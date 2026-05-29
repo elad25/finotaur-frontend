@@ -124,12 +124,27 @@ const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
   ],
 };
 
-// Normalize a free-typed ticker to the source-native symbol for its class.
-// Futures get the Yahoo "=F" suffix; equities + crypto pass through uppercased.
-function normalizeRawSymbol(raw: string, assetClass: AssetClass): string {
+// Combined searchable universe across all asset classes, each tagged with its class.
+const ALL_SYMBOLS: (SymbolEntry & { assetClass: AssetClass })[] = (
+  Object.entries(SYMBOL_UNIVERSE) as [AssetClass, SymbolEntry[]][]
+).flatMap(([ac, entries]) => entries.map((e) => ({ ...e, assetClass: ac })));
+
+// Detect the asset class implied by a source-native symbol.
+function detectAssetClass(sym: string): AssetClass {
+  if (isCryptoSymbol(sym)) return 'crypto';
+  if (sym.endsWith('=F')) return 'futures';
+  return 'stocks';
+}
+
+// Normalize a free-typed ticker to a source-native symbol WITHOUT an explicit
+// class. Exact-match the combined universe first (covers futures roots like ES,
+// indices like SPX->^GSPC, crypto bases like BTC->BTCUSDT); otherwise infer
+// from the raw shape (=F => futures, crypto pair => crypto, else bare equity).
+function normalizeSymbolAuto(raw: string): string {
   const t = raw.trim().toUpperCase();
   if (!t) return t;
-  if (assetClass === 'futures') return t.endsWith('=F') ? t : `${t}=F`;
+  const hit = ALL_SYMBOLS.find((u) => u.ticker.toUpperCase() === t);
+  if (hit) return hit.symbol;
   return t;
 }
 
@@ -259,22 +274,14 @@ function ActiveStrategyDropdown({
 // Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
 // Enter select; Enter on no-match commits a custom symbol. Matches the toolbar
 // styling (gold #C9A646 accent on dark zinc) like ActiveStrategyDropdown.
-function SymbolAutocomplete({
-  assetClass,
-  symbol,
-  onSelect,
-}: {
-  assetClass: AssetClass;
-  symbol: string;
-  onSelect: (symbol: string) => void;
-}) {
+function SymbolAutocomplete({ symbol, onSelect }: { symbol: string; onSelect: (symbol: string) => void; }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const universe = SYMBOL_UNIVERSE[assetClass];
+  const universe = ALL_SYMBOLS;
 
   // Best-effort reverse lookup: show the human ticker for the active symbol;
   // fall back to the raw source symbol if it isn't in the universe.
@@ -292,7 +299,7 @@ function SymbolAutocomplete({
   }, [universe, query]);
 
   // Reset the keyboard highlight whenever the visible match list changes.
-  useEffect(() => { setHighlight(0); }, [query, assetClass]);
+  useEffect(() => { setHighlight(0); }, [query]);
 
   useEffect(() => {
     if (!open) return;
@@ -311,7 +318,7 @@ function SymbolAutocomplete({
   };
 
   const commitRaw = () => {
-    const next = normalizeRawSymbol(query, assetClass);
+    const next = normalizeSymbolAuto(query);
     if (!next) return;
     onSelect(next);
     setQuery('');
@@ -358,7 +365,7 @@ function SymbolAutocomplete({
               onMouseDown={(e) => { e.preventDefault(); commitRaw(); }}
               className="block w-full px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900"
             >
-              Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeRawSymbol(query, assetClass) || '—'}</span> as a custom symbol
+              Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeSymbolAuto(query) || '—'}</span> as a custom symbol
             </button>
           ) : (
             matches.map((m, i) => (
@@ -374,6 +381,7 @@ function SymbolAutocomplete({
                 <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
                   {m.ticker}
                 </span>
+                <span className="rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">{m.assetClass}</span>
                 <span className="truncate text-[11px] text-zinc-500">{m.label}</span>
               </button>
             ))
@@ -398,12 +406,9 @@ export function BacktestChart({
   startingBalance = 10000,
   theme = 'dark',
 }: BacktestChartProps) {
-  const [assetClass, setAssetClass] = useState<AssetClass>(
-    isCryptoSymbol(initialSymbol) ? 'crypto'
-      : initialSymbol.endsWith('=F') ? 'futures'
-      : 'stocks',
-  );
   const [symbol, setSymbol] = useState(initialSymbol);
+  // Asset class is derived from the symbol — no separate user control.
+  const assetClass = useMemo<AssetClass>(() => detectAssetClass(symbol), [symbol]);
   // Avoid shadowing the global setInterval — use barInterval / setBarInterval.
   const [barInterval, setBarInterval] = useState<Interval>(initialInterval);
   const [size, setSize] = useState(1);
@@ -519,8 +524,6 @@ export function BacktestChart({
         const detail = await persistence.loadSession(sessionIdParam);
         if (cancelled) return;
         // 1. Restore chart context (asset/symbol/interval/mode).
-        const ac = detail.session.asset_class;
-        if (ac === 'futures' || ac === 'stocks' || ac === 'crypto') setAssetClass(ac);
         setSymbol(detail.session.symbol);
         setBarInterval(detail.session.interval as Interval);
         setChartMode('replay');
@@ -579,12 +582,6 @@ export function BacktestChart({
   }, [sessionIdParam, persistence, loadSession]);
 
   // ─── Handlers ────────────────────────────────────────────────
-  const handleAssetClassChange = (next: AssetClass) => {
-    setAssetClass(next);
-    setSymbol(SYMBOL_UNIVERSE[next][0].symbol);
-    setLivePrice('');
-  };
-
   const handleOpen = (side: PaperSide) => {
     const price = parseFloat(livePrice);
     if (!price || isNaN(price) || price <= 0) {
@@ -838,27 +835,9 @@ export function BacktestChart({
           </button>
         )}
 
-        {/* Asset class tabs */}
-        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
-          {(['futures', 'stocks', 'crypto'] as AssetClass[]).map((ac) => (
-            <button
-              key={ac}
-              onClick={() => handleAssetClassChange(ac)}
-              className={`px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
-                assetClass === ac
-                  ? 'bg-[#C9A646] text-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {ac}
-            </button>
-          ))}
-        </div>
-
-        {/* Symbol picker — type-ahead autocomplete (Tier 1 2026-05-30,
-            replaces the native <select> so traders can search/free-type). */}
+        {/* Symbol picker — type-ahead autocomplete across all asset classes
+            (Tier 1 2026-05-30). Asset class auto-detected from chosen symbol. */}
         <SymbolAutocomplete
-          assetClass={assetClass}
           symbol={symbol}
           onSelect={(next) => { setSymbol(next); setLivePrice(''); }}
         />
