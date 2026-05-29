@@ -203,7 +203,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         .from('profiles')
         .select('account_type, role, email')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle();
 
       const isAdmin = 
         currentProfile?.account_type === 'admin' || 

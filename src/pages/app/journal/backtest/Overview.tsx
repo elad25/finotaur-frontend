@@ -1,8 +1,10 @@
 // ================================================
 // FINOTAUR BACKTEST DASHBOARD - MIRRORS JOURNAL OVERVIEW
 // File: src/pages/app/journal/backtest/BacktestOverview.tsx
-// ✅ Identical layout to JournalOverview.tsx
-// ✅ Beautiful circular progress indicators for backtest metrics
+// ✅ Visual design matches JournalOverview.tsx (refactored 2026-05-28)
+// ✅ bg-[#070808] outer shell, JOURNAL_PANEL chart wrappers
+// ✅ JournalKpiCard replaces DashboardKpiCard (5-card grid)
+// ✅ Inline h1 header pattern matching Journal Dashboard
 // ✅ Backtest-specific KPIs with dynamic data
 // ✅ Trade Time & Duration Performance Charts
 // ✅ AI Insights for backtest analysis
@@ -10,26 +12,22 @@
 // ✅ Production ready for 5000+ users
 // ================================================
 
-import React, { useState, lazy, Suspense, useMemo, useCallback } from "react";
+import React, { lazy, Suspense, useMemo, useCallback } from "react";
 import CftcDisclosureBanner from "@/components/backtest/CftcDisclosureBanner";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import PageTitle from "@/components/PageTitle";
+import { useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import {
-  FileText, Layers, BarChart3, Calendar as CalendarIcon,
-  TrendingUp, TrendingDown, Crown, X, Sparkles, 
-  RefreshCw, Download, Share2, HelpCircle, CheckCircle2
+  TrendingUp, TrendingDown, Crown, Sparkles,
+  RefreshCw, Download, Share2, HelpCircle, BarChart3
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
-import { useSubscription } from "@/hooks/useSubscription";
 import {
   formatCurrency,
   formatPercentage,
-  getPnLColor,
 } from "@/hooks/useDashboardData";
-import { BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
+import { BORDER_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { DashboardKpiCard } from "@/components/DashboardKpiCard";
+import { JournalKpiCard } from "@/components/journal/ds/JournalKpiCard";
 import { useBacktestStats } from "@/hooks/useBacktestStats";
 
 // ================================================
@@ -44,7 +42,7 @@ const BacktestDailyPnLChart = lazy(() => import("@/components/charts/BacktestDai
 // ================================================
 
 const ChartSkeleton = React.memo(() => (
-  <div className="w-full h-[380px] bg-[#0A0A0A] rounded-[20px] animate-pulse flex items-center justify-center border" style={BORDER_STYLE}>
+  <div className="w-full h-[380px] rounded-[12px] bg-[#0E0E0E] border border-white/[0.05] animate-pulse flex items-center justify-center">
     <div className="text-[#A0A0A0] text-sm">Loading backtest chart...</div>
   </div>
 ));
@@ -264,69 +262,6 @@ const useMockBacktestStats = (): { data: BacktestStats | null; isLoading: boolea
   }, [real]);
   
   return { data, isLoading };
-};
-
-// Helper functions for mock data
-const generateMockEquityCurve = () => {
-  const curve = [];
-  let equity = 100000;
-  let maxEquity = 100000;
-  const startDate = dayjs("2023-01-01");
-  
-  for (let i = 0; i <= 730; i++) {
-    const randomChange = (Math.random() - 0.45) * 800;
-    equity += randomChange;
-    maxEquity = Math.max(maxEquity, equity);
-    const drawdown = ((equity - maxEquity) / maxEquity) * 100;
-    
-    curve.push({
-      date: startDate.add(i, 'day').format('YYYY-MM-DD'),
-      value: Math.round(equity),
-      drawdown: Math.round(drawdown * 100) / 100
-    });
-  }
-  
-  return curve;
-};
-
-const generateMockMonthlyReturns = () => {
-  const months = [];
-  const startDate = dayjs("2023-01-01");
-  
-  for (let i = 0; i < 24; i++) {
-    months.push({
-      month: startDate.add(i, 'month').format('YYYY-MM'),
-      return: (Math.random() - 0.35) * 8
-    });
-  }
-  
-  return months;
-};
-
-const generateMockTrades = (count: number): BacktestTrade[] => {
-  const trades: BacktestTrade[] = [];
-  const symbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'META', 'AMZN'];
-  
-  for (let i = 0; i < count; i++) {
-    const isWin = Math.random() > 0.4;
-    const pnl = isWin ? Math.random() * 2000 + 200 : -(Math.random() * 1200 + 100);
-    
-    trades.push({
-      id: `bt_trade_${i}`,
-      symbol: symbols[Math.floor(Math.random() * symbols.length)],
-      open_at: dayjs("2023-01-01").add(i * 4, 'day').toISOString(),
-      close_at: dayjs("2023-01-01").add(i * 4 + 2, 'day').toISOString(),
-      pnl: Math.round(pnl),
-      pnl_percent: Math.round((pnl / 50000) * 100 * 100) / 100,
-      side: Math.random() > 0.5 ? ('long' as const) : ('short' as const),
-      entry_price: 100 + Math.random() * 200,
-      exit_price: 100 + Math.random() * 200,
-      size: Math.floor(Math.random() * 100) + 10,
-      rr: isWin ? Math.random() * 3 + 0.5 : -(Math.random() * 2)
-    });
-  }
-  
-  return trades;
 };
 
 // ================================================
@@ -772,9 +707,9 @@ BacktestAIInsight.displayName = 'BacktestAIInsight';
 
 function BacktestOverviewContent() {
   const navigate = useNavigate();
-  const { backtestId } = useParams();
-  
-  const { id: userId, isImpersonating } = useEffectiveUser();
+  useParams(); // backtestId available for future deep-link routing
+
+  const { isImpersonating } = useEffectiveUser();
   const { data: stats, isLoading } = useMockBacktestStats(); // Replace with actual hook
   
   // Generate chart data
@@ -804,7 +739,7 @@ function BacktestOverviewContent() {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
+      <div className="min-h-screen flex items-center justify-center bg-[#070808]">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-[#C9A646] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <div className="text-[#A0A0A0] text-xl">Loading backtest results...</div>
@@ -812,10 +747,10 @@ function BacktestOverviewContent() {
       </div>
     );
   }
-  
+
   if (!stats) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
+      <div className="min-h-screen flex items-center justify-center bg-[#070808]">
         <div className="text-center">
           <div className="text-[#E36363] text-xl mb-2">Backtest not found</div>
           <button
@@ -828,53 +763,65 @@ function BacktestOverviewContent() {
       </div>
     );
   }
-  
+
+  const pfAccent =
+    stats.profit_factor > 2 ? 'green' :
+    stats.profit_factor > 1 ? 'gold' :
+    'red';
+  const pfValueColor =
+    stats.profit_factor > 2 ? '#4AD295' :
+    stats.profit_factor > 1 ? '#C9A646' :
+    '#E36363';
+  const netPnlPositive = stats.net_pnl >= 0;
+
   return (
-    <div className="min-h-screen" style={{ 
-      background: 'radial-gradient(circle at top, #0A0A0A 0%, #121212 100%)'
-    }}>
+    <div className="min-h-screen bg-[#070808] text-white">
       <style>{ANIMATION_STYLES}</style>
-      
-      <div className="p-6 space-y-6">
-        {/* Header - NO BACK ARROW */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <PageTitle 
-            title="Backtest Dashboard"
-            subtitle={`${stats.strategy_name} • ${dayjs(stats.backtest_period_start).format('MMM DD, YYYY')} - ${dayjs(stats.backtest_period_end).format('MMM DD, YYYY')}`}
-          />
-          
-          <div className="flex items-center gap-3">
+
+      <div className="mx-auto max-w-[1360px] space-y-4 px-1 py-3 sm:px-3 lg:px-1">
+        {/* Header — Journal inline pattern */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="pt-0.5">
+            <h1 className="text-[17px] font-semibold leading-tight tracking-normal text-white">
+              Backtest Dashboard
+            </h1>
+            <p className="mt-2 text-[11px] text-white/60">
+              {stats.strategy_name} • {dayjs(stats.backtest_period_start).format('MMM DD, YYYY')} – {dayjs(stats.backtest_period_end).format('MMM DD, YYYY')}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {isImpersonating && (
-              <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
+              <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 h-9">
                 <Crown className="w-4 h-4 text-orange-400" />
-                <span className="text-orange-400 text-sm font-medium">Admin View</span>
+                <span className="text-orange-400 text-[12px] font-medium">Admin View</span>
               </div>
             )}
 
             <button
               onClick={handleRunAgain}
-              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-4 py-2.5 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors"
+              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-3 h-9 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors text-[12px]"
               style={BORDER_STYLE}
             >
-              <RefreshCw className="w-4 h-4" />
-              <span className="text-sm font-medium">Run Again</span>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="font-medium">Run Again</span>
             </button>
 
             <button
               onClick={handleShareResults}
-              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-4 py-2.5 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors"
+              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-3 h-9 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors text-[12px]"
               style={BORDER_STYLE}
             >
-              <Share2 className="w-4 h-4" />
-              <span className="text-sm font-medium">Share</span>
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="font-medium">Share</span>
             </button>
 
             <button
               onClick={handleExportResults}
-              className="flex items-center gap-2 bg-gradient-to-r from-[#C9A646] to-[#E5C158] text-black rounded-[12px] px-4 py-2.5 font-medium hover:from-[#B39540] hover:to-[#D4B55E] transition-all"
+              className="flex items-center gap-2 bg-gradient-to-r from-[#C9A646] to-[#E5C158] text-black rounded-[12px] px-3 h-9 font-medium hover:from-[#B39540] hover:to-[#D4B55E] transition-all text-[12px]"
             >
-              <Download className="w-4 h-4" />
-              <span className="text-sm">Download Report (AI-Enhanced)</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Report (AI-Enhanced)</span>
             </button>
           </div>
         </div>
@@ -882,84 +829,95 @@ function BacktestOverviewContent() {
         {/* AI Insights */}
         <BacktestAIInsight stats={stats} />
 
-        {/* Main KPIs - IDENTICAL TO JOURNAL OVERVIEW */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DashboardKpiCard 
-            label="Net P&L" 
-            value={formatCurrency(stats.net_pnl)} 
-            color={getPnLColor(stats.net_pnl)}
+        {/* Main KPIs — JournalKpiCard, 5-col on lg */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+          <JournalKpiCard
+            label="Net P&L"
+            value={formatCurrency(stats.net_pnl)}
+            accent={netPnlPositive ? 'green' : 'red'}
+            icon={netPnlPositive ? TrendingUp : TrendingDown}
+            valueColor={netPnlPositive ? '#4AD295' : '#EF4444'}
             hint={`${stats.total_trades} closed trades`}
             tooltip="Total profit or loss from backtest period"
           />
-          
-          <DashboardKpiCard 
-            label="Win Rate" 
-            value={formatPercentage(stats.win_rate)} 
+
+          <JournalKpiCard
+            label="Win Rate"
+            value={formatPercentage(stats.win_rate)}
+            accent="gold"
             hint={`${stats.winning_trades}W / ${stats.losing_trades}L / ${stats.breakeven_trades}BE`}
-            color="text-[#C9A646]"
             tooltip="Percentage of winning trades vs total trades"
-            showGauge={true}
-            gaugeData={{ 
-              wins: stats.winning_trades, 
-              losses: stats.losing_trades, 
-              breakeven: stats.breakeven_trades 
-            }}
           />
-          
-          <DashboardKpiCard 
-            label="Profit Factor" 
+
+          <JournalKpiCard
+            label="Profit Factor"
             value={stats.profit_factor.toFixed(2)}
-            color={
-              stats.profit_factor > 2 ? "text-[#4AD295]" :
-              stats.profit_factor > 1 ? "text-[#C9A646]" :
-              "text-[#E36363]"
-            }
+            accent={pfAccent}
+            valueColor={pfValueColor}
             tooltip="Gross profit divided by gross loss. >1 means profitable"
           />
-          
-          <DashboardKpiCard 
-            label="Avg Win/Loss Trade" 
-            value={`${(stats.avg_win / Math.abs(stats.avg_loss)).toFixed(2)}`}
+
+          <JournalKpiCard
+            label="Total Trades"
+            value={String(stats.total_trades)}
+            accent="neutral"
+            icon={BarChart3}
+            tooltip="Total number of trades in the backtest period"
+          />
+
+          <JournalKpiCard
+            label="Avg Win/Loss Ratio"
+            value={stats.avg_loss !== 0 ? (stats.avg_win / Math.abs(stats.avg_loss)).toFixed(2) : '—'}
+            accent="gold"
             hint={`${formatCurrency(stats.avg_win)} / ${formatCurrency(stats.avg_loss)}`}
-            color="text-[#C9A646]"
             tooltip="Average size of winning trades vs losing trades"
-            showGauge={true}
-            gaugeData={{ 
-              avgWin: stats.avg_win, 
-              avgLoss: stats.avg_loss 
-            }}
           />
         </div>
 
         {/* Best/Worst Trades */}
         <BacktestBestWorstTrades stats={stats} />
 
-        {/* Equity Chart */}
-        <ErrorBoundary fallback={
-          <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-            Failed to load equity curve. Please refresh the page.
+        {/* Equity + Daily P&L charts row */}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1fr]">
+          {/* Equity Curve panel */}
+          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
+            <h2 className="text-[14px] font-semibold text-white mb-3">Equity Curve</h2>
+            <ErrorBoundary fallback={
+              <div className="text-center text-[#E36363] p-6 bg-[#0E0E0E] rounded-[12px] border border-white/[0.05]">
+                Failed to load equity curve. Please refresh the page.
+              </div>
+            }>
+              <Suspense fallback={<ChartSkeleton />}>
+                <BacktestEquityChart data={stats.equity_curve} />
+              </Suspense>
+            </ErrorBoundary>
           </div>
-        }>
-          <Suspense fallback={<ChartSkeleton />}>
-            <BacktestEquityChart data={stats.equity_curve} />
-          </Suspense>
-        </ErrorBoundary>
 
-        {/* Daily P&L Chart */}
-        <ErrorBoundary fallback={
-          <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-            Failed to load daily P&L chart. Please refresh the page.
+          {/* Daily P&L panel */}
+          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
+            <h2 className="text-[14px] font-semibold text-white mb-3">Daily P&L</h2>
+            <ErrorBoundary fallback={
+              <div className="text-center text-[#E36363] p-6 bg-[#0E0E0E] rounded-[12px] border border-white/[0.05]">
+                Failed to load daily P&L chart. Please refresh the page.
+              </div>
+            }>
+              <Suspense fallback={<ChartSkeleton />}>
+                <BacktestDailyPnLChart data={stats.equity_curve} />
+              </Suspense>
+            </ErrorBoundary>
           </div>
-        }>
-          <Suspense fallback={<ChartSkeleton />}>
-            <BacktestDailyPnLChart data={stats.equity_curve} />
-          </Suspense>
-        </ErrorBoundary>
+        </div>
 
         {/* Trade Time & Duration Performance Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TradeTimePerformanceChart data={tradeTimeData} />
-          <TradeDurationPerformanceChart data={tradeDurationData} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
+            <h2 className="text-[14px] font-semibold text-white mb-3">Trade Time Performance</h2>
+            <TradeTimePerformanceChart data={tradeTimeData} />
+          </div>
+          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
+            <h2 className="text-[14px] font-semibold text-white mb-3">Trade Duration Performance</h2>
+            <TradeDurationPerformanceChart data={tradeDurationData} />
+          </div>
         </div>
 
         {/* Hypothetical Performance Disclosure — placed at the bottom as a
