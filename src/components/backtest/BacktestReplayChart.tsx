@@ -152,6 +152,7 @@ export function BacktestReplayChart({
   const onJumpToTimeRef = useRef(onJumpToTime);
   const showReplayCursorRef = useRef(showReplayCursor);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Replay cursor overlay state ─────────────────────────────
   // X pixel position of the vertical cut line (null = hidden / out of range).
@@ -318,7 +319,26 @@ export function BacktestReplayChart({
       if (!param.time) return;
       const clickedTime = param.time as number;
       if (onJumpToTimeRef.current) {
-        onJumpToTimeRef.current(new Date(clickedTime * 1000));
+        // Animate the chart's visible range toward the clicked bar, then
+        // commit the jump after the scroll animation (~280 ms).
+        const currentRange = chart.timeScale().getVisibleLogicalRange();
+        if (currentRange) {
+          const targetIdx = bars.findIndex((b) => (b.time as number) === clickedTime);
+          if (targetIdx >= 0) {
+            const center = (currentRange.from + currentRange.to) / 2;
+            const delta = targetIdx - center;
+            chart.timeScale().scrollToPosition(
+              chart.timeScale().scrollPosition() + delta,
+              true, // animated
+            );
+          }
+        }
+        // Cancel any in-flight jump timer before scheduling the new one.
+        if (jumpTimerRef.current !== null) clearTimeout(jumpTimerRef.current);
+        jumpTimerRef.current = setTimeout(() => {
+          jumpTimerRef.current = null;
+          onJumpToTimeRef.current?.(new Date(clickedTime * 1000));
+        }, 280);
         return;
       }
       if (!onBarClickRef.current) return;
@@ -418,6 +438,10 @@ export function BacktestReplayChart({
       container.removeEventListener('mouseleave', handleMouseLeave);
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.timeScale().unsubscribeVisibleTimeRangeChange(updateCursorX);
+      if (jumpTimerRef.current !== null) {
+        clearTimeout(jumpTimerRef.current);
+        jumpTimerRef.current = null;
+      }
       priceLinesRef.current.clear();
       // chart.remove() is idempotent in lightweight-charts — safe to call
       // even if the container was already detached by concurrent mode.
@@ -558,7 +582,7 @@ export function BacktestReplayChart({
         onSpeedChange={playback.setSpeed}
       />
       <div className="relative flex-1" style={{ minHeight: 0 }}>
-        <div ref={containerRef} className="absolute inset-0" style={{ height }} />
+        <div ref={containerRef} className={`absolute inset-0${showReplayCursor ? ' cursor-none' : ''}`} style={{ height }} />
 
         {/* ── TV-style replay cursor overlays ── */}
         {showReplayCursor && activeX !== null && (
