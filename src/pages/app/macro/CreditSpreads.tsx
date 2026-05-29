@@ -13,6 +13,7 @@ import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
+import { MetricChart } from '@/components/macro/MetricChart';
 import {
   useCreditSpreadsSnapshot,
   useCreditSpreadsSeries,
@@ -69,6 +70,30 @@ const REGIME_CONFIG: Record<CreditRegime, { label: string; emoji: string; color:
   },
 };
 
+
+// ─── Interactive MetricChart (recharts) ──────────────────────────────────────
+
+const CreditSpreadsMetricChart = memo(function CreditSpreadsMetricChart() {
+  const { data: seriesResp, isLoading } = useCreditSpreadsSeries(365 * 5);
+
+  return (
+    <Card className="w-full mb-6 p-4">
+      <MetricChart
+        title="Credit Spreads (OAS) — HY / IG / EM"
+        data={seriesResp?.data ?? []}
+        lines={[
+          { dataKey: 'hy', label: 'High Yield',       color: '#E24B4A',               format: 'percent' },
+          { dataKey: 'ig', label: 'Investment Grade', color: '#C9A646',               format: 'percent' },
+          { dataKey: 'em', label: 'Emerging Markets', color: 'rgba(255,255,255,0.65)', format: 'percent', strokeDasharray: '4 4' },
+        ]}
+        showNBER
+        showFOMC
+        defaultRange="1Y"
+        isLoading={isLoading}
+      />
+    </Card>
+  );
+});
 
 // ─── Hero: Regime classifier pill + current regime duration ──────────────────
 
@@ -411,6 +436,9 @@ const CreditSpreads = memo(function CreditSpreads() {
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
         <AiSummaryCard feature="credit-spreads" />
+
+        {/* Interactive recharts MetricChart — HY / IG / EM OAS */}
+        <CreditSpreadsMetricChart />
 
         {/* Hero: Regime classifier pill + duration */}
         <RegimeHero />

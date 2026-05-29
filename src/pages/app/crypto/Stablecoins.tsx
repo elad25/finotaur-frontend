@@ -7,6 +7,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
+import { MetricChart } from '@/components/macro/MetricChart';
 import {
   useStablecoinsList,
   useStablecoinsHistory,
@@ -117,6 +118,41 @@ const TotalCapHeader = memo(function TotalCapHeader() {
         ))}
       </div>
     </div>
+  );
+});
+
+// ─── Interactive MetricChart — Total Supply time series ───────────────────────
+
+const StablecoinMetricChart = memo(function StablecoinMetricChart() {
+  const { data: histResp, isLoading, error } = useStablecoinsHistory(365 * 2); // 2Y for range pills
+
+  // Map history points to MetricChart's expected data shape (values in billions)
+  const chartData = (histResp?.data ?? []).map((pt: StablecoinHistoryPoint) => ({
+    date: pt.date,
+    totalCirculating: pt.totalCirculating / 1e9,
+    usdt: pt.top3.usdt / 1e9,
+    usdc: pt.top3.usdc / 1e9,
+    dai:  pt.top3.dai  / 1e9,
+  }));
+
+  return (
+    <Card className="w-full mb-6 p-4">
+      <MetricChart
+        title="Stablecoin Total Supply"
+        data={chartData}
+        lines={[
+          { dataKey: 'totalCirculating', label: 'Total Supply', color: '#C9A646',                format: 'compactUSD' },
+          { dataKey: 'usdt',             label: 'USDT',         color: 'rgba(255,255,255,0.7)',   format: 'compactUSD', strokeDasharray: '4 4' },
+          { dataKey: 'usdc',             label: 'USDC',         color: 'rgba(255,255,255,0.5)',   format: 'compactUSD', strokeDasharray: '2 3' },
+          { dataKey: 'dai',              label: 'DAI',          color: 'rgba(255,255,255,0.35)',  format: 'compactUSD', strokeDasharray: '6 2' },
+        ]}
+        showNBER={false}
+        showFOMC={false}
+        defaultRange="1Y"
+        isLoading={isLoading || (error != null && chartData.length === 0)}
+        height={320}
+      />
+    </Card>
   );
 });
 
@@ -350,6 +386,9 @@ const Stablecoins = memo(function Stablecoins() {
 
         {/* Hero: Total stablecoin cap + change pills */}
         <TotalCapHeader />
+
+        {/* Interactive MetricChart — total supply + top-3 breakdown over time */}
+        <StablecoinMetricChart />
 
         {/* Section 1: Supply growth sparkline */}
         <section>
