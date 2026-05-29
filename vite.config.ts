@@ -14,6 +14,52 @@ import { resolve as pathResolve } from 'node:path'
 // MZ-2D errors. Run in buildStart so CI fails fast on the offending PR.
 // ADL-040 enforcement: make this entire class of bug impossible going
 // forward instead of patching each instance after it ships.
+// P0.4 guard (incident 2026-05-30): assert critical client-side env vars
+// are present at build time. Without this, a Cloudflare Pages deploy with
+// missing `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` silently ships a
+// bundle that points Supabase calls at the literal placeholder URL
+// `your-project.supabase.co`, breaking login site-wide. CI now fails fast
+// instead. Production-only — local `vite dev` may legitimately use the
+// `.env.local` defaults.
+function assertCriticalEnvAtBuild(opts: {
+  required: Array<{ name: string; placeholder: string }>
+  env: Record<string, string>
+}): Plugin {
+  return {
+    name: 'finotaur:assert-critical-env',
+    apply: 'build',
+    buildStart() {
+      const failures: string[] = []
+      for (const { name, placeholder } of opts.required) {
+        const value = process.env[name] ?? opts.env[name]
+        if (!value || value.trim().length === 0) {
+          failures.push(`  • ${name} is missing (not set in process.env or .env files)`)
+          continue
+        }
+        if (value === placeholder) {
+          failures.push(`  • ${name} is the placeholder value (${placeholder}) — replace with the real value`)
+        }
+      }
+      if (failures.length > 0) {
+        this.error(
+          [
+            '',
+            '┌─ [finotaur:assert-critical-env] ─────────────────────────────────────',
+            '│ One or more required environment variables are missing or invalid:',
+            ...failures.map((f) => '│' + f),
+            '│',
+            '│ In Cloudflare Pages, set these under:',
+            '│   Settings → Environment variables → Production',
+            '│ Then trigger a new deployment.',
+            '└─────────────────────────────────────────────────────────────────────',
+            '',
+          ].join('\n')
+        )
+      }
+    },
+  }
+}
+
 function assertLazyImportsHaveDefault(opts: { entry: string; srcRoot: string }): Plugin {
   return {
     name: 'finotaur:assert-lazy-default-exports',
@@ -87,6 +133,13 @@ export default defineConfig(({ mode }) => {
   return {
   plugins: [
     react(),
+    assertCriticalEnvAtBuild({
+      env,
+      required: [
+        { name: 'VITE_SUPABASE_URL', placeholder: 'https://your-project.supabase.co' },
+        { name: 'VITE_SUPABASE_ANON_KEY', placeholder: 'your-anon-key' },
+      ],
+    }),
     assertLazyImportsHaveDefault({ entry: appEntry, srcRoot }),
     sentryEnabled && sentryVitePlugin({
       org: process.env.SENTRY_ORG,
