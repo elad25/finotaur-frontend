@@ -6,7 +6,8 @@
  * toolbar above the chart.
  */
 
-import { Play, Pause, ChevronLeft, ChevronRight, SkipBack, Gauge } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Play, Pause, ChevronLeft, ChevronRight, ChevronDown, SkipBack, Gauge } from 'lucide-react';
 import { REPLAY_SPEEDS, type ReplaySpeed } from '@/hooks/useReplayPlayback';
 
 export interface ReplayControlsProps {
@@ -28,6 +29,12 @@ function speedLabel(s: ReplaySpeed): string {
   return `${s}×`;
 }
 
+/** Number of bars per chevron click, derived from the current speed. */
+function getStepSize(speed: ReplaySpeed): number {
+  if (speed === Infinity) return 50;
+  return Math.max(1, Math.round(speed));
+}
+
 export function ReplayControls({
   isPlaying,
   speed,
@@ -45,6 +52,27 @@ export function ReplayControls({
   const visibleBars = Math.max(0, cursor + 1);
   const totalBars = Math.max(0, maxIndex + 1);
   const pct = totalBars > 0 ? Math.round((visibleBars / totalBars) * 100) : 0;
+  const stepSize = getStepSize(speed);
+
+  // ─── Speed dropdown state ──────────────────────────────────────
+  const [speedOpen, setSpeedOpen] = useState(false);
+  const speedContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!speedOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!speedContainerRef.current?.contains(e.target as Node)) setSpeedOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSpeedOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [speedOpen]);
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-4 py-2">
@@ -60,9 +88,9 @@ export function ReplayControls({
 
       {/* STEP-BACK */}
       <button
-        onClick={onStepBack}
+        onClick={() => { for (let i = 0; i < stepSize; i++) onStepBack(); }}
         disabled={atStart}
-        title="Step back one bar"
+        title={`${stepSize} bar${stepSize !== 1 ? 's' : ''} back`}
         className="rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <ChevronLeft size={14} />
@@ -85,31 +113,44 @@ export function ReplayControls({
 
       {/* STEP forward */}
       <button
-        onClick={onStep}
+        onClick={() => { for (let i = 0; i < stepSize; i++) onStep(); }}
         disabled={atEnd}
-        title="Step forward one bar"
+        title={`${stepSize} bar${stepSize !== 1 ? 's' : ''} forward`}
         className="rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <ChevronRight size={14} />
       </button>
 
-      {/* SPEED */}
-      <div className="ml-2 flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1">
-        <Gauge size={12} className="text-zinc-500" />
-        <select
-          value={speed === Infinity ? 'Infinity' : String(speed)}
-          onChange={(e) => {
-            const v = e.target.value;
-            onSpeedChange(v === 'Infinity' ? Infinity : (Number(v) as ReplaySpeed));
-          }}
-          className="bg-transparent text-xs font-medium text-zinc-300 focus:outline-none"
+      {/* SPEED — custom dropdown */}
+      <div className="relative ml-2" ref={speedContainerRef}>
+        <button
+          type="button"
+          onClick={() => setSpeedOpen((v) => !v)}
+          className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+          title="Playback speed"
         >
-          {REPLAY_SPEEDS.map((s) => (
-            <option key={String(s)} value={s === Infinity ? 'Infinity' : String(s)}>
-              {speedLabel(s)}
-            </option>
-          ))}
-        </select>
+          <Gauge size={12} className="text-zinc-500" />
+          <span>{speedLabel(speed)}</span>
+          <ChevronDown size={12} className="text-zinc-500" />
+        </button>
+        {speedOpen && (
+          <div className="absolute left-0 top-full z-30 mt-1 min-w-[80px] overflow-hidden rounded-md border border-zinc-800 bg-zinc-900 shadow-2xl">
+            {REPLAY_SPEEDS.map((s) => (
+              <button
+                key={String(s)}
+                type="button"
+                onClick={() => { onSpeedChange(s as ReplaySpeed); setSpeedOpen(false); }}
+                className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
+                  speed === s
+                    ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                    : 'text-zinc-300 hover:bg-zinc-900'
+                }`}
+              >
+                {speedLabel(s)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Progress */}
