@@ -134,6 +134,7 @@ import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
 
 // LAZY LOADED PAGES
+const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/app/journal/admin/Users"));
 const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"));
@@ -559,6 +560,8 @@ function AppContent() {
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
 <Route path="journal/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
 <Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
+{/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
+<Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
