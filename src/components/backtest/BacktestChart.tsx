@@ -770,6 +770,8 @@ export function BacktestChart({
               onBarReveal={handleReplayBarReveal}
               onBarClick={handleReplayBarClick}
               onContextMenu={(info) => setContextMenu(info)}
+              onJumpToTime={(date) => setReplayStart(date)}
+              showReplayCursor
               height="100%"
             />
           )}

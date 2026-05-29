@@ -35,11 +35,16 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
+import { Scissors } from 'lucide-react';
+import dayjs from 'dayjs';
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
 import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { ReplayControls } from './ReplayControls';
+
+// Height of the time-axis row (lightweight-charts default is ~28px).
+const TIMESCALE_HEIGHT = 28;
 
 // ─── Theme tokens — kept in sync with FinotaurChart ─────────────
 const THEME = {
@@ -105,6 +110,15 @@ export interface BacktestReplayChartProps {
   onBarClick?: (bar: Bar) => void;
   /** Phase 6: right-click — parent renders the order-type context menu at given screen coords. */
   onContextMenu?: (info: ContextMenuPriceInfo) => void;
+  /**
+   * TV-style replay: when the user left-clicks on the chart, jump playback to
+   * that timestamp. The parent resets replayStart + the playback cursor.
+   * When provided, click-to-jump takes precedence over click-to-trade.
+   */
+  onJumpToTime?: (date: Date) => void;
+  /** Show the TV-style replay cursor (vertical line, scissors, gray overlay, date label).
+   *  Should be true when chartMode === 'replay'. */
+  showReplayCursor?: boolean;
   /** Height in px (or any CSS height string). */
   height?: string | number;
 }
@@ -125,6 +139,8 @@ export function BacktestReplayChart({
   onBarReveal,
   onBarClick,
   onContextMenu,
+  onJumpToTime,
+  showReplayCursor = false,
   height = '100%',
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,11 +149,19 @@ export function BacktestReplayChart({
   const onBarClickRef = useRef(onBarClick);
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
+  const onJumpToTimeRef = useRef(onJumpToTime);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+
+  // ─── Replay cursor overlay state ─────────────────────────────
+  // X pixel position of the vertical cut line (null = hidden / out of range).
+  const [cursorX, setCursorX] = useState<number | null>(null);
+  // Width of the chart container (for gray-overlay right-side calc).
+  const [chartWidth, setChartWidth] = useState(0);
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
+  useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -282,11 +306,17 @@ export function BacktestReplayChart({
     series.setData(visible);
     chart.timeScale().fitContent();
 
-    // Click-to-trade: map the clicked Time back to the underlying bar.
+    // Click handler: jump-to-time (TV replay UX) takes priority when wired;
+    // falls back to click-to-trade. Right-click is handled separately via the
+    // DOM contextmenu listener below — this only fires on left-click.
     chart.subscribeClick((param) => {
-      if (!param.time || !onBarClickRef.current) return;
+      if (!param.time) return;
       const clickedTime = param.time as number;
-      // The clicked time may correspond to any visible bar — find it.
+      if (onJumpToTimeRef.current) {
+        onJumpToTimeRef.current(new Date(clickedTime * 1000));
+        return;
+      }
+      if (!onBarClickRef.current) return;
       const found = bars.find((b) => (b.time as number) === clickedTime);
       if (found) onBarClickRef.current(found);
     });
@@ -326,19 +356,38 @@ export function BacktestReplayChart({
         width: container.clientWidth,
         height: container.clientHeight,
       });
+      setChartWidth(container.clientWidth);
     });
     ro.observe(container);
+    // Initialise width immediately.
+    setChartWidth(container.clientWidth);
+
+    // Recompute the cut-line X position whenever the visible range pans/zooms.
+    const updateCursorX = () => {
+      if (!chartRef.current || !containerRef.current) return;
+      const cursorBar = bars[lastUpdatedIdxRef.current];
+      if (!cursorBar) { setCursorX(null); return; }
+      const x = chartRef.current.timeScale().timeToCoordinate(cursorBar.time);
+      if (x === null) { setCursorX(null); return; }
+      const w = containerRef.current.clientWidth;
+      if (x < 0 || x > w) { setCursorX(null); return; }
+      setCursorX(x);
+    };
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(updateCursorX);
 
     return () => {
       cancelled = true;
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(updateCursorX);
       priceLinesRef.current.clear();
       // chart.remove() is idempotent in lightweight-charts — safe to call
       // even if the container was already detached by concurrent mode.
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      setCursorX(null);
     };
     // We intentionally re-mount the chart only on window changes (bars
     // identity). Cursor changes are handled via series.update() above,
@@ -429,6 +478,28 @@ export function BacktestReplayChart({
     }
   }, [pendingOrders]);
 
+  // ─── Replay cursor X: recompute on every cursor/bar advance ─
+  useEffect(() => {
+    if (!chartRef.current || !containerRef.current || !showReplayCursor) {
+      setCursorX(null);
+      return;
+    }
+    const cursorBar = bars[lastUpdatedIdxRef.current];
+    if (!cursorBar) { setCursorX(null); return; }
+    const x = chartRef.current.timeScale().timeToCoordinate(cursorBar.time);
+    if (x === null) { setCursorX(null); return; }
+    const w = containerRef.current.clientWidth;
+    if (x < 0 || x > w) { setCursorX(null); return; }
+    setCursorX(x);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback.cursor, bars, showReplayCursor]);
+
+  // Current playback bar — used for the date label and the gray overlay.
+  const currentBar = bars[lastUpdatedIdxRef.current] ?? null;
+  const replayDateLabel = currentBar
+    ? dayjs((currentBar.time as number) * 1000).format("ddd DD MMM 'YY HH:mm")
+    : null;
+
   // ─── Render ─────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full flex-col">
@@ -446,6 +517,49 @@ export function BacktestReplayChart({
       />
       <div className="relative flex-1" style={{ minHeight: 0 }}>
         <div ref={containerRef} className="absolute inset-0" style={{ height }} />
+
+        {/* ── TV-style replay cursor overlays ── */}
+        {showReplayCursor && cursorX !== null && (
+          <>
+            {/* Vertical cut line */}
+            <div
+              className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[#7AB6F4]"
+              style={{ left: `${cursorX}px`, bottom: `${TIMESCALE_HEIGHT}px`, top: 0 }}
+            />
+
+            {/* Scissors icon at top of the cut line */}
+            <div
+              className="pointer-events-none absolute z-20 -translate-x-1/2"
+              style={{ left: `${cursorX}px`, top: '4px' }}
+            >
+              <Scissors className="h-4 w-4 text-[#7AB6F4]" />
+            </div>
+
+            {/* Gray overlay for "future" bars (right of cut line) */}
+            {cursorX < chartWidth && (
+              <div
+                className="pointer-events-none absolute z-10 bg-black/40 backdrop-grayscale"
+                style={{
+                  left: `${cursorX + 1}px`,
+                  top: 0,
+                  right: 0,
+                  bottom: `${TIMESCALE_HEIGHT}px`,
+                }}
+              />
+            )}
+
+            {/* Date label at bottom of the cut line */}
+            {replayDateLabel && (
+              <div
+                className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-md bg-[#7AB6F4] px-2 py-0.5 text-[11px] font-semibold text-black shadow-md"
+                style={{ left: `${cursorX}px`, bottom: `${TIMESCALE_HEIGHT + 2}px` }}
+              >
+                Re: {replayDateLabel}
+              </div>
+            )}
+          </>
+        )}
+
         {load.kind === 'loading' && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#08080a]/80 text-sm text-zinc-500">
             Loading replay window…
