@@ -767,18 +767,19 @@ function BacktestOverviewContent() {
     );
   }
 
-  // Infinity (no losses) = "elite" → display ∞ in green; >2 green; >1 gold;
-  // ≤1 red. Without the Infinity branch the value would surface as red 0.00
-  // for users whose session had only winners.
-  const pfAccent: 'green' | 'gold' | 'red' =
+  // Backtest accent = BLUE (Elad 2026-05-29). The Journal Dashboard runs
+  // gold; Backtest distinguishes itself with #7AB6F4 sky-blue across neutral
+  // KPIs. Profit Factor still uses semantic colors (green elite, blue
+  // healthy, red losing) so the metric reads at a glance.
+  const pfAccent: 'green' | 'blue' | 'red' =
     !Number.isFinite(stats.profit_factor) ? 'green' :
     stats.profit_factor > 2 ? 'green' :
-    stats.profit_factor > 1 ? 'gold' :
+    stats.profit_factor > 1 ? 'blue' :
     'red';
   const pfValueColor =
     !Number.isFinite(stats.profit_factor) ? '#4AD295' :
     stats.profit_factor > 2 ? '#4AD295' :
-    stats.profit_factor > 1 ? '#C9A646' :
+    stats.profit_factor > 1 ? '#7AB6F4' :
     '#E36363';
   const netPnlPositive = stats.net_pnl >= 0;
 
@@ -826,7 +827,7 @@ function BacktestOverviewContent() {
 
             <button
               onClick={handleExportResults}
-              className="flex items-center gap-2 bg-gradient-to-r from-[#C9A646] to-[#E5C158] text-black rounded-[12px] px-3 h-9 font-medium hover:from-[#B39540] hover:to-[#D4B55E] transition-all text-[12px]"
+              className="flex items-center gap-2 bg-gradient-to-r from-[#7AB6F4] to-[#5C9BDF] text-black rounded-[12px] px-3 h-9 font-medium hover:from-[#5C9BDF] hover:to-[#4A8AD4] transition-all text-[12px]"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download Report (AI-Enhanced)</span>
@@ -852,7 +853,7 @@ function BacktestOverviewContent() {
           <JournalKpiCard
             label="Win Rate"
             value={formatPercentage(stats.win_rate)}
-            accent="gold"
+            accent="blue"
             hint={`${stats.winning_trades}W / ${stats.losing_trades}L / ${stats.breakeven_trades}BE`}
             tooltip="Percentage of winning trades vs total trades"
           />
@@ -868,7 +869,7 @@ function BacktestOverviewContent() {
           <JournalKpiCard
             label="Total Trades"
             value={String(stats.total_trades)}
-            accent="neutral"
+            accent="blue"
             icon={BarChart3}
             tooltip="Total number of trades in the backtest period"
           />
@@ -876,7 +877,7 @@ function BacktestOverviewContent() {
           <JournalKpiCard
             label="Avg Win/Loss Ratio"
             value={stats.avg_loss !== 0 ? (stats.avg_win / Math.abs(stats.avg_loss)).toFixed(2) : '—'}
-            accent="gold"
+            accent="blue"
             hint={`${formatCurrency(stats.avg_win)} / ${formatCurrency(stats.avg_loss)}`}
             tooltip="Average size of winning trades vs losing trades"
           />
