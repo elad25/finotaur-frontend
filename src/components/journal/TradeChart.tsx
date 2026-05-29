@@ -133,16 +133,22 @@ function tradeToMarkers(trade: TradeChartTrade): {
   const entryTime = Math.floor(new Date(trade.open_at).getTime() / 1000) as UTCTimestamp;
   if (Number.isFinite(entryTime as number)) {
     const entryColor = entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
-    // Overlay is the single source of truth — no native lightweight-charts
-    // marker is pushed, so the user sees exactly one circle (with the icon
-    // inside) per entry/exit instead of two at slightly different y-positions.
+    // Belt-and-suspenders: native lightweight-charts marker as the fallback
+    // colored circle (always reliable), plus the React overlay icon that sits
+    // on top when the chart's timing/refs cooperate. Worst case the user sees
+    // a clean colored circle; best case they see the circle with an arrow in.
+    markers.push({
+      time: entryTime,
+      position: entryIsBuy ? 'belowBar' : 'aboveBar',
+      shape: 'circle',
+      color: entryColor,
+      size: 2,
+    });
     markerIcons.push({
       time: entryTime,
       price: trade.entry_price,
       direction: entryIsBuy ? 'up' : 'down',
       color: entryColor,
-      // buy (entry below the price) → icon sits a bit below the entry price.
-      // sell (entry above the price) → icon sits a bit above.
       offsetY: entryIsBuy ? 18 : -18,
     });
   }
@@ -153,6 +159,13 @@ function tradeToMarkers(trade: TradeChartTrade): {
     const exitTime = Math.floor(new Date(trade.close_at).getTime() / 1000) as UTCTimestamp;
     if (Number.isFinite(exitTime as number)) {
       const exitColor = exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
+      markers.push({
+        time: exitTime,
+        position: exitIsBuy ? 'belowBar' : 'aboveBar',
+        shape: 'circle',
+        color: exitColor,
+        size: 2,
+      });
       markerIcons.push({
         time: exitTime,
         price: trade.exit_price,
