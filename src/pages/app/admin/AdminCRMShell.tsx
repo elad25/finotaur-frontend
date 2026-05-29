@@ -40,6 +40,7 @@ import { HealthRiskPanel } from './tabs/tools/HealthRiskPanel';
 import { BulkActions } from './tabs/tools/BulkActions';
 import { GDPRTools } from './tabs/tools/GDPRTools';
 import { AIUsageTab } from './tabs/AIUsageTab';
+import SeoAnalyticsPage from './SeoAnalyticsPage';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
 const Users = lazy(() => import('@/pages/app/journal/admin/Users'));
@@ -109,6 +110,9 @@ export function AdminCRMShell() {
           <Route path="analytics" element={<Lazy><Analytics /></Lazy>} />
           <Route path="analytics/top-traders" element={<Lazy><TopTraders /></Lazy>} />
           <Route path="analytics/ai-usage" element={<AIUsageTab />} />
+
+          {/* SEO Analytics */}
+          <Route path="seo" element={<SeoAnalyticsPage />} />
 
           {/* Billing & Revenue */}
           <Route path="billing" element={<Lazy><Subscribers /></Lazy>} />
