@@ -883,19 +883,23 @@ export function FinotaurChart({
             const candidateBefore = lo > 0 ? bars[lo - 1] : candidateAfter;
             const beforeT = candidateBefore.time as unknown as number;
             const afterT = candidateAfter.time as unknown as number;
-            const snappedTime = (
+            const snappedBar = (
               Math.abs(targetTime - beforeT) <= Math.abs(afterT - targetTime)
-                ? candidateBefore.time
-                : candidateAfter.time
-            ) as UTCTimestamp;
+                ? candidateBefore
+                : candidateAfter
+            );
 
-            const x = chart.timeScale().timeToCoordinate(snappedTime);
-            const y = series.priceToCoordinate(icon.price);
+            // Anchor to the candle's high/low (not the fill price) so the
+            // marker floats above/below the candle instead of overlapping it.
+            const anchorPrice = icon.direction === 'down' ? snappedBar.high : snappedBar.low;
+            const x = chart.timeScale().timeToCoordinate(snappedBar.time as UTCTimestamp);
+            const y = series.priceToCoordinate(anchorPrice);
 
             if (x === null || y === null) return null;
             if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-            const top = (y as number) + icon.offsetY;
+            // Push the marker clearly off the candle: 18px gap from the high/low.
+            const top = icon.direction === 'down' ? (y as number) - 18 : (y as number) + 18;
             const left = x as number;
 
             return (
@@ -903,22 +907,23 @@ export function FinotaurChart({
                 key={idx}
                 style={{
                   position: 'absolute',
-                  top: top - 11,   // center the 22px circle vertically on the anchor point
-                  left: left - 11, // center the 22px circle horizontally on the bar
-                  width: 22,
-                  height: 22,
+                  top: top - 12,   // center the 24px circle vertically
+                  left: left - 12, // center the 24px circle horizontally on the bar
+                  width: 24,
+                  height: 24,
                   borderRadius: '50%',
                   background: icon.color,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 0 0 2px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.45)',
+                  border: '2px solid #ffffff',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.6), 0 0 12px ' + icon.color + '66',
                   pointerEvents: 'none',
                 }}
               >
                 {icon.direction === 'up'
-                  ? <ArrowUp size={14} color="#fff" strokeWidth={3} absoluteStrokeWidth />
-                  : <ArrowDown size={14} color="#fff" strokeWidth={3} absoluteStrokeWidth />
+                  ? <ArrowUp size={14} color="#fff" strokeWidth={3.5} absoluteStrokeWidth />
+                  : <ArrowDown size={14} color="#fff" strokeWidth={3.5} absoluteStrokeWidth />
                 }
               </div>
             );
