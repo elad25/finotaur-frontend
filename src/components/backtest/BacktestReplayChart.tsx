@@ -151,6 +151,9 @@ export function BacktestReplayChart({
   const onContextMenuRef = useRef(onContextMenu);
   const onJumpToTimeRef = useRef(onJumpToTime);
   const showReplayCursorRef = useRef(showReplayCursor);
+  // Ref so the chart lifecycle closure (subscribeClick) always calls the
+  // latest setCursor from the playback engine, even after bars reload.
+  const setCursorRef = useRef<((c: number) => void) | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -247,6 +250,10 @@ export function BacktestReplayChart({
     onAdvance: handleAdvance,
   });
 
+  // Keep setCursorRef in sync so the chart lifecycle closure can always call
+  // the latest setCursor without needing playback in its deps array.
+  useEffect(() => { setCursorRef.current = playback.setCursor; }, [playback.setCursor]);
+
   // ─── Chart lifecycle ─────────────────────────────────────────
   useEffect(() => {
     // Guard: only create the chart once bars are ready.
@@ -319,21 +326,31 @@ export function BacktestReplayChart({
       if (!param.time) return;
       const clickedTime = param.time as number;
       if (onJumpToTimeRef.current) {
-        // Animate the chart's visible range toward the clicked bar, then
-        // commit the jump after the scroll animation (~280 ms).
+        const targetIdx = bars.findIndex((b) => (b.time as number) === clickedTime);
+
+        // Animate scroll toward the clicked bar regardless of path taken.
         const currentRange = chart.timeScale().getVisibleLogicalRange();
-        if (currentRange) {
-          const targetIdx = bars.findIndex((b) => (b.time as number) === clickedTime);
-          if (targetIdx >= 0) {
-            const center = (currentRange.from + currentRange.to) / 2;
-            const delta = targetIdx - center;
-            chart.timeScale().scrollToPosition(
-              chart.timeScale().scrollPosition() + delta,
-              true, // animated
-            );
-          }
+        if (currentRange && targetIdx >= 0) {
+          const center = (currentRange.from + currentRange.to) / 2;
+          const delta = targetIdx - center;
+          chart.timeScale().scrollToPosition(
+            chart.timeScale().scrollPosition() + delta,
+            true, // animated
+          );
         }
-        // Cancel any in-flight jump timer before scheduling the new one.
+
+        // If the bar is already within the loaded window, jump directly via
+        // setCursor — no re-fetch, no loading state. The redraw effect below
+        // handles resetting the series for backward and forward moves.
+        // Use the ref so we always call the latest setCursor even though this
+        // closure is captured once per bars mount.
+        if (targetIdx >= 0 && targetIdx < bars.length) {
+          setCursorRef.current?.(targetIdx);
+          return;
+        }
+
+        // Clicked outside the loaded window — delegate to the parent so it
+        // can re-fetch a new window around the target date.
         if (jumpTimerRef.current !== null) clearTimeout(jumpTimerRef.current);
         jumpTimerRef.current = setTimeout(() => {
           jumpTimerRef.current = null;
@@ -503,20 +520,27 @@ export function BacktestReplayChart({
     seriesRef.current.setMarkers(markers);
   }, [activePosition, closedPositions, playback.cursor, bars, load.kind]);
 
-  // Step-back support. lightweight-charts' series.update() is monotonic-
-  // forward only, so a user clicking the step-back chevron leaves the
-  // chart visually stuck (cursor changes, no bar removed). Track the
-  // PREVIOUS cursor and only re-seed when the cursor actually moves
-  // BACKWARD relative to its prior value — this avoids tripping during
-  // bars-change re-fetches or initial mount where lastUpdatedIdxRef is
-  // still being aligned to startIndex.
+  // Cursor-change redraw. lightweight-charts' series.update() is monotonic-
+  // forward only, so any cursor move that isn't a single-step forward needs
+  // a full re-seed via setData(). This covers:
+  //   - Backward moves (step-back chevron, setCursor to earlier bar)
+  //   - Forward jumps that skip bars (setCursor from click-to-jump on an
+  //     in-window bar — those bars were never handed to series.update())
+  // We re-seed whenever cursor changes AND the new cursor differs from the
+  // series' current high-water mark (lastUpdatedIdxRef). Single-step forward
+  // advances are handled exclusively by handleAdvance → series.update(); we
+  // skip them here to avoid an unnecessary full setData on normal playback.
   const prevCursorRef = useRef(playback.cursor);
   useEffect(() => {
     const prev = prevCursorRef.current;
     prevCursorRef.current = playback.cursor;
     if (!seriesRef.current) return;
     if (bars.length === 0) return;
-    if (playback.cursor < prev && playback.cursor >= 0) {
+    // Re-seed if cursor moved backward OR jumped forward past the last update.
+    const needsReseed =
+      playback.cursor < prev ||
+      (playback.cursor > prev && playback.cursor !== lastUpdatedIdxRef.current);
+    if (needsReseed && playback.cursor >= 0) {
       const visible = bars.slice(0, playback.cursor + 1).map((b) => ({
         time: b.time,
         open: b.open,
