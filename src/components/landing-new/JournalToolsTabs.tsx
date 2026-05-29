@@ -323,17 +323,18 @@ const JournalToolsTabs = () => {
   const activeTab = tabs.find((t) => t.key === active)!;
 
   return (
-    <SectionShell id="journal-toolkit" atmosphere="subtle" beam={false}>
+    <SectionShell
+      id="journal-toolkit"
+      atmosphere="subtle"
+      beam={false}
+      className="pt-8 md:pt-12"
+    >
       <div className="text-center mb-8">
         <SectionEyebrow className="mb-4">The Journal Toolkit</SectionEyebrow>
         <SectionTitle gradient="split" size="default" className="mb-4">
           One journal.{" "}
           <span className="text-gold-primary">Every angle.</span>
         </SectionTitle>
-        <p className="font-sans font-light text-ink-secondary text-base leading-relaxed max-w-2xl mx-auto">
-          Four modules under one roof. Start with the Automated Journal today —
-          Backtesting, AI Insights, and Trade Replay roll out next.
-        </p>
       </div>
 
       {/* Tab pills */}
