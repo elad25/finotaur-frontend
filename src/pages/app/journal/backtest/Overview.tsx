@@ -127,14 +127,56 @@ interface BacktestStats {
 // from backtest_sessions_v2 + backtest_trades_v2 (RLS-scoped).
 // ================================================
 
+// Trading-days per year for annualization (US equity convention).
+const TRADING_DAYS_PER_YEAR = 252;
+
+// Daily return series from per-day P&L vs deployed capital. The denominator
+// is the user's total initial balance (sum across sessions), so a $100 day
+// on a $10K baseline reads as 1.00% — comparable across sessions.
+function dailyReturnsFromEquitySeries(
+  equitySeries: ReadonlyArray<{ pnl: number }>,
+  baseline: number,
+): number[] {
+  if (baseline <= 0) return [];
+  return equitySeries.map((pt) => pt.pnl / baseline);
+}
+
+// Sharpe = mean(returns) / std(returns) * sqrt(252). Risk-free rate assumed 0
+// (per Sprint D decision 2026-05-29). Returns 0 when sample is too small or
+// std collapses — caller renders the literal 0 (UI does not show ∞).
+function computeSharpe(returns: number[]): number {
+  if (returns.length < 2) return 0;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance =
+    returns.reduce((acc, r) => acc + (r - mean) ** 2, 0) / returns.length;
+  const std = Math.sqrt(variance);
+  if (!Number.isFinite(std) || std === 0) return 0;
+  return (mean / std) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
+// Sortino = mean(returns) / std(downside returns) * sqrt(252). Downside
+// deviation uses only r < 0 (treats upside volatility as harmless).
+function computeSortino(returns: number[]): number {
+  if (returns.length < 2) return 0;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const negatives = returns.filter((r) => r < 0);
+  if (negatives.length === 0) return 0;
+  const downsideVar =
+    negatives.reduce((acc, r) => acc + r ** 2, 0) / negatives.length;
+  const downsideStd = Math.sqrt(downsideVar);
+  if (!Number.isFinite(downsideStd) || downsideStd === 0) return 0;
+  return (mean / downsideStd) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
 const useMockBacktestStats = (): { data: BacktestStats | null; isLoading: boolean } => {
   const { data: real, isLoading } = useBacktestStats();
 
   const data = useMemo<BacktestStats | null>(() => {
     if (!real) return null;
-    const { stats, trades, equitySeries } = real;
-    const INITIAL_CAPITAL = 10000;
+    const { stats, trades, equitySeries, totalInitialBalance } = real;
+    const INITIAL_CAPITAL = totalInitialBalance;
     const finalCapital = INITIAL_CAPITAL + stats.netPnl;
+    const dailyReturns = dailyReturnsFromEquitySeries(equitySeries, INITIAL_CAPITAL);
 
     // Build cumulative equity curve from equitySeries (date label → cumulative).
     // For the Overview chart we approximate ISO dates by adding day offsets
@@ -238,8 +280,8 @@ const useMockBacktestStats = (): { data: BacktestStats | null; isLoading: boolea
       losing_trades: stats.losers,
       breakeven_trades: stats.breakeven,
       win_rate: stats.winRate / 100,
-      sharpe_ratio: 0,   // not computed yet — would need daily-return time series
-      sortino_ratio: 0,
+      sharpe_ratio: computeSharpe(dailyReturns),
+      sortino_ratio: computeSortino(dailyReturns),
       max_drawdown: maxDrawdown,
       max_drawdown_percent: maxDrawdownPercent,
       recovery_factor: maxDrawdown !== 0 ? stats.netPnl / Math.abs(maxDrawdown) : 0,

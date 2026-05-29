@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import type { PaperPosition, SessionStats } from '@/hooks/useBacktestSession';
-import { computeStatsByStrategy } from '@/hooks/useBacktestSession';
+import { computeStats, computeStatsByStrategy } from '@/hooks/useBacktestSession';
 import dayjs from 'dayjs';
 
 // Raw row shape from backtest_trades_v2 joined with session.
@@ -40,6 +40,7 @@ interface BacktestTradeRow {
     interval: string;
     asset_class: string | null;
     created_at: string;
+    initial_balance: number;
   };
 }
 
@@ -79,6 +80,11 @@ export interface BacktestStatsResult {
   byStrategy: Map<string, SessionStats>;
   /** Number of distinct saved sessions feeding the stats. */
   sessionCount: number;
+  /** Sum of `initial_balance` across all distinct sessions in the result set.
+   *  Used as the denominator for percentage-based stats so they reflect actual
+   *  capital deployed instead of a flat $10K assumption. Falls back to 10000
+   *  when no sessions exist. */
+  totalInitialBalance: number;
   /** True when the trade history was clipped at BACKTEST_TRADES_PAGE_SIZE
    *  and additional older trades exist server-side. The UI should hint at
    *  per-session view for older trades. */
@@ -152,49 +158,6 @@ function tradesToPaperPositions(trades: BacktestTrade[]): PaperPosition[] {
   }));
 }
 
-// Inlined version of computeStats from useBacktestSession (so the hook
-// doesn't have to import a non-exported helper). Keep in sync if the
-// canonical formula changes there.
-function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
-  if (closed.length === 0) return EMPTY_STATS;
-  let winners = 0, losers = 0, breakeven = 0;
-  let grossProfit = 0, grossLoss = 0;
-  let largestWin = 0, largestLoss = 0;
-  let currentWinStreak = 0, currentLossStreak = 0;
-  let longestWinStreak = 0, longestLossStreak = 0;
-  for (const p of closed) {
-    const pnl = p.pnl ?? 0;
-    if (pnl > 0) {
-      winners++; grossProfit += pnl;
-      if (pnl > largestWin) largestWin = pnl;
-      currentWinStreak++; currentLossStreak = 0;
-      if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak;
-    } else if (pnl < 0) {
-      losers++; grossLoss += Math.abs(pnl);
-      if (Math.abs(pnl) > largestLoss) largestLoss = Math.abs(pnl);
-      currentLossStreak++; currentWinStreak = 0;
-      if (currentLossStreak > longestLossStreak) longestLossStreak = currentLossStreak;
-    } else {
-      breakeven++; currentWinStreak = 0; currentLossStreak = 0;
-    }
-  }
-  const totalTrades = closed.length;
-  const netPnl = grossProfit - grossLoss;
-  const avgWin = winners > 0 ? grossProfit / winners : 0;
-  const avgLoss = losers > 0 ? grossLoss / losers : 0;
-  return {
-    totalTrades, winners, losers, breakeven,
-    winRate: (winners / totalTrades) * 100,
-    netPnl,
-    netPnlPercent: startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0,
-    grossProfit, grossLoss,
-    profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0,
-    avgWin, avgLoss, largestWin, largestLoss,
-    avgRR: avgLoss > 0 ? avgWin / avgLoss : 0,
-    longestWinStreak, longestLossStreak,
-  };
-}
-
 function buildEquitySeries(trades: BacktestTrade[]): EquityPoint[] {
   const sorted = [...trades].sort((a, b) => {
     const ta = a.exitTime ?? a.entryTime;
@@ -238,6 +201,7 @@ export function useBacktestStats() {
           equitySeries: [],
           byStrategy: new Map(),
           sessionCount: 0,
+          totalInitialBalance: 10000,
           hasMore: false,
         };
       }
@@ -250,7 +214,7 @@ export function useBacktestStats() {
         .select(`
           id, session_id, side, entry_time, entry_price, exit_time, exit_price,
           size, stop_loss, take_profit, pnl, pnl_percent, exit_reason,
-          session:backtest_sessions_v2!inner(id, name, symbol, interval, asset_class, created_at, user_id)
+          session:backtest_sessions_v2!inner(id, name, symbol, interval, asset_class, created_at, user_id, initial_balance)
         `)
         .eq('session.user_id', userId)
         .not('exit_time', 'is', null)   // closed trades only
@@ -264,12 +228,25 @@ export function useBacktestStats() {
       const rows = hasMore ? allRows.slice(0, BACKTEST_TRADES_PAGE_SIZE) : allRows;
       const trades = rows.map(rowToTrade);
       const paperPositions = tradesToPaperPositions(trades);
-      const stats = computeStats(paperPositions, 10000);  // 10k baseline for pct
-      const byStrategy = computeStatsByStrategy(paperPositions, 10000);
-      const equitySeries = buildEquitySeries(trades);
-      const sessionCount = new Set(trades.map((t) => t.sessionId)).size;
 
-      return { stats, trades, equitySeries, byStrategy, sessionCount, hasMore };
+      // Sum initial_balance once per distinct session — same session has the
+      // same balance on every row, so dedupe by session_id before summing.
+      const balanceBySession = new Map<string, number>();
+      for (const row of rows) {
+        if (row.session?.id != null && !balanceBySession.has(row.session.id)) {
+          balanceBySession.set(row.session.id, Number(row.session.initial_balance) || 10000);
+        }
+      }
+      const totalInitialBalance = balanceBySession.size > 0
+        ? Array.from(balanceBySession.values()).reduce((a, b) => a + b, 0)
+        : 10000;
+
+      const stats = computeStats(paperPositions, totalInitialBalance);
+      const byStrategy = computeStatsByStrategy(paperPositions, totalInitialBalance);
+      const equitySeries = buildEquitySeries(trades);
+      const sessionCount = balanceBySession.size;
+
+      return { stats, trades, equitySeries, byStrategy, sessionCount, totalInitialBalance, hasMore };
     },
   });
 }

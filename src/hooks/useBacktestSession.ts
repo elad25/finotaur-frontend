@@ -13,7 +13,13 @@
  * 2 will introduce a single proper store if persistence demands it.
  */
 
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
+import { useAuth } from '@/providers/AuthProvider';
+
+// localStorage key prefix — actual key is `<prefix><userId>` so two accounts
+// sharing a browser don't see each other's in-flight session.
+const STORAGE_PREFIX = 'finotaur:backtest:session:';
+const PERSIST_THROTTLE_MS = 500;
 
 export type PaperSide = 'LONG' | 'SHORT';
 export type ExitReason = 'manual' | 'sl' | 'tp';
@@ -170,7 +176,7 @@ function computePnL(p: PaperPosition, exitPrice: number): { pnl: number; pnlPerc
   return { pnl, pnlPercent };
 }
 
-function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
+export function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
   if (closed.length === 0) return EMPTY_STATS;
 
   let winners = 0;
@@ -410,14 +416,78 @@ export function computeStatsByStrategy(
   return out;
 }
 
-export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
-  const [state, dispatch] = useReducer(reducer, {
+function makeEmptyState(initialBalance: number): SessionState {
+  return {
     startingBalance: initialBalance,
     activePosition: undefined,
     closedPositions: [],
     pendingOrders: [],
     stats: EMPTY_STATS,
-  });
+  };
+}
+
+function storageKeyFor(userId: string | null | undefined): string | null {
+  return userId ? STORAGE_PREFIX + userId : null;
+}
+
+function loadPersistedState(initialBalance: number, key: string | null): SessionState {
+  const empty = makeEmptyState(initialBalance);
+  if (!key || typeof window === 'undefined') return empty;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw);
+    // Soft shape validation — discard anything that doesn't look like SessionState.
+    if (
+      parsed
+      && typeof parsed === 'object'
+      && typeof parsed.startingBalance === 'number'
+      && Array.isArray(parsed.closedPositions)
+      && Array.isArray(parsed.pendingOrders)
+      && parsed.stats
+    ) {
+      return parsed as SessionState;
+    }
+  } catch {
+    // corrupt JSON / quota / blocked storage — fall through to empty.
+  }
+  return empty;
+}
+
+export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
+  const { user } = useAuth();
+  const key = storageKeyFor(user?.id);
+
+  const [state, dispatch] = useReducer(
+    reducer,
+    null,
+    () => loadPersistedState(initialBalance, key),
+  );
+
+  // Throttled persistence: every state change schedules a write ~500ms out;
+  // a fresh change before the timer fires resets it. This collapses bursts
+  // (e.g. SL drag) into one localStorage write.
+  const writeTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!key || typeof window === 'undefined') return;
+    if (writeTimerRef.current !== null) {
+      window.clearTimeout(writeTimerRef.current);
+    }
+    writeTimerRef.current = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(state));
+      } catch {
+        // quota exceeded / private-mode / disabled — silently drop.
+      }
+      writeTimerRef.current = null;
+    }, PERSIST_THROTTLE_MS);
+    return () => {
+      if (writeTimerRef.current !== null) {
+        window.clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = null;
+      }
+    };
+  }, [state, key]);
 
   const openPosition = useCallback((payload: OpenPayload) => {
     dispatch({ type: 'OPEN', payload });

@@ -17,7 +17,7 @@ import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, TrendingUp, TrendingDown, Search, Filter, ArrowUpDown,
-  Trophy, Percent, Target, DollarSign, Layers, AlertCircle, Sparkles,
+  Layers, AlertCircle, Sparkles, Download,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -45,6 +45,55 @@ function pnlColor(v: number): string {
   if (v > 0) return 'text-emerald-400';
   if (v < 0) return 'text-rose-400';
   return 'text-zinc-400';
+}
+
+// CSV escape: wrap in quotes, double any internal quotes. Per RFC 4180.
+function csvCell(v: string | number | null | undefined): string {
+  if (v === null || v === undefined) return '';
+  const s = typeof v === 'number' ? String(v) : v;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function tradesToCsv(rows: BacktestTrade[]): string {
+  const header = [
+    'symbol', 'interval', 'side',
+    'entry_time', 'exit_time',
+    'entry_price', 'exit_price',
+    'size', 'pnl', 'pnl_percent',
+    'exit_reason', 'session_name', 'saved_at',
+  ];
+  const lines = [header.join(',')];
+  for (const t of rows) {
+    lines.push([
+      csvCell(t.symbol),
+      csvCell(t.interval),
+      csvCell(t.side),
+      csvCell(new Date(t.entryTime * 1000).toISOString()),
+      csvCell(t.exitTime != null ? new Date(t.exitTime * 1000).toISOString() : ''),
+      csvCell(t.entryPrice),
+      csvCell(t.exitPrice),
+      csvCell(t.size),
+      csvCell(t.pnl),
+      csvCell(t.pnlPercent),
+      csvCell(t.exitReason ?? ''),
+      csvCell(t.sessionName ?? ''),
+      csvCell(t.savedAt),
+    ].join(','));
+  }
+  return lines.join('\r\n');
+}
+
+function downloadCsv(filename: string, csv: string): void {
+  // Prepend UTF-8 BOM so Excel auto-detects encoding.
+  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 type SortKey = 'savedAt' | 'pnl' | 'symbol' | 'side';
@@ -120,6 +169,13 @@ export default function BacktestTrades() {
     }
   };
 
+  const handleExportCsv = () => {
+    if (filteredSorted.length === 0) return;
+    const csv = tradesToCsv(filteredSorted);
+    const filename = `backtest_trades_${dayjs().format('YYYY-MM-DD')}.csv`;
+    downloadCsv(filename, csv);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] p-6 text-zinc-100">
@@ -163,6 +219,15 @@ export default function BacktestTrades() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleExportCsv}
+              disabled={filteredSorted.length === 0}
+              title={filteredSorted.length === 0 ? 'No trades to export' : `Export ${filteredSorted.length} trades to CSV`}
+            >
+              <Download size={14} className="mr-1.5" />
+              Export CSV
+            </Button>
             <Button variant="outline" onClick={() => navigate('/app/journal/backtest/results')}>
               <Layers size={14} className="mr-1.5" />
               By Session
