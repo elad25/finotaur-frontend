@@ -248,6 +248,7 @@ const CryptoDerivatives = lazy(() => import("@/pages/app/crypto/Derivatives"));
 const CryptoSentiment = lazy(() => import("@/pages/app/crypto/Sentiment"));
 const CryptoWatchlist = lazy(() => import("@/pages/app/crypto/Watchlist"));
 const CryptoAcademy = lazy(() => import("@/pages/app/crypto/Academy"));
+const CryptoDefiTvl = lazy(() => import("@/pages/app/crypto/DefiTvl"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -473,7 +474,8 @@ function AppContent() {
           <Route path="crypto/sentiment" element={<LockedRoute domainId="crypto"><CryptoSentiment /></LockedRoute>} />
           <Route path="crypto/watchlist" element={<LockedRoute domainId="crypto"><CryptoWatchlist /></LockedRoute>} />
           <Route path="crypto/academy" element={<LockedRoute domainId="crypto"><CryptoAcademy /></LockedRoute>} />
-          
+          <Route path="crypto/defi-tvl" element={<LockedRoute domainId="crypto"><CryptoDefiTvl /></LockedRoute>} />
+
           {/* FUTURES */}
           <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
           <Route path="futures/open-interests" element={<LockedRoute domainId="futures"><FuturesOpenInterests /></LockedRoute>} />
