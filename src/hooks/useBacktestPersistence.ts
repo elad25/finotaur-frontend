@@ -29,6 +29,10 @@ export interface SaveSessionInput {
   trades: PaperPosition[];
   pendingOrders: PendingOrder[];
   notes?: string;
+  /** Optional FK to the strategy this session validates.
+   *  Enables FINOTAUR AI to compare live execution to this backtest's baseline
+   *  via `compare_live_vs_backtest(strategy_id)`. Added 2026-05-29 Phase F. */
+  strategyId?: string | null;
 }
 
 export interface SavedSessionSummary {
@@ -163,6 +167,7 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
         ? input.statistics.profitFactor
         : 9999,
       notes: input.notes,
+      strategy_id: input.strategyId ?? null,
       trades: input.trades.map(paperToWire),
       pending_orders: input.pendingOrders.map(pendingToWire),
     };

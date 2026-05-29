@@ -754,6 +754,10 @@ export function BacktestChart({
         pendingOrders: state.pendingOrders,
         // Auto-name: "<symbol> · <interval> · <date>"
         name: `${symbol} · ${barInterval} · ${new Date().toLocaleDateString()}`,
+        // Session-level strategy link — last active strategy at save time.
+        // Per-trade strategy_id is already persisted via trades[].strategy_id.
+        // Enables FINOTAUR AI Phase F compare_live_vs_backtest. 2026-05-29.
+        strategyId: activeStrategyId,
       });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
