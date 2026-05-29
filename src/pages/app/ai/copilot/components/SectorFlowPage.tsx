@@ -1,4 +1,6 @@
-// COPILOT > Sector Flow — main page composition with ErrorBoundary + market status.
+// COPILOT > Quant Flow — main page composition with ErrorBoundary + market status.
+// Brand: Quant Flow tracks INDUSTRIES (Semiconductors, Cybersecurity, Solar, Biotech) —
+// not broad sectors. File name kept as SectorFlowPage for diff minimality.
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
@@ -16,11 +18,11 @@ function SectorFlowPageInner() {
       <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-ds-3">
         <div>
           <div className="text-xs uppercase tracking-[0.2em] text-gold-primary mb-ds-2">
-            COPILOT · SECTOR FLOW
+            COPILOT · QUANT FLOW
           </div>
-          <h1 className="text-3xl text-ink-primary tracking-tight">Sector Flow</h1>
+          <h1 className="text-3xl text-ink-primary tracking-tight">Quant Flow</h1>
           <p className="text-ink-secondary text-sm mt-ds-2 max-w-2xl">
-            Where institutional money is moving across sub-sectors. Composite score = relative strength · volume z-score · price change.
+            Industry-level capital rotation. We track <span className="text-ink-primary">Semiconductors, Cybersecurity, Solar, Biotech, Oil Services</span> — not broad sectors. Score = relative strength · volume z-score · price change.
           </p>
         </div>
         <div className="md:self-start">
@@ -57,7 +59,7 @@ function SectorFlowPageInner() {
 
 export function SectorFlowPage() {
   return (
-    <ErrorBoundary boundary="sector-flow">
+    <ErrorBoundary boundary="quant-flow">
       <SectorFlowPageInner />
     </ErrorBoundary>
   );
