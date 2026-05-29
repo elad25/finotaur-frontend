@@ -326,7 +326,15 @@ export function BacktestReplayChart({
       close: b.close,
     }));
     series.setData(visible);
-    chart.timeScale().fitContent();
+    // Show a stable window of the most recent ~150 bars near the cursor
+    // instead of fitContent() (which zooms out to fit all ~1000 history bars
+    // and causes the viewport to jump on every re-seed / LIVE->REPLAY toggle).
+    const seededCount = startIndex + 1;
+    const VISIBLE_WINDOW = 150;
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(0, seededCount - VISIBLE_WINDOW),
+      to: seededCount + 2,
+    });
 
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the
