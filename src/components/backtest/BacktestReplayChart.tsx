@@ -150,6 +150,7 @@ export function BacktestReplayChart({
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
   const onJumpToTimeRef = useRef(onJumpToTime);
+  const showReplayCursorRef = useRef(showReplayCursor);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
 
   // ─── Replay cursor overlay state ─────────────────────────────
@@ -157,11 +158,15 @@ export function BacktestReplayChart({
   const [cursorX, setCursorX] = useState<number | null>(null);
   // Width of the chart container (for gray-overlay right-side calc).
   const [chartWidth, setChartWidth] = useState(0);
+  // Mouse hover position — when set, preview takes over from playback cursor.
+  const [hoverX, setHoverX] = useState<number | null>(null);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
   useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
+  useEffect(() => { showReplayCursorRef.current = showReplayCursor; }, [showReplayCursor]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -321,6 +326,36 @@ export function BacktestReplayChart({
       if (found) onBarClickRef.current(found);
     });
 
+    // TV-style preview: crosshair moves → update hover state so the scissors
+    // + gray overlay + date label follow the mouse. param.time is undefined
+    // when the crosshair leaves the plot area.
+    // handleCrosshairMove — param type inferred from chart.subscribeCrosshairMove signature.
+    const handleCrosshairMove: Parameters<typeof chart.subscribeCrosshairMove>[0] = (param) => {
+      if (!showReplayCursorRef.current) return;
+      if (!param.time) {
+        setHoverX(null);
+        setHoverTime(null);
+        return;
+      }
+      const x = chart.timeScale().timeToCoordinate(param.time);
+      if (x === null) {
+        setHoverX(null);
+        setHoverTime(null);
+        return;
+      }
+      setHoverX(x);
+      setHoverTime(param.time as number);
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    // Fallback: clear preview when the pointer physically leaves the container
+    // (subscribeCrosshairMove may not fire on rapid exits).
+    const handleMouseLeave = () => {
+      setHoverX(null);
+      setHoverTime(null);
+    };
+    container.addEventListener('mouseleave', handleMouseLeave);
+
     // Phase 6: right-click → order context menu. Compute the clicked price
     // by converting the local Y coordinate via the candlestick series.
     // lightweight-charts has no native contextmenu hook, so we listen on
@@ -380,6 +415,8 @@ export function BacktestReplayChart({
       cancelled = true;
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.timeScale().unsubscribeVisibleTimeRangeChange(updateCursorX);
       priceLinesRef.current.clear();
       // chart.remove() is idempotent in lightweight-charts — safe to call
@@ -388,6 +425,8 @@ export function BacktestReplayChart({
       chartRef.current = null;
       seriesRef.current = null;
       setCursorX(null);
+      setHoverX(null);
+      setHoverTime(null);
     };
     // We intentionally re-mount the chart only on window changes (bars
     // identity). Cursor changes are handled via series.update() above,
@@ -494,10 +533,13 @@ export function BacktestReplayChart({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback.cursor, bars, showReplayCursor]);
 
-  // Current playback bar — used for the date label and the gray overlay.
+  // Active display X and time: hover preview when available, else playback cursor.
+  const activeX = hoverX ?? cursorX;
+  // Current playback bar — used as fallback for the date label.
   const currentBar = bars[lastUpdatedIdxRef.current] ?? null;
-  const replayDateLabel = currentBar
-    ? dayjs((currentBar.time as number) * 1000).format("ddd DD MMM 'YY HH:mm")
+  const activeTime: number | null = hoverTime ?? (currentBar ? (currentBar.time as number) : null);
+  const replayDateLabel = activeTime
+    ? dayjs(activeTime * 1000).format("ddd DD MMM 'YY HH:mm")
     : null;
 
   // ─── Render ─────────────────────────────────────────────────
@@ -519,28 +561,28 @@ export function BacktestReplayChart({
         <div ref={containerRef} className="absolute inset-0" style={{ height }} />
 
         {/* ── TV-style replay cursor overlays ── */}
-        {showReplayCursor && cursorX !== null && (
+        {showReplayCursor && activeX !== null && (
           <>
             {/* Vertical cut line */}
             <div
               className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[#7AB6F4]"
-              style={{ left: `${cursorX}px`, bottom: `${TIMESCALE_HEIGHT}px`, top: 0 }}
+              style={{ left: `${activeX}px`, bottom: `${TIMESCALE_HEIGHT}px`, top: 0 }}
             />
 
             {/* Scissors icon at top of the cut line */}
             <div
               className="pointer-events-none absolute z-20 -translate-x-1/2"
-              style={{ left: `${cursorX}px`, top: '4px' }}
+              style={{ left: `${activeX}px`, top: '4px' }}
             >
               <Scissors className="h-4 w-4 text-[#7AB6F4]" />
             </div>
 
             {/* Gray overlay for "future" bars (right of cut line) */}
-            {cursorX < chartWidth && (
+            {activeX < chartWidth && (
               <div
                 className="pointer-events-none absolute z-10 bg-black/40 backdrop-grayscale"
                 style={{
-                  left: `${cursorX + 1}px`,
+                  left: `${activeX + 1}px`,
                   top: 0,
                   right: 0,
                   bottom: `${TIMESCALE_HEIGHT}px`,
@@ -552,7 +594,7 @@ export function BacktestReplayChart({
             {replayDateLabel && (
               <div
                 className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-md bg-[#7AB6F4] px-2 py-0.5 text-[11px] font-semibold text-black shadow-md"
-                style={{ left: `${cursorX}px`, bottom: `${TIMESCALE_HEIGHT + 2}px` }}
+                style={{ left: `${activeX}px`, bottom: `${TIMESCALE_HEIGHT + 2}px` }}
               >
                 Re: {replayDateLabel}
               </div>
