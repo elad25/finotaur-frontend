@@ -122,8 +122,10 @@ const GUIDES: Partial<Record<JournalSource, JournalGuide>> = {
         kind: 'image',
         title: 'Step 1 — Open Trade View',
         body: 'Log in to TradeZella and click "Trade View" in the left sidebar. The zoom on the right shows exactly where to click.',
-        imageSrc: '/import-guides/tradezella/01-trade-view.png',
-        secondaryImageSrc: '/import-guides/tradezella/01-trade-view-zoom.png',
+        // ?v=3 cache-buster: bump whenever the underlying PNGs change so returning
+        // clients fetch the new file instead of the disk-cached old copy.
+        imageSrc: '/import-guides/tradezella/01-trade-view.png?v=3',
+        secondaryImageSrc: '/import-guides/tradezella/01-trade-view-zoom.png?v=3',
         secondaryCaption: 'Zoom in',
       },
       {
