@@ -26,6 +26,16 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
+// DoS guard: cap one session at 10k trades. Saves above this size
+// pin an edge worker + hold a DB connection long enough to degrade
+// availability under a small number of bad-actor requests.
+const MAX_TRADES_PER_SESSION = 10000;
+
+// JSONB column size cap (statistics / config). 100KB is well above the
+// largest legitimate payload (real stats blobs are ~2KB) and far below
+// what would force Postgres to TOAST or impact query latency.
+const MAX_JSON_BYTES = 100 * 1024;
+
 // ─── Types (mirror frontend useBacktestSession) ─────────────────
 interface TradePayload {
   side: 'LONG' | 'SHORT';
@@ -39,6 +49,18 @@ interface TradePayload {
   pnl?: number;
   pnl_percent?: number;
   exit_reason?: 'manual' | 'sl' | 'tp';
+}
+
+interface PendingOrderPayload {
+  id: string;
+  side: 'LONG' | 'SHORT';
+  type: 'LIMIT' | 'STOP';
+  trigger_price: number;
+  size: number;
+  stop_loss?: number;
+  take_profit?: number;
+  strategy_id?: string | null;
+  created_at: number;
 }
 
 interface SaveSessionPayload {
@@ -58,6 +80,7 @@ interface SaveSessionPayload {
   notes?: string;
   config?: Record<string, unknown>;
   trades: TradePayload[];
+  pending_orders?: PendingOrderPayload[];
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -70,6 +93,14 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 function errorResponse(message: string, status = 400): Response {
   return jsonResponse({ error: message }, status);
+}
+
+// Log the full error server-side (visible via supabase function logs)
+// while returning only the generic label to the client. Prevents leakage
+// of DB constraint names, column names, or row data through err.message.
+function safeError(label: string, err: unknown, status: number): Response {
+  console.error(`[backtest-sessions] ${label}:`, err);
+  return errorResponse(label, status);
 }
 
 // ─── Handler ────────────────────────────────────────────────────
@@ -109,6 +140,20 @@ serve(async (req) => {
       if (!payload.symbol || !payload.interval || !Array.isArray(payload.trades)) {
         return errorResponse('Invalid payload: symbol, interval, and trades[] are required');
       }
+      if (payload.trades.length > MAX_TRADES_PER_SESSION) {
+        return errorResponse(
+          `Too many trades in one session (max ${MAX_TRADES_PER_SESSION})`,
+          413,
+        );
+      }
+      const statsBytes = JSON.stringify(payload.statistics ?? {}).length;
+      const configBytes = JSON.stringify(payload.config ?? {}).length;
+      if (statsBytes > MAX_JSON_BYTES || configBytes > MAX_JSON_BYTES) {
+        return errorResponse(
+          `Payload too large (max ${MAX_JSON_BYTES} bytes per JSON field)`,
+          413,
+        );
+      }
 
       // 1. Insert session row.
       const { data: session, error: sessErr } = await supabase
@@ -130,12 +175,13 @@ serve(async (req) => {
           profit_factor: payload.profit_factor,
           notes: payload.notes ?? null,
           config: payload.config ?? null,
+          pending_orders: payload.pending_orders ?? [],
         })
         .select('id, created_at')
         .single();
 
       if (sessErr || !session) {
-        return errorResponse(`Failed to save session: ${sessErr?.message ?? 'unknown error'}`, 500);
+        return safeError('Failed to save session', sessErr, 500);
       }
 
       // 2. Insert trades (bulk). Skip if empty array.
@@ -159,7 +205,7 @@ serve(async (req) => {
         if (tradesErr) {
           // Best-effort rollback so we don't leave an empty session orphaned.
           await supabase.from('backtest_sessions_v2').delete().eq('id', session.id);
-          return errorResponse(`Failed to save trades: ${tradesErr.message}`, 500);
+          return safeError('Failed to save trades', tradesErr, 500);
         }
       }
 
@@ -180,36 +226,59 @@ serve(async (req) => {
               .order('entry_time', { ascending: true }),
           ]);
 
-        if (sessErr) return errorResponse(`Session not found: ${sessErr.message}`, 404);
-        if (tradesErr) return errorResponse(`Failed to load trades: ${tradesErr.message}`, 500);
+        if (sessErr) return safeError('Session not found', sessErr, 404);
+        if (tradesErr) return safeError('Failed to load trades', tradesErr, 500);
 
         return jsonResponse({ session, trades: trades ?? [] });
       }
 
       // ── List (summary only — no trades) ──
-      const { data, error } = await supabase
+      // Cursor-based pagination on created_at DESC.
+      // Query params:
+      //   limit  — rows per page (default 50, max 200)
+      //   before — ISO timestamp cursor; returns rows older than this value
+      const rawLimit = parseInt(url.searchParams.get('limit') ?? '50', 10);
+      const pageLimit = Number.isFinite(rawLimit)
+        ? Math.min(Math.max(rawLimit, 1), 200)
+        : 50;
+      const beforeParam = url.searchParams.get('before');
+      const beforeDate = beforeParam ? new Date(beforeParam) : null;
+
+      let query = supabase
         .from('backtest_sessions_v2')
         .select(
           'id, name, symbol, interval, asset_class, total_trades, win_rate, net_pnl, profit_factor, created_at',
         )
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(pageLimit + 1); // over-fetch by 1 to detect next page
 
-      if (error) return errorResponse(`Failed to list sessions: ${error.message}`, 500);
-      return jsonResponse({ sessions: data ?? [] });
+      if (beforeDate && !isNaN(beforeDate.getTime())) {
+        query = query.lt('created_at', beforeDate.toISOString());
+      }
+
+      const { data, error } = await query;
+
+      if (error) return safeError('Failed to list sessions', error, 500);
+
+      const rows = data ?? [];
+      const hasMore = rows.length > pageLimit;
+      const sessions = hasMore ? rows.slice(0, pageLimit) : rows;
+      // next_cursor is the created_at of the last row we're returning
+      const next_cursor = hasMore ? sessions[sessions.length - 1].created_at : null;
+
+      return jsonResponse({ sessions, next_cursor });
     }
 
     // ─── DELETE /backtest-sessions?id=… ───────────────────────
     if (req.method === 'DELETE') {
       if (!id) return errorResponse('Query param "id" is required for DELETE');
       const { error } = await supabase.from('backtest_sessions_v2').delete().eq('id', id);
-      if (error) return errorResponse(`Failed to delete session: ${error.message}`, 500);
+      if (error) return safeError('Failed to delete session', error, 500);
       return jsonResponse({ ok: true, id });
     }
 
     return errorResponse(`Method not allowed: ${req.method}`, 405);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return errorResponse(`Internal error: ${message}`, 500);
+    return safeError('Internal error', err, 500);
   }
 });

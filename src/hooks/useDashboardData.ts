@@ -13,6 +13,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
+import { logger } from '@/lib/logger';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { TRADER_PORTFOLIO_ID } from '@/hooks/usePortfolios';
@@ -393,12 +395,29 @@ async function fetchAggregatedStats(
   avg_loss: number;
   avg_rr: number;
 } | null> {
-  const { data, error } = await client.rpc('get_user_portfolio_stats', {
-    p_user_id: userId,
-    p_portfolio_ids: portfolioIds && portfolioIds.length > 0 ? portfolioIds : null,
-  });
+  let data: unknown;
+  let error: unknown;
+  try {
+    const result = await withTimeout(
+      client.rpc('get_user_portfolio_stats', {
+        p_user_id: userId,
+        p_portfolio_ids: portfolioIds && portfolioIds.length > 0 ? portfolioIds : null,
+      }),
+      TIMEOUTS.SUPABASE_RPC,
+      'useDashboardData.fetchAggregatedStats'
+    );
+    data = result.data;
+    error = result.error;
+  } catch (err) {
+    if (err instanceof TimeoutError) {
+      logger.error('useDashboardData.fetchAggregatedStats timed out', err, { userId });
+    } else {
+      logger.error('useDashboardData.fetchAggregatedStats failed', err, { userId });
+    }
+    throw err;
+  }
   if (error) {
-    console.error('get_user_portfolio_stats RPC error:', error.message);
+    logger.error('get_user_portfolio_stats RPC error', error, { userId });
     throw error;
   }
   if (!Array.isArray(data) || data.length === 0) return null;

@@ -1,10 +1,9 @@
 // src/components/routes/BacktestRoute.tsx
 // 🧪 BACKTEST PROTECTION - Checks if locked first
-import { memo, useEffect, useState, Suspense, ReactNode } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { memo, Suspense, ReactNode } from 'react';
 import { domains } from '@/constants/nav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 
 // Loading component
 const PageLoader = memo(() => (
@@ -119,32 +118,10 @@ const BacktestLanding = lazy(() => import('@/pages/app/journal/backtest/Backtest
 
 // 🧪 BACKTEST PROTECTION COMPONENT
 export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
-  const [accountType, setAccountType] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { hasAccess, isLoading } = useBacktestAccess();
 
-  // 🔒 Check if backtest domain is locked
+  // 🔒 Check if backtest domain is globally locked
   const isBacktestLocked = domains['journal-backtest']?.locked === true;
-
-  useEffect(() => {
-    async function checkAccess() {
-      if (!user?.id) {
-        setIsLoading(false);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('account_type')
-        .eq('id', user.id)
-        .single();
-
-      setAccountType(data?.account_type || 'trial');
-      setIsLoading(false);
-    }
-
-    checkAccess();
-  }, [user?.id]);
 
   if (isLoading) {
     return <PageLoader />;
@@ -155,7 +132,7 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
     return <BacktestLockedPage />;
   }
 
-  if (accountType !== 'premium' && accountType !== 'admin') {
+  if (!hasAccess) {
     return (
       <Suspense fallback={<PageLoader />}>
         <BacktestLanding />

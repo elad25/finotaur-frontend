@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase, cachedQuery, supabaseCache } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
+import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
+import { logger } from '@/lib/logger';
 
 type ExtendedUser = User & { name?: string };
 
@@ -62,17 +64,21 @@ export function useAuth() {
 
     try {
       const cacheKey = `impersonation:${sessionToken}`;
-      const data = await cachedQuery(
-        cacheKey,
-        async () => {
-          const { data, error } = await supabase.rpc('get_active_impersonation_session', {
-            p_session_token: sessionToken
-          });
-          
-          if (error || !data || data.length === 0) return null;
-          return data[0];
-        },
-        IMPERSONATION_CHECK_INTERVAL
+      const data = await withTimeout(
+        cachedQuery(
+          cacheKey,
+          async () => {
+            const { data, error } = await supabase.rpc('get_active_impersonation_session', {
+              p_session_token: sessionToken
+            });
+
+            if (error || !data || data.length === 0) return null;
+            return data[0];
+          },
+          IMPERSONATION_CHECK_INTERVAL
+        ),
+        TIMEOUTS.SUPABASE_RPC,
+        'useAuth.checkImpersonation'
       );
 
       if (!data) {
@@ -109,7 +115,11 @@ export function useAuth() {
       };
       
     } catch (error) {
-      console.error('❌ Error checking impersonation:', error);
+      if (error instanceof TimeoutError) {
+        logger.error('useAuth.checkImpersonation timed out', error, { sessionToken: '[redacted]' });
+      } else {
+        logger.error('useAuth.checkImpersonation failed', error);
+      }
       sessionStorage.removeItem(SESSION_TOKEN_KEY);
       supabaseCache.invalidate('impersonation:');
     }

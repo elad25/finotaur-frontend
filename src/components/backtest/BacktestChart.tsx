@@ -21,8 +21,9 @@
  *   - Rule-based strategy executor (Phase 3)
  */
 
-import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
@@ -117,6 +118,86 @@ function positionToMarkers(p: PaperPosition): ChartMarker[] {
   return [entryMarker];
 }
 
+// ─── ActiveStrategyDropdown — custom dropdown (replaces native <select>) ─────
+function ActiveStrategyDropdown({
+  activeStrategyId,
+  strategies,
+  onChange,
+}: {
+  activeStrategyId: string | null;
+  strategies: Array<{ id: string; name: string }>;
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const activeName = activeStrategyId
+    ? strategies.find((s) => s.id === activeStrategyId)?.name ?? 'Unknown'
+    : 'No strategy (Manual)';
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+        title="Tag new trades with this strategy for per-strategy stats"
+      >
+        <Sparkles size={12} className="text-[#7AB6F4]" />
+        <span className="max-w-[160px] truncate">{activeName}</span>
+        <ChevronDown size={12} className="text-zinc-500" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <button
+            type="button"
+            onClick={() => { onChange(null); setOpen(false); }}
+            className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
+              activeStrategyId === null
+                ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                : 'text-zinc-300 hover:bg-zinc-900'
+            }`}
+          >
+            No strategy (Manual)
+          </button>
+          {strategies.length > 0 && (
+            <div className="border-t border-zinc-800" />
+          )}
+          {strategies.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => { onChange(s.id); setOpen(false); }}
+              className={`block w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
+                activeStrategyId === s.id
+                  ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                  : 'text-zinc-300 hover:bg-zinc-900'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────
 export interface BacktestChartProps {
   initialSymbol?: string;
@@ -157,6 +238,7 @@ export function BacktestChart({
     updateTakeProfit,
     reset,
     loadTrades,
+    loadSession,
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
@@ -181,9 +263,10 @@ export function BacktestChart({
   // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
   // BacktestReplayChart (cursor-controlled). In Live mode it's the
   // current FinotaurChart with manual current-price input.
-  // Phase 5: Replay is the default — Elad: "תדאג שהIMERSSIVE יעבוד חלק כמו REPLAY"
+  // Elad 2026-05-29: switch the default back to Live. Replay is one click
+  // away via the LIVE/REPLAY toggle in the toolbar.
   type ChartMode = 'live' | 'replay';
-  const [chartMode, setChartMode] = useState<ChartMode>('replay');
+  const [chartMode, setChartMode] = useState<ChartMode>('live');
 
   // Phase 5: Chart link goes straight to fullscreen immersive — covers
   // app topnav + journal sub-nav. Exit button returns user to backtest
@@ -233,6 +316,68 @@ export function BacktestChart({
     if (state.activePosition) all.push(...positionToMarkers(state.activePosition));
     return all.sort((a, b) => (a.time as number) - (b.time as number));
   }, [state.activePosition, state.closedPositions]);
+
+  // Phase 7: load a saved session from the URL ?sessionId= param.
+  const [searchParams] = useSearchParams();
+  const sessionIdParam = searchParams.get('sessionId');
+  const hydratedRef = useRef<string | null>(null);
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionIdParam) return;
+    if (hydratedRef.current === sessionIdParam) return; // prevent double-hydrate
+    hydratedRef.current = sessionIdParam;
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await persistence.loadSession(sessionIdParam);
+        if (cancelled) return;
+        // 1. Restore chart context.
+        const ac = detail.session.asset_class;
+        if (ac === 'futures' || ac === 'stocks' || ac === 'crypto') setAssetClass(ac);
+        setSymbol(detail.session.symbol);
+        setBarInterval(detail.session.interval as Interval);
+        setReplayStart(new Date(detail.session.start_date));
+        setChartMode('replay');
+        // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
+        const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
+          id: t.id,
+          side: t.side,
+          entryTime: Math.floor(new Date(t.entry_time).getTime() / 1000),
+          entryPrice: t.entry_price,
+          size: t.size,
+          stopLoss: t.stop_loss ?? undefined,
+          takeProfit: t.take_profit ?? undefined,
+          exitTime: t.exit_time != null ? Math.floor(new Date(t.exit_time).getTime() / 1000) : undefined,
+          exitPrice: t.exit_price ?? undefined,
+          pnl: t.pnl ?? undefined,
+          pnlPercent: t.pnl_percent ?? undefined,
+          exitReason: t.exit_reason ?? undefined,
+        }));
+        const pendingOrders: PendingOrder[] = (detail.session.pending_orders ?? []).map((o) => ({
+          id: o.id,
+          side: o.side,
+          type: o.type,
+          triggerPrice: o.trigger_price,
+          size: o.size,
+          stopLoss: o.stop_loss ?? undefined,
+          takeProfit: o.take_profit ?? undefined,
+          strategyId: o.strategy_id ?? null,
+          createdAt: o.created_at,
+        }));
+        // 3. Hydrate the session reducer.
+        loadSession({
+          startingBalance: detail.session.initial_balance,
+          closedPositions,
+          pendingOrders,
+        });
+        setHydrateError(null);
+      } catch (err) {
+        if (!cancelled) setHydrateError(err instanceof Error ? err.message : 'Failed to load saved session');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionIdParam, persistence, loadSession]);
 
   // ─── Handlers ────────────────────────────────────────────────
   const handleAssetClassChange = (next: AssetClass) => {
@@ -406,6 +551,7 @@ export function BacktestChart({
         finalBalance,
         statistics: state.stats,
         trades: state.closedPositions,
+        pendingOrders: state.pendingOrders,
         // Auto-name: "<symbol> · <interval> · <date>"
         name: `${symbol} · ${barInterval} · ${new Date().toLocaleDateString()}`,
       });
@@ -468,6 +614,14 @@ export function BacktestChart({
 
   return (
     <div className={containerCls}>
+      <CftcDisclosureBanner className="mx-4 mt-3" />
+      {/* Session hydration error — shown when ?sessionId= fetch fails */}
+      {hydrateError && (
+        <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-rose-800 bg-rose-950/60 px-3 py-2 text-xs text-rose-300">
+          <span><AlertCircle size={12} className="mr-1.5 inline" />Failed to load saved session: {hydrateError}</span>
+          <button onClick={() => setHydrateError(null)} className="shrink-0 text-rose-400 hover:text-rose-200"><X size={12} /></button>
+        </div>
+      )}
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
         {/* Exit fullscreen — back to backtest overview (only in fullscreen) */}
@@ -532,7 +686,16 @@ export function BacktestChart({
           {(['live', 'replay'] as ChartMode[]).map((mode) => (
             <button
               key={mode}
-              onClick={() => setChartMode(mode)}
+              onClick={() => {
+                // Elad 2026-05-29: switching LIVE → REPLAY should feel
+                // continuous. Snap replayStart to NOW so the replay window
+                // shows the same recent bars the user was looking at on
+                // LIVE, instead of jumping back 4 hours.
+                if (mode === 'replay' && chartMode === 'live') {
+                  setReplayStart(new Date());
+                }
+                setChartMode(mode);
+              }}
               className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
                 chartMode === mode
                   ? 'bg-[#C9A646] text-black'
@@ -554,21 +717,14 @@ export function BacktestChart({
           />
         )}
 
-        {/* Active Strategy dropdown (Phase 4) — both modes */}
-        <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1">
-          <Sparkles size={12} className="text-[#C9A646]" />
-          <select
-            value={activeStrategyId ?? ''}
-            onChange={(e) => setActiveStrategyId(e.target.value || null)}
-            className="bg-transparent text-xs font-medium text-zinc-300 focus:outline-none"
-            title="Tag new trades with this strategy for per-strategy stats"
-          >
-            <option value="">No strategy (Manual)</option>
-            {strategyLib.strategies.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
+        {/* Active Strategy dropdown — custom (Sprint F: native <select> styling
+            was browser-default ugly; replaced with a button + popover panel
+            that matches the rest of the toolbar). */}
+        <ActiveStrategyDropdown
+          activeStrategyId={activeStrategyId}
+          strategies={strategyLib.strategies}
+          onChange={setActiveStrategyId}
+        />
 
         {/* Balance display */}
         <div className="ml-auto flex items-center gap-4">
@@ -582,8 +738,12 @@ export function BacktestChart({
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
           </div>
-          {/* Run Strategy dropdown — Live mode only */}
-          {chartMode === 'live' && (
+          {/* Run Strategy dropdown — Bug D fast-path (Sprint C1 of backtest-launch-ready):
+              hidden globally because clicking it in Live mode triggers a browser
+              freeze (CDP timeout 30s). Investigation deferred to Sprint D. To
+              re-enable, remove the `false &&` prefix from the gate below. */}
+          {/* eslint-disable-next-line no-constant-binary-expression */}
+          {false && chartMode === 'live' && (
           <div className="relative">
             <button
               onClick={() => setStrategyPickerOpen((v) => !v)}
@@ -693,6 +853,8 @@ export function BacktestChart({
               onBarReveal={handleReplayBarReveal}
               onBarClick={handleReplayBarClick}
               onContextMenu={(info) => setContextMenu(info)}
+              onJumpToTime={(date) => setReplayStart(date)}
+              showReplayCursor
               height="100%"
             />
           )}
@@ -713,8 +875,8 @@ export function BacktestChart({
                 value={livePrice}
                 onChange={(e) => setLivePrice(e.target.value)}
                 placeholder="e.g. 20425.50"
-                step="0.01"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
+                step="any"
+                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
 
@@ -725,8 +887,8 @@ export function BacktestChart({
                 value={size}
                 onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))}
                 min="0.01"
-                step="0.1"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
+                step="any"
+                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
 
@@ -738,8 +900,8 @@ export function BacktestChart({
                   value={slInput}
                   onChange={(e) => setSlInput(e.target.value)}
                   placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none"
+                  step="any"
+                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </label>
               <label className="block">
@@ -749,8 +911,8 @@ export function BacktestChart({
                   value={tpInput}
                   onChange={(e) => setTpInput(e.target.value)}
                   placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  step="any"
+                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </label>
             </div>
@@ -963,47 +1125,8 @@ export function BacktestChart({
             </div>
           )}
 
-          {/* Trade history */}
-          <div className="flex-1 p-4">
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-              <Target size={12} />
-              History ({state.closedPositions.length})
-            </h3>
-            {state.closedPositions.length === 0 ? (
-              <div className="rounded-md border border-dashed border-zinc-800 px-3 py-6 text-center text-xs text-zinc-600">
-                No closed trades yet.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {state.closedPositions.slice().reverse().map((trade, i) => {
-                  const idx = state.closedPositions.length - i;
-                  const pnl = trade.pnl ?? 0;
-                  return (
-                    <div
-                      key={trade.id}
-                      className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-xs"
-                    >
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-zinc-500">#{idx}</span>
-                          <span className={`font-semibold ${trade.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {trade.side}
-                          </span>
-                        </div>
-                        <span className={`font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[10px] text-zinc-500">
-                        <span>${trade.entryPrice.toFixed(2)} → ${trade.exitPrice?.toFixed(2)}</span>
-                        <span>{trade.size}×</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* History panel removed per Elad — closed trades land in My Trades */}
+          <div className="flex-1" />
         </aside>
       </div>
 

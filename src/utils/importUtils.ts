@@ -428,16 +428,90 @@ export function autoMapColumns(
 }
 
 /**
- * Parse side/direction value
+ * Parse side/direction value.
+ * Handles exact matches first (long/buy/b/...), then substring matches
+ * (e.g., "Buy to Open", "Sell to Close", "Market pos. Long", "B/S: S").
+ * If both long-words and short-words appear, exact match wins; otherwise LONG (safer default).
  */
 function parseSide(value: string): 'LONG' | 'SHORT' {
   const normalized = value.toLowerCase().trim();
-  
-  if (['long', 'buy', 'b', 'bullish', '1', 'true'].includes(normalized)) {
-    return 'LONG';
-  }
-  
-  return 'SHORT';
+
+  const LONG_EXACT = ['long', 'buy', 'b', 'bullish', '1', 'true'];
+  const SHORT_EXACT = ['short', 'sell', 's', 'bearish', '-1', 'false'];
+
+  if (LONG_EXACT.includes(normalized)) return 'LONG';
+  if (SHORT_EXACT.includes(normalized)) return 'SHORT';
+
+  // Substring fallback for phrases like "Buy to Open", "Sell to Close",
+  // "Market pos. Long", "buyer", etc. Word-boundary regex avoids matching
+  // "buy" inside "bought" or unrelated tokens.
+  const hasLong = /\b(long|buy|bullish)\b/.test(normalized);
+  const hasShort = /\b(short|sell|bearish)\b/.test(normalized);
+  if (hasLong && !hasShort) return 'LONG';
+  if (hasShort && !hasLong) return 'SHORT';
+
+  return 'LONG';
+}
+
+/**
+ * Infer side from price movement + signed PnL when the source CSV has no
+ * Side column (e.g., TradeZella "Active columns" export). Returns null when
+ * data is insufficient — caller should fall back to the existing default.
+ *
+ * Logic:
+ *   LONG profits when exit > entry. So sign(pnl) === sign(exit - entry) ⇒ LONG.
+ *   SHORT profits when exit < entry. So sign(pnl) === sign(entry - exit) ⇒ SHORT.
+ */
+function inferSideFromPriceMove(
+  entry: number | null,
+  exit: number | null,
+  pnl: number | null
+): 'LONG' | 'SHORT' | null {
+  if (entry == null || exit == null || pnl == null) return null;
+  if (entry === exit || pnl === 0) return null;
+  const priceMove = exit - entry;
+  return Math.sign(pnl) === Math.sign(priceMove) ? 'LONG' : 'SHORT';
+}
+
+/**
+ * Infer asset type from the symbol/contract string when no Asset Type
+ * column is present. Covers the common futures roots, OCC option format,
+ * FX pairs, and crypto tickers. Returns null when ambiguous.
+ */
+const FUTURES_ROOTS = new Set([
+  // CME equity index
+  'ES', 'MES', 'NQ', 'MNQ', 'RTY', 'M2K', 'YM', 'MYM', 'EMD',
+  // CME / COMEX / NYMEX metals & energy
+  'GC', 'MGC', 'SI', 'SIL', 'HG', 'PA', 'PL', 'CL', 'MCL', 'NG', 'QM', 'HO', 'RB', 'BZ',
+  // CBOT rates & grains
+  'ZB', 'ZN', 'ZF', 'ZT', 'UB', 'TN', 'ZC', 'ZS', 'ZW', 'ZL', 'ZM',
+  // CME FX & softs
+  '6E', '6B', '6J', '6A', '6C', '6S', '6N', 'DX',
+  // CME crypto
+  'BTC', 'MBT', 'ETH', 'MET',
+]);
+
+function inferAssetTypeFromSymbol(symbol: string): FinotaurTrade['asset_type'] | null {
+  if (!symbol) return null;
+  const s = symbol.trim().toUpperCase();
+
+  // OCC option symbol: e.g., "AAPL  240119C00150000" or "SPY231215P450" — has C/P + strike digits
+  if (/^[A-Z.]{1,6}\s*\d{6}[CP]\d+$/.test(s.replace(/\s+/g, ' '))) return 'OPTION';
+
+  // FX pair: EURUSD / EUR/USD / EUR.USD (6 letters, optional separator)
+  if (/^[A-Z]{3}[\/.\-]?[A-Z]{3}$/.test(s)) return 'FOREX';
+
+  // Crypto pair (USDT/USDC/USD/PERP suffixes or known coins)
+  if (/^(BTC|ETH|SOL|ADA|XRP|DOGE|MATIC|LTC|BCH|LINK|AVAX|DOT)[\/.\-]?(USDT|USDC|USD|PERP)?$/.test(s)) return 'CRYPTO';
+
+  // Futures: contract root, optionally followed by month code + 1-2 year digits (e.g., MNQU5, ESZ24, GCH26)
+  const futuresMatch = s.match(/^([A-Z0-9]{1,4})([FGHJKMNQUVXZ]\d{1,2})?$/);
+  if (futuresMatch && FUTURES_ROOTS.has(futuresMatch[1])) return 'FUTURES';
+
+  // Default stock pattern: 1-5 uppercase letters with optional dot (BRK.B, BF.A)
+  if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(s)) return 'STOCK';
+
+  return null;
 }
 
 /**
@@ -611,7 +685,6 @@ export async function importTrades(
       }
       
       // Parse required fields
-      const side = sideRaw ? parseSide(sideRaw) : 'LONG';
       const quantity = parseNumber(quantityRaw) ?? 1;
       const entryPrice = parseNumber(entryPriceRaw) ?? 0;
       const openAt = parseDateTime(openAtRaw, userTimezone);
@@ -645,8 +718,18 @@ export async function importTrades(
       const commission = parseNumber(commissionRaw);
       const stopLoss = parseNumber(stopLossRaw);
       const takeProfit = parseNumber(takeProfitRaw);
-      const assetType = assetTypeRaw ? parseAssetType(assetTypeRaw) : 'STOCK';
+      const assetType =
+        (assetTypeRaw ? parseAssetType(assetTypeRaw) : null) ??
+        inferAssetTypeFromSymbol(symbol) ??
+        'STOCK';
       const tags = tagsRaw ? parseTags(tagsRaw) : [];
+
+      // Side: explicit column wins; otherwise infer from entry/exit/pnl;
+      // otherwise default LONG (preserves prior behavior for ambiguous rows).
+      const side: 'LONG' | 'SHORT' =
+        (sideRaw ? parseSide(sideRaw) : null) ??
+        inferSideFromPriceMove(entryPrice || null, exitPrice, pnl) ??
+        'LONG';
       
       // Calculate RR if stop loss and take profit are available
       let rr: number | undefined;

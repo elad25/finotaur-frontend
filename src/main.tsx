@@ -6,6 +6,21 @@ import App from './App';
 import { initSentry } from '@/lib/sentry';
 initSentry();
 
+// ─── Legacy Supabase storage cleanup ───────────────────────────────────────
+// Some users still have a `supabase.auth.token` key in localStorage from an
+// old Supabase v1 SDK (current client uses `finotaur-auth-token`). When the
+// legacy value is a raw OAuth URL fragment instead of JSON, downstream
+// JSON.parse calls explode with `SyntaxError: Unexpected token '#'...`,
+// which surfaces as "site stuck / data not loading". One-shot removal.
+try {
+  const legacy = localStorage.getItem('supabase.auth.token');
+  if (legacy !== null && (legacy.length === 0 || legacy[0] !== '{')) {
+    localStorage.removeItem('supabase.auth.token');
+  }
+} catch {
+  // localStorage unavailable (private mode, quota) — nothing to clean.
+}
+
 // ─── Vite stale-chunk recovery ─────────────────────────────────────────────
 // After a new deploy, Cloudflare Pages serves new chunk filenames. Clients
 // still holding stale HTML (open tabs from before the deploy) get a

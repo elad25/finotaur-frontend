@@ -23,7 +23,7 @@ const PageLoader = () => (
 
 // Lazy imports - from WarzoneComponents folder
 const Warzonelanding = lazy(() => import('./WarzoneComponents/Warzonelanding'));
-const NewsletterSub = lazy(() => import('@/pages/app/journal/admin/NewsletterSub'));
+const WarZoneAdmin = lazy(() => import('@/pages/app/journal/admin/WarZoneAdmin'));
 
 /**
  * ⚔️ WAR ZONE PAGE
@@ -39,11 +39,11 @@ function WarZonePage() {
     return <PageLoader />;
   }
 
-  // Admin view
+  // Admin view — WAR ZONE ticker tracking dashboard
   if (isAdmin) {
     return (
       <Suspense fallback={<PageLoader />}>
-        <NewsletterSub />
+        <WarZoneAdmin />
       </Suspense>
     );
   }

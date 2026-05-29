@@ -19,6 +19,7 @@ import {
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
   Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Droplet
 } from 'lucide-react';
+import { FEATURES } from '@/config/features';
 
 export interface NavItem { 
   label: string; 
@@ -56,7 +57,7 @@ export const domains: Record<string, Domain> = {
       { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
       { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
-      { label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true },  // 🤝 NEW
+      ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true }] : []),  // gated: AFFILIATE_TRACKING
       { label: 'Admin CRM', path: '/app/admin', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
@@ -261,21 +262,21 @@ ai: {
     beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },
+      { label: 'My Trades', path: '/app/journal/backtest/trades' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
       { label: 'Results', path: '/app/journal/backtest/results' },
     ],
     sidebar: [
+      // Sprint E (2026-05-28): 6 practical tabs only. Historical Data /
+      // AI Insights / Market Replay / Monte Carlo / Walk Forward / Optimization
+      // stubs deleted from /pages and dropped here. AI insight surface is
+      // inline on the Dashboard; immersive replay lives on Chart.
       { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: LayoutDashboard },
-      { label: 'New Backtest', path: '/app/journal/backtest/new', icon: FlaskConical },
+      { label: 'Chart', path: '/app/journal/backtest/chart', icon: FlaskConical },
+      { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
       { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
       { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Code },
-      { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Database },
-      { label: 'Performance Analytics', path: '/app/journal/backtest/analytics', icon: BarChart3 },
-      { label: 'Monte Carlo', path: '/app/journal/backtest/monte-carlo', icon: Activity },
-      { label: 'Walk Forward', path: '/app/journal/backtest/walk-forward', icon: TrendingUp },
-      { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Target },
-      { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
-      { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: PlayCircle },
+      { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: BarChart3 },
     ],
   },
 

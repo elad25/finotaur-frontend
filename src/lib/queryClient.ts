@@ -158,7 +158,7 @@ export const prefetchUserProfile = async () => {
         .from('profiles')
         .select('account_type, subscription_interval, subscription_status, subscription_expires_at')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       return profile;
     },
@@ -182,8 +182,8 @@ export const prefetchSettingsData = async () => {
         .from('profiles')
         .select('account_type, subscription_interval, subscription_status, subscription_expires_at, risk_settings, initial_portfolio, current_portfolio, total_pnl')
         .eq('id', user.id)
-        .single();
-      
+        .maybeSingle();
+
       return profile;
     },
   });

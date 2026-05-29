@@ -1301,3 +1301,26 @@ function Metric({ label, value, positive = false }: { label: string; value: stri
     </div>
   );
 }
+
+// P0.2 fix (OQ-93): explicit default export keeps the six named page
+// components reachable through `m.default.X` AND through `m.X`. The latter
+// is what App.tsx currently uses via `.then((m) => ({ default: m.X }))`.
+// Without an `export default`, Vite/Rollup's static analysis may strip a
+// named export under certain chunking conditions, leaving `m.X` undefined at
+// runtime and triggering Sentry's [lazyWithRetry] / MZ-2D "Cannot read
+// properties of undefined (reading 'default')" errors. Including each name
+// in the default object literal pins them as live references so they
+// survive tree-shaking deterministically. ADL-040: structural fix, not a
+// defensive workaround. The Vite build-time guard added in vite.config.ts
+// (assertLazyImportsHaveDefault) now prevents any future lazy-loaded file
+// from regressing on this invariant.
+const CopilotSections = {
+  CopilotTopOpportunitiesPage,
+  CopilotMacroPage,
+  CopilotAIAnalystPage,
+  CopilotHoldingsPage,
+  CopilotRisksPage,
+  CopilotAIChatPage,
+};
+
+export default CopilotSections;

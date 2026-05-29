@@ -13,7 +13,9 @@
 //   ✅ Admin Mode Toggle preserved
 // =====================================================
 
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -1505,7 +1507,7 @@ function Top5Content() {
       .from('profiles')
       .select('role, email, is_tester')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           const admin = data.role === 'admin' || data.role === 'super_admin' || data.email === 'elad2550@gmail.com';
@@ -1882,5 +1884,9 @@ export default function Top5() {
       />
     );
   }
-  return <Top5Content />;
+  return (
+    <ErrorBoundary boundary="ai-top5">
+      <Top5Content />
+    </ErrorBoundary>
+  );
 }

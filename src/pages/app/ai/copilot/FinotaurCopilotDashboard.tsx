@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -28,6 +29,7 @@ export function FinotaurCopilotDashboard() {
   const ib = useIBConnection();
 
   return (
+    <ErrorBoundary boundary="ai-copilot">
     <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
       <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} isConnected={ib.isConnected} />
       <AiBrainPanel className="xl:col-span-4" />
@@ -44,6 +46,7 @@ export function FinotaurCopilotDashboard() {
       <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
       <RiskAnalysisPanel className="xl:col-span-4" />
     </div>
+    </ErrorBoundary>
   );
 }
 
