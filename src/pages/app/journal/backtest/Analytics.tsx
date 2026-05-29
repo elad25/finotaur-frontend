@@ -714,14 +714,14 @@ const BacktestAnalyticsInner: React.FC = () => {
           <JournalKpiCard
             label="Sharpe Ratio"
             value={sharpe.toFixed(2)}
-            accent="gold"
+            accent="blue"
             icon={Activity}
             tooltip="Annualised Sharpe Ratio (RFR=0%). Mean daily return ÷ std of daily returns × √252. Higher is better."
           />
           <JournalKpiCard
             label="Sortino Ratio"
             value={sortino >= 9999 ? '∞' : sortino.toFixed(2)}
-            accent="gold"
+            accent="blue"
             icon={TrendingDown}
             tooltip="Annualised Sortino Ratio. Like Sharpe but penalises only downside volatility. ∞ means no losing days."
           />
@@ -736,14 +736,14 @@ const BacktestAnalyticsInner: React.FC = () => {
           <JournalKpiCard
             label="Recovery Factor"
             value={recoveryFactor.toFixed(2)}
-            accent="gold"
+            accent="blue"
             icon={Repeat2}
             tooltip="Net P&L ÷ Max Drawdown (absolute). Shows how much profit was made relative to the worst drawdown."
           />
           <JournalKpiCard
             label="R-Multiple Avg"
             value={rMultipleAvg !== null ? rMultipleAvg.toFixed(2) : '—'}
-            accent="gold"
+            accent="blue"
             icon={Target}
             hint={rMultipleAvg !== null ? `avgWin / avgLoss` : 'No losses yet'}
             tooltip="Average R-Multiple: average win ÷ average loss (absolute). A value >1 means you win more than you risk."

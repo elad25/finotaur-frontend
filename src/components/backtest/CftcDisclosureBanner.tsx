@@ -1,94 +1,50 @@
 /**
  * CftcDisclosureBanner — NFA / CFTC Rule 4.41(b)(1) hypothetical-performance
- * disclosure. Required on all backtest screens before public launch.
+ * disclosure as a discreet footer link.
  *
- * Dismissible per-user via localStorage. Once dismissed the banner stays
- * hidden until localStorage is cleared. Key includes userId so
- * multi-account setups on the same browser each see the banner once.
+ * Compliance retained, visual prominence removed: a single small "Hypothetical
+ * Performance Disclosure" link at the bottom of each backtest screen,
+ * expandable on click via a native <details>/<summary> element. The full
+ * regulatory text is the disclosed content; nothing else is shipped with it.
+ *
+ * No JS state required — <details> handles the toggle natively, accessible
+ * by default, and survives reload without any persistence layer.
+ *
+ * The component name is preserved (it ships at the same import path used by
+ * Sprint A5 mount sites) so existing callers continue to work.
  */
 
-import { useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { useAuth } from '@/providers/AuthProvider';
+import React from 'react';
 
 export interface CftcDisclosureBannerProps {
-  /** Optional Tailwind class override for the outer container */
+  /** Optional Tailwind class override for the outer container. */
   className?: string;
-}
-
-const STORAGE_PREFIX = 'finotaur:cftc-disclosure-dismissed';
-
-function getStorageKey(userId: string | undefined): string {
-  return `${STORAGE_PREFIX}:${userId ?? 'anon'}`;
-}
-
-function readDismissed(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === 'true';
-  } catch {
-    // localStorage may be unavailable in some environments
-    return false;
-  }
-}
-
-function writeDismissed(key: string): void {
-  try {
-    localStorage.setItem(key, 'true');
-  } catch {
-    // ignore write failures
-  }
 }
 
 export const CftcDisclosureBanner: React.FC<CftcDisclosureBannerProps> = ({
   className,
 }) => {
-  const { user } = useAuth();
-  const storageKey = getStorageKey(user?.id);
-
-  const [dismissed, setDismissed] = useState<boolean>(() =>
-    readDismissed(storageKey)
-  );
-
-  if (dismissed) return null;
-
-  const handleDismiss = () => {
-    writeDismissed(storageKey);
-    setDismissed(true);
-  };
-
   return (
-    <div
-      className={`mb-4 flex items-start gap-3 rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-3 ${className ?? ''}`}
+    <details
+      className={`mt-8 text-amber-200/60 ${className ?? ''}`.trim()}
     >
-      <AlertTriangle
-        size={16}
-        className="mt-0.5 shrink-0 text-amber-400/80"
-        aria-hidden="true"
-      />
-      <div className="flex-1 min-w-0">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-400">
-          Hypothetical Performance Disclosure
-        </p>
-        <p className="text-[11px] leading-relaxed text-amber-200/90">
-          HYPOTHETICAL OR SIMULATED PERFORMANCE RESULTS HAVE CERTAIN
-          LIMITATIONS. UNLIKE AN ACTUAL PERFORMANCE RECORD, SIMULATED RESULTS
-          DO NOT REPRESENT ACTUAL TRADING. ALSO, SINCE THE TRADES HAVE NOT BEEN
-          EXECUTED, THE RESULTS MAY HAVE UNDER-OR-OVER COMPENSATED FOR THE
-          IMPACT, IF ANY, OF CERTAIN MARKET FACTORS, SUCH AS LACK OF LIQUIDITY.
-          SIMULATED TRADING PROGRAMS IN GENERAL ARE ALSO SUBJECT TO THE FACT
-          THAT THEY ARE DESIGNED WITH THE BENEFIT OF HINDSIGHT. NO
-          REPRESENTATION IS BEING MADE THAT ANY ACCOUNT WILL OR IS LIKELY TO
-          ACHIEVE PROFITS OR LOSSES SIMILAR TO THOSE SHOWN.
-        </p>
-      </div>
-      <button
-        onClick={handleDismiss}
-        className="shrink-0 text-xs font-medium text-amber-400 transition-colors hover:text-amber-300"
-        aria-label="Dismiss disclosure"
+      <summary
+        className="cursor-pointer list-none text-[10px] font-medium uppercase tracking-widest text-amber-400/70 transition-colors hover:text-amber-300"
       >
-        Got it
-      </button>
-    </div>
+        Hypothetical Performance Disclosure
+      </summary>
+      <p className="mt-2 max-w-3xl text-[10px] leading-relaxed text-amber-200/60">
+        HYPOTHETICAL OR SIMULATED PERFORMANCE RESULTS HAVE CERTAIN
+        LIMITATIONS. UNLIKE AN ACTUAL PERFORMANCE RECORD, SIMULATED RESULTS
+        DO NOT REPRESENT ACTUAL TRADING. ALSO, SINCE THE TRADES HAVE NOT BEEN
+        EXECUTED, THE RESULTS MAY HAVE UNDER-OR-OVER COMPENSATED FOR THE
+        IMPACT, IF ANY, OF CERTAIN MARKET FACTORS, SUCH AS LACK OF LIQUIDITY.
+        SIMULATED TRADING PROGRAMS IN GENERAL ARE ALSO SUBJECT TO THE FACT
+        THAT THEY ARE DESIGNED WITH THE BENEFIT OF HINDSIGHT. NO
+        REPRESENTATION IS BEING MADE THAT ANY ACCOUNT WILL OR IS LIKELY TO
+        ACHIEVE PROFITS OR LOSSES SIMILAR TO THOSE SHOWN.
+      </p>
+    </details>
   );
 };
 
