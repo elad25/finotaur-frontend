@@ -6,6 +6,7 @@ import { useSectorFlowSnapshot, useSectorFlowBriefing } from '../hooks/useSector
 import { SectorFlowHeatmap } from './SectorFlowHeatmap';
 import { SharpestMoversPanel } from './SharpestMoversPanel';
 import { SectorFlowAIBriefing } from './SectorFlowAIBriefing';
+import { NetSectorFlowBar } from './NetSectorFlowBar';
 
 function SectorFlowPageInner() {
   const snapshot = useSectorFlowSnapshot();
@@ -33,6 +34,11 @@ function SectorFlowPageInner() {
           Snapshot unavailable: {snapshot.error.message}
         </div>
       )}
+
+      <NetSectorFlowBar
+        ranked={snapshot.data?.ranked ?? []}
+        loading={snapshot.loading}
+      />
 
       <SectorFlowAIBriefing
         briefing={briefing.data}

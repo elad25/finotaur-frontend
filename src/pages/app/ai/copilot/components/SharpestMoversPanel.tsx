@@ -53,8 +53,11 @@ export function SharpestMoversPanel({ movers, weakest, loading }: SharpestMovers
   return (
     <div className="flex flex-col gap-ds-5">
       <Card variant="glass" className="p-ds-5">
-        <Eyebrow className="text-gold-primary mb-ds-2">SHARPEST MOVERS</Eyebrow>
-        <h3 className="text-xl text-ink-primary mb-ds-4">Where the money is moving</h3>
+        <div className="flex items-center gap-ds-2 mb-ds-2">
+          <span aria-hidden className="text-gold-primary text-base leading-none">↗</span>
+          <Eyebrow className="text-gold-primary">MONEY FLOWING IN</Eyebrow>
+        </div>
+        <h3 className="text-xl text-ink-primary mb-ds-4">Top 5 sub-sectors absorbing capital</h3>
         {loading && movers.length === 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-ds-3">
             {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -72,8 +75,11 @@ export function SharpestMoversPanel({ movers, weakest, loading }: SharpestMovers
 
       {weakest && weakest.length > 0 && (
         <Card variant="glass" className="p-ds-5">
-          <Eyebrow className="text-num-negative mb-ds-2">WEAKEST FLOWS</Eyebrow>
-          <h3 className="text-xl text-ink-primary mb-ds-4">Money flowing out</h3>
+          <div className="flex items-center gap-ds-2 mb-ds-2">
+            <span aria-hidden className="text-num-negative text-base leading-none">↘</span>
+            <Eyebrow className="text-num-negative">MONEY FLOWING OUT</Eyebrow>
+          </div>
+          <h3 className="text-xl text-ink-primary mb-ds-4">Top 5 sub-sectors losing capital</h3>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-ds-3">
             {weakest.slice(0, 5).map((m) => <MoverCard key={m.etf} etf={m} tone="negative" />)}
           </div>
