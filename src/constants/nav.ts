@@ -255,16 +255,16 @@ ai: {
       { label: 'Results', path: '/app/journal/backtest/results' },
     ],
     sidebar: [
+      // Sprint E (2026-05-28): 6 practical tabs only. Historical Data /
+      // AI Insights / Market Replay / Monte Carlo / Walk Forward / Optimization
+      // stubs deleted from /pages and dropped here. AI insight surface is
+      // inline on the Dashboard; immersive replay lives on Chart.
       { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: LayoutDashboard },
+      { label: 'Chart', path: '/app/journal/backtest/chart', icon: FlaskConical },
       { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
-      { label: 'New Backtest', path: '/app/journal/backtest/new', icon: FlaskConical },
       { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
       { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Code },
-      { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Database },
-      { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: PlayCircle },
-      // Sprint C8 (backtest-launch-ready): Performance Analytics / Monte Carlo /
-      // Walk Forward / Optimization / AI Insights are stub pages — hidden from
-      // sidebar pre-launch. Re-add when each ships real content.
+      { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: BarChart3 },
     ],
   },
 

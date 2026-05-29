@@ -277,18 +277,18 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
 
+  // Backtest sidebar — Sprint E (2026-05-28): trimmed to the 6 practical tabs
+  // the trader actually needs. Removed Historical Data / AI Insights / Monte
+  // Carlo / Walk Forward / Optimization / Market Replay stubs; AI insight
+  // surface lives inline on the Dashboard, and Market Replay is reachable via
+  // the Chart page's Immersive Mode button.
   backtest: [
     { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
     { label: 'Chart', path: '/app/journal/backtest/chart', icon: PlusCircle },
-    { label: 'Results', path: '/app/journal/backtest/results', icon: FileText },
+    { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
+    { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
     { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Layers },
     { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
-    { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Calendar },
-    { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
-    { label: 'Monte Carlo', path: '/app/journal/backtest/monte-carlo', icon: Shuffle },
-    { label: 'Walk Forward', path: '/app/journal/backtest/walk-forward', icon: Activity },
-    { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Calculator },
-    { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: Play },
   ],
 
   'copy-trade': [

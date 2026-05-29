@@ -189,13 +189,7 @@ const BacktestOverview = lazy(() => import("@/pages/app/journal/backtest/Overvie
 const BacktestChart = lazy(() => import("@/pages/app/journal/backtest/Chart"));
 const BacktestResults = lazy(() => import("@/pages/app/journal/backtest/Results"));
 const BacktestBuilder = lazy(() => import("@/pages/app/journal/backtest/Builder"));
-const BacktestData = lazy(() => import("@/pages/app/journal/backtest/Data"));
 const BacktestAnalytics = lazy(() => import("@/pages/app/journal/backtest/Analytics"));
-const BacktestAIInsights = lazy(() => import("@/pages/app/journal/backtest/Aiinsights"));
-const BacktestMonteCarlo = lazy(() => import("@/pages/app/journal/backtest/Montecarlo"));
-const BacktestWalkForward = lazy(() => import("@/pages/app/journal/backtest/Walkforward"));
-const BacktestOptimization = lazy(() => import("@/pages/app/journal/backtest/Optimization"));
-const BacktestReplay = lazy(() => import("@/pages/app/journal/backtest/Replay"));
 const BacktestTrades = lazy(() => import("@/pages/app/journal/backtest/BacktestTrades"));
 
 // Affiliate Center Pages
@@ -570,13 +564,7 @@ function AppContent() {
           <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
           <Route path="journal/backtest/trades" element={<BacktestRoute><BacktestTrades /></BacktestRoute>} />
           <Route path="journal/backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
-          <Route path="journal/backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="journal/backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
-          <Route path="journal/backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
-          <Route path="journal/backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
-          <Route path="journal/backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
-          <Route path="journal/backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
-          <Route path="journal/backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           <Route path="journal/backtest/new" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
 
           {/* AFFILIATE CENTER — gated by FEATURES.AFFILIATE_TRACKING (re-enable for Stripe migration) */}
@@ -616,13 +604,7 @@ function AppContent() {
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
-          <Route path="backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
-          <Route path="backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
-          <Route path="backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
-          <Route path="backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
-          <Route path="backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
-          <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* TRADE COPIER */}
           {/* TRADE COPIER — beta-only (gated via DomainGuard, domain copy-trade has beta:true in constants/nav.ts) */}
