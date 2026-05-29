@@ -1118,9 +1118,6 @@ function BacktestOverviewContent() {
           />
         </div>
 
-        {/* Best/Worst Trades */}
-        <BacktestBestWorstTrades stats={stats} />
-
         {/* Equity + Daily P&L charts row — V2 components bring their own panel chrome */}
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1fr]">
           <ErrorBoundary fallback={
