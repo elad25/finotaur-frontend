@@ -16,6 +16,16 @@ import {
   useBacktestPersistence,
   type SavedSessionSummary,
 } from '@/hooks/useBacktestPersistence';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export const BacktestResults = () => {
   const navigate = useNavigate();
@@ -24,6 +34,7 @@ export const BacktestResults = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SavedSessionSummary | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -59,8 +70,10 @@ export const BacktestResults = () => {
     refresh();
   }, [refresh]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this saved session? This cannot be undone.')) return;
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    setPendingDelete(null);
     setDeletingId(id);
     try {
       await persistence.deleteSession(id);
@@ -182,7 +195,7 @@ export const BacktestResults = () => {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                        onClick={(e) => { e.stopPropagation(); setPendingDelete(s); }}
                         disabled={deletingId === s.id}
                         className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400 disabled:cursor-wait"
                         title="Delete session"
@@ -208,6 +221,30 @@ export const BacktestResults = () => {
           </div>
         )}
       </div>
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+        <AlertDialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#C9A646]">Delete this saved session?</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {pendingDelete?.name
+                ? <>You're about to delete <span className="font-semibold text-zinc-200">"{pendingDelete.name}"</span> permanently. This cannot be undone.</>
+                : <>You're about to delete this saved session permanently. This cannot be undone.</>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-rose-600 text-white hover:bg-rose-500"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

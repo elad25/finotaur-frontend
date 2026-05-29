@@ -332,12 +332,11 @@ export function BacktestChart({
       try {
         const detail = await persistence.loadSession(sessionIdParam);
         if (cancelled) return;
-        // 1. Restore chart context.
+        // 1. Restore chart context (asset/symbol/interval/mode).
         const ac = detail.session.asset_class;
         if (ac === 'futures' || ac === 'stocks' || ac === 'crypto') setAssetClass(ac);
         setSymbol(detail.session.symbol);
         setBarInterval(detail.session.interval as Interval);
-        setReplayStart(new Date(detail.session.start_date));
         setChartMode('replay');
         // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
         const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
@@ -354,6 +353,19 @@ export function BacktestChart({
           pnlPercent: t.pnl_percent ?? undefined,
           exitReason: t.exit_reason ?? undefined,
         }));
+        // D8 (Sprint D, 2026-05-30): anchor the replay window to the first
+        // trade rather than the session's start_date — otherwise the markers
+        // can land outside the initially-loaded bar window and look missing.
+        // Falls back to the session start_date when there are no trades.
+        const firstTradeTime = closedPositions.reduce<number | null>(
+          (min, p) => (min === null || p.entryTime < min ? p.entryTime : min),
+          null,
+        );
+        setReplayStart(
+          firstTradeTime !== null
+            ? new Date(firstTradeTime * 1000)
+            : new Date(detail.session.start_date),
+        );
         const pendingOrders: PendingOrder[] = (detail.session.pending_orders ?? []).map((o) => ({
           id: o.id,
           side: o.side,
@@ -740,8 +752,13 @@ export function BacktestChart({
           </div>
           {/* Run Strategy dropdown — Bug D fast-path (Sprint C1 of backtest-launch-ready):
               hidden globally because clicking it in Live mode triggers a browser
-              freeze (CDP timeout 30s). Investigation deferred to Sprint D. To
-              re-enable, remove the `false &&` prefix from the gate below. */}
+              freeze (CDP timeout 30s).
+              Sprint D 2026-05-30 investigation: `useStrategyLibrary` returns a
+              fresh object literal on every render, though the inner `strategies`
+              array is stable (useState). `handleRunStrategy` is not memoized.
+              Repro requires a logged-in browser session — deferred to Sprint E
+              with React DevTools Profiler. To re-enable, remove the `false &&`
+              prefix from the gate below. */}
           {/* eslint-disable-next-line no-constant-binary-expression */}
           {false && chartMode === 'live' && (
           <div className="relative">
