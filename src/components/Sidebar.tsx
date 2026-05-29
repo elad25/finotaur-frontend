@@ -59,7 +59,8 @@ import {
   Coins,
   Flame,
   Sparkles,  // נ”¥ For beta items
-  Link2
+  Link2,
+  FileBarChart
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -270,7 +271,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
     { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
-    { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
+    { label: 'Reports', path: '/app/journal/reports', icon: FileBarChart },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },

@@ -154,6 +154,10 @@ const JournalExport = lazy(() => import("@/pages/app/journal/Export"));
 const JournalNotes = lazy(() => import("@/pages/app/journal/Notes"));
 const JournalAnalytics = lazy(() => import("@/pages/app/journal/Analytics"));
 const JournalAIReview = lazy(() => import("@/pages/app/journal/AIReview"));
+const JournalReports = lazy(() => import("@/pages/app/journal/Reports"));
+const JournalReportsProgress = lazy(() => import("@/pages/app/journal/reports/ProgressTracker"));
+const JournalReportsDayView = lazy(() => import("@/pages/app/journal/reports/DayView"));
+const JournalReportsRecaps = lazy(() => import("@/pages/app/journal/reports/AIRecaps"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
 const Strategies = lazy(() => import("@/pages/app/journal/Strategies"));
@@ -549,6 +553,10 @@ function AppContent() {
 <Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />
 <Route path="journal/analytics" element={<JournalRoute><JournalAnalytics /></JournalRoute>} />
 <Route path="journal/ai-review" element={<JournalRoute><JournalAIReview /></JournalRoute>} />
+<Route path="journal/reports" element={<JournalRoute><JournalReports /></JournalRoute>} />
+<Route path="journal/reports/progress" element={<JournalRoute><JournalReportsProgress /></JournalRoute>} />
+<Route path="journal/reports/day-view" element={<JournalRoute><JournalReportsDayView /></JournalRoute>} />
+<Route path="journal/reports/recaps" element={<JournalRoute><JournalReportsRecaps /></JournalRoute>} />
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
