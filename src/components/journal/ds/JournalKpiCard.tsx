@@ -18,7 +18,7 @@
 // @see JOURNAL_DESIGN.md § The Journal KPI Card
 
 import React, { type ReactNode } from 'react';
-import { HelpCircle, type LucideIcon } from 'lucide-react';
+import { HelpCircle, ChevronUp, ChevronDown, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +56,13 @@ export interface JournalKpiCardProps {
    * journal cards leave this unset and stay neutral white.
    */
   valueColor?: string;
+  /**
+   * Period-over-period delta (e.g. change in win rate vs previous period).
+   * When provided and non-zero, renders a small chevron + delta below the hint.
+   * Positive → green up-chevron; negative → red down-chevron.
+   * Pass undefined to suppress the indicator (e.g. when timeRange === 'ALL').
+   */
+  trend?: number;
   className?: string;
 }
 
@@ -149,6 +156,7 @@ const JournalKpiCard = React.memo<JournalKpiCardProps>(function JournalKpiCard({
   tooltip,
   valueSize = 'xl',
   valueColor,
+  trend,
   className,
 }) {
   const cfg = ACCENT_MAP[accent];
@@ -227,6 +235,19 @@ const JournalKpiCard = React.memo<JournalKpiCardProps>(function JournalKpiCard({
           {hint && (
             <span className="mt-2 font-sans text-[10px] font-medium text-[#5A5A5A]">
               {hint}
+            </span>
+          )}
+
+          {/* Trend delta indicator */}
+          {trend !== undefined && trend !== 0 && (
+            <span
+              className="mt-1.5 inline-flex items-center gap-0.5 font-sans text-[10px] font-medium"
+              style={{ color: trend > 0 ? '#4AD295' : '#E36363' }}
+            >
+              {trend > 0
+                ? <ChevronUp className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                : <ChevronDown className="h-3 w-3" strokeWidth={2.5} aria-hidden />}
+              {trend > 0 ? '+' : ''}{trend.toFixed(1)}
             </span>
           )}
         </div>
