@@ -21,25 +21,68 @@ try {
   // localStorage unavailable (private mode, quota) — nothing to clean.
 }
 
-// ─── Vite stale-chunk recovery ─────────────────────────────────────────────
-// After a new deploy, Cloudflare Pages serves new chunk filenames. Clients
-// still holding stale HTML (open tabs from before the deploy) get a
-// "Failed to fetch dynamically imported module" error when a React.lazy()
-// route triggers. The fix is a single hard reload — the new HTML points at
-// the new chunk hashes. Guarded by a 10-second sessionStorage flag so we
-// never loop if the failure is something other than a stale chunk.
+// ─── Stale-chunk recovery (multi-layer) ─────────────────────────────────────
+// After a deploy, Cloudflare Pages serves new hashed chunk filenames and the
+// old ones 404 → SPA fallback returns index.html (Content-Type text/html). A
+// client still holding pre-deploy HTML then fails to load a chunk and renders
+// a blank screen. We recover with a single guarded hard reload — the fresh
+// HTML points at the new hashes.
+//
+// Three failure surfaces are covered (the original handler caught only #1):
+//   1. vite:preloadError     — React.lazy() dynamic import() failures
+//   2. capture-phase 'error' — <script>/<link> (modulepreload) load failures,
+//                              i.e. the entry/vendor chunks the stale HTML
+//                              preloads before any app code runs. THIS is the
+//                              blank-screen case vite:preloadError misses.
+//   3. unhandledrejection    — dynamic import() rejections with chunk/MIME text
+// Guarded by a 10s sessionStorage flag so a non-stale failure never loops.
 // See Sentry MZ-2 (TradeCopier chunk) and MZ-4 (Strategies chunk).
-window.addEventListener('vite:preloadError', (event) => {
-  const RELOAD_KEY = '__vite_preload_reload_at__';
-  const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+const STALE_CHUNK_RELOAD_KEY = '__vite_preload_reload_at__';
+
+function recoverFromStaleChunk(): void {
+  const last = Number(sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY) || 0);
   if (Date.now() - last < 10_000) {
-    // Already reloaded recently — surface the real error to Sentry instead
-    // of looping.
+    // Already reloaded recently — let the real error surface (Sentry +
+    // GlobalErrorBoundary manual-refresh UI) instead of looping.
     return;
   }
-  sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-  event.preventDefault?.();
+  sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(Date.now()));
   window.location.reload();
+}
+
+const STALE_CHUNK_PATTERN =
+  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|module script.*MIME type|Unexpected token '<'/i;
+
+// 1. Vite's own dynamic-import failure event (React.lazy routes).
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault?.();
+  recoverFromStaleChunk();
+});
+
+// 2. Resource-load failures for module scripts / modulepreload links. These
+//    fire a non-bubbling 'error' on the element, so we listen in capture phase
+//    on window. Scoped to our hashed build assets so third-party script
+//    failures never trigger a reload.
+window.addEventListener(
+  'error',
+  (event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target || typeof target.tagName !== 'string') return;
+    if (target.tagName !== 'SCRIPT' && target.tagName !== 'LINK') return;
+    const url =
+      (target as HTMLScriptElement).src || (target as HTMLLinkElement).href || '';
+    if (!/\/assets\/.*\.(js|mjs)(\?|$)/.test(url)) return;
+    recoverFromStaleChunk();
+  },
+  true,
+);
+
+// 3. Dynamic import() rejections that slipped past vite:preloadError.
+window.addEventListener('unhandledrejection', (event) => {
+  const message = String(event.reason?.message ?? event.reason ?? '');
+  if (STALE_CHUNK_PATTERN.test(message)) {
+    recoverFromStaleChunk();
+  }
 });
 
 // ================================================
