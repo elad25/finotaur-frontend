@@ -147,7 +147,10 @@ type Action =
   | { type: 'ADD_PENDING'; payload: AddPendingPayload }
   | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
   | { type: 'FILL_PENDING'; payload: FillPendingPayload }
-  | { type: 'LOAD_SESSION'; payload: LoadSessionPayload };
+  | { type: 'LOAD_SESSION'; payload: LoadSessionPayload }
+  // Replace the entire session state from a persisted/restored snapshot.
+  // Used by the localStorage hydration effect once the user key is known.
+  | { type: 'HYDRATE'; payload: SessionState };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -320,6 +323,11 @@ function reducer(state: SessionState, action: Action): SessionState {
         stats: computeStats(closedPositions, startingBalance),
       };
     }
+    case 'HYDRATE': {
+      // Full-state replace from a validated persisted snapshot. The payload is
+      // already shape-checked + stats-recomputed by loadPersistedState.
+      return action.payload;
+    }
     case 'ADD_PENDING': {
       const { side, type: orderType, triggerPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
       const order: PendingOrder = {
@@ -430,6 +438,21 @@ function storageKeyFor(userId: string | null | undefined): string | null {
   return userId ? STORAGE_PREFIX + userId : null;
 }
 
+// Per-position field validation. A persisted trade from an older schema (or a
+// corrupted blob) could carry bad fields that produce NaN P&L or div-by-zero in
+// computeStats/computePnL (e.g. entryPrice: 0). Drop anything that doesn't pass.
+function isValidPaperPosition(p: unknown): p is PaperPosition {
+  if (!p || typeof p !== 'object') return false;
+  const o = p as Record<string, unknown>;
+  return (
+    typeof o.id === 'string'
+    && (o.side === 'LONG' || o.side === 'SHORT')
+    && typeof o.entryTime === 'number' && Number.isFinite(o.entryTime)
+    && typeof o.entryPrice === 'number' && Number.isFinite(o.entryPrice) && o.entryPrice > 0
+    && typeof o.size === 'number' && Number.isFinite(o.size) && o.size > 0
+  );
+}
+
 function loadPersistedState(initialBalance: number, key: string | null): SessionState {
   const empty = makeEmptyState(initialBalance);
   if (!key || typeof window === 'undefined') return empty;
@@ -437,17 +460,29 @@ function loadPersistedState(initialBalance: number, key: string | null): Session
     const raw = window.localStorage.getItem(key);
     if (!raw) return empty;
     const parsed = JSON.parse(raw);
-    // Soft shape validation — discard anything that doesn't look like SessionState.
-    if (
-      parsed
-      && typeof parsed === 'object'
-      && typeof parsed.startingBalance === 'number'
-      && Array.isArray(parsed.closedPositions)
-      && Array.isArray(parsed.pendingOrders)
-      && parsed.stats
-    ) {
-      return parsed as SessionState;
-    }
+    if (!parsed || typeof parsed !== 'object') return empty;
+    if (!Array.isArray(parsed.closedPositions) || !Array.isArray(parsed.pendingOrders)) return empty;
+
+    // Field-level sanitization: keep only well-formed positions, validate the
+    // active one, and ALWAYS recompute stats from the cleaned set so the
+    // persisted `stats` can never disagree with the trades (or carry NaN).
+    const startingBalance =
+      typeof parsed.startingBalance === 'number' && Number.isFinite(parsed.startingBalance) && parsed.startingBalance > 0
+        ? parsed.startingBalance
+        : initialBalance;
+    const closedPositions = (parsed.closedPositions as unknown[]).filter(isValidPaperPosition) as PaperPosition[];
+    const activePosition = isValidPaperPosition(parsed.activePosition)
+      ? (parsed.activePosition as PaperPosition)
+      : undefined;
+    const pendingOrders = parsed.pendingOrders as PendingOrder[];
+
+    return {
+      startingBalance,
+      activePosition,
+      closedPositions,
+      pendingOrders,
+      stats: computeStats(closedPositions, startingBalance),
+    };
   } catch {
     // corrupt JSON / quota / blocked storage — fall through to empty.
   }
@@ -458,18 +493,32 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
   const { user } = useAuth();
   const key = storageKeyFor(user?.id);
 
-  const [state, dispatch] = useReducer(
-    reducer,
-    null,
-    () => loadPersistedState(initialBalance, key),
-  );
+  // Initialize empty. The real restore happens in the hydration effect below
+  // once `key` is known — `useAuth().user` is frequently null on first render
+  // (auth resolves async), and useReducer's lazy initializer runs only ONCE,
+  // so loading here would permanently miss the late-arriving user id.
+  const [state, dispatch] = useReducer(reducer, null, () => makeEmptyState(initialBalance));
 
-  // Throttled persistence: every state change schedules a write ~500ms out;
-  // a fresh change before the timer fires resets it. This collapses bursts
-  // (e.g. SL drag) into one localStorage write.
+  // Tracks which user key we've already hydrated, so we restore exactly once
+  // per key and never re-clobber mid-session. Also gates the write effect.
+  const hydratedKeyRef = useRef<string | null>(null);
+
+  // Hydrate from localStorage as soon as the user key becomes available.
+  useEffect(() => {
+    if (!key) return;
+    if (hydratedKeyRef.current === key) return;
+    hydratedKeyRef.current = key;
+    dispatch({ type: 'HYDRATE', payload: loadPersistedState(initialBalance, key) });
+  }, [key, initialBalance]);
+
+  // Throttled persistence: every state change schedules a write ~500ms out; a
+  // fresh change before the timer fires resets it (collapses bursts like SL
+  // drag into one write). Gated on hydratedKeyRef so the initial empty state
+  // never overwrites saved data before the hydration dispatch lands.
   const writeTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (!key || typeof window === 'undefined') return;
+    if (hydratedKeyRef.current !== key) return;
     if (writeTimerRef.current !== null) {
       window.clearTimeout(writeTimerRef.current);
     }

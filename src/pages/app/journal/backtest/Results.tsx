@@ -34,6 +34,7 @@ export const BacktestResults = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SavedSessionSummary | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -75,11 +76,14 @@ export const BacktestResults = () => {
     const id = pendingDelete.id;
     setPendingDelete(null);
     setDeletingId(id);
+    setDeleteError(null);
     try {
       await persistence.deleteSession(id);
       setSessions((prev) => prev.filter((s) => s.id !== id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to delete');
+      // Inline banner instead of alert() — native dialogs freeze the renderer
+      // under browser automation (matches the app-wide flashTradeError policy).
+      setDeleteError(e instanceof Error ? e.message : 'Failed to delete session');
     } finally {
       setDeletingId(null);
     }
@@ -107,6 +111,22 @@ export const BacktestResults = () => {
             Refresh
           </button>
         </div>
+
+        {/* Delete-failure banner (inline — no alert()) */}
+        {deleteError && (
+          <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-rose-900 bg-rose-950/40 p-3 text-sm text-rose-300">
+            <span className="flex items-start gap-2">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              Couldn't delete session: {deleteError}
+            </span>
+            <button
+              onClick={() => setDeleteError(null)}
+              className="shrink-0 text-rose-400 transition-colors hover:text-rose-200"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Body */}
         {loading && (
