@@ -33,8 +33,8 @@ import { useBacktestStats } from "@/hooks/useBacktestStats";
 // LAZY LOAD HEAVY COMPONENTS
 // ================================================
 
-const BacktestEquityChart = lazy(() => import("@/components/charts/BacktestEquityChart"));
-const BacktestDailyPnLChart = lazy(() => import("@/components/charts/BacktestDailyPnLChart"));
+const BacktestEquityChartV2 = lazy(() => import("@/components/charts/BacktestEquityChartV2"));
+const BacktestDailyPnLChartV2 = lazy(() => import("@/components/charts/BacktestDailyPnLChartV2"));
 
 // ================================================
 // LOADING SKELETONS
@@ -925,6 +925,18 @@ function BacktestOverviewContent() {
 
   const { isImpersonating } = useEffectiveUser();
   const { data: stats, isLoading } = useMockBacktestStats(); // Replace with actual hook
+  // Raw equitySeries + trades for V2 chart components (camelCase, Journal-compatible)
+  const { data: rawBacktest } = useBacktestStats();
+  const chartEquitySeries = rawBacktest?.equitySeries ?? [];
+  // Map BacktestTrade → shape expected by DailyPnLChart (open_at + pnl)
+  const chartTrades = useMemo(
+    () =>
+      (rawBacktest?.trades ?? []).map((t) => ({
+        open_at: new Date(t.entryTime * 1000).toISOString(),
+        pnl: t.pnl,
+      })),
+    [rawBacktest]
+  );
   
   // Generate chart data
   const tradeTimeData = useMemo(() => {
@@ -1109,35 +1121,27 @@ function BacktestOverviewContent() {
         {/* Best/Worst Trades */}
         <BacktestBestWorstTrades stats={stats} />
 
-        {/* Equity + Daily P&L charts row */}
+        {/* Equity + Daily P&L charts row — V2 components bring their own panel chrome */}
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1fr]">
-          {/* Equity Curve panel */}
-          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
-            <h2 className="text-[14px] font-semibold text-white mb-3">Equity Curve</h2>
-            <ErrorBoundary fallback={
-              <div className="text-center text-[#E36363] p-6 bg-[#0E0E0E] rounded-[12px] border border-white/[0.05]">
-                Failed to load equity curve. Please refresh the page.
-              </div>
-            }>
-              <Suspense fallback={<ChartSkeleton />}>
-                <BacktestEquityChart data={stats.equity_curve} />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
+          <ErrorBoundary fallback={
+            <div className="rounded-[12px] bg-[#0E0E0E] border border-white/[0.05] p-6 text-center text-[#E36363]">
+              Failed to load chart
+            </div>
+          }>
+            <Suspense fallback={<ChartSkeleton />}>
+              <BacktestEquityChartV2 data={chartEquitySeries} trades={[]} />
+            </Suspense>
+          </ErrorBoundary>
 
-          {/* Daily P&L panel */}
-          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
-            <h2 className="text-[14px] font-semibold text-white mb-3">Daily P&L</h2>
-            <ErrorBoundary fallback={
-              <div className="text-center text-[#E36363] p-6 bg-[#0E0E0E] rounded-[12px] border border-white/[0.05]">
-                Failed to load daily P&L chart. Please refresh the page.
-              </div>
-            }>
-              <Suspense fallback={<ChartSkeleton />}>
-                <BacktestDailyPnLChart data={stats.equity_curve} />
-              </Suspense>
-            </ErrorBoundary>
-          </div>
+          <ErrorBoundary fallback={
+            <div className="rounded-[12px] bg-[#0E0E0E] border border-white/[0.05] p-6 text-center text-[#E36363]">
+              Failed to load chart
+            </div>
+          }>
+            <Suspense fallback={<ChartSkeleton />}>
+              <BacktestDailyPnLChartV2 data={chartEquitySeries} trades={chartTrades} />
+            </Suspense>
+          </ErrorBoundary>
         </div>
 
         {/* Trade Time & Duration Performance Charts */}
