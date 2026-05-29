@@ -256,6 +256,9 @@ const CryptoDerivatives = lazy(() => import("@/pages/app/crypto/Derivatives"));
 const CryptoSentiment = lazy(() => import("@/pages/app/crypto/Sentiment"));
 const CryptoWatchlist = lazy(() => import("@/pages/app/crypto/Watchlist"));
 const CryptoAcademy = lazy(() => import("@/pages/app/crypto/Academy"));
+const CryptoDefiTvl = lazy(() => import("@/pages/app/crypto/DefiTvl"));
+const CryptoStablecoins = lazy(() => import("@/pages/app/crypto/Stablecoins"));
+const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -297,6 +300,9 @@ const MacroEvents = lazy(() => import("@/pages/app/macro/Events"));
 const MacroReports = lazy(() => import("@/pages/app/macro/Reports"));
 const MacroSentiment = lazy(() => import("@/pages/app/macro/Sentiment"));
 const MacroNews = lazy(() => import("@/pages/app/macro/News"));
+const MacroLiquidity = lazy(() => import("@/pages/app/macro/Liquidity"));
+const MacroRealYields = lazy(() => import("@/pages/app/macro/RealYields"));
+const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"));
 
 // Options
 const OptionsChain = lazy(() => import("@/pages/app/options/Chain"));
@@ -484,7 +490,10 @@ function AppContent() {
           <Route path="crypto/sentiment" element={<LockedRoute domainId="crypto"><CryptoSentiment /></LockedRoute>} />
           <Route path="crypto/watchlist" element={<LockedRoute domainId="crypto"><CryptoWatchlist /></LockedRoute>} />
           <Route path="crypto/academy" element={<LockedRoute domainId="crypto"><CryptoAcademy /></LockedRoute>} />
-          
+          <Route path="crypto/defi-tvl" element={<LockedRoute domainId="crypto"><CryptoDefiTvl /></LockedRoute>} />
+          <Route path="crypto/stablecoins" element={<LockedRoute domainId="crypto"><CryptoStablecoins /></LockedRoute>} />
+          <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
+
           {/* FUTURES */}
           <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
           <Route path="futures/open-interests" element={<LockedRoute domainId="futures"><FuturesOpenInterests /></LockedRoute>} />
@@ -515,6 +524,9 @@ function AppContent() {
           
           {/* MACRO */}
           <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
+          <Route path="macro/liquidity" element={<LockedRoute domainId="macro"><MacroLiquidity /></LockedRoute>} />
+          <Route path="macro/real-yields" element={<LockedRoute domainId="macro"><MacroRealYields /></LockedRoute>} />
+          <Route path="macro/credit-spreads" element={<LockedRoute domainId="macro"><MacroCreditSpreads /></LockedRoute>} />
           <Route path="macro/cross-asset" element={<LockedRoute domainId="macro"><MacroCrossAsset /></LockedRoute>} />
           <Route path="macro/global-heatmap" element={<LockedRoute domainId="macro"><MacroGlobalHeatmap /></LockedRoute>} />
           <Route path="macro/models" element={<LockedRoute domainId="macro"><MacroModels /></LockedRoute>} />

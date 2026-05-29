@@ -17,7 +17,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Droplet
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
 
@@ -108,12 +108,18 @@ export const domains: Record<string, Domain> = {
       { label: 'Overview', path: '/app/crypto/overview' },
       { label: 'Screener', path: '/app/crypto/screener' },
       { label: 'Sentiment', path: '/app/crypto/sentiment' },
+      { label: 'DeFi', path: '/app/crypto/defi-tvl' },
+      { label: 'Stablecoins', path: '/app/crypto/stablecoins' },
+      { label: 'Heatmap', path: '/app/crypto/heatmap' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/crypto/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/crypto/screener', icon: Search },
       { label: 'Derivatives', path: '/app/crypto/derivatives', icon: Activity },
       { label: 'Sentiment & News', path: '/app/crypto/sentiment', icon: Newspaper },
+      { label: 'DeFi TVL', path: '/app/crypto/defi-tvl', icon: Coins },
+      { label: 'Stablecoins', path: '/app/crypto/stablecoins', icon: DollarSign },
+      { label: 'Heatmap', path: '/app/crypto/heatmap', icon: Map },
       { label: 'Watchlist', path: '/app/crypto/watchlist', icon: Bell },
       { label: 'Academy', path: '/app/crypto/academy', icon: GraduationCap },
     ],
@@ -182,9 +188,15 @@ export const domains: Record<string, Domain> = {
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
+      { label: 'Liquidity', path: '/app/macro/liquidity' },
+      { label: 'Real Yields', path: '/app/macro/real-yields' },
+      { label: 'Credit Spreads', path: '/app/macro/credit-spreads' },
     ],
     sidebar: [
       { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
+      { label: 'Net Liquidity', path: '/app/macro/liquidity', icon: Droplet },
+      { label: 'Real Yields & TIPS', path: '/app/macro/real-yields', icon: TrendingUp },
+      { label: 'Credit Spreads', path: '/app/macro/credit-spreads', icon: Activity },
       { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
       { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
       { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },
