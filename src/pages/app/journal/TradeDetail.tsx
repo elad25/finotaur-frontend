@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { uploadScreenshot } from '@/lib/trades';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
-import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil } from 'lucide-react';
+import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
+import MultiUploadZone from '@/components/journal/MultiUploadZone';
 
 interface PartialLeg {
   // Common fields written by both the Tradovate edge fn (v48+) and the
@@ -55,6 +57,14 @@ interface EditDraft {
   next_time: string;
   tags: string; // comma-separated; split on save
   actual_user_r: string; // string for input binding; parsed to number | null on save
+}
+
+// Local mirror of MultiUploadZone's internal Screenshot shape (not exported from that module).
+interface PendingScreenshot {
+  file: File;
+  preview: string;
+  compressed?: File;
+  compressing?: boolean;
 }
 
 const LEG_VISIBLE_CAP = 3;
@@ -146,6 +156,12 @@ export default function JournalTradeDetail() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // ---- screenshot edit state ----
+  // existingScreenshots: URLs already persisted on the trade (user may remove some).
+  // pendingFiles: new File objects added in this edit session (not yet uploaded).
+  const [existingScreenshots, setExistingScreenshots] = useState<string[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<PendingScreenshot[]>([]);
+
   useEffect(() => {
     if (id) {
       fetchTrade();
@@ -189,12 +205,16 @@ export default function JournalTradeDetail() {
   const handleEditClick = () => {
     if (!trade) return;
     setDraft(tradeToEditDraft(trade));
+    setExistingScreenshots(trade.screenshots ?? []);
+    setPendingFiles([]);
     setSaveError(null);
     setIsEditing(true);
   };
 
   const handleCancel = () => {
     setDraft(null);
+    setExistingScreenshots([]);
+    setPendingFiles([]);
     setSaveError(null);
     setIsEditing(false);
   };
@@ -215,6 +235,22 @@ export default function JournalTradeDetail() {
         ? null
         : Number(draft.actual_user_r);
 
+    // Upload any pending screenshot files; skip nulls (failed uploads).
+    const filesToUpload = pendingFiles.map((s) => s.compressed ?? s.file);
+    const uploadedUrls = await Promise.all(filesToUpload.map((f) => uploadScreenshot(f)));
+    const successfulUrls = uploadedUrls.filter((url): url is string => url !== null);
+
+    if (uploadedUrls.some((url) => url === null)) {
+      // Surface partial-failure info; uploadScreenshot already calls its own
+      // toast.error internally, but we also set saveError so the banner shows.
+      const failCount = uploadedUrls.filter((url) => url === null).length;
+      setSaveError(
+        `${failCount} screenshot${failCount > 1 ? 's' : ''} failed to upload — other changes were still saved.`,
+      );
+    }
+
+    const finalScreenshots = [...existingScreenshots, ...successfulUrls];
+
     // Supabase update accepts null to clear a column; we type the payload
     // explicitly rather than fighting Partial<Trade> optional-vs-nullable.
     const payload: {
@@ -224,6 +260,7 @@ export default function JournalTradeDetail() {
       next_time: string | null;
       tags: string[] | null;
       actual_user_r: number | null;
+      screenshots: string[];
     } = {
       notes: draft.notes || null,
       setup: draft.setup || null,
@@ -232,6 +269,7 @@ export default function JournalTradeDetail() {
       tags: parsedTags.length > 0 ? parsedTags : null,
       actual_user_r:
         parsedR !== null && !isNaN(parsedR) ? parsedR : null,
+      screenshots: finalScreenshots,
     };
 
     try {
@@ -247,6 +285,8 @@ export default function JournalTradeDetail() {
       setTrade(data as Trade);
       setIsEditing(false);
       setDraft(null);
+      setExistingScreenshots([]);
+      setPendingFiles([]);
 
       // Invalidate React Query caches so MyTrades / stats reflect the change
       queryClient.invalidateQueries({ queryKey: queryKeys.tradeDetail(trade.id) });
@@ -687,22 +727,64 @@ export default function JournalTradeDetail() {
         </div>
       )}
 
-      {/* Screenshots — display only; upload is deferred */}
-      {/* TODO(screenshots): add image upload UI when storage bucket + signed URL flow is ready */}
-      {trade.screenshots && trade.screenshots.length > 0 && (
+      {/* Screenshots */}
+      {isEditing ? (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
           <h3 className="text-xl font-semibold text-white mb-4">Screenshots</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {trade.screenshots.map((url, index) => (
-              <img
-                key={index}
-                src={url}
-                alt={`Trade screenshot ${index + 1}`}
-                className="w-full rounded-lg border border-zinc-800"
-              />
-            ))}
-          </div>
+
+          {/* Existing screenshot thumbnails with remove control */}
+          {existingScreenshots.length > 0 && (
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {existingScreenshots.map((url, index) => (
+                <div
+                  key={url}
+                  className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900/50"
+                >
+                  <div className="aspect-video">
+                    <img
+                      src={url}
+                      alt={`Screenshot ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExistingScreenshots((prev) => prev.filter((_, i) => i !== index))
+                    }
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-600/90 hover:bg-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label="Remove screenshot"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Upload zone for new files */}
+          <MultiUploadZone
+            screenshots={pendingFiles}
+            onScreenshotsChange={setPendingFiles}
+            maxFiles={Math.max(0, 4 - existingScreenshots.length)}
+          />
         </div>
+      ) : (
+        (trade.screenshots && trade.screenshots.length > 0) && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Screenshots</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {trade.screenshots.map((url, index) => (
+                <img
+                  key={index}
+                  src={url}
+                  alt={`Trade screenshot ${index + 1}`}
+                  className="w-full rounded-lg border border-zinc-800"
+                />
+              ))}
+            </div>
+          </div>
+        )
       )}
     </div>
   );
