@@ -109,6 +109,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Sentiment', path: '/app/crypto/sentiment' },
       { label: 'DeFi', path: '/app/crypto/defi-tvl' },
       { label: 'Stablecoins', path: '/app/crypto/stablecoins' },
+      { label: 'Heatmap', path: '/app/crypto/heatmap' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/crypto/overview', icon: LayoutDashboard },
@@ -117,6 +118,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Sentiment & News', path: '/app/crypto/sentiment', icon: Newspaper },
       { label: 'DeFi TVL', path: '/app/crypto/defi-tvl', icon: Coins },
       { label: 'Stablecoins', path: '/app/crypto/stablecoins', icon: DollarSign },
+      { label: 'Heatmap', path: '/app/crypto/heatmap', icon: Map },
       { label: 'Watchlist', path: '/app/crypto/watchlist', icon: Bell },
       { label: 'Academy', path: '/app/crypto/academy', icon: GraduationCap },
     ],
