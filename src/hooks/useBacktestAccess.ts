@@ -1,50 +1,66 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
+type AccountType = 'free' | 'basic' | 'premium' | 'admin';
+
+// Bound the profiles fetch. supabase-js has no built-in timeout, so a stalled
+// network would otherwise pin the BacktestRoute gate on an infinite "Loading…"
+// spinner. 8s is far above a healthy round-trip and well below user patience.
+const ACCESS_FETCH_TIMEOUT_MS = 8000;
+
+async function fetchAccountType(userId: string): Promise<AccountType> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ACCESS_FETCH_TIMEOUT_MS);
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userId)
+      .abortSignal(controller.signal)
+      .maybeSingle();
+    if (error) throw error;
+    return (data?.account_type as AccountType) || 'free';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * useBacktestAccess — resolves the current user's backtest entitlement.
+ *
+ * React Query-backed (was a raw useEffect+useState): the result is cached per
+ * user id with a 5-minute staleTime, so navigating between backtest tabs no
+ * longer re-fetches `profiles` on every BacktestRoute re-mount (which showed a
+ * fresh full-screen spinner each time and could hang on a stalled request).
+ * The first load is bounded by an 8s abort so `isLoading` can never stick.
+ */
 export const useBacktestAccess = () => {
   const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [accountType, setAccountType] = useState<'free' | 'basic' | 'premium' | 'admin'>('free');
+  const userId = user?.id;
 
-  useEffect(() => {
-    async function fetchAccountType() {
-      if (!user?.id) {
-        setAccountType('free');
-        setIsLoading(false);
-        return;
-      }
+  const { data: accountType = 'free', isLoading } = useQuery<AccountType>({
+    queryKey: ['backtest-access', userId ?? 'anon'],
+    enabled: !!userId,
+    queryFn: () => fetchAccountType(userId as string),
+    staleTime: 5 * 60 * 1000,   // cache across tab switches — no refetch storm
+    gcTime: 10 * 60 * 1000,
+    retry: 1,
+  });
 
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('account_type')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (error) throw error;
-
-        setAccountType(data?.account_type || 'free');
-      } catch (error) {
-        console.error('Error fetching account type:', error);
-        setAccountType('free');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    fetchAccountType();
-  }, [user?.id]);
-
+  // With no user yet we're not truly loading — treat as resolved (free).
+  const resolvedLoading = !!userId && isLoading;
   const hasAccess = accountType === 'premium' || accountType === 'admin';
 
   return {
     hasAccess,
     accountType,
-    isLoading,
+    isLoading: resolvedLoading,
     isPremium: accountType === 'premium',
     isAdmin: accountType === 'admin',
     isBasic: accountType === 'basic',
     isFree: accountType === 'free',
   };
 };
+
+export default useBacktestAccess;
