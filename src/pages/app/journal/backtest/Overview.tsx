@@ -244,7 +244,10 @@ const useMockBacktestStats = (): { data: BacktestStats | null; isLoading: boolea
       max_drawdown: maxDrawdown,
       max_drawdown_percent: maxDrawdownPercent,
       recovery_factor: maxDrawdown !== 0 ? stats.netPnl / Math.abs(maxDrawdown) : 0,
-      profit_factor: isFinite(stats.profitFactor) ? stats.profitFactor : 0,
+      // Preserve Infinity → UI renders as ∞. Mapping to 0 hid the
+      // "winning session with no losses" case as "no profit factor at all"
+      // (which surfaces as red 0.00 on the dashboard).
+      profit_factor: stats.profitFactor,
       avg_win: stats.avgWin,
       avg_loss: -stats.avgLoss,
       avg_win_percent: INITIAL_CAPITAL > 0 ? (stats.avgWin / INITIAL_CAPITAL) * 100 : 0,
@@ -764,11 +767,16 @@ function BacktestOverviewContent() {
     );
   }
 
-  const pfAccent =
+  // Infinity (no losses) = "elite" → display ∞ in green; >2 green; >1 gold;
+  // ≤1 red. Without the Infinity branch the value would surface as red 0.00
+  // for users whose session had only winners.
+  const pfAccent: 'green' | 'gold' | 'red' =
+    !Number.isFinite(stats.profit_factor) ? 'green' :
     stats.profit_factor > 2 ? 'green' :
     stats.profit_factor > 1 ? 'gold' :
     'red';
   const pfValueColor =
+    !Number.isFinite(stats.profit_factor) ? '#4AD295' :
     stats.profit_factor > 2 ? '#4AD295' :
     stats.profit_factor > 1 ? '#C9A646' :
     '#E36363';
@@ -851,10 +859,10 @@ function BacktestOverviewContent() {
 
           <JournalKpiCard
             label="Profit Factor"
-            value={stats.profit_factor.toFixed(2)}
+            value={Number.isFinite(stats.profit_factor) ? stats.profit_factor.toFixed(2) : '∞'}
             accent={pfAccent}
             valueColor={pfValueColor}
-            tooltip="Gross profit divided by gross loss. >1 means profitable"
+            tooltip="Gross profit divided by gross loss. >1 means profitable. ∞ = no losing trades."
           />
 
           <JournalKpiCard
