@@ -63,10 +63,10 @@ const MARKER_COLORS = {
   //   SELL → red  circle ABOVE the bar
   // A LONG trade is buy-then-sell; a SHORT trade is sell-then-buy. The
   // direction (not the entry/exit role) drives the marker.
-  // Colors mirror DS tokens (--gold-primary, --num-negative). Hardcoded as
-  // hex because lightweight-charts' setMarkers API needs literal color values.
-  buy:  '#C9A646',  // gold-primary — FINOTAUR brand
-  sell: '#E24B4A',  // num-negative — DS red
+  // Classic trading-chart palette: bright green (buy) / bright red (sell).
+  // Chart context overrides the DS no-green rule per user preference.
+  buy:  '#22c55e',  // tailwind green-500 — buy direction
+  sell: '#ef4444',  // tailwind red-500   — sell direction
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -133,22 +133,17 @@ function tradeToMarkers(trade: TradeChartTrade): {
   const entryTime = Math.floor(new Date(trade.open_at).getTime() / 1000) as UTCTimestamp;
   if (Number.isFinite(entryTime as number)) {
     const entryColor = entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
-    markers.push({
-      time: entryTime,
-      position: entryIsBuy ? 'belowBar' : 'aboveBar',
-      shape: 'circle',
-      color: entryColor,
-      // No text — the icon overlay replaces the text label.
-      size: 2,
-    });
+    // Overlay is the single source of truth — no native lightweight-charts
+    // marker is pushed, so the user sees exactly one circle (with the icon
+    // inside) per entry/exit instead of two at slightly different y-positions.
     markerIcons.push({
       time: entryTime,
       price: trade.entry_price,
       direction: entryIsBuy ? 'up' : 'down',
       color: entryColor,
-      // belowBar → icon sits below the candle low; positive offsetY pushes further down.
-      // aboveBar → icon sits above the candle high; negative offsetY pushes further up.
-      offsetY: entryIsBuy ? 14 : -14,
+      // buy (entry below the price) → icon sits a bit below the entry price.
+      // sell (entry above the price) → icon sits a bit above.
+      offsetY: entryIsBuy ? 18 : -18,
     });
   }
 
@@ -158,19 +153,12 @@ function tradeToMarkers(trade: TradeChartTrade): {
     const exitTime = Math.floor(new Date(trade.close_at).getTime() / 1000) as UTCTimestamp;
     if (Number.isFinite(exitTime as number)) {
       const exitColor = exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
-      markers.push({
-        time: exitTime,
-        position: exitIsBuy ? 'belowBar' : 'aboveBar',
-        shape: 'circle',
-        color: exitColor,
-        size: 2,
-      });
       markerIcons.push({
         time: exitTime,
         price: trade.exit_price,
         direction: exitIsBuy ? 'up' : 'down',
         color: exitColor,
-        offsetY: exitIsBuy ? 14 : -14,
+        offsetY: exitIsBuy ? 18 : -18,
       });
     }
   }

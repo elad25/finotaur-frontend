@@ -622,7 +622,20 @@ export function FinotaurChart({
       ro.observe(el);
     }
 
+    // After first paint, defer 2 frames so the chart finishes its initial
+    // layout pass (setVisibleRange + fitContent). Without this, the first
+    // bump runs while timeToCoordinate / priceToCoordinate still return null
+    // and the icons render at top:-9 left:-9 — clipped by overflow-hidden.
+    const raf1 = requestAnimationFrame(() => {
+      const raf2 = requestAnimationFrame(bump);
+      // Store raf2 id for cleanup via the outer raf1Ref pattern below
+      (bump as unknown as { _raf2?: number })._raf2 = raf2;
+    });
+
     return () => {
+      cancelAnimationFrame(raf1);
+      const raf2 = (bump as unknown as { _raf2?: number })._raf2;
+      if (raf2 != null) cancelAnimationFrame(raf2);
       chart.timeScale().unsubscribeVisibleTimeRangeChange(bump);
       ro?.disconnect();
     };
@@ -842,8 +855,7 @@ export function FinotaurChart({
           never steals hover/click from the lightweight-charts canvas below. */}
       {markerIcons && markerIcons.length > 0 && chartRef.current && seriesRef.current && (
         <div
-          className="absolute inset-0 overflow-hidden"
-          style={{ pointerEvents: 'none' }}
+          className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
           // overlayTick in key forces React to recompute coordinates on pan/zoom/resize
           key={overlayTick}
         >
@@ -855,33 +867,36 @@ export function FinotaurChart({
             const x = chart.timeScale().timeToCoordinate(icon.time as UTCTimestamp);
             const y = series.priceToCoordinate(icon.price);
 
-            // null means the marker is outside the visible viewport — skip it.
+            // null = outside viewport; NaN = chart not yet laid out (first paint).
+            // The RAF deferral in the subscribe effect handles the NaN case on the
+            // next bump, but defend at the boundary too.
             if (x === null || y === null) return null;
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-            const top = y + icon.offsetY;
-            const left = x;
+            const top = (y as number) + icon.offsetY;
+            const left = x as number;
 
             return (
               <div
                 key={idx}
                 style={{
                   position: 'absolute',
-                  top: top - 9,   // center the 18px circle vertically on the anchor point
-                  left: left - 9, // center the 18px circle horizontally on the bar
-                  width: 18,
-                  height: 18,
+                  top: top - 11,   // center the 22px circle vertically on the anchor point
+                  left: left - 11, // center the 22px circle horizontally on the bar
+                  width: 22,
+                  height: 22,
                   borderRadius: '50%',
                   background: icon.color,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                  boxShadow: '0 0 0 2px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.45)',
                   pointerEvents: 'none',
                 }}
               >
                 {icon.direction === 'up'
-                  ? <ArrowUp size={10} color="#fff" strokeWidth={2.5} />
-                  : <ArrowDown size={10} color="#fff" strokeWidth={2.5} />
+                  ? <ArrowUp size={14} color="#fff" strokeWidth={3} absoluteStrokeWidth />
+                  : <ArrowDown size={14} color="#fff" strokeWidth={3} absoluteStrokeWidth />
                 }
               </div>
             );
