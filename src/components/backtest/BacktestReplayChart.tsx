@@ -62,7 +62,7 @@ const THEME = {
 // Bars to pre-fetch on each side of the replay-start moment. ~700 total
 // at 5m bars = ~58 hours of replay — enough for a multi-day session
 // while keeping payload modest. Tweak if you need more "future" runway.
-const BARS_BEFORE_START = 200;
+const BARS_BEFORE_START = 1000;
 const BARS_AFTER_START = 500;
 
 /** Seconds per bar for the given interval. Used to pick the fetch window. */
@@ -189,7 +189,8 @@ export function BacktestReplayChart({
 
     const secPerBar = intervalSeconds(interval);
     const from = (replayStartTime - BARS_BEFORE_START * secPerBar) as UTCTimestamp;
-    const to = (replayStartTime + BARS_AFTER_START * secPerBar) as UTCTimestamp;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const to = Math.min(replayStartTime + BARS_AFTER_START * secPerBar, nowSec) as UTCTimestamp;
 
     dataSource
       .getBars(symbol, interval, from, to)
