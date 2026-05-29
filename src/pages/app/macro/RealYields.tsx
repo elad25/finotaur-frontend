@@ -12,6 +12,7 @@ import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
+import { MetricChart } from '@/components/macro/MetricChart';
 import {
   useRealYieldsSnapshot,
   useRealYieldsSeries,
@@ -51,6 +52,31 @@ function breakevenColor(n: number): string {
   return 'text-sky-400';
 }
 
+
+// ─── Interactive MetricChart (recharts) ──────────────────────────────────────
+
+const RealYieldsMetricChart = memo(function RealYieldsMetricChart() {
+  const { data: seriesResp, isLoading } = useRealYieldsSeries(365 * 5); // fetch 5Y for range pills
+
+  return (
+    <Card className="w-full mb-6 p-4">
+      <MetricChart
+        title="Real Yields vs Breakeven Inflation"
+        data={seriesResp?.data ?? []}
+        lines={[
+          { dataKey: 'tips10',      label: '10Y TIPS (Real)', color: '#C9A646',               format: 'percent' },
+          { dataKey: 'tips5',       label: '5Y TIPS',         color: 'rgba(255,255,255,0.65)', format: 'percent', strokeDasharray: '4 4' },
+          { dataKey: 'breakeven10', label: '10Y Breakeven',   color: '#E24B4A',               format: 'percent' },
+          { dataKey: 'breakeven5',  label: '5Y Breakeven',    color: 'rgba(229,75,74,0.55)',   format: 'percent', strokeDasharray: '4 4' },
+        ]}
+        showNBER
+        showFOMC
+        defaultRange="1Y"
+        isLoading={isLoading}
+      />
+    </Card>
+  );
+});
 
 // ─── Hero: TIPS 10Y primary + 5Y/30Y secondary ───────────────────────────────
 
@@ -348,6 +374,9 @@ const RealYields = memo(function RealYields() {
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
         <AiSummaryCard feature="real-yields" />
+
+        {/* Interactive recharts MetricChart — TIPS yields + breakeven inflation */}
+        <RealYieldsMetricChart />
 
         {/* Hero stat: TIPS 10Y + 5Y/30Y secondary pills */}
         <RealYieldsHero />
