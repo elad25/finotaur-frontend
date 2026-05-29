@@ -539,6 +539,7 @@ export function BacktestChart({
           pnl: t.pnl ?? undefined,
           pnlPercent: t.pnl_percent ?? undefined,
           exitReason: t.exit_reason ?? undefined,
+          strategyId: t.strategy_id ?? null,
         }));
         // D8 (Sprint D, 2026-05-30): anchor the replay window to the first
         // trade rather than the session's start_date — otherwise the markers
