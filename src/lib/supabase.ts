@@ -5,18 +5,51 @@ import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabas
 // Supabase Client Configuration
 // ============================================
 
-const supabaseUrl = 
-  import.meta.env?.VITE_SUPABASE_URL || 
-  'https://your-project.supabase.co';
+// P0.4 fix (incident 2026-05-30): when Cloudflare Pages env vars are not
+// injected at build time, `import.meta.env.VITE_SUPABASE_URL` is undefined.
+// The previous behaviour fell back to the literal placeholder
+// `https://your-project.supabase.co` — a non-existent domain — so every
+// auth request resolved to ERR_NAME_NOT_RESOLVED and the site became
+// completely unusable (login, getSession, refresh all silently broken).
+//
+// New contract: if either env var is missing OR equals the dev-template
+// placeholder, throw at module init. The module never instantiates a
+// broken client. The GlobalErrorBoundary above the app then renders the
+// error rather than a silently-broken login screen — and Sentry captures
+// it via the boundary's reportError path. ADL-040: structural failure over
+// silent fallback.
+//
+// The Vite build-time guard added in vite.config.ts
+// (`assertSupabaseEnvAtBuild`) also blocks deploys missing these vars from
+// reaching production at all.
+const PLACEHOLDER_URL = 'https://your-project.supabase.co';
+const PLACEHOLDER_KEY = 'your-anon-key';
 
-const supabaseAnonKey = 
-  import.meta.env?.VITE_SUPABASE_ANON_KEY || 
-  'your-anon-key';
+const rawSupabaseUrl = import.meta.env?.VITE_SUPABASE_URL;
+const rawSupabaseAnonKey = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
-// 🔥 DEBUG - Check if env vars are loaded
+if (!rawSupabaseUrl || rawSupabaseUrl === PLACEHOLDER_URL) {
+  throw new Error(
+    '[Supabase] VITE_SUPABASE_URL is missing or set to the placeholder. ' +
+    'Set it in the Cloudflare Pages environment for the production project. ' +
+    `Got: ${rawSupabaseUrl ? '(placeholder)' : '(undefined)'}`
+  );
+}
+if (!rawSupabaseAnonKey || rawSupabaseAnonKey === PLACEHOLDER_KEY) {
+  throw new Error(
+    '[Supabase] VITE_SUPABASE_ANON_KEY is missing or set to the placeholder. ' +
+    'Set it in the Cloudflare Pages environment for the production project.'
+  );
+}
+
+const supabaseUrl = rawSupabaseUrl;
+const supabaseAnonKey = rawSupabaseAnonKey;
+
+// Boot-time observability — URL is public, key prefix is the public anon key
+// (NOT service_role). Safe to log; helps debugging stale CDN caches.
 console.log('🔑 [Supabase Init] URL:', supabaseUrl);
-console.log('🔑 [Supabase Init] Anon Key loaded:', !!supabaseAnonKey && supabaseAnonKey !== 'your-anon-key');
-console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey?.substring(0, 20) + '...');
+console.log('🔑 [Supabase Init] Anon Key loaded:', !!supabaseAnonKey);
+console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey.substring(0, 20) + '...');
 
 // 🔥 SINGLETON - instance יחיד לכל האפליקציה
 let supabaseInstance: SupabaseClient | null = null;

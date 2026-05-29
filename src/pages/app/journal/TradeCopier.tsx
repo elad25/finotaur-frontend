@@ -1486,8 +1486,7 @@ const CopyHistorySection = memo(({ compact = false }: { compact?: boolean }) => 
 export default function TradeCopier() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isPremium, isAdmin } = useSubscription();
-  const isPremiumUser = isPremium || isAdmin;
+  const { isAdmin } = useSubscription();
 
   const { hasAnyConnection, syncStatus } = useTradovate();
   const { alive: engineAlive } = useCopyEngineHealth();
@@ -1534,7 +1533,23 @@ export default function TradeCopier() {
       ? 'copy-trading'
       : 'connections';
 
-  if (!isPremiumUser) return <PremiumGate />;
+  if (!isAdmin) return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
+      <div className="max-w-md w-full text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center mx-auto">
+          <Zap className="w-8 h-8 text-[#C9A646]" />
+        </div>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#C9A646]/10 border border-[#C9A646]/25 text-[#C9A646] text-xs font-semibold tracking-wider uppercase">
+          Private Beta
+        </div>
+        <h2 className="text-xl font-bold text-white">Trade Copier — Private Beta</h2>
+        <p className="text-zinc-400 text-sm leading-relaxed">
+          We&apos;re fire-testing the copier with admin accounts before public release.
+          Stay tuned — this will open to all Premium members soon.
+        </p>
+      </div>
+    </div>
+  );
 
   // Only real broker accounts — no manual portfolios
   const brokerPortfolios = useMemo(

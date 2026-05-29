@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:client": "vite build",
+    "build:ssr": "vite build --ssr src/entry-server.tsx --outDir dist-ssr -c vite.config.ssr.ts",
+    "prerender": "node scripts/seo/prerender.mjs",
+    "build": "npm run build:client && npm run build:ssr && npm run prerender",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -101,6 +104,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@sentry/vite-plugin": "^2.23.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22.16.5",

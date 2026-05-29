@@ -22,6 +22,8 @@ import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
 import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
 import JournalCopierPage from "@/pages/JournalCopierPage";
+import ResearchIndex from "@/pages/research/ResearchIndexPage";
+import TickerResearch from "@/pages/research/TickerResearchPage";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -36,6 +38,8 @@ import { WelcomePopup } from "@/components/WelcomePopup";
 import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
+import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
+import { logger } from '@/lib/logger';
 
 // =====================================================
 // 🔄 AUTO-RELOAD ON CHUNK LOAD FAILURE (after deploy)
@@ -98,9 +102,13 @@ if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     const msg =
       (event.reason && (event.reason.message || event.reason.toString?.())) || '';
+    // ChunkLoadError is handled by GlobalErrorBoundary (manual refresh UI).
+    // Do NOT auto-reload here — it causes infinite reload loops after deploys.
     if (matchesChunkError(msg)) {
-      tryReloadOnce();
+      logger.warn('[App] Chunk load rejection detected — GlobalErrorBoundary will handle UI', { msg });
+      return;
     }
+    logger.error('[App] Unhandled promise rejection', event.reason);
   });
 }
 
@@ -126,6 +134,7 @@ import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
 
 // LAZY LOADED PAGES
+const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/app/journal/admin/Users"));
 const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"));
@@ -187,13 +196,8 @@ const BacktestOverview = lazy(() => import("@/pages/app/journal/backtest/Overvie
 const BacktestChart = lazy(() => import("@/pages/app/journal/backtest/Chart"));
 const BacktestResults = lazy(() => import("@/pages/app/journal/backtest/Results"));
 const BacktestBuilder = lazy(() => import("@/pages/app/journal/backtest/Builder"));
-const BacktestData = lazy(() => import("@/pages/app/journal/backtest/Data"));
 const BacktestAnalytics = lazy(() => import("@/pages/app/journal/backtest/Analytics"));
-const BacktestAIInsights = lazy(() => import("@/pages/app/journal/backtest/Aiinsights"));
-const BacktestMonteCarlo = lazy(() => import("@/pages/app/journal/backtest/Montecarlo"));
-const BacktestWalkForward = lazy(() => import("@/pages/app/journal/backtest/Walkforward"));
-const BacktestOptimization = lazy(() => import("@/pages/app/journal/backtest/Optimization"));
-const BacktestReplay = lazy(() => import("@/pages/app/journal/backtest/Replay"));
+const BacktestTrades = lazy(() => import("@/pages/app/journal/backtest/BacktestTrades"));
 
 // Affiliate Center Pages
 const AffiliateOverview = lazy(() => import("@/features/affiliate/pages/Affiliateoverview"));
@@ -230,6 +234,10 @@ const AdminPatternLibraryList = lazy(() => import("@/pages/app/admin/PatternLibr
 // Upcoming Events — forward-looking event calendar (Tree #2, 2026-05-27)
 const UpcomingEventsView = lazy(() => import("@/pages/app/ai/UpcomingEventsView"));
 const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsAdmin"));
+// DEV-ONLY: /__dev/seo-analytics — public screen-verification route for the
+// admin SEO widget. Remove import + route + delete src/__dev/SeoAnalyticsDevPage.tsx
+// before merging Wave 5 to main (the admin route at /app/admin/seo is the prod surface).
+import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -252,6 +260,9 @@ const CryptoDerivatives = lazy(() => import("@/pages/app/crypto/Derivatives"));
 const CryptoSentiment = lazy(() => import("@/pages/app/crypto/Sentiment"));
 const CryptoWatchlist = lazy(() => import("@/pages/app/crypto/Watchlist"));
 const CryptoAcademy = lazy(() => import("@/pages/app/crypto/Academy"));
+const CryptoDefiTvl = lazy(() => import("@/pages/app/crypto/DefiTvl"));
+const CryptoStablecoins = lazy(() => import("@/pages/app/crypto/Stablecoins"));
+const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -293,6 +304,9 @@ const MacroEvents = lazy(() => import("@/pages/app/macro/Events"));
 const MacroReports = lazy(() => import("@/pages/app/macro/Reports"));
 const MacroSentiment = lazy(() => import("@/pages/app/macro/Sentiment"));
 const MacroNews = lazy(() => import("@/pages/app/macro/News"));
+const MacroLiquidity = lazy(() => import("@/pages/app/macro/Liquidity"));
+const MacroRealYields = lazy(() => import("@/pages/app/macro/RealYields"));
+const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"));
 
 // Options
 const OptionsChain = lazy(() => import("@/pages/app/options/Chain"));
@@ -322,6 +336,7 @@ const CopilotAIAnalystPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSe
 const CopilotHoldingsPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotHoldingsPage })));
 const CopilotRisksPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotRisksPage })));
 const CopilotAIChatPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIChatPage })));
+const CopilotSectorFlowPage = lazy(() => import("@/pages/app/ai/copilot/components/SectorFlowPage").then((m) => ({ default: m.SectorFlowPage })));
 
 // Funding
 const FundingOverview = lazy(() => import("@/pages/app/funding/Overview"));
@@ -362,7 +377,7 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
-      <AffiliateTracker />
+      {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
       <WelcomeOffer />
@@ -392,6 +407,8 @@ function AppContent() {
         <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/glossary" element={<GlossaryIndex />} />
         <Route path="/glossary/:slug" element={<GlossaryTerm />} />
+        <Route path="/research" element={<ResearchIndex />} />
+        <Route path="/research/:ticker" element={<TickerResearch />} />
         <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
@@ -477,7 +494,10 @@ function AppContent() {
           <Route path="crypto/sentiment" element={<LockedRoute domainId="crypto"><CryptoSentiment /></LockedRoute>} />
           <Route path="crypto/watchlist" element={<LockedRoute domainId="crypto"><CryptoWatchlist /></LockedRoute>} />
           <Route path="crypto/academy" element={<LockedRoute domainId="crypto"><CryptoAcademy /></LockedRoute>} />
-          
+          <Route path="crypto/defi-tvl" element={<LockedRoute domainId="crypto"><CryptoDefiTvl /></LockedRoute>} />
+          <Route path="crypto/stablecoins" element={<LockedRoute domainId="crypto"><CryptoStablecoins /></LockedRoute>} />
+          <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
+
           {/* FUTURES */}
           <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
           <Route path="futures/open-interests" element={<LockedRoute domainId="futures"><FuturesOpenInterests /></LockedRoute>} />
@@ -508,6 +528,9 @@ function AppContent() {
           
           {/* MACRO */}
           <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
+          <Route path="macro/liquidity" element={<LockedRoute domainId="macro"><MacroLiquidity /></LockedRoute>} />
+          <Route path="macro/real-yields" element={<LockedRoute domainId="macro"><MacroRealYields /></LockedRoute>} />
+          <Route path="macro/credit-spreads" element={<LockedRoute domainId="macro"><MacroCreditSpreads /></LockedRoute>} />
           <Route path="macro/cross-asset" element={<LockedRoute domainId="macro"><MacroCrossAsset /></LockedRoute>} />
           <Route path="macro/global-heatmap" element={<LockedRoute domainId="macro"><MacroGlobalHeatmap /></LockedRoute>} />
           <Route path="macro/models" element={<LockedRoute domainId="macro"><MacroModels /></LockedRoute>} />
@@ -523,6 +546,8 @@ function AppContent() {
           <Route path="ai/copilot" element={<Navigate to="/copilot" replace />} />
           <Route path="ai/copilot/top-opportunities" element={<Navigate to="/copilot/top-opportunities" replace />} />
           <Route path="ai/copilot/macro" element={<Navigate to="/copilot/macro" replace />} />
+          <Route path="ai/copilot/sector-flow" element={<Navigate to="/copilot/quant-flow" replace />} />
+          <Route path="ai/copilot/quant-flow" element={<Navigate to="/copilot/quant-flow" replace />} />
           <Route path="ai/copilot/ai-analyst" element={<Navigate to="/copilot/ai-analyst" replace />} />
           <Route path="ai/copilot/holdings" element={<Navigate to="/copilot/holdings" replace />} />
           <Route path="ai/copilot/risks" element={<Navigate to="/copilot/risks" replace />} />
@@ -562,6 +587,8 @@ function AppContent() {
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
 <Route path="journal/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
 <Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
+{/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
+<Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
@@ -569,14 +596,9 @@ function AppContent() {
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
+          <Route path="journal/backtest/trades" element={<BacktestRoute><BacktestTrades /></BacktestRoute>} />
           <Route path="journal/backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
-          <Route path="journal/backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="journal/backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
-          <Route path="journal/backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
-          <Route path="journal/backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
-          <Route path="journal/backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
-          <Route path="journal/backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
-          <Route path="journal/backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           <Route path="journal/backtest/new" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
 
           {/* AFFILIATE CENTER — gated by FEATURES.AFFILIATE_TRACKING (re-enable for Stripe migration) */}
@@ -616,13 +638,7 @@ function AppContent() {
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
-          <Route path="backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
-          <Route path="backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
-          <Route path="backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
-          <Route path="backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
-          <Route path="backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
-          <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* TRADE COPIER */}
           {/* TRADE COPIER — beta-only (gated via DomainGuard, domain copy-trade has beta:true in constants/nav.ts) */}
@@ -650,11 +666,16 @@ function AppContent() {
           <Route index element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
           <Route path="top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
           <Route path="macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />
+          <Route path="quant-flow" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotSectorFlowPage /></BetaRoute>} />
+          <Route path="sector-flow" element={<Navigate to="/copilot/quant-flow" replace />} />
           <Route path="ai-analyst" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIAnalystPage /></BetaRoute>} />
           <Route path="holdings" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotHoldingsPage /></BetaRoute>} />
           <Route path="risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
           <Route path="ai-chat" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIChatPage /></BetaRoute>} />
         </Route>
+
+        {/* DEV-ONLY: public screen-verification for admin SEO widget */}
+        <Route path="/__dev/seo-analytics" element={<SeoAnalyticsDevPage />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -665,26 +686,28 @@ function AppContent() {
 
 // MAIN APP
 export const App = () => (
-  <AppQueryProvider>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <ScrollToTop />
-          <AuthProvider>
-            <TimezoneProvider>
-              <RiskSettingsRealtimeProvider>
-                <ImpersonationProvider>
-                  <AppContent />
-                </ImpersonationProvider>
-              </RiskSettingsRealtimeProvider>
-            </TimezoneProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </AppQueryProvider>
+  <GlobalErrorBoundary>
+    <AppQueryProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <ScrollToTop />
+            <AuthProvider>
+              <TimezoneProvider>
+                <RiskSettingsRealtimeProvider>
+                  <ImpersonationProvider>
+                    <AppContent />
+                  </ImpersonationProvider>
+                </RiskSettingsRealtimeProvider>
+              </TimezoneProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </AppQueryProvider>
+  </GlobalErrorBoundary>
 );
 
 export default App;

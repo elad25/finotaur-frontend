@@ -21,10 +21,11 @@
  *   - Rule-based strategy executor (Phase 3)
  */
 
-import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
@@ -50,30 +51,88 @@ import { DateTimePicker } from './DateTimePicker';
 // class — power users can type freely.
 type AssetClass = 'futures' | 'stocks' | 'crypto';
 
-const PRESETS: Record<AssetClass, Array<{ label: string; symbol: string }>> = {
+// Searchable symbol universe per asset class. `ticker` is what the trader
+// types/sees (e.g. "ES"); `symbol` is the source-native form passed to the
+// data layer (Yahoo futures use a "=F" suffix, equities are bare, Binance
+// crypto are "<BASE>USDT"). The first entry per class is the default symbol
+// when the trader switches asset class. The picker also accepts free-form
+// tickers not in this list (normalized per class on commit).
+interface SymbolEntry { ticker: string; label: string; symbol: string }
+
+const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
   futures: [
-    { label: 'Micro Nasdaq (MNQ)', symbol: 'MNQ=F' },
-    { label: 'Micro S&P (MES)', symbol: 'MES=F' },
-    { label: 'E-mini Nasdaq (NQ)', symbol: 'NQ=F' },
-    { label: 'E-mini S&P (ES)', symbol: 'ES=F' },
-    { label: 'Gold (GC)', symbol: 'GC=F' },
-    { label: 'Crude Oil (CL)', symbol: 'CL=F' },
+    { ticker: 'MNQ', label: 'Micro E-mini Nasdaq-100', symbol: 'MNQ=F' },
+    { ticker: 'MES', label: 'Micro E-mini S&P 500', symbol: 'MES=F' },
+    { ticker: 'NQ', label: 'E-mini Nasdaq-100', symbol: 'NQ=F' },
+    { ticker: 'ES', label: 'E-mini S&P 500', symbol: 'ES=F' },
+    { ticker: 'YM', label: 'E-mini Dow', symbol: 'YM=F' },
+    { ticker: 'MYM', label: 'Micro E-mini Dow', symbol: 'MYM=F' },
+    { ticker: 'RTY', label: 'E-mini Russell 2000', symbol: 'RTY=F' },
+    { ticker: 'M2K', label: 'Micro E-mini Russell 2000', symbol: 'M2K=F' },
+    { ticker: 'GC', label: 'Gold', symbol: 'GC=F' },
+    { ticker: 'MGC', label: 'Micro Gold', symbol: 'MGC=F' },
+    { ticker: 'SI', label: 'Silver', symbol: 'SI=F' },
+    { ticker: 'HG', label: 'Copper', symbol: 'HG=F' },
+    { ticker: 'CL', label: 'Crude Oil (WTI)', symbol: 'CL=F' },
+    { ticker: 'MCL', label: 'Micro Crude Oil', symbol: 'MCL=F' },
+    { ticker: 'NG', label: 'Natural Gas', symbol: 'NG=F' },
+    { ticker: 'ZB', label: '30-Year T-Bond', symbol: 'ZB=F' },
+    { ticker: 'ZN', label: '10-Year T-Note', symbol: 'ZN=F' },
+    { ticker: 'ZC', label: 'Corn', symbol: 'ZC=F' },
+    { ticker: 'ZS', label: 'Soybeans', symbol: 'ZS=F' },
+    { ticker: 'ZW', label: 'Wheat', symbol: 'ZW=F' },
+    { ticker: '6E', label: 'Euro FX', symbol: '6E=F' },
+    { ticker: '6J', label: 'Japanese Yen', symbol: '6J=F' },
+    { ticker: '6B', label: 'British Pound', symbol: '6B=F' },
   ],
   stocks: [
-    { label: 'Apple (AAPL)', symbol: 'AAPL' },
-    { label: 'Nvidia (NVDA)', symbol: 'NVDA' },
-    { label: 'Tesla (TSLA)', symbol: 'TSLA' },
-    { label: 'Microsoft (MSFT)', symbol: 'MSFT' },
-    { label: 'S&P 500 (^GSPC)', symbol: '^GSPC' },
-    { label: 'Nasdaq 100 (^NDX)', symbol: '^NDX' },
+    { ticker: 'AAPL', label: 'Apple', symbol: 'AAPL' },
+    { ticker: 'NVDA', label: 'Nvidia', symbol: 'NVDA' },
+    { ticker: 'TSLA', label: 'Tesla', symbol: 'TSLA' },
+    { ticker: 'MSFT', label: 'Microsoft', symbol: 'MSFT' },
+    { ticker: 'AMZN', label: 'Amazon', symbol: 'AMZN' },
+    { ticker: 'GOOGL', label: 'Alphabet (Class A)', symbol: 'GOOGL' },
+    { ticker: 'META', label: 'Meta Platforms', symbol: 'META' },
+    { ticker: 'NFLX', label: 'Netflix', symbol: 'NFLX' },
+    { ticker: 'AMD', label: 'Advanced Micro Devices', symbol: 'AMD' },
+    { ticker: 'JPM', label: 'JPMorgan Chase', symbol: 'JPM' },
+    { ticker: 'V', label: 'Visa', symbol: 'V' },
+    { ticker: 'DIS', label: 'Walt Disney', symbol: 'DIS' },
+    { ticker: 'BA', label: 'Boeing', symbol: 'BA' },
+    { ticker: 'XOM', label: 'Exxon Mobil', symbol: 'XOM' },
+    { ticker: 'WMT', label: 'Walmart', symbol: 'WMT' },
+    { ticker: 'COST', label: 'Costco', symbol: 'COST' },
+    { ticker: 'SPY', label: 'SPDR S&P 500 ETF', symbol: 'SPY' },
+    { ticker: 'QQQ', label: 'Invesco QQQ (Nasdaq-100)', symbol: 'QQQ' },
+    { ticker: 'IWM', label: 'iShares Russell 2000 ETF', symbol: 'IWM' },
+    { ticker: 'SPX', label: 'S&P 500 Index', symbol: '^GSPC' },
+    { ticker: 'NDX', label: 'Nasdaq-100 Index', symbol: '^NDX' },
+    { ticker: 'VIX', label: 'CBOE Volatility Index', symbol: '^VIX' },
   ],
   crypto: [
-    { label: 'Bitcoin (BTCUSDT)', symbol: 'BTCUSDT' },
-    { label: 'Ethereum (ETHUSDT)', symbol: 'ETHUSDT' },
-    { label: 'Solana (SOLUSDT)', symbol: 'SOLUSDT' },
-    { label: 'BNB (BNBUSDT)', symbol: 'BNBUSDT' },
+    { ticker: 'BTC', label: 'Bitcoin', symbol: 'BTCUSDT' },
+    { ticker: 'ETH', label: 'Ethereum', symbol: 'ETHUSDT' },
+    { ticker: 'SOL', label: 'Solana', symbol: 'SOLUSDT' },
+    { ticker: 'BNB', label: 'BNB', symbol: 'BNBUSDT' },
+    { ticker: 'XRP', label: 'XRP', symbol: 'XRPUSDT' },
+    { ticker: 'ADA', label: 'Cardano', symbol: 'ADAUSDT' },
+    { ticker: 'DOGE', label: 'Dogecoin', symbol: 'DOGEUSDT' },
+    { ticker: 'AVAX', label: 'Avalanche', symbol: 'AVAXUSDT' },
+    { ticker: 'LINK', label: 'Chainlink', symbol: 'LINKUSDT' },
+    { ticker: 'DOT', label: 'Polkadot', symbol: 'DOTUSDT' },
+    { ticker: 'MATIC', label: 'Polygon', symbol: 'MATICUSDT' },
+    { ticker: 'LTC', label: 'Litecoin', symbol: 'LTCUSDT' },
   ],
 };
+
+// Normalize a free-typed ticker to the source-native symbol for its class.
+// Futures get the Yahoo "=F" suffix; equities + crypto pass through uppercased.
+function normalizeRawSymbol(raw: string, assetClass: AssetClass): string {
+  const t = raw.trim().toUpperCase();
+  if (!t) return t;
+  if (assetClass === 'futures') return t.endsWith('=F') ? t : `${t}=F`;
+  return t;
+}
 
 const INTERVALS: Interval[] = ['1m', '5m', '15m', '60m', '1d'];
 
@@ -117,6 +176,215 @@ function positionToMarkers(p: PaperPosition): ChartMarker[] {
   return [entryMarker];
 }
 
+// ─── ActiveStrategyDropdown — custom dropdown (replaces native <select>) ─────
+function ActiveStrategyDropdown({
+  activeStrategyId,
+  strategies,
+  onChange,
+}: {
+  activeStrategyId: string | null;
+  strategies: Array<{ id: string; name: string }>;
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const activeName = activeStrategyId
+    ? strategies.find((s) => s.id === activeStrategyId)?.name ?? 'Unknown'
+    : 'No strategy (Manual)';
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+        title="Tag new trades with this strategy for per-strategy stats"
+      >
+        <Sparkles size={12} className="text-[#7AB6F4]" />
+        <span className="max-w-[160px] truncate">{activeName}</span>
+        <ChevronDown size={12} className="text-zinc-500" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <button
+            type="button"
+            onClick={() => { onChange(null); setOpen(false); }}
+            className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
+              activeStrategyId === null
+                ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                : 'text-zinc-300 hover:bg-zinc-900'
+            }`}
+          >
+            No strategy (Manual)
+          </button>
+          {strategies.length > 0 && (
+            <div className="border-t border-zinc-800" />
+          )}
+          {strategies.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => { onChange(s.id); setOpen(false); }}
+              className={`block w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
+                activeStrategyId === s.id
+                  ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                  : 'text-zinc-300 hover:bg-zinc-900'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SymbolAutocomplete — type-ahead ticker picker (replaces native <select>) ─
+// Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
+// Enter select; Enter on no-match commits a custom symbol. Matches the toolbar
+// styling (gold #C9A646 accent on dark zinc) like ActiveStrategyDropdown.
+function SymbolAutocomplete({
+  assetClass,
+  symbol,
+  onSelect,
+}: {
+  assetClass: AssetClass;
+  symbol: string;
+  onSelect: (symbol: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlight, setHighlight] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const universe = SYMBOL_UNIVERSE[assetClass];
+
+  // Best-effort reverse lookup: show the human ticker for the active symbol;
+  // fall back to the raw source symbol if it isn't in the universe.
+  const currentTicker = useMemo(() => {
+    const hit = universe.find((u) => u.symbol === symbol);
+    return hit?.ticker ?? symbol;
+  }, [universe, symbol]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toUpperCase();
+    if (!q) return universe.slice(0, 8);
+    return universe
+      .filter((u) => u.ticker.toUpperCase().includes(q) || u.label.toUpperCase().includes(q))
+      .slice(0, 8);
+  }, [universe, query]);
+
+  // Reset the keyboard highlight whenever the visible match list changes.
+  useEffect(() => { setHighlight(0); }, [query, assetClass]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const commit = (entry: SymbolEntry) => {
+    onSelect(entry.symbol);
+    setQuery('');
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const commitRaw = () => {
+    const next = normalizeRawSymbol(query, assetClass);
+    if (!next) return;
+    onSelect(next);
+    setQuery('');
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={open ? query : currentTicker}
+        placeholder="Search ticker…"
+        spellCheck={false}
+        autoComplete="off"
+        onFocus={() => { setQuery(''); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, Math.max(matches.length - 1, 0)));
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (matches[highlight]) commit(matches[highlight]);
+            else commitRaw();
+          } else if (e.key === 'Escape') {
+            setOpen(false);
+            inputRef.current?.blur();
+          }
+        }}
+        className="w-32 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm font-medium uppercase text-zinc-200 placeholder:normal-case placeholder:text-zinc-600 focus:border-[#C9A646] focus:outline-none"
+      />
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
+          {matches.length === 0 ? (
+            <button
+              type="button"
+              // onMouseDown (not onClick) fires before the input blur that would
+              // otherwise close the dropdown and drop the click.
+              onMouseDown={(e) => { e.preventDefault(); commitRaw(); }}
+              className="block w-full px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900"
+            >
+              Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeRawSymbol(query, assetClass) || '—'}</span> as a custom symbol
+            </button>
+          ) : (
+            matches.map((m, i) => (
+              <button
+                key={m.symbol}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); commit(m); }}
+                onMouseEnter={() => setHighlight(i)}
+                className={`flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left transition-colors ${
+                  i === highlight ? 'bg-[#C9A646]/10' : 'hover:bg-zinc-900'
+                }`}
+              >
+                <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
+                  {m.ticker}
+                </span>
+                <span className="truncate text-[11px] text-zinc-500">{m.label}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────
 export interface BacktestChartProps {
   initialSymbol?: string;
@@ -157,6 +425,7 @@ export function BacktestChart({
     updateTakeProfit,
     reset,
     loadTrades,
+    loadSession,
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
@@ -181,9 +450,10 @@ export function BacktestChart({
   // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
   // BacktestReplayChart (cursor-controlled). In Live mode it's the
   // current FinotaurChart with manual current-price input.
-  // Phase 5: Replay is the default — Elad: "תדאג שהIMERSSIVE יעבוד חלק כמו REPLAY"
+  // Elad 2026-05-29: switch the default back to Live. Replay is one click
+  // away via the LIVE/REPLAY toggle in the toolbar.
   type ChartMode = 'live' | 'replay';
-  const [chartMode, setChartMode] = useState<ChartMode>('replay');
+  const [chartMode, setChartMode] = useState<ChartMode>('live');
 
   // Phase 5: Chart link goes straight to fullscreen immersive — covers
   // app topnav + journal sub-nav. Exit button returns user to backtest
@@ -234,10 +504,84 @@ export function BacktestChart({
     return all.sort((a, b) => (a.time as number) - (b.time as number));
   }, [state.activePosition, state.closedPositions]);
 
+  // Phase 7: load a saved session from the URL ?sessionId= param.
+  const [searchParams] = useSearchParams();
+  const sessionIdParam = searchParams.get('sessionId');
+  const hydratedRef = useRef<string | null>(null);
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionIdParam) return;
+    if (hydratedRef.current === sessionIdParam) return; // prevent double-hydrate
+    hydratedRef.current = sessionIdParam;
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await persistence.loadSession(sessionIdParam);
+        if (cancelled) return;
+        // 1. Restore chart context (asset/symbol/interval/mode).
+        const ac = detail.session.asset_class;
+        if (ac === 'futures' || ac === 'stocks' || ac === 'crypto') setAssetClass(ac);
+        setSymbol(detail.session.symbol);
+        setBarInterval(detail.session.interval as Interval);
+        setChartMode('replay');
+        // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
+        const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
+          id: t.id,
+          side: t.side,
+          entryTime: Math.floor(new Date(t.entry_time).getTime() / 1000),
+          entryPrice: t.entry_price,
+          size: t.size,
+          stopLoss: t.stop_loss ?? undefined,
+          takeProfit: t.take_profit ?? undefined,
+          exitTime: t.exit_time != null ? Math.floor(new Date(t.exit_time).getTime() / 1000) : undefined,
+          exitPrice: t.exit_price ?? undefined,
+          pnl: t.pnl ?? undefined,
+          pnlPercent: t.pnl_percent ?? undefined,
+          exitReason: t.exit_reason ?? undefined,
+        }));
+        // D8 (Sprint D, 2026-05-30): anchor the replay window to the first
+        // trade rather than the session's start_date — otherwise the markers
+        // can land outside the initially-loaded bar window and look missing.
+        // Falls back to the session start_date when there are no trades.
+        const firstTradeTime = closedPositions.reduce<number | null>(
+          (min, p) => (min === null || p.entryTime < min ? p.entryTime : min),
+          null,
+        );
+        setReplayStart(
+          firstTradeTime !== null
+            ? new Date(firstTradeTime * 1000)
+            : new Date(detail.session.start_date),
+        );
+        const pendingOrders: PendingOrder[] = (detail.session.pending_orders ?? []).map((o) => ({
+          id: o.id,
+          side: o.side,
+          type: o.type,
+          triggerPrice: o.trigger_price,
+          size: o.size,
+          stopLoss: o.stop_loss ?? undefined,
+          takeProfit: o.take_profit ?? undefined,
+          strategyId: o.strategy_id ?? null,
+          createdAt: o.created_at,
+        }));
+        // 3. Hydrate the session reducer.
+        loadSession({
+          startingBalance: detail.session.initial_balance,
+          closedPositions,
+          pendingOrders,
+        });
+        setHydrateError(null);
+      } catch (err) {
+        if (!cancelled) setHydrateError(err instanceof Error ? err.message : 'Failed to load saved session');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionIdParam, persistence, loadSession]);
+
   // ─── Handlers ────────────────────────────────────────────────
   const handleAssetClassChange = (next: AssetClass) => {
     setAssetClass(next);
-    setSymbol(PRESETS[next][0].symbol);
+    setSymbol(SYMBOL_UNIVERSE[next][0].symbol);
     setLivePrice('');
   };
 
@@ -406,6 +750,7 @@ export function BacktestChart({
         finalBalance,
         statistics: state.stats,
         trades: state.closedPositions,
+        pendingOrders: state.pendingOrders,
         // Auto-name: "<symbol> · <interval> · <date>"
         name: `${symbol} · ${barInterval} · ${new Date().toLocaleDateString()}`,
       });
@@ -468,6 +813,14 @@ export function BacktestChart({
 
   return (
     <div className={containerCls}>
+      <CftcDisclosureBanner className="mx-4 mt-3" />
+      {/* Session hydration error — shown when ?sessionId= fetch fails */}
+      {hydrateError && (
+        <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-rose-800 bg-rose-950/60 px-3 py-2 text-xs text-rose-300">
+          <span><AlertCircle size={12} className="mr-1.5 inline" />Failed to load saved session: {hydrateError}</span>
+          <button onClick={() => setHydrateError(null)} className="shrink-0 text-rose-400 hover:text-rose-200"><X size={12} /></button>
+        </div>
+      )}
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
         {/* Exit fullscreen — back to backtest overview (only in fullscreen) */}
@@ -499,16 +852,13 @@ export function BacktestChart({
           ))}
         </div>
 
-        {/* Symbol picker */}
-        <select
-          value={symbol}
-          onChange={(e) => { setSymbol(e.target.value); setLivePrice(''); }}
-          className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200 focus:border-[#C9A646] focus:outline-none"
-        >
-          {PRESETS[assetClass].map((p) => (
-            <option key={p.symbol} value={p.symbol}>{p.label}</option>
-          ))}
-        </select>
+        {/* Symbol picker — type-ahead autocomplete (Tier 1 2026-05-30,
+            replaces the native <select> so traders can search/free-type). */}
+        <SymbolAutocomplete
+          assetClass={assetClass}
+          symbol={symbol}
+          onSelect={(next) => { setSymbol(next); setLivePrice(''); }}
+        />
 
         {/* Interval picker */}
         <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
@@ -532,7 +882,16 @@ export function BacktestChart({
           {(['live', 'replay'] as ChartMode[]).map((mode) => (
             <button
               key={mode}
-              onClick={() => setChartMode(mode)}
+              onClick={() => {
+                // Elad 2026-05-29: switching LIVE → REPLAY should feel
+                // continuous. Snap replayStart to NOW so the replay window
+                // shows the same recent bars the user was looking at on
+                // LIVE, instead of jumping back 4 hours.
+                if (mode === 'replay' && chartMode === 'live') {
+                  setReplayStart(new Date());
+                }
+                setChartMode(mode);
+              }}
               className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
                 chartMode === mode
                   ? 'bg-[#C9A646] text-black'
@@ -554,21 +913,14 @@ export function BacktestChart({
           />
         )}
 
-        {/* Active Strategy dropdown (Phase 4) — both modes */}
-        <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1">
-          <Sparkles size={12} className="text-[#C9A646]" />
-          <select
-            value={activeStrategyId ?? ''}
-            onChange={(e) => setActiveStrategyId(e.target.value || null)}
-            className="bg-transparent text-xs font-medium text-zinc-300 focus:outline-none"
-            title="Tag new trades with this strategy for per-strategy stats"
-          >
-            <option value="">No strategy (Manual)</option>
-            {strategyLib.strategies.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
+        {/* Active Strategy dropdown — custom (Sprint F: native <select> styling
+            was browser-default ugly; replaced with a button + popover panel
+            that matches the rest of the toolbar). */}
+        <ActiveStrategyDropdown
+          activeStrategyId={activeStrategyId}
+          strategies={strategyLib.strategies}
+          onChange={setActiveStrategyId}
+        />
 
         {/* Balance display */}
         <div className="ml-auto flex items-center gap-4">
@@ -582,7 +934,16 @@ export function BacktestChart({
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
           </div>
-          {/* Run Strategy dropdown — Live mode only */}
+          {/* Run Strategy dropdown — re-enabled in Tier 1 (2026-05-30).
+              Bug D ("freeze" on click in Live mode) was a browser-AUTOMATION
+              artifact, not a real user freeze: the prior report was a CDP 30s
+              timeout, and this codebase documents that native dialogs freeze the
+              renderer under automation (see the flashTradeError comment above).
+              Static analysis confirms the Run Strategy path has NO alert()/
+              confirm()/blocking loop, and runStrategy() is provably O(bars)
+              (single bounded for-loop, indicators precomputed once). The button
+              is already guarded against double-runs (disabled while running) and
+              handleRunStrategy closes the picker before awaiting. */}
           {chartMode === 'live' && (
           <div className="relative">
             <button
@@ -693,6 +1054,8 @@ export function BacktestChart({
               onBarReveal={handleReplayBarReveal}
               onBarClick={handleReplayBarClick}
               onContextMenu={(info) => setContextMenu(info)}
+              onJumpToTime={(date) => setReplayStart(date)}
+              showReplayCursor
               height="100%"
             />
           )}
@@ -713,8 +1076,8 @@ export function BacktestChart({
                 value={livePrice}
                 onChange={(e) => setLivePrice(e.target.value)}
                 placeholder="e.g. 20425.50"
-                step="0.01"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
+                step="any"
+                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
 
@@ -725,8 +1088,8 @@ export function BacktestChart({
                 value={size}
                 onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))}
                 min="0.01"
-                step="0.1"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
+                step="any"
+                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
 
@@ -738,8 +1101,8 @@ export function BacktestChart({
                   value={slInput}
                   onChange={(e) => setSlInput(e.target.value)}
                   placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none"
+                  step="any"
+                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </label>
               <label className="block">
@@ -749,8 +1112,8 @@ export function BacktestChart({
                   value={tpInput}
                   onChange={(e) => setTpInput(e.target.value)}
                   placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  step="any"
+                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </label>
             </div>
@@ -963,47 +1326,8 @@ export function BacktestChart({
             </div>
           )}
 
-          {/* Trade history */}
-          <div className="flex-1 p-4">
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-              <Target size={12} />
-              History ({state.closedPositions.length})
-            </h3>
-            {state.closedPositions.length === 0 ? (
-              <div className="rounded-md border border-dashed border-zinc-800 px-3 py-6 text-center text-xs text-zinc-600">
-                No closed trades yet.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {state.closedPositions.slice().reverse().map((trade, i) => {
-                  const idx = state.closedPositions.length - i;
-                  const pnl = trade.pnl ?? 0;
-                  return (
-                    <div
-                      key={trade.id}
-                      className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-xs"
-                    >
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-zinc-500">#{idx}</span>
-                          <span className={`font-semibold ${trade.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {trade.side}
-                          </span>
-                        </div>
-                        <span className={`font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[10px] text-zinc-500">
-                        <span>${trade.entryPrice.toFixed(2)} → ${trade.exitPrice?.toFixed(2)}</span>
-                        <span>{trade.size}×</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* History panel removed per Elad — closed trades land in My Trades */}
+          <div className="flex-1" />
         </aside>
       </div>
 

@@ -15,10 +15,11 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
-  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Droplet
 } from 'lucide-react';
+import { FEATURES } from '@/config/features';
 
 export interface NavItem { 
   label: string; 
@@ -56,7 +57,7 @@ export const domains: Record<string, Domain> = {
       { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
       { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
-      { label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true },  // 🤝 NEW
+      ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true }] : []),  // gated: AFFILIATE_TRACKING
       { label: 'Admin CRM', path: '/app/admin', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
@@ -107,12 +108,18 @@ export const domains: Record<string, Domain> = {
       { label: 'Overview', path: '/app/crypto/overview' },
       { label: 'Screener', path: '/app/crypto/screener' },
       { label: 'Sentiment', path: '/app/crypto/sentiment' },
+      { label: 'DeFi', path: '/app/crypto/defi-tvl' },
+      { label: 'Stablecoins', path: '/app/crypto/stablecoins' },
+      { label: 'Heatmap', path: '/app/crypto/heatmap' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/crypto/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/crypto/screener', icon: Search },
       { label: 'Derivatives', path: '/app/crypto/derivatives', icon: Activity },
       { label: 'Sentiment & News', path: '/app/crypto/sentiment', icon: Newspaper },
+      { label: 'DeFi TVL', path: '/app/crypto/defi-tvl', icon: Coins },
+      { label: 'Stablecoins', path: '/app/crypto/stablecoins', icon: DollarSign },
+      { label: 'Heatmap', path: '/app/crypto/heatmap', icon: Map },
       { label: 'Watchlist', path: '/app/crypto/watchlist', icon: Bell },
       { label: 'Academy', path: '/app/crypto/academy', icon: GraduationCap },
     ],
@@ -181,9 +188,15 @@ export const domains: Record<string, Domain> = {
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
+      { label: 'Liquidity', path: '/app/macro/liquidity' },
+      { label: 'Real Yields', path: '/app/macro/real-yields' },
+      { label: 'Credit Spreads', path: '/app/macro/credit-spreads' },
     ],
     sidebar: [
       { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
+      { label: 'Net Liquidity', path: '/app/macro/liquidity', icon: Droplet },
+      { label: 'Real Yields & TIPS', path: '/app/macro/real-yields', icon: TrendingUp },
+      { label: 'Credit Spreads', path: '/app/macro/credit-spreads', icon: Activity },
       { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
       { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
       { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },
@@ -226,6 +239,7 @@ ai: {
     subNav: [
       { label: 'Journal', path: '/app/journal/overview' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
+      { label: 'FINOTAUR AI', path: '/app/journal/finotaur-ai' },
       { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true },
     ],
     sidebar: [
@@ -249,21 +263,21 @@ ai: {
     beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },
+      { label: 'My Trades', path: '/app/journal/backtest/trades' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
       { label: 'Results', path: '/app/journal/backtest/results' },
     ],
     sidebar: [
+      // Sprint E (2026-05-28): 6 practical tabs only. Historical Data /
+      // AI Insights / Market Replay / Monte Carlo / Walk Forward / Optimization
+      // stubs deleted from /pages and dropped here. AI insight surface is
+      // inline on the Dashboard; immersive replay lives on Chart.
       { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: LayoutDashboard },
-      { label: 'New Backtest', path: '/app/journal/backtest/new', icon: FlaskConical },
+      { label: 'Chart', path: '/app/journal/backtest/chart', icon: FlaskConical },
+      { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
       { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
       { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Code },
-      { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Database },
-      { label: 'Performance Analytics', path: '/app/journal/backtest/analytics', icon: BarChart3 },
-      { label: 'Monte Carlo', path: '/app/journal/backtest/monte-carlo', icon: Activity },
-      { label: 'Walk Forward', path: '/app/journal/backtest/walk-forward', icon: TrendingUp },
-      { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Target },
-      { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
-      { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: PlayCircle },
+      { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: BarChart3 },
     ],
   },
 

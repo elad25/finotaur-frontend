@@ -9,7 +9,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle,
   ArrowRight, ArrowLeft, Loader2, HelpCircle, Check, Eye, RefreshCw,
-  BarChart3, LineChart, Target, TrendingUp, Briefcase, Activity,
+  BarChart3, LineChart, TrendingUp, Briefcase, Activity,
   Layers, Zap, Database, FileText
 } from 'lucide-react';
 
@@ -23,6 +23,7 @@ import {
   type FinotaurTrade,
   type ImportResult,
 } from '@/utils/importUtils';
+import JournalExportGuide from './import/JournalExportGuide';
 
 // ================================================
 // TYPES
@@ -47,12 +48,13 @@ const JOURNAL_SOURCES: {
   color: string;
   description: string;
 }[] = [
-  { 
-    id: 'tradezella', 
-    name: 'TradeZella', 
-    icon: <Target className="w-4 h-4" />,
+  {
+    id: 'tradezella',
+    name: 'TradeZella',
+    // Official TradeZella brand mark (apple-touch-icon from tradezella.com CDN, downloaded to public/)
+    icon: <img src="/import-guides/tradezella/logo.png" alt="" className="w-5 h-5 object-contain" />,
     color: 'text-emerald-400',
-    description: 'Full support for TradeZella exports' 
+    description: 'Full support for TradeZella exports'
   },
   { 
     id: 'tradervue', 
@@ -120,6 +122,57 @@ const JOURNAL_SOURCES: {
 ];
 
 // ================================================
+// JOURNAL CARD — single source picker with optional HOW? button
+// ================================================
+
+interface JournalCardProps {
+  source: (typeof JOURNAL_SOURCES)[number];
+  selected: boolean;
+  onSelect: () => void;
+  onShowGuide: () => void;
+  elevated?: boolean; // adds glow when selected (used for primary 6 cards)
+}
+
+function JournalCard({ source, selected, onSelect, onShowGuide, elevated }: JournalCardProps) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+      aria-pressed={selected}
+      className={`
+        relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer
+        ${selected
+          ? `border-[#C9A646] bg-[#C9A646]/10 ${elevated ? 'shadow-[0_0_20px_rgba(201,166,70,0.15)]' : ''}`
+          : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-800/50'}
+      `}
+    >
+      <div className="flex items-center gap-2.5 pr-9">
+        <div className={`
+          w-8 h-8 rounded-lg flex items-center justify-center
+          ${selected ? 'bg-[#C9A646]/20 text-[#C9A646]' : `bg-zinc-800 ${source.color}`}
+        `}>
+          {source.icon}
+        </div>
+        <span className={`text-sm font-medium ${selected ? 'text-[#C9A646]' : 'text-white'}`}>
+          {source.name}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); onShowGuide(); }}
+        aria-label={`How to export from ${source.name}`}
+        className="absolute top-1.5 right-1.5 text-[10px] font-semibold tracking-wider px-2 py-0.5 rounded-md border border-zinc-700 bg-zinc-900/70 text-zinc-400 hover:border-[#C9A646]/50 hover:text-[#C9A646] hover:bg-[#C9A646]/10 transition-all"
+      >
+        HOW?
+      </button>
+    </div>
+  );
+}
+
+// ================================================
 // MAIN COMPONENT
 // ================================================
 
@@ -140,7 +193,8 @@ export default function ImportTradesPopup({
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  const [guideSource, setGuideSource] = useState<JournalSource | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ================================================
@@ -313,35 +367,17 @@ export default function ImportTradesPopup({
         </label>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {JOURNAL_SOURCES.slice(0, 6).map(source => (
-            <button
+            <JournalCard
               key={source.id}
-              onClick={() => setSelectedSource(source.id)}
-              className={`
-                p-3 rounded-xl border text-left transition-all duration-200
-                ${selectedSource === source.id 
-                  ? 'border-[#C9A646] bg-[#C9A646]/10 shadow-[0_0_20px_rgba(201,166,70,0.15)]' 
-                  : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-600 hover:bg-zinc-800/50'}
-              `}
-            >
-              <div className="flex items-center gap-2.5">
-                <div className={`
-                  w-8 h-8 rounded-lg flex items-center justify-center
-                  ${selectedSource === source.id 
-                    ? 'bg-[#C9A646]/20 text-[#C9A646]' 
-                    : `bg-zinc-800 ${source.color}`}
-                `}>
-                  {source.icon}
-                </div>
-                <span className={`text-sm font-medium ${
-                  selectedSource === source.id ? 'text-[#C9A646]' : 'text-white'
-                }`}>
-                  {source.name}
-                </span>
-              </div>
-            </button>
+              source={source}
+              selected={selectedSource === source.id}
+              onSelect={() => setSelectedSource(source.id)}
+              onShowGuide={() => setGuideSource(source.id)}
+              elevated
+            />
           ))}
         </div>
-        
+
         {/* Show more sources */}
         <details className="mt-3 group">
           <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 flex items-center gap-1">
@@ -350,32 +386,13 @@ export default function ImportTradesPopup({
           </summary>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-3 pt-3 border-t border-zinc-800/50">
             {JOURNAL_SOURCES.slice(6).map(source => (
-              <button
+              <JournalCard
                 key={source.id}
-                onClick={() => setSelectedSource(source.id)}
-                className={`
-                  p-3 rounded-xl border text-left transition-all duration-200
-                  ${selectedSource === source.id 
-                    ? 'border-[#C9A646] bg-[#C9A646]/10' 
-                    : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-600'}
-                `}
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className={`
-                    w-8 h-8 rounded-lg flex items-center justify-center
-                    ${selectedSource === source.id 
-                      ? 'bg-[#C9A646]/20 text-[#C9A646]' 
-                      : `bg-zinc-800 ${source.color}`}
-                  `}>
-                    {source.icon}
-                  </div>
-                  <span className={`text-sm font-medium ${
-                    selectedSource === source.id ? 'text-[#C9A646]' : 'text-white'
-                  }`}>
-                    {source.name}
-                  </span>
-                </div>
-              </button>
+                source={source}
+                selected={selectedSource === source.id}
+                onSelect={() => setSelectedSource(source.id)}
+                onShowGuide={() => setGuideSource(source.id)}
+              />
             ))}
           </div>
         </details>
@@ -811,6 +828,13 @@ export default function ImportTradesPopup({
         }
         .animate-progress { animation: progress 3s ease-in-out; }
       `}</style>
+
+      {guideSource && (
+        <JournalExportGuide
+          source={guideSource}
+          onClose={() => setGuideSource(null)}
+        />
+      )}
     </div>
   );
 }

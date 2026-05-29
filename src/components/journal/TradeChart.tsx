@@ -58,13 +58,15 @@ interface TradeChartProps {
 // are trade-specific semantics, not generic chart styling.
 // ═══════════════════════════════════════════════════════════════
 const MARKER_COLORS = {
-  // Direction-based markers (TradingView convention):
-  //   BUY  → green arrow BELOW the bar (filled in from the bottom)
-  //   SELL → red   arrow ABOVE the bar (filled in from the top)
+  // Direction-based markers, FINOTAUR brand palette:
+  //   BUY  → gold circle BELOW the bar
+  //   SELL → red  circle ABOVE the bar
   // A LONG trade is buy-then-sell; a SHORT trade is sell-then-buy. The
   // direction (not the entry/exit role) drives the marker.
-  buy:  '#26a69a',  // teal-green — matches light-theme candleUp
-  sell: '#ef5350',  // soft red   — matches light-theme candleDown
+  // Colors mirror DS tokens (--gold-primary, --num-negative). Hardcoded as
+  // hex because lightweight-charts' setMarkers API needs literal color values.
+  buy:  '#C9A646',  // gold-primary — FINOTAUR brand
+  sell: '#E24B4A',  // num-negative — DS red
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -133,9 +135,9 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
     out.push({
       time: entryTime,
       position: entryIsBuy ? 'belowBar' : 'aboveBar',
-      shape: entryIsBuy ? 'arrowUp' : 'arrowDown',
+      shape: 'circle',
       color: entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell,
-      // Arrow glyph in text mirrors the shape so the legend reads naturally
+      // Arrow glyph in text label still mirrors direction for legibility
       text: `${entryIsBuy ? '▲' : '▼'} ${trade.side} @ ${entryPriceStr}`,
       size: 2,
     });
@@ -151,7 +153,7 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
       out.push({
         time: exitTime,
         position: exitIsBuy ? 'belowBar' : 'aboveBar',
-        shape: exitIsBuy ? 'arrowUp' : 'arrowDown',
+        shape: 'circle',
         color: exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell,
         text: `${exitIsBuy ? '▲' : '▼'} EXIT @ ${trade.exit_price.toFixed(2)}${pnlSuffix}`,
         size: 2,

@@ -11,7 +11,6 @@
  */
 
 import type { UTCTimestamp } from 'lightweight-charts';
-import { supabase } from '@/lib/supabase';
 import type { Bar, ChartDataSource, Interval } from '../types';
 import { getCached, makeCacheKey, setCached } from './cache';
 
@@ -46,19 +45,38 @@ export class YahooFinanceSource implements ChartDataSource {
     const cached = getCached<Bar[]>(cacheKey);
     if (cached) return cached;
 
-    const { data, error } = await supabase.functions.invoke<ChartBarsResponse>('chart-bars', {
-      body: {
-        symbol,
-        interval,
-        from: Number(from),
-        to: Number(to),
+    // Use native fetch GET so the browser HTTP cache and CDN can serve cached
+    // responses. supabase.functions.invoke() always POSTs and bypasses the
+    // browser cache entirely. The apikey header satisfies the Supabase platform
+    // gateway; Authorization is intentionally omitted to keep the cache key
+    // user-agnostic (the endpoint is anonymous — no JWT needed).
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    const edgeUrl =
+      `${SUPABASE_URL}/functions/v1/chart-bars` +
+      `?symbol=${encodeURIComponent(symbol)}` +
+      `&interval=${interval}` +
+      `&from=${Number(from)}` +
+      `&to=${Number(to)}`;
+
+    const resp = await fetch(edgeUrl, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
       },
     });
 
-    if (error) {
-      throw new Error(`YahooFinanceSource: chart-bars Edge Function failed: ${error.message}`);
+    if (!resp.ok) {
+      throw new Error(`YahooFinanceSource: chart-bars HTTP ${resp.status}`);
     }
-    if (!data || !Array.isArray(data.bars)) {
+
+    let data: ChartBarsResponse;
+    try {
+      data = await resp.json() as ChartBarsResponse;
+    } catch {
+      throw new Error('YahooFinanceSource: chart-bars returned malformed payload');
+    }
+    if (!Array.isArray(data.bars)) {
       throw new Error('YahooFinanceSource: chart-bars returned malformed payload');
     }
 

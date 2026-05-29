@@ -51,6 +51,17 @@ import {
   BottomFeaturesBar,
 } from './components';
 
+const RPC_TIMEOUT_MS = 15000;
+
+function withRpcTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
+    ),
+  ]);
+}
+
 interface TopSecretDashboardProps {
   userId?: string;
 }
@@ -95,14 +106,14 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
           .from('profiles')
           .select('is_tester, role, email')
           .eq('id', currentUserId)
-          .single();
+          .maybeSingle();
 
         if (!error && data) {
           const isAdmin = data.role === 'admin' || data.role === 'super_admin' || data.email === 'elad2550@gmail.com';
           setIsTester(data.is_tester || isAdmin);
         }
       } catch (error) {
-        console.error('Error fetching profile:', error);
+        console.error('[TopSecret] Error fetching profile:', error, { userId: currentUserId });
       } finally {
         setIsUserLoaded(true);
       }
@@ -120,7 +131,10 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       }
 
       const fetchParams = `${currentUserId}_${effectiveIsTester}`;
-      if (!cache.shouldFetch(fetchParams)) return;
+      if (!cache.shouldFetch(fetchParams)) {
+        setIsLoading(false);
+        return;
+      }
 
       // Try cache first
       const cached = cache.getCachedReports();
@@ -134,12 +148,16 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
 
       // Fetch fresh data
       try {
-        const { data: publishedReports, error } = await supabase
-          .rpc('get_published_reports_for_user', {
-            p_user_id: currentUserId,
-            p_limit: 200,
-            p_is_tester: effectiveIsTester,
-          });
+        const { data: publishedReports, error } = await withRpcTimeout(
+          supabase
+            .rpc('get_published_reports_for_user', {
+              p_user_id: currentUserId,
+              p_limit: 200,
+              p_is_tester: effectiveIsTester,
+            }),
+          RPC_TIMEOUT_MS,
+          'get_published_reports_for_user'
+        );
 
         if (error) throw error;
 
@@ -158,7 +176,10 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
         cache.setCachedReports(sorted);
         setExpandedMonths(new Set([getMonthKey(new Date())]));
       } catch (error) {
-        console.error('Error fetching reports:', error);
+        console.error('[TopSecret] Error fetching reports:', error, {
+          userId: currentUserId,
+          isTester: effectiveIsTester,
+        });
       } finally {
         setIsLoading(false);
       }

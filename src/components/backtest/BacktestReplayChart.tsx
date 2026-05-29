@@ -35,11 +35,16 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
+import { Scissors } from 'lucide-react';
+import dayjs from 'dayjs';
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
 import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { ReplayControls } from './ReplayControls';
+
+// Height of the time-axis row (lightweight-charts default is ~28px).
+const TIMESCALE_HEIGHT = 28;
 
 // ─── Theme tokens — kept in sync with FinotaurChart ─────────────
 const THEME = {
@@ -105,6 +110,15 @@ export interface BacktestReplayChartProps {
   onBarClick?: (bar: Bar) => void;
   /** Phase 6: right-click — parent renders the order-type context menu at given screen coords. */
   onContextMenu?: (info: ContextMenuPriceInfo) => void;
+  /**
+   * TV-style replay: when the user left-clicks on the chart, jump playback to
+   * that timestamp. The parent resets replayStart + the playback cursor.
+   * When provided, click-to-jump takes precedence over click-to-trade.
+   */
+  onJumpToTime?: (date: Date) => void;
+  /** Show the TV-style replay cursor (vertical line, scissors, gray overlay, date label).
+   *  Should be true when chartMode === 'replay'. */
+  showReplayCursor?: boolean;
   /** Height in px (or any CSS height string). */
   height?: string | number;
 }
@@ -125,6 +139,8 @@ export function BacktestReplayChart({
   onBarReveal,
   onBarClick,
   onContextMenu,
+  onJumpToTime,
+  showReplayCursor = false,
   height = '100%',
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,11 +149,36 @@ export function BacktestReplayChart({
   const onBarClickRef = useRef(onBarClick);
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
+  const onJumpToTimeRef = useRef(onJumpToTime);
+  const showReplayCursorRef = useRef(showReplayCursor);
+  // Ref so the chart lifecycle closure (subscribeClick) always calls the
+  // latest setCursor from the playback engine, even after bars reload.
+  const setCursorRef = useRef<((c: number) => void) | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Replay cursor overlay state ─────────────────────────────
+  // X pixel position of the vertical cut line (null = hidden / out of range).
+  const [cursorX, setCursorX] = useState<number | null>(null);
+  // Width of the chart container (for gray-overlay right-side calc).
+  const [chartWidth, setChartWidth] = useState(0);
+  // Mouse hover position — when set, preview takes over from playback cursor.
+  const [hoverX, setHoverX] = useState<number | null>(null);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+
+  // Scissors (jump tool) armed state. Armed on mount (= entering replay): the
+  // trader picks a rewind point with ONE click, after which it disarms and the
+  // chart returns to a normal crosshair for trading. Re-arm via the toolbar
+  // Scissors toggle. (Elad 2026-05-30: "rewind once, then no scissors".)
+  const [scissorsArmed, setScissorsArmed] = useState(true);
+  const scissorsArmedRef = useRef(scissorsArmed);
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
+  useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
+  useEffect(() => { showReplayCursorRef.current = showReplayCursor; }, [showReplayCursor]);
+  useEffect(() => { scissorsArmedRef.current = scissorsArmed; }, [scissorsArmed]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -217,10 +258,19 @@ export function BacktestReplayChart({
     onAdvance: handleAdvance,
   });
 
+  // Keep setCursorRef in sync so the chart lifecycle closure can always call
+  // the latest setCursor without needing playback in its deps array.
+  useEffect(() => { setCursorRef.current = playback.setCursor; }, [playback.setCursor]);
+
   // ─── Chart lifecycle ─────────────────────────────────────────
   useEffect(() => {
+    // Guard: only create the chart once bars are ready.
+    // Using `bars` directly in deps (not the ternary) so React sees a stable
+    // reference identity change rather than null→array flips on rapid re-picks.
+    let cancelled = false;
     if (!containerRef.current) return;
     if (load.kind !== 'ready') return;
+    if (cancelled) return;
 
     const container = containerRef.current;
     const chart = createChart(container, {
@@ -277,14 +327,89 @@ export function BacktestReplayChart({
     series.setData(visible);
     chart.timeScale().fitContent();
 
-    // Click-to-trade: map the clicked Time back to the underlying bar.
+    // Click handler: jump-to-time (TV replay UX) takes priority when wired;
+    // falls back to click-to-trade. Right-click is handled separately via the
+    // DOM contextmenu listener below — this only fires on left-click.
     chart.subscribeClick((param) => {
-      if (!param.time || !onBarClickRef.current) return;
+      if (!param.time) return;
       const clickedTime = param.time as number;
-      // The clicked time may correspond to any visible bar — find it.
+      // Scissors armed → this click is a time-rewind (jump). Disarm right after
+      // so the next click trades normally and the scissors cursor disappears.
+      // Disarmed → fall through to click-to-trade (onBarClick).
+      if (scissorsArmedRef.current && onJumpToTimeRef.current) {
+        setScissorsArmed(false);
+        const targetIdx = bars.findIndex((b) => (b.time as number) === clickedTime);
+
+        // Animate scroll toward the clicked bar regardless of path taken.
+        const currentRange = chart.timeScale().getVisibleLogicalRange();
+        if (currentRange && targetIdx >= 0) {
+          const center = (currentRange.from + currentRange.to) / 2;
+          const delta = targetIdx - center;
+          chart.timeScale().scrollToPosition(
+            chart.timeScale().scrollPosition() + delta,
+            true, // animated
+          );
+        }
+
+        // If the bar is already within the loaded window, jump directly via
+        // setCursor — no re-fetch, no loading state. The redraw effect below
+        // handles resetting the series for backward and forward moves.
+        // Use the ref so we always call the latest setCursor even though this
+        // closure is captured once per bars mount.
+        if (targetIdx >= 0 && targetIdx < bars.length) {
+          setCursorRef.current?.(targetIdx);
+          return;
+        }
+
+        // Clicked outside the loaded window — delegate to the parent so it
+        // can re-fetch a new window around the target date.
+        if (jumpTimerRef.current !== null) clearTimeout(jumpTimerRef.current);
+        jumpTimerRef.current = setTimeout(() => {
+          jumpTimerRef.current = null;
+          onJumpToTimeRef.current?.(new Date(clickedTime * 1000));
+        }, 280);
+        return;
+      }
+      if (!onBarClickRef.current) return;
       const found = bars.find((b) => (b.time as number) === clickedTime);
       if (found) onBarClickRef.current(found);
     });
+
+    // TV-style preview: crosshair moves → update hover state so the scissors
+    // + gray overlay + date label follow the mouse. param.time is undefined
+    // when the crosshair leaves the plot area.
+    // handleCrosshairMove — param type inferred from chart.subscribeCrosshairMove signature.
+    const handleCrosshairMove: Parameters<typeof chart.subscribeCrosshairMove>[0] = (param) => {
+      // Only follow the mouse while the scissors tool is armed. Once disarmed
+      // (after a rewind), clear the preview so a normal crosshair takes over.
+      if (!showReplayCursorRef.current || !scissorsArmedRef.current) {
+        setHoverX(null);
+        setHoverTime(null);
+        return;
+      }
+      if (!param.time) {
+        setHoverX(null);
+        setHoverTime(null);
+        return;
+      }
+      const x = chart.timeScale().timeToCoordinate(param.time);
+      if (x === null) {
+        setHoverX(null);
+        setHoverTime(null);
+        return;
+      }
+      setHoverX(x);
+      setHoverTime(param.time as number);
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
+    // Fallback: clear preview when the pointer physically leaves the container
+    // (subscribeCrosshairMove may not fire on rapid exits).
+    const handleMouseLeave = () => {
+      setHoverX(null);
+      setHoverTime(null);
+    };
+    container.addEventListener('mouseleave', handleMouseLeave);
 
     // Phase 6: right-click → order context menu. Compute the clicked price
     // by converting the local Y coordinate via the candlestick series.
@@ -321,22 +446,55 @@ export function BacktestReplayChart({
         width: container.clientWidth,
         height: container.clientHeight,
       });
+      setChartWidth(container.clientWidth);
     });
     ro.observe(container);
+    // Initialise width immediately.
+    setChartWidth(container.clientWidth);
+
+    // Recompute the cut-line X position whenever the visible range pans/zooms.
+    const updateCursorX = () => {
+      if (!chartRef.current || !containerRef.current) return;
+      const cursorBar = bars[lastUpdatedIdxRef.current];
+      if (!cursorBar) { setCursorX(null); return; }
+      const x = chartRef.current.timeScale().timeToCoordinate(cursorBar.time);
+      if (x === null) { setCursorX(null); return; }
+      const w = containerRef.current.clientWidth;
+      if (x < 0 || x > w) { setCursorX(null); return; }
+      setCursorX(x);
+    };
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(updateCursorX);
 
     return () => {
+      cancelled = true;
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(updateCursorX);
+      if (jumpTimerRef.current !== null) {
+        clearTimeout(jumpTimerRef.current);
+        jumpTimerRef.current = null;
+      }
       priceLinesRef.current.clear();
+      // chart.remove() is idempotent in lightweight-charts — safe to call
+      // even if the container was already detached by concurrent mode.
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      setCursorX(null);
+      setHoverX(null);
+      setHoverTime(null);
     };
     // We intentionally re-mount the chart only on window changes (bars
     // identity). Cursor changes are handled via series.update() above,
-    // which doesn't need a full re-mount.
+    // which doesn't need a full re-mount. `bars` is used directly (not the
+    // ternary `load.kind === 'ready' ? bars : null`) so the dep is a stable
+    // array reference; the early-return on `load.kind !== 'ready'` above
+    // guards against running before data is available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load.kind === 'ready' ? bars : null]);
+  }, [bars]);
 
   // ─── Markers ────────────────────────────────────────────────
   // Repaint markers whenever positions change. Only include markers up to
@@ -380,6 +538,39 @@ export function BacktestReplayChart({
     seriesRef.current.setMarkers(markers);
   }, [activePosition, closedPositions, playback.cursor, bars, load.kind]);
 
+  // Cursor-change redraw. lightweight-charts' series.update() is monotonic-
+  // forward only, so any cursor move that isn't a single-step forward needs
+  // a full re-seed via setData(). This covers:
+  //   - Backward moves (step-back chevron, setCursor to earlier bar)
+  //   - Forward jumps that skip bars (setCursor from click-to-jump on an
+  //     in-window bar — those bars were never handed to series.update())
+  // We re-seed whenever cursor changes AND the new cursor differs from the
+  // series' current high-water mark (lastUpdatedIdxRef). Single-step forward
+  // advances are handled exclusively by handleAdvance → series.update(); we
+  // skip them here to avoid an unnecessary full setData on normal playback.
+  const prevCursorRef = useRef(playback.cursor);
+  useEffect(() => {
+    const prev = prevCursorRef.current;
+    prevCursorRef.current = playback.cursor;
+    if (!seriesRef.current) return;
+    if (bars.length === 0) return;
+    // Re-seed if cursor moved backward OR jumped forward past the last update.
+    const needsReseed =
+      playback.cursor < prev ||
+      (playback.cursor > prev && playback.cursor !== lastUpdatedIdxRef.current);
+    if (needsReseed && playback.cursor >= 0) {
+      const visible = bars.slice(0, playback.cursor + 1).map((b) => ({
+        time: b.time,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+      }));
+      seriesRef.current.setData(visible);
+      lastUpdatedIdxRef.current = playback.cursor;
+    }
+  }, [playback.cursor, bars]);
+
   // Phase 6: sync price lines for pending orders. Each order gets a single
   // horizontal line at its trigger price, colored by side (BUY=green,
   // SELL=red) and dashed to distinguish from any future SL/TP overlay.
@@ -418,6 +609,31 @@ export function BacktestReplayChart({
     }
   }, [pendingOrders]);
 
+  // ─── Replay cursor X: recompute on every cursor/bar advance ─
+  useEffect(() => {
+    if (!chartRef.current || !containerRef.current || !showReplayCursor) {
+      setCursorX(null);
+      return;
+    }
+    const cursorBar = bars[lastUpdatedIdxRef.current];
+    if (!cursorBar) { setCursorX(null); return; }
+    const x = chartRef.current.timeScale().timeToCoordinate(cursorBar.time);
+    if (x === null) { setCursorX(null); return; }
+    const w = containerRef.current.clientWidth;
+    if (x < 0 || x > w) { setCursorX(null); return; }
+    setCursorX(x);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback.cursor, bars, showReplayCursor]);
+
+  // Active display X and time: hover preview when available, else playback cursor.
+  const activeX = hoverX ?? cursorX;
+  // Current playback bar — used as fallback for the date label.
+  const currentBar = bars[lastUpdatedIdxRef.current] ?? null;
+  const activeTime: number | null = hoverTime ?? (currentBar ? (currentBar.time as number) : null);
+  const replayDateLabel = activeTime
+    ? dayjs(activeTime * 1000).format("ddd DD MMM 'YY HH:mm")
+    : null;
+
   // ─── Render ─────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full flex-col">
@@ -432,9 +648,63 @@ export function BacktestReplayChart({
         onStepBack={playback.stepBack}
         onReset={playback.reset}
         onSpeedChange={playback.setSpeed}
+        showScissors={showReplayCursor}
+        scissorsArmed={scissorsArmed}
+        onToggleScissors={() => setScissorsArmed((v) => !v)}
       />
       <div className="relative flex-1" style={{ minHeight: 0 }}>
-        <div ref={containerRef} className="absolute inset-0" style={{ height }} />
+        {/* cursor-none on container + [&_*]:cursor-none propagates to
+            lightweight-charts' inner <canvas> (which sets cursor:crosshair
+            itself, otherwise winning over the parent). */}
+        <div
+          ref={containerRef}
+          className={`absolute inset-0${showReplayCursor && scissorsArmed ? ' cursor-none [&_*]:cursor-none' : ''}`}
+          style={{ height }}
+        />
+
+        {/* ── TV-style replay cursor overlays — only while the scissors tool
+            is armed; after a rewind it disarms and a normal crosshair returns. ── */}
+        {showReplayCursor && scissorsArmed && activeX !== null && (
+          <>
+            {/* Vertical cut line */}
+            <div
+              className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[#7AB6F4]"
+              style={{ left: `${activeX}px`, bottom: `${TIMESCALE_HEIGHT}px`, top: 0 }}
+            />
+
+            {/* Scissors icon at top of the cut line */}
+            <div
+              className="pointer-events-none absolute z-20 -translate-x-1/2"
+              style={{ left: `${activeX}px`, top: '4px' }}
+            >
+              <Scissors className="h-4 w-4 text-[#7AB6F4]" />
+            </div>
+
+            {/* Gray overlay for "future" bars (right of cut line) */}
+            {activeX < chartWidth && (
+              <div
+                className="pointer-events-none absolute z-10 bg-black/40 backdrop-grayscale"
+                style={{
+                  left: `${activeX + 1}px`,
+                  top: 0,
+                  right: 0,
+                  bottom: `${TIMESCALE_HEIGHT}px`,
+                }}
+              />
+            )}
+
+            {/* Date label at bottom of the cut line */}
+            {replayDateLabel && (
+              <div
+                className="pointer-events-none absolute z-20 -translate-x-1/2 rounded-md bg-[#7AB6F4] px-2 py-0.5 text-[11px] font-semibold text-black shadow-md"
+                style={{ left: `${activeX}px`, bottom: `${TIMESCALE_HEIGHT + 2}px` }}
+              >
+                Re: {replayDateLabel}
+              </div>
+            )}
+          </>
+        )}
+
         {load.kind === 'loading' && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#08080a]/80 text-sm text-zinc-500">
             Loading replay window…

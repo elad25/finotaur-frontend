@@ -12,6 +12,7 @@ import BeforeAfter from '@/components/landing-new/BeforeAfter';
 import AISection from '@/components/landing-new/AISection';
 import CoreSystem from '@/components/landing-new/CoreSystem';
 import ProductShowcase from '@/components/landing-new/ProductShowcase';
+import JournalToolsTabs from '@/components/landing-new/JournalToolsTabs';
 import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
 import Testimonials from '@/components/landing-new/Testimonials';
@@ -108,6 +109,7 @@ const LandingPage = () => {
       <AISection />
       <CoreSystem />
       <ProductShowcase />
+      <JournalToolsTabs />
       <PartnershipRow />
       <DesignPhilosophy />
       <Testimonials />

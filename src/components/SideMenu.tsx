@@ -36,7 +36,7 @@ export const Sidebar = () => {
           .from('profiles')
           .select('role, account_type')
           .eq('id', userIdToCheck)
-          .single();
+          .maybeSingle();
 
         if (!error && data) {
           const isAdminUser = 
