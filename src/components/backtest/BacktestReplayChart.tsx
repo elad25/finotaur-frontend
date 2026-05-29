@@ -504,15 +504,20 @@ export function BacktestReplayChart({
   }, [activePosition, closedPositions, playback.cursor, bars, load.kind]);
 
   // Step-back support. lightweight-charts' series.update() is monotonic-
-  // forward only; `handleAdvance` short-circuits when newCursor moves back
-  // (it just no-ops to avoid corrupting the series). To actually re-render
-  // with N fewer bars when the user clicks the step-back chevron, watch the
-  // cursor and re-seed the series with bars[0..cursor+1] whenever it
-  // decreases below `lastUpdatedIdxRef`.
+  // forward only, so a user clicking the step-back chevron leaves the
+  // chart visually stuck (cursor changes, no bar removed). Track the
+  // PREVIOUS cursor and only re-seed when the cursor actually moves
+  // BACKWARD relative to its prior value — this avoids tripping during
+  // bars-change re-fetches or initial mount where lastUpdatedIdxRef is
+  // still being aligned to startIndex.
+  const prevCursorRef = useRef(playback.cursor);
   useEffect(() => {
+    const prev = prevCursorRef.current;
+    prevCursorRef.current = playback.cursor;
     if (!seriesRef.current) return;
-    if (playback.cursor < lastUpdatedIdxRef.current) {
-      const visible = bars.slice(0, Math.max(0, playback.cursor + 1)).map((b) => ({
+    if (bars.length === 0) return;
+    if (playback.cursor < prev && playback.cursor >= 0) {
+      const visible = bars.slice(0, playback.cursor + 1).map((b) => ({
         time: b.time,
         open: b.open,
         high: b.high,
