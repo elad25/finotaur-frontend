@@ -32,12 +32,18 @@ export interface Insight {
   eyebrow?: string;
 }
 
+/** Inner briefing content returned inside BriefingResponse.briefing */
 export interface Briefing {
-  schema_version: 'v1';
   insights: Insight[];
   recommendations: string[];
-  generated_at: string;
-  model: string;
+}
+
+/** Outer envelope returned by GET /api/journal-ai/briefing */
+export interface BriefingResponse {
+  schema_version: 'v1';
+  briefing: Briefing | null;
   stale: boolean;
   refreshing: boolean;
+  generated_at: string | null;
+  model: string | null;
 }

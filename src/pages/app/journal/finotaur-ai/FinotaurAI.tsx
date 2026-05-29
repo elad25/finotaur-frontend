@@ -1,14 +1,18 @@
 // src/pages/app/journal/finotaur-ai/FinotaurAI.tsx
 // Page orchestrator for /app/journal/finotaur-ai.
-// Decision tree: Free → UpsellGate (no API), 0-trades → EmptyState, error → ErrorCard, happy path → ScoreHero.
+// Decision tree: Free → UpsellGate (no API), 0-trades → EmptyState, error → ErrorCard, happy path → ScoreHero + BriefingHero.
 
 import * as React from 'react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useFinotaurScore } from './hooks/useFinotaurScore';
+import { useBriefing, useRefreshBriefing } from './hooks/useBriefing';
+import { BriefingHero } from './components/BriefingHero';
 import { ScoreHero } from './components/ScoreHero';
 import { EmptyState } from './components/EmptyState';
 import { UpsellGate } from './components/UpsellGate';
 import { Eyebrow } from '@/components/ds/Card';
+import { BriefingApiError } from './services/finotaurAIApi';
+import type { Insight } from './types';
 
 // ---------------------------------------------------------------------------
 // Page shell — wraps content with page-level padding/header
@@ -52,13 +56,29 @@ export default function FinotaurAI() {
   // Free users see UpsellGate without any API calls to journal-ai.
   const isPremium: boolean = subscription.isPremium ?? false;
 
-  // Only fetch score for premium users. enabled=false means zero network cost.
+  // Only fetch score/briefing for premium users. enabled=false means zero network cost.
   const {
     data: score,
     isLoading,
     error,
     refetch,
   } = useFinotaurScore(30, isPremium);
+
+  const briefingQuery = useBriefing(isPremium);
+  const refreshMutation = useRefreshBriefing();
+
+  const refreshing429 =
+    refreshMutation.error instanceof BriefingApiError &&
+    refreshMutation.error.status === 429;
+
+  const handleRefresh = () => {
+    refreshMutation.mutate();
+  };
+
+  const handleDiscuss = (insight: Insight) => {
+    // Phase 5 will wire this to the chat panel
+    console.log('[journal-ai] discuss:', insight.id);
+  };
 
   // Subscription not resolved yet
   if (subscription.isLoading) {
@@ -97,10 +117,20 @@ export default function FinotaurAI() {
         error={error as Error | null}
         onRefresh={refetch}
       />
-      {/* BriefingHero (Phase 4), CoachChatPanel (Phase 5) — placeholders */}
-      <div className="mt-ds-6 font-sans text-small text-ink-tertiary">
-        Briefing + chat coming soon…
+      <div className="mt-ds-6">
+        <BriefingHero
+          briefing={briefingQuery.data?.briefing ?? null}
+          stale={briefingQuery.data?.stale ?? false}
+          refreshing={briefingQuery.data?.refreshing ?? refreshMutation.isPending}
+          generatedAt={briefingQuery.data?.generated_at ?? null}
+          isLoading={briefingQuery.isLoading}
+          error={briefingQuery.error as Error | null}
+          onRefresh={handleRefresh}
+          refreshing429={refreshing429}
+          onDiscuss={handleDiscuss}
+        />
       </div>
+      {/* CoachChatPanel (Phase 5) — placeholder */}
     </PageShell>
   );
 }
