@@ -230,6 +230,10 @@ const AdminPatternLibraryList = lazy(() => import("@/pages/app/admin/PatternLibr
 // Upcoming Events — forward-looking event calendar (Tree #2, 2026-05-27)
 const UpcomingEventsView = lazy(() => import("@/pages/app/ai/UpcomingEventsView"));
 const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsAdmin"));
+// DEV-ONLY: /__dev/seo-analytics — public screen-verification route for the
+// admin SEO widget. Remove import + route + delete src/__dev/SeoAnalyticsDevPage.tsx
+// before merging Wave 5 to main (the admin route at /app/admin/seo is the prod surface).
+import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -644,6 +648,9 @@ function AppContent() {
           <Route path="risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
           <Route path="ai-chat" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIChatPage /></BetaRoute>} />
         </Route>
+
+        {/* DEV-ONLY: public screen-verification for admin SEO widget */}
+        <Route path="/__dev/seo-analytics" element={<SeoAnalyticsDevPage />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>
