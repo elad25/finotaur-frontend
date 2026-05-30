@@ -120,12 +120,11 @@ Tradovate-synced MNQM6 trades whose stored P&L is broker-authoritative. **No bac
 ---
 
 ## 5. Cross-cutting gaps (all asset classes)
-- **Form has no explicit asset-class selector** — type is inferred from the ticker and silently
-  falls back to `stocks` / multiplier 1.
-- **Reports do not segment by `asset_class`** — win-rate / profit-factor are flat across all assets.
-- **Journal list has no asset-class filter.**
-- `asset_class` is **NULL on 32 of 40** production trades (Tradovate sync doesn't set it) — candidate
-  for an additive backfill via `detectAssetClass`.
+- ✅ ~~Form has no explicit asset-class selector~~ — DONE (selector + conditional fields, 2026-05-30).
+- ✅ ~~Reports do not segment by `asset_class`~~ — DONE ("Asset Class" tab in Breakdowns, 2026-05-30).
+- **Journal list (MyTrades table) has no asset-class filter** — still flat; candidate for a filter chip.
+- `asset_class` is NULL on 32 of 40 production trades, but the reports fallback classifies them by
+  symbol, so this is cosmetic. DB backfill skipped on purpose (see §6 — trigger-recompute risk).
 
 ---
 
@@ -133,9 +132,9 @@ Tradovate-synced MNQM6 trades whose stored P&L is broker-authoritative. **No bac
 
 | Sub-wave | Schema | Form | Calc | Reports | Status |
 |---|---|---|---|---|---|
-| Options | ✅ | ✅ | ✅ | ⏳ | core done |
-| Crypto | ✅ | ✅ | ✅ | ⏳ | core done |
-| Forex | ✅ | ✅ | ✅ | ⏳ | core done |
+| Options | ✅ | ✅ | ✅ | ✅ | core + reports done |
+| Crypto | ✅ | ✅ | ✅ | ✅ | core + reports done |
+| Forex | ✅ | ✅ | ✅ | ✅ | core + reports done |
 
 **Done:**
 - Schema: 13 nullable columns applied to `public.trades` (3 migrations, additive, forward-only):
@@ -148,9 +147,17 @@ Tradovate-synced MNQM6 trades whose stored P&L is broker-authoritative. **No bac
   `journalStore` → `lib/journal.ts` / `lib/trades`. Options save `multiplier=100`.
 - Types: `database.types.ts` + `Trade.ts` extended.
 
-**Remaining (next sessions):**
-1. **Reports segmentation by `asset_class`** — win-rate / profit-factor / R per class (today flat).
-2. **Live broker feeds** — IB OAuth (stocks/options), a crypto broker (Binance/Bybit), spot-forex.
-3. **Auto-compute** `liquidation_price` (crypto) and auto-fetch `quote_rate` / pip-size (forex).
-4. **Backfill `asset_class`** for the 32 NULL Tradovate rows via `detectAssetClass` (DB write — gated).
-5. Visual QA of the new form fields on `http://localhost:5173/` (pending).
+- Reports: **"Asset Class" breakdown tab** in `reports/Breakdowns.tsx` — per-class count / win-rate /
+  net P&L / avg R, via `trade.asset_class ?? getAssetClass(symbol)`.
+
+**`asset_class` backfill — intentionally SKIPPED (2026-05-30):** the 32 NULL Tradovate rows
+(MNQM6 / MESM6) are already classified as Futures at display time by the `getAssetClass(symbol)`
+fallback, so reports are correct without a DB write. A naive `UPDATE ... SET asset_class` is also
+**unsafe**: the BEFORE trigger `handle_trade_changes_unified` recomputes `pnl` on every UPDATE of a
+closed regular-mode trade, which would overwrite the broker-authoritative P&L on the 2 MNQM6
+mismatch rows. If a backfill is ever needed, do it without re-firing the pnl recompute.
+
+**Remaining (next session — external feeds + auto-calcs):**
+1. **Live broker feeds** — IB OAuth (stocks/options), a crypto broker (Binance/Bybit), spot-forex.
+2. **Auto-compute** `liquidation_price` (crypto) and auto-fetch `quote_rate` / pip-size (forex).
+3. Visual QA of the new form fields + reports tab on `http://localhost:5173/` (pending).
