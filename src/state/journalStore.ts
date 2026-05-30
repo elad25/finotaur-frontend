@@ -15,7 +15,7 @@ import { create } from "zustand";
 import { computeRR as smartComputeRR, detectAssetClass, inferDirection } from "@/utils/smartCalc";
 import { getStrategyById } from "@/utils/storage";
 import type { AssetClass } from "@/utils/smartCalc";
-import { getAssetMultiplier } from "@/utils/tradeCalculations";
+import { getAssetMultiplier, computeLiquidationPrice, getPipSize, parseForexPair, computeQuoteRate } from "@/utils/tradeCalculations";
 
 export type Side = "LONG" | "SHORT";
 
@@ -183,6 +183,10 @@ export interface TradePayload {
   lot_size?: number | null;
   account_currency?: string | null;
   quote_rate?: number | null;
+  liquidation_price?: number | null;
+  pip_size?: number | null;
+  base_currency?: string | null;
+  quote_currency?: string | null;
 }
 
 const DRAFT_KEY = "finotaur_journal_draft_v5"; // 🔥 Bumped version for fix
@@ -544,7 +548,15 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       funding_paid: (assetClass === 'crypto' && s.positionType === 'Perpetual') ? (s.fundingPaid ?? null) : null,
       lot_size: assetClass === 'forex' ? (s.lotSize ?? null) : null,
       account_currency: assetClass === 'forex' ? (s.accountCurrency ?? 'USD') : null,
-      quote_rate: assetClass === 'forex' ? (s.quoteRate ?? 1) : null,
+      quote_rate: assetClass === 'forex'
+        ? computeQuoteRate({ symbol: s.symbol, accountCurrency: s.accountCurrency, current: s.quoteRate })
+        : null,
+      liquidation_price: assetClass === 'crypto'
+        ? computeLiquidationPrice({ entryPrice: s.entryPrice, leverage: s.leverage, side: s.side })
+        : null,
+      pip_size: assetClass === 'forex' ? getPipSize(s.symbol) : null,
+      base_currency: assetClass === 'forex' ? parseForexPair(s.symbol).base : null,
+      quote_currency: assetClass === 'forex' ? parseForexPair(s.symbol).quote : null,
     };
   },
 
