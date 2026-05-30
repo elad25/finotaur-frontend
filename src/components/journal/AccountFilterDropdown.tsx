@@ -23,6 +23,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     portfolios,
     manualPortfolios,
     tradovatePortfolios,
+    brokerPortfolios,
     selectedPortfolioIds,
     togglePortfolioSelection,
     setSelectedPortfolioIds,
@@ -175,6 +176,29 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
               onToggle={togglePortfolioSelection}
             />
           ))}
+
+          {/* Broker accounts (non-Tradovate journal connections) */}
+          {brokerPortfolios.length > 0 && (
+            <>
+              <div className="border-t border-zinc-800/60 mx-2 my-1" />
+              <div className="px-3 pt-1 pb-0.5">
+                <span className="text-[9px] text-zinc-600 font-semibold uppercase tracking-widest">
+                  Brokers
+                </span>
+              </div>
+              {brokerPortfolios.map(p => (
+                <AccountRow
+                  key={p.id}
+                  id={p.id}
+                  label={p.name}
+                  badge={p.environment === 'live' ? 'Live' : p.environment === 'demo' ? 'Demo' : undefined}
+                  badgeColor={p.environment === 'live' ? 'emerald' : 'yellow'}
+                  checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
+                  onToggle={togglePortfolioSelection}
+                />
+              ))}
+            </>
+          )}
 
           {/* Manage accounts footer */}
           <div className="border-t border-zinc-800/60 mx-2 mt-1 mb-0" />

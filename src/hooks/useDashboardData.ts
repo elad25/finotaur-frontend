@@ -17,7 +17,7 @@ import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
 import { logger } from '@/lib/logger';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
-import { TRADER_PORTFOLIO_ID } from '@/hooks/usePortfolios';
+import { TRADER_PORTFOLIO_ID, isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
 
@@ -375,6 +375,31 @@ function computeStats(trades: any[]): DashboardStats {
 }
 
 // ================================================
+// BROKER-ID PARTITION HELPER
+// ================================================
+
+/**
+ * Splits a mixed array of portfolio ids and broker portfolio ids into two
+ * separate lists so callers can apply the correct Supabase filter per id type.
+ *
+ * portfolioUUIDs → plain UUIDs that go into .in('portfolio_id', ...)
+ * brokerConnIds  → the UUID part of "broker_<uuid>" that goes into
+ *                  .in('broker_connection_id', ...)
+ */
+function partitionPortfolioIds(ids: string[] | null): {
+  portfolioUUIDs: string[] | null;
+  brokerConnIds: string[] | null;
+} {
+  if (!ids || ids.length === 0) return { portfolioUUIDs: null, brokerConnIds: null };
+  const portfolioUUIDs = ids.filter(id => !isBrokerId(id));
+  const brokerConnIds = ids.filter(isBrokerId).map(brokerConnId);
+  return {
+    portfolioUUIDs: portfolioUUIDs.length > 0 ? portfolioUUIDs : null,
+    brokerConnIds: brokerConnIds.length > 0 ? brokerConnIds : null,
+  };
+}
+
+// ================================================
 // AGGREGATED-PATH HELPERS (CHUNK 3 B.4 phase 2.A.bis/B/C)
 // ================================================
 
@@ -456,7 +481,19 @@ async function fetchBestWorst(
       .in('outcome', ['WIN', 'LOSS', 'BE'])
       .not('pnl', 'is', null)
       .gte('open_at', cutoffDate);
-    if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
+    if (portfolioIds && portfolioIds.length > 0) {
+      const { portfolioUUIDs, brokerConnIds } = partitionPortfolioIds(portfolioIds);
+      if (portfolioUUIDs && brokerConnIds) {
+        // Mixed: use .or() to cover both column types
+        q = q.or(
+          `portfolio_id.in.(${portfolioUUIDs.join(',')}),broker_connection_id.in.(${brokerConnIds.join(',')})`,
+        );
+      } else if (brokerConnIds) {
+        q = q.in('broker_connection_id', brokerConnIds);
+      } else if (portfolioUUIDs) {
+        q = q.in('portfolio_id', portfolioUUIDs);
+      }
+    }
     return q;
   };
   const [bestRes, worstRes] = await Promise.all([
@@ -499,7 +536,14 @@ async function fetchDailyPnL(
     .select('trade_date, portfolio_id, day_trades, day_pnl')
     .eq('user_id', userId)
     .gte('trade_date', cutoffDate);
-  if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
+  // user_daily_pnl_v only has portfolio_id — broker rows are excluded from this view.
+  // Only apply the filter when there are actual portfolio UUIDs in the selection.
+  if (portfolioIds && portfolioIds.length > 0) {
+    const { portfolioUUIDs } = partitionPortfolioIds(portfolioIds);
+    if (portfolioUUIDs) q = q.in('portfolio_id', portfolioUUIDs);
+    // If selection is broker-only, filter to nothing (no portfolio_id match possible).
+    else q = q.in('portfolio_id', [] as string[]);
+  }
   const { data, error } = await q.order('trade_date', { ascending: true });
   if (error) {
     console.error('user_daily_pnl_v query error:', error.message);
@@ -530,7 +574,18 @@ async function fetchTradesForOverview(
     .is('deleted_at', null)
     .gte('open_at', cutoffDate)
     .order('open_at', { ascending: true, nullsFirst: false });
-  if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
+  if (portfolioIds && portfolioIds.length > 0) {
+    const { portfolioUUIDs, brokerConnIds } = partitionPortfolioIds(portfolioIds);
+    if (portfolioUUIDs && brokerConnIds) {
+      q = q.or(
+        `portfolio_id.in.(${portfolioUUIDs.join(',')}),broker_connection_id.in.(${brokerConnIds.join(',')})`,
+      );
+    } else if (brokerConnIds) {
+      q = q.in('broker_connection_id', brokerConnIds);
+    } else if (portfolioUUIDs) {
+      q = q.in('portfolio_id', portfolioUUIDs);
+    }
+  }
   const { data, error } = await q;
   if (error) {
     console.error('fetchTradesForOverview error:', error.message);
@@ -679,8 +734,10 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         const effectivePortfolioIds = dashboardPortfolioIds && dashboardPortfolioIds.length > 0
           ? dashboardPortfolioIds
           : (dashboardPortfolioId ? [dashboardPortfolioId] : null);
+        // RPC get_user_portfolio_stats only understands portfolio_id — pass only plain UUIDs.
+        const { portfolioUUIDs: rpcPortfolioIds } = partitionPortfolioIds(effectivePortfolioIds);
         const [agg, bestWorst, dailyRows, tradesForOverview] = await Promise.all([
-          fetchAggregatedStats(client, userId, effectivePortfolioIds),
+          fetchAggregatedStats(client, userId, rpcPortfolioIds),
           fetchBestWorst(client, userId, cutoffDate, effectivePortfolioIds),
           fetchDailyPnL(client, userId, cutoffDate, effectivePortfolioIds),
           fetchTradesForOverview(client, userId, cutoffDate, effectivePortfolioIds),
@@ -703,10 +760,24 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         .order('open_at', { ascending: true, nullsFirst: false });
 
       // 🔥 Portfolio filter: null = all accounts, string[] = multi-select, string = single
+      // broker_ prefix → filter by broker_connection_id instead of portfolio_id
       if (dashboardPortfolioIds && dashboardPortfolioIds.length > 0) {
-        queryBuilder = queryBuilder.in('portfolio_id', dashboardPortfolioIds);
+        const { portfolioUUIDs, brokerConnIds } = partitionPortfolioIds(dashboardPortfolioIds);
+        if (portfolioUUIDs && brokerConnIds) {
+          queryBuilder = queryBuilder.or(
+            `portfolio_id.in.(${portfolioUUIDs.join(',')}),broker_connection_id.in.(${brokerConnIds.join(',')})`,
+          );
+        } else if (brokerConnIds) {
+          queryBuilder = queryBuilder.in('broker_connection_id', brokerConnIds);
+        } else if (portfolioUUIDs) {
+          queryBuilder = queryBuilder.in('portfolio_id', portfolioUUIDs);
+        }
       } else if (dashboardPortfolioId) {
-        queryBuilder = queryBuilder.eq('portfolio_id', dashboardPortfolioId);
+        if (isBrokerId(dashboardPortfolioId)) {
+          queryBuilder = queryBuilder.eq('broker_connection_id', brokerConnId(dashboardPortfolioId));
+        } else {
+          queryBuilder = queryBuilder.eq('portfolio_id', dashboardPortfolioId);
+        }
       }
 
       // Cutoff is always set (defaults to MAX_LOOKBACK_DAYS for "all time").

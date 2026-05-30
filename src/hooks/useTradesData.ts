@@ -16,7 +16,7 @@ import { queryKeys } from '@/lib/queryClient';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMemo, useRef, useEffect } from 'react';
-import { TRADER_PORTFOLIO_ID } from '@/hooks/usePortfolios';
+import { TRADER_PORTFOLIO_ID, isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 
 // ================================================
 // 🔥 ASSET MULTIPLIERS - For R calculation
@@ -167,8 +167,13 @@ async function fetchAllTrades(
       .order('open_at', { ascending: false });
 
     // 🔥 Portfolio filter: NULL = show all accounts, string = specific portfolio only
+    // broker_ prefix → filter by broker_connection_id instead of portfolio_id
     if (portfolioId && portfolioId !== TRADER_PORTFOLIO_ID) {
-      query = query.eq('portfolio_id', portfolioId);
+      if (isBrokerId(portfolioId)) {
+        query = query.eq('broker_connection_id', brokerConnId(portfolioId));
+      } else {
+        query = query.eq('portfolio_id', portfolioId);
+      }
     }
 
     const { data, error } = await query;

@@ -19,6 +19,7 @@ interface PortfolioContextValue {
   isLoading:              boolean;
   manualPortfolios:       Portfolio[];
   tradovatePortfolios:    Portfolio[];
+  brokerPortfolios:       Portfolio[];
   hasMultiplePortfolios:  boolean;
   // ── Multi-select ────────────────────────────────────
   selectedPortfolioIds:     string[];

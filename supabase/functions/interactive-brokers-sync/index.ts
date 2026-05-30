@@ -241,7 +241,7 @@ async function fetchIBRITActivity(token: string, queryId: string, serviceCode: s
 }
 
 // ─── mapActivityToTrade: handles both legacy (BuySell column) and new (TransactionType=BUY/SELL) schemas ───
-function mapActivityToTrade(rec: Record<string, string>, userId: string): Record<string, unknown> | null {
+function mapActivityToTrade(rec: Record<string, string>, userId: string, brokerConnectionId: string | null): Record<string, unknown> | null {
   // Prefer TransactionID, fall back to TradeID, then legacy IB fields
   const extId = rec.TransactionID || rec.TradeID || rec.IBExecID || rec.IBOrderID || rec.OrderID;
   if (!extId) return null;
@@ -315,6 +315,7 @@ function mapActivityToTrade(rec: Record<string, string>, userId: string): Record
     contract_id: rawContractId || null,
     ib_conid: rec.ConID || null,
     sync_source: 'interactive_brokers_ibrit_v8',
+    broker_connection_id: brokerConnectionId ?? null,
   };
 }
 
@@ -642,7 +643,7 @@ async function syncOneUser(userId: string): Promise<UserSyncSummary> {
   // Upsert trades from Activity section
   let tradesInserted = 0, tradeErrors = 0;
   for (const rec of allSections.activity) {
-    const row = mapActivityToTrade(rec, userId); if (!row) continue;
+    const row = mapActivityToTrade(rec, userId, conn?.id ?? null); if (!row) continue;
     const { error: upsertErr } = await supabaseAdmin.from('trades').upsert(row, { onConflict: 'idempotency_key', ignoreDuplicates: true });
     if (upsertErr) { console.error('[ib-sync v8] trade upsert:', upsertErr.message); tradeErrors++; }
     else tradesInserted++;
