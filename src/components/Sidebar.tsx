@@ -59,7 +59,8 @@ import {
   Bell,
   Coins,
   Flame,
-  Sparkles,  // נ”¥ For beta items
+  FileBarChart,
+  Sparkles, // נ”¥ For beta items
   Link2
 } from 'lucide-react';
 import { 
