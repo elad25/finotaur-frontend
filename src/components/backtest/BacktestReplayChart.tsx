@@ -41,6 +41,7 @@ import dayjs from 'dayjs';
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
 import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
+import { PositionBox, type PositionBoxModel } from '@/components/charting/PositionBox';
 import { ReplayControls } from './ReplayControls';
 
 // Height of the time-axis row (lightweight-charts default is ~28px).
@@ -144,6 +145,16 @@ export interface BacktestReplayChartProps {
   showReplayCursor?: boolean;
   /** Height in px (or any CSS height string). */
   height?: string | number;
+  /**
+   * Draggable risk/reward position box. The component injects the live cursor-bar
+   * close as `currentPrice` so Open P&L tracks the replay. Replaces the old static
+   * TP/SL zones overlay; recomputes coordinates on pan/zoom/resize.
+   */
+  positionOverlay?: {
+    model: PositionBoxModel;
+    onStopLossChange: (price: number) => void;
+    onTakeProfitChange: (price: number) => void;
+  };
 }
 
 type LoadState =
@@ -166,6 +177,7 @@ export function BacktestReplayChart({
   onJumpToTime,
   showReplayCursor = false,
   height = '100%',
+  positionOverlay,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -190,13 +202,10 @@ export function BacktestReplayChart({
   // Mouse hover position — when set, preview takes over from playback cursor.
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
-  // Pixel coordinates for the active-position TP/SL zones overlay (#4).
-  const [posZones, setPosZones] = useState<{
-    entryY: number | null;
-    tpY: number | null;
-    slY: number | null;
-    entryX: number;
-  } | null>(null);
+  // Bumping counter that re-renders the PositionBox overlay on pan/zoom/resize
+  // so its pixel coordinates stay glued to price (fixes the old static overlay
+  // whose entry line / zones got stuck after zoom).
+  const [overlayTick, setOverlayTick] = useState(0);
 
   // Replay-rewind ("REPLAY" button) armed state. Default OFF (Elad 2026-05-29):
   // the chart opens in normal mode — a click trades, no surprise jump. The
@@ -476,6 +485,19 @@ export function BacktestReplayChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
+    // Coalesce position-box reposition bumps to one per animation frame.
+    // Continuous pan/zoom fires visibleTimeRangeChange dozens of times per
+    // second; a synchronous React re-render per event janks (and can lock the
+    // main thread). One rAF-batched bump keeps the overlay glued without storm.
+    let coalesceRaf = 0;
+    const bumpOverlay = () => {
+      if (coalesceRaf) return;
+      coalesceRaf = requestAnimationFrame(() => {
+        coalesceRaf = 0;
+        setOverlayTick((n) => n + 1);
+      });
+    };
+
     // Responsive resize.
     const ro = new ResizeObserver(() => {
       if (!container || !chartRef.current) return;
@@ -484,6 +506,7 @@ export function BacktestReplayChart({
         height: container.clientHeight,
       });
       setChartWidth(container.clientWidth);
+      bumpOverlay();
     });
     ro.observe(container);
     // Initialise width immediately.
@@ -491,6 +514,7 @@ export function BacktestReplayChart({
 
     // Recompute the cut-line X position whenever the visible range pans/zooms.
     const updateCursorX = () => {
+      bumpOverlay();
       if (!chartRef.current || !containerRef.current) return;
       const cursorBar = bars[lastUpdatedIdxRef.current];
       if (!cursorBar) { setCursorX(null); return; }
@@ -505,6 +529,7 @@ export function BacktestReplayChart({
 
     return () => {
       cancelled = true;
+      if (coalesceRaf) cancelAnimationFrame(coalesceRaf);
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('mouseleave', handleMouseLeave);
@@ -668,21 +693,6 @@ export function BacktestReplayChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback.cursor, bars]);
 
-  // ─── Active-position TP/SL zone coordinates (#4) ─────────────
-  useEffect(() => {
-    const chart = chartRef.current;
-    const series = seriesRef.current;
-    if (!chart || !series || !activePosition) { setPosZones(null); return; }
-    const entryY = series.priceToCoordinate(activePosition.entryPrice);
-    if (entryY === null) { setPosZones(null); return; }
-    const tpY = activePosition.takeProfit != null ? series.priceToCoordinate(activePosition.takeProfit) : null;
-    const slY = activePosition.stopLoss != null ? series.priceToCoordinate(activePosition.stopLoss) : null;
-    const rawX = chart.timeScale().timeToCoordinate(activePosition.entryTime as UTCTimestamp);
-    const entryX = rawX != null && rawX > 0 ? rawX : 0;
-    setPosZones({ entryY, tpY, slY, entryX });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePosition, playback.cursor, bars, chartWidth]);
-
   // Active display X and time: hover preview when available, else playback cursor.
   const activeX = hoverX ?? cursorX;
   // Current playback bar — used as fallback for the date label.
@@ -721,55 +731,21 @@ export function BacktestReplayChart({
           style={{ height }}
         />
 
-        {/* ── Active-position TP/SL zones (#4): green entry->TP, red entry->SL ── */}
-        {posZones && posZones.entryY !== null && (
-          <>
-            {posZones.tpY !== null && (
-              <div
-                className="pointer-events-none absolute z-[5] border-y border-emerald-500/40 bg-emerald-500/15"
-                style={{
-                  left: `${posZones.entryX}px`,
-                  right: 0,
-                  top: `${Math.min(posZones.entryY, posZones.tpY)}px`,
-                  height: `${Math.abs(posZones.entryY - posZones.tpY)}px`,
-                }}
-              />
-            )}
-            {posZones.slY !== null && (
-              <div
-                className="pointer-events-none absolute z-[5] border-y border-rose-500/40 bg-rose-500/15"
-                style={{
-                  left: `${posZones.entryX}px`,
-                  right: 0,
-                  top: `${Math.min(posZones.entryY, posZones.slY)}px`,
-                  height: `${Math.abs(posZones.entryY - posZones.slY)}px`,
-                }}
-              />
-            )}
-            {/* Entry line */}
-            <div
-              className="pointer-events-none absolute z-[6] h-px bg-zinc-100"
-              style={{ left: `${posZones.entryX}px`, right: 0, top: `${posZones.entryY}px` }}
-            />
-            {/* TP price tag */}
-            {posZones.tpY !== null && activePosition?.takeProfit != null && (
-              <div
-                className="pointer-events-none absolute right-0 z-[7] -translate-y-1/2 rounded-l bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                style={{ top: `${posZones.tpY}px` }}
-              >
-                TP {activePosition.takeProfit.toFixed(2)}
-              </div>
-            )}
-            {/* SL price tag */}
-            {posZones.slY !== null && activePosition?.stopLoss != null && (
-              <div
-                className="pointer-events-none absolute right-0 z-[7] -translate-y-1/2 rounded-l bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                style={{ top: `${posZones.slY}px` }}
-              >
-                SL {activePosition.stopLoss.toFixed(2)}
-              </div>
-            )}
-          </>
+        {/* ── Draggable risk/reward position box — recomputes on overlayTick
+            (pan/zoom/resize), so it never gets stuck like the old static overlay.
+            currentPrice is injected from the live cursor bar so Open P&L tracks. ── */}
+        {positionOverlay && chartRef.current && seriesRef.current && (
+          <PositionBox
+            chart={chartRef.current}
+            series={seriesRef.current}
+            model={{
+              ...positionOverlay.model,
+              currentPrice: bars[playback.cursor]?.close ?? positionOverlay.model.currentPrice,
+            }}
+            redrawKey={overlayTick}
+            onStopLossChange={positionOverlay.onStopLossChange}
+            onTakeProfitChange={positionOverlay.onTakeProfitChange}
+          />
         )}
 
         {/* ── TV-style replay cursor overlays — only while the scissors tool
