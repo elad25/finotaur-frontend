@@ -5,6 +5,7 @@ import { TopNav } from '@/components/TopNav';
 import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
+import { MentorViewBanner } from '@/components/MentorViewBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
@@ -67,6 +68,7 @@ export const ProtectedAppLayout = () => {
     <PortfolioProvider>
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
         <ImpersonationBanner />
+        <MentorViewBanner />
         {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
         <SubNav />

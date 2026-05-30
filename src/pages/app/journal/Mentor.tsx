@@ -6,8 +6,9 @@
 // via the normal supabase client (never supabaseAdmin).
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useMentorView } from '@/contexts/MentorViewContext';
 import { Users, ChevronRight, Clock, GraduationCap, UserPlus, X, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -203,17 +204,27 @@ function PendingRequestRow({
   );
 }
 
-function StudentRow({ student, onRemove, removing }: { student: StudentLink; onRemove: () => void; removing: boolean }) {
+function StudentRow({
+  student,
+  onView,
+  onRemove,
+  removing,
+}: {
+  student: StudentLink;
+  onView: () => void;
+  onRemove: () => void;
+  removing: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors group">
-      <Link to={`/app/journal/mentor/${student.student_id}`} className="flex flex-col gap-0.5 min-w-0 flex-1">
+      <button type="button" onClick={onView} className="flex flex-col gap-0.5 min-w-0 flex-1 text-left">
         <span className="font-medium text-white truncate">{student.display_name}</span>
         <span className="text-sm text-zinc-400 truncate">{student.email}</span>
         <span className="flex items-center gap-1 text-xs text-zinc-500 mt-0.5">
           <Clock className="h-3 w-3" />
           Accepted {formatDate(student.accepted_at)}
         </span>
-      </Link>
+      </button>
       <div className="flex items-center gap-3 flex-shrink-0">
         <Button
           variant="outline"
@@ -224,19 +235,26 @@ function StudentRow({ student, onRemove, removing }: { student: StudentLink; onR
         >
           Remove
         </Button>
-        <Link to={`/app/journal/mentor/${student.student_id}`}>
+        <button type="button" onClick={onView} aria-label="View journal">
           <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-[#C9A646] transition-colors" />
-        </Link>
+        </button>
       </div>
     </div>
   );
 }
 
 function MyStudentsSection() {
+  const navigate = useNavigate();
+  const { enterMentorView } = useMentorView();
   const { students, isLoading: studentsLoading } = useMyStudents();
   const { requests, isLoading: requestsLoading } = usePendingMentorRequests();
   const respond = useRespondToMentorRequest();
   const revoke = useRevokeRelationship();
+
+  const handleView = (s: StudentLink) => {
+    enterMentorView(s.student_id, s.display_name, s.email);
+    navigate('/app/journal/overview');
+  };
 
   const handleRespond = (req: PendingRequest, accept: boolean) => {
     respond.mutate(
@@ -305,6 +323,7 @@ function MyStudentsSection() {
                     key={s.relationship_id}
                     student={s}
                     removing={revoke.isPending}
+                    onView={() => handleView(s)}
                     onRemove={() => handleRemove(s)}
                   />
                 ))}

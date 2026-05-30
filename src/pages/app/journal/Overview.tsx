@@ -27,6 +27,7 @@ import {
   RefreshCw, Wifi, WifiOff, AlertCircle, Target
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { useMentorView } from "@/contexts/MentorViewContext";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
@@ -1390,8 +1391,12 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const { id: fallbackUserId, isImpersonating } = useEffectiveUser();
+  const { id: fallbackUserId, isImpersonating, isMentorView } = useEffectiveUser();
+  const { studentName, studentEmail } = useMentorView();
   const userId = overrideUserId ?? fallbackUserId;
+  // Mentor View browses a student's journal read-only. Treat it like the prop.
+  const effectiveReadOnly = readOnly || isMentorView;
+  const bypassPortfolioFilter = !!overrideUserId || isMentorView;
   // queryClient hoisted ~90 lines up to fix TDZ in handleSyncAllTrades deps.
 
   // Convert date range to days for useDashboardStats (null = ALL TIME)
@@ -1410,8 +1415,8 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   const canUseSnapTrade = false; // disabled during SnapTrade removal (Phase A1)
   // When viewing another user's journal (mentor view), do not apply the
   // logged-in mentor's portfolio filter — show all of the student's data.
-  const mentorPortfolioId = overrideUserId ? undefined : effectivePortfolioId;
-  const mentorPortfolioIds = overrideUserId ? undefined : effectivePortfolioIds;
+  const mentorPortfolioId = bypassPortfolioFilter ? undefined : effectivePortfolioId;
+  const mentorPortfolioIds = bypassPortfolioFilter ? undefined : effectivePortfolioIds;
   const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, mentorPortfolioId, mentorPortfolioIds);
   
   // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
@@ -1538,9 +1543,13 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="pt-0.5">
             <h1 className="text-[17px] font-semibold leading-tight tracking-normal text-white">
-              Welcome back, {displayName.charAt(0).toUpperCase() + displayName.slice(1)} 👋
+              {isMentorView
+                ? <>You're watching {studentName || studentEmail || 'student'} with Mentor Mode 👁️</>
+                : <>Welcome back, {displayName.charAt(0).toUpperCase() + displayName.slice(1)} 👋</>}
             </h1>
-            <p className="mt-2 text-[11px] text-white/62">Here's your performance overview</p>
+            <p className="mt-2 text-[11px] text-white/62">
+              {isMentorView ? "Read-only view of this student's journal" : "Here's your performance overview"}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -1699,7 +1708,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 connection it triggers a broker sync; without one it still
                 refetches trades + dashboard queries so the user always has a
                 manual way to force-refresh the page data. */}
-            {!readOnly && (
+            {!effectiveReadOnly && (
               <Button
                 onClick={handleSyncAllTrades}
                 disabled={isSyncingAll}
@@ -1726,7 +1735,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             )}
 
             {/* F2.5: Import Trades — compact (handler unchanged) */}
-            {!readOnly && (
+            {!effectiveReadOnly && (
               <Button
                 onClick={() => setShowImportPopup(true)}
                 variant="gold"
@@ -1750,7 +1759,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
 
         {/* Phase 1B.4 — Reconnect CTA for degraded / canceled broker connections.
             Hidden in mentor/read-only view — mentor cannot act on student's broker. */}
-        {!readOnly && !brokersLoading && degradedConnection && (
+        {!effectiveReadOnly && !brokersLoading && degradedConnection && (
           <div className="rounded-2xl border border-[#E36363]/30 bg-[#E36363]/8 px-5 py-4 mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#E36363]/15 flex items-center justify-center flex-shrink-0">
@@ -1776,7 +1785,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {!readOnly
+        {!effectiveReadOnly
           && !brokersLoading
           && allBrokerConnections.length === 0
           && !emptyStateDismissed
