@@ -23,6 +23,45 @@
  *  largestProfitableDay — highest single-day net P&L
  *  largestLosingDay     — most negative single-day net P&L (negative number)
  *
+ * TRADE-LEVEL COUNTS & STREAKS (new — Tradezella parity):
+ *  winningTrades    — count of trades with outcome === 'WIN'
+ *  losingTrades     — count of trades with outcome === 'LOSS'
+ *  breakevenTrades  — count of trades with outcome === 'BE'
+ *  openTrades       — count of trades with outcome === 'OPEN' or no close_at
+ *  maxConsecutiveWins   — longest unbroken WIN streak (by open_at order)
+ *  maxConsecutiveLosses — longest unbroken LOSS streak (by open_at order)
+ *  largestProfit    — single-trade highest pnl (same as gs.largestWin)
+ *  largestLoss      — single-trade most negative pnl (same as gs.largestLoss)
+ *  totalFees        — sum of trade.fees across all trades
+ *  totalCommissions — placeholder 0 (no separate commission field in Trade)
+ *  totalSwap        — placeholder 0 (no swap field in Trade)
+ *  avgHoldAllMs     — mean hold time (ms) for all closed trades (= avgHoldTimeMs)
+ *  avgHoldWinningMs — mean hold time (ms) for WIN trades only; 0 when none
+ *  avgHoldLosingMs  — mean hold time (ms) for LOSS trades only; 0 when none
+ *  avgHoldScratchMs — mean hold time (ms) for BE trades only; 0 when none
+ *  avgTradePnl      — netPnl / tradeCount (alias for avgNetTradePnl)
+ *
+ * DAY-LEVEL COUNTS & STREAKS (new — Tradezella parity):
+ *  totalTradingDays        — total distinct calendar days with ≥1 trade (= loggedDays)
+ *  winningDays             — count of days where net P&L > 0
+ *  losingDays              — count of days where net P&L < 0
+ *  breakevenDays           — count of days where net P&L === 0
+ *  maxConsecutiveWinningDays — longest unbroken run of net-positive days
+ *  maxConsecutiveLosingDays  — longest unbroken run of net-negative days
+ *  avgWinningDayPnl        — mean P&L of winning days; 0 when none
+ *  avgLosingDayPnl         — mean P&L of losing days (negative); 0 when none
+ *
+ * DRAWDOWN ALIASES (new — Tradezella parity):
+ *  maxDrawdown  — alias for maxDailyNetDrawdown (≤ 0)
+ *  avgDrawdown  — alias for avgDailyNetDrawdown (≤ 0)
+ *
+ * MONTH STATS (new — Tradezella parity):
+ *  bestMonthPnl    — highest monthly net P&L
+ *  lowestMonthPnl  — lowest (most negative) monthly net P&L
+ *  avgMonthlyPnl   — mean monthly net P&L
+ *  bestMonthLabel  — e.g. "Sep 2025"
+ *  lowestMonthLabel — e.g. "Nov 2025"
+ *
  * DAILY-LEVEL:
  *  loggedDays       — count of distinct calendar days with ≥1 trade
  *  avgDailyNetPnl   — netPnl / loggedDays
@@ -81,6 +120,56 @@ export interface ReportMetrics {
   /** ≤ 0 (most negative daily P&L); 0 when no losing days */
   largestLosingDay: number;
 
+  // --- trade-level counts (new) ---
+  /** Trades with outcome === 'WIN' */
+  winningTrades: number;
+  /** Trades with outcome === 'LOSS' */
+  losingTrades: number;
+  /** Trades with outcome === 'BE' */
+  breakevenTrades: number;
+  /** Trades with outcome === 'OPEN' or no close_at */
+  openTrades: number;
+
+  // --- trade-level streaks (new) ---
+  /** Longest consecutive WIN streak (by open_at ascending) */
+  maxConsecutiveWins: number;
+  /** Longest consecutive LOSS streak (by open_at ascending) */
+  maxConsecutiveLosses: number;
+
+  // --- trade-level P&L extremes (new) ---
+  /** Largest single-trade profit (same as groupStats.largestWin) */
+  largestProfit: number;
+  /** Most-negative single-trade loss (same as groupStats.largestLoss; ≤ 0) */
+  largestLoss: number;
+
+  // --- fees / costs (new) ---
+  /** Sum of trade.fees across all trades */
+  totalFees: number;
+  /**
+   * Placeholder 0 — the Trade interface has no dedicated commission field.
+   * If a commission field is added in future, compute it here.
+   */
+  totalCommissions: number;
+  /**
+   * Placeholder 0 — the Trade interface has no swap/overnight field.
+   * If a swap field is added in future, compute it here.
+   */
+  totalSwap: number;
+
+  // --- hold-time split (new; ms; 0 when no trades of that type) ---
+  /** Mean hold time (ms) of all closed trades — alias for avgHoldTimeMs */
+  avgHoldAllMs: number;
+  /** Mean hold time (ms) of WIN-outcome closed trades; 0 when none */
+  avgHoldWinningMs: number;
+  /** Mean hold time (ms) of LOSS-outcome closed trades; 0 when none */
+  avgHoldLosingMs: number;
+  /** Mean hold time (ms) of BE-outcome (scratch) closed trades; 0 when none */
+  avgHoldScratchMs: number;
+
+  // --- per-trade average P&L alias (new) ---
+  /** netPnl / tradeCount; alias for avgNetTradePnl */
+  avgTradePnl: number;
+
   // --- daily-level ---
   loggedDays: number;
   avgDailyNetPnl: number;
@@ -93,6 +182,46 @@ export interface ReportMetrics {
   maxDailyNetDrawdown: number;
   /** ≤ 0 — mean of daily drawdown values */
   avgDailyNetDrawdown: number;
+
+  // --- day-level counts (new) ---
+  /** Distinct calendar days with ≥1 trade — alias for loggedDays */
+  totalTradingDays: number;
+  /** Days where net P&L > 0 */
+  winningDays: number;
+  /** Days where net P&L < 0 */
+  losingDays: number;
+  /** Days where net P&L === 0 */
+  breakevenDays: number;
+
+  // --- day-level streaks (new) ---
+  /** Longest consecutive run of net-positive days */
+  maxConsecutiveWinningDays: number;
+  /** Longest consecutive run of net-negative days */
+  maxConsecutiveLosingDays: number;
+
+  // --- day-level P&L averages (new) ---
+  /** Mean P&L of winning days; 0 when no winning days */
+  avgWinningDayPnl: number;
+  /** Mean P&L of losing days (negative); 0 when no losing days */
+  avgLosingDayPnl: number;
+
+  // --- drawdown aliases (new — Tradezella uses "maxDrawdown" / "avgDrawdown") ---
+  /** Alias for maxDailyNetDrawdown (≤ 0) */
+  maxDrawdown: number;
+  /** Alias for avgDailyNetDrawdown (≤ 0) */
+  avgDrawdown: number;
+
+  // --- month stats (new) ---
+  /** Highest monthly net P&L across all calendar months in the data */
+  bestMonthPnl: number;
+  /** Most-negative monthly net P&L; 0 when no data */
+  lowestMonthPnl: number;
+  /** Mean monthly net P&L */
+  avgMonthlyPnl: number;
+  /** Label of best month, e.g. "Sep 2025"; '' when no data */
+  bestMonthLabel: string;
+  /** Label of lowest month, e.g. "Nov 2025"; '' when no data */
+  lowestMonthLabel: string;
 
   // --- chart series ---
   cumulativePnl: { date: string; value: number }[];
@@ -141,6 +270,31 @@ function runningWinLoss(buckets: DailyBucket[], upToIndex: number): number {
   return avgWin / avgLoss;
 }
 
+/**
+ * Compute the longest consecutive run of a given boolean predicate over
+ * an array, iterating in order.
+ */
+function maxConsecutiveRun(items: boolean[]): number {
+  let max = 0;
+  let current = 0;
+  for (const hit of items) {
+    if (hit) {
+      current += 1;
+      if (current > max) max = current;
+    } else {
+      current = 0;
+    }
+  }
+  return max;
+}
+
+/** Format a YYYY-MM key as "Mon YYYY", e.g. "Sep 2025". */
+function formatMonthLabel(yyyyMM: string): string {
+  const [year, month] = yyyyMM.split('-');
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+}
+
 // ---------------------------------------------------------------------------
 // Main function
 // ---------------------------------------------------------------------------
@@ -161,6 +315,29 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
       avgRealizedR: null,
       largestProfitableDay: 0,
       largestLosingDay: 0,
+      // new trade-level counts
+      winningTrades: 0,
+      losingTrades: 0,
+      breakevenTrades: 0,
+      openTrades: 0,
+      // new streaks
+      maxConsecutiveWins: 0,
+      maxConsecutiveLosses: 0,
+      // new trade extremes
+      largestProfit: 0,
+      largestLoss: 0,
+      // new fees
+      totalFees: 0,
+      totalCommissions: 0,
+      totalSwap: 0,
+      // new hold-time split
+      avgHoldAllMs: 0,
+      avgHoldWinningMs: 0,
+      avgHoldLosingMs: 0,
+      avgHoldScratchMs: 0,
+      // new per-trade pnl alias
+      avgTradePnl: 0,
+      // daily-level
       loggedDays: 0,
       avgDailyNetPnl: 0,
       avgDailyWinPct: 0,
@@ -168,6 +345,27 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
       avgDailyVolume: 0,
       maxDailyNetDrawdown: 0,
       avgDailyNetDrawdown: 0,
+      // new day-level counts
+      totalTradingDays: 0,
+      winningDays: 0,
+      losingDays: 0,
+      breakevenDays: 0,
+      // new day streaks
+      maxConsecutiveWinningDays: 0,
+      maxConsecutiveLosingDays: 0,
+      // new day averages
+      avgWinningDayPnl: 0,
+      avgLosingDayPnl: 0,
+      // drawdown aliases
+      maxDrawdown: 0,
+      avgDrawdown: 0,
+      // month stats
+      bestMonthPnl: 0,
+      lowestMonthPnl: 0,
+      avgMonthlyPnl: 0,
+      bestMonthLabel: '',
+      lowestMonthLabel: '',
+      // chart series
       cumulativePnl: [],
       cumulativeAvgDailyWinLoss: [],
       dailyBuckets: [],
@@ -177,19 +375,76 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
   // ---- DELEGATE TRADE-LEVEL STATS ----
   const gs = computeGroupStats(trades);
 
-  // ---- HOLD TIME ----
+  // ---- SORT TRADES BY open_at FOR STREAK CALCULATION ----
+  const sortedTrades = [...trades].sort(
+    (a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime(),
+  );
+
+  // ---- TRADE-LEVEL COUNTS ----
+  let winningTrades = 0;
+  let losingTrades = 0;
+  let breakevenTrades = 0;
+  let openTrades = 0;
+
+  for (const t of trades) {
+    if (t.outcome === 'OPEN' || !t.close_at) {
+      openTrades += 1;
+    } else if (t.outcome === 'WIN') {
+      winningTrades += 1;
+    } else if (t.outcome === 'LOSS') {
+      losingTrades += 1;
+    } else if (t.outcome === 'BE') {
+      breakevenTrades += 1;
+    }
+  }
+
+  // ---- TRADE-LEVEL STREAKS (sorted by open_at) ----
+  const winFlags = sortedTrades.map(t => t.outcome === 'WIN');
+  const lossFlags = sortedTrades.map(t => t.outcome === 'LOSS');
+  const maxConsecutiveWins = maxConsecutiveRun(winFlags);
+  const maxConsecutiveLosses = maxConsecutiveRun(lossFlags);
+
+  // ---- FEES ----
+  let totalFees = 0;
+  for (const t of trades) {
+    totalFees += t.fees ?? 0;
+  }
+  // totalCommissions and totalSwap are 0 — Trade has no separate fields for these.
+
+  // ---- HOLD TIME (all + per outcome) ----
   let totalHoldMs = 0;
   let holdCount = 0;
+  let holdWinMs = 0;
+  let holdWinCount = 0;
+  let holdLossMs = 0;
+  let holdLossCount = 0;
+  let holdScratchMs = 0;
+  let holdScratchCount = 0;
+
   for (const t of trades) {
     if (t.open_at && t.close_at) {
       const ms = new Date(t.close_at).getTime() - new Date(t.open_at).getTime();
       if (ms > 0) {
         totalHoldMs += ms;
         holdCount += 1;
+        if (t.outcome === 'WIN') {
+          holdWinMs += ms;
+          holdWinCount += 1;
+        } else if (t.outcome === 'LOSS') {
+          holdLossMs += ms;
+          holdLossCount += 1;
+        } else if (t.outcome === 'BE') {
+          holdScratchMs += ms;
+          holdScratchCount += 1;
+        }
       }
     }
   }
   const avgHoldTimeMs = holdCount > 0 ? totalHoldMs / holdCount : 0;
+  const avgHoldAllMs = avgHoldTimeMs; // alias
+  const avgHoldWinningMs = holdWinCount > 0 ? holdWinMs / holdWinCount : 0;
+  const avgHoldLosingMs = holdLossCount > 0 ? holdLossMs / holdLossCount : 0;
+  const avgHoldScratchMs = holdScratchCount > 0 ? holdScratchMs / holdScratchCount : 0;
 
   // ---- PLANNED R ----
   let plannedRTotal = 0;
@@ -254,15 +509,30 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
     if (b.netPnl < largestLosingDay) largestLosingDay = b.netPnl;
   }
 
+  // ---- DAY-LEVEL COUNTS ----
+  const winDayBuckets = dailyBuckets.filter(b => b.netPnl > 0);
+  const lossDayBuckets = dailyBuckets.filter(b => b.netPnl < 0);
+  const breakevenDays = dailyBuckets.filter(b => b.netPnl === 0).length;
+  const winningDaysCount = winDayBuckets.length;
+  const losingDaysCount = lossDayBuckets.length;
+
+  // ---- DAY-LEVEL STREAKS ----
+  const dayWinFlags = dailyBuckets.map(b => b.netPnl > 0);
+  const dayLossFlags = dailyBuckets.map(b => b.netPnl < 0);
+  const maxConsecutiveWinningDays = maxConsecutiveRun(dayWinFlags);
+  const maxConsecutiveLosingDays = maxConsecutiveRun(dayLossFlags);
+
   // ---- DAILY WIN % ----
-  const winDayCount = dailyBuckets.filter(b => b.netPnl > 0).length;
-  const avgDailyWinPct = loggedDays > 0 ? (winDayCount / loggedDays) * 100 : 0;
+  const avgDailyWinPct = loggedDays > 0 ? (winningDaysCount / loggedDays) * 100 : 0;
 
   // ---- DAILY WIN/LOSS RATIO ----
-  const winDays = dailyBuckets.filter(b => b.netPnl > 0);
-  const lossDays = dailyBuckets.filter(b => b.netPnl < 0);
-  const avgWinDayPnl = winDays.length > 0 ? winDays.reduce((s, b) => s + b.netPnl, 0) / winDays.length : 0;
-  const avgLossDayPnlMag = lossDays.length > 0 ? Math.abs(lossDays.reduce((s, b) => s + b.netPnl, 0) / lossDays.length) : 0;
+  const avgWinDayPnl = winDayBuckets.length > 0
+    ? winDayBuckets.reduce((s, b) => s + b.netPnl, 0) / winDayBuckets.length
+    : 0;
+  const avgLossDayPnl = lossDayBuckets.length > 0
+    ? lossDayBuckets.reduce((s, b) => s + b.netPnl, 0) / lossDayBuckets.length
+    : 0; // already negative
+  const avgLossDayPnlMag = Math.abs(avgLossDayPnl);
   const avgDailyWinLoss = avgLossDayPnlMag === 0
     ? avgWinDayPnl > 0 ? Infinity : 0
     : avgWinDayPnl / avgLossDayPnlMag;
@@ -277,7 +547,7 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
   let runningPnl = 0;
   let peakPnl = 0;
   let totalDrawdown = 0;
-  let maxDrawdown = 0; // stored as most negative value seen
+  let maxDrawdownValue = 0; // stored as most negative value seen
 
   for (const b of dailyBuckets) {
     runningPnl += b.netPnl;
@@ -286,10 +556,10 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
     if (runningPnl > peakPnl) peakPnl = runningPnl;
     const drawdown = runningPnl - peakPnl; // ≤ 0
     totalDrawdown += drawdown;
-    if (drawdown < maxDrawdown) maxDrawdown = drawdown;
+    if (drawdown < maxDrawdownValue) maxDrawdownValue = drawdown;
   }
 
-  const maxDailyNetDrawdown = maxDrawdown; // ≤ 0
+  const maxDailyNetDrawdown = maxDrawdownValue; // ≤ 0
   const avgDailyNetDrawdown = loggedDays > 0 ? totalDrawdown / loggedDays : 0; // ≤ 0
 
   // ---- CUMULATIVE AVG DAILY WIN/LOSS SERIES ----
@@ -302,6 +572,46 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
       value: isFinite(ratio) ? ratio : 9999,
     });
   }
+
+  // ---- MONTH STATS ----
+  // Group daily buckets by YYYY-MM and sum net P&L per month.
+  const monthMap = new Map<string, number>();
+  for (const b of dailyBuckets) {
+    const ym = b.date.slice(0, 7); // "YYYY-MM"
+    monthMap.set(ym, (monthMap.get(ym) ?? 0) + b.netPnl);
+  }
+
+  let bestMonthPnl = 0;
+  let lowestMonthPnl = 0;
+  let bestMonthLabel = '';
+  let lowestMonthLabel = '';
+  let monthTotal = 0;
+
+  if (monthMap.size > 0) {
+    let bestKey = '';
+    let lowestKey = '';
+    let bestVal = -Infinity;
+    let lowestVal = Infinity;
+
+    for (const [ym, pnl] of monthMap) {
+      monthTotal += pnl;
+      if (pnl > bestVal) {
+        bestVal = pnl;
+        bestKey = ym;
+      }
+      if (pnl < lowestVal) {
+        lowestVal = pnl;
+        lowestKey = ym;
+      }
+    }
+
+    bestMonthPnl = bestVal === -Infinity ? 0 : bestVal;
+    lowestMonthPnl = lowestVal === Infinity ? 0 : lowestVal;
+    bestMonthLabel = bestKey ? formatMonthLabel(bestKey) : '';
+    lowestMonthLabel = lowestKey ? formatMonthLabel(lowestKey) : '';
+  }
+
+  const avgMonthlyPnl = monthMap.size > 0 ? monthTotal / monthMap.size : 0;
 
   return {
     netPnl: gs.netPnl,
@@ -316,6 +626,29 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
     avgRealizedR,
     largestProfitableDay,
     largestLosingDay,
+    // new trade-level counts
+    winningTrades,
+    losingTrades,
+    breakevenTrades,
+    openTrades,
+    // new streaks
+    maxConsecutiveWins,
+    maxConsecutiveLosses,
+    // new trade extremes (reuse groupStats values which already computed these)
+    largestProfit: gs.largestWin,
+    largestLoss: gs.largestLoss,
+    // new fees
+    totalFees,
+    totalCommissions: 0,
+    totalSwap: 0,
+    // new hold-time split
+    avgHoldAllMs,
+    avgHoldWinningMs,
+    avgHoldLosingMs,
+    avgHoldScratchMs,
+    // new per-trade pnl alias
+    avgTradePnl: safeDiv(gs.netPnl, gs.count),
+    // daily-level
     loggedDays,
     avgDailyNetPnl: safeDiv(gs.netPnl, loggedDays),
     avgDailyWinPct,
@@ -323,6 +656,27 @@ export function computeReportMetrics(trades: Trade[]): ReportMetrics {
     avgDailyVolume,
     maxDailyNetDrawdown,
     avgDailyNetDrawdown,
+    // new day-level counts
+    totalTradingDays: loggedDays,
+    winningDays: winningDaysCount,
+    losingDays: losingDaysCount,
+    breakevenDays,
+    // new day streaks
+    maxConsecutiveWinningDays,
+    maxConsecutiveLosingDays,
+    // new day averages
+    avgWinningDayPnl: avgWinDayPnl,
+    avgLosingDayPnl: avgLossDayPnl,
+    // drawdown aliases
+    maxDrawdown: maxDailyNetDrawdown,
+    avgDrawdown: avgDailyNetDrawdown,
+    // month stats
+    bestMonthPnl,
+    lowestMonthPnl,
+    avgMonthlyPnl,
+    bestMonthLabel,
+    lowestMonthLabel,
+    // chart series
     cumulativePnl,
     cumulativeAvgDailyWinLoss,
     dailyBuckets,
