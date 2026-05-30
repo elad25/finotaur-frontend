@@ -9,7 +9,7 @@ import ToolCallCard from './ToolCallCard';
 import TradeActionModal from './TradeActionModal';
 import type { useFinotaurChat } from '../hooks/useFinotaurChat';
 import { useTradeAction } from '../hooks/useTradeAction';
-import type { PendingToolCall, ChatToolUse } from '../types';
+import type { PendingToolCall, ChatToolUse, ChatMessage } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -36,11 +36,27 @@ interface CoachChatPanelProps {
    * instantiates the hook itself so there is exactly one instance per mounted panel.
    */
   chatInstance: ReturnType<typeof useFinotaurChat>;
+  /**
+   * Mentor View: when true, renders messagesOverride instead of chat.messages,
+   * hides all input/send/stop/tool affordances, and shows a read-only notice.
+   */
+  isReadOnly?: boolean;
+  /**
+   * Mentor View: the student's chat messages to display when isReadOnly is true.
+   * Ignored when isReadOnly is false/undefined.
+   */
+  messagesOverride?: ChatMessage[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function CoachChatPanel({ className, prefillRequest, chatInstance }: CoachChatPanelProps): JSX.Element {
+export default function CoachChatPanel({
+  className,
+  prefillRequest,
+  chatInstance,
+  isReadOnly = false,
+  messagesOverride,
+}: CoachChatPanelProps): JSX.Element {
   const chat = chatInstance;
   const action = useTradeAction();
 
@@ -192,29 +208,54 @@ export default function CoachChatPanel({ className, prefillRequest, chatInstance
           <h2 className="font-sans text-h4 font-medium text-ink-primary">
             AI Coach
           </h2>
-        </div>
-
-        {/* Message list */}
-        <div className="flex-1 overflow-y-auto flex flex-col gap-ds-3 min-h-0">
-          {chat.messages.length === 0 ? (
-            <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} />
-          ) : (
-            <>
-              {chat.messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
-              {showConfirmFlash && (
-                <p className="text-sm text-ink-secondary pl-ds-3">
-                  ✓ Action confirmed
-                </p>
-              )}
-              <div ref={messagesEndRef} />
-            </>
+          {isReadOnly && (
+            <span className="text-xs text-ink-tertiary italic">read-only</span>
           )}
         </div>
 
-        {/* Error banner (desktop) — surfaces SSE / chat errors that would otherwise be silent */}
-        {chat.error && (
+        {/* Read-only notice (mentor view) */}
+        {isReadOnly && (
+          <p className="shrink-0 mb-ds-2 text-xs text-ink-tertiary">
+            Viewing student&apos;s chat history (read-only)
+          </p>
+        )}
+
+        {/* Message list */}
+        <div className="flex-1 overflow-y-auto flex flex-col gap-ds-3 min-h-0">
+          {isReadOnly ? (
+            // ── Mentor view: render messagesOverride, no interactive affordances ──
+            !messagesOverride || messagesOverride.length === 0 ? (
+              <p className="text-ink-secondary text-sm py-ds-4">No chat history yet.</p>
+            ) : (
+              <>
+                {messagesOverride.map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
+                ))}
+                <div ref={messagesEndRef} />
+              </>
+            )
+          ) : (
+            // ── Owner view: existing behaviour ──────────────────────────────────
+            chat.messages.length === 0 ? (
+              <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} />
+            ) : (
+              <>
+                {chat.messages.map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
+                ))}
+                {showConfirmFlash && (
+                  <p className="text-sm text-ink-secondary pl-ds-3">
+                    ✓ Action confirmed
+                  </p>
+                )}
+                <div ref={messagesEndRef} />
+              </>
+            )
+          )}
+        </div>
+
+        {/* Error banner (desktop) — owner path only; never shown in read-only */}
+        {!isReadOnly && chat.error && (
           <div
             role="alert"
             className="shrink-0 mt-ds-3 rounded-[8px] border border-num-negative/40 bg-num-negative/5 px-ds-3 py-ds-2"
@@ -223,8 +264,8 @@ export default function CoachChatPanel({ className, prefillRequest, chatInstance
           </div>
         )}
 
-        {/* Pending tool call — between message list and input */}
-        {pendingToolCallUI && (
+        {/* Pending tool call — owner path only */}
+        {!isReadOnly && pendingToolCallUI && (
           <div className="shrink-0 mt-ds-3">
             <ToolCallCard
               pendingToolCall={pendingToolCallUI}
@@ -234,17 +275,19 @@ export default function CoachChatPanel({ className, prefillRequest, chatInstance
           </div>
         )}
 
-        {/* Input row */}
-        <InputRow
-          ref={textareaRef}
-          value={inputText}
-          onChange={setInputText}
-          onSend={handleSend}
-          onKeyDown={handleKeyDown}
-          disabled={inputDisabled}
-          isStreaming={chat.isStreaming}
-          onStop={chat.abort}
-        />
+        {/* Input row — hidden in read-only (mentor) mode */}
+        {!isReadOnly && (
+          <InputRow
+            ref={textareaRef}
+            value={inputText}
+            onChange={setInputText}
+            onSend={handleSend}
+            onKeyDown={handleKeyDown}
+            disabled={inputDisabled}
+            isStreaming={chat.isStreaming}
+            onStop={chat.abort}
+          />
+        )}
       </Card>
 
       {/* ── Mobile: bottom sheet ───────────────────────────────────────────── */}
@@ -277,26 +320,41 @@ export default function CoachChatPanel({ className, prefillRequest, chatInstance
           {/* Messages (only visible when expanded) */}
           {isExpanded && (
             <div className="flex-1 overflow-y-auto flex flex-col gap-ds-3 min-h-0">
-              {chat.messages.length === 0 ? (
-                <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} />
+              {isReadOnly ? (
+                // ── Mentor view ────────────────────────────────────────────────
+                !messagesOverride || messagesOverride.length === 0 ? (
+                  <p className="text-ink-secondary text-sm py-ds-4">No chat history yet.</p>
+                ) : (
+                  <>
+                    {messagesOverride.map((msg) => (
+                      <MessageBubble key={msg.id} message={msg} />
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </>
+                )
               ) : (
-                <>
-                  {chat.messages.map((msg) => (
-                    <MessageBubble key={msg.id} message={msg} />
-                  ))}
-                  {showConfirmFlash && (
-                    <p className="text-sm text-ink-secondary pl-ds-3">
-                      ✓ Action confirmed
-                    </p>
-                  )}
-                  <div ref={messagesEndRef} />
-                </>
+                // ── Owner view ─────────────────────────────────────────────────
+                chat.messages.length === 0 ? (
+                  <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} />
+                ) : (
+                  <>
+                    {chat.messages.map((msg) => (
+                      <MessageBubble key={msg.id} message={msg} />
+                    ))}
+                    {showConfirmFlash && (
+                      <p className="text-sm text-ink-secondary pl-ds-3">
+                        ✓ Action confirmed
+                      </p>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
+                )
               )}
             </div>
           )}
 
-          {/* Error banner (mobile) — only visible when sheet expanded */}
-          {isExpanded && chat.error && (
+          {/* Error banner (mobile) — owner path only */}
+          {isExpanded && !isReadOnly && chat.error && (
             <div
               role="alert"
               className="shrink-0 mt-ds-3 rounded-[8px] border border-num-negative/40 bg-num-negative/5 px-ds-3 py-ds-2"
@@ -305,8 +363,8 @@ export default function CoachChatPanel({ className, prefillRequest, chatInstance
             </div>
           )}
 
-          {/* Pending tool call */}
-          {isExpanded && pendingToolCallUI && (
+          {/* Pending tool call — owner path only */}
+          {isExpanded && !isReadOnly && pendingToolCallUI && (
             <div className="shrink-0 mt-ds-3">
               <ToolCallCard
                 pendingToolCall={pendingToolCallUI}
@@ -316,17 +374,19 @@ export default function CoachChatPanel({ className, prefillRequest, chatInstance
             </div>
           )}
 
-          {/* Input row (always visible when sheet is open) */}
-          <InputRow
-            ref={textareaRef}
-            value={inputText}
-            onChange={setInputText}
-            onSend={handleSend}
-            onKeyDown={handleKeyDown}
-            disabled={inputDisabled}
-            isStreaming={chat.isStreaming}
-            onStop={chat.abort}
-          />
+          {/* Input row — hidden in read-only (mentor) mode */}
+          {!isReadOnly && (
+            <InputRow
+              ref={textareaRef}
+              value={inputText}
+              onChange={setInputText}
+              onSend={handleSend}
+              onKeyDown={handleKeyDown}
+              disabled={inputDisabled}
+              isStreaming={chat.isStreaming}
+              onStop={chat.abort}
+            />
+          )}
         </Card>
       </div>
 
