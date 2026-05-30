@@ -11,6 +11,7 @@ import type {
   ConversationMessageRow,
   FinotaurScore,
   ToolExecuteResponse,
+  TradeScorecardResponse,
   UsageResponse,
 } from '../types';
 
@@ -200,6 +201,29 @@ export async function fetchConversation(
   );
 
   return { conversation: data.conversation, messages };
+}
+
+export async function fetchTradeScorecard(tradeId: string): Promise<TradeScorecardResponse> {
+  const res = await authFetch(
+    `/api/journal-ai/trades/${encodeURIComponent(tradeId)}/scorecard`,
+    {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BriefingApiError(
+      body?.message_en ?? `fetchTradeScorecard failed (${res.status})`,
+      res.status,
+      body?.error,
+      body?.message_he,
+      body,
+    );
+  }
+
+  return res.json() as Promise<TradeScorecardResponse>;
 }
 
 export async function deleteConversation(id: string): Promise<void> {

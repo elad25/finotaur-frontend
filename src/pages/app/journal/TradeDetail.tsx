@@ -9,6 +9,7 @@ import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
+import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
 
 interface PartialLeg {
   // Common fields written by both the Tradovate edge fn (v48+) and the
@@ -579,6 +580,9 @@ export default function JournalTradeDetail() {
           </div>
         </div>
       )}
+
+      {/* Trade Scorecard */}
+      {id && <TradeScorecard tradeId={id} />}
 
       {/* Trade Notes — view mode or edit mode */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">

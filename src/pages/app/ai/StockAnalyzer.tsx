@@ -15,6 +15,8 @@ import { POPULAR_TICKERS } from '@/constants/stock-analyzer.constants';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { UsageBadge } from '@/components/access/UsageBadge';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 import { AIArenaShell } from '@/components/ai-arena';
 import { SearchBar } from '@/components/stock-analyzer/SearchBar';
@@ -103,6 +105,7 @@ export default function StockAnalyzer() {
     );
 
   return (
+    <ErrorBoundary boundary="stock-analyzer" fallback={<AiToolErrorFallback />}>
     <AIArenaShell
       eyebrow={undefined}
       title={stockData ? undefined : 'Stock Analyzer'}
@@ -245,5 +248,6 @@ export default function StockAnalyzer() {
         </motion.div>
       )}
     </AIArenaShell>
+    </ErrorBoundary>
   );
 }
