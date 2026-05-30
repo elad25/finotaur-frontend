@@ -9,6 +9,7 @@ import { AuthProvider } from "@/providers/AuthProvider";
 import { TimezoneProvider } from "@/contexts/TimezoneContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
+import { MentorViewProvider } from "@/contexts/MentorViewContext";
 import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DomainGuard } from "@/components/DomainGuard";
@@ -186,7 +187,6 @@ const JournalSettings = lazy(async () => {
 });
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
-const MentorStudentView = lazy(() => import("@/pages/app/journal/MentorStudentView"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
@@ -426,7 +426,7 @@ function AppContent() {
         <Route path="/pricing-selection" element={<Navigate to="/onboarding" replace />} />
         
         {/* PROTECTED ROUTES */}
-        <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
+        <Route path="/app" element={<ProtectedRoute><MentorViewProvider><ProtectedAppLayout /></MentorViewProvider></ProtectedRoute>}>
           <Route index element={<Navigate to="/app/top-secret" replace />} />
           
           {/* ALL MARKETS */}
@@ -594,7 +594,6 @@ function AppContent() {
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 {/* Mentor Mode — must be before journal/:id to avoid wildcard match */}
 <Route path="journal/mentor" element={<JournalRoute><Mentor /></JournalRoute>} />
-<Route path="journal/mentor/:studentId" element={<JournalRoute><MentorStudentView /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
