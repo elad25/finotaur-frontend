@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft } from 'lucide-react';
 
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
@@ -189,85 +189,6 @@ function positionToMarkers(p: PaperPosition): ChartMarker[] {
   return [entryMarker];
 }
 
-// ─── ActiveStrategyDropdown — custom dropdown (replaces native <select>) ─────
-function ActiveStrategyDropdown({
-  activeStrategyId,
-  strategies,
-  onChange,
-}: {
-  activeStrategyId: string | null;
-  strategies: Array<{ id: string; name: string }>;
-  onChange: (id: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const activeName = activeStrategyId
-    ? strategies.find((s) => s.id === activeStrategyId)?.name ?? 'Unknown'
-    : 'No strategy (Manual)';
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onEsc);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onEsc);
-    };
-  }, [open]);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
-        title="Tag new trades with this strategy for per-strategy stats"
-      >
-        <Sparkles size={12} className="text-[#7AB6F4]" />
-        <span className="max-w-[160px] truncate">{activeName}</span>
-        <ChevronDown size={12} className="text-zinc-500" />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
-          <button
-            type="button"
-            onClick={() => { onChange(null); setOpen(false); }}
-            className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
-              activeStrategyId === null
-                ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
-                : 'text-zinc-300 hover:bg-zinc-900'
-            }`}
-          >
-            No strategy (Manual)
-          </button>
-          {strategies.length > 0 && (
-            <div className="border-t border-zinc-800" />
-          )}
-          {strategies.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => { onChange(s.id); setOpen(false); }}
-              className={`block w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
-                activeStrategyId === s.id
-                  ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
-                  : 'text-zinc-300 hover:bg-zinc-900'
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── SymbolAutocomplete — type-ahead ticker picker (replaces native <select>) ─
 // Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
@@ -483,7 +404,7 @@ export function BacktestChart({
 
   // Phase 4: active strategy tag. Every trade opened while this is set will
   // be attributed to the strategy in stats breakdown + saved session record.
-  const [activeStrategyId, setActiveStrategyId] = useState<string | null>(null);
+  const [activeStrategyId] = useState<string | null>(null);
   const activeStrategy = useMemo(
     () => strategyLib.strategies.find((s) => s.id === activeStrategyId) ?? null,
     [strategyLib.strategies, activeStrategyId],
@@ -718,6 +639,9 @@ export function BacktestChart({
     return rows;
   }, [statsByStrategy, strategyLib.strategies]);
 
+  // True when no trades have been made yet — used to allow editing starting balance.
+  const sessionEmpty = state.closedPositions.length === 0 && !state.activePosition;
+
   const handleClose = (reason: 'manual' | 'sl' | 'tp' = 'manual') => {
     const price = parseFloat(livePrice);
     if (!price || isNaN(price) || price <= 0) {
@@ -867,84 +791,91 @@ export function BacktestChart({
           onChange={setReplayStart}
         />
 
-        {/* Active Strategy dropdown — custom (Sprint F: native <select> styling
-            was browser-default ugly; replaced with a button + popover panel
-            that matches the rest of the toolbar). */}
-        <ActiveStrategyDropdown
-          activeStrategyId={activeStrategyId}
-          strategies={strategyLib.strategies}
-          onChange={setActiveStrategyId}
-        />
+        {/* Run Strategy — moved left (after DateTimePicker) so balance group stays clean */}
+        <div className="relative">
+          <button
+            onClick={() => setStrategyPickerOpen((v) => !v)}
+            disabled={runStatus === 'running'}
+            className={`flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+              runStatus === 'done'
+                ? 'border-emerald-700 bg-emerald-950 text-emerald-400'
+                : runStatus === 'error'
+                ? 'border-rose-700 bg-rose-950 text-rose-400'
+                : runStatus === 'running'
+                ? 'border-zinc-700 bg-zinc-900 text-zinc-500 cursor-wait'
+                : 'border-emerald-700/40 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-950/60'
+            }`}
+            title={runError ?? runSummary ?? 'Run a saved strategy on this chart'}
+          >
+            <Play size={12} />
+            {runStatus === 'running' ? 'Running…' : runStatus === 'done' ? 'Ran' : runStatus === 'error' ? 'Failed' : 'Run Strategy'}
+            <ChevronDown size={12} />
+          </button>
+          {strategyPickerOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-md border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
+              {strategyLib.strategies.length === 0 ? (
+                <div className="px-2 py-3 text-center text-xs text-zinc-500">
+                  No saved strategies. Build one in the
+                  <span className="ml-1 text-[#C9A646]">Builder</span> tab first.
+                </div>
+              ) : (
+                <>
+                  <div className="mb-1 px-2 text-[10px] uppercase tracking-wider text-zinc-500">
+                    Saved strategies ({strategyLib.strategies.length})
+                  </div>
+                  {strategyLib.strategies.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleRunStrategy(s.id)}
+                      className="block w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-900"
+                    >
+                      {s.name}
+                      <span className="ml-2 text-[10px] text-zinc-600">
+                        {s.rules.length} rule{s.rules.length !== 1 && 's'}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Balance display */}
         <div className="ml-auto flex items-center gap-4">
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-zinc-500">Starting</div>
-            <div className="text-sm font-semibold text-zinc-200">${state.startingBalance.toLocaleString()}</div>
+            {sessionEmpty ? (
+              <>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Starting</div>
+                <input
+                  type="number"
+                  value={state.startingBalance}
+                  min="1"
+                  step="any"
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (Number.isFinite(n) && n > 0) reset(n);
+                  }}
+                  className="mt-1 w-28 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-sm text-zinc-200 focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+              </>
+            ) : (
+              <>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Starting</div>
+                <div
+                  className="text-sm font-semibold text-zinc-200"
+                  title="Reset the session to edit the starting balance"
+                >
+                  ${state.startingBalance.toLocaleString()}
+                </div>
+              </>
+            )}
           </div>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wider text-zinc-500">Net P&L</div>
             <div className={`text-sm font-semibold ${state.stats.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
-          </div>
-          {/* Run Strategy dropdown — re-enabled in Tier 1 (2026-05-30).
-              Bug D ("freeze" on click in Live mode) was a browser-AUTOMATION
-              artifact, not a real user freeze: the prior report was a CDP 30s
-              timeout, and this codebase documents that native dialogs freeze the
-              renderer under automation (see the flashTradeError comment above).
-              Static analysis confirms the Run Strategy path has NO alert()/
-              confirm()/blocking loop, and runStrategy() is provably O(bars)
-              (single bounded for-loop, indicators precomputed once). The button
-              is already guarded against double-runs (disabled while running) and
-              handleRunStrategy closes the picker before awaiting. */}
-          <div className="relative">
-            <button
-              onClick={() => setStrategyPickerOpen((v) => !v)}
-              disabled={runStatus === 'running'}
-              className={`flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
-                runStatus === 'done'
-                  ? 'border-emerald-700 bg-emerald-950 text-emerald-400'
-                  : runStatus === 'error'
-                  ? 'border-rose-700 bg-rose-950 text-rose-400'
-                  : runStatus === 'running'
-                  ? 'border-zinc-700 bg-zinc-900 text-zinc-500 cursor-wait'
-                  : 'border-emerald-700/40 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-950/60'
-              }`}
-              title={runError ?? runSummary ?? 'Run a saved strategy on this chart'}
-            >
-              <Play size={12} />
-              {runStatus === 'running' ? 'Running…' : runStatus === 'done' ? 'Ran' : runStatus === 'error' ? 'Failed' : 'Run Strategy'}
-              <ChevronDown size={12} />
-            </button>
-            {strategyPickerOpen && (
-              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-md border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
-                {strategyLib.strategies.length === 0 ? (
-                  <div className="px-2 py-3 text-center text-xs text-zinc-500">
-                    No saved strategies. Build one in the
-                    <span className="ml-1 text-[#C9A646]">Builder</span> tab first.
-                  </div>
-                ) : (
-                  <>
-                    <div className="mb-1 px-2 text-[10px] uppercase tracking-wider text-zinc-500">
-                      Saved strategies ({strategyLib.strategies.length})
-                    </div>
-                    {strategyLib.strategies.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => handleRunStrategy(s.id)}
-                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-900"
-                      >
-                        {s.name}
-                        <span className="ml-2 text-[10px] text-zinc-600">
-                          {s.rules.length} rule{s.rules.length !== 1 && 's'}
-                        </span>
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
           </div>
           <button
             onClick={handleSaveSession}
@@ -1082,34 +1013,58 @@ export function BacktestChart({
             )}
           </div>
           {/* Floating trading bar — bottom-center, overlaid on the chart */}
-          <div className="absolute bottom-4 left-1/2 z-20 max-w-[95%] -translate-x-1/2 rounded-xl border border-zinc-800 bg-zinc-950/95 px-4 py-2 shadow-2xl backdrop-blur-sm">
-            <div className="flex flex-wrap items-end justify-center gap-3">
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price (optional)</span>
-              <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
-                className="mt-1 w-28 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Size</span>
-              <input type="number" value={size} onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))} min="0.01" step="any"
-                className="mt-1 w-20 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Stop loss</span>
-              <input type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)} placeholder="optional" step="any"
-                className="mt-1 w-24 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Take profit</span>
-              <input type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)} placeholder="optional" step="any"
-                className="mt-1 w-24 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            {!state.activePosition ? (
-              <>
-                <button onClick={() => handleOpen('LONG')} className="flex items-center gap-1.5 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-4 py-2 text-sm font-bold text-emerald-400 transition-colors hover:bg-emerald-950/60"><TrendingUp size={14} /> BUY <span className="text-[10px] uppercase tracking-wider text-emerald-600">Market</span></button>
-                <button onClick={() => handleOpen('SHORT')} className="flex items-center gap-1.5 rounded-md border border-rose-700/40 bg-rose-950/30 px-4 py-2 text-sm font-bold text-rose-400 transition-colors hover:bg-rose-950/60"><TrendingDown size={14} /> SELL <span className="text-[10px] uppercase tracking-wider text-rose-600">Market</span></button>
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className={`flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side === 'LONG' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}{state.activePosition.side} <span className="text-xs font-normal text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span></span>
-                <button onClick={() => handleClose('manual')} className="rounded-md border border-[#C9A646]/40 bg-[#C9A646]/10 px-4 py-2 text-sm font-semibold text-[#C9A646] transition-colors hover:bg-[#C9A646]/20">✕ Close at ${livePrice || '—'}</button>
+          <div className="absolute bottom-8 left-1/2 z-20 max-w-[95%] -translate-x-1/2">
+            <div className="relative overflow-hidden rounded-[14px] border border-[#C9A646]/25 bg-gradient-to-b from-[#14141b]/95 to-[#0a0a0c]/95 px-5 py-3 shadow-glow-gold-resting backdrop-blur-md">
+              {/* top-edge gold light bar (flagship accent) */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-px w-2/3 bg-gradient-to-r from-transparent via-[#C9A646]/70 to-transparent" />
+              <div className="flex flex-wrap items-end justify-center gap-4">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Current price</span>
+                    <div className="flex items-center rounded-md border border-white/10 bg-black/50 px-2.5 transition-colors focus-within:border-[#C9A646]/70">
+                      <span className="mr-1 text-sm text-zinc-500">$</span>
+                      <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
+                        className="w-24 bg-transparent py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                    </div>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Size</span>
+                    <input type="number" value={size} onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))} min="0.01" step="any"
+                      className="w-16 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 text-center font-mono text-sm tabular-nums text-zinc-100 transition-colors focus:border-[#C9A646]/70 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-rose-400/80">Stop loss</span>
+                    <input type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)} placeholder="optional" step="any"
+                      className="w-24 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 transition-colors focus:border-rose-500/60 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-400/80">Take profit</span>
+                    <input type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)} placeholder="optional" step="any"
+                      className="w-24 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 transition-colors focus:border-emerald-500/60 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  </label>
+                </div>
+                <div className="hidden h-10 w-px self-center bg-white/10 sm:block" />
+                {!state.activePosition ? (
+                  <div className="flex items-stretch gap-2">
+                    <button onClick={() => handleOpen('LONG')} className="flex flex-col items-center justify-center rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-5 py-1.5 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400"><TrendingUp size={15} /> BUY</span><span className="text-[9px] uppercase tracking-wider text-emerald-600/80">Market</span></button>
+                    <button onClick={() => handleOpen('SHORT')} className="flex flex-col items-center justify-center rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-5 py-1.5 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-rose-400"><TrendingDown size={15} /> SELL</span><span className="text-[9px] uppercase tracking-wider text-rose-600/80">Market</span></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5">
+                    <span className={`flex items-center gap-2 rounded-md border bg-black/40 px-3 py-2 ${state.activePosition.side === 'LONG' ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
+                      <span className={`h-2 w-2 rounded-full ${state.activePosition.side === 'LONG' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                      <span className={`text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side}</span>
+                      <span className="font-mono text-xs tabular-nums text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span>
+                    </span>
+                    <button onClick={() => handleClose('manual')} className="flex items-center gap-1.5 rounded-[10px] bg-gradient-gold px-5 py-2 text-sm font-semibold text-black shadow-glow-gold-resting transition-all hover:shadow-glow-gold-hover"><X size={15} strokeWidth={2.5} /> Close <span className="font-mono tabular-nums">${livePrice || '—'}</span></button>
+                  </div>
+                )}
               </div>
-            )}
-            <span className="ml-auto text-[11px] text-zinc-600">💡 Right-click the chart for LIMIT / STOP orders</span>
-          </div>
-          {tradeError && <p className="mt-1 text-xs text-rose-400">{tradeError}</p>}
+              <div className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-white/5 pt-2 text-[11px] text-zinc-500">
+                <span>💡</span><span>Right-click the chart for <span className="text-zinc-400">LIMIT</span> / <span className="text-zinc-400">STOP</span> orders</span>
+              </div>
+              {tradeError && <p className="mt-1.5 text-center text-xs text-rose-400">{tradeError}</p>}
+            </div>
           </div>
         </div>
       </div>
