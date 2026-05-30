@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft, Star } from 'lucide-react';
 
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
@@ -279,22 +279,90 @@ function normalizeSymbolAuto(raw: string): string {
   return t;
 }
 
-const INTERVALS: Interval[] = ['1m', '5m', '15m', '60m', '1d'];
+// ─── Interval selector config ──────────────────────────────────
+// All intervals that chart-bars/Yahoo supports, grouped for the dropdown.
+// '60m' is the canonical hour value in this codebase (toYahooInterval maps it
+// to '1h' before hitting Yahoo); '1h' is also in the Interval type but we use
+// '60m' here to match the existing state default and persistence format.
+interface IntervalOption {
+  value: Interval;
+  label: string;
+}
+const INTERVAL_GROUPS: { heading: string; items: IntervalOption[] }[] = [
+  {
+    heading: 'Minutes',
+    items: [
+      { value: '1m',  label: '1m'  },
+      { value: '2m',  label: '2m'  },
+      { value: '5m',  label: '5m'  },
+      { value: '15m', label: '15m' },
+      { value: '30m', label: '30m' },
+    ],
+  },
+  {
+    heading: 'Hours',
+    items: [
+      { value: '60m', label: '1h' },
+      { value: '4h',  label: '4h' },
+    ],
+  },
+  {
+    heading: 'Days',
+    items: [
+      { value: '1d',  label: '1D'  },
+      { value: '1wk', label: '1W'  },
+    ],
+  },
+];
+
+const DEFAULT_FAVORITES: Interval[] = ['1m', '5m', '15m', '60m', '4h', '1d'];
+const LS_FAVORITES_KEY = 'finotaur.backtest.intervalFavorites';
+
+function loadFavorites(): Interval[] {
+  try {
+    const raw = localStorage.getItem(LS_FAVORITES_KEY);
+    if (!raw) return DEFAULT_FAVORITES;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as Interval[];
+  } catch {
+    // ignore parse errors
+  }
+  return DEFAULT_FAVORITES;
+}
+
+function saveFavorites(favs: Interval[]): void {
+  try {
+    localStorage.setItem(LS_FAVORITES_KEY, JSON.stringify(favs));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+// Display label for an interval value (e.g. '60m' → '1h', '1wk' → '1W').
+function intervalLabel(iv: Interval): string {
+  for (const group of INTERVAL_GROUPS) {
+    const opt = group.items.find((o) => o.value === iv);
+    if (opt) return opt.label;
+  }
+  return iv;
+}
 
 // Lookback windows tuned to Yahoo's per-barInterval limits (1m → 7d, 5m → 60d,
 // 1d → unlimited). Crypto from Binance has no equivalent ceiling but we keep
 // the same windows for UX consistency.
 function lookbackSeconds(barInterval: Interval): number {
   switch (barInterval) {
-    case '1m': return 7 * 24 * 60 * 60;       // 7 days
-    case '5m': return 30 * 24 * 60 * 60;      // 30 days
-    case '15m': return 60 * 24 * 60 * 60;     // 60 days
+    case '1m': return 7 * 24 * 60 * 60;        // 7 days
+    case '2m': return 14 * 24 * 60 * 60;        // 14 days
+    case '5m': return 30 * 24 * 60 * 60;        // 30 days
+    case '15m': return 60 * 24 * 60 * 60;       // 60 days
+    case '30m': return 90 * 24 * 60 * 60;       // 90 days
     case '60m':
     case '1h':
-    case '4h': return 180 * 24 * 60 * 60;     // 180 days
+    case '4h': return 180 * 24 * 60 * 60;       // 180 days
     case '1d':
     case '1wk':
-    case '1mo': return 5 * 365 * 24 * 60 * 60; // 5 years
+    case '1mo': return 5 * 365 * 24 * 60 * 60;  // 5 years
     default: return 30 * 24 * 60 * 60;
   }
 }
@@ -321,6 +389,143 @@ function positionToMarkers(p: PaperPosition): ChartMarker[] {
   return [entryMarker];
 }
 
+
+// ─── IntervalSelector — TradingView-style favorites row + categorized dropdown ─
+// Favorites row shows starred intervals as small buttons (selected one gold).
+// Chevron button at the end opens a dropdown grouped by Minutes / Hours / Days.
+// Each row in the dropdown: click label → select; click star → toggle favorite.
+// Favorites persist in localStorage under LS_FAVORITES_KEY.
+function IntervalSelector({
+  value,
+  onChange,
+}: {
+  value: Interval;
+  onChange: (iv: Interval) => void;
+}) {
+  const [favorites, setFavorites] = useState<Interval[]>(loadFavorites);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close dropdown on outside click or Escape (mirrors SymbolAutocomplete pattern).
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const toggleFavorite = (iv: Interval, e: { stopPropagation(): void }) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = prev.includes(iv)
+        ? prev.filter((f) => f !== iv)
+        : [...prev, iv];
+      saveFavorites(next);
+      return next;
+    });
+  };
+
+  const selectInterval = (iv: Interval) => {
+    onChange(iv);
+    setOpen(false);
+  };
+
+  // Preserve the order from INTERVAL_GROUPS for display.
+  const allOrderedIntervals = INTERVAL_GROUPS.flatMap((g) => g.items.map((i) => i.value));
+  const favoritesOrdered = allOrderedIntervals.filter((iv) => favorites.includes(iv));
+
+  return (
+    <div className="relative flex items-center" ref={containerRef}>
+      {/* Favorites row + chevron — unified rounded container */}
+      <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
+        {favoritesOrdered.map((iv) => (
+          <button
+            key={iv}
+            type="button"
+            onClick={() => selectInterval(iv)}
+            className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              value === iv
+                ? 'bg-[#C9A646] text-black'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            {intervalLabel(iv)}
+          </button>
+        ))}
+        {/* Chevron toggle button */}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="More intervals"
+          className={`flex items-center justify-center px-2 py-1.5 text-zinc-400 transition-colors hover:text-zinc-200 ${
+            open ? 'text-[#C9A646]' : ''
+          }`}
+        >
+          <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {/* Dropdown panel — styled to match Run Strategy / ActiveStrategy dropdowns */}
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 min-w-[160px] rounded-md border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
+          {INTERVAL_GROUPS.map((group) => (
+            <div key={group.heading} className="mb-1 last:mb-0">
+              <div className="mb-1 px-2 text-[10px] uppercase tracking-wider text-zinc-500">
+                {group.heading}
+              </div>
+              {group.items.map(({ value: iv, label }) => {
+                const isSelected = value === iv;
+                const isFav = favorites.includes(iv);
+                return (
+                  <div
+                    key={iv}
+                    className={`flex items-center justify-between rounded px-2 py-1 ${
+                      isSelected ? 'bg-[#C9A646]/10' : 'hover:bg-zinc-900'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => selectInterval(iv)}
+                      className={`flex-1 text-left text-sm font-medium ${
+                        isSelected ? 'text-[#C9A646]' : 'text-zinc-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => toggleFavorite(iv, e)}
+                      aria-label={isFav ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+                      className="ml-2 flex-shrink-0 p-0.5"
+                    >
+                      <Star
+                        size={12}
+                        className={
+                          isFav
+                            ? 'fill-[#C9A646] text-[#C9A646]'
+                            : 'fill-none text-zinc-600 hover:text-zinc-400'
+                        }
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── SymbolAutocomplete — type-ahead ticker picker (replaces native <select>) ─
 // Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
@@ -902,22 +1107,8 @@ export function BacktestChart({
           onSelect={(next) => { setSymbol(next); setLivePrice(''); }}
         />
 
-        {/* Interval picker */}
-        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
-          {INTERVALS.map((iv) => (
-            <button
-              key={iv}
-              onClick={() => setBarInterval(iv)}
-              className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                barInterval === iv
-                  ? 'bg-[#C9A646] text-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {iv}
-            </button>
-          ))}
-        </div>
+        {/* Interval picker — TradingView-style favorites row + categorized dropdown */}
+        <IntervalSelector value={barInterval} onChange={setBarInterval} />
 
         {/* Date picker */}
         <DateTimePicker
