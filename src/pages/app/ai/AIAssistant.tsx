@@ -13,6 +13,8 @@ import { Plus, Sparkles } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 export default function AIAssistant() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -76,6 +78,7 @@ export default function AIAssistant() {
   };
 
   return (
+    <ErrorBoundary boundary="ai-assistant" fallback={<AiToolErrorFallback />}>
     <div className="relative flex h-[calc(100vh-4rem)] overflow-hidden bg-surface-base">
       {/* Main Chat Area */}
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
@@ -126,5 +129,6 @@ export default function AIAssistant() {
         />
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
