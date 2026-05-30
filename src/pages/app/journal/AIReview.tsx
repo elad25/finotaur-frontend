@@ -6,6 +6,7 @@ import { Message } from "@/hooks/useAICopilot";
 import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import { getStrategyName } from "@/utils/storage";
+import { calculatePnL, Trade as CanonicalTrade } from "@/utils/tradeCalculations";
 
 // Types remain the same...
 interface Trade {
@@ -176,14 +177,6 @@ export default function JournalAIReviewEnhanced() {
     }
   }
 
-  function calculatePnL(trade: Trade): number {
-    if (!trade.exit_price) return 0;
-    const priceDiff = trade.side === "LONG"
-      ? trade.exit_price - trade.entry_price
-      : trade.entry_price - trade.exit_price;
-    return priceDiff * trade.quantity - trade.fees;
-  }
-
   function getFilteredTrades(): Trade[] {
     const now = new Date();
     let startDate = new Date();
@@ -228,7 +221,7 @@ export default function JournalAIReviewEnhanced() {
     let maxWinStreak = 0, maxLossStreak = 0;
 
     closedTrades.forEach(trade => {
-      const pnl = trade.pnl ?? calculatePnL(trade);
+      const pnl = trade.pnl ?? calculatePnL(trade as unknown as CanonicalTrade);
       totalPnL += pnl;
       runningPnL += pnl;
 
@@ -356,7 +349,7 @@ export default function JournalAIReviewEnhanced() {
       const hour = new Date(trade.open_at).getHours();
       const key = `${hour}:00`;
       if (!hourlyPerf[key]) hourlyPerf[key] = {wins: 0, losses: 0, pnl: 0};
-      const pnl = trade.pnl ?? calculatePnL(trade);
+      const pnl = trade.pnl ?? calculatePnL(trade as unknown as CanonicalTrade);
       hourlyPerf[key].pnl += pnl;
       if (pnl > 0) hourlyPerf[key].wins++;
       else if (pnl < 0) hourlyPerf[key].losses++;

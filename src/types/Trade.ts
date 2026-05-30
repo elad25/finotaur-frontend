@@ -39,6 +39,20 @@ export interface Trade {
   metrics?: TradeMetrics;
   created_at?: string;
   updated_at?: string;
+  // Asset-class extension fields (all optional — existing call sites unaffected)
+  option_type?: "CALL" | "PUT";
+  strike_price?: number;
+  expiration_date?: string;
+  leverage?: number;           // Does NOT affect realized P&L — margin/risk sizing only
+  position_type?: string;
+  liquidation_price?: number;
+  funding_paid?: number;       // Crypto perpetual swap carry cost; subtracted in P&L calc
+  base_currency?: string;
+  quote_currency?: string;
+  account_currency?: string;
+  quote_rate?: number;         // Forex: quote-currency-to-account-currency rate
+  pip_size?: number;
+  lot_size?: number;           // Forex: units per lot (e.g. 100000 for standard lot)
 }
 
 export interface Strategy {
