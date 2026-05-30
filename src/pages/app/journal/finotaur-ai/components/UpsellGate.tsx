@@ -3,44 +3,225 @@
 // One gold CTA max (upgrade). No green. Sentence case CTAs.
 
 import * as React from 'react';
-import { Card, Eyebrow } from '@/components/ds/Card';
+import {
+  Sparkles,
+  Crown,
+  ArrowRight,
+  Gauge,
+  BarChart3,
+  Brain,
+  Pencil,
+  FileText,
+  Users,
+  Shield,
+  ShieldCheck,
+  Star,
+} from 'lucide-react';
+import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+interface FeatureRowProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+function FeatureRow({ icon, title, description }: FeatureRowProps) {
+  return (
+    <div className="flex items-start gap-ds-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gold-border bg-surface-1">
+        {icon}
+      </div>
+      <div>
+        <p className="text-body font-semibold text-ink-primary">{title}</p>
+        <p className="text-small leading-snug text-ink-secondary">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+interface TrustItemProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+function TrustItem({ children, className = '' }: TrustItemProps) {
+  return (
+    <div className={`flex items-center gap-ds-3 sm:px-ds-4 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
 
 export function UpsellGate() {
   return (
-    <Card variant="featured" padding="spacious" className="max-w-2xl">
-      <Eyebrow>AI COACH</Eyebrow>
+    <div className="flex flex-col gap-ds-6">
+      {/* (A) TWO-COLUMN GRID */}
+      <div className="grid grid-cols-1 gap-ds-6 lg:grid-cols-[1.15fr_1fr] lg:items-start">
 
-      <h2 className="mt-ds-3 font-sans text-h2 font-medium text-ink-primary">
-        Your AI Trading Coach
-      </h2>
+        {/* LEFT: Hero copy + CTA */}
+        <Card variant="featured" padding="spacious">
+          {/* Pill badge */}
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-gold-border bg-surface-1 px-3 py-1">
+            <Sparkles className="h-3.5 w-3.5 text-gold-primary" />
+            <span className="text-small uppercase tracking-wide text-ink-secondary">
+              AI COACH
+            </span>
+          </div>
 
-      <div className="mt-ds-3 flex flex-col gap-ds-2">
-        <p className="font-sans text-body text-ink-secondary">
-          Premium members get a personalized FINOTAUR Score — a single number that
-          distills your win rate, risk management, consistency, and recovery into one
-          performance benchmark that improves every session.
-        </p>
-        <p className="font-sans text-body text-ink-secondary">
-          Your AI coach reviews every trade, spots recurring patterns, and delivers
-          daily briefings with ranked insights — telling you what to work on first,
-          not just what happened. It can propose trade edits, add missing context, and
-          update your journal with your confirmation.
-        </p>
-        <p className="font-sans text-body text-ink-secondary">
-          No guesswork. No noise. A coach that learns your edge and holds you to it.
-        </p>
+          {/* Title */}
+          <h2 className="mt-ds-4 text-[40px] font-semibold leading-tight text-ink-primary">
+            Your <span className="text-gold-primary">AI</span> Trading Coach
+          </h2>
+          <div className="mt-ds-2 h-[3px] w-12 rounded-full bg-gold-primary" />
+
+          {/* Body copy */}
+          <p className="mt-ds-4 text-body leading-relaxed text-ink-secondary">
+            Premium members get a personalized{' '}
+            <span className="font-medium text-gold-primary">FINOTAUR Score</span>
+            {' '}— a single number that distills your win rate, risk management,
+            consistency, and recovery into one performance benchmark that improves
+            every session.
+          </p>
+
+          <p className="mt-ds-3 text-body leading-relaxed text-ink-secondary">
+            Your AI Coach reviews every trade, spots recurring patterns, and delivers
+            daily briefings with{' '}
+            <span className="font-semibold text-ink-primary">ranked insights</span>
+            {' '}— telling you what to work on first, not just what happened. It can
+            propose trade edits, add missing context, and update your journal with
+            your confirmation.
+          </p>
+
+          {/* Tagline */}
+          <div className="mt-ds-4">
+            <p className="text-body font-semibold text-gold-primary">
+              No guesswork. No noise.
+            </p>
+            <p className="text-body text-ink-secondary">
+              A coach that learns your edge and holds you to it.
+            </p>
+          </div>
+
+          {/* CTA row */}
+          <div className="mt-ds-6 flex flex-wrap items-center gap-ds-5">
+            {/* Gold CTA — asChild suppresses Button's built-in arrow; Crown + ArrowRight added manually */}
+            <Button variant="gold" size="default" asChild>
+              <a href="/pricing" className="inline-flex items-center gap-2">
+                <Crown className="h-4 w-4" />
+                Upgrade to Premium
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </Button>
+
+            {/* Guarantee */}
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-gold-primary" />
+              <div>
+                <p className="text-small font-semibold uppercase tracking-wide text-gold-primary">
+                  14-Day Money Back Guarantee
+                </p>
+                <p className="text-small text-ink-tertiary">
+                  Cancel anytime. No questions asked.
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* RIGHT: Bull image + feature list */}
+        <div className="flex flex-col gap-ds-5">
+          {/* Bull image — mix-blend-screen drops the PNG's black backdrop so only the
+              glowing gold bull shows, blending seamlessly onto the dark page. */}
+          <img
+            src="/bull-ai-coach.png"
+            alt="FINOTAUR AI bull"
+            className="mx-auto w-full max-w-[420px] object-contain mix-blend-screen lg:ml-auto lg:mr-0"
+          />
+
+          {/* Feature list */}
+          <div className="flex flex-col gap-ds-4">
+            <FeatureRow
+              icon={<Gauge className="h-5 w-5 text-gold-primary" />}
+              title="Personalized FINOTAUR Score"
+              description="Track your edge with one clear number that improves as you do."
+            />
+            <FeatureRow
+              icon={<BarChart3 className="h-5 w-5 text-gold-primary" />}
+              title="Daily AI Briefings"
+              description="Get focused insights every day on what matters most for your performance."
+            />
+            <FeatureRow
+              icon={<Brain className="h-5 w-5 text-gold-primary" />}
+              title="Pattern Recognition"
+              description="AI spots your recurring strengths and leaks across all markets and timeframes."
+            />
+            <FeatureRow
+              icon={<Pencil className="h-5 w-5 text-gold-primary" />}
+              title="Smart Trade Suggestions"
+              description="Proposed edits and missing context to elevate your decision-making."
+            />
+            <FeatureRow
+              icon={<FileText className="h-5 w-5 text-gold-primary" />}
+              title="AI-Powered Journal"
+              description="Your journal, automatically enriched and kept up to date by your AI Coach."
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="mt-ds-6">
-        <Button variant="gold" size="default" asChild>
-          <a href="/pricing">Upgrade to Premium</a>
-        </Button>
-      </div>
+      {/* (B) TRUST BAR */}
+      <Card variant="default" padding="default">
+        <div className="grid grid-cols-1 gap-ds-5 sm:grid-cols-3 sm:divide-x sm:divide-white/10">
+          <TrustItem>
+            <Users className="h-6 w-6 shrink-0 text-gold-primary" />
+            <div>
+              <p className="text-body font-semibold text-gold-primary">
+                Trusted by serious traders
+              </p>
+              <p className="text-small text-ink-secondary">
+                Join thousands of premium members improving their edge every day.
+              </p>
+            </div>
+          </TrustItem>
 
-      <p className="mt-ds-3 font-sans text-small text-ink-tertiary">
-        Cancel anytime. 14-day money back guarantee.
-      </p>
-    </Card>
+          <TrustItem className="justify-center text-center">
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center gap-1">
+                <span className="text-h2 font-semibold text-ink-primary">4.9</span>
+                <div className="flex items-center gap-0.5">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <Star key={i} className="h-4 w-4 fill-gold-primary text-gold-primary" />
+                  ))}
+                </div>
+              </div>
+              <p className="text-small text-ink-secondary">
+                Average rating by premium members
+              </p>
+            </div>
+          </TrustItem>
+
+          <TrustItem>
+            <Shield className="h-6 w-6 shrink-0 text-gold-primary" />
+            <div>
+              <p className="text-body font-semibold text-gold-primary">
+                Your data is secure
+              </p>
+              <p className="text-small text-ink-secondary">
+                End-to-end encryption. We never share your data.
+              </p>
+            </div>
+          </TrustItem>
+        </div>
+      </Card>
+    </div>
   );
 }
