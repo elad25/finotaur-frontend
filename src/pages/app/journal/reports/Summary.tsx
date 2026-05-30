@@ -5,10 +5,11 @@
  * computeReportMetrics() + computeGroupStats(), plus an Export PDF button stub.
  *
  * Sections:
- *  1. Performance      — trade-level P&L and win stats
- *  2. Daily            — day-level aggregates and drawdown
- *  3. Risk / R         — R-multiple metrics
- *  4. Streaks & Extremes — largest wins/losses per trade and per day
+ *  1. Performance        — trade-level P&L, win stats, counts, ratios, hold times
+ *  2. Daily              — day-level aggregates, streaks, drawdown, month stats
+ *  3. Risk / R           — R-multiple metrics
+ *  4. Streaks & Extremes — trade/day streaks, largest win/loss per trade and per day
+ *  5. Costs              — fees, commissions, swap
  *
  * NOTE: <ReportsTabsNav> is mounted ABOVE this component by the route parent.
  */
@@ -46,6 +47,19 @@ function fmtPercent(v: number, decimals = 1): string {
 function fmtR(v: number | null): string {
   if (v === null) return '—';
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}R`;
+}
+
+function fmtInt(v: number): string {
+  return String(Math.round(v));
+}
+
+function fmtCurrency(v: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(v);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +177,7 @@ export default function JournalReportsSummary() {
   }
 
   // ---------------------------------------------------------------------------
-  // Render
+  // Destructure
   // ---------------------------------------------------------------------------
 
   const {
@@ -171,12 +185,34 @@ export default function JournalReportsSummary() {
     avgTradeWinLoss, avgNetTradePnl, avgHoldTimeMs,
     avgPlannedR, avgRealizedR,
     largestProfitableDay, largestLosingDay,
+    // new trade-level counts
+    winningTrades, losingTrades, breakevenTrades, openTrades,
+    // new streaks
+    maxConsecutiveWins, maxConsecutiveLosses,
+    // new trade extremes
+    largestProfit, largestLoss,
+    // new fees
+    totalFees, totalCommissions, totalSwap,
+    // new hold-time split
+    avgHoldWinningMs, avgHoldLosingMs, avgHoldScratchMs,
+    // daily-level
     loggedDays, avgDailyNetPnl, avgDailyWinPct, avgDailyWinLoss,
     avgDailyVolume,
     maxDailyNetDrawdown, avgDailyNetDrawdown,
+    // new day-level counts
+    totalTradingDays, winningDays, losingDays, breakevenDays,
+    // new day streaks
+    maxConsecutiveWinningDays, maxConsecutiveLosingDays,
+    // new day averages
+    avgWinningDayPnl, avgLosingDayPnl,
+    // drawdown aliases
+    maxDrawdown, avgDrawdown,
+    // month stats
+    bestMonthPnl, lowestMonthPnl, avgMonthlyPnl,
+    bestMonthLabel, lowestMonthLabel,
   } = metrics;
 
-  const { avgWin, avgLoss, largestWin, largestLoss, avgR } = gs;
+  const { avgWin, avgLoss, largestWin, largestLoss: gsLargestLoss, avgR } = gs;
 
   // avgLoss from groupStats is already negative
   const avgLossDisplay = avgLoss;
@@ -216,7 +252,23 @@ export default function JournalReportsSummary() {
             />
             <MetricRow
               label="Trade Count"
-              value={<span className="text-ink-primary">{tradeCount}</span>}
+              value={<span className="text-ink-primary">{fmtInt(tradeCount)}</span>}
+            />
+            <MetricRow
+              label="Winning Trades"
+              value={<span className="text-[#4AD295]">{fmtInt(winningTrades)}</span>}
+            />
+            <MetricRow
+              label="Losing Trades"
+              value={<span className="text-num-negative">{fmtInt(losingTrades)}</span>}
+            />
+            <MetricRow
+              label="Breakeven Trades"
+              value={<span className="text-ink-secondary">{fmtInt(breakevenTrades)}</span>}
+            />
+            <MetricRow
+              label="Open Trades"
+              value={<span className="text-ink-secondary">{fmtInt(openTrades)}</span>}
             />
             <MetricRow
               label="Win Rate"
@@ -263,21 +315,57 @@ export default function JournalReportsSummary() {
               value={<Change value={avgLossDisplay} format="currency" decimals={2} showSign={false} />}
             />
             <MetricRow
-              label="Avg Hold Time"
+              label="Avg Hold Time (All)"
               note="closed trades"
               value={<span className="text-ink-primary">{fmtHoldTime(avgHoldTimeMs)}</span>}
+            />
+            <MetricRow
+              label="Avg Hold Time (Wins)"
+              value={<span className="text-ink-primary">{fmtHoldTime(avgHoldWinningMs)}</span>}
+            />
+            <MetricRow
+              label="Avg Hold Time (Losses)"
+              value={<span className="text-ink-primary">{fmtHoldTime(avgHoldLosingMs)}</span>}
+            />
+            <MetricRow
+              label="Avg Hold Time (Scratch)"
+              value={<span className="text-ink-primary">{fmtHoldTime(avgHoldScratchMs)}</span>}
             />
 
             {/* ── 2. Daily ── */}
             <SectionHeader>Daily</SectionHeader>
 
             <MetricRow
+              label="Total Trading Days"
+              value={<span className="text-ink-primary">{fmtInt(totalTradingDays)}</span>}
+            />
+            <MetricRow
               label="Logged Days"
-              value={<span className="text-ink-primary">{loggedDays}</span>}
+              value={<span className="text-ink-primary">{fmtInt(loggedDays)}</span>}
+            />
+            <MetricRow
+              label="Winning Days"
+              value={<span className="text-[#4AD295]">{fmtInt(winningDays)}</span>}
+            />
+            <MetricRow
+              label="Losing Days"
+              value={<span className="text-num-negative">{fmtInt(losingDays)}</span>}
+            />
+            <MetricRow
+              label="Breakeven Days"
+              value={<span className="text-ink-secondary">{fmtInt(breakevenDays)}</span>}
             />
             <MetricRow
               label="Avg Daily Net P&L"
               value={<Change value={avgDailyNetPnl} format="currency" decimals={2} showSign />}
+            />
+            <MetricRow
+              label="Avg Winning Day P&L"
+              value={<span className="text-[#4AD295]"><Price value={avgWinningDayPnl} format="currency" /></span>}
+            />
+            <MetricRow
+              label="Avg Losing Day P&L"
+              value={<Change value={avgLosingDayPnl} format="currency" decimals={2} showSign />}
             />
             <MetricRow
               label="Avg Daily Win %"
@@ -303,6 +391,16 @@ export default function JournalReportsSummary() {
               value={<span className="text-ink-primary">{avgDailyVolume.toFixed(1)}</span>}
             />
             <MetricRow
+              label="Max Drawdown"
+              note="alias for max daily net drawdown"
+              value={<Change value={maxDrawdown} format="currency" decimals={2} showSign />}
+            />
+            <MetricRow
+              label="Avg Drawdown"
+              note="alias for avg daily net drawdown"
+              value={<Change value={avgDrawdown} format="currency" decimals={2} showSign />}
+            />
+            <MetricRow
               label="Max Daily Net Drawdown"
               note="deepest from peak"
               value={<Change value={maxDailyNetDrawdown} format="currency" decimals={2} showSign />}
@@ -311,6 +409,22 @@ export default function JournalReportsSummary() {
               label="Avg Daily Net Drawdown"
               note="mean across all days"
               value={<Change value={avgDailyNetDrawdown} format="currency" decimals={2} showSign />}
+            />
+
+            {/* Month stats */}
+            <MetricRow
+              label="Best Month P&L"
+              note={bestMonthLabel || undefined}
+              value={<span className="text-[#4AD295]"><Price value={bestMonthPnl} format="currency" /></span>}
+            />
+            <MetricRow
+              label="Lowest Month P&L"
+              note={lowestMonthLabel || undefined}
+              value={<Change value={lowestMonthPnl} format="currency" decimals={2} showSign />}
+            />
+            <MetricRow
+              label="Avg Monthly P&L"
+              value={<Change value={avgMonthlyPnl} format="currency" decimals={2} showSign />}
             />
 
             {/* ── 3. Risk / R ── */}
@@ -343,12 +457,38 @@ export default function JournalReportsSummary() {
             <SectionHeader>Streaks &amp; Extremes</SectionHeader>
 
             <MetricRow
+              label="Max Consecutive Wins"
+              value={<span className="text-[#4AD295]">{fmtInt(maxConsecutiveWins)}</span>}
+            />
+            <MetricRow
+              label="Max Consecutive Losses"
+              value={<span className="text-num-negative">{fmtInt(maxConsecutiveLosses)}</span>}
+            />
+            <MetricRow
+              label="Max Consecutive Winning Days"
+              value={<span className="text-[#4AD295]">{fmtInt(maxConsecutiveWinningDays)}</span>}
+            />
+            <MetricRow
+              label="Max Consecutive Losing Days"
+              value={<span className="text-num-negative">{fmtInt(maxConsecutiveLosingDays)}</span>}
+            />
+            <MetricRow
+              label="Largest Profit (trade)"
+              value={<span className="text-[#4AD295]"><Price value={largestProfit} format="currency" /></span>}
+            />
+            <MetricRow
+              label="Largest Loss (trade)"
+              value={<Change value={largestLoss} format="currency" decimals={2} showSign={false} />}
+            />
+            <MetricRow
               label="Largest Winning Trade"
+              note="groupStats"
               value={<Price value={largestWin} format="currency" />}
             />
             <MetricRow
               label="Largest Losing Trade"
-              value={<Change value={largestLoss} format="currency" decimals={2} showSign={false} />}
+              note="groupStats"
+              value={<Change value={gsLargestLoss} format="currency" decimals={2} showSign={false} />}
             />
             <MetricRow
               label="Largest Profitable Day"
@@ -357,6 +497,25 @@ export default function JournalReportsSummary() {
             <MetricRow
               label="Largest Losing Day"
               value={<Change value={largestLosingDay} format="currency" decimals={2} showSign={false} />}
+            />
+
+            {/* ── 5. Costs ── */}
+            <SectionHeader>Costs</SectionHeader>
+
+            <MetricRow
+              label="Total Fees"
+              note="sum of trade.fees"
+              value={<Change value={-totalFees} format="currency" decimals={2} showSign={false} />}
+            />
+            <MetricRow
+              label="Total Commissions"
+              note="no commission field in Trade — placeholder"
+              value={<span className="text-ink-tertiary">{fmtCurrency(totalCommissions)}</span>}
+            />
+            <MetricRow
+              label="Total Swap"
+              note="no swap field in Trade — placeholder"
+              value={<span className="text-ink-tertiary">{fmtCurrency(totalSwap)}</span>}
             />
 
           </tbody>

@@ -1,11 +1,12 @@
 /**
  * JournalReportsOverview — Tradezella-parity overview tab.
  *
- * Renders the full KPI grid + two cumulative charts.
- * Charts: recharts (same as Analytics.tsx / EquityChart.tsx in this repo).
+ * Layout:
+ *  1. "Your Stats" section — best/lowest/avg month cards at top
+ *  2. Two-column stats table (Trades column | Days column) with ALL metrics
+ *  3. Two cumulative charts below
  *
  * NOTE: <ReportsTabsNav> is mounted ABOVE this component by the route parent.
- * This component owns only its own heading + content.
  */
 
 import React, { useMemo } from 'react';
@@ -63,27 +64,73 @@ function fmtCurrency(v: number): string {
   }).format(v);
 }
 
-// ---------------------------------------------------------------------------
-// KPI tile
-// ---------------------------------------------------------------------------
-
-interface KpiTileProps {
-  label: string;
-  children: React.ReactNode;
-  sub?: string;
+function fmtInt(v: number): string {
+  return String(Math.round(v));
 }
 
-function KpiTile({ label, children, sub }: KpiTileProps) {
+// ---------------------------------------------------------------------------
+// Month summary card (Best / Lowest / Average)
+// ---------------------------------------------------------------------------
+
+interface MonthCardProps {
+  label: string;
+  sublabel: string;
+  pnl: number;
+  /** When true, color is gold; when false, uses standard change coloring */
+  neutral?: boolean;
+}
+
+function MonthCard({ label, sublabel, pnl, neutral }: MonthCardProps) {
   return (
     <Card padding="compact" className="flex flex-col gap-1 min-w-0">
-      <span className="text-[11px] font-medium tracking-[0.8px] uppercase text-ink-tertiary truncate">
+      <span className="text-[11px] font-medium tracking-[0.8px] uppercase text-ink-tertiary">
         {label}
       </span>
-      <div className="text-xl font-semibold tabular-nums leading-tight">{children}</div>
-      {sub && (
-        <span className="text-[11px] text-ink-tertiary truncate">{sub}</span>
+      <div className="text-lg font-semibold tabular-nums leading-tight">
+        {neutral
+          ? <span className="text-gold-primary"><Change value={pnl} format="currency" decimals={2} showSign /></span>
+          : <Change value={pnl} format="currency" decimals={2} showSign />
+        }
+      </div>
+      {sublabel && (
+        <span className="text-[11px] text-ink-tertiary truncate">{sublabel}</span>
       )}
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stats row — used inside the two-column table
+// ---------------------------------------------------------------------------
+
+interface StatRowProps {
+  label: string;
+  value: React.ReactNode;
+}
+
+function StatRow({ label, value }: StatRowProps) {
+  return (
+    <tr className="border-b border-border-ds-subtle last:border-b-0">
+      <td className="py-2 pr-3 text-[12px] text-ink-secondary leading-snug w-[58%]">{label}</td>
+      <td className="py-2 text-right text-[12px] font-medium tabular-nums leading-snug">{value}</td>
+    </tr>
+  );
+}
+
+interface SectionLabelProps {
+  children: React.ReactNode;
+}
+
+function SectionLabel({ children }: SectionLabelProps) {
+  return (
+    <tr>
+      <td
+        colSpan={2}
+        className="pt-4 pb-1 text-[10px] font-semibold tracking-[1.2px] uppercase text-gold-primary border-b border-gold-border/40"
+      >
+        {children}
+      </td>
+    </tr>
   );
 }
 
@@ -141,8 +188,12 @@ export default function JournalReportsOverview() {
           <div className="h-7 w-40 rounded bg-white/10 animate-pulse" />
           <div className="h-4 w-64 rounded bg-white/10 animate-pulse mt-2" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 18 }).map((_, i) => <SkeletonTile key={i} />)}
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => <SkeletonTile key={i} />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="rounded-[12px] bg-surface-1 border-[0.5px] border-border-ds-subtle p-4 h-64 animate-pulse" />
+          <div className="rounded-[12px] bg-surface-1 border-[0.5px] border-border-ds-subtle p-4 h-64 animate-pulse" />
         </div>
       </div>
     );
@@ -168,7 +219,7 @@ export default function JournalReportsOverview() {
   }
 
   // ---------------------------------------------------------------------------
-  // Render
+  // Destructure all metrics
   // ---------------------------------------------------------------------------
 
   const {
@@ -176,14 +227,38 @@ export default function JournalReportsOverview() {
     avgTradeWinLoss, avgNetTradePnl, avgHoldTimeMs,
     avgPlannedR, avgRealizedR,
     largestProfitableDay, largestLosingDay,
-    loggedDays, avgDailyNetPnl, avgDailyWinPct, avgDailyWinLoss,
+    // new trade-level counts
+    winningTrades, losingTrades, breakevenTrades, openTrades,
+    // new streaks
+    maxConsecutiveWins, maxConsecutiveLosses,
+    // new trade extremes
+    largestProfit, largestLoss,
+    // new fees
+    totalFees, totalCommissions, totalSwap,
+    // new hold-time split
+    avgHoldWinningMs, avgHoldLosingMs, avgHoldScratchMs,
+    // daily-level
+    loggedDays, avgDailyNetPnl, avgDailyWinPct,
     avgDailyVolume,
     maxDailyNetDrawdown, avgDailyNetDrawdown,
+    // new day-level counts
+    totalTradingDays, winningDays, losingDays, breakevenDays,
+    // new day streaks
+    maxConsecutiveWinningDays, maxConsecutiveLosingDays,
+    // new day averages
+    avgWinningDayPnl, avgLosingDayPnl,
+    // drawdown aliases
+    maxDrawdown, avgDrawdown,
+    // month stats
+    bestMonthPnl, lowestMonthPnl, avgMonthlyPnl,
+    bestMonthLabel, lowestMonthLabel,
+    // chart series
     cumulativePnl, cumulativeAvgDailyWinLoss,
   } = metrics;
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-8">
+
       {/* Heading */}
       <div>
         <h2 className="text-2xl font-semibold text-yellow-100">Overview</h2>
@@ -192,117 +267,236 @@ export default function JournalReportsOverview() {
         </p>
       </div>
 
-      {/* ── KPI Grid ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {/* ── YOUR STATS ── */}
+      <section>
+        <h3 className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-3">
+          Your Stats
+        </h3>
 
-        {/* Net P&L */}
-        <KpiTile label="Net P&L">
-          <Change value={netPnl} format="currency" decimals={2} showSign={false} />
-        </KpiTile>
+        {/* Month summary row */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <MonthCard
+            label="Best Month"
+            sublabel={bestMonthLabel || '—'}
+            pnl={bestMonthPnl}
+          />
+          <MonthCard
+            label="Lowest Month"
+            sublabel={lowestMonthLabel || '—'}
+            pnl={lowestMonthPnl}
+          />
+          <MonthCard
+            label="Average Month"
+            sublabel="Mean monthly P&L"
+            pnl={avgMonthlyPnl}
+            neutral
+          />
+        </div>
 
-        {/* Win % */}
-        <KpiTile label="Win %" sub={`${tradeCount} trades`}>
-          <span className={winRatePct >= 50 ? 'text-[#4AD295]' : 'text-num-negative'}>
-            {fmtPercent(winRatePct)}
-          </span>
-        </KpiTile>
+        {/* Two-column stats table */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Profit Factor */}
-        <KpiTile label="Profit Factor" sub="Gross wins / gross losses">
-          <span className={profitFactor >= 1 ? 'text-[#4AD295]' : 'text-num-negative'}>
-            {fmtRatio(profitFactor === Infinity ? null : profitFactor)}
-            {profitFactor === Infinity ? '∞' : ''}
-          </span>
-        </KpiTile>
+          {/* ── LEFT COLUMN — Trades ── */}
+          <Card padding="default">
+            <p className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-2">
+              Trades
+            </p>
+            <table className="w-full">
+              <tbody>
 
-        {/* Trade Expectancy */}
-        <KpiTile label="Trade Expectancy" sub="Per-trade edge">
-          <Change value={tradeExpectancy} format="currency" decimals={2} showSign />
-        </KpiTile>
+                <SectionLabel>P&amp;L</SectionLabel>
+                <StatRow
+                  label="Net P&L"
+                  value={<Change value={netPnl} format="currency" decimals={2} showSign={false} />}
+                />
+                <StatRow
+                  label="Avg Net Trade P&L"
+                  value={<Change value={avgNetTradePnl} format="currency" decimals={2} showSign />}
+                />
+                <StatRow
+                  label="Trade Expectancy"
+                  value={<Change value={tradeExpectancy} format="currency" decimals={2} showSign />}
+                />
 
-        {/* Trades count */}
-        <KpiTile label="Trades" sub={`${loggedDays} days logged`}>
-          <span className="text-ink-primary">{tradeCount}</span>
-        </KpiTile>
+                <SectionLabel>Counts</SectionLabel>
+                <StatRow label="Total Trades" value={<span className="text-ink-primary">{fmtInt(tradeCount)}</span>} />
+                <StatRow label="Winning Trades" value={<span className="text-[#4AD295]">{fmtInt(winningTrades)}</span>} />
+                <StatRow label="Losing Trades" value={<span className="text-num-negative">{fmtInt(losingTrades)}</span>} />
+                <StatRow label="Breakeven Trades" value={<span className="text-ink-secondary">{fmtInt(breakevenTrades)}</span>} />
+                <StatRow label="Open Trades" value={<span className="text-ink-secondary">{fmtInt(openTrades)}</span>} />
+                <StatRow
+                  label="Win Rate"
+                  value={
+                    <span className={winRatePct >= 50 ? 'text-[#4AD295]' : 'text-num-negative'}>
+                      {fmtPercent(winRatePct)}
+                    </span>
+                  }
+                />
 
-        {/* Avg Daily Net P&L */}
-        <KpiTile label="Avg Daily Net P&L">
-          <Change value={avgDailyNetPnl} format="currency" decimals={2} showSign />
-        </KpiTile>
+                <SectionLabel>Streaks</SectionLabel>
+                <StatRow label="Max Consecutive Wins" value={<span className="text-[#4AD295]">{fmtInt(maxConsecutiveWins)}</span>} />
+                <StatRow label="Max Consecutive Losses" value={<span className="text-num-negative">{fmtInt(maxConsecutiveLosses)}</span>} />
 
-        {/* Avg Daily Win % */}
-        <KpiTile label="Avg Daily Win %" sub="% of green days">
-          <span className={avgDailyWinPct >= 50 ? 'text-[#4AD295]' : 'text-num-negative'}>
-            {fmtPercent(avgDailyWinPct)}
-          </span>
-        </KpiTile>
+                <SectionLabel>Hold Times</SectionLabel>
+                <StatRow label="Avg Hold Time (All)" value={<span className="text-ink-primary">{fmtHoldTime(avgHoldTimeMs)}</span>} />
+                <StatRow label="Avg Hold Time (Wins)" value={<span className="text-ink-primary">{fmtHoldTime(avgHoldWinningMs)}</span>} />
+                <StatRow label="Avg Hold Time (Losses)" value={<span className="text-ink-primary">{fmtHoldTime(avgHoldLosingMs)}</span>} />
+                <StatRow label="Avg Hold Time (Scratch)" value={<span className="text-ink-primary">{fmtHoldTime(avgHoldScratchMs)}</span>} />
 
-        {/* Avg Trade Win/Loss */}
-        <KpiTile label="Avg Trade Win/Loss" sub="Avg win ÷ |avg loss|">
-          <span className={avgTradeWinLoss >= 1 ? 'text-[#4AD295]' : 'text-num-negative'}>
-            {fmtRatio(isFinite(avgTradeWinLoss) ? avgTradeWinLoss : null)}
-            {!isFinite(avgTradeWinLoss) ? '∞' : ''}
-          </span>
-        </KpiTile>
+                <SectionLabel>Ratios &amp; Factors</SectionLabel>
+                <StatRow
+                  label="Profit Factor"
+                  value={
+                    <span className={profitFactor >= 1 ? 'text-[#4AD295]' : 'text-num-negative'}>
+                      {fmtRatio(profitFactor === Infinity ? null : profitFactor)}
+                      {profitFactor === Infinity ? '∞' : ''}
+                    </span>
+                  }
+                />
+                <StatRow
+                  label="Avg Trade Win/Loss"
+                  value={
+                    <span className={avgTradeWinLoss >= 1 ? 'text-[#4AD295]' : 'text-num-negative'}>
+                      {fmtRatio(isFinite(avgTradeWinLoss) ? avgTradeWinLoss : null)}
+                      {!isFinite(avgTradeWinLoss) ? '∞' : ''}
+                    </span>
+                  }
+                />
 
-        {/* Avg Net Trade P&L */}
-        <KpiTile label="Avg Net Trade P&L" sub="Per trade">
-          <Change value={avgNetTradePnl} format="currency" decimals={2} showSign />
-        </KpiTile>
+                <SectionLabel>Largest Trade</SectionLabel>
+                <StatRow
+                  label="Largest Profit"
+                  value={<span className="text-[#4AD295]"><Price value={largestProfit} format="currency" /></span>}
+                />
+                <StatRow
+                  label="Largest Loss"
+                  value={<Change value={largestLoss} format="currency" decimals={2} showSign={false} />}
+                />
 
-        {/* Avg Hold Time */}
-        <KpiTile label="Avg Hold Time" sub="Closed trades only">
-          <span className="text-ink-primary">{fmtHoldTime(avgHoldTimeMs)}</span>
-        </KpiTile>
+                <SectionLabel>Costs</SectionLabel>
+                <StatRow
+                  label="Total Fees"
+                  value={<Change value={-totalFees} format="currency" decimals={2} showSign={false} />}
+                />
+                <StatRow
+                  label="Total Commissions"
+                  value={<span className="text-ink-tertiary">{fmtCurrency(totalCommissions)}</span>}
+                />
+                <StatRow
+                  label="Total Swap"
+                  value={<span className="text-ink-tertiary">{fmtCurrency(totalSwap)}</span>}
+                />
 
-        {/* Avg Daily Volume */}
-        <KpiTile label="Avg Daily Volume" sub="Contracts/shares per day">
-          <span className="text-ink-primary">{avgDailyVolume.toFixed(1)}</span>
-        </KpiTile>
+                <SectionLabel>R-Multiple</SectionLabel>
+                <StatRow label="Avg Planned R" value={<span className="text-ink-primary">{fmtR(avgPlannedR)}</span>} />
+                <StatRow
+                  label="Avg Realized R"
+                  value={
+                    <span className={
+                      avgRealizedR === null ? 'text-ink-tertiary' :
+                      avgRealizedR >= 0 ? 'text-[#4AD295]' : 'text-num-negative'
+                    }>
+                      {fmtR(avgRealizedR)}
+                    </span>
+                  }
+                />
 
-        {/* Logged Days */}
-        <KpiTile label="Logged Days">
-          <span className="text-ink-primary">{loggedDays}</span>
-        </KpiTile>
+              </tbody>
+            </table>
+          </Card>
 
-        {/* Avg Planned R */}
-        <KpiTile label="Avg Planned R" sub="user_risk_r → rr proxy">
-          <span className="text-ink-primary">{fmtR(avgPlannedR)}</span>
-        </KpiTile>
+          {/* ── RIGHT COLUMN — Days ── */}
+          <Card padding="default">
+            <p className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-2">
+              Days
+            </p>
+            <table className="w-full">
+              <tbody>
 
-        {/* Avg Realized R */}
-        <KpiTile label="Avg Realized R" sub="actual_user_r → actual_r">
-          <span className={
-            avgRealizedR === null ? 'text-ink-tertiary' :
-            avgRealizedR >= 0 ? 'text-[#4AD295]' : 'text-num-negative'
-          }>
-            {fmtR(avgRealizedR)}
-          </span>
-        </KpiTile>
+                <SectionLabel>Day Counts</SectionLabel>
+                <StatRow label="Total Trading Days" value={<span className="text-ink-primary">{fmtInt(totalTradingDays)}</span>} />
+                <StatRow label="Logged Days" value={<span className="text-ink-primary">{fmtInt(loggedDays)}</span>} />
+                <StatRow label="Winning Days" value={<span className="text-[#4AD295]">{fmtInt(winningDays)}</span>} />
+                <StatRow label="Losing Days" value={<span className="text-num-negative">{fmtInt(losingDays)}</span>} />
+                <StatRow label="Breakeven Days" value={<span className="text-ink-secondary">{fmtInt(breakevenDays)}</span>} />
+                <StatRow
+                  label="Avg Daily Win %"
+                  value={
+                    <span className={avgDailyWinPct >= 50 ? 'text-[#4AD295]' : 'text-num-negative'}>
+                      {fmtPercent(avgDailyWinPct)}
+                    </span>
+                  }
+                />
 
-        {/* Max Daily Net Drawdown */}
-        <KpiTile label="Max Daily Drawdown" sub="Deepest from peak">
-          <Change value={maxDailyNetDrawdown} format="currency" decimals={2} showSign />
-        </KpiTile>
+                <SectionLabel>Day Streaks</SectionLabel>
+                <StatRow label="Max Consecutive Winning Days" value={<span className="text-[#4AD295]">{fmtInt(maxConsecutiveWinningDays)}</span>} />
+                <StatRow label="Max Consecutive Losing Days" value={<span className="text-num-negative">{fmtInt(maxConsecutiveLosingDays)}</span>} />
 
-        {/* Avg Daily Net Drawdown */}
-        <KpiTile label="Avg Daily Drawdown" sub="Mean across all days">
-          <Change value={avgDailyNetDrawdown} format="currency" decimals={2} showSign />
-        </KpiTile>
+                <SectionLabel>Daily P&amp;L</SectionLabel>
+                <StatRow label="Avg Daily Net P&L" value={<Change value={avgDailyNetPnl} format="currency" decimals={2} showSign />} />
+                <StatRow
+                  label="Avg Winning Day P&L"
+                  value={<span className="text-[#4AD295]"><Price value={avgWinningDayPnl} format="currency" /></span>}
+                />
+                <StatRow
+                  label="Avg Losing Day P&L"
+                  value={<Change value={avgLosingDayPnl} format="currency" decimals={2} showSign />}
+                />
 
-        {/* Largest Profitable Day */}
-        <KpiTile label="Largest Profitable Day">
-          <span className="text-[#4AD295]">
-            <Price value={largestProfitableDay} format="currency" />
-          </span>
-        </KpiTile>
+                <SectionLabel>Largest Day</SectionLabel>
+                <StatRow
+                  label="Largest Profitable Day"
+                  value={<span className="text-[#4AD295]"><Price value={largestProfitableDay} format="currency" /></span>}
+                />
+                <StatRow
+                  label="Largest Losing Day"
+                  value={<Change value={largestLosingDay} format="currency" decimals={2} showSign={false} />}
+                />
 
-        {/* Largest Losing Day */}
-        <KpiTile label="Largest Losing Day">
-          <Change value={largestLosingDay} format="currency" decimals={2} showSign={false} />
-        </KpiTile>
+                <SectionLabel>Volume</SectionLabel>
+                <StatRow
+                  label="Avg Daily Volume"
+                  value={<span className="text-ink-primary">{avgDailyVolume.toFixed(1)}</span>}
+                />
 
-      </div>
+                <SectionLabel>R-Multiple</SectionLabel>
+                <StatRow label="Avg Planned R" value={<span className="text-ink-primary">{fmtR(avgPlannedR)}</span>} />
+                <StatRow
+                  label="Avg Realized R"
+                  value={
+                    <span className={
+                      avgRealizedR === null ? 'text-ink-tertiary' :
+                      avgRealizedR >= 0 ? 'text-[#4AD295]' : 'text-num-negative'
+                    }>
+                      {fmtR(avgRealizedR)}
+                    </span>
+                  }
+                />
+
+                <SectionLabel>Drawdown</SectionLabel>
+                <StatRow
+                  label="Max Drawdown"
+                  value={<Change value={maxDrawdown} format="currency" decimals={2} showSign />}
+                />
+                <StatRow
+                  label="Avg Drawdown"
+                  value={<Change value={avgDrawdown} format="currency" decimals={2} showSign />}
+                />
+                <StatRow
+                  label="Max Daily Net Drawdown"
+                  value={<Change value={maxDailyNetDrawdown} format="currency" decimals={2} showSign />}
+                />
+                <StatRow
+                  label="Avg Daily Net Drawdown"
+                  value={<Change value={avgDailyNetDrawdown} format="currency" decimals={2} showSign />}
+                />
+
+              </tbody>
+            </table>
+          </Card>
+
+        </div>
+      </section>
 
       {/* ── Charts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
