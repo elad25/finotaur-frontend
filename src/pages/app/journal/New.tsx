@@ -48,6 +48,7 @@ import { useRiskSettings } from '@/hooks/useRiskSettings';
 import { useCommissions } from '@/hooks/useRiskSettings';
 import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
+import { computeLiquidationPrice, getPipSize, parseForexPair, computeQuoteRate } from '@/utils/tradeCalculations';
 import { supabase } from '@/lib/supabase';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
@@ -2584,6 +2585,18 @@ if (hasResult && directRiskUSD > 0) {
                           className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
                         />
                       </div>
+                      {(() => {
+                        const liqPrice = computeLiquidationPrice({ entryPrice: st.entryPrice, leverage: st.leverage, side: st.side });
+                        return liqPrice !== null ? (
+                          <div>
+                            <Label className="text-xs text-zinc-400 mb-2 block">Est. Liquidation Price</Label>
+                            <div className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 flex items-center justify-end px-3 text-zinc-200 text-sm tabular-nums">
+                              {liqPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                            </div>
+                            <p className="text-xs text-zinc-500 mt-1">Estimate — excludes maintenance margin &amp; fees.</p>
+                          </div>
+                        ) : null;
+                      })()}
                       {st.positionType === 'Perpetual' && (
                         <div>
                           <Label className="text-xs text-zinc-400 mb-2 block">Funding Paid (optional)</Label>
@@ -2649,8 +2662,33 @@ if (hasResult && directRiskUSD > 0) {
                           placeholder="1.0"
                           className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
                         />
+                        {(() => {
+                          const { quote } = parseForexPair(st.symbol);
+                          const acct = (st.accountCurrency ?? 'USD').toUpperCase();
+                          if (quote && quote === acct) {
+                            return (
+                              <p className="text-xs text-zinc-500 mt-1">
+                                Auto: quote currency = account currency → 1.0
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
+                    {(() => {
+                      const pipSize = getPipSize(st.symbol);
+                      const { base, quote } = parseForexPair(st.symbol);
+                      if (!base && !quote) return null;
+                      return (
+                        <div className="mt-3 flex gap-4 text-xs text-zinc-500">
+                          {base && quote && (
+                            <span>Base: <span className="text-zinc-400">{base}</span> / Quote: <span className="text-zinc-400">{quote}</span></span>
+                          )}
+                          <span>Pip size: <span className="text-zinc-400">{pipSize}</span></span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 

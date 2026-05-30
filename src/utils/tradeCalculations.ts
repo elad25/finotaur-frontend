@@ -100,6 +100,94 @@ export function detectAssetClass(symbol: string): string | null {
 }
 
 // ================================================================
+// FOREX / CRYPTO HELPERS — SINGLE SOURCE OF TRUTH
+// ================================================================
+
+/**
+ * Compute estimated liquidation price for a leveraged crypto position.
+ * Formula: simplified isolated-margin estimate that ignores maintenance
+ * margin and exchange-specific fees — show as an estimate only.
+ *
+ * LONG  → entryPrice * (1 - 1 / leverage)
+ * SHORT → entryPrice * (1 + 1 / leverage)
+ *
+ * Returns null when inputs are insufficient or invalid.
+ */
+export function computeLiquidationPrice(args: {
+  entryPrice?: number;
+  leverage?: number;
+  side?: 'LONG' | 'SHORT';
+}): number | null {
+  const { entryPrice, leverage, side } = args;
+  if (
+    !entryPrice || !Number.isFinite(entryPrice) || entryPrice <= 0 ||
+    !leverage || !Number.isFinite(leverage) || leverage <= 1 ||
+    (side !== 'LONG' && side !== 'SHORT')
+  ) {
+    return null;
+  }
+  if (side === 'LONG') {
+    return entryPrice * (1 - 1 / leverage);
+  }
+  return entryPrice * (1 + 1 / leverage);
+}
+
+/**
+ * Returns the pip size for a forex symbol.
+ * Single source of truth — currently duplicated inline in useRiskRR.tsx.
+ *
+ * Rules: uppercase, strip non-letters.
+ *   - Ends with 'JPY' → 0.01
+ *   - Otherwise       → 0.0001
+ */
+export function getPipSize(symbol?: string): number {
+  const s = (symbol ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+  return s.endsWith('JPY') ? 0.01 : 0.0001;
+}
+
+/**
+ * Parse a forex pair string into { base, quote }.
+ * Accepts formats: 'EURUSD', 'EUR/USD', 'eurusd'.
+ * Strips non-letters, uppercases, then expects exactly 6 letters.
+ * Returns { base: null, quote: null } for anything that doesn't match.
+ */
+export function parseForexPair(symbol?: string): { base: string | null; quote: string | null } {
+  const s = (symbol ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+  if (s.length === 6) {
+    return { base: s.slice(0, 3), quote: s.slice(3, 6) };
+  }
+  return { base: null, quote: null };
+}
+
+/**
+ * Derive the effective quote rate for a forex trade.
+ *
+ * Deterministic case: if the pair's quote currency matches the account
+ * currency, the rate is exactly 1 (no conversion needed).
+ *
+ * Otherwise: returns `current` if it is a finite number > 0 (preserves
+ * any manual entry), or 1 as a safe fallback.
+ *
+ * NOTE: cross-currency live quote-rate fetch is deferred to a server-side
+ * FX endpoint (not implemented here).
+ */
+export function computeQuoteRate(args: {
+  symbol?: string;
+  accountCurrency?: string;
+  current?: number;
+}): number {
+  const { symbol, accountCurrency, current } = args;
+  const { quote } = parseForexPair(symbol);
+  if (quote && accountCurrency && quote === accountCurrency.toUpperCase()) {
+    return 1;
+  }
+  if (current !== undefined && Number.isFinite(current) && current > 0) {
+    return current;
+  }
+  return 1;
+}
+
+// ================================================================
 // CORE CALCULATION FUNCTIONS
 // ================================================================
 
