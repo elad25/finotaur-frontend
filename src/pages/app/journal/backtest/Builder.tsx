@@ -33,6 +33,7 @@ import {
   type Strategy,
 } from '@/types/backtest-strategy';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
+import { useMentorView } from '@/contexts/MentorViewContext';
 
 // ─── Quick templates ────────────────────────────────────────────
 const TEMPLATES: Array<{ name: string; build: () => Strategy }> = [
@@ -328,6 +329,7 @@ function RuleRow({
 // ═══════════════════════════════════════════════════════════════
 export const Builder = () => {
   const lib = useStrategyLibrary();
+  const { isMentorView } = useMentorView();
   const [draft, setDraft] = useState<Strategy>(() => makeEmptyStrategy());
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -460,28 +462,32 @@ export const Builder = () => {
             New
           </button>
           <div className="flex-1" />
-          <button
-            onClick={handleDuplicate}
-            className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
-          >
-            <Copy size={14} />
-            Duplicate
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={!lib.strategies.some((s) => s.id === draft.id)}
-            className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-400 hover:border-rose-700 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Trash2 size={14} />
-            Delete
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-1.5 rounded-md bg-[#C9A646] px-4 py-1.5 text-sm font-semibold text-black hover:bg-[#D4B55E]"
-          >
-            <Save size={14} />
-            Save
-          </button>
+          {!isMentorView && (
+            <>
+              <button
+                onClick={handleDuplicate}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800"
+              >
+                <Copy size={14} />
+                Duplicate
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={!lib.strategies.some((s) => s.id === draft.id)}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-400 hover:border-rose-700 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-1.5 rounded-md bg-[#C9A646] px-4 py-1.5 text-sm font-semibold text-black hover:bg-[#D4B55E]"
+              >
+                <Save size={14} />
+                Save
+              </button>
+            </>
+          )}
         </div>
 
         {/* Strategy metadata */}

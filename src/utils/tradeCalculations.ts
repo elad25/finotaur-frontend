@@ -38,7 +38,16 @@ export const ASSET_MULTIPLIERS: Record<string, { class: string; mult: number }> 
   // Currencies
   "6E": { class: "futures", mult: 12.5 },
   M6E: { class: "futures", mult: 6.25 },
-  
+  "6B": { class: "futures", mult: 62500 },
+  "6J": { class: "futures", mult: 12500000 },
+  "6A": { class: "futures", mult: 100000 },
+
+  // Metals (extended) / Grains (Agricultural)
+  HG: { class: "futures", mult: 25000 },
+  ZC: { class: "futures", mult: 50 },
+  ZW: { class: "futures", mult: 50 },
+  ZS: { class: "futures", mult: 50 },
+
   // Crypto
   BTC: { class: "futures", mult: 5 },
   MBT: { class: "futures", mult: 0.1 },
@@ -49,9 +58,21 @@ import { normalizeSymbol } from './normalizeSymbol';
 // Helper: Get multiplier for symbol.
 // Tries the exact symbol first, then falls back to the futures root
 // (e.g. "MNQM6" → "MNQ") so contracts with expiry suffixes resolve correctly.
-export function getAssetMultiplier(symbol: string): number {
+//
+// Optional assetClass param: if the caller knows the asset class and it is NOT
+// "futures", AND the symbol has no expiry suffix (bare root like "BTC" or "AAPL"),
+// return 1 immediately — spot stocks/crypto/forex carry no contract multiplier.
+// All existing call sites omit assetClass and get identical behavior (backward compatible).
+export function getAssetMultiplier(symbol: string, assetClass?: string): number {
   if (!symbol) return 1;
   const symbolUpper = symbol.toUpperCase().trim();
+
+  // Spot-asset guard: if caller declares a non-futures class AND the symbol is
+  // already normalized (no expiry suffix), skip the futures multiplier table.
+  if (assetClass && assetClass !== 'futures' && normalizeSymbol(symbolUpper) === symbolUpper) {
+    return 1;
+  }
+
   if (ASSET_MULTIPLIERS[symbolUpper]) return ASSET_MULTIPLIERS[symbolUpper].mult;
   const root = normalizeSymbol(symbolUpper);
   if (root && root !== symbolUpper && ASSET_MULTIPLIERS[root]) return ASSET_MULTIPLIERS[root].mult;
@@ -122,6 +143,72 @@ export interface Trade {
   strategy_name?: string;
   open_at: string;
   close_at?: string;
+  // Asset-class-aware fields (all optional — no existing call sites break)
+  asset_class?: string;
+  multiplier?: number;
+  funding_paid?: number;
+  quote_rate?: number;
+  lot_size?: number;
+  leverage?: number;
+  option_type?: "CALL" | "PUT";
+  strike_price?: number;
+  expiration_date?: string;
+  position_type?: string;
+}
+
+// ================================================================
+// ASSET-CLASS-AWARE HELPERS
+// ================================================================
+
+/**
+ * Returns the effective contract multiplier for a trade.
+ * - Options: always 100 (standard US equity option contract, 100 shares/contract).
+ *   We do NOT rely on the symbol appearing in ASSET_MULTIPLIERS for options.
+ * - All other classes: delegates to getAssetMultiplier(symbol, assetClass) unchanged,
+ *   preserving existing behavior for futures, stocks, crypto, and forex.
+ */
+export function getEffectiveMultiplier(trade: Pick<Trade, 'symbol' | 'asset_class'>): number {
+  const assetClass = trade.asset_class ?? getAssetClass(trade.symbol);
+  if (assetClass === 'options') return 100;
+  return getAssetMultiplier(trade.symbol, assetClass);
+}
+
+/**
+ * Converts a price-difference in points to a USD value for a given trade.
+ * This is the single "points → USD" conversion shared by calculatePnL,
+ * calculateActualR, and calculateTradeMetrics so the three stay in sync.
+ *
+ * Asset-class rules:
+ *   options : points * quantity * 100
+ *   forex   : units (quantity * lot_size, or quantity if no lot_size) * points * quote_rate
+ *   crypto  : points * quantity * getAssetMultiplier(symbol, 'crypto')
+ *             NOTE: leverage does NOT change realized P&L — it affects margin only.
+ *   futures / stocks / default : points * quantity * getAssetMultiplier(symbol, assetClass)
+ *             Byte-identical to the pre-existing formula for these two classes.
+ */
+export function pointsToUsd(trade: Trade, points: number): number {
+  const assetClass = trade.asset_class ?? getAssetClass(trade.symbol);
+
+  if (assetClass === 'options') {
+    // Standard US equity option: 100 shares per contract
+    return points * trade.quantity * 100;
+  }
+
+  if (assetClass === 'forex') {
+    // lot_size converts lots → units (e.g. standard lot = 100,000 units).
+    // quote_rate converts quote-currency P&L to account currency (usually USD).
+    const units = trade.lot_size ? trade.quantity * trade.lot_size : trade.quantity;
+    return points * units * (trade.quote_rate ?? 1);
+  }
+
+  if (assetClass === 'crypto') {
+    // Leverage does NOT change realized P&L — it only affects margin/risk sizing.
+    // funding_paid is subtracted separately in calculatePnL (not here).
+    return points * trade.quantity * getAssetMultiplier(trade.symbol, 'crypto');
+  }
+
+  // futures / stocks / default — identical to pre-existing formula
+  return points * trade.quantity * getAssetMultiplier(trade.symbol, assetClass);
 }
 
 /**
@@ -151,8 +238,17 @@ export function calculatePlannedRR(
 }
 
 /**
- * Calculate actual R based on REAL exit price
- * This is what ACTUALLY happened
+ * Calculate actual R based on REAL exit price.
+ * This is what ACTUALLY happened.
+ *
+ * Asset-class awareness is handled by pointsToUsd(): options use 100x,
+ * forex uses units*quote_rate, crypto uses the crypto multiplier, and
+ * futures/stocks use the existing ASSET_MULTIPLIERS table — identical to before.
+ *
+ * The optional `trade` parameter lets callers pass the full Trade object so
+ * pointsToUsd() can use lot_size / quote_rate / etc.  When omitted the function
+ * falls back to a synthetic Trade with only symbol and side set (backward-compat
+ * for all existing call sites that pass individual scalar arguments).
  */
 export function calculateActualR(
   entryPrice: number,
@@ -161,61 +257,101 @@ export function calculateActualR(
   quantity: number,
   symbol: string,
   side: "LONG" | "SHORT",
-  fees: number = 0
+  fees: number = 0,
+  trade?: Partial<Trade>
 ): number {
   if (!exitPrice || exitPrice <= 0) return 0;
-  
-  const multiplier = getAssetMultiplier(symbol);
-  
-  // Calculate risk (what you could have lost)
+
+  // Build a minimal Trade-like object so pointsToUsd can apply asset-class logic.
+  // Any extra fields (lot_size, quote_rate, etc.) come from the optional `trade` param.
+  const tradeCtx = {
+    symbol,
+    side,
+    quantity,
+    fees,
+    entry_price: entryPrice,
+    stop_price: stopPrice,
+    exit_price: exitPrice,
+    ...trade,
+  } as Trade;
+
+  // Calculate risk in USD (what you could have lost)
   const riskPts = Math.abs(entryPrice - stopPrice);
-  const riskUSD = riskPts * quantity * multiplier;
-  
+  const riskUSD = pointsToUsd(tradeCtx, riskPts);
+
   if (riskUSD === 0) return 0;
-  
-  // Calculate actual P&L
-  const priceDiff = side === "LONG" 
+
+  // Calculate actual net P&L
+  const priceDiff = side === "LONG"
     ? exitPrice - entryPrice
     : entryPrice - exitPrice;
-  
-  const grossPnL = priceDiff * quantity * multiplier;
-  const netPnL = grossPnL - fees;
-  
+
+  const grossPnL = pointsToUsd(tradeCtx, priceDiff);
+  // For crypto, also subtract funding_paid if present
+  const fundingAdj = (tradeCtx.asset_class ?? getAssetClass(symbol)) === 'crypto'
+    ? (tradeCtx.funding_paid ?? 0)
+    : 0;
+  const netPnL = grossPnL - fees - fundingAdj;
+
   // Actual R = (What you made or lost) / (What you risked)
   return netPnL / riskUSD;
 }
 
 /**
- * Calculate P&L from trade data
- * Returns NET P&L after fees
+ * Calculate P&L from trade data.
+ * Returns NET P&L after fees (and funding for crypto).
+ *
+ * Short-circuit: if trade.pnl is already set (stored in DB), return it as-is —
+ * behavior UNCHANGED from before.
+ *
+ * When recomputing from prices, asset-class dispatch via pointsToUsd():
+ *   OPTIONS : grossPnL = priceDiff * quantity * 100
+ *   FOREX   : grossPnL = priceDiff * units * quote_rate
+ *   CRYPTO  : grossPnL = priceDiff * quantity * cryptoMultiplier
+ *             netPnL   = grossPnL - fees - funding_paid
+ *             NOTE: leverage does NOT change realized P&L — it affects margin only.
+ *   FUTURES / STOCKS / default : priceDiff * quantity * ASSET_MULTIPLIERS[symbol] - fees
+ *             Byte-identical to the pre-existing formula for these two classes.
  */
 export function calculatePnL(trade: Trade): number {
-  // Use stored PnL if available
+  // Use stored PnL if available — unchanged short-circuit
   if (trade.pnl !== undefined && trade.pnl !== null) {
     return trade.pnl;
   }
-  
+
   // If no exit, P&L is 0
   if (!trade.exit_price || trade.exit_price <= 0) {
     return 0;
   }
-  
-  const multiplier = getAssetMultiplier(trade.symbol);
-  
-  // Calculate price difference based on side
-  const priceDiff = trade.side === "LONG" 
+
+  // Price direction: positive means trade moved in our favor
+  const priceDiff = trade.side === "LONG"
     ? trade.exit_price - trade.entry_price
     : trade.entry_price - trade.exit_price;
-  
-  const grossPnL = priceDiff * trade.quantity * multiplier;
-  const netPnL = grossPnL - trade.fees;
-  
+
+  const grossPnL = pointsToUsd(trade, priceDiff);
+
+  // Crypto: also subtract funding_paid (perp/perpetual swap carry cost).
+  // For all other classes funding_paid is undefined/0, so this is a no-op.
+  const assetClass = trade.asset_class ?? getAssetClass(trade.symbol);
+  const fundingAdj = assetClass === 'crypto' ? (trade.funding_paid ?? 0) : 0;
+
+  const netPnL = grossPnL - trade.fees - fundingAdj;
   return netPnL;
 }
 
 /**
- * Calculate all trade metrics for display
- * @param oneRValue - User's configured 1R value (from risk settings). If provided, calculates user_risk_r and user_reward_r
+ * Calculate all trade metrics for display.
+ * @param oneRValue - User's configured 1R value (from risk settings). If provided, calculates user_risk_r and user_reward_r.
+ * @param trade     - Optional full Trade object. When supplied, pointsToUsd() uses asset-class fields
+ *                    (lot_size, quote_rate, funding_paid, etc.) for correct USD scaling.
+ *                    When omitted the function behaves exactly as before (backward-compatible).
+ *
+ * Asset-class-aware USD scaling is handled entirely by pointsToUsd():
+ *   - options  : 100x multiplier
+ *   - forex    : units * quote_rate
+ *   - crypto   : crypto multiplier (leverage excluded — affects margin only)
+ *   - futures/stocks/default : ASSET_MULTIPLIERS table — byte-identical to pre-existing behavior
  */
 export function calculateTradeMetrics(
   entryPrice: number,
@@ -226,41 +362,53 @@ export function calculateTradeMetrics(
   symbol: string,
   side: "LONG" | "SHORT",
   fees: number = 0,
-  oneRValue?: number // 🔥 User's 1R setting
+  oneRValue?: number, // 🔥 User's 1R setting
+  trade?: Partial<Trade> // optional full trade for asset-class-aware USD scaling
 ): TradeMetrics {
-  const multiplier = getAssetMultiplier(symbol);
-  
+  // Build a minimal Trade context so pointsToUsd can apply asset-class logic.
+  const tradeCtx = {
+    symbol,
+    side,
+    quantity,
+    fees,
+    entry_price: entryPrice,
+    stop_price: stopPrice,
+    exit_price: exitPrice,
+    ...trade,
+  } as Trade;
+
   // Risk calculation (points and USD)
   const riskPts = Math.abs(entryPrice - stopPrice);
-  const riskUSD = riskPts * quantity * multiplier;
-  
+  const riskUSD = pointsToUsd(tradeCtx, riskPts);
+
   // Reward calculation (points and USD)
   const rewardPts = takeProfitPrice ? Math.abs(entryPrice - takeProfitPrice) : 0;
-  const rewardUSD = rewardPts * quantity * multiplier;
-  
-  // Planned R:R (traditional calculation)
+  const rewardUSD = rewardPts > 0 ? pointsToUsd(tradeCtx, rewardPts) : 0;
+
+  // Planned R:R (traditional calculation — unchanged)
   const rr = calculatePlannedRR(entryPrice, stopPrice, takeProfitPrice, side);
-  
-  // Actual R (only if trade is closed) - traditional calculation
-  const actual_r = exitPrice 
-    ? calculateActualR(entryPrice, stopPrice, exitPrice, quantity, symbol, side, fees)
+
+  // Actual R (only if trade is closed) — pass full trade context for asset-class-aware scaling
+  const actual_r = exitPrice
+    ? calculateActualR(entryPrice, stopPrice, exitPrice, quantity, symbol, side, fees, tradeCtx)
     : undefined;
-  
+
   // 🔥 User's personal R multiples (based on their 1R setting)
   let user_risk_r: number | undefined;
   let user_reward_r: number | undefined;
   let user_actual_r: number | undefined;
-  
+
   if (oneRValue && oneRValue > 0) {
     // Calculate how many R's the user is risking
     user_risk_r = riskUSD / oneRValue;
-    
+
     // Calculate how many R's the user can potentially make
     user_reward_r = rewardUSD / oneRValue;
-    
+
     // Calculate how many R's the user actually made (if trade closed)
     if (exitPrice && actual_r !== undefined) {
       const actualPnL = calculatePnL({
+        ...tradeCtx,
         entry_price: entryPrice,
         exit_price: exitPrice,
         stop_price: stopPrice,
@@ -269,11 +417,11 @@ export function calculateTradeMetrics(
         side,
         fees,
       } as Trade);
-      
+
       user_actual_r = actualPnL / oneRValue;
     }
   }
-  
+
   return {
     riskPts,
     rewardPts,

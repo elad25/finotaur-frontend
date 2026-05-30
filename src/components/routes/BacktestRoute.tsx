@@ -4,6 +4,7 @@ import { memo, Suspense, ReactNode } from 'react';
 import { domains } from '@/constants/nav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
+import { useMentorView } from '@/contexts/MentorViewContext';
 
 // Loading component
 const PageLoader = memo(() => (
@@ -119,6 +120,7 @@ const BacktestLanding = lazy(() => import('@/pages/app/journal/backtest/Backtest
 // 🧪 BACKTEST PROTECTION COMPONENT
 export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
   const { hasAccess, isLoading } = useBacktestAccess();
+  const { isMentorView } = useMentorView();
 
   // 🔒 Check if backtest domain is globally locked
   const isBacktestLocked = domains['journal-backtest']?.locked === true;
@@ -132,7 +134,10 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
     return <BacktestLockedPage />;
   }
 
-  if (!hasAccess) {
+  // Mentor View: allow read-only entry regardless of the mentor's own tier,
+  // so a mentor can view their student's existing backtests (data is RLS-scoped
+  // to the student; run/save actions are hidden in mentor view).
+  if (!hasAccess && !isMentorView) {
     return (
       <Suspense fallback={<PageLoader />}>
         <BacktestLanding />

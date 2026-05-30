@@ -4,7 +4,6 @@
 
 import * as React from 'react';
 import {
-  Sparkles,
   Crown,
   ArrowRight,
   Gauge,
@@ -17,6 +16,7 @@ import {
   ShieldCheck,
   Star,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 
@@ -69,16 +69,8 @@ export function UpsellGate() {
 
         {/* LEFT: Hero copy + CTA */}
         <Card variant="featured" padding="spacious">
-          {/* Pill badge */}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-gold-border bg-surface-1 px-3 py-1">
-            <Sparkles className="h-3.5 w-3.5 text-gold-primary" />
-            <span className="text-small uppercase tracking-wide text-ink-secondary">
-              AI COACH
-            </span>
-          </div>
-
           {/* Title */}
-          <h2 className="mt-ds-4 text-[40px] font-semibold leading-tight text-ink-primary">
+          <h2 className="text-[40px] font-semibold leading-tight text-ink-primary">
             Your <span className="text-gold-primary">AI</span> Trading Coach
           </h2>
           <div className="mt-ds-2 h-[3px] w-12 rounded-full bg-gold-primary" />
@@ -115,11 +107,11 @@ export function UpsellGate() {
           <div className="mt-ds-6 flex flex-wrap items-center gap-ds-5">
             {/* Gold CTA — asChild suppresses Button's built-in arrow; Crown + ArrowRight added manually */}
             <Button variant="gold" size="default" asChild>
-              <a href="/pricing" className="inline-flex items-center gap-2">
+              <Link to="/app/journal/pricing" className="inline-flex items-center gap-2">
                 <Crown className="h-4 w-4" />
                 Upgrade to Premium
                 <ArrowRight className="h-4 w-4" />
-              </a>
+              </Link>
             </Button>
 
             {/* Guarantee */}
@@ -142,13 +134,13 @@ export function UpsellGate() {
           {/* Bull image — rendered as-is (the asset is already on black); no blend
               so it shows exactly like the source PNG (warm glow preserved). */}
           <img
-            src="/bull-ai-coach.png"
+            src="/bull-ai-coach-v2.png"
             alt="FINOTAUR AI bull"
-            className="mx-auto w-full max-w-[420px] object-contain lg:ml-auto lg:mr-0"
+            className="mx-auto w-full max-w-[420px] object-contain lg:ml-auto lg:mr-0 lg:translate-x-[-28px] lg:translate-y-4"
           />
 
-          {/* Feature list */}
-          <div className="flex flex-col gap-ds-4">
+          {/* Feature list — pulled up to tighten the gap under the bull */}
+          <div className="flex flex-col gap-ds-4 lg:-translate-y-4">
             <FeatureRow
               icon={<Gauge className="h-5 w-5 text-gold-primary" />}
               title="Personalized FINOTAUR Score"

@@ -1,12 +1,15 @@
 // src/pages/app/journal/finotaur-ai/FinotaurAI.tsx
 // Page orchestrator for /app/journal/finotaur-ai.
 // Decision tree: Free → UpsellGate (no API), 0-trades → EmptyState, error → ErrorCard, happy path → ScoreHero + BriefingHero.
+// Mentor View: bypasses premium gate, reads student data read-only, hides all write affordances.
 
 import * as React from 'react';
 import { useState } from 'react';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useFinotaurScore } from './hooks/useFinotaurScore';
 import { useBriefing, useRefreshBriefing } from './hooks/useBriefing';
+import { useMentorChatHistory } from './hooks/useMentorChatHistory';
 import { BriefingHero } from './components/BriefingHero';
 import { ScoreHero } from './components/ScoreHero';
 import { EmptyState } from './components/EmptyState';
@@ -16,7 +19,6 @@ import { ConversationHistorySidebar } from './components/ConversationHistorySide
 import { useFinotaurChat } from './hooks/useFinotaurChat';
 import { DailyLimitBanner } from './components/DailyLimitBanner';
 import { useUsage } from './hooks/useUsage';
-import { Eyebrow } from '@/components/ds/Card';
 import { BriefingApiError } from './services/finotaurAIApi';
 import type { Insight } from './types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -29,14 +31,6 @@ function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-bg-base">
       <div className="mx-auto max-w-7xl px-ds-6 py-ds-7">
-        <header className="mb-ds-6 flex items-end justify-between">
-          <div>
-            <Eyebrow>AI COACH BRIEFING</Eyebrow>
-            <h1 className="mt-ds-2 font-sans text-[32px] font-medium tracking-[-0.5px] text-ink-primary">
-              FINOTAUR <span className="text-gold-primary">AI</span>
-            </h1>
-          </div>
-        </header>
         {children}
       </div>
     </div>
@@ -60,47 +54,65 @@ function PageLoader() {
 export default function FinotaurAI() {
   const subscription = useSubscription();
 
+  // Mentor View detection: when isMentorView is true, effectiveUserId is the student's id.
+  // useEffectiveUser composes MentorView > Impersonation > Session.
+  const { id: effectiveUserId, isMentorView } = useEffectiveUser();
+
   // isPremium covers: admin, lifetime, premium plan, platform bundle.
   // Free users see UpsellGate without any API calls to journal-ai.
-  const isPremium: boolean = subscription.isPremium ?? false;
+  // Mentor View bypasses the premium gate — the mentor is viewing, not subscribing.
+  const isPremium: boolean = isMentorView ? true : (subscription.isPremium ?? false);
 
-  // Only fetch score/briefing for premium users. enabled=false means zero network cost.
+  // In mentor view we pass effectiveUserId (the student's id) as overrideUserId,
+  // which causes the hooks to read directly from Supabase via RLS rather than
+  // the server API (which uses the mentor's own session).
+  const overrideUserId: string | undefined = isMentorView ? effectiveUserId : undefined;
+
+  // Only fetch score/briefing when premium (or mentor). enabled=false means zero network cost.
   const {
     data: score,
     isLoading,
     error,
     refetch,
-  } = useFinotaurScore(30, isPremium);
+  } = useFinotaurScore(30, isPremium, overrideUserId);
 
-  const briefingQuery = useBriefing(isPremium);
+  const briefingQuery = useBriefing(isPremium, overrideUserId);
   const refreshMutation = useRefreshBriefing();
-  const usageQuery = useUsage(isPremium);
+
+  // In mentor view: disable usage tracking — the mentor is not the rate-limited user.
+  const usageQuery = useUsage(isMentorView ? false : isPremium);
 
   // Lift chat hook to page level so the sidebar and chat panel share state.
-  // Only instantiated in the premium branch (sidebar is not rendered for free users),
-  // but React requires hooks to be called unconditionally.
+  // React requires hooks to be called unconditionally.
   const chat = useFinotaurChat();
+
+  // Mentor chat history: load the student's most-recent conversation read-only.
+  // Enabled only in mentor view. Uses effectiveUserId (student's id).
+  const mentorHistory = useMentorChatHistory(effectiveUserId, isMentorView);
 
   const refreshing429 =
     refreshMutation.error instanceof BriefingApiError &&
     refreshMutation.error.status === 429;
 
-  const handleRefresh = () => {
-    refreshMutation.mutate();
-  };
+  // In mentor view: do not expose Refresh — it would write to the student's briefing.
+  const handleRefresh = isMentorView ? undefined : () => { refreshMutation.mutate(); };
 
   const [prefillRequest, setPrefillRequest] = useState<string | null>(null);
 
-  const handleDiscuss = (insight: Insight) => {
-    setPrefillRequest(`Tell me more about: ${insight.title ?? insight.body ?? insight.id}`);
-  };
+  // In mentor view: "Discuss" would open the mentor's own chat, not the student's.
+  // We keep onDiscuss wired for the owner path only.
+  const handleDiscuss = isMentorView
+    ? undefined
+    : (insight: Insight) => {
+        setPrefillRequest(`Tell me more about: ${insight.title ?? insight.body ?? insight.id}`);
+      };
 
-  // Subscription not resolved yet
-  if (subscription.isLoading) {
+  // Subscription not resolved yet (skip during mentor view — no gate needed)
+  if (!isMentorView && subscription.isLoading) {
     return <PageLoader />;
   }
 
-  // Free users: UpsellGate, no API calls
+  // Free users (non-mentor): UpsellGate, no API calls
   if (!isPremium) {
     return (
       <PageShell>
@@ -127,17 +139,23 @@ export default function FinotaurAI() {
   return (
     <PageShell>
       <ErrorBoundary boundary="journal-finotaur-ai" fallback={<AiToolErrorFallback />}>
-        <DailyLimitBanner usage={usageQuery.data ?? null} />
+        {/* Daily limit banner — suppressed in mentor view (mentor has no usage counter) */}
+        {!isMentorView && <DailyLimitBanner usage={usageQuery.data ?? null} />}
+
         {/* Three-column layout on large screens: history sidebar | main content | chat panel */}
         <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr_380px]">
-          {/* Conversation history sidebar — desktop only */}
-          <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
-            <ConversationHistorySidebar
-              activeConversationId={chat.conversationId}
-              onSelect={(id) => void chat.loadConversation(id)}
-              onNew={() => chat.newConversation()}
-            />
-          </aside>
+          {/* Conversation history sidebar — hidden in mentor view (student owns convos) */}
+          {!isMentorView && (
+            <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
+              <ConversationHistorySidebar
+                activeConversationId={chat.conversationId}
+                onSelect={(id) => void chat.loadConversation(id)}
+                onNew={() => chat.newConversation()}
+              />
+            </aside>
+          )}
+          {/* Spacer column placeholder in mentor view so grid alignment holds */}
+          {isMentorView && <div className="hidden lg:block" aria-hidden="true" />}
 
           {/* Main briefing content */}
           <div>
@@ -145,26 +163,31 @@ export default function FinotaurAI() {
               score={score}
               isLoading={isLoading}
               error={error as Error | null}
-              onRefresh={refetch}
+              onRefresh={isMentorView ? undefined : refetch}
             />
             <div className="mt-ds-6">
               <BriefingHero
                 briefing={briefingQuery.data?.briefing ?? null}
                 stale={briefingQuery.data?.stale ?? false}
-                refreshing={briefingQuery.data?.refreshing ?? refreshMutation.isPending}
+                refreshing={briefingQuery.data?.refreshing ?? (isMentorView ? false : refreshMutation.isPending)}
                 generatedAt={briefingQuery.data?.generated_at ?? null}
                 isLoading={briefingQuery.isLoading}
                 error={briefingQuery.error as Error | null}
                 onRefresh={handleRefresh}
-                refreshing429={refreshing429}
+                refreshing429={isMentorView ? false : refreshing429}
                 onDiscuss={handleDiscuss}
               />
             </div>
           </div>
 
-          {/* Chat panel — receives the shared hook instance */}
+          {/* Chat panel — in mentor view: read-only with student's history */}
           <aside className="lg:sticky lg:top-ds-6 lg:self-start">
-            <CoachChatPanel prefillRequest={prefillRequest} chatInstance={chat} />
+            <CoachChatPanel
+              prefillRequest={isMentorView ? null : prefillRequest}
+              chatInstance={chat}
+              isReadOnly={isMentorView}
+              messagesOverride={isMentorView ? mentorHistory.messages : undefined}
+            />
           </aside>
         </div>
       </ErrorBoundary>

@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 // ✅ FIXED: Correct import path
 import type { FinotaurTrade } from '@/utils/importUtils';
 import { buildCSVIdempotencyKey } from '@/lib/trades/idempotencyKey';
+import { getAssetMultiplier } from '@/utils/tradeCalculations';
 
 // ================================================
 // TYPES
@@ -272,9 +273,11 @@ export function enrichTrade(trade: FinotaurTrade): FinotaurTrade {
     const priceDiff = enriched.side === 'LONG'
       ? enriched.exit_price - enriched.entry_price
       : enriched.entry_price - enriched.exit_price;
-    
-    enriched.pnl = priceDiff * enriched.quantity;
-    
+
+    // Apply contract multiplier (mirrors canonical calculatePnL in tradeCalculations.ts)
+    const multiplier = getAssetMultiplier(enriched.symbol);
+    enriched.pnl = priceDiff * enriched.quantity * multiplier;
+
     if (enriched.commission) {
       enriched.pnl -= enriched.commission;
     }

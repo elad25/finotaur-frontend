@@ -14,7 +14,7 @@
  */
 
 import { useReducer, useCallback, useEffect, useRef } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 // localStorage key prefix — actual key is `<prefix><userId>` so two accounts
 // sharing a browser don't see each other's in-flight session.
@@ -494,8 +494,9 @@ function loadPersistedState(initialBalance: number, key: string | null): Session
 }
 
 export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
-  const { user } = useAuth();
-  const key = storageKeyFor(user?.id);
+  // useEffectiveUser returns the student's id in Mentor View (read-only there).
+  const { id: userId } = useEffectiveUser();
+  const key = storageKeyFor(userId);
 
   // Initialize empty. The real restore happens in the hydration effect below
   // once `key` is known — `useAuth().user` is frequently null on first render

@@ -63,7 +63,11 @@ function toYahooInterval(internal: string): string {
   return internal;
 }
 
-const YAHOO_BASE = 'https://query2.finance.yahoo.com/v8/finance/chart';
+// Both Yahoo Finance hosts — query2 is primary, query1 is the fallback.
+const YAHOO_HOSTS = [
+  'https://query2.finance.yahoo.com/v8/finance/chart',
+  'https://query1.finance.yahoo.com/v8/finance/chart',
+] as const;
 
 // Yahoo blocks requests without a real-looking User-Agent.
 const YAHOO_HEADERS = {
@@ -72,6 +76,16 @@ const YAHOO_HEADERS = {
   'Accept': 'application/json,text/javascript,*/*;q=0.01',
   'Accept-Language': 'en-US,en;q=0.9',
 };
+
+// Statuses that are worth retrying (transient upstream failures).
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+// Fixed backoff schedule (ms) between attempt 1→2 and 2→3.
+const BACKOFF_MS = [300, 800] as const;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 // ─── Supabase service-role client (bypasses RLS) ──────────────
 const supabaseAdmin = createClient(
@@ -98,29 +112,16 @@ interface ChartBarsRequest {
 }
 
 // ═════════════════════════════════════════════════════════════
-// Yahoo fetch
+// Yahoo fetch — with retry/backoff + host fallback
 // ═════════════════════════════════════════════════════════════
-async function fetchYahooBars(
-  symbol: string,
-  interval: string,
-  from: number,
-  to: number,
-): Promise<Bar[]> {
-  const yahooInterval = toYahooInterval(interval);
-  const url = new URL(`${YAHOO_BASE}/${encodeURIComponent(symbol)}`);
-  url.searchParams.set('interval', yahooInterval);
-  url.searchParams.set('period1', String(from));
-  url.searchParams.set('period2', String(to));
-  url.searchParams.set('includePrePost', 'false');
 
-  const resp = await fetch(url.toString(), { headers: YAHOO_HEADERS });
-  if (!resp.ok) {
-    throw new Error(`Yahoo HTTP ${resp.status} ${resp.statusText}`);
-  }
-  const json = await resp.json();
-  const result = json?.chart?.result?.[0];
+/** Parse a successful Yahoo JSON response into Bar[]. */
+function parseYahooJson(json: unknown): Bar[] {
+  // deno-lint-ignore no-explicit-any
+  const data = json as any;
+  const result = data?.chart?.result?.[0];
   if (!result) {
-    const err = json?.chart?.error;
+    const err = data?.chart?.error;
     if (err) throw new Error(`Yahoo error: ${err.code} — ${err.description}`);
     return [];
   }
@@ -154,6 +155,102 @@ async function fetchYahooBars(
     });
   }
   return bars;
+}
+
+/**
+ * Attempt a single fetch against one Yahoo base URL.
+ * Returns { bars } on success.
+ * Throws on non-retryable 4xx (fail fast — bad symbol, auth, etc.).
+ * Returns { retryable: true, status } on transient failures so the
+ * caller can back off and retry or switch hosts.
+ */
+async function tryYahooFetch(
+  base: string,
+  symbol: string,
+  yahooInterval: string,
+  from: number,
+  to: number,
+): Promise<{ bars: Bar[] } | { retryable: true; status: number; message: string }> {
+  const url = new URL(`${base}/${encodeURIComponent(symbol)}`);
+  url.searchParams.set('interval', yahooInterval);
+  url.searchParams.set('period1', String(from));
+  url.searchParams.set('period2', String(to));
+  url.searchParams.set('includePrePost', 'false');
+
+  let resp: Response;
+  try {
+    resp = await fetch(url.toString(), { headers: YAHOO_HEADERS });
+  } catch (networkErr) {
+    // Network-level failure (DNS, TCP reset, etc.) — always retryable.
+    const message = networkErr instanceof Error ? networkErr.message : String(networkErr);
+    return { retryable: true, status: 0, message: `network error: ${message}` };
+  }
+
+  if (!resp.ok) {
+    if (RETRYABLE_STATUSES.has(resp.status)) {
+      return { retryable: true, status: resp.status, message: `HTTP ${resp.status} ${resp.statusText}` };
+    }
+    // Non-retryable 4xx (e.g. 404 bad symbol, 400 bad params) — fail immediately.
+    throw new Error(`Yahoo HTTP ${resp.status} ${resp.statusText}`);
+  }
+
+  const json = await resp.json();
+  return { bars: parseYahooJson(json) };
+}
+
+async function fetchYahooBars(
+  symbol: string,
+  interval: string,
+  from: number,
+  to: number,
+): Promise<Bar[]> {
+  const yahooInterval = toYahooInterval(interval);
+
+  // Strategy: up to 3 attempts on the primary host (YAHOO_HOSTS[0]) using
+  // the fixed backoff schedule, then 1 final attempt on the fallback host
+  // (YAHOO_HOSTS[1]) if all primary attempts fail with a retryable error.
+  const MAX_ATTEMPTS = 3; // 1 initial + 2 retries on primary
+  let lastMessage = '';
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await sleep(BACKOFF_MS[attempt - 1]);
+    }
+
+    const outcome = await tryYahooFetch(
+      YAHOO_HOSTS[0],
+      symbol,
+      yahooInterval,
+      from,
+      to,
+    );
+
+    if ('bars' in outcome) return outcome.bars;
+
+    // Retryable failure on primary.
+    lastMessage = outcome.message;
+    console.warn(
+      `chart-bars: primary Yahoo attempt ${attempt + 1}/${MAX_ATTEMPTS} failed — ${lastMessage}`,
+    );
+  }
+
+  // All primary attempts exhausted — try the fallback host once.
+  console.warn('chart-bars: primary host exhausted, trying fallback host');
+  const fallback = await tryYahooFetch(
+    YAHOO_HOSTS[1],
+    symbol,
+    yahooInterval,
+    from,
+    to,
+  );
+
+  if ('bars' in fallback) return fallback.bars;
+
+  // Both hosts failed.
+  const totalAttempts = MAX_ATTEMPTS + 1;
+  throw new Error(
+    `Yahoo upstream failed after ${totalAttempts} attempts (last: ${fallback.message})`,
+  );
 }
 
 // ═════════════════════════════════════════════════════════════

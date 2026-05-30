@@ -11,6 +11,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
+import { useMentorView } from '@/contexts/MentorViewContext';
 import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
 import {
   useBacktestPersistence,
@@ -29,6 +30,7 @@ import {
 
 export const BacktestResults = () => {
   const navigate = useNavigate();
+  const { isMentorView } = useMentorView();
   const persistence = useBacktestPersistence();
   const [sessions, setSessions] = useState<SavedSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,14 +215,16 @@ export const BacktestResults = () => {
                       → Open
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setPendingDelete(s); }}
-                        disabled={deletingId === s.id}
-                        className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400 disabled:cursor-wait"
-                        title="Delete session"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {!isMentorView && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPendingDelete(s); }}
+                          disabled={deletingId === s.id}
+                          className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400 disabled:cursor-wait"
+                          title="Delete session"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -15,21 +15,9 @@ import { create } from "zustand";
 import { computeRR as smartComputeRR, detectAssetClass, inferDirection } from "@/utils/smartCalc";
 import { getStrategyById } from "@/utils/storage";
 import type { AssetClass } from "@/utils/smartCalc";
+import { getAssetMultiplier } from "@/utils/tradeCalculations";
 
 export type Side = "LONG" | "SHORT";
-
-const ASSET_MULTIPLIERS: Record<string, number> = {
-  'ES': 50, 'MES': 5, 'NQ': 20, 'MNQ': 2, 'YM': 5, 'MYM': 0.5,
-  'RTY': 50, 'M2K': 5, 'CL': 1000, 'MCL': 100, 'QM': 500,
-  'GC': 100, 'MGC': 10, 'SI': 5000, 'SIL': 1000,
-  'NG': 10000, 'QG': 2500, 'ZB': 1000, 'ZN': 1000, 'ZF': 1000, 'ZT': 2000,
-  '6E': 12.5, 'M6E': 6.25, 'BTC': 5, 'MBT': 0.1,
-};
-
-function getAssetMultiplier(symbol: string): number {
-  const symbolUpper = symbol.toUpperCase().trim();
-  return ASSET_MULTIPLIERS[symbolUpper] || 1;
-}
 
 // 🔥 FIX: Normalize assetClass to ensure consistency
 function normalizeAssetClass(assetClass: string | undefined): AssetClass | undefined {
@@ -72,7 +60,7 @@ type State = {
   mistake?: string;
   nextTime?: string;
   tags: string[];
-  
+
   // Calculated fields (match DB columns)
   multiplier: number;
   rr: number;
@@ -80,21 +68,32 @@ type State = {
   rewardUSD: number;
   riskPts: number;
   rewardPts: number;
-  
+
   // R-multiple fields (all 4 - match DB!)
   actualR?: number;
   userRiskR?: number;
   userRewardR?: number;
   actualUserR?: number;
-  
+
   // Media
   file?: File | null;
   screenshotFiles?: File[];
   screenshotUrls?: string[];
-  
+
   // Meta (for frontend tracking)
   broker: string;
   importSource: string;
+
+  // Asset-class-specific fields (DB columns)
+  optionType?: 'CALL' | 'PUT';
+  strikePrice?: number;
+  expirationDate?: string;
+  leverage?: number;
+  positionType?: 'Spot' | 'Perpetual';
+  fundingPaid?: number;
+  lotSize?: number;
+  accountCurrency?: string;
+  quoteRate?: number;
 };
 
 type Actions = {
@@ -121,6 +120,16 @@ type Actions = {
   setScreenshotFiles: (files: File[]) => void;
   setScreenshotUrls: (urls: string[]) => void;
   setMultiplier: (v: number) => void;
+  // Asset-class-specific setters
+  setOptionType: (v?: 'CALL' | 'PUT') => void;
+  setStrikePrice: (v?: number) => void;
+  setExpirationDate: (v?: string) => void;
+  setLeverage: (v?: number) => void;
+  setPositionType: (v?: 'Spot' | 'Perpetual') => void;
+  setFundingPaid: (v?: number) => void;
+  setLotSize: (v?: number) => void;
+  setAccountCurrency: (v?: string) => void;
+  setQuoteRate: (v?: number) => void;
   recompute: () => void;
   payload: () => TradePayload;
   loadDraft: () => void;
@@ -164,6 +173,16 @@ export interface TradePayload {
   import_source: string;
   outcome?: 'WIN' | 'LOSS' | 'BE' | 'OPEN';
   pnl?: number | null;
+  // Asset-class-specific fields
+  option_type?: 'CALL' | 'PUT' | null;
+  strike_price?: number | null;
+  expiration_date?: string | null;
+  leverage?: number | null;
+  position_type?: 'Spot' | 'Perpetual' | null;
+  funding_paid?: number | null;
+  lot_size?: number | null;
+  account_currency?: string | null;
+  quote_rate?: number | null;
 }
 
 const DRAFT_KEY = "finotaur_journal_draft_v5"; // 🔥 Bumped version for fix
@@ -226,6 +245,17 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   actualUserR: undefined,
   broker: 'manual',
   importSource: 'manual',
+
+  // Asset-class-specific initial values
+  optionType: undefined,
+  strikePrice: undefined,
+  expirationDate: undefined,
+  leverage: undefined,
+  positionType: undefined,
+  fundingPaid: undefined,
+  lotSize: undefined,
+  accountCurrency: undefined,
+  quoteRate: undefined,
 
   // Setters
   setOpenAt: (v) => {
@@ -380,6 +410,16 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     get().saveDraft();
   },
 
+  setOptionType: (v) => { set({ optionType: v }); get().saveDraft(); },
+  setStrikePrice: (v) => { set({ strikePrice: v }); get().saveDraft(); },
+  setExpirationDate: (v) => { set({ expirationDate: v }); get().saveDraft(); },
+  setLeverage: (v) => { set({ leverage: v }); get().saveDraft(); },
+  setPositionType: (v) => { set({ positionType: v }); get().saveDraft(); },
+  setFundingPaid: (v) => { set({ fundingPaid: v }); get().saveDraft(); },
+  setLotSize: (v) => { set({ lotSize: v }); get().saveDraft(); },
+  setAccountCurrency: (v) => { set({ accountCurrency: v }); get().saveDraft(); },
+  setQuoteRate: (v) => { set({ quoteRate: v }); get().saveDraft(); },
+
   // 🔥🔥🔥 RECOMPUTE - FIXED VERSION 🔥🔥🔥
   recompute: () => {
     const s = get();
@@ -495,6 +535,16 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       screenshots: s.screenshotUrls || [],
       broker: s.broker || 'manual',
       import_source: s.importSource || 'manual',
+      // Asset-class-specific fields — only set when relevant
+      option_type: assetClass === 'options' ? (s.optionType ?? null) : null,
+      strike_price: assetClass === 'options' ? (s.strikePrice ?? null) : null,
+      expiration_date: assetClass === 'options' ? (s.expirationDate ?? null) : null,
+      leverage: assetClass === 'crypto' ? (s.leverage ?? null) : null,
+      position_type: assetClass === 'crypto' ? (s.positionType ?? null) : null,
+      funding_paid: (assetClass === 'crypto' && s.positionType === 'Perpetual') ? (s.fundingPaid ?? null) : null,
+      lot_size: assetClass === 'forex' ? (s.lotSize ?? null) : null,
+      account_currency: assetClass === 'forex' ? (s.accountCurrency ?? 'USD') : null,
+      quote_rate: assetClass === 'forex' ? (s.quoteRate ?? 1) : null,
     };
   },
 
@@ -526,6 +576,15 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         screenshotUrls: s.screenshotUrls,
         broker: s.broker,
         importSource: s.importSource,
+        optionType: s.optionType,
+        strikePrice: s.strikePrice,
+        expirationDate: s.expirationDate,
+        leverage: s.leverage,
+        positionType: s.positionType,
+        fundingPaid: s.fundingPaid,
+        lotSize: s.lotSize,
+        accountCurrency: s.accountCurrency,
+        quoteRate: s.quoteRate,
       });
       
       if (draft.length > 100000) {
@@ -608,6 +667,15 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         actualUserR: undefined,
         broker: 'manual',
         importSource: 'manual',
+        optionType: undefined,
+        strikePrice: undefined,
+        expirationDate: undefined,
+        leverage: undefined,
+        positionType: undefined,
+        fundingPaid: undefined,
+        lotSize: undefined,
+        accountCurrency: undefined,
+        quoteRate: undefined,
       });
     } catch (e) {
       console.warn("Failed to clear draft", e);

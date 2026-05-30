@@ -85,6 +85,11 @@ export function toYahooSymbol(raw: string | null | undefined): string | null {
   const symbol = raw.trim().toUpperCase();
   if (!symbol) return null;
 
+  // Forex spot pairs (Yahoo =X suffix) → passthrough unchanged, before any
+  // other pattern matching. EURUSD=X is NOT a crypto pair despite ending in
+  // USD — the =X suffix ensures it always routes to Yahoo, never Binance.
+  if (symbol.endsWith('=X')) return symbol;
+
   // Crypto → not Yahoo (route to Binance via pickDataSource)
   if (CRYPTO_PATTERN.test(symbol)) return null;
 
