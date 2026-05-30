@@ -9,7 +9,7 @@ import ToolCallCard from './ToolCallCard';
 import TradeActionModal from './TradeActionModal';
 import { useFinotaurChat } from '../hooks/useFinotaurChat';
 import { useTradeAction } from '../hooks/useTradeAction';
-import type { PendingToolCall, ChatToolUse } from '../types';
+import type { PendingToolCall, ChatToolUse, ChatMessage } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,11 +30,28 @@ interface CoachChatPanelProps {
   className?: string;
   /** When this string changes, the panel's input is pre-filled with it (one-shot). */
   prefillRequest?: string | null;
+  /**
+   * When true (mentor mode): hides the input row and renders `messages` as a
+   * static read-only history. The live useFinotaurChat streaming path is NOT
+   * used — no network calls for sending.
+   */
+  readOnly?: boolean;
+  /** Static message list provided by the parent in readOnly mode. */
+  messages?: ChatMessage[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function CoachChatPanel({ className, prefillRequest }: CoachChatPanelProps): JSX.Element {
+export default function CoachChatPanel({
+  className,
+  prefillRequest,
+  readOnly,
+  messages: staticMessages,
+}: CoachChatPanelProps): JSX.Element {
+  // ── Mentor (read-only) branch — rendered BEFORE any live-chat hooks ──────────
+  // We still call all live-chat hooks unconditionally below (React rules of hooks),
+  // but we return the read-only panel immediately afterward so no sending occurs.
+
   const chat = useFinotaurChat();
   const action = useTradeAction();
 
@@ -166,6 +183,44 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
 
   // ── Desktop layout: sticky aside ─────────────────────────────────────────────
   // ── Mobile layout: bottom sheet ──────────────────────────────────────────────
+
+  // ── Read-only (mentor) branch ────────────────────────────────────────────────
+  // All hooks above have already been called (React rules of hooks).
+  // We return a static history view without any send/stream functionality.
+  if (readOnly) {
+    const readOnlyMessages = staticMessages ?? [];
+    return (
+      <Card
+        variant="glass"
+        padding="compact"
+        className={['flex flex-col h-full', className ?? ''].filter(Boolean).join(' ')}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-ds-4 shrink-0">
+          <h2 className="font-sans text-h4 font-medium text-ink-primary">AI Coach</h2>
+        </div>
+
+        {/* Read-only notice */}
+        <p className="shrink-0 mb-ds-3 font-sans text-[12px] text-ink-tertiary italic">
+          Viewing student's chat history (read-only)
+        </p>
+
+        {/* Message list */}
+        <div className="flex-1 overflow-y-auto flex flex-col gap-ds-3 min-h-0">
+          {readOnlyMessages.length === 0 ? (
+            <p className="font-sans text-small text-ink-tertiary py-ds-4">
+              No chat history yet.
+            </p>
+          ) : (
+            readOnlyMessages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))
+          )}
+        </div>
+        {/* Input row intentionally omitted in readOnly mode */}
+      </Card>
+    );
+  }
 
   return (
     <>

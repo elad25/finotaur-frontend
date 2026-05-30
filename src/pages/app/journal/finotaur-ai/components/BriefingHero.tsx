@@ -74,6 +74,8 @@ export interface BriefingHeroProps {
   /** True when the last refresh attempt got a 429 daily-limit response */
   refreshing429?: boolean;
   onDiscuss?: (insight: Insight) => void;
+  /** When true (mentor mode) the Refresh button is hidden. */
+  readOnly?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +91,7 @@ export function BriefingHero({
   onRefresh,
   refreshing429,
   onDiscuss,
+  readOnly,
 }: BriefingHeroProps) {
   if (isLoading) return <BriefingSkeleton />;
   if (error) return <ErrorCard error={error} onRetry={onRefresh} />;
@@ -110,7 +113,7 @@ export function BriefingHero({
           )}
           {refreshing ? (
             <span className="text-gold-primary">Refreshing…</span>
-          ) : onRefresh ? (
+          ) : !readOnly && onRefresh ? (
             <button
               type="button"
               onClick={onRefresh}

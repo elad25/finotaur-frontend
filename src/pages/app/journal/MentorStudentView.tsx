@@ -15,12 +15,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useMyStudents } from '@/hooks/useMentorRelationships';
 import JournalOverview from '@/pages/app/journal/Overview';
 import MyTrades from '@/pages/app/journal/MyTrades';
+import FinotaurAI from '@/pages/app/journal/finotaur-ai/FinotaurAI';
 
 // ================================================
 // TYPES
 // ================================================
 
-type Tab = 'overview' | 'trades';
+type Tab = 'overview' | 'trades' | 'finotaur-ai';
 
 // ================================================
 // TAB CONTROL
@@ -52,6 +53,13 @@ function SegmentedControl({ value, onChange }: SegmentedControlProps) {
         onClick={() => onChange('trades')}
       >
         Trades
+      </button>
+      <button
+        type="button"
+        className={`${base} ${value === 'finotaur-ai' ? active : inactive}`}
+        onClick={() => onChange('finotaur-ai')}
+      >
+        FINOTAUR AI
       </button>
     </div>
   );
@@ -148,8 +156,10 @@ export default function MentorStudentView() {
       <div>
         {activeTab === 'overview' ? (
           <JournalOverview overrideUserId={student.student_id} readOnly />
-        ) : (
+        ) : activeTab === 'trades' ? (
           <MyTrades overrideUserId={student.student_id} readOnly />
+        ) : (
+          <FinotaurAI overrideUserId={student.student_id} readOnly />
         )}
       </div>
     </div>
