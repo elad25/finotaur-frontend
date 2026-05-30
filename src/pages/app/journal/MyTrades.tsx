@@ -83,6 +83,7 @@ import { updateTrade, deleteTrade } from "@/lib/trades";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+import { TradeGradeBadge } from '@/pages/app/journal/finotaur-ai/components/TradeGradeBadge';
 
 interface Trade {
   id: string;
@@ -636,7 +637,12 @@ const TradeRow = memo(({
           </span>
         )}
       </TableCell>
-      
+
+      {/* Grade badge */}
+      <TableCell className="w-10">
+        <TradeGradeBadge tradeId={trade.id} />
+      </TableCell>
+
       {/* Side */}
       <TableCell>
         <Badge 
@@ -1647,6 +1653,7 @@ const stats = useMemo<Stats>(() => {
     </TableHead>
     <TableHead className="text-zinc-500">Date</TableHead>
     <TableHead className="text-zinc-500">Symbol</TableHead>
+    <TableHead className="text-zinc-500 w-10">Grade</TableHead>
     <TableHead className="text-zinc-500">Side</TableHead>
     <TableHead className="text-zinc-500">Session</TableHead>
     <TableHead className="text-zinc-500">Entry / Risk</TableHead>
