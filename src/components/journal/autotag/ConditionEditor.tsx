@@ -77,13 +77,17 @@ interface ConditionEditorProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+// `[color-scheme:dark]` is the load-bearing fix: Chrome on Windows renders the
+// native <select> popup with OS colors and IGNORES background-color on <option>,
+// so a plain dark class on the options stays white-on-white. Declaring a dark
+// color-scheme forces the browser to paint the entire native dropdown dark.
 const inputBase =
   'rounded-md border border-border-ds-subtle bg-surface-1 px-2 py-1 text-xs text-ink-primary ' +
-  'focus:outline-none focus:ring-1 focus:ring-gold-primary transition-colors';
+  '[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-gold-primary transition-colors';
 
-// Native <option> elements ignore the parent's translucent bg and fall back to
-// the OS default (white) when opened — producing white-on-white text. Force an
-// opaque matte-black background with gold text for a luxe black-and-gold dropdown.
+// Gold option text (color IS respected cross-browser, unlike background) plus an
+// opaque matte-black bg as a fallback for engines that do honor it (Firefox/Linux),
+// for a luxe black-and-gold dropdown.
 const optionClass = 'bg-[#0a0a0a] text-gold-primary';
 
 export default function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps) {
