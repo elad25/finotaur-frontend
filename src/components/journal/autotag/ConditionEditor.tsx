@@ -81,6 +81,11 @@ const inputBase =
   'rounded-md border border-border-ds-subtle bg-surface-1 px-2 py-1 text-xs text-ink-primary ' +
   'focus:outline-none focus:ring-1 focus:ring-gold-primary transition-colors';
 
+// Native <option> elements ignore the parent's translucent bg and fall back to
+// the OS default (white) when opened — producing white-on-white text. Force an
+// opaque matte-black background with gold text for a luxe black-and-gold dropdown.
+const optionClass = 'bg-[#0a0a0a] text-gold-primary';
+
 export default function ConditionEditor({ condition, onChange, onRemove }: ConditionEditorProps) {
   const meta = FIELD_META[condition.field];
 
@@ -108,7 +113,7 @@ export default function ConditionEditor({ condition, onChange, onRemove }: Condi
         className={cn(inputBase, 'w-32')}
       >
         {(Object.keys(FIELD_META) as AutoTagCondition['field'][]).map(f => (
-          <option key={f} value={f}>
+          <option key={f} value={f} className={optionClass}>
             {FIELD_META[f].label}
           </option>
         ))}
@@ -121,7 +126,7 @@ export default function ConditionEditor({ condition, onChange, onRemove }: Condi
         className={cn(inputBase, 'w-24')}
       >
         {meta.ops.map(op => (
-          <option key={op} value={op}>
+          <option key={op} value={op} className={optionClass}>
             {OP_LABELS[op]}
           </option>
         ))}
@@ -144,7 +149,7 @@ export default function ConditionEditor({ condition, onChange, onRemove }: Condi
           className={cn(inputBase, 'w-32')}
         >
           {meta.enumValues.map(v => (
-            <option key={v} value={v}>
+            <option key={v} value={v} className={optionClass}>
               {v}
             </option>
           ))}
