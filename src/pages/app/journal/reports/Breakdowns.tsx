@@ -10,6 +10,7 @@ import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
 import { Card } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
+import { getAssetClass } from '@/utils/tradeCalculations';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -130,6 +131,33 @@ function groupByTag(trades: Trade[]): BreakdownRow[] {
     }
   }
   return Array.from(map.values()).sort((a, b) => b.netPnl - a.netPnl);
+}
+
+/** Normalize raw asset-class strings to title-case display labels. */
+function normalizeAssetClassLabel(raw: string): string {
+  switch (raw.toLowerCase().trim()) {
+    case 'futures': return 'Futures';
+    case 'stocks':  return 'Stocks';
+    case 'options': return 'Options';
+    case 'crypto':  return 'Crypto';
+    case 'forex':   return 'Forex';
+    default: {
+      // Title-case fallback for unknown values
+      const s = raw.trim();
+      return s.length === 0 ? '(unknown)' : s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    }
+  }
+}
+
+function groupByAssetClass(trades: Trade[]): BreakdownRow[] {
+  const map = new Map<string, BreakdownRow>();
+  for (const t of trades) {
+    const raw = t.asset_class ?? getAssetClass(t.symbol ?? '');
+    const label = normalizeAssetClassLabel(raw);
+    if (!map.has(label)) map.set(label, emptyRow(label));
+    accumulateTrade(map.get(label)!, t);
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +294,7 @@ const BreakdownTable: React.FC<BreakdownTableProps> = ({
 // Tab keys
 // ---------------------------------------------------------------------------
 
-type TabKey = 'dayTime' | 'risk' | 'tags';
+type TabKey = 'dayTime' | 'risk' | 'tags' | 'assetClass';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -288,17 +316,19 @@ export default function JournalReportsBreakdowns() {
   const { data: trades = [], isLoading } = useTrades();
   const [activeTab, setActiveTab] = useState<TabKey>('dayTime');
 
-  const dowRows     = useMemo(() => groupByDow(trades),     [trades]);
-  const hourRows    = useMemo(() => groupByHour(trades),    [trades]);
-  const sessionRows = useMemo(() => groupBySession(trades), [trades]);
-  const rRows       = useMemo(() => groupByRBucket(trades), [trades]);
-  const riskUsdRows = useMemo(() => groupByRiskUsd(trades), [trades]);
-  const tagRows     = useMemo(() => groupByTag(trades),     [trades]);
+  const dowRows        = useMemo(() => groupByDow(trades),         [trades]);
+  const hourRows       = useMemo(() => groupByHour(trades),        [trades]);
+  const sessionRows    = useMemo(() => groupBySession(trades),     [trades]);
+  const rRows          = useMemo(() => groupByRBucket(trades),     [trades]);
+  const riskUsdRows    = useMemo(() => groupByRiskUsd(trades),     [trades]);
+  const tagRows        = useMemo(() => groupByTag(trades),         [trades]);
+  const assetClassRows = useMemo(() => groupByAssetClass(trades),  [trades]);
 
   const tabs: { key: TabKey; label: string }[] = [
-    { key: 'dayTime', label: 'Day & Time' },
-    { key: 'risk',    label: 'Risk'       },
-    { key: 'tags',    label: 'Tags'       },
+    { key: 'dayTime',    label: 'Day & Time'  },
+    { key: 'risk',       label: 'Risk'        },
+    { key: 'tags',       label: 'Tags'        },
+    { key: 'assetClass', label: 'Asset Class' },
   ];
 
   const hasRiskUsd = trades.some(t => t.risk_usd != null && t.risk_usd > 0);
@@ -391,6 +421,18 @@ export default function JournalReportsBreakdowns() {
             tagRows.length === 0
               ? <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
               : <BreakdownTable rows={tagRows} />
+          )}
+        </Card>
+      )}
+
+      {/* ASSET CLASS tab */}
+      {activeTab === 'assetClass' && (
+        <Card padding="compact">
+          <h3 className="text-sm font-semibold text-ink-primary mb-4">By Asset Class</h3>
+          {isLoading ? <Skeleton /> : (
+            assetClassRows.length === 0
+              ? <div className="py-10 text-center text-sm text-ink-tertiary">No trades to display</div>
+              : <BreakdownTable rows={assetClassRows} defaultSort={{ col: 'count', dir: 'desc' }} />
           )}
         </Card>
       )}
