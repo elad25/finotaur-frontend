@@ -15,15 +15,20 @@ export function CopilotPageHeader() {
     <>
       <div className="relative overflow-hidden border-b border-gold-primary/12 pb-5 pt-1">
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
-        <p className="text-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/72">
-          Finotaur Intelligence System
-        </p>
-        <h1 className="mx-auto mt-3 max-w-[980px] text-center text-[36px] font-semibold uppercase leading-[0.95] text-white md:text-[52px]">
-          <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">
-            FINOTAUR
-          </span>{' '}
-          <span className="text-ink-primary">COPILOT</span>
-        </h1>
+        {/* Offset the heading block left by half the sidebar width so it is centered
+            on the full viewport, not just the (sidebar-offset) content column. Uses the
+            same --finotaur-sidebar-width var as <main>'s ml, so it tracks collapse state. */}
+        <div className="md:translate-x-[calc(var(--finotaur-sidebar-width,14rem)/-2)]">
+          <p className="text-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/72">
+            Finotaur Intelligence System
+          </p>
+          <h1 className="mx-auto mt-3 max-w-[980px] text-center text-[36px] font-semibold uppercase leading-[0.95] text-white md:text-[52px]">
+            <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">
+              FINOTAUR
+            </span>{' '}
+            <span className="text-ink-primary">COPILOT</span>
+          </h1>
+        </div>
         {ib.isConnected ? (
           <button
             type="button"
