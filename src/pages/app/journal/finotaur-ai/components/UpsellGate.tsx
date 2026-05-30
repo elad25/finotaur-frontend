@@ -4,7 +4,6 @@
 
 import * as React from 'react';
 import {
-  Sparkles,
   Crown,
   ArrowRight,
   Gauge,
@@ -70,16 +69,8 @@ export function UpsellGate() {
 
         {/* LEFT: Hero copy + CTA */}
         <Card variant="featured" padding="spacious">
-          {/* Pill badge */}
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-gold-border bg-surface-1 px-3 py-1">
-            <Sparkles className="h-3.5 w-3.5 text-gold-primary" />
-            <span className="text-small uppercase tracking-wide text-ink-secondary">
-              AI COACH
-            </span>
-          </div>
-
           {/* Title */}
-          <h2 className="mt-ds-4 text-[40px] font-semibold leading-tight text-ink-primary">
+          <h2 className="text-[40px] font-semibold leading-tight text-ink-primary">
             Your <span className="text-gold-primary">AI</span> Trading Coach
           </h2>
           <div className="mt-ds-2 h-[3px] w-12 rounded-full bg-gold-primary" />

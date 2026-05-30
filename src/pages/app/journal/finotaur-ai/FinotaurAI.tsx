@@ -16,7 +16,6 @@ import { ConversationHistorySidebar } from './components/ConversationHistorySide
 import { useFinotaurChat } from './hooks/useFinotaurChat';
 import { DailyLimitBanner } from './components/DailyLimitBanner';
 import { useUsage } from './hooks/useUsage';
-import { Eyebrow } from '@/components/ds/Card';
 import { BriefingApiError } from './services/finotaurAIApi';
 import type { Insight } from './types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -29,14 +28,6 @@ function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-bg-base">
       <div className="mx-auto max-w-7xl px-ds-6 py-ds-7">
-        <header className="mb-ds-6 flex items-end justify-between">
-          <div>
-            <Eyebrow>AI COACH BRIEFING</Eyebrow>
-            <h1 className="mt-ds-2 font-sans text-[32px] font-medium tracking-[-0.5px] text-ink-primary">
-              FINOTAUR <span className="text-gold-primary">AI</span>
-            </h1>
-          </div>
-        </header>
         {children}
       </div>
     </div>
