@@ -14,8 +14,8 @@ function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: Re
   );
 }
 
-function MiniReturn({ changePercent, isConnected }: { changePercent?: number; isConnected?: boolean }) {
-  const display = isConnected ? (changePercent ?? 0) : 24.67;
+function MiniReturn({ changePercent }: { changePercent?: number }) {
+  const display = changePercent ?? 0;
   return (
     <div>
       <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">ALL TIME RETURN</p>
@@ -41,6 +41,22 @@ export function PortfolioValuePanel({
   snapshot: PortfolioSnapshot;
   isConnected: boolean;
 }) {
+  if (!isConnected) {
+    return (
+      <PremiumFrame className={`min-h-[260px] ${className}`}>
+        <div className="p-5 h-full flex flex-col">
+          <div className="flex items-center justify-between">
+            <p className="text-eyebrow uppercase text-ink-tertiary">TOTAL PORTFOLIO VALUE</p>
+            <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
+          </div>
+          <div className="flex flex-1 items-center justify-center">
+            <span className="text-[13px] text-ink-tertiary">Connect a broker to see your portfolio value</span>
+          </div>
+        </div>
+      </PremiumFrame>
+    );
+  }
+
   // Sum all CASH-class holdings to derive cash balance.
   // assetClass is carried on Holding when sourced from IBRIT; absent on mock holdings.
   const cashBalance = snapshot.holdings
@@ -59,22 +75,22 @@ export function PortfolioValuePanel({
             <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
           </div>
           <Price
-            value={isConnected ? snapshot.totalValue : 1247842.35}
+            value={snapshot.totalValue}
             size="display"
             className="mt-5 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
           />
           <div className="mt-6 grid grid-cols-2 gap-5">
             <Stat
               label="24H CHANGE"
-              value={isConnected ? <span className="text-ink-tertiary">—</span> : <Change value={2.34} />}
-              sub={isConnected ? null : <Change value={28472.11} format="currency" />}
+              value={<span className="text-ink-tertiary">—</span>}
+              sub={null}
             />
-            <MiniReturn changePercent={snapshot.changePercent} isConnected={isConnected} />
+            <MiniReturn changePercent={snapshot.changePercent} />
           </div>
         </div>
         <div className="grid grid-cols-2 border-t border-gold-primary/12 mt-6 pt-5">
-          <Stat label="CASH BALANCE" value={<Price value={isConnected ? cashBalance : 87432.21} size="small" />} />
-          <Stat label="BUYING POWER" value={<Price value={isConnected ? buyingPower : 163210.09} size="small" />} />
+          <Stat label="CASH BALANCE" value={<Price value={cashBalance} size="small" />} />
+          <Stat label="BUYING POWER" value={<Price value={buyingPower} size="small" />} />
         </div>
         <div className="absolute right-4 top-4 text-[10px] text-gold-primary/70">{range}</div>
       </div>
