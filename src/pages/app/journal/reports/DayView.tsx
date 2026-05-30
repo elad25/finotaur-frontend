@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import ReportsTabsNav from "@/components/journal/reports/ReportsTabsNav";
 import DayWeekToggle from "@/components/journal/reports/DayWeekToggle";
 import DateNavigator from "@/components/journal/reports/DateNavigator";
 import DayKpiStrip from "@/components/journal/reports/DayKpiStrip";
@@ -41,8 +40,6 @@ export default function DayView() {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
-      <ReportsTabsNav />
-
       <div>
         <h2 className="text-2xl font-semibold text-yellow-100">Day View</h2>
         <p className="text-sm text-zinc-400 mt-1">Drill into a single day or week of trading.</p>
