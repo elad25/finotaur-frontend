@@ -13,6 +13,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import type { PaperPosition, PendingOrder, SessionStats } from './useBacktestSession';
 
 // ─── Wire types — match Edge Function payloads ─────────────────
@@ -29,10 +30,6 @@ export interface SaveSessionInput {
   trades: PaperPosition[];
   pendingOrders: PendingOrder[];
   notes?: string;
-  /** Optional FK to the strategy this session validates.
-   *  Enables FINOTAUR AI to compare live execution to this backtest's baseline
-   *  via `compare_live_vs_backtest(strategy_id)`. Added 2026-05-29 Phase F. */
-  strategyId?: string | null;
 }
 
 export interface SavedSessionSummary {
@@ -148,6 +145,13 @@ export interface UseBacktestPersistenceReturn {
 }
 
 export function useBacktestPersistence(): UseBacktestPersistenceReturn {
+  // The saved-sessions edge function is JWT-scoped to the caller. In Mentor View
+  // the caller is the mentor, so we must NOT surface the mentor's own sessions
+  // as if they were the student's. The student's backtest performance is shown
+  // via useBacktestStats (RLS-scoped). A dedicated student-sessions list is a
+  // follow-up; for now listSessions returns empty in Mentor View.
+  const { isMentorView } = useEffectiveUser();
+
   const saveSession = useCallback(async (input: SaveSessionInput) => {
     const body = {
       name: input.name,
@@ -167,7 +171,6 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
         ? input.statistics.profitFactor
         : 9999,
       notes: input.notes,
-      strategy_id: input.strategyId ?? null,
       trades: input.trades.map(paperToWire),
       pending_orders: input.pendingOrders.map(pendingToWire),
     };
@@ -185,6 +188,10 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
   }, []);
 
   const listSessions = useCallback(async (options?: ListSessionsOptions): Promise<ListSessionsResult> => {
+    // Mentor View: do not list the mentor's own sessions while viewing a student.
+    if (isMentorView) {
+      return { sessions: [], nextCursor: null };
+    }
     // Build query string mirroring the loadSession pattern (append to function name).
     const qs = new URLSearchParams();
     if (options?.limit != null) qs.set('limit', String(options.limit));
@@ -203,7 +210,7 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
       // Defensive: coerce missing next_cursor (pre-deploy edge fn) to null.
       nextCursor: data?.next_cursor ?? null,
     };
-  }, []);
+  }, [isMentorView]);
 
   const loadSession = useCallback(async (id: string) => {
     // supabase.functions.invoke doesn't accept query strings directly — pass
