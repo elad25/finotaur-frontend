@@ -5,7 +5,7 @@
 import * as React from 'react';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
-import type { FinotaurScore, ScoreBreakdown } from '../types';
+import type { FinotaurScore, ScoreBreakdown, ScoreMetric } from '../types';
 
 // ---------------------------------------------------------------------------
 // Sub-bar config
@@ -14,55 +14,48 @@ interface BarConfig {
   key: keyof ScoreBreakdown;
   label: string;
   tooltip: string;
-  /** Convert raw value to 0-100 percentage for bar width */
-  toPercent: (v: number) => number;
-  /** Display string for raw value */
-  display: (v: number) => string;
+  /** Format the metric's raw real-world value for the right-hand label. */
+  display: (raw: number) => string;
 }
 
+// Keys mirror the get_finotaur_score RPC breakdown. The bar fill uses each
+// metric's normalised `score` (0-100); the label shows the formatted `raw`.
 const BAR_CONFIGS: BarConfig[] = [
   {
     key: 'win_rate',
     label: 'WIN RATE',
     tooltip: 'Percentage of closed trades that were profitable',
-    toPercent: (v) => Math.min(100, Math.max(0, v)),
     display: (v) => `${v.toFixed(1)}%`,
   },
   {
     key: 'profit_factor',
     label: 'PROFIT FACTOR',
     tooltip: 'Gross profit divided by gross loss. ≥2 is strong.',
-    toPercent: (v) => Math.min(100, Math.max(0, (v / 4) * 100)),
     display: (v) => v.toFixed(2),
   },
   {
     key: 'avg_wl',
     label: 'AVG W/L',
     tooltip: 'Average winner divided by average loser. ≥1.5 is healthy.',
-    toPercent: (v) => Math.min(100, Math.max(0, (v / 3) * 100)),
     display: (v) => v.toFixed(2),
   },
   {
-    key: 'max_dd',
+    key: 'max_drawdown_pct',
     label: 'MAX DD',
     tooltip: 'Maximum drawdown as a percentage of peak equity. Lower is better.',
-    // Invert: lower drawdown → higher bar fill (100 − dd, clamped)
-    toPercent: (v) => Math.min(100, Math.max(0, 100 - v)),
     display: (v) => `${v.toFixed(1)}%`,
   },
   {
-    key: 'consistency',
+    key: 'consistency_cv',
     label: 'CONSISTENCY',
     tooltip: 'How uniformly wins and losses are distributed across sessions',
-    toPercent: (v) => Math.min(100, Math.max(0, v)),
-    display: (v) => `${v.toFixed(0)}`,
+    display: (v) => v.toFixed(2),
   },
   {
-    key: 'recovery',
+    key: 'recovery_factor',
     label: 'RECOVERY',
     tooltip: 'How quickly portfolio recovers after drawdowns (Recovery Factor)',
-    toPercent: (v) => Math.min(100, Math.max(0, v)),
-    display: (v) => `${v.toFixed(0)}`,
+    display: (v) => v.toFixed(2),
   },
 ];
 
@@ -71,18 +64,23 @@ const BAR_CONFIGS: BarConfig[] = [
 // ---------------------------------------------------------------------------
 interface SubBarProps {
   config: BarConfig;
-  value: number;
+  metric: ScoreMetric | undefined;
 }
 
-function SubBar({ config, value }: SubBarProps) {
-  const pct = config.toPercent(value);
+function SubBar({ config, metric }: SubBarProps) {
+  const score = typeof metric?.score === 'number' ? metric.score : null;
+  const raw = typeof metric?.raw === 'number' ? metric.raw : null;
+
+  // Bar fill = normalised 0-100 score (0 when missing).
+  const pct = score === null ? 0 : Math.min(100, Math.max(0, score));
+  const label = raw === null ? '—' : config.display(raw);
   // Gold tint at high values (≥80% of bar), white otherwise
   const fillClass = pct >= 80 ? 'bg-gold-primary/40' : 'bg-white/40';
 
   return (
     <div
       className="flex items-center gap-ds-3"
-      title={`${config.label}: ${config.display(value)} — ${config.tooltip}`}
+      title={`${config.label}: ${label} — ${config.tooltip}`}
     >
       <span className="w-[90px] shrink-0 font-sans text-[10px] font-medium tracking-[1px] uppercase text-ink-tertiary">
         {config.label}
@@ -94,7 +92,7 @@ function SubBar({ config, value }: SubBarProps) {
         />
       </div>
       <span className="w-[36px] shrink-0 text-right font-sans tabular-nums text-[12px] text-ink-secondary">
-        {config.display(value)}
+        {label}
       </span>
     </div>
   );
@@ -215,7 +213,7 @@ export function ScoreHero({ score, isLoading, error, onRefresh }: ScoreHeroProps
         <div className="flex-1 flex flex-col gap-ds-3 justify-center">
           {BAR_CONFIGS.map((cfg, i) => (
             <div key={i}>
-              <SubBar config={cfg} value={breakdown[cfg.key]} />
+              <SubBar config={cfg} metric={breakdown[cfg.key]} />
             </div>
           ))}
         </div>

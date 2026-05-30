@@ -1,12 +1,24 @@
 export type InsightCategory = 'symbol' | 'day_time' | 'setup' | 'risk' | 'tag' | 'behavioral';
 
+/**
+ * One metric in the score breakdown.
+ * `raw` is the real-world value (e.g. win rate 46.2, profit factor 2.1);
+ * `score` is its normalised 0-100 contribution to the overall Finotaur score.
+ * Either may be null when the backend has insufficient data for that metric.
+ */
+export interface ScoreMetric {
+  raw: number | null;
+  score: number | null;
+}
+
+/** Keys mirror the get_finotaur_score RPC breakdown exactly. */
 export interface ScoreBreakdown {
-  win_rate: number;       // 0-100
-  profit_factor: number;
-  avg_wl: number;
-  max_dd: number;
-  consistency: number;
-  recovery: number;
+  win_rate: ScoreMetric;
+  profit_factor: ScoreMetric;
+  avg_wl: ScoreMetric;
+  max_drawdown_pct: ScoreMetric;
+  consistency_cv: ScoreMetric;
+  recovery_factor: ScoreMetric;
 }
 
 export interface FinotaurScore {
@@ -16,7 +28,8 @@ export interface FinotaurScore {
   delta: number | null;
   breakdown: ScoreBreakdown | null;
   window_days?: number;
-  total_trades?: number;
+  trade_count?: number;        // RPC field name
+  total_trades?: number;       // legacy alias (kept for FinotaurAI no-trades check)
   generated_at?: string;       // ISO
 }
 
