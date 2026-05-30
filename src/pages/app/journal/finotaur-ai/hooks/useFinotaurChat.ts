@@ -3,6 +3,7 @@
 // pending tool calls, conversation id, and prefill text.
 
 import { useCallback, useReducer, useRef, useState } from 'react';
+import { fetchConversation } from '../services/finotaurAIApi';
 import { streamFinotaurChat } from '../services/finotaurChatStream';
 import type { ChatMessage, ChatToolUse } from '../types';
 
@@ -20,7 +21,9 @@ type Action =
   | { type: 'ATTACH_TOOL_USE'; id: string; toolUse: ChatToolUse }
   | { type: 'MARK_DONE'; id: string }
   | { type: 'MARK_ERROR'; id: string }
-  | { type: 'CLEAR' };
+  | { type: 'CLEAR' }
+  /** Replace the entire messages array (used when loading a past conversation). */
+  | { type: 'HYDRATE'; messages: ChatMessage[] };
 
 function messagesReducer(state: ChatMessage[], action: Action): ChatMessage[] {
   switch (action.type) {
@@ -50,6 +53,9 @@ function messagesReducer(state: ChatMessage[], action: Action): ChatMessage[] {
     case 'CLEAR':
       return [];
 
+    case 'HYDRATE':
+      return action.messages;
+
     default:
       return state;
   }
@@ -71,6 +77,10 @@ export interface UseFinotaurChatResult {
   conversationId: string | undefined;
   /** Abort the in-flight stream (no-op if not streaming) */
   abort: () => void;
+  /** Load a past conversation by id: fetches messages and hydrates state. */
+  loadConversation: (id: string) => Promise<void>;
+  /** Reset to a blank conversation (next send will create a new one server-side). */
+  newConversation: () => void;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -178,8 +188,8 @@ export function useFinotaurChat(): UseFinotaurChatResult {
               break;
 
             case 'error':
-              setError(event.message_en ?? event.code ?? 'stream_error');
-              setErrorHe(event.message_he ?? 'שגיאה ב-AI');
+              setError(event.message_en ?? event.code ?? 'AI error.');
+              setErrorHe(event.message_he ?? 'AI error.');
               dispatch({ type: 'MARK_ERROR', id: assistantMsgId });
               setIsStreaming(false);
               break;
@@ -198,7 +208,7 @@ export function useFinotaurChat(): UseFinotaurChatResult {
 
         const message = err instanceof Error ? err.message : 'Streaming failed';
         setError(message);
-        setErrorHe('בעיה בתקשורת עם שרת ה-AI.');
+        setErrorHe('Communication error with the AI server.');
         dispatch({ type: 'MARK_ERROR', id: assistantMsgId });
         setIsStreaming(false);
       }
@@ -208,6 +218,42 @@ export function useFinotaurChat(): UseFinotaurChatResult {
 
   const clearPendingToolCall = useCallback(() => {
     setPendingToolCall(null);
+  }, []);
+
+  /** Fetch a past conversation and replace current messages in the reducer. */
+  const loadConversation = useCallback(async (id: string): Promise<void> => {
+    // Abort any in-flight stream before switching conversations
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsStreaming(false);
+    setError(null);
+    setErrorHe(null);
+    setPendingToolCall(null);
+
+    try {
+      const { conversation, messages: fetched } = await fetchConversation(id);
+      setConversationId(conversation.id);
+      dispatch({ type: 'HYDRATE', messages: fetched });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load conversation.';
+      setError(message);
+    }
+  }, []);
+
+  /** Reset to a blank conversation; the next sendMessage will create a new one. */
+  const newConversation = useCallback((): void => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsStreaming(false);
+    setError(null);
+    setErrorHe(null);
+    setPendingToolCall(null);
+    setConversationId(undefined);
+    dispatch({ type: 'CLEAR' });
   }, []);
 
   return {
@@ -222,5 +268,7 @@ export function useFinotaurChat(): UseFinotaurChatResult {
     prefill,
     conversationId,
     abort,
+    loadConversation,
+    newConversation,
   };
 }

@@ -59,8 +59,7 @@ import {
   Coins,
   Flame,
   Sparkles,  // נ”¥ For beta items
-  Link2,
-  FileBarChart
+  Link2
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 

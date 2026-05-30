@@ -12,6 +12,8 @@ import { ScoreHero } from './components/ScoreHero';
 import { EmptyState } from './components/EmptyState';
 import { UpsellGate } from './components/UpsellGate';
 import CoachChatPanel from './components/CoachChatPanel';
+import { ConversationHistorySidebar } from './components/ConversationHistorySidebar';
+import { useFinotaurChat } from './hooks/useFinotaurChat';
 import { DailyLimitBanner } from './components/DailyLimitBanner';
 import { useUsage } from './hooks/useUsage';
 import { Eyebrow } from '@/components/ds/Card';
@@ -72,6 +74,11 @@ export default function FinotaurAI() {
   const refreshMutation = useRefreshBriefing();
   const usageQuery = useUsage(isPremium);
 
+  // Lift chat hook to page level so the sidebar and chat panel share state.
+  // Only instantiated in the premium branch (sidebar is not rendered for free users),
+  // but React requires hooks to be called unconditionally.
+  const chat = useFinotaurChat();
+
   const refreshing429 =
     refreshMutation.error instanceof BriefingApiError &&
     refreshMutation.error.status === 429;
@@ -118,7 +125,18 @@ export default function FinotaurAI() {
   return (
     <PageShell>
       <DailyLimitBanner usage={usageQuery.data ?? null} />
-      <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[1fr_380px]">
+      {/* Three-column layout on large screens: history sidebar | main content | chat panel */}
+      <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr_380px]">
+        {/* Conversation history sidebar — desktop only */}
+        <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
+          <ConversationHistorySidebar
+            activeConversationId={chat.conversationId}
+            onSelect={(id) => void chat.loadConversation(id)}
+            onNew={() => chat.newConversation()}
+          />
+        </aside>
+
+        {/* Main briefing content */}
         <div>
           <ScoreHero
             score={score}
@@ -140,8 +158,10 @@ export default function FinotaurAI() {
             />
           </div>
         </div>
+
+        {/* Chat panel — receives the shared hook instance */}
         <aside className="lg:sticky lg:top-ds-6 lg:self-start">
-          <CoachChatPanel prefillRequest={prefillRequest} />
+          <CoachChatPanel prefillRequest={prefillRequest} chatInstance={chat} />
         </aside>
       </div>
     </PageShell>

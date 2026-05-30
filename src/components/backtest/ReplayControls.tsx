@@ -21,6 +21,8 @@ export interface ReplayControlsProps {
   onStepBack: () => void;
   onReset: () => void;
   onSpeedChange: (s: ReplaySpeed) => void;
+  /** Seek the cursor to an arbitrary bar index (drag scrub-bar). When provided, the progress bar becomes an interactive slider. */
+  onSeek?: (index: number) => void;
   /** Show the scissors (jump-tool) toggle — only relevant in replay-cursor mode. */
   showScissors?: boolean;
   /** Whether the scissors jump tool is currently armed. */
@@ -52,6 +54,7 @@ export function ReplayControls({
   onStepBack,
   onReset,
   onSpeedChange,
+  onSeek,
   showScissors = false,
   scissorsArmed = false,
   onToggleScissors,
@@ -187,12 +190,29 @@ export function ReplayControls({
         <span>
           Bar <span className="font-mono text-zinc-300">{Math.max(0, cursor + 1)}</span> / {totalBars}
         </span>
-        <div className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-900">
-          <div
-            className="h-full bg-[#C9A646] transition-[width] duration-200"
-            style={{ width: `${pct}%` }}
+        {onSeek && totalBars > 0 ? (
+          <input
+            type="range"
+            min={0}
+            max={maxIndex}
+            step={1}
+            value={Math.max(0, cursor)}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if (next !== cursor) onSeek(next);
+            }}
+            title="Scrub to any bar"
+            aria-label="Replay scrub bar"
+            className="h-1.5 w-32 cursor-pointer accent-[#C9A646]"
           />
-        </div>
+        ) : (
+          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-900">
+            <div
+              className="h-full bg-[#C9A646] transition-[width] duration-200"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
         <span className="font-mono tabular-nums text-zinc-400">{pct}%</span>
       </div>
     </div>

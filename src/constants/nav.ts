@@ -240,7 +240,7 @@ ai: {
       { label: 'Journal', path: '/app/journal/overview' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
       { label: 'FINOTAUR AI', path: '/app/journal/finotaur-ai' },
-      { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true },
+      { label: 'Mentor Mode', path: '/app/journal/mentor' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },

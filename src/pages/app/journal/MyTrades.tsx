@@ -557,6 +557,7 @@ const TradeRow = memo(({
   onAssignStrategy,
   isSelected,
   onToggleSelect,
+  readOnly = false,
 }: {
   trade: Trade;
   oneR: number;
@@ -568,6 +569,7 @@ const TradeRow = memo(({
   onAssignStrategy: (trade: Trade, strategyId: string) => void;
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
+  readOnly?: boolean;
 }) => {
   const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
     () => getTradeData(trade, oneR), 
@@ -785,27 +787,31 @@ const TradeRow = memo(({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={handleClick}
               className="text-zinc-300 hover:text-white hover:bg-zinc-800"
             >
               View Details
             </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={handleEdit}
-              className="text-zinc-300 hover:text-white hover:bg-zinc-800"
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              Edit Trade
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-zinc-800" />
-            <DropdownMenuItem 
-              onClick={handleDelete}
-              className="text-red-400 hover:text-red-300 hover:bg-zinc-800"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Trade
-            </DropdownMenuItem>
+            {!readOnly && (
+              <>
+                <DropdownMenuItem
+                  onClick={handleEdit}
+                  className="text-zinc-300 hover:text-white hover:bg-zinc-800"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit Trade
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <DropdownMenuItem
+                  onClick={handleDelete}
+                  className="text-red-400 hover:text-red-300 hover:bg-zinc-800"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Trade
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -1015,13 +1021,19 @@ const DaySummaryCard = memo(({
 
 DaySummaryCard.displayName = 'DaySummaryCard';
 
-export default function MyTrades() {
+interface MyTradesProps {
+  overrideUserId?: string;
+  readOnly?: boolean;
+}
+
+export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesProps = {}) {
   // ✅ 1. ALL HOOKS MUST BE AT THE TOP (Rules of Hooks!)
   const navigate = useNavigate();
   const queryClient = useQueryClient(); // 🔥 ADD: for cross-page cache invalidation
-  
+
   // 🔥 FIXED: Now using useEffectiveUser for admin impersonation support
-  const { id: userId, isImpersonating } = useEffectiveUser();
+  const { id: fallbackUserId, isImpersonating } = useEffectiveUser();
+  const userId = overrideUserId ?? fallbackUserId;
   
   // 🔥 NEW: Timezone context
   const timezone = useTimezone();
@@ -1032,7 +1044,10 @@ export default function MyTrades() {
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
   const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
-  const { data: trades = [], isLoading, error } = useTrades(userId, effectivePortfolioId);
+  // When viewing another user's journal (mentor view), do not apply the
+  // logged-in mentor's portfolio filter — show all of the student's trades.
+  const mentorPortfolioId = overrideUserId ? undefined : effectivePortfolioId;
+  const { data: trades = [], isLoading, error } = useTrades(userId, mentorPortfolioId);
   const { data: strategies = [] } = useStrategiesOptimized(userId);
   
   // 🔥 NEW: Using centralized mutations from hooks
@@ -1499,13 +1514,15 @@ const stats = useMemo<Stats>(() => {
                 <TooltipContent>Export Trades</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <Button 
-              onClick={() => navigate("/app/journal/new")}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Trade
-            </Button>
+            {!readOnly && (
+              <Button
+                onClick={() => navigate("/app/journal/new")}
+                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Trade
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1527,8 +1544,8 @@ const stats = useMemo<Stats>(() => {
                 {searchQuery ? "Try adjusting your search" : "Start by adding your first trade"}
               </div>
             </div>
-            {!searchQuery && (
-              <Button 
+            {!searchQuery && !readOnly && (
+              <Button
                 onClick={() => navigate("/app/journal/new")}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium mt-2"
               >
@@ -1655,6 +1672,7 @@ const stats = useMemo<Stats>(() => {
                   onAssignStrategy={handleAssignStrategy}
                   isSelected={selectedTradeIds.has(trade.id)}
                   onToggleSelect={handleToggleTradeSelection}
+                  readOnly={readOnly}
                 />
               ))}
             </TableBody>
@@ -2014,25 +2032,27 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-3 border-t border-zinc-800/50">
-                    <Button 
-                      variant="outline" 
-                      className="flex-1 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all text-xs h-8"
-                      onClick={() => handleEditTrade(selectedTrade.id)}
-                    >
-                      <Edit className="w-3 h-3 mr-1.5" />
-                      Edit
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      className="flex-1 bg-red-600/90 hover:bg-red-600 transition-all text-xs h-8"
-                      onClick={() => handleDeleteClick(selectedTrade.id)}
-                    >
-                      <Trash2 className="w-3 h-3 mr-1.5" />
-                      Delete
-                    </Button>
-                  </div>
+                  {/* Actions — hidden in read-only/mentor view */}
+                  {!readOnly && (
+                    <div className="flex gap-2 pt-3 border-t border-zinc-800/50">
+                      <Button
+                        variant="outline"
+                        className="flex-1 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all text-xs h-8"
+                        onClick={() => handleEditTrade(selectedTrade.id)}
+                      >
+                        <Edit className="w-3 h-3 mr-1.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1 bg-red-600/90 hover:bg-red-600 transition-all text-xs h-8"
+                        onClick={() => handleDeleteClick(selectedTrade.id)}
+                      >
+                        <Trash2 className="w-3 h-3 mr-1.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  )}
                   
                   <div className="h-12"></div>
                 </div>

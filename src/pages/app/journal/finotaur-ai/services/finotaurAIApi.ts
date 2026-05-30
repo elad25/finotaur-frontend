@@ -2,7 +2,16 @@
 // Auth: credentials: 'include' passes the Supabase session cookie.
 // The server's requireAuthJWT middleware validates the JWT from the cookie.
 
-import type { BriefingResponse, ConversationListItem, FinotaurScore, ToolExecuteResponse, UsageResponse } from '../types';
+import type {
+  BriefingResponse,
+  ChatMessage,
+  ConversationDetailResponse,
+  ConversationListItem,
+  ConversationMessageRow,
+  FinotaurScore,
+  ToolExecuteResponse,
+  UsageResponse,
+} from '../types';
 
 export async function fetchFinotaurScore(windowDays: number = 30): Promise<FinotaurScore> {
   const res = await fetch(`/api/journal-ai/score?window=${windowDays}`, {
@@ -153,6 +162,43 @@ export async function fetchUsage(): Promise<UsageResponse> {
     );
   }
   return res.json() as Promise<UsageResponse>;
+}
+
+export async function fetchConversation(
+  id: string,
+): Promise<{ conversation: ConversationListItem; messages: ChatMessage[] }> {
+  const res = await fetch(`/api/journal-ai/conversations/${encodeURIComponent(id)}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BriefingApiError(
+      body?.message_en ?? `fetchConversation failed (${res.status})`,
+      res.status,
+      body?.code,
+      body?.message_he,
+      body,
+    );
+  }
+  const data: ConversationDetailResponse = await res.json();
+
+  // Map server message rows → ChatMessage (client shape)
+  const messages: ChatMessage[] = (data.messages ?? []).map(
+    (row: ConversationMessageRow): ChatMessage => {
+      const base: ChatMessage = {
+        id: row.id,
+        role: row.role,
+        content: row.content ?? '',
+      };
+      if (row.role === 'tool') {
+        return { ...base, tool_result: row.tool_output };
+      }
+      return base;
+    },
+  );
+
+  return { conversation: data.conversation, messages };
 }
 
 export async function deleteConversation(id: string): Promise<void> {

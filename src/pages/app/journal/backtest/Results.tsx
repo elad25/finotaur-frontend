@@ -9,8 +9,8 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
-import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
 import {
   useBacktestPersistence,
@@ -92,7 +92,6 @@ export const BacktestResults = () => {
   return (
     <div className="min-h-screen bg-[#0A0A0A] p-6 text-[#F4F4F4]">
       <div className="mx-auto max-w-6xl">
-        <CftcDisclosureBanner />
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -269,4 +268,10 @@ export const BacktestResults = () => {
   );
 };
 
-export default BacktestResults;
+export default function BacktestResultsRoute() {
+  return (
+    <ErrorBoundary boundary="backtest-results">
+      <BacktestResults />
+    </ErrorBoundary>
+  );
+}

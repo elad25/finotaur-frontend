@@ -7,7 +7,7 @@ import MessageBubble from './MessageBubble';
 import PromptChips from './PromptChips';
 import ToolCallCard from './ToolCallCard';
 import TradeActionModal from './TradeActionModal';
-import { useFinotaurChat } from '../hooks/useFinotaurChat';
+import type { useFinotaurChat } from '../hooks/useFinotaurChat';
 import { useTradeAction } from '../hooks/useTradeAction';
 import type { PendingToolCall, ChatToolUse } from '../types';
 
@@ -30,12 +30,18 @@ interface CoachChatPanelProps {
   className?: string;
   /** When this string changes, the panel's input is pre-filled with it (one-shot). */
   prefillRequest?: string | null;
+  /**
+   * Pre-created hook instance from the parent. The parent (FinotaurAI) owns
+   * the single useFinotaurChat() call and passes it here; CoachChatPanel never
+   * instantiates the hook itself so there is exactly one instance per mounted panel.
+   */
+  chatInstance: ReturnType<typeof useFinotaurChat>;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function CoachChatPanel({ className, prefillRequest }: CoachChatPanelProps): JSX.Element {
-  const chat = useFinotaurChat();
+export default function CoachChatPanel({ className, prefillRequest, chatInstance }: CoachChatPanelProps): JSX.Element {
+  const chat = chatInstance;
   const action = useTradeAction();
 
   // ── Local state ─────────────────────────────────────────────────────────────
@@ -208,12 +214,12 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
         </div>
 
         {/* Error banner (desktop) — surfaces SSE / chat errors that would otherwise be silent */}
-        {(chat.error || chat.errorHe) && (
+        {chat.error && (
           <div
             role="alert"
             className="shrink-0 mt-ds-3 rounded-[8px] border border-num-negative/40 bg-num-negative/5 px-ds-3 py-ds-2"
           >
-            <p className="text-sm text-num-negative">{chat.error ?? chat.errorHe}</p>
+            <p className="text-sm text-num-negative">{chat.error ?? 'Something went wrong.'}</p>
           </div>
         )}
 
@@ -290,12 +296,12 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
           )}
 
           {/* Error banner (mobile) — only visible when sheet expanded */}
-          {isExpanded && (chat.error || chat.errorHe) && (
+          {isExpanded && chat.error && (
             <div
               role="alert"
               className="shrink-0 mt-ds-3 rounded-[8px] border border-num-negative/40 bg-num-negative/5 px-ds-3 py-ds-2"
             >
-              <p className="text-sm text-num-negative">{chat.error ?? chat.errorHe}</p>
+              <p className="text-sm text-num-negative">{chat.error ?? 'Something went wrong.'}</p>
             </div>
           )}
 

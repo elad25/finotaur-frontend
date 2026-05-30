@@ -13,6 +13,7 @@ import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
+import { MetricChart } from '@/components/macro/MetricChart';
 import {
   useLiquiditySnapshot,
   useLiquiditySeries,
@@ -183,6 +184,39 @@ const ComponentCards = memo(function ComponentCards() {
   );
 });
 
+// ─── Interactive MetricChart (recharts) ──────────────────────────────────────
+
+const LiquidityMetricChart = memo(function LiquidityMetricChart() {
+  const { data: seriesResp, isLoading } = useLiquiditySeries(365 * 5); // fetch 5Y for range pills
+
+  const chartData = (seriesResp?.data ?? []).map((p: LiquidityPoint) => ({
+    date: p.date,
+    netLiquidity: p.netLiquidity / 1e9,
+    walcl: p.walcl / 1e9,
+    wtregen: p.wtregen / 1e9,
+    rrpontsyd: p.rrpontsyd / 1e9,
+  }));
+
+  return (
+    <Card className="w-full mb-6 p-4">
+      <MetricChart
+        title="Net Liquidity vs Components"
+        data={chartData}
+        lines={[
+          { dataKey: 'netLiquidity', label: 'Net Liquidity', color: '#C9A646',               format: 'compactUSD' },
+          { dataKey: 'walcl',        label: 'Fed Balance',   color: 'rgba(255,255,255,0.65)', format: 'compactUSD', strokeDasharray: '4 4' },
+          { dataKey: 'wtregen',      label: 'TGA',           color: 'rgba(255,255,255,0.45)', format: 'compactUSD', strokeDasharray: '2 3' },
+          { dataKey: 'rrpontsyd',    label: 'RRP',           color: 'rgba(255,255,255,0.45)', format: 'compactUSD', strokeDasharray: '6 2' },
+        ]}
+        showNBER
+        showFOMC
+        defaultRange="1Y"
+        isLoading={isLoading}
+      />
+    </Card>
+  );
+});
+
 // ─── Time Series Chart (SVG sparkline) ───────────────────────────────────────
 
 const LiquidityChart = memo(function LiquidityChart() {
@@ -317,6 +351,9 @@ const Liquidity = memo(function Liquidity() {
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
         <AiSummaryCard feature="liquidity" />
+
+        {/* Interactive recharts MetricChart — Net Liquidity + components */}
+        <LiquidityMetricChart />
 
         {/* Hero stat: Net Liquidity + MoM/YoY pills */}
         <LiquidityHero />

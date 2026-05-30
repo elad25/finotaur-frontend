@@ -22,12 +22,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
-import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
 import {
@@ -125,12 +123,27 @@ const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
   ],
 };
 
-// Normalize a free-typed ticker to the source-native symbol for its class.
-// Futures get the Yahoo "=F" suffix; equities + crypto pass through uppercased.
-function normalizeRawSymbol(raw: string, assetClass: AssetClass): string {
+// Combined searchable universe across all asset classes, each tagged with its class.
+const ALL_SYMBOLS: (SymbolEntry & { assetClass: AssetClass })[] = (
+  Object.entries(SYMBOL_UNIVERSE) as [AssetClass, SymbolEntry[]][]
+).flatMap(([ac, entries]) => entries.map((e) => ({ ...e, assetClass: ac })));
+
+// Detect the asset class implied by a source-native symbol.
+function detectAssetClass(sym: string): AssetClass {
+  if (isCryptoSymbol(sym)) return 'crypto';
+  if (sym.endsWith('=F')) return 'futures';
+  return 'stocks';
+}
+
+// Normalize a free-typed ticker to a source-native symbol WITHOUT an explicit
+// class. Exact-match the combined universe first (covers futures roots like ES,
+// indices like SPX->^GSPC, crypto bases like BTC->BTCUSDT); otherwise infer
+// from the raw shape (=F => futures, crypto pair => crypto, else bare equity).
+function normalizeSymbolAuto(raw: string): string {
   const t = raw.trim().toUpperCase();
   if (!t) return t;
-  if (assetClass === 'futures') return t.endsWith('=F') ? t : `${t}=F`;
+  const hit = ALL_SYMBOLS.find((u) => u.ticker.toUpperCase() === t);
+  if (hit) return hit.symbol;
   return t;
 }
 
@@ -260,22 +273,14 @@ function ActiveStrategyDropdown({
 // Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
 // Enter select; Enter on no-match commits a custom symbol. Matches the toolbar
 // styling (gold #C9A646 accent on dark zinc) like ActiveStrategyDropdown.
-function SymbolAutocomplete({
-  assetClass,
-  symbol,
-  onSelect,
-}: {
-  assetClass: AssetClass;
-  symbol: string;
-  onSelect: (symbol: string) => void;
-}) {
+function SymbolAutocomplete({ symbol, onSelect }: { symbol: string; onSelect: (symbol: string) => void; }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const universe = SYMBOL_UNIVERSE[assetClass];
+  const universe = ALL_SYMBOLS;
 
   // Best-effort reverse lookup: show the human ticker for the active symbol;
   // fall back to the raw source symbol if it isn't in the universe.
@@ -293,7 +298,7 @@ function SymbolAutocomplete({
   }, [universe, query]);
 
   // Reset the keyboard highlight whenever the visible match list changes.
-  useEffect(() => { setHighlight(0); }, [query, assetClass]);
+  useEffect(() => { setHighlight(0); }, [query]);
 
   useEffect(() => {
     if (!open) return;
@@ -312,7 +317,7 @@ function SymbolAutocomplete({
   };
 
   const commitRaw = () => {
-    const next = normalizeRawSymbol(query, assetClass);
+    const next = normalizeSymbolAuto(query);
     if (!next) return;
     onSelect(next);
     setQuery('');
@@ -359,7 +364,7 @@ function SymbolAutocomplete({
               onMouseDown={(e) => { e.preventDefault(); commitRaw(); }}
               className="block w-full px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900"
             >
-              Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeRawSymbol(query, assetClass) || '—'}</span> as a custom symbol
+              Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeSymbolAuto(query) || '—'}</span> as a custom symbol
             </button>
           ) : (
             matches.map((m, i) => (
@@ -375,6 +380,7 @@ function SymbolAutocomplete({
                 <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
                   {m.ticker}
                 </span>
+                <span className="rounded bg-zinc-800 px-1 text-[9px] uppercase tracking-wider text-zinc-500">{m.assetClass}</span>
                 <span className="truncate text-[11px] text-zinc-500">{m.label}</span>
               </button>
             ))
@@ -399,12 +405,9 @@ export function BacktestChart({
   startingBalance = 10000,
   theme = 'dark',
 }: BacktestChartProps) {
-  const [assetClass, setAssetClass] = useState<AssetClass>(
-    isCryptoSymbol(initialSymbol) ? 'crypto'
-      : initialSymbol.endsWith('=F') ? 'futures'
-      : 'stocks',
-  );
   const [symbol, setSymbol] = useState(initialSymbol);
+  // Asset class is derived from the symbol — no separate user control.
+  const assetClass = useMemo<AssetClass>(() => detectAssetClass(symbol), [symbol]);
   // Avoid shadowing the global setInterval — use barInterval / setBarInterval.
   const [barInterval, setBarInterval] = useState<Interval>(initialInterval);
   const [size, setSize] = useState(1);
@@ -447,13 +450,6 @@ export function BacktestChart({
 
   const navigate = useNavigate();
 
-  // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
-  // BacktestReplayChart (cursor-controlled). In Live mode it's the
-  // current FinotaurChart with manual current-price input.
-  // Elad 2026-05-29: switch the default back to Live. Replay is one click
-  // away via the LIVE/REPLAY toggle in the toolbar.
-  type ChartMode = 'live' | 'replay';
-  const [chartMode, setChartMode] = useState<ChartMode>('live');
 
   // Phase 5: Chart link goes straight to fullscreen immersive — covers
   // app topnav + journal sub-nav. Exit button returns user to backtest
@@ -492,6 +488,7 @@ export function BacktestChart({
 
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
+  // Bar window for the Run Strategy fetch (data-driven, mode-independent).
   const { from, to } = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     return { from: now - lookbackSeconds(barInterval), to: now };
@@ -519,12 +516,9 @@ export function BacktestChart({
       try {
         const detail = await persistence.loadSession(sessionIdParam);
         if (cancelled) return;
-        // 1. Restore chart context (asset/symbol/interval/mode).
-        const ac = detail.session.asset_class;
-        if (ac === 'futures' || ac === 'stocks' || ac === 'crypto') setAssetClass(ac);
+        // 1. Restore chart context (asset/symbol/interval).
         setSymbol(detail.session.symbol);
         setBarInterval(detail.session.interval as Interval);
-        setChartMode('replay');
         // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
         const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
           id: t.id,
@@ -580,12 +574,6 @@ export function BacktestChart({
   }, [sessionIdParam, persistence, loadSession]);
 
   // ─── Handlers ────────────────────────────────────────────────
-  const handleAssetClassChange = (next: AssetClass) => {
-    setAssetClass(next);
-    setSymbol(SYMBOL_UNIVERSE[next][0].symbol);
-    setLivePrice('');
-  };
-
   const handleOpen = (side: PaperSide) => {
     const price = parseFloat(livePrice);
     if (!price || isNaN(price) || price <= 0) {
@@ -818,7 +806,6 @@ export function BacktestChart({
 
   return (
     <div className={containerCls}>
-      <CftcDisclosureBanner className="mx-4 mt-3" />
       {/* Session hydration error — shown when ?sessionId= fetch fails */}
       {hydrateError && (
         <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-rose-800 bg-rose-950/60 px-3 py-2 text-xs text-rose-300">
@@ -840,27 +827,9 @@ export function BacktestChart({
           </button>
         )}
 
-        {/* Asset class tabs */}
-        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
-          {(['futures', 'stocks', 'crypto'] as AssetClass[]).map((ac) => (
-            <button
-              key={ac}
-              onClick={() => handleAssetClassChange(ac)}
-              className={`px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
-                assetClass === ac
-                  ? 'bg-[#C9A646] text-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {ac}
-            </button>
-          ))}
-        </div>
-
-        {/* Symbol picker — type-ahead autocomplete (Tier 1 2026-05-30,
-            replaces the native <select> so traders can search/free-type). */}
+        {/* Symbol picker — type-ahead autocomplete across all asset classes
+            (Tier 1 2026-05-30). Asset class auto-detected from chosen symbol. */}
         <SymbolAutocomplete
-          assetClass={assetClass}
           symbol={symbol}
           onSelect={(next) => { setSymbol(next); setLivePrice(''); }}
         />
@@ -882,41 +851,12 @@ export function BacktestChart({
           ))}
         </div>
 
-        {/* Live | Replay mode toggle (Phase 4) */}
-        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
-          {(['live', 'replay'] as ChartMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => {
-                // Elad 2026-05-29: switching LIVE → REPLAY should feel
-                // continuous. Snap replayStart to NOW so the replay window
-                // shows the same recent bars the user was looking at on
-                // LIVE, instead of jumping back 4 hours.
-                if (mode === 'replay' && chartMode === 'live') {
-                  setReplayStart(new Date());
-                }
-                setChartMode(mode);
-              }}
-              className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
-                chartMode === mode
-                  ? 'bg-[#C9A646] text-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title={mode === 'live' ? 'Live historical chart with manual price entry' : 'Time-travel replay — pick a moment, PLAY, trade live'}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-
-        {/* Date picker — Replay mode only */}
-        {chartMode === 'replay' && (
-          <DateTimePicker
-            value={replayStart}
-            interval={barInterval}
-            onChange={setReplayStart}
-          />
-        )}
+        {/* Date picker */}
+        <DateTimePicker
+          value={replayStart}
+          interval={barInterval}
+          onChange={setReplayStart}
+        />
 
         {/* Active Strategy dropdown — custom (Sprint F: native <select> styling
             was browser-default ugly; replaced with a button + popover panel
@@ -949,7 +889,6 @@ export function BacktestChart({
               (single bounded for-loop, indicators precomputed once). The button
               is already guarded against double-runs (disabled while running) and
               handleRunStrategy closes the picker before awaiting. */}
-          {chartMode === 'live' && (
           <div className="relative">
             <button
               onClick={() => setStrategyPickerOpen((v) => !v)}
@@ -998,7 +937,6 @@ export function BacktestChart({
               </div>
             )}
           </div>
-          )}
           <button
             onClick={handleSaveSession}
             disabled={saveStatus === 'saving'}
@@ -1033,37 +971,23 @@ export function BacktestChart({
 
       {/* Main split: chart + side panel */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chart — Live (FinotaurChart) or Replay (BacktestReplayChart) */}
+        {/* Chart — always Replay (BacktestReplayChart) */}
         <div className="flex-1 min-w-0 bg-[#08080a]">
-          {chartMode === 'live' ? (
-            <FinotaurChart
-              symbol={symbol}
-              interval={barInterval}
-              from={from}
-              to={to}
-              dataSource={dataSource}
-              markers={markers}
-              theme={theme}
-              height="100%"
-              onError={(err) => console.warn('[BacktestChart] data fetch failed', err)}
-            />
-          ) : (
-            <BacktestReplayChart
-              symbol={symbol}
-              interval={barInterval}
-              dataSource={dataSource}
-              replayStartTime={Math.floor(replayStart.getTime() / 1000)}
-              activePosition={state.activePosition}
-              closedPositions={state.closedPositions}
-              pendingOrders={state.pendingOrders}
-              onBarReveal={handleReplayBarReveal}
-              onBarClick={handleReplayBarClick}
-              onContextMenu={(info) => setContextMenu(info)}
-              onJumpToTime={(date) => setReplayStart(date)}
-              showReplayCursor
-              height="100%"
-            />
-          )}
+          <BacktestReplayChart
+            symbol={symbol}
+            interval={barInterval}
+            dataSource={dataSource}
+            replayStartTime={Math.floor(replayStart.getTime() / 1000)}
+            activePosition={state.activePosition}
+            closedPositions={state.closedPositions}
+            pendingOrders={state.pendingOrders}
+            onBarReveal={handleReplayBarReveal}
+            onBarClick={handleReplayBarClick}
+            onContextMenu={(info) => setContextMenu(info)}
+            onJumpToTime={(date) => setReplayStart(date)}
+            showReplayCursor
+            height="100%"
+          />
         </div>
 
         {/* Side panel — paper trading + stats + history */}
@@ -1147,11 +1071,9 @@ export function BacktestChart({
                     <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
                   </button>
                 </div>
-                {chartMode === 'replay' && (
-                  <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
-                    💡 Right-click on the chart to place LIMIT or STOP orders
-                  </div>
-                )}
+                <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
+                  💡 Right-click on the chart to place LIMIT or STOP orders
+                </div>
                 {tradeError && (
                   <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
                     <AlertCircle size={12} className="mt-0.5 shrink-0" />

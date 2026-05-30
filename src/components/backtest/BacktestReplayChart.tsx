@@ -62,7 +62,7 @@ const THEME = {
 // Bars to pre-fetch on each side of the replay-start moment. ~700 total
 // at 5m bars = ~58 hours of replay — enough for a multi-day session
 // while keeping payload modest. Tweak if you need more "future" runway.
-const BARS_BEFORE_START = 200;
+const BARS_BEFORE_START = 1000;
 const BARS_AFTER_START = 500;
 
 /** Seconds per bar for the given interval. Used to pick the fetch window. */
@@ -165,6 +165,13 @@ export function BacktestReplayChart({
   // Mouse hover position — when set, preview takes over from playback cursor.
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
+  // Pixel coordinates for the active-position TP/SL zones overlay (#4).
+  const [posZones, setPosZones] = useState<{
+    entryY: number | null;
+    tpY: number | null;
+    slY: number | null;
+    entryX: number;
+  } | null>(null);
 
   // Scissors (jump tool) armed state. Armed on mount (= entering replay): the
   // trader picks a rewind point with ONE click, after which it disarms and the
@@ -189,7 +196,8 @@ export function BacktestReplayChart({
 
     const secPerBar = intervalSeconds(interval);
     const from = (replayStartTime - BARS_BEFORE_START * secPerBar) as UTCTimestamp;
-    const to = (replayStartTime + BARS_AFTER_START * secPerBar) as UTCTimestamp;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const to = Math.min(replayStartTime + BARS_AFTER_START * secPerBar, nowSec) as UTCTimestamp;
 
     dataSource
       .getBars(symbol, interval, from, to)
@@ -325,7 +333,15 @@ export function BacktestReplayChart({
       close: b.close,
     }));
     series.setData(visible);
-    chart.timeScale().fitContent();
+    // Show a stable window of the most recent ~150 bars near the cursor
+    // instead of fitContent() (which zooms out to fit all ~1000 history bars
+    // and causes the viewport to jump on every re-seed / LIVE->REPLAY toggle).
+    const seededCount = startIndex + 1;
+    const VISIBLE_WINDOW = 150;
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(0, seededCount - VISIBLE_WINDOW),
+      to: seededCount + 2,
+    });
 
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the
@@ -625,6 +641,21 @@ export function BacktestReplayChart({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback.cursor, bars, showReplayCursor]);
 
+  // ─── Active-position TP/SL zone coordinates (#4) ─────────────
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || !activePosition) { setPosZones(null); return; }
+    const entryY = series.priceToCoordinate(activePosition.entryPrice);
+    if (entryY === null) { setPosZones(null); return; }
+    const tpY = activePosition.takeProfit != null ? series.priceToCoordinate(activePosition.takeProfit) : null;
+    const slY = activePosition.stopLoss != null ? series.priceToCoordinate(activePosition.stopLoss) : null;
+    const rawX = chart.timeScale().timeToCoordinate(activePosition.entryTime as UTCTimestamp);
+    const entryX = rawX != null && rawX > 0 ? rawX : 0;
+    setPosZones({ entryY, tpY, slY, entryX });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePosition, playback.cursor, bars, chartWidth]);
+
   // Active display X and time: hover preview when available, else playback cursor.
   const activeX = hoverX ?? cursorX;
   // Current playback bar — used as fallback for the date label.
@@ -648,6 +679,7 @@ export function BacktestReplayChart({
         onStepBack={playback.stepBack}
         onReset={playback.reset}
         onSpeedChange={playback.setSpeed}
+        onSeek={playback.setCursor}
         showScissors={showReplayCursor}
         scissorsArmed={scissorsArmed}
         onToggleScissors={() => setScissorsArmed((v) => !v)}
@@ -661,6 +693,57 @@ export function BacktestReplayChart({
           className={`absolute inset-0${showReplayCursor && scissorsArmed ? ' cursor-none [&_*]:cursor-none' : ''}`}
           style={{ height }}
         />
+
+        {/* ── Active-position TP/SL zones (#4): green entry->TP, red entry->SL ── */}
+        {posZones && posZones.entryY !== null && (
+          <>
+            {posZones.tpY !== null && (
+              <div
+                className="pointer-events-none absolute z-[5] border-y border-emerald-500/40 bg-emerald-500/15"
+                style={{
+                  left: `${posZones.entryX}px`,
+                  right: 0,
+                  top: `${Math.min(posZones.entryY, posZones.tpY)}px`,
+                  height: `${Math.abs(posZones.entryY - posZones.tpY)}px`,
+                }}
+              />
+            )}
+            {posZones.slY !== null && (
+              <div
+                className="pointer-events-none absolute z-[5] border-y border-rose-500/40 bg-rose-500/15"
+                style={{
+                  left: `${posZones.entryX}px`,
+                  right: 0,
+                  top: `${Math.min(posZones.entryY, posZones.slY)}px`,
+                  height: `${Math.abs(posZones.entryY - posZones.slY)}px`,
+                }}
+              />
+            )}
+            {/* Entry line */}
+            <div
+              className="pointer-events-none absolute z-[6] h-px bg-zinc-100"
+              style={{ left: `${posZones.entryX}px`, right: 0, top: `${posZones.entryY}px` }}
+            />
+            {/* TP price tag */}
+            {posZones.tpY !== null && activePosition?.takeProfit != null && (
+              <div
+                className="pointer-events-none absolute right-0 z-[7] -translate-y-1/2 rounded-l bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                style={{ top: `${posZones.tpY}px` }}
+              >
+                TP {activePosition.takeProfit.toFixed(2)}
+              </div>
+            )}
+            {/* SL price tag */}
+            {posZones.slY !== null && activePosition?.stopLoss != null && (
+              <div
+                className="pointer-events-none absolute right-0 z-[7] -translate-y-1/2 rounded-l bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                style={{ top: `${posZones.slY}px` }}
+              >
+                SL {activePosition.stopLoss.toFixed(2)}
+              </div>
+            )}
+          </>
+        )}
 
         {/* ── TV-style replay cursor overlays — only while the scissors tool
             is armed; after a rewind it disarms and a normal crosshair returns. ── */}

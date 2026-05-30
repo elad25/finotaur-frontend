@@ -13,7 +13,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, TrendingUp, TrendingDown, Search, Filter, ArrowUpDown,
@@ -122,7 +122,7 @@ function KpiTile({ label, value, sub, accent }: {
 }
 
 // ─── Main page ────────────────────────────────────────────────
-export default function BacktestTrades() {
+function BacktestTradesInner() {
   const navigate = useNavigate();
   const { data, isLoading, error } = useBacktestStats();
   const [search, setSearch] = useState('');
@@ -206,7 +206,6 @@ export default function BacktestTrades() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] p-6 text-zinc-100">
       <div className="mx-auto max-w-7xl">
-        <CftcDisclosureBanner />
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -394,5 +393,13 @@ export default function BacktestTrades() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BacktestTrades() {
+  return (
+    <ErrorBoundary boundary="backtest-trades">
+      <BacktestTradesInner />
+    </ErrorBoundary>
   );
 }

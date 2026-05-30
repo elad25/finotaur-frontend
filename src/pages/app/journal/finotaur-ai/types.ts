@@ -119,6 +119,24 @@ export interface UsageResponse {
   resets_at?: string;  // ISO timestamp
 }
 
+// ─── Conversation history (sidebar) ──────────────────────────────────────────
+
+export interface ConversationMessageRow {
+  id: string;
+  role: ChatMessageRole;
+  content: string | null;
+  tool_name?: string | null;
+  tool_input?: Record<string, unknown> | null;
+  tool_output?: unknown;
+  created_at: string;
+}
+
+export interface ConversationDetailResponse {
+  schema_version?: 'v1';
+  conversation: ConversationListItem;
+  messages: ConversationMessageRow[];
+}
+
 // ─── Phase 5b: Narrowed tool_result shapes for inline renderers ───────────────
 /** Common envelope — every read-tool result carries an `action`. */
 export interface ToolResultEnvelope {

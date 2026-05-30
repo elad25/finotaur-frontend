@@ -13,7 +13,6 @@
 // ================================================
 
 import React, { lazy, Suspense, useMemo, useCallback } from "react";
-import CftcDisclosureBanner from "@/components/backtest/CftcDisclosureBanner";
 import { useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import {
@@ -1138,10 +1137,6 @@ function BacktestOverviewContent() {
           </div>
         </div>
 
-        {/* Hypothetical Performance Disclosure — placed at the bottom as a
-            footer-style note (Elad 2026-05-28: legal compliance retained,
-            visual prominence reduced — users don't need the alert framing). */}
-        <CftcDisclosureBanner className="mt-8" />
       </div>
     </div>
   );
@@ -1149,7 +1144,7 @@ function BacktestOverviewContent() {
 
 export default function BacktestOverview() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary boundary="backtest-overview">
       <BacktestOverviewContent />
     </ErrorBoundary>
   );

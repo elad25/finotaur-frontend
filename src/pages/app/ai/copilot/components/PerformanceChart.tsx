@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Card } from '@/components/ds/Card';
 import { PerformancePoint, TimeRange } from '../hooks/usePortfolioMockData';
-import { calculatePortfolioMetrics, fmtPercent, fmtNumber } from '@/lib/portfolio/metrics';
+import { calculatePortfolioMetrics, fmtPercent, fmtNumber, robustExtent, clampToRange } from '@/lib/portfolio/metrics';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -20,6 +21,8 @@ const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
 
 export function PerformanceChart({ series, range, onRangeChange }: Props) {
   const [mode, setMode] = useState<Mode>('dollar');
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const metrics = useMemo(() => calculatePortfolioMetrics(series), [series]);
   const returnLabel = range === '1Y' || range === 'ALL' || !range
     ? `RETURN (${range ?? '1Y'})`
@@ -59,8 +62,7 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
     const values = series.map((point) =>
       mode === 'dollar' ? point.value : ((point.value - start) / start) * 100
     );
-    let min = Math.min(...values);
-    let max = Math.max(...values);
+    let { min, max } = robustExtent(values);
     const isFlat = max - min === 0;
 
     // Flat line (e.g., cash-only account, no historical movement): synthesize a
@@ -80,7 +82,8 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
 
     const coords = values.map((value, index) => {
       const x = PADDING.left + (index / Math.max(values.length - 1, 1)) * innerWidth;
-      const y = PADDING.top + (1 - (value - min) / valueRange) * innerHeight;
+      const clampedValue = clampToRange(value, min, max);
+      const y = PADDING.top + (1 - (clampedValue - min) / valueRange) * innerHeight;
       return [x, y] as const;
     });
 
@@ -91,8 +94,30 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
     const areaPath = `${path} L${last[0].toFixed(1)} ${baseline} L${first[0].toFixed(1)} ${baseline} Z`;
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => min + valueRange * ratio);
 
-    return { path, areaPath, ticks, min, max, isFlat };
+    return { path, areaPath, ticks, min, max, isFlat, coords };
   }, [series, mode]);
+
+  /**
+   * Map mouse pixel x → series index via SVG bounding rect.
+   * Clamped to [0, series.length-1]. Returns null when out of plot area.
+   */
+  const handleMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current || series.length < 2) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    if (rect.width === 0) return;
+    // Convert from pixel coords to SVG viewBox coords using the rendered width.
+    const svgX = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
+    const ratio = (svgX - PADDING.left) / innerWidth;
+    if (ratio < 0 || ratio > 1) {
+      setHoverIdx(null);
+      return;
+    }
+    const idx = Math.round(ratio * (series.length - 1));
+    setHoverIdx(Math.max(0, Math.min(series.length - 1, idx)));
+  };
+
+  const handleMouseLeave = () => setHoverIdx(null);
 
   const formatTick = (value: number) => {
     if (mode === 'percent') return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
@@ -186,7 +211,16 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
           {modeToggle}
         </div>
 
-        <svg className="h-[286px] w-full overflow-visible" viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label="Portfolio performance chart">
+        <div className="relative">
+        <svg
+          ref={svgRef}
+          className="h-[286px] w-full overflow-visible"
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+          role="img"
+          aria-label="Portfolio performance chart"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
           <defs>
             <linearGradient id="copilotSvgArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#F4D97B" stopOpacity="0.30" />
@@ -256,7 +290,42 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
               </text>
             );
           })}
+
+          {/* Hover crosshair + marker — only when mouse is over the plot area. */}
+          {hoverIdx !== null && chart.coords[hoverIdx] && (
+            <g pointerEvents="none">
+              <line
+                x1={chart.coords[hoverIdx][0]}
+                x2={chart.coords[hoverIdx][0]}
+                y1={PADDING.top}
+                y2={CHART_HEIGHT - PADDING.bottom}
+                stroke="rgba(244,217,123,0.45)"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+              />
+              <circle
+                cx={chart.coords[hoverIdx][0]}
+                cy={chart.coords[hoverIdx][1]}
+                r="5"
+                fill="#F4D97B"
+                stroke="#070604"
+                strokeWidth="2"
+              />
+            </g>
+          )}
         </svg>
+
+        {/* HTML tooltip overlay — positioned by % of SVG viewBox, flips side near right edge. */}
+        {hoverIdx !== null && chart.coords[hoverIdx] && (
+          <PerformanceHoverTooltip
+            point={series[hoverIdx]}
+            firstPoint={series[0]}
+            mode={mode}
+            svgX={chart.coords[hoverIdx][0]}
+            svgY={chart.coords[hoverIdx][1]}
+          />
+        )}
+        </div>
 
         {rangeSummary && (
           <div className="-mt-2 mb-2 flex items-center justify-between px-4 text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">
@@ -290,4 +359,74 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
       </div>
     </Card>
   );
+}
+
+/**
+ * Floating HTML card that follows the hover crosshair. Position is expressed
+ * as a % of the SVG viewBox so it tracks the chart regardless of pixel width.
+ * Flips to the left of the crosshair when the cursor is in the right third
+ * so it never spills outside the panel.
+ */
+function PerformanceHoverTooltip({
+  point,
+  firstPoint,
+  mode,
+  svgX,
+  svgY,
+}: {
+  point: PerformancePoint;
+  firstPoint: PerformancePoint;
+  mode: Mode;
+  svgX: number;
+  svgY: number;
+}) {
+  const leftPct = (svgX / CHART_WIDTH) * 100;
+  const topPct = (svgY / CHART_HEIGHT) * 100;
+  // Anchor to the right side of the cursor; flip when cursor passes 60% to keep tooltip on-screen.
+  const flipLeft = svgX > CHART_WIDTH * 0.6;
+
+  const change = point.value - firstPoint.value;
+  const changePct = firstPoint.value > 0 ? (change / firstPoint.value) * 100 : 0;
+  const date = new Date(point.date).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const valueDisplay = mode === 'percent'
+    ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`
+    : formatTooltipDollar(point.value);
+  const changeSign = change >= 0 ? '+' : '−';
+  const absChange = Math.abs(change);
+  const changeDisplay = formatTooltipDollar(absChange);
+  const changeToneClass = change >= 0 ? 'text-status-success' : 'text-num-negative';
+
+  return (
+    <div
+      className="pointer-events-none absolute z-20 min-w-[148px] rounded-[7px] border border-gold-primary/35 bg-[#0a0908]/96 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+      style={{
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        transform: flipLeft
+          ? 'translate(calc(-100% - 14px), -50%)'
+          : 'translate(14px, -50%)',
+      }}
+    >
+      <p className="text-[9px] uppercase tracking-[0.12em] text-ink-tertiary">{date}</p>
+      <p className="mt-1 font-mono text-base font-semibold text-gold-primary tabular-nums">{valueDisplay}</p>
+      <p className={`mt-1 text-[11px] font-mono tabular-nums ${changeToneClass}`}>
+        {changeSign}{changeDisplay} ({changeSign}{Math.abs(changePct).toFixed(2)}%)
+      </p>
+    </div>
+  );
+}
+
+/** Local dollar formatter for the tooltip — same buckets as the y-axis ticks but without sign. */
+function formatTooltipDollar(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `$${(abs / 1_000).toFixed(1)}K`;
+  if (abs >= 1_000) return `$${(abs / 1_000).toFixed(2)}K`;
+  if (abs >= 1) return `$${abs.toFixed(2)}`;
+  if (abs > 0) return `$${abs.toFixed(4)}`;
+  return '$0.00';
 }

@@ -89,11 +89,7 @@ export const AiSummaryCard = memo(function AiSummaryCard({ feature, className }:
           )}
 
           {!isPending && !errMsg && data?.summary && (
-            <p
-              className="text-sm text-ink-primary leading-relaxed whitespace-pre-line"
-              dir="rtl"
-              lang="he"
-            >
+            <p className="text-sm text-ink-primary leading-relaxed whitespace-pre-line">
               {data.summary}
             </p>
           )}

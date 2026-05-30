@@ -864,16 +864,42 @@ export function FinotaurChart({
             const series = seriesRef.current;
             if (!chart || !series) return null;
 
-            const x = chart.timeScale().timeToCoordinate(icon.time as UTCTimestamp);
-            const y = series.priceToCoordinate(icon.price);
+            // Snap marker time to the nearest available bar — lightweight-charts
+            // returns null from timeToCoordinate for times that don't EXACTLY
+            // match a bar timestamp (fills between bar starts, after-hours
+            // executions). Without snapping, the overlay never renders for most
+            // real trades. Binary search over barsRef which the chart already
+            // keeps up to date.
+            const bars = barsRef.current;
+            if (bars.length === 0) return null;
+            let lo = 0, hi = bars.length - 1;
+            const targetTime = icon.time as unknown as number;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if ((bars[mid].time as unknown as number) < targetTime) lo = mid + 1;
+              else hi = mid;
+            }
+            const candidateAfter = bars[lo];
+            const candidateBefore = lo > 0 ? bars[lo - 1] : candidateAfter;
+            const beforeT = candidateBefore.time as unknown as number;
+            const afterT = candidateAfter.time as unknown as number;
+            const snappedBar = (
+              Math.abs(targetTime - beforeT) <= Math.abs(afterT - targetTime)
+                ? candidateBefore
+                : candidateAfter
+            );
 
-            // null = outside viewport; NaN = chart not yet laid out (first paint).
-            // The RAF deferral in the subscribe effect handles the NaN case on the
-            // next bump, but defend at the boundary too.
+            // Anchor to the candle's high/low (not the fill price) so the
+            // marker floats above/below the candle instead of overlapping it.
+            const anchorPrice = icon.direction === 'down' ? snappedBar.high : snappedBar.low;
+            const x = chart.timeScale().timeToCoordinate(snappedBar.time as UTCTimestamp);
+            const y = series.priceToCoordinate(anchorPrice);
+
             if (x === null || y === null) return null;
             if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-            const top = (y as number) + icon.offsetY;
+            // Push the marker clearly off the candle: 28px gap from the high/low.
+            const top = icon.direction === 'down' ? (y as number) - 28 : (y as number) + 28;
             const left = x as number;
 
             return (
@@ -881,22 +907,23 @@ export function FinotaurChart({
                 key={idx}
                 style={{
                   position: 'absolute',
-                  top: top - 11,   // center the 22px circle vertically on the anchor point
-                  left: left - 11, // center the 22px circle horizontally on the bar
-                  width: 22,
-                  height: 22,
+                  top: top - 12,   // center the 24px circle vertically
+                  left: left - 12, // center the 24px circle horizontally on the bar
+                  width: 24,
+                  height: 24,
                   borderRadius: '50%',
                   background: icon.color,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 0 0 2px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.45)',
+                  border: '2px solid #ffffff',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
                   pointerEvents: 'none',
                 }}
               >
                 {icon.direction === 'up'
-                  ? <ArrowUp size={14} color="#fff" strokeWidth={3} absoluteStrokeWidth />
-                  : <ArrowDown size={14} color="#fff" strokeWidth={3} absoluteStrokeWidth />
+                  ? <ArrowUp size={14} color="#fff" strokeWidth={3.5} absoluteStrokeWidth />
+                  : <ArrowDown size={14} color="#fff" strokeWidth={3.5} absoluteStrokeWidth />
                 }
               </div>
             );

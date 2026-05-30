@@ -180,7 +180,10 @@ function computePnL(p: PaperPosition, exitPrice: number): { pnl: number; pnlPerc
 }
 
 export function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
-  if (closed.length === 0) return EMPTY_STATS;
+  // #6: headline stats reflect only configured trades (a defined SL and/or TP).
+  // Purely discretionary trades (neither SL nor TP) are excluded from the metrics.
+  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null);
+  if (configured.length === 0) return EMPTY_STATS;
 
   let winners = 0;
   let losers = 0;
@@ -194,7 +197,7 @@ export function computeStats(closed: PaperPosition[], startingBalance: number): 
   let longestWinStreak = 0;
   let longestLossStreak = 0;
 
-  for (const p of closed) {
+  for (const p of configured) {
     const pnl = p.pnl ?? 0;
     if (pnl > 0) {
       winners++;
@@ -217,7 +220,7 @@ export function computeStats(closed: PaperPosition[], startingBalance: number): 
     }
   }
 
-  const totalTrades = closed.length;
+  const totalTrades = configured.length;
   const netPnl = grossProfit - grossLoss;
   const avgWin = winners > 0 ? grossProfit / winners : 0;
   const avgLoss = losers > 0 ? grossLoss / losers : 0;
@@ -411,7 +414,8 @@ export function computeStatsByStrategy(
   startingBalance: number,
 ): Map<string, SessionStats> {
   const buckets = new Map<string, PaperPosition[]>();
-  for (const p of closed) {
+  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null);
+  for (const p of configured) {
     const key = p.strategyId || 'manual';
     const arr = buckets.get(key);
     if (arr) arr.push(p);
