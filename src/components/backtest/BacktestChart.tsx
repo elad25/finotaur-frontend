@@ -1081,10 +1081,9 @@ export function BacktestChart({
               </div>
             )}
           </div>
-        </div>
-        {/* Bottom trading bar */}
-        <div className="border-t border-zinc-800 bg-zinc-950 px-4 py-2">
-          <div className="flex flex-wrap items-end gap-3">
+          {/* Floating trading bar — bottom-center, overlaid on the chart */}
+          <div className="absolute bottom-4 left-1/2 z-20 max-w-[95%] -translate-x-1/2 rounded-xl border border-zinc-800 bg-zinc-950/95 px-4 py-2 shadow-2xl backdrop-blur-sm">
+            <div className="flex flex-wrap items-end justify-center gap-3">
             <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price (optional)</span>
               <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
                 className="mt-1 w-28 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
@@ -1111,6 +1110,7 @@ export function BacktestChart({
             <span className="ml-auto text-[11px] text-zinc-600">💡 Right-click the chart for LIMIT / STOP orders</span>
           </div>
           {tradeError && <p className="mt-1 text-xs text-rose-400">{tradeError}</p>}
+          </div>
         </div>
       </div>
 
