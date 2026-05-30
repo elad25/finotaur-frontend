@@ -1,6 +1,7 @@
 // src/pages/app/journal/finotaur-ai/services/finotaurChatStream.ts
-// Low-level SSE wrapper using fetch + ReadableStream (no EventSource — we POST a body).
+// Low-level SSE wrapper using authFetch + ReadableStream (no EventSource — we POST a body).
 
+import { authFetch } from '@/utils/authFetch';
 import type { ChatStreamEvent } from '../types';
 
 export interface ChatStreamOptions {
@@ -32,7 +33,7 @@ export async function* streamFinotaurChat(opts: ChatStreamOptions): AsyncGenerat
   const { message, conversationId, attachedTradeIds, signal } = opts;
 
   // 1. Open the POST
-  const res = await fetch('/api/journal-ai/chat/stream', {
+  const res = await authFetch('/api/journal-ai/chat/stream', {
     method: 'POST',
     credentials: 'include',
     headers: {

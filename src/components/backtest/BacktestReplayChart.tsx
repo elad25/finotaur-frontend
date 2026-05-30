@@ -59,10 +59,7 @@ const THEME = {
   brandGold: '#eab308',
 } as const;
 
-// Bars to pre-fetch on each side of the replay-start moment. ~700 total
-// at 5m bars = ~58 hours of replay — enough for a multi-day session
-// while keeping payload modest. Tweak if you need more "future" runway.
-const BARS_BEFORE_START = 1000;
+// Forward "future" runway revealed by PLAY after the replay-start moment.
 const BARS_AFTER_START = 500;
 
 /** Seconds per bar for the given interval. Used to pick the fetch window. */
@@ -79,6 +76,30 @@ function intervalSeconds(iv: Interval): number {
     case '1d': return 86400;
     case '1wk': return 7 * 86400;
     case '1mo': return 30 * 86400;
+  }
+}
+
+// Maximum history (seconds) to pull BEFORE the replay-start moment, tuned to
+// Yahoo's per-interval intraday limits (1m→7d, 5m→60d, 15m→60d, 1h→2y, 1d→max).
+// We deliberately request the largest window each interval allows so the chart
+// has as many bars as possible. The chart-bars edge fn caches immutable history
+// (chart_bars_cache + CDN), so a wide window is fetched once and reused — no
+// per-call cost (Yahoo is free).
+function maxLookbackSeconds(iv: Interval): number {
+  const DAY = 86400;
+  switch (iv) {
+    case '1m':
+    case '2m': return 7 * DAY;
+    case '5m':
+    case '15m':
+    case '30m': return 60 * DAY;
+    case '60m':
+    case '1h':
+    case '4h': return 730 * DAY;          // ~2y of hourly
+    case '1d':
+    case '1wk':
+    case '1mo': return 20 * 365 * DAY;    // effectively all available
+    default: return 60 * DAY;
   }
 }
 
@@ -110,6 +131,8 @@ export interface BacktestReplayChartProps {
   onBarClick?: (bar: Bar) => void;
   /** Phase 6: right-click — parent renders the order-type context menu at given screen coords. */
   onContextMenu?: (info: ContextMenuPriceInfo) => void;
+  /** Reports the current cursor bar (last revealed) so the parent can fill MARKET orders at its close/time. */
+  onCurrentBarChange?: (bar: Bar | null) => void;
   /**
    * TV-style replay: when the user left-clicks on the chart, jump playback to
    * that timestamp. The parent resets replayStart + the playback cursor.
@@ -139,6 +162,7 @@ export function BacktestReplayChart({
   onBarReveal,
   onBarClick,
   onContextMenu,
+  onCurrentBarChange,
   onJumpToTime,
   showReplayCursor = false,
   height = '100%',
@@ -149,6 +173,7 @@ export function BacktestReplayChart({
   const onBarClickRef = useRef(onBarClick);
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
+  const onCurrentBarChangeRef = useRef(onCurrentBarChange);
   const onJumpToTimeRef = useRef(onJumpToTime);
   const showReplayCursorRef = useRef(showReplayCursor);
   // Ref so the chart lifecycle closure (subscribeClick) always calls the
@@ -173,16 +198,17 @@ export function BacktestReplayChart({
     entryX: number;
   } | null>(null);
 
-  // Scissors (jump tool) armed state. Armed on mount (= entering replay): the
-  // trader picks a rewind point with ONE click, after which it disarms and the
-  // chart returns to a normal crosshair for trading. Re-arm via the toolbar
-  // Scissors toggle. (Elad 2026-05-30: "rewind once, then no scissors".)
-  const [scissorsArmed, setScissorsArmed] = useState(true);
+  // Replay-rewind ("REPLAY" button) armed state. Default OFF (Elad 2026-05-29):
+  // the chart opens in normal mode — a click trades, no surprise jump. The
+  // trader arms rewind via the toolbar REPLAY button, then ONE click jumps the
+  // cursor to that bar and it auto-disarms back to normal crosshair.
+  const [scissorsArmed, setScissorsArmed] = useState(false);
   const scissorsArmedRef = useRef(scissorsArmed);
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
+  useEffect(() => { onCurrentBarChangeRef.current = onCurrentBarChange; }, [onCurrentBarChange]);
   useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
   useEffect(() => { showReplayCursorRef.current = showReplayCursor; }, [showReplayCursor]);
   useEffect(() => { scissorsArmedRef.current = scissorsArmed; }, [scissorsArmed]);
@@ -195,7 +221,8 @@ export function BacktestReplayChart({
     setLoad({ kind: 'loading' });
 
     const secPerBar = intervalSeconds(interval);
-    const from = (replayStartTime - BARS_BEFORE_START * secPerBar) as UTCTimestamp;
+    // Pull the maximum history the interval allows before the start moment.
+    const from = (replayStartTime - maxLookbackSeconds(interval)) as UTCTimestamp;
     const nowSec = Math.floor(Date.now() / 1000);
     const to = Math.min(replayStartTime + BARS_AFTER_START * secPerBar, nowSec) as UTCTimestamp;
 
@@ -333,15 +360,9 @@ export function BacktestReplayChart({
       close: b.close,
     }));
     series.setData(visible);
-    // Show a stable window of the most recent ~150 bars near the cursor
-    // instead of fitContent() (which zooms out to fit all ~1000 history bars
-    // and causes the viewport to jump on every re-seed / LIVE->REPLAY toggle).
-    const seededCount = startIndex + 1;
-    const VISIBLE_WINDOW = 150;
-    chart.timeScale().setVisibleLogicalRange({
-      from: Math.max(0, seededCount - VISIBLE_WINDOW),
-      to: seededCount + 2,
-    });
+    // Zoom to fit ALL seeded history (Elad 2026-05-29: "maximum bars"). Shows
+    // the most candles possible on load; the trader can scroll/zoom from there.
+    chart.timeScale().fitContent();
 
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the
@@ -640,6 +661,12 @@ export function BacktestReplayChart({
     setCursorX(x);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback.cursor, bars, showReplayCursor]);
+
+  // Report the current cursor bar to the parent (for MARKET-order fills).
+  useEffect(() => {
+    onCurrentBarChangeRef.current?.(bars[lastUpdatedIdxRef.current] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback.cursor, bars]);
 
   // ─── Active-position TP/SL zone coordinates (#4) ─────────────
   useEffect(() => {

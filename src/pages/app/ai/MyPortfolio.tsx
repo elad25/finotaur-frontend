@@ -27,6 +27,8 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { FinotaurCopilotDashboard } from './copilot/FinotaurCopilotDashboard';
+import { DailyBrief } from './copilot/DailyBrief';
+import { FEATURES } from '@/config/features';
 
 type CopilotPreviewMode = 'landing' | 'subscriber' | 'admin';
 
@@ -66,7 +68,7 @@ export default function MyPortfolio() {
     return (
       <>
         {canPreview && <CopilotViewToggle mode={previewMode} onChange={setPreviewMode} />}
-        <FinotaurCopilotDashboard />
+        {FEATURES.COPILOT_DAILY_BRIEF ? <DailyBrief /> : <FinotaurCopilotDashboard />}
       </>
     );
   }
