@@ -49,6 +49,27 @@ jobs:
       - name: Type check (advisory)
         run: npm run typecheck || echo "::warning::tsc errors remain (OQ-69); advisory only, see workflow comment"
 
+  # BLOCKING gate (unlike `typecheck` above, which is advisory for OQ-69).
+  # Fails the build ONLY on undefined-identifier errors (TS2304/2552/2686/
+  # 2693/18004) — the crash class that ships a guaranteed runtime
+  # ReferenceError to production. Added after the 2026-05-30 FileBarChart
+  # white-screen incident, where advisory tsc + name-blind esbuild let an
+  # unimported identifier reach the prod bundle. See scripts/ci/crash-guard.mjs.
+  crash-guard:
+    name: crash-guard (undefined identifiers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Crash guard (blocking)
+        run: npm run typecheck:crash-guard
+
   lint:
     name: lint (eslint)
     runs-on: ubuntu-latest
