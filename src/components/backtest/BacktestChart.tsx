@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft, Star } from 'lucide-react';
 
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
@@ -47,7 +47,7 @@ import { DateTimePicker } from './DateTimePicker';
 // (continuous front-month via =F suffix) and equities (bare ticker). Binance
 // handles crypto. Pickers default to the most common contracts/tickers per
 // class — power users can type freely.
-type AssetClass = 'futures' | 'stocks' | 'crypto';
+type AssetClass = 'futures' | 'stocks' | 'forex' | 'crypto';
 
 // Searchable symbol universe per asset class. `ticker` is what the trader
 // types/sees (e.g. "ES"); `symbol` is the source-native form passed to the
@@ -86,11 +86,11 @@ const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
   stocks: [
     { ticker: 'AAPL', label: 'Apple', symbol: 'AAPL' },
     { ticker: 'NVDA', label: 'Nvidia', symbol: 'NVDA' },
-    { ticker: 'TSLA', label: 'Tesla', symbol: 'TSLA' },
     { ticker: 'MSFT', label: 'Microsoft', symbol: 'MSFT' },
     { ticker: 'AMZN', label: 'Amazon', symbol: 'AMZN' },
     { ticker: 'GOOGL', label: 'Alphabet (Class A)', symbol: 'GOOGL' },
     { ticker: 'META', label: 'Meta Platforms', symbol: 'META' },
+    { ticker: 'TSLA', label: 'Tesla', symbol: 'TSLA' },
     { ticker: 'NFLX', label: 'Netflix', symbol: 'NFLX' },
     { ticker: 'AMD', label: 'Advanced Micro Devices', symbol: 'AMD' },
     { ticker: 'JPM', label: 'JPMorgan Chase', symbol: 'JPM' },
@@ -100,12 +100,121 @@ const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
     { ticker: 'XOM', label: 'Exxon Mobil', symbol: 'XOM' },
     { ticker: 'WMT', label: 'Walmart', symbol: 'WMT' },
     { ticker: 'COST', label: 'Costco', symbol: 'COST' },
+    // S&P 100 mega/large caps
+    { ticker: 'BRK-B', label: 'Berkshire Hathaway (Class B)', symbol: 'BRK-B' },
+    { ticker: 'UNH', label: 'UnitedHealth Group', symbol: 'UNH' },
+    { ticker: 'LLY', label: 'Eli Lilly', symbol: 'LLY' },
+    { ticker: 'JNJ', label: 'Johnson & Johnson', symbol: 'JNJ' },
+    { ticker: 'PG', label: 'Procter & Gamble', symbol: 'PG' },
+    { ticker: 'HD', label: 'Home Depot', symbol: 'HD' },
+    { ticker: 'MA', label: 'Mastercard', symbol: 'MA' },
+    { ticker: 'ABBV', label: 'AbbVie', symbol: 'ABBV' },
+    { ticker: 'MRK', label: 'Merck', symbol: 'MRK' },
+    { ticker: 'AVGO', label: 'Broadcom', symbol: 'AVGO' },
+    { ticker: 'PEP', label: 'PepsiCo', symbol: 'PEP' },
+    { ticker: 'KO', label: 'Coca-Cola', symbol: 'KO' },
+    { ticker: 'ORCL', label: 'Oracle', symbol: 'ORCL' },
+    { ticker: 'CRM', label: 'Salesforce', symbol: 'CRM' },
+    { ticker: 'ADBE', label: 'Adobe', symbol: 'ADBE' },
+    { ticker: 'ACN', label: 'Accenture', symbol: 'ACN' },
+    { ticker: 'MCD', label: "McDonald's", symbol: 'MCD' },
+    { ticker: 'CSCO', label: 'Cisco Systems', symbol: 'CSCO' },
+    { ticker: 'INTC', label: 'Intel', symbol: 'INTC' },
+    { ticker: 'QCOM', label: 'Qualcomm', symbol: 'QCOM' },
+    { ticker: 'TXN', label: 'Texas Instruments', symbol: 'TXN' },
+    { ticker: 'NKE', label: 'Nike', symbol: 'NKE' },
+    { ticker: 'PFE', label: 'Pfizer', symbol: 'PFE' },
+    { ticker: 'TMO', label: 'Thermo Fisher Scientific', symbol: 'TMO' },
+    { ticker: 'ABT', label: 'Abbott Laboratories', symbol: 'ABT' },
+    { ticker: 'DHR', label: 'Danaher', symbol: 'DHR' },
+    { ticker: 'LIN', label: 'Linde', symbol: 'LIN' },
+    { ticker: 'UPS', label: 'United Parcel Service', symbol: 'UPS' },
+    { ticker: 'PM', label: 'Philip Morris International', symbol: 'PM' },
+    { ticker: 'RTX', label: 'RTX Corporation', symbol: 'RTX' },
+    { ticker: 'HON', label: 'Honeywell', symbol: 'HON' },
+    { ticker: 'GS', label: 'Goldman Sachs', symbol: 'GS' },
+    { ticker: 'MS', label: 'Morgan Stanley', symbol: 'MS' },
+    { ticker: 'BAC', label: 'Bank of America', symbol: 'BAC' },
+    { ticker: 'WFC', label: 'Wells Fargo', symbol: 'WFC' },
+    { ticker: 'C', label: 'Citigroup', symbol: 'C' },
+    { ticker: 'AXP', label: 'American Express', symbol: 'AXP' },
+    { ticker: 'CAT', label: 'Caterpillar', symbol: 'CAT' },
+    { ticker: 'DE', label: 'Deere & Company', symbol: 'DE' },
+    { ticker: 'GE', label: 'GE Aerospace', symbol: 'GE' },
+    { ticker: 'LMT', label: 'Lockheed Martin', symbol: 'LMT' },
+    { ticker: 'CVX', label: 'Chevron', symbol: 'CVX' },
+    { ticker: 'COP', label: 'ConocoPhillips', symbol: 'COP' },
+    { ticker: 'T', label: 'AT&T', symbol: 'T' },
+    { ticker: 'VZ', label: 'Verizon Communications', symbol: 'VZ' },
+    { ticker: 'CMCSA', label: 'Comcast', symbol: 'CMCSA' },
+    { ticker: 'IBM', label: 'IBM', symbol: 'IBM' },
+    { ticker: 'NOW', label: 'ServiceNow', symbol: 'NOW' },
+    { ticker: 'INTU', label: 'Intuit', symbol: 'INTU' },
+    { ticker: 'AMAT', label: 'Applied Materials', symbol: 'AMAT' },
+    { ticker: 'MU', label: 'Micron Technology', symbol: 'MU' },
+    { ticker: 'LRCX', label: 'Lam Research', symbol: 'LRCX' },
+    { ticker: 'KLAC', label: 'KLA Corporation', symbol: 'KLAC' },
+    { ticker: 'MDT', label: 'Medtronic', symbol: 'MDT' },
+    { ticker: 'ISRG', label: 'Intuitive Surgical', symbol: 'ISRG' },
+    { ticker: 'REGN', label: 'Regeneron Pharmaceuticals', symbol: 'REGN' },
+    { ticker: 'GILD', label: 'Gilead Sciences', symbol: 'GILD' },
+    { ticker: 'BMY', label: 'Bristol-Myers Squibb', symbol: 'BMY' },
+    { ticker: 'AMGN', label: 'Amgen', symbol: 'AMGN' },
+    { ticker: 'CI', label: 'Cigna', symbol: 'CI' },
+    { ticker: 'CVS', label: 'CVS Health', symbol: 'CVS' },
+    { ticker: 'LOW', label: "Lowe's", symbol: 'LOW' },
+    { ticker: 'TGT', label: 'Target', symbol: 'TGT' },
+    { ticker: 'SBUX', label: 'Starbucks', symbol: 'SBUX' },
+    { ticker: 'BLK', label: 'BlackRock', symbol: 'BLK' },
+    { ticker: 'SCHW', label: 'Charles Schwab', symbol: 'SCHW' },
+    { ticker: 'AMT', label: 'American Tower', symbol: 'AMT' },
+    { ticker: 'PLD', label: 'Prologis', symbol: 'PLD' },
+    { ticker: 'NEE', label: 'NextEra Energy', symbol: 'NEE' },
+    { ticker: 'DUK', label: 'Duke Energy', symbol: 'DUK' },
+    { ticker: 'SO', label: 'Southern Company', symbol: 'SO' },
+    // Leading ETFs
     { ticker: 'SPY', label: 'SPDR S&P 500 ETF', symbol: 'SPY' },
     { ticker: 'QQQ', label: 'Invesco QQQ (Nasdaq-100)', symbol: 'QQQ' },
     { ticker: 'IWM', label: 'iShares Russell 2000 ETF', symbol: 'IWM' },
+    { ticker: 'DIA', label: 'SPDR Dow Jones Industrial ETF', symbol: 'DIA' },
+    { ticker: 'VTI', label: 'Vanguard Total Stock Market ETF', symbol: 'VTI' },
+    { ticker: 'VOO', label: 'Vanguard S&P 500 ETF', symbol: 'VOO' },
+    { ticker: 'XLF', label: 'Financial Select Sector SPDR', symbol: 'XLF' },
+    { ticker: 'XLE', label: 'Energy Select Sector SPDR', symbol: 'XLE' },
+    { ticker: 'XLK', label: 'Technology Select Sector SPDR', symbol: 'XLK' },
+    { ticker: 'SMH', label: 'VanEck Semiconductor ETF', symbol: 'SMH' },
+    { ticker: 'ARKK', label: 'ARK Innovation ETF', symbol: 'ARKK' },
+    { ticker: 'GLD', label: 'SPDR Gold Shares ETF', symbol: 'GLD' },
+    { ticker: 'TLT', label: 'iShares 20+ Year Treasury Bond ETF', symbol: 'TLT' },
+    // Indices
     { ticker: 'SPX', label: 'S&P 500 Index', symbol: '^GSPC' },
     { ticker: 'NDX', label: 'Nasdaq-100 Index', symbol: '^NDX' },
     { ticker: 'VIX', label: 'CBOE Volatility Index', symbol: '^VIX' },
+  ],
+  forex: [
+    // Majors
+    { ticker: 'EURUSD', label: 'EUR/USD', symbol: 'EURUSD=X' },
+    { ticker: 'GBPUSD', label: 'GBP/USD', symbol: 'GBPUSD=X' },
+    { ticker: 'USDJPY', label: 'USD/JPY', symbol: 'USDJPY=X' },
+    { ticker: 'AUDUSD', label: 'AUD/USD', symbol: 'AUDUSD=X' },
+    { ticker: 'USDCAD', label: 'USD/CAD', symbol: 'USDCAD=X' },
+    { ticker: 'USDCHF', label: 'USD/CHF', symbol: 'USDCHF=X' },
+    { ticker: 'NZDUSD', label: 'NZD/USD', symbol: 'NZDUSD=X' },
+    // Crosses
+    { ticker: 'EURGBP', label: 'EUR/GBP', symbol: 'EURGBP=X' },
+    { ticker: 'EURJPY', label: 'EUR/JPY', symbol: 'EURJPY=X' },
+    { ticker: 'GBPJPY', label: 'GBP/JPY', symbol: 'GBPJPY=X' },
+    { ticker: 'EURCHF', label: 'EUR/CHF', symbol: 'EURCHF=X' },
+    { ticker: 'EURAUD', label: 'EUR/AUD', symbol: 'EURAUD=X' },
+    { ticker: 'EURCAD', label: 'EUR/CAD', symbol: 'EURCAD=X' },
+    { ticker: 'AUDJPY', label: 'AUD/JPY', symbol: 'AUDJPY=X' },
+    { ticker: 'GBPCHF', label: 'GBP/CHF', symbol: 'GBPCHF=X' },
+    { ticker: 'CADJPY', label: 'CAD/JPY', symbol: 'CADJPY=X' },
+    { ticker: 'CHFJPY', label: 'CHF/JPY', symbol: 'CHFJPY=X' },
+    { ticker: 'AUDNZD', label: 'AUD/NZD', symbol: 'AUDNZD=X' },
+    { ticker: 'NZDJPY', label: 'NZD/JPY', symbol: 'NZDJPY=X' },
+    { ticker: 'GBPAUD', label: 'GBP/AUD', symbol: 'GBPAUD=X' },
+    { ticker: 'AUDCAD', label: 'AUD/CAD', symbol: 'AUDCAD=X' },
   ],
   crypto: [
     { ticker: 'BTC', label: 'Bitcoin', symbol: 'BTCUSDT' },
@@ -120,6 +229,14 @@ const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
     { ticker: 'DOT', label: 'Polkadot', symbol: 'DOTUSDT' },
     { ticker: 'MATIC', label: 'Polygon', symbol: 'MATICUSDT' },
     { ticker: 'LTC', label: 'Litecoin', symbol: 'LTCUSDT' },
+    { ticker: 'TRX', label: 'TRON', symbol: 'TRXUSDT' },
+    { ticker: 'BCH', label: 'Bitcoin Cash', symbol: 'BCHUSDT' },
+    { ticker: 'NEAR', label: 'NEAR Protocol', symbol: 'NEARUSDT' },
+    { ticker: 'APT', label: 'Aptos', symbol: 'APTUSDT' },
+    { ticker: 'ARB', label: 'Arbitrum', symbol: 'ARBUSDT' },
+    { ticker: 'OP', label: 'Optimism', symbol: 'OPUSDT' },
+    { ticker: 'FIL', label: 'Filecoin', symbol: 'FILUSDT' },
+    { ticker: 'ICP', label: 'Internet Computer', symbol: 'ICPUSDT' },
   ],
 };
 
@@ -132,37 +249,120 @@ const ALL_SYMBOLS: (SymbolEntry & { assetClass: AssetClass })[] = (
 function detectAssetClass(sym: string): AssetClass {
   if (isCryptoSymbol(sym)) return 'crypto';
   if (sym.endsWith('=F')) return 'futures';
+  if (sym.endsWith('=X')) return 'forex';
   return 'stocks';
+}
+
+// Normalize a free-typed ticker to a source-native symbol given an explicit
+// asset class. Returns the class-appropriate native form (e.g. adds =X for
+// forex pairs that don't already carry the suffix).
+function normalizeRawSymbol(raw: string, assetClass: AssetClass): string {
+  const t = raw.trim().toUpperCase();
+  if (!t) return t;
+  if (assetClass === 'forex') return t.endsWith('=X') ? t : `${t}=X`;
+  return t;
 }
 
 // Normalize a free-typed ticker to a source-native symbol WITHOUT an explicit
 // class. Exact-match the combined universe first (covers futures roots like ES,
 // indices like SPX->^GSPC, crypto bases like BTC->BTCUSDT); otherwise infer
-// from the raw shape (=F => futures, crypto pair => crypto, else bare equity).
+// from the raw shape (=F => futures, crypto pair => crypto, =X => forex, else
+// bare equity).
 function normalizeSymbolAuto(raw: string): string {
   const t = raw.trim().toUpperCase();
   if (!t) return t;
   const hit = ALL_SYMBOLS.find((u) => u.ticker.toUpperCase() === t);
   if (hit) return hit.symbol;
+  // For raw strings not in the universe, infer class from shape so that
+  // e.g. a manually-typed "EURUSD" without a universe entry stays as-is
+  // (forex detection relies on =X suffix already present or a universe hit).
   return t;
 }
 
-const INTERVALS: Interval[] = ['1m', '5m', '15m', '60m', '1d'];
+// ─── Interval selector config ──────────────────────────────────
+// All intervals that chart-bars/Yahoo supports, grouped for the dropdown.
+// '60m' is the canonical hour value in this codebase (toYahooInterval maps it
+// to '1h' before hitting Yahoo); '1h' is also in the Interval type but we use
+// '60m' here to match the existing state default and persistence format.
+interface IntervalOption {
+  value: Interval;
+  label: string;
+}
+const INTERVAL_GROUPS: { heading: string; items: IntervalOption[] }[] = [
+  {
+    heading: 'Minutes',
+    items: [
+      { value: '1m',  label: '1m'  },
+      { value: '2m',  label: '2m'  },
+      { value: '5m',  label: '5m'  },
+      { value: '15m', label: '15m' },
+      { value: '30m', label: '30m' },
+    ],
+  },
+  {
+    heading: 'Hours',
+    items: [
+      { value: '60m', label: '1h' },
+      { value: '4h',  label: '4h' },
+    ],
+  },
+  {
+    heading: 'Days',
+    items: [
+      { value: '1d',  label: '1D'  },
+      { value: '1wk', label: '1W'  },
+    ],
+  },
+];
+
+const DEFAULT_FAVORITES: Interval[] = ['1m', '5m', '15m', '60m', '4h', '1d'];
+const LS_FAVORITES_KEY = 'finotaur.backtest.intervalFavorites';
+
+function loadFavorites(): Interval[] {
+  try {
+    const raw = localStorage.getItem(LS_FAVORITES_KEY);
+    if (!raw) return DEFAULT_FAVORITES;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed as Interval[];
+  } catch {
+    // ignore parse errors
+  }
+  return DEFAULT_FAVORITES;
+}
+
+function saveFavorites(favs: Interval[]): void {
+  try {
+    localStorage.setItem(LS_FAVORITES_KEY, JSON.stringify(favs));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+// Display label for an interval value (e.g. '60m' → '1h', '1wk' → '1W').
+function intervalLabel(iv: Interval): string {
+  for (const group of INTERVAL_GROUPS) {
+    const opt = group.items.find((o) => o.value === iv);
+    if (opt) return opt.label;
+  }
+  return iv;
+}
 
 // Lookback windows tuned to Yahoo's per-barInterval limits (1m → 7d, 5m → 60d,
 // 1d → unlimited). Crypto from Binance has no equivalent ceiling but we keep
 // the same windows for UX consistency.
 function lookbackSeconds(barInterval: Interval): number {
   switch (barInterval) {
-    case '1m': return 7 * 24 * 60 * 60;       // 7 days
-    case '5m': return 30 * 24 * 60 * 60;      // 30 days
-    case '15m': return 60 * 24 * 60 * 60;     // 60 days
+    case '1m': return 7 * 24 * 60 * 60;        // 7 days
+    case '2m': return 14 * 24 * 60 * 60;        // 14 days
+    case '5m': return 30 * 24 * 60 * 60;        // 30 days
+    case '15m': return 60 * 24 * 60 * 60;       // 60 days
+    case '30m': return 90 * 24 * 60 * 60;       // 90 days
     case '60m':
     case '1h':
-    case '4h': return 180 * 24 * 60 * 60;     // 180 days
+    case '4h': return 180 * 24 * 60 * 60;       // 180 days
     case '1d':
     case '1wk':
-    case '1mo': return 5 * 365 * 24 * 60 * 60; // 5 years
+    case '1mo': return 5 * 365 * 24 * 60 * 60;  // 5 years
     default: return 30 * 24 * 60 * 60;
   }
 }
@@ -190,11 +390,148 @@ function positionToMarkers(p: PaperPosition): ChartMarker[] {
 }
 
 
+// ─── IntervalSelector — TradingView-style favorites row + categorized dropdown ─
+// Favorites row shows starred intervals as small buttons (selected one gold).
+// Chevron button at the end opens a dropdown grouped by Minutes / Hours / Days.
+// Each row in the dropdown: click label → select; click star → toggle favorite.
+// Favorites persist in localStorage under LS_FAVORITES_KEY.
+function IntervalSelector({
+  value,
+  onChange,
+}: {
+  value: Interval;
+  onChange: (iv: Interval) => void;
+}) {
+  const [favorites, setFavorites] = useState<Interval[]>(loadFavorites);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close dropdown on outside click or Escape (mirrors SymbolAutocomplete pattern).
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const toggleFavorite = (iv: Interval, e: { stopPropagation(): void }) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = prev.includes(iv)
+        ? prev.filter((f) => f !== iv)
+        : [...prev, iv];
+      saveFavorites(next);
+      return next;
+    });
+  };
+
+  const selectInterval = (iv: Interval) => {
+    onChange(iv);
+    setOpen(false);
+  };
+
+  // Preserve the order from INTERVAL_GROUPS for display.
+  const allOrderedIntervals = INTERVAL_GROUPS.flatMap((g) => g.items.map((i) => i.value));
+  const favoritesOrdered = allOrderedIntervals.filter((iv) => favorites.includes(iv));
+
+  return (
+    <div className="relative flex items-center" ref={containerRef}>
+      {/* Favorites row + chevron — unified rounded container */}
+      <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
+        {favoritesOrdered.map((iv) => (
+          <button
+            key={iv}
+            type="button"
+            onClick={() => selectInterval(iv)}
+            className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              value === iv
+                ? 'bg-[#C9A646] text-black'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            {intervalLabel(iv)}
+          </button>
+        ))}
+        {/* Chevron toggle button */}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="More intervals"
+          className={`flex items-center justify-center px-2 py-1.5 text-zinc-400 transition-colors hover:text-zinc-200 ${
+            open ? 'text-[#C9A646]' : ''
+          }`}
+        >
+          <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {/* Dropdown panel — styled to match Run Strategy / ActiveStrategy dropdowns */}
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 min-w-[160px] rounded-md border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
+          {INTERVAL_GROUPS.map((group) => (
+            <div key={group.heading} className="mb-1 last:mb-0">
+              <div className="mb-1 px-2 text-[10px] uppercase tracking-wider text-zinc-500">
+                {group.heading}
+              </div>
+              {group.items.map(({ value: iv, label }) => {
+                const isSelected = value === iv;
+                const isFav = favorites.includes(iv);
+                return (
+                  <div
+                    key={iv}
+                    className={`flex items-center justify-between rounded px-2 py-1 ${
+                      isSelected ? 'bg-[#C9A646]/10' : 'hover:bg-zinc-900'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => selectInterval(iv)}
+                      className={`flex-1 text-left text-sm font-medium ${
+                        isSelected ? 'text-[#C9A646]' : 'text-zinc-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => toggleFavorite(iv, e)}
+                      aria-label={isFav ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+                      className="ml-2 flex-shrink-0 p-0.5"
+                    >
+                      <Star
+                        size={12}
+                        className={
+                          isFav
+                            ? 'fill-[#C9A646] text-[#C9A646]'
+                            : 'fill-none text-zinc-600 hover:text-zinc-400'
+                        }
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── SymbolAutocomplete — type-ahead ticker picker (replaces native <select>) ─
 // Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
 // Enter select; Enter on no-match commits a custom symbol. Matches the toolbar
 // styling (gold #C9A646 accent on dark zinc) like ActiveStrategyDropdown.
-function SymbolAutocomplete({ symbol, onSelect }: { symbol: string; onSelect: (symbol: string) => void; }) {
+function SymbolAutocomplete({ symbol, assetClass, onSelect }: { symbol: string; assetClass?: AssetClass; onSelect: (symbol: string) => void; }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
@@ -238,7 +575,9 @@ function SymbolAutocomplete({ symbol, onSelect }: { symbol: string; onSelect: (s
   };
 
   const commitRaw = () => {
-    const next = normalizeSymbolAuto(query);
+    const next = assetClass
+      ? normalizeRawSymbol(normalizeSymbolAuto(query), assetClass)
+      : normalizeSymbolAuto(query);
     if (!next) return;
     onSelect(next);
     setQuery('');
@@ -764,25 +1103,12 @@ export function BacktestChart({
             (Tier 1 2026-05-30). Asset class auto-detected from chosen symbol. */}
         <SymbolAutocomplete
           symbol={symbol}
+          assetClass={assetClass}
           onSelect={(next) => { setSymbol(next); setLivePrice(''); }}
         />
 
-        {/* Interval picker */}
-        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
-          {INTERVALS.map((iv) => (
-            <button
-              key={iv}
-              onClick={() => setBarInterval(iv)}
-              className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                barInterval === iv
-                  ? 'bg-[#C9A646] text-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {iv}
-            </button>
-          ))}
-        </div>
+        {/* Interval picker — TradingView-style favorites row + categorized dropdown */}
+        <IntervalSelector value={barInterval} onChange={setBarInterval} />
 
         {/* Date picker */}
         <DateTimePicker
@@ -1057,9 +1383,9 @@ export function BacktestChart({
                   </span>
                 )}
                 <div className="flex items-stretch gap-2">
-                  <button onClick={() => handleOpen('LONG')} className="flex flex-col items-center justify-center rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-5 py-1.5 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400"><TrendingUp size={15} /> BUY</span><span className="text-[9px] uppercase tracking-wider text-emerald-600/80">Market</span></button>
-                  <button onClick={() => handleOpen('SHORT')} className="flex flex-col items-center justify-center rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-5 py-1.5 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-rose-400"><TrendingDown size={15} /> SELL</span><span className="text-[9px] uppercase tracking-wider text-rose-600/80">Market</span></button>
-                  <button onClick={() => handleClose('manual')} disabled={!state.activePosition} className={`flex flex-col items-center justify-center rounded-md border px-5 py-1.5 transition-all ${state.activePosition ? 'border-zinc-600 bg-zinc-800/70 hover:border-zinc-500 hover:bg-zinc-700/70' : 'cursor-not-allowed border-white/10 bg-white/[0.03]'}`}><span className={`flex items-center gap-1.5 text-sm font-bold ${state.activePosition ? 'text-zinc-100' : 'text-zinc-600'}`}><X size={15} strokeWidth={2.5} /> CLOSE</span><span className={`text-[9px] uppercase tracking-wider ${state.activePosition ? 'text-zinc-400' : 'text-zinc-600'}`}>{state.activePosition ? `$${livePrice || '—'}` : 'Flat'}</span></button>
+                  <button onClick={() => handleOpen('LONG')} className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-4 py-2 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><TrendingUp size={15} className="text-emerald-400" /><span className="text-sm font-bold text-emerald-400">BUY</span><span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/90">Market</span></button>
+                  <button onClick={() => handleOpen('SHORT')} className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-4 py-2 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><TrendingDown size={15} className="text-rose-400" /><span className="text-sm font-bold text-rose-400">SELL</span><span className="text-[10px] font-semibold uppercase tracking-wider text-rose-600/90">Market</span></button>
+                  <button onClick={() => handleClose('manual')} disabled={!state.activePosition} className={`flex items-center gap-2 rounded-md border px-4 py-2 transition-all ${state.activePosition ? 'border-zinc-700 bg-black hover:border-zinc-600 hover:bg-zinc-900' : 'cursor-not-allowed border-white/10 bg-black/40'}`}><X size={15} strokeWidth={2.5} className={state.activePosition ? 'text-zinc-100' : 'text-zinc-600'} /><span className={`text-sm font-bold ${state.activePosition ? 'text-zinc-100' : 'text-zinc-600'}`}>CLOSE</span><span className={`text-[10px] font-semibold uppercase tracking-wider ${state.activePosition ? 'text-zinc-500' : 'text-zinc-700'}`}>{state.activePosition ? `$${livePrice || '—'}` : 'Flat'}</span></button>
                 </div>
               </div>
               <div className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-white/5 pt-2 text-[11px] text-zinc-500">

@@ -21,7 +21,7 @@ export interface SaveSessionInput {
   name?: string;
   symbol: string;
   interval: string;
-  asset_class?: 'futures' | 'stocks' | 'crypto';
+  asset_class?: 'futures' | 'stocks' | 'forex' | 'crypto';
   startDate: Date | string;
   endDate: Date | string;
   initialBalance: number;
