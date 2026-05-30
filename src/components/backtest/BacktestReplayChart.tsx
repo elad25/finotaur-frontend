@@ -59,10 +59,7 @@ const THEME = {
   brandGold: '#eab308',
 } as const;
 
-// Bars to pre-fetch on each side of the replay-start moment. ~700 total
-// at 5m bars = ~58 hours of replay — enough for a multi-day session
-// while keeping payload modest. Tweak if you need more "future" runway.
-const BARS_BEFORE_START = 1000;
+// Forward "future" runway revealed by PLAY after the replay-start moment.
 const BARS_AFTER_START = 500;
 
 /** Seconds per bar for the given interval. Used to pick the fetch window. */
@@ -79,6 +76,30 @@ function intervalSeconds(iv: Interval): number {
     case '1d': return 86400;
     case '1wk': return 7 * 86400;
     case '1mo': return 30 * 86400;
+  }
+}
+
+// Maximum history (seconds) to pull BEFORE the replay-start moment, tuned to
+// Yahoo's per-interval intraday limits (1m→7d, 5m→60d, 15m→60d, 1h→2y, 1d→max).
+// We deliberately request the largest window each interval allows so the chart
+// has as many bars as possible. The chart-bars edge fn caches immutable history
+// (chart_bars_cache + CDN), so a wide window is fetched once and reused — no
+// per-call cost (Yahoo is free).
+function maxLookbackSeconds(iv: Interval): number {
+  const DAY = 86400;
+  switch (iv) {
+    case '1m':
+    case '2m': return 7 * DAY;
+    case '5m':
+    case '15m':
+    case '30m': return 60 * DAY;
+    case '60m':
+    case '1h':
+    case '4h': return 730 * DAY;          // ~2y of hourly
+    case '1d':
+    case '1wk':
+    case '1mo': return 20 * 365 * DAY;    // effectively all available
+    default: return 60 * DAY;
   }
 }
 
@@ -200,7 +221,8 @@ export function BacktestReplayChart({
     setLoad({ kind: 'loading' });
 
     const secPerBar = intervalSeconds(interval);
-    const from = (replayStartTime - BARS_BEFORE_START * secPerBar) as UTCTimestamp;
+    // Pull the maximum history the interval allows before the start moment.
+    const from = (replayStartTime - maxLookbackSeconds(interval)) as UTCTimestamp;
     const nowSec = Math.floor(Date.now() / 1000);
     const to = Math.min(replayStartTime + BARS_AFTER_START * secPerBar, nowSec) as UTCTimestamp;
 
@@ -338,15 +360,9 @@ export function BacktestReplayChart({
       close: b.close,
     }));
     series.setData(visible);
-    // Show a stable window of the most recent ~150 bars near the cursor
-    // instead of fitContent() (which zooms out to fit all ~1000 history bars
-    // and causes the viewport to jump on every re-seed / LIVE->REPLAY toggle).
-    const seededCount = startIndex + 1;
-    const VISIBLE_WINDOW = 150;
-    chart.timeScale().setVisibleLogicalRange({
-      from: Math.max(0, seededCount - VISIBLE_WINDOW),
-      to: seededCount + 2,
-    });
+    // Zoom to fit ALL seeded history (Elad 2026-05-29: "maximum bars"). Shows
+    // the most candles possible on load; the trader can scroll/zoom from there.
+    chart.timeScale().fitContent();
 
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the

@@ -466,6 +466,9 @@ export function BacktestChart({
     setTimeout(() => setTradeError(null), 3000);
   }, []);
 
+  // Floating stats popup collapse state — starts open.
+  const [statsPanelOpen, setStatsPanelOpen] = useState(true);
+
   // Phase 6: right-click context menu for pending order types. Position
   // captured from the chart click; menu closes on outside click or after
   // a selection is made.
@@ -975,10 +978,9 @@ export function BacktestChart({
         </div>
       </div>
 
-      {/* Main split: chart + side panel */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Chart — always Replay (BacktestReplayChart) */}
-        <div className="flex-1 min-w-0 bg-[#08080a]">
+      {/* Main: full-width chart with floating stats popup + bottom trading bar */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="relative flex-1 min-w-0 bg-[#08080a]">
           <BacktestReplayChart
             symbol={symbol}
             interval={barInterval}
@@ -995,274 +997,121 @@ export function BacktestChart({
             showReplayCursor
             height="100%"
           />
-        </div>
-
-        {/* Side panel — paper trading + stats + history */}
-        <aside className="flex w-80 flex-col overflow-y-auto border-l border-zinc-800 bg-zinc-950">
-          {/* Paper trading panel */}
-          <div className="border-b border-zinc-800 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-              Paper Trading
-            </h3>
-
-            <label className="mb-3 block">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price</span>
-              <input
-                type="number"
-                value={livePrice}
-                onChange={(e) => setLivePrice(e.target.value)}
-                placeholder="e.g. 20425.50"
-                step="any"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-            </label>
-
-            <label className="mb-3 block">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-500">Size (contracts)</span>
-              <input
-                type="number"
-                value={size}
-                onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))}
-                min="0.01"
-                step="any"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-            </label>
-
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Stop loss</span>
-                <input
-                  type="number"
-                  value={slInput}
-                  onChange={(e) => setSlInput(e.target.value)}
-                  placeholder="optional"
-                  step="any"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Take profit</span>
-                <input
-                  type="number"
-                  value={tpInput}
-                  onChange={(e) => setTpInput(e.target.value)}
-                  placeholder="optional"
-                  step="any"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-              </label>
-            </div>
-
-            {!activePos ? (
-              <div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleOpen('LONG')}
-                    className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-emerald-600 px-3 py-2 text-white transition-colors hover:bg-emerald-500"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <TrendingUp size={14} />
-                      <span className="text-sm font-bold">BUY</span>
-                    </div>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
-                  </button>
-                  <button
-                    onClick={() => handleOpen('SHORT')}
-                    className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-rose-600 px-3 py-2 text-white transition-colors hover:bg-rose-500"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <TrendingDown size={14} />
-                      <span className="text-sm font-bold">SELL</span>
-                    </div>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
-                  </button>
+          {/* Floating Session Stats popup — top-right */}
+          <div className="absolute right-3 top-3 z-20 w-72 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/95 shadow-2xl backdrop-blur-sm">
+            <button type="button" onClick={() => setStatsPanelOpen((v) => !v)}
+              className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646] hover:bg-zinc-900/60">
+              <span>Session Stats</span>
+              <ChevronDown size={14} className={`transition-transform ${statsPanelOpen ? '' : '-rotate-90'}`} />
+            </button>
+            {statsPanelOpen && (
+              <div className="max-h-[70vh] overflow-y-auto border-t border-zinc-800">
+                <div className="p-3">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <StatRow label="Trades" value={state.stats.totalTrades.toString()} />
+                    <StatRow
+                      label="Win rate"
+                      value={`${state.stats.winRate.toFixed(1)}%`}
+                      tone={state.stats.winRate >= 50 ? 'positive' : 'neutral'}
+                    />
+                    <StatRow label="Winners" value={state.stats.winners.toString()} tone="positive" />
+                    <StatRow label="Losers" value={state.stats.losers.toString()} tone="negative" />
+                    <StatRow
+                      label="Profit factor"
+                      value={state.stats.profitFactor === Infinity ? '∞' : state.stats.profitFactor.toFixed(2)}
+                      tone="brand"
+                    />
+                    <StatRow
+                      label="Avg R:R"
+                      value={state.stats.avgRR > 0 ? `1:${state.stats.avgRR.toFixed(2)}` : '—'}
+                      tone="brand"
+                    />
+                    <StatRow
+                      label="Avg win"
+                      value={`$${state.stats.avgWin.toFixed(2)}`}
+                      tone="positive"
+                    />
+                    <StatRow
+                      label="Avg loss"
+                      value={`$${state.stats.avgLoss.toFixed(2)}`}
+                      tone="negative"
+                    />
+                    <StatRow
+                      label="Largest win"
+                      value={`$${state.stats.largestWin.toFixed(2)}`}
+                      tone="positive"
+                    />
+                    <StatRow
+                      label="Largest loss"
+                      value={`$${state.stats.largestLoss.toFixed(2)}`}
+                      tone="negative"
+                    />
+                    <StatRow label="Win streak" value={state.stats.longestWinStreak.toString()} />
+                    <StatRow label="Loss streak" value={state.stats.longestLossStreak.toString()} />
+                  </div>
                 </div>
-                <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
-                  💡 Right-click on the chart to place LIMIT or STOP orders
-                </div>
-                {tradeError && (
-                  <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
-                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
-                    <span>{tradeError}</span>
+                {strategyBreakdown.length > 0 && (
+                  <div className="border-t border-zinc-800 p-3">
+                    <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#C9A646]">By Strategy</h3>
+                    <div className="space-y-1.5 text-xs">
+                      {strategyBreakdown.map((row) => (
+                        <div
+                          key={row.key}
+                          className="flex items-center justify-between rounded-md border border-zinc-900 bg-zinc-900/40 px-2 py-1.5"
+                        >
+                          <div className="flex min-w-0 flex-col">
+                            <span className="truncate font-medium text-zinc-300">{row.label}</span>
+                            <span className="text-[10px] text-zinc-600">
+                              {row.trades} trade{row.trades !== 1 && 's'} · {row.winRate.toFixed(0)}% win
+                            </span>
+                          </div>
+                          <span className={`font-bold tabular-nums ${row.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {row.netPnl >= 0 ? '+' : ''}${row.netPnl.toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
+                <div className="border-t border-zinc-800 p-3">
+                  <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#C9A646]">Trade History</h3>
+                  {/* History panel removed per Elad — closed trades land in My Trades */}
+                  <div className="flex-1" />
+                </div>
               </div>
+            )}
+          </div>
+        </div>
+        {/* Bottom trading bar */}
+        <div className="border-t border-zinc-800 bg-zinc-950 px-4 py-2">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price (optional)</span>
+              <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
+                className="mt-1 w-28 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
+            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Size</span>
+              <input type="number" value={size} onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))} min="0.01" step="any"
+                className="mt-1 w-20 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
+            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Stop loss</span>
+              <input type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)} placeholder="optional" step="any"
+                className="mt-1 w-24 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
+            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Take profit</span>
+              <input type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)} placeholder="optional" step="any"
+                className="mt-1 w-24 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
+            {!state.activePosition ? (
+              <>
+                <button onClick={() => handleOpen('LONG')} className="flex items-center gap-1.5 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-4 py-2 text-sm font-bold text-emerald-400 transition-colors hover:bg-emerald-950/60"><TrendingUp size={14} /> BUY <span className="text-[10px] uppercase tracking-wider text-emerald-600">Market</span></button>
+                <button onClick={() => handleOpen('SHORT')} className="flex items-center gap-1.5 rounded-md border border-rose-700/40 bg-rose-950/30 px-4 py-2 text-sm font-bold text-rose-400 transition-colors hover:bg-rose-950/60"><TrendingDown size={14} /> SELL <span className="text-[10px] uppercase tracking-wider text-rose-600">Market</span></button>
+              </>
             ) : (
-              <div className="space-y-2">
-                <div className="rounded-md border border-[#C9A646]/30 bg-[#C9A646]/5 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                      activePos.side === 'LONG' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-rose-600/20 text-rose-400'
-                    }`}>
-                      {activePos.side}
-                    </span>
-                    <span className="text-xs text-zinc-500">{activePos.size}× @ ${activePos.entryPrice.toFixed(2)}</span>
-                  </div>
-                  {unrealizedPnl != null && (
-                    <div className="mt-2">
-                      <div className="text-[10px] uppercase tracking-wider text-zinc-500">Unrealized</div>
-                      <div className={`text-lg font-bold ${unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
-                      </div>
-                    </div>
-                  )}
-                  {(activePos.stopLoss || activePos.takeProfit) && (
-                    <div className="mt-2 flex gap-3 text-[10px] text-zinc-500">
-                      {activePos.stopLoss && <span>SL ${activePos.stopLoss.toFixed(2)}</span>}
-                      {activePos.takeProfit && <span>TP ${activePos.takeProfit.toFixed(2)}</span>}
-                    </div>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {slInput && (
-                    <button
-                      onClick={() => updateStopLoss(parseFloat(slInput))}
-                      className="rounded-md border border-rose-700 bg-rose-950 px-2 py-1.5 text-[10px] font-semibold text-rose-400 hover:bg-rose-900"
-                    >
-                      Set SL
-                    </button>
-                  )}
-                  {tpInput && (
-                    <button
-                      onClick={() => updateTakeProfit(parseFloat(tpInput))}
-                      className="rounded-md border border-emerald-700 bg-emerald-950 px-2 py-1.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-900"
-                    >
-                      Set TP
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleClose('manual')}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[#C9A646] px-3 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#D4B55E]"
-                >
-                  <X size={16} />
-                  Close at ${livePrice || '—'}
-                </button>
+              <div className="flex items-center gap-2">
+                <span className={`flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side === 'LONG' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}{state.activePosition.side} <span className="text-xs font-normal text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span></span>
+                <button onClick={() => handleClose('manual')} className="rounded-md border border-[#C9A646]/40 bg-[#C9A646]/10 px-4 py-2 text-sm font-semibold text-[#C9A646] transition-colors hover:bg-[#C9A646]/20">✕ Close at ${livePrice || '—'}</button>
               </div>
             )}
+            <span className="ml-auto text-[11px] text-zinc-600">💡 Right-click the chart for LIMIT / STOP orders</span>
           </div>
-
-          {/* Stats panel */}
-          <div className="border-b border-zinc-800 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-              Session Stats
-            </h3>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-              <StatRow label="Trades" value={state.stats.totalTrades.toString()} />
-              <StatRow
-                label="Win rate"
-                value={`${state.stats.winRate.toFixed(1)}%`}
-                tone={state.stats.winRate >= 50 ? 'positive' : 'neutral'}
-              />
-              <StatRow label="Winners" value={state.stats.winners.toString()} tone="positive" />
-              <StatRow label="Losers" value={state.stats.losers.toString()} tone="negative" />
-              <StatRow
-                label="Profit factor"
-                value={state.stats.profitFactor === Infinity ? '∞' : state.stats.profitFactor.toFixed(2)}
-                tone="brand"
-              />
-              <StatRow
-                label="Avg R:R"
-                value={state.stats.avgRR > 0 ? `1:${state.stats.avgRR.toFixed(2)}` : '—'}
-                tone="brand"
-              />
-              <StatRow
-                label="Avg win"
-                value={`$${state.stats.avgWin.toFixed(2)}`}
-                tone="positive"
-              />
-              <StatRow
-                label="Avg loss"
-                value={`$${state.stats.avgLoss.toFixed(2)}`}
-                tone="negative"
-              />
-              <StatRow
-                label="Largest win"
-                value={`$${state.stats.largestWin.toFixed(2)}`}
-                tone="positive"
-              />
-              <StatRow
-                label="Largest loss"
-                value={`$${state.stats.largestLoss.toFixed(2)}`}
-                tone="negative"
-              />
-              <StatRow label="Win streak" value={state.stats.longestWinStreak.toString()} />
-              <StatRow label="Loss streak" value={state.stats.longestLossStreak.toString()} />
-            </div>
-
-            {/* Phase 4: per-strategy breakdown. Shown only when there's ≥1 trade. */}
-            {strategyBreakdown.length > 0 && (
-              <div className="mt-4 border-t border-zinc-900 pt-3">
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
-                  <Sparkles size={10} className="text-[#C9A646]" />
-                  By strategy
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  {strategyBreakdown.map((row) => (
-                    <div
-                      key={row.key}
-                      className="flex items-center justify-between rounded-md border border-zinc-900 bg-zinc-900/40 px-2 py-1.5"
-                    >
-                      <div className="flex min-w-0 flex-col">
-                        <span className="truncate font-medium text-zinc-300">{row.label}</span>
-                        <span className="text-[10px] text-zinc-600">
-                          {row.trades} trade{row.trades !== 1 && 's'} · {row.winRate.toFixed(0)}% win
-                        </span>
-                      </div>
-                      <span className={`font-bold tabular-nums ${row.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {row.netPnl >= 0 ? '+' : ''}${row.netPnl.toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Phase 6: Pending orders */}
-          {state.pendingOrders.length > 0 && (
-            <div className="border-b border-zinc-800 p-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-                Pending Orders ({state.pendingOrders.length})
-              </h3>
-              <div className="space-y-1.5">
-                {state.pendingOrders.map((o) => (
-                  <div
-                    key={o.id}
-                    className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900/50 px-2.5 py-1.5 text-xs"
-                  >
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                          o.side === 'LONG' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-rose-600/20 text-rose-400'
-                        }`}>
-                          {o.side === 'LONG' ? 'BUY' : 'SELL'} {o.type}
-                        </span>
-                        <span className="text-zinc-500">{o.size}×</span>
-                      </div>
-                      <span className="mt-0.5 font-mono text-[10px] text-zinc-400">
-                        @ ${o.triggerPrice.toFixed(2)}
-                        {o.stopLoss != null && <span className="ml-1.5 text-rose-500/70">SL {o.stopLoss.toFixed(2)}</span>}
-                        {o.takeProfit != null && <span className="ml-1.5 text-emerald-500/70">TP {o.takeProfit.toFixed(2)}</span>}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => cancelPendingOrder(o.id)}
-                      title="Cancel order"
-                      className="rounded p-1 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* History panel removed per Elad — closed trades land in My Trades */}
-          <div className="flex-1" />
-        </aside>
+          {tradeError && <p className="mt-1 text-xs text-rose-400">{tradeError}</p>}
+        </div>
       </div>
 
       {/* Phase 6: right-click context menu for pending order types.
