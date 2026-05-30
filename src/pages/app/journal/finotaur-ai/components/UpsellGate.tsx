@@ -145,11 +145,11 @@ export function UpsellGate() {
           <img
             src="/bull-ai-coach-v2.png"
             alt="FINOTAUR AI bull"
-            className="mx-auto w-full max-w-[420px] object-contain lg:ml-auto lg:mr-0"
+            className="mx-auto w-full max-w-[420px] object-contain lg:ml-auto lg:mr-0 lg:translate-x-[-28px] lg:translate-y-4"
           />
 
-          {/* Feature list */}
-          <div className="flex flex-col gap-ds-4">
+          {/* Feature list — pulled up to tighten the gap under the bull */}
+          <div className="flex flex-col gap-ds-4 lg:-translate-y-4">
             <FeatureRow
               icon={<Gauge className="h-5 w-5 text-gold-primary" />}
               title="Personalized FINOTAUR Score"
