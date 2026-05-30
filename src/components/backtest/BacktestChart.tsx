@@ -501,6 +501,10 @@ export function BacktestChart({
     return all.sort((a, b) => (a.time as number) - (b.time as number));
   }, [state.activePosition, state.closedPositions]);
 
+  // Holds the most-recent cursor bar reported by BacktestReplayChart — used to
+  // fill MARKET orders at the correct close price without requiring manual input.
+  const currentBarRef = useRef<Bar | null>(null);
+
   // Phase 7: load a saved session from the URL ?sessionId= param.
   const [searchParams] = useSearchParams();
   const sessionIdParam = searchParams.get('sessionId');
@@ -575,15 +579,17 @@ export function BacktestChart({
 
   // ─── Handlers ────────────────────────────────────────────────
   const handleOpen = (side: PaperSide) => {
-    const price = parseFloat(livePrice);
-    if (!price || isNaN(price) || price <= 0) {
-      flashTradeError('Enter a valid current price before opening a position.');
+    const cur = currentBarRef.current;
+    const manual = parseFloat(livePrice);
+    const price = (!isNaN(manual) && manual > 0) ? manual : cur?.close;
+    if (price == null || !(price > 0)) {
+      flashTradeError('No price yet — let the replay chart load a bar first.');
       return;
     }
     openPosition({
       side,
       price,
-      time: Math.floor(Date.now() / 1000),
+      time: (cur?.time as number) ?? Math.floor(Date.now() / 1000),
       size,
       stopLoss: slInput ? parseFloat(slInput) : undefined,
       takeProfit: tpInput ? parseFloat(tpInput) : undefined,
@@ -983,6 +989,7 @@ export function BacktestChart({
             pendingOrders={state.pendingOrders}
             onBarReveal={handleReplayBarReveal}
             onBarClick={handleReplayBarClick}
+            onCurrentBarChange={(b) => { currentBarRef.current = b; }}
             onContextMenu={(info) => setContextMenu(info)}
             onJumpToTime={(date) => setReplayStart(date)}
             showReplayCursor

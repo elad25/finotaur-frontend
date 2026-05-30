@@ -110,6 +110,8 @@ export interface BacktestReplayChartProps {
   onBarClick?: (bar: Bar) => void;
   /** Phase 6: right-click — parent renders the order-type context menu at given screen coords. */
   onContextMenu?: (info: ContextMenuPriceInfo) => void;
+  /** Reports the current cursor bar (last revealed) so the parent can fill MARKET orders at its close/time. */
+  onCurrentBarChange?: (bar: Bar | null) => void;
   /**
    * TV-style replay: when the user left-clicks on the chart, jump playback to
    * that timestamp. The parent resets replayStart + the playback cursor.
@@ -139,6 +141,7 @@ export function BacktestReplayChart({
   onBarReveal,
   onBarClick,
   onContextMenu,
+  onCurrentBarChange,
   onJumpToTime,
   showReplayCursor = false,
   height = '100%',
@@ -149,6 +152,7 @@ export function BacktestReplayChart({
   const onBarClickRef = useRef(onBarClick);
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
+  const onCurrentBarChangeRef = useRef(onCurrentBarChange);
   const onJumpToTimeRef = useRef(onJumpToTime);
   const showReplayCursorRef = useRef(showReplayCursor);
   // Ref so the chart lifecycle closure (subscribeClick) always calls the
@@ -183,6 +187,7 @@ export function BacktestReplayChart({
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
+  useEffect(() => { onCurrentBarChangeRef.current = onCurrentBarChange; }, [onCurrentBarChange]);
   useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
   useEffect(() => { showReplayCursorRef.current = showReplayCursor; }, [showReplayCursor]);
   useEffect(() => { scissorsArmedRef.current = scissorsArmed; }, [scissorsArmed]);
@@ -640,6 +645,12 @@ export function BacktestReplayChart({
     setCursorX(x);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playback.cursor, bars, showReplayCursor]);
+
+  // Report the current cursor bar to the parent (for MARKET-order fills).
+  useEffect(() => {
+    onCurrentBarChangeRef.current?.(bars[lastUpdatedIdxRef.current] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playback.cursor, bars]);
 
   // ─── Active-position TP/SL zone coordinates (#4) ─────────────
   useEffect(() => {
