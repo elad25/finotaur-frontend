@@ -2,7 +2,7 @@
  * useDailyBrief — composing hook for the Daily PM Brief page.
  *
  * Combines:
- *  - useSynthesisBrief()   → global brief + personalization
+ *  - useDailyBriefData()   → personalized daily brief (global + personal in one call)
  *  - usePortfolioData('1M') → snapshot (1M range for day-change computation)
  *  - useMarketStatus()     → session phase + context
  *
@@ -13,10 +13,10 @@
  */
 
 import { useMemo, useCallback } from 'react';
-import { useSynthesisBrief } from './useSynthesisBrief';
+import { useDailyBriefData } from './useDailyBriefData';
 import { usePortfolioData } from './usePortfolioData';
 import { useMarketStatus } from '@/lib/marketStatus';
-import { buildBriefModules, type BriefData } from '../utils/buildBriefModules';
+import { buildBriefModulesFromDaily, type BriefData } from '../utils/buildBriefModules';
 import type { MarketStatusResult } from '@/lib/marketStatus';
 
 // ---------------------------------------------------------------------------
@@ -72,13 +72,11 @@ export interface UseDailyBriefResult {
 
 export function useDailyBrief(): UseDailyBriefResult {
   const {
-    brief,
+    global,
+    personal,
     loading: briefLoading,
     error: briefError,
-    personal,
-    // personalLoading intentionally unused — we don't block on it; the adapter
-    // handles null personal gracefully (produces un-personalized output).
-  } = useSynthesisBrief();
+  } = useDailyBriefData();
 
   // Use 1M range for the portfolio snapshot. Day-change (changeAbs / changePercent)
   // reflects the full range — for a true intraday day-change we'd need a live feed.
@@ -108,15 +106,13 @@ export function useDailyBrief(): UseDailyBriefResult {
     // Don't produce data while loading to avoid flicker with empty BriefData
     if (briefLoading) return null;
 
-    return buildBriefModules(brief, personal, snapshot, { greeting });
-  }, [briefLoading, brief, personal, snapshot, greeting]);
+    return buildBriefModulesFromDaily(global, personal, snapshot, { greeting });
+  }, [briefLoading, global, personal, snapshot, greeting]);
 
-  // refetch: useSynthesisBrief doesn't expose a refetch fn — the hook re-mounts
-  // on demand. We expose a no-op that triggers a page reload via window.location
-  // only as a last resort. In practice the hook runs once on mount and the user
-  // would navigate away to force a fresh fetch. A proper refetch requires
-  // useSynthesisBrief to expose its internal `load` fn (future task).
-  // For now we expose a stable callback that signals "manual refresh" intent.
+  // refetch: useDailyBriefData re-fetches only on hook remount.
+  // We expose a stable no-op callback for API compatibility. A proper refetch
+  // would require useDailyBriefData to expose its internal load fn (future task).
+  // In practice the brief refreshes on page navigation (hook remount).
   const refetch = useCallback(() => {
     // Placeholder: when useSynthesisBrief gains refetch support, wire it here.
     // For Phase 1 the brief refreshes only on hook remount (page navigation).
@@ -129,7 +125,7 @@ export function useDailyBrief(): UseDailyBriefResult {
     refetch,
     sessionPhase,
     greeting,
-    generatedAt: brief?.generated_at ?? null,
+    generatedAt: global?.generated_at ?? null,
     marketStatus,
   };
 }

@@ -273,7 +273,7 @@ function ModuleBody({
     case 'risk':
       return (
         <div className="space-y-ds-4">
-          <RiskAnalysisPanel />
+          <RiskAnalysisPanel isConnected={isConnected} />
           {data.riskManagement.items.length > 0 && (
             <ul className="space-y-ds-3">
               {data.riskManagement.items.map((risk, i) => (

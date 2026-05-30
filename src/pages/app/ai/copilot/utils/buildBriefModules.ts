@@ -15,6 +15,11 @@ import type {
   EventRadarItem,
   PlanAction,
 } from '@/services/copilotSynthesisBriefApi';
+import type {
+  DailyGlobalBrief,
+  DailyPersonalization,
+  DailyOpportunityItem,
+} from '@/services/copilotDailyBriefApi';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 import type { RotationRow, BookRow } from '../brief/QuantFlow';
 import type { Tone } from '../brief/ToneBadge';
@@ -424,4 +429,138 @@ export function buildBriefModules(
     thePlan,
     pmNote,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Daily Brief adapter
+// ---------------------------------------------------------------------------
+
+/**
+ * Adapt a daily-brief opportunity item to the TradeIdea shape ideaToOpportunity expects.
+ * Conviction is capitalized in the daily API ('High'/'Medium'/'Low') but TradeIdea
+ * requires lowercase — we normalise here.
+ */
+function dailyItemToTradeIdea(it: DailyOpportunityItem): TradeIdea {
+  return {
+    symbol: it.symbol,
+    sector: '',
+    time_horizon: 'medium',
+    source: 'synthesis',
+    thesis: it.thesis,
+    entry: it.entry,
+    stop: it.stop,
+    target: it.target,
+    conviction: ((it.conviction ?? 'Medium').toLowerCase()) as TradeIdea['conviction'],
+    catalysts: Array.isArray(it.catalysts) ? it.catalysts : [],
+  } as TradeIdea;
+}
+
+/**
+ * Adapt the personalized daily-brief payload into the BriefData shape consumed
+ * by the Daily PM Brief page.
+ *
+ * Does NOT modify buildBriefModules — this is an additive, parallel adapter.
+ */
+export function buildBriefModulesFromDaily(
+  global: DailyGlobalBrief | null,
+  personal: DailyPersonalization | null,
+  snapshot: PortfolioSnapshot | null,
+  ctx: BuildBriefModulesCtx,
+): BriefData {
+  const { greeting } = ctx;
+  const m = global?.modules ?? {};
+
+  // ── BLUF ──────────────────────────────────────────────────────────────────
+  const bluf: BriefData['bluf'] = {
+    glance: m.bluf?.glance ?? { headline: `${greeting} — Markets open.` },
+    totalValue: snapshot?.totalValue,
+    dayChangeAbs: snapshot?.changeAbs,
+    dayChangePercent: snapshot?.changePercent,
+  };
+
+  // ── MARKET PULSE ─────────────────────────────────────────────────────────
+  const macroNarrative = m.marketPulse?.deep?.narrative ?? '';
+  const marketPulse: BriefData['marketPulse'] = {
+    glance: m.marketPulse?.glance ?? { headline: firstSentence(macroNarrative) || 'Market pulse' },
+    macro_narrative: macroNarrative,
+    weekly_context: '',
+    this_week_tactical: '',
+  };
+
+  // ── EVENT RADAR ───────────────────────────────────────────────────────────
+  const radarItems = Array.isArray(m.eventRadar?.items) ? m.eventRadar!.items! : [];
+  const eventRadar: BriefData['eventRadar'] = {
+    glance: m.eventRadar?.glance ?? {
+      headline: radarItems.length > 0
+        ? `${radarItems.length} signal${radarItems.length !== 1 ? 's' : ''} on your radar`
+        : 'No signals on your radar',
+    },
+    items: radarItems,
+  };
+
+  // ── PORTFOLIO TODAY ───────────────────────────────────────────────────────
+  const holdingCount = snapshot?.holdings.length ?? 0;
+  const portfolioToday: BriefData['portfolioToday'] = {
+    glance: personal?.modules?.portfolioToday?.glance ?? {
+      headline: snapshot
+        ? `${holdingCount} position${holdingCount !== 1 ? 's' : ''}`
+        : 'Connect a broker to see your portfolio',
+    },
+    snapshot,
+  };
+
+  // ── QUANT FLOW ────────────────────────────────────────────────────────────
+  const rotation = Array.isArray(m.quantFlow?.rotation) ? m.quantFlow!.rotation! : [];
+  const quantFlow: BriefData['quantFlow'] = {
+    glance: m.quantFlow?.glance ?? {
+      headline: rotation.length > 0 ? `${rotation.length} sector calls` : 'No sector rotation signals',
+    },
+    rotation,
+    book: holdingsToBookRows(snapshot),
+  };
+
+  // ── OPPORTUNITIES ─────────────────────────────────────────────────────────
+  const oppItems = Array.isArray(m.opportunities?.items) ? m.opportunities!.items! : [];
+  const opportunities: BriefData['opportunities'] = {
+    glance: m.opportunities?.glance ?? {
+      headline: oppItems.length > 0 ? `Top ${oppItems.length} ranked for you` : 'No trade ideas today',
+    },
+    items: oppItems.map((it, i) => ideaToOpportunity(dailyItemToTradeIdea(it), i, personal?.rankedTradeIdeas)),
+  };
+
+  // ── RISK MANAGEMENT ───────────────────────────────────────────────────────
+  // DailyRiskItem: { risk, severity?, time_horizon? }
+  // KeyRisk:       { risk, impact?, probability? }
+  // Mapping: severity → probability, time_horizon → impact
+  const riskItems = Array.isArray(m.riskManagement?.items) ? m.riskManagement!.items! : [];
+  const riskManagement: BriefData['riskManagement'] = {
+    glance: m.riskManagement?.glance ?? {
+      headline: riskItems.length > 0 ? riskItems[0].risk.slice(0, 80) : 'No key risks identified',
+    },
+    items: riskItems.map((r): KeyRisk => ({ risk: r.risk, probability: r.severity, impact: r.time_horizon })),
+  };
+
+  // ── THE PLAN ──────────────────────────────────────────────────────────────
+  const planActions = personal?.modules?.thePlan?.actions ?? [];
+  const thePlan: BriefData['thePlan'] = {
+    glance: personal?.modules?.thePlan?.glance ?? {
+      headline: planActions.length > 0
+        ? `Do these ${planActions.length} thing${planActions.length !== 1 ? 's' : ''}`
+        : 'No high-conviction actions today',
+    },
+    actions: planActions,
+  };
+
+  // ── PM NOTE ───────────────────────────────────────────────────────────────
+  const commentary = personal?.personalCommentary ?? m.pmNote?.deep?.narrative ?? null;
+  const pmNote: BriefData['pmNote'] = {
+    glance: m.pmNote?.glance ?? {
+      headline: commentary
+        ? firstSentence(commentary) || 'A note from your analyst'
+        : 'A note from your analyst',
+    },
+    commentary,
+  };
+
+  return { bluf, marketPulse, eventRadar, portfolioToday, quantFlow, opportunities, riskManagement, thePlan, pmNote };
 }

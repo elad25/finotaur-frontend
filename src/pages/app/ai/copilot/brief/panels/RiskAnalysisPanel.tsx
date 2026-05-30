@@ -95,7 +95,26 @@ function RiskManagementGoldMark() {
   );
 }
 
-export function RiskAnalysisPanel({ className }: { className?: string }) {
+export function RiskAnalysisPanel({
+  className,
+  isConnected,
+}: {
+  className?: string;
+  isConnected: boolean;
+}) {
+  if (!isConnected) {
+    return (
+      <PremiumFrame className={`min-h-[210px] ${className}`}>
+        <div className="p-5">
+          <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/app/ai/copilot/risks" />
+          <div className="mt-4 flex min-h-[120px] items-center justify-center">
+            <span className="text-[13px] text-ink-tertiary">Connect a broker to see your risk profile</span>
+          </div>
+        </div>
+      </PremiumFrame>
+    );
+  }
+
   const rows = [
     ['Market Risk', 'Medium'],
     ['Credit Risk', 'Low'],

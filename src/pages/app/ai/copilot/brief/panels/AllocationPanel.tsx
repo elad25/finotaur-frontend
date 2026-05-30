@@ -47,36 +47,37 @@ export function AllocationPanel({
   snapshot: PortfolioSnapshot;
   isConnected: boolean;
 }) {
-  // Mock allocation used pre-connection. After connect, real holdings drive the donut + rows.
-  const mockRows: Array<[string, number]> = [
-    ['EQUITIES', 68.4],
-    ['ETFs', 15.7],
-    ['BONDS', 7.3],
-    ['CASH', 5.6],
-    ['OTHER', 2.0],
-  ];
+  if (!isConnected) {
+    return (
+      <PremiumFrame className={`min-h-[210px] ${className}`}>
+        <div className="p-5">
+          <PanelHeader title="HOLDINGS" action="VIEW ALL" actionTo="/app/ai/copilot/holdings" />
+          <div className="mt-4 flex min-h-[120px] items-center justify-center">
+            <span className="text-[13px] text-ink-tertiary">Connect a broker to see your holdings</span>
+          </div>
+        </div>
+      </PremiumFrame>
+    );
+  }
 
-  let rows: Array<[string, number]> = mockRows;
-  let totalDisplay = '$1.25M';
+  const total = snapshot.totalValue || 1;
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketAssetClass(h.assetClass);
+    groups.set(label, (groups.get(label) || 0) + h.marketValue);
+  }
+  let rows: Array<[string, number]> = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, val]) => [label, (val / total) * 100]);
+  if (rows.length === 0) rows = [['CASH', 100]]; // defensive: empty holdings
 
-  if (isConnected) {
-    const total = snapshot.totalValue || 1;
-    const groups = new Map<string, number>();
-    for (const h of snapshot.holdings) {
-      const label = bucketAssetClass(h.assetClass);
-      groups.set(label, (groups.get(label) || 0) + h.marketValue);
-    }
-    rows = Array.from(groups.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, (val / total) * 100]);
-    if (rows.length === 0) rows = [['CASH', 100]]; // defensive: empty holdings
-    if (snapshot.totalValue >= 1_000_000) {
-      totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
-    } else if (snapshot.totalValue >= 10_000) {
-      totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
-    } else {
-      totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
-    }
+  let totalDisplay: string;
+  if (snapshot.totalValue >= 1_000_000) {
+    totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
+  } else if (snapshot.totalValue >= 10_000) {
+    totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
+  } else {
+    totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
   }
 
   const conic = buildConicGradient(rows);

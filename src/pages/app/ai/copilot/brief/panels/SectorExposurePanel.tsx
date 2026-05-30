@@ -29,28 +29,29 @@ export function SectorExposurePanel({
   snapshot: PortfolioSnapshot;
   isConnected: boolean;
 }) {
-  const mockSectors: Array<[string, number]> = [
-    ['Technology', 28.7],
-    ['Financials', 14.3],
-    ['Health Care', 12.6],
-    ['Consumer Cyclical', 11.8],
-    ['Industrials', 8.7],
-    ['Other', 23.9],
-  ];
-
-  let sectors: Array<[string, number]> = mockSectors;
-  if (isConnected) {
-    const total = snapshot.totalValue || 1;
-    const groups = new Map<string, number>();
-    for (const h of snapshot.holdings) {
-      const label = bucketSector(h.assetClass);
-      groups.set(label, (groups.get(label) || 0) + h.marketValue);
-    }
-    sectors = Array.from(groups.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, (val / total) * 100]);
-    if (sectors.length === 0) sectors = [['Other', 100]];
+  if (!isConnected) {
+    return (
+      <PremiumFrame className={`min-h-[210px] ${className}`}>
+        <div className="p-5">
+          <PanelHeader title="MACRO" action="VIEW ALL" actionTo="/app/ai/copilot/macro" />
+          <div className="mt-4 flex min-h-[120px] items-center justify-center">
+            <span className="text-[13px] text-ink-tertiary">Connect a broker to see your sector exposure</span>
+          </div>
+        </div>
+      </PremiumFrame>
+    );
   }
+
+  const total = snapshot.totalValue || 1;
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketSector(h.assetClass);
+    groups.set(label, (groups.get(label) || 0) + h.marketValue);
+  }
+  let sectors: Array<[string, number]> = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, val]) => [label, (val / total) * 100]);
+  if (sectors.length === 0) sectors = [['Other', 100]];
 
   // Bars scale so the largest sector fills the available width; tiny allocations stay visible.
   const maxPct = Math.max(...sectors.map((s) => s[1]), 1);
