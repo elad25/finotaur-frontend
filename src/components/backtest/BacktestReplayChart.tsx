@@ -717,7 +717,7 @@ export function BacktestReplayChart({
             itself, otherwise winning over the parent). */}
         <div
           ref={containerRef}
-          className={`absolute inset-0${showReplayCursor && scissorsArmed ? ' cursor-none [&_*]:cursor-none' : ''}`}
+          className={`absolute inset-0 ${showReplayCursor && scissorsArmed ? 'cursor-none [&_*]:cursor-none' : 'cursor-chart-cross'}`}
           style={{ height }}
         />
 

@@ -19,6 +19,8 @@ import { useUsage } from './hooks/useUsage';
 import { Eyebrow } from '@/components/ds/Card';
 import { BriefingApiError } from './services/finotaurAIApi';
 import type { Insight } from './types';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 // ---------------------------------------------------------------------------
 // Page shell — wraps content with page-level padding/header
@@ -124,46 +126,48 @@ export default function FinotaurAI() {
 
   return (
     <PageShell>
-      <DailyLimitBanner usage={usageQuery.data ?? null} />
-      {/* Three-column layout on large screens: history sidebar | main content | chat panel */}
-      <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr_380px]">
-        {/* Conversation history sidebar — desktop only */}
-        <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
-          <ConversationHistorySidebar
-            activeConversationId={chat.conversationId}
-            onSelect={(id) => void chat.loadConversation(id)}
-            onNew={() => chat.newConversation()}
-          />
-        </aside>
-
-        {/* Main briefing content */}
-        <div>
-          <ScoreHero
-            score={score}
-            isLoading={isLoading}
-            error={error as Error | null}
-            onRefresh={refetch}
-          />
-          <div className="mt-ds-6">
-            <BriefingHero
-              briefing={briefingQuery.data?.briefing ?? null}
-              stale={briefingQuery.data?.stale ?? false}
-              refreshing={briefingQuery.data?.refreshing ?? refreshMutation.isPending}
-              generatedAt={briefingQuery.data?.generated_at ?? null}
-              isLoading={briefingQuery.isLoading}
-              error={briefingQuery.error as Error | null}
-              onRefresh={handleRefresh}
-              refreshing429={refreshing429}
-              onDiscuss={handleDiscuss}
+      <ErrorBoundary boundary="journal-finotaur-ai" fallback={<AiToolErrorFallback />}>
+        <DailyLimitBanner usage={usageQuery.data ?? null} />
+        {/* Three-column layout on large screens: history sidebar | main content | chat panel */}
+        <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr_380px]">
+          {/* Conversation history sidebar — desktop only */}
+          <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
+            <ConversationHistorySidebar
+              activeConversationId={chat.conversationId}
+              onSelect={(id) => void chat.loadConversation(id)}
+              onNew={() => chat.newConversation()}
             />
-          </div>
-        </div>
+          </aside>
 
-        {/* Chat panel — receives the shared hook instance */}
-        <aside className="lg:sticky lg:top-ds-6 lg:self-start">
-          <CoachChatPanel prefillRequest={prefillRequest} chatInstance={chat} />
-        </aside>
-      </div>
+          {/* Main briefing content */}
+          <div>
+            <ScoreHero
+              score={score}
+              isLoading={isLoading}
+              error={error as Error | null}
+              onRefresh={refetch}
+            />
+            <div className="mt-ds-6">
+              <BriefingHero
+                briefing={briefingQuery.data?.briefing ?? null}
+                stale={briefingQuery.data?.stale ?? false}
+                refreshing={briefingQuery.data?.refreshing ?? refreshMutation.isPending}
+                generatedAt={briefingQuery.data?.generated_at ?? null}
+                isLoading={briefingQuery.isLoading}
+                error={briefingQuery.error as Error | null}
+                onRefresh={handleRefresh}
+                refreshing429={refreshing429}
+                onDiscuss={handleDiscuss}
+              />
+            </div>
+          </div>
+
+          {/* Chat panel — receives the shared hook instance */}
+          <aside className="lg:sticky lg:top-ds-6 lg:self-start">
+            <CoachChatPanel prefillRequest={prefillRequest} chatInstance={chat} />
+          </aside>
+        </div>
+      </ErrorBoundary>
     </PageShell>
   );
 }

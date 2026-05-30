@@ -154,3 +154,27 @@ export interface PendingToolCall {
   summary: string;
   toolInput?: Record<string, unknown>;  // forwarded from ChatToolUse.tool_input for the modal preview
 }
+
+// ─── Phase B: Per-trade Scorecard ─────────────────────────────────────────────
+
+export type ScorecardGrade = 'A' | 'B' | 'C' | 'D' | 'F';
+export type ScorecardDimensionKey = 'entry' | 'sizing' | 'exit' | 'history' | 'emotional';
+
+export interface ScorecardDimension {
+  score: number | null;
+  status: 'scored' | 'insufficient_data';
+  detail: string;
+  nudge?: string;
+}
+
+export interface TradeScorecard {
+  overall: number | null;
+  grade: ScorecardGrade | null;
+  dimensions: Record<ScorecardDimensionKey, ScorecardDimension>;
+}
+
+export interface TradeScorecardResponse {
+  schema_version: 'v1';
+  trade_id: string;
+  scorecard: TradeScorecard;
+}

@@ -1014,9 +1014,14 @@ export function BacktestChart({
           </div>
           {/* Floating trading bar — bottom-center, overlaid on the chart */}
           <div className="absolute bottom-8 left-1/2 z-20 max-w-[95%] -translate-x-1/2">
-            <div className="relative overflow-hidden rounded-[14px] border border-[#C9A646]/25 bg-gradient-to-b from-[#14141b]/95 to-[#0a0a0c]/95 px-5 py-3 shadow-glow-gold-resting backdrop-blur-md">
+            <div className="relative rounded-[14px] border border-[#C9A646]/30 bg-gradient-to-b from-[#15151c]/95 to-[#0a0a0c]/95 px-6 py-3.5 shadow-[0_8px_40px_-8px_rgba(201,166,70,0.22)] ring-1 ring-inset ring-white/5 backdrop-blur-md">
               {/* top-edge gold light bar (flagship accent) */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-px w-2/3 bg-gradient-to-r from-transparent via-[#C9A646]/70 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-px w-2/3 bg-gradient-to-r from-transparent via-[#C9A646]/80 to-transparent" />
+              {/* corner brackets — premium terminal frame */}
+              <span className="pointer-events-none absolute left-2 top-2 h-2.5 w-2.5 border-l border-t border-[#C9A646]/60" />
+              <span className="pointer-events-none absolute right-2 top-2 h-2.5 w-2.5 border-r border-t border-[#C9A646]/60" />
+              <span className="pointer-events-none absolute bottom-2 left-2 h-2.5 w-2.5 border-b border-l border-[#C9A646]/60" />
+              <span className="pointer-events-none absolute bottom-2 right-2 h-2.5 w-2.5 border-b border-r border-[#C9A646]/60" />
               <div className="flex flex-wrap items-end justify-center gap-4">
                 <div className="flex flex-wrap items-end gap-3">
                   <label className="flex flex-col gap-1">
@@ -1044,21 +1049,18 @@ export function BacktestChart({
                   </label>
                 </div>
                 <div className="hidden h-10 w-px self-center bg-white/10 sm:block" />
-                {!state.activePosition ? (
-                  <div className="flex items-stretch gap-2">
-                    <button onClick={() => handleOpen('LONG')} className="flex flex-col items-center justify-center rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-5 py-1.5 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400"><TrendingUp size={15} /> BUY</span><span className="text-[9px] uppercase tracking-wider text-emerald-600/80">Market</span></button>
-                    <button onClick={() => handleOpen('SHORT')} className="flex flex-col items-center justify-center rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-5 py-1.5 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-rose-400"><TrendingDown size={15} /> SELL</span><span className="text-[9px] uppercase tracking-wider text-rose-600/80">Market</span></button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5">
-                    <span className={`flex items-center gap-2 rounded-md border bg-black/40 px-3 py-2 ${state.activePosition.side === 'LONG' ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
-                      <span className={`h-2 w-2 rounded-full ${state.activePosition.side === 'LONG' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                      <span className={`text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side}</span>
-                      <span className="font-mono text-xs tabular-nums text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span>
-                    </span>
-                    <button onClick={() => handleClose('manual')} className="flex items-center gap-1.5 rounded-[10px] bg-gradient-gold px-5 py-2 text-sm font-semibold text-black shadow-glow-gold-resting transition-all hover:shadow-glow-gold-hover"><X size={15} strokeWidth={2.5} /> Close <span className="font-mono tabular-nums">${livePrice || '—'}</span></button>
-                  </div>
+                {state.activePosition && (
+                  <span className={`flex items-center gap-2 self-center rounded-md border bg-black/40 px-3 py-2 ${state.activePosition.side === 'LONG' ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
+                    <span className={`h-2 w-2 rounded-full ${state.activePosition.side === 'LONG' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                    <span className={`text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side}</span>
+                    <span className="font-mono text-xs tabular-nums text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span>
+                  </span>
                 )}
+                <div className="flex items-stretch gap-2">
+                  <button onClick={() => handleOpen('LONG')} className="flex flex-col items-center justify-center rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-5 py-1.5 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400"><TrendingUp size={15} /> BUY</span><span className="text-[9px] uppercase tracking-wider text-emerald-600/80">Market</span></button>
+                  <button onClick={() => handleOpen('SHORT')} className="flex flex-col items-center justify-center rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-5 py-1.5 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-rose-400"><TrendingDown size={15} /> SELL</span><span className="text-[9px] uppercase tracking-wider text-rose-600/80">Market</span></button>
+                  <button onClick={() => handleClose('manual')} disabled={!state.activePosition} className={`flex flex-col items-center justify-center rounded-md border px-5 py-1.5 transition-all ${state.activePosition ? 'border-zinc-600 bg-zinc-800/70 hover:border-zinc-500 hover:bg-zinc-700/70' : 'cursor-not-allowed border-white/10 bg-white/[0.03]'}`}><span className={`flex items-center gap-1.5 text-sm font-bold ${state.activePosition ? 'text-zinc-100' : 'text-zinc-600'}`}><X size={15} strokeWidth={2.5} /> CLOSE</span><span className={`text-[9px] uppercase tracking-wider ${state.activePosition ? 'text-zinc-400' : 'text-zinc-600'}`}>{state.activePosition ? `$${livePrice || '—'}` : 'Flat'}</span></button>
+                </div>
               </div>
               <div className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-white/5 pt-2 text-[11px] text-zinc-500">
                 <span>💡</span><span>Right-click the chart for <span className="text-zinc-400">LIMIT</span> / <span className="text-zinc-400">STOP</span> orders</span>
