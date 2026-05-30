@@ -8,11 +8,13 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
+  HelpCircle,
   Key,
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import BinanceApiKeyGuide from './BinanceApiKeyGuide';
 
 // ============================================================================
 // TYPES
@@ -38,6 +40,7 @@ export default function BinanceConnectionPopup({ onClose, onSuccess }: Props) {
   // ── view state ──────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewType>('instructions');
   const [error, setError] = useState<string>('');
+  const [showGuide, setShowGuide] = useState(false);
 
   // ── credential state (cleared after successful connect) ─────────────────
   const [apiKey, setApiKey] = useState('');
@@ -229,6 +232,15 @@ export default function BinanceConnectionPopup({ onClose, onSuccess }: Props) {
           </div>
         ))}
       </div>
+
+      {/* Screenshot guide link */}
+      <button
+        onClick={() => setShowGuide(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800/50 px-4 py-2.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+      >
+        <HelpCircle className="h-4 w-4 text-[#F0B90B]" />
+        How to create an API key (with screenshots)
+      </button>
 
       <div className="flex gap-3 pt-1">
         <button
@@ -494,6 +506,9 @@ export default function BinanceConnectionPopup({ onClose, onSuccess }: Props) {
         {view === 'success' && renderSuccess()}
         {view === 'error' && renderError()}
       </div>
+
+      {/* Screenshot guide overlay — renders above the popup (z-[200]) */}
+      {showGuide && <BinanceApiKeyGuide onClose={() => setShowGuide(false)} />}
     </div>
   );
 }
