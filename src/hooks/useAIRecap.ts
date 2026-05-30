@@ -173,9 +173,10 @@ export function useAIRecap(period: RecapPeriod): {
         throw fnError ?? new Error('Empty response');
       }
 
-      if (data.error === 'not_implemented') {
-        // Edge function is a stub — fall back to mock
-        throw new Error('not_implemented');
+      // Any error field from the edge function (daily_cap_exceeded, global_cap_exceeded,
+      // generation_failed, etc.) falls through to the mock fallback below.
+      if (data.error) {
+        throw new Error(data.error as string);
       }
 
       const result: RecapData = {

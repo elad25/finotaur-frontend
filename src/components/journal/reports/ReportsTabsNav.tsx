@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const TABS = [
+  { label: 'Performance', path: '/app/journal/reports/performance' },
   { label: 'Overview', path: '/app/journal/reports/overview' },
   { label: 'Progress', path: '/app/journal/reports/progress' },
   { label: 'Day View', path: '/app/journal/reports/day-view' },
