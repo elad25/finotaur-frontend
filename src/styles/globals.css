@@ -277,6 +277,40 @@ All colors MUST be HSL.
   .num-change--positive { color: var(--num-positive); }
   .num-change--negative { color: var(--num-negative); }
 
+  /*
+   * Gold-on-black custom checkbox (FINOTAUR brand).
+   * Unchecked: black fill + gold border (never the browser-default white box).
+   * Checked: gold fill + black checkmark. Indeterminate: gold fill + black dash.
+   */
+  .checkbox-gold {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 1rem;
+    width: 1rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    border: 1px solid #c9a646;
+    background-color: #000000;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 0.7rem 0.7rem;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .checkbox-gold:checked {
+    background-color: #c9a646;
+    border-color: #c9a646;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  }
+  .checkbox-gold:indeterminate {
+    background-color: #c9a646;
+    border-color: #c9a646;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3C/svg%3E");
+  }
+  .checkbox-gold:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(201, 166, 70, 0.4);
+  }
+
   /* App data typography.
      Landing pages intentionally sit outside `.finotaur-app-shell`, so their
      existing marketing typography stays untouched. */

@@ -619,7 +619,7 @@ const TradeRow = memo(({
           checked={isSelected}
           onChange={handleCheckboxChange}
           aria-label={`Select trade ${trade.symbol}`}
-          className="h-4 w-4 cursor-pointer rounded border border-zinc-600 bg-zinc-900 accent-[#C9A646] checked:border-[#C9A646] focus:outline-none focus:ring-2 focus:ring-[#C9A646]/40 focus:ring-offset-0"
+          className="checkbox-gold"
         />
       </TableCell>
 
@@ -1648,7 +1648,7 @@ const stats = useMemo<Stats>(() => {
             }}
             onChange={handleToggleSelectAll}
             aria-label="Select all visible trades"
-            className="h-4 w-4 cursor-pointer rounded border border-zinc-600 bg-zinc-900 accent-[#C9A646] checked:border-[#C9A646] focus:outline-none focus:ring-2 focus:ring-[#C9A646]/40 focus:ring-offset-0"
+            className="checkbox-gold"
           />
         );
       })()}
