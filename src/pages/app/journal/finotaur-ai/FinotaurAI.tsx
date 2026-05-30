@@ -33,7 +33,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
           <div>
             <Eyebrow>AI COACH BRIEFING</Eyebrow>
             <h1 className="mt-ds-2 font-sans text-[32px] font-medium tracking-[-0.5px] text-ink-primary">
-              FINOTAUR AI
+              FINOTAUR <span className="text-gold-primary">AI</span>
             </h1>
           </div>
         </header>

@@ -147,7 +147,11 @@ function mapIBRITPositionToHolding(pos: IBRITPosition): Holding {
   const marketValue = Number(pos.PositionValue) || (quantity * marketPrice);
   const avgCost = Number(pos.CostBasisPrice) || 0;
   const unrealizedPnl = Number(pos.FifoPnlUnrealized) || 0;
-  const costBasis = avgCost * Math.abs(quantity);
+  // Use IB's CostBasisMoney (total cost in account currency, already includes the
+  // contract multiplier for options/futures). Falling back to avgCost × qty drops
+  // the ×100 option multiplier and inflates P&L% by 100× (QBTS showed -1472% vs -14.72%).
+  const costBasisMoney = Number(pos.CostBasisMoney);
+  const costBasis = costBasisMoney > 0 ? costBasisMoney : avgCost * Math.abs(quantity);
   return {
     symbol: pos.Symbol || pos.UnderlyingSymbol || 'UNKNOWN',
     name: pos.Description || pos.Symbol || 'Unknown',

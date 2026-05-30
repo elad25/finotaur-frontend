@@ -666,3 +666,9 @@ nav[class*="flex-col"] button.active {
   box-shadow: 0 0 0 1px rgba(201, 166, 70, 0.9), 0 0 16px rgba(201, 166, 70, 0.28);
 }
 
+/* Large thin "+" crosshair cursor for the backtest chart (overrides lightweight-charts' native canvas crosshair) */
+.cursor-chart-cross,
+.cursor-chart-cross * {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='32'%20height='32'%3E%3Cline%20x1='16'%20y1='1'%20x2='16'%20y2='31'%20stroke='white'%20stroke-width='1'/%3E%3Cline%20x1='1'%20y1='16'%20x2='31'%20y2='16'%20stroke='white'%20stroke-width='1'/%3E%3C/svg%3E") 16 16, crosshair !important;
+}
+

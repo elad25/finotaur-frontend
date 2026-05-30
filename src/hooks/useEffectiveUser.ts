@@ -9,11 +9,13 @@
 import { useMemo, useRef } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { useMentorView } from '@/contexts/MentorViewContext';
 
 interface EffectiveUser {
   id: string | undefined;
   email: string | undefined;
   isImpersonating: boolean;
+  isMentorView: boolean;
   isLoading: boolean;
 }
 
@@ -32,7 +34,8 @@ const LOG_THROTTLE_MS = 2000;
 export function useEffectiveUser(): EffectiveUser {
   const { user, isLoading: authLoading } = useAuth();
   const { impersonatedUser, isImpersonating } = useImpersonation();
-  
+  const { isMentorView, studentUserId, studentEmail } = useMentorView();
+
   // Track previous values for comparison
   const prevResultRef = useRef<EffectiveUser | null>(null);
 
@@ -41,24 +44,32 @@ export function useEffectiveUser(): EffectiveUser {
   const userEmail = user?.email;
   const impersonatedId = impersonatedUser?.id;
   const impersonatedEmail = impersonatedUser?.email;
+  const mentorStudentId = studentUserId ?? undefined;
+  const mentorStudentEmail = studentEmail ?? undefined;
 
-  // Memoize the result with primitive dependencies only
+  // Memoize the result with primitive dependencies only.
+  // Precedence: Mentor View > Impersonation > Session.
   const result = useMemo((): EffectiveUser => {
-    const effectiveUserId = isImpersonating && impersonatedId 
-      ? impersonatedId 
-      : userId;
-    
-    const effectiveEmail = isImpersonating && impersonatedEmail 
-      ? impersonatedEmail 
-      : userEmail;
+    const effectiveUserId = isMentorView && mentorStudentId
+      ? mentorStudentId
+      : isImpersonating && impersonatedId
+        ? impersonatedId
+        : userId;
+
+    const effectiveEmail = isMentorView && mentorStudentId
+      ? mentorStudentEmail
+      : isImpersonating && impersonatedEmail
+        ? impersonatedEmail
+        : userEmail;
 
     return {
       id: effectiveUserId,
       email: effectiveEmail,
       isImpersonating,
+      isMentorView: isMentorView && !!mentorStudentId,
       isLoading: authLoading,
     };
-  }, [userId, userEmail, impersonatedId, impersonatedEmail, isImpersonating, authLoading]);
+  }, [userId, userEmail, impersonatedId, impersonatedEmail, isImpersonating, isMentorView, mentorStudentId, mentorStudentEmail, authLoading]);
 
   // Throttled debug logging (only in development)
   if (import.meta.env.DEV) {

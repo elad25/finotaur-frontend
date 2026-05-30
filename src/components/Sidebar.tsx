@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
+import { useMentorView } from '@/contexts/MentorViewContext';
 import { useAdminAuth } from '@/hooks/useAdminAuth';  // נ”¥ NEW
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
@@ -58,7 +59,8 @@ import {
   Bell,
   Coins,
   Flame,
-  Sparkles,  // נ”¥ For beta items
+  FileBarChart,
+  Sparkles, // נ”¥ For beta items
   Link2
 } from 'lucide-react';
 import { 
@@ -364,6 +366,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
+  const { isMentorView } = useMentorView();
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
@@ -427,7 +430,12 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   const currentEnvironment = getCurrentEnvironment();
-  const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
+  // In Mentor View the journal is read-only, so hide mutation-oriented items
+  // (the student's data is browsed, not edited, by the mentor).
+  const MENTOR_HIDDEN_ITEMS = ['Add Trade', 'Settings'];
+  const sidebarItems = isMentorView
+    ? ENVIRONMENT_MENUS[currentEnvironment].filter((item) => !MENTOR_HIDDEN_ITEMS.includes(item.label))
+    : ENVIRONMENT_MENUS[currentEnvironment];
   // True when the user is already inside the /copilot/* standalone shell
   const inStandaloneCopilot = location.pathname.startsWith('/copilot');
   const sidebarTopClass = 'top-28 h-[calc(100vh-7rem)]';

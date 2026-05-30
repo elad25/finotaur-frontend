@@ -1038,9 +1038,11 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const queryClient = useQueryClient(); // 🔥 ADD: for cross-page cache invalidation
 
   // 🔥 FIXED: Now using useEffectiveUser for admin impersonation support
-  const { id: fallbackUserId, isImpersonating } = useEffectiveUser();
+  const { id: fallbackUserId, isImpersonating, isMentorView } = useEffectiveUser();
   const userId = overrideUserId ?? fallbackUserId;
-  
+  // Mentor View browses a student's journal read-only; treat like the prop.
+  const effectiveReadOnly = readOnly || isMentorView;
+
   // 🔥 NEW: Timezone context
   const timezone = useTimezone();
   
@@ -1052,7 +1054,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
   // When viewing another user's journal (mentor view), do not apply the
   // logged-in mentor's portfolio filter — show all of the student's trades.
-  const mentorPortfolioId = overrideUserId ? undefined : effectivePortfolioId;
+  const mentorPortfolioId = (overrideUserId || isMentorView) ? undefined : effectivePortfolioId;
   const { data: trades = [], isLoading, error } = useTrades(userId, mentorPortfolioId);
   const { data: strategies = [] } = useStrategiesOptimized(userId);
   
@@ -1520,7 +1522,7 @@ const stats = useMemo<Stats>(() => {
                 <TooltipContent>Export Trades</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {!readOnly && (
+            {!effectiveReadOnly && (
               <Button
                 onClick={() => navigate("/app/journal/new")}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
@@ -1550,7 +1552,7 @@ const stats = useMemo<Stats>(() => {
                 {searchQuery ? "Try adjusting your search" : "Start by adding your first trade"}
               </div>
             </div>
-            {!searchQuery && !readOnly && (
+            {!searchQuery && !effectiveReadOnly && (
               <Button
                 onClick={() => navigate("/app/journal/new")}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium mt-2"
@@ -1679,7 +1681,7 @@ const stats = useMemo<Stats>(() => {
                   onAssignStrategy={handleAssignStrategy}
                   isSelected={selectedTradeIds.has(trade.id)}
                   onToggleSelect={handleToggleTradeSelection}
-                  readOnly={readOnly}
+                  readOnly={effectiveReadOnly}
                 />
               ))}
             </TableBody>
@@ -2040,7 +2042,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                   </div>
 
                   {/* Actions — hidden in read-only/mentor view */}
-                  {!readOnly && (
+                  {!effectiveReadOnly && (
                     <div className="flex gap-2 pt-3 border-t border-zinc-800/50">
                       <Button
                         variant="outline"

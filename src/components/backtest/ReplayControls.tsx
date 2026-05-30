@@ -61,9 +61,7 @@ export function ReplayControls({
 }: ReplayControlsProps) {
   const atEnd = cursor >= maxIndex;
   const atStart = cursor <= -1;
-  const visibleBars = Math.max(0, cursor + 1);
   const totalBars = Math.max(0, maxIndex + 1);
-  const pct = totalBars > 0 ? Math.round((visibleBars / totalBars) * 100) : 0;
   const stepSize = getStepSize(speed);
 
   // ─── Speed dropdown state ──────────────────────────────────────
@@ -185,12 +183,10 @@ export function ReplayControls({
         </button>
       )}
 
-      {/* Progress */}
-      <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
-        <span>
-          Bar <span className="font-mono text-zinc-300">{Math.max(0, cursor + 1)}</span> / {totalBars}
-        </span>
-        {onSeek && totalBars > 0 ? (
+      {/* Scrub bar — drag to jump to any bar. Text/percent labels removed per
+          Elad 2026-05-29; the slider alone conveys position. */}
+      {onSeek && totalBars > 0 && (
+        <div className="ml-auto flex items-center">
           <input
             type="range"
             min={0}
@@ -203,18 +199,10 @@ export function ReplayControls({
             }}
             title="Scrub to any bar"
             aria-label="Replay scrub bar"
-            className="h-1.5 w-32 cursor-pointer accent-[#C9A646]"
+            className="h-1.5 w-48 cursor-pointer accent-[#C9A646]"
           />
-        ) : (
-          <div className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-900">
-            <div
-              className="h-full bg-[#C9A646] transition-[width] duration-200"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        )}
-        <span className="font-mono tabular-nums text-zinc-400">{pct}%</span>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

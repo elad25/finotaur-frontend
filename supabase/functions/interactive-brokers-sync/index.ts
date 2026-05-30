@@ -1,4 +1,6 @@
-// interactive-brokers-sync v9 (2026-05-28): trades upsert onConflict fix —
+// interactive-brokers-sync v10 (2026-05-30): capture NetLiquidation from NAV/Account section -> last_account_summary + NLV-authoritative snapshot total; ib-auto-sync heartbeat.
+//
+// v9 (2026-05-28): trades upsert onConflict fix —
 //   * trades upsert onConflict must be 'idempotency_key' (the only unique
 //     constraint on trades besides PK). Previous 'user_id,broker,external_id'
 //     does not match any constraint, so PostgREST returned 42P10 on every row.
@@ -228,7 +230,13 @@ async function fetchIBRITActivity(token: string, queryId: string, serviceCode: s
       if (code === '1010') return empty; // NO_STATEMENT — no activity on this day (not an error)
       throw new Error(`IBRIT error ${code}: ${text.slice(0, 300)}`);
     }
-    return parseIBRITFlexQuery(text);
+    const parsed = parseIBRITFlexQuery(text);
+    // Stamp every NAV/Account row with the request date so extractAccountSummary
+    // can select the latest day's row (NAV rows have no ReportDate column).
+    const rd = formatYYYYMMDD(date);
+    for (const r of parsed.nav) (r as Record<string, string>).__rd = rd;
+    for (const r of parsed.account) (r as Record<string, string>).__rd = rd;
+    return parsed;
   } finally { clearTimeout(timer); }
 }
 
@@ -410,6 +418,115 @@ interface UserSyncSummary {
   positionsSource?: 'position_section' | 'aggregated' | 'preserved';
 }
 
+// ─── AccountSummary: authoritative account value extracted from NAV/Account sections ───
+type AccountSummary = {
+  netliquidation: { amount: number; currency: 'USD' };
+  totalcashvalue?: { amount: number };
+  as_of: string;
+  source_field: string;
+};
+
+// extractAccountSummary: scans NAV then Account section rows for NetLiquidation (NLV).
+// Returns null if no positive NLV is found — caller must fall back to position-derived totals.
+// The function logs raw rows for diagnostic field-name discovery (real IB column names vary).
+function extractAccountSummary(sections: ParsedSections, latestReportDate: string): AccountSummary | null {
+  // Diagnostic: log the last row of each section so we can verify field names in production logs.
+  if (sections.nav.length > 0) {
+    console.log('[ib-sync] NAV last row:', JSON.stringify(sections.nav.at(-1)));
+  }
+  if (sections.account.length > 0) {
+    console.log('[ib-sync] Account last row:', JSON.stringify(sections.account.at(-1)));
+  }
+
+  // NLV candidate field names in priority order (case-insensitive comparison applied below).
+  // 'Totals' (plural) is the real IBRIT NAV-section field name — must be first.
+  const NLV_KEYS = ['Totals', 'EndingValue', 'EndingNAV', 'NetLiquidation', 'NetLiquidationValue', 'Total', 'NAV'];
+  // Cash candidate field names (optional).
+  // 'CashTotal' is the real IBRIT NAV-section field name — must be first.
+  const CASH_KEYS = ['CashTotal', 'EndingCash', 'TotalCashValue', 'Cash', 'CashBalance'];
+
+  // Helper: pick the best row from an array — prefer the row whose date key matches
+  // latestReportDate, else use the last row.
+  // Priority for date key: synthetic '__rd' (stamped in fetchIBRITActivity for rows that
+  // lack a native ReportDate column, e.g. NAV section), then any key whose lowercase ===
+  // 'reportdate' (Account section and legacy schemas).
+  function pickRow(rows: Record<string, string>[]): Record<string, string> | null {
+    if (rows.length === 0) return null;
+    if (latestReportDate) {
+      // 1. Check for synthetic __rd stamp (NAV section rows have no ReportDate column).
+      if ('__rd' in rows[0]) {
+        const match = rows.findLast(r => r.__rd === latestReportDate);
+        if (match) return match;
+      }
+      // 2. Fall back to native ReportDate key (case-insensitive scan).
+      const reportDateKey = Object.keys(rows[0]).find(k => k.toLowerCase() === 'reportdate');
+      if (reportDateKey) {
+        const match = rows.findLast(r => r[reportDateKey] === latestReportDate);
+        if (match) return match;
+      }
+    }
+    // 3. Last resort: use the final row in the array.
+    return rows.at(-1)!;
+  }
+
+  // Helper: find the first matching key in a row (case-insensitive), return [key, numericValue]
+  // or null if none of the candidates match or the value is not a finite positive number.
+  function findValue(
+    row: Record<string, string>,
+    candidates: readonly string[],
+  ): [string, number] | null {
+    const rowKeys = Object.keys(row);
+    for (const candidate of candidates) {
+      const found = rowKeys.find(k => k.toLowerCase() === candidate.toLowerCase());
+      if (found !== undefined) {
+        const num = Number(row[found]);
+        if (Number.isFinite(num) && num > 0) return [found, num];
+      }
+    }
+    return null;
+  }
+
+  // Try NAV section first, then Account section.
+  const candidateSources: Array<{ label: string; rows: Record<string, string>[] }> = [
+    { label: 'nav', rows: sections.nav },
+    { label: 'account', rows: sections.account },
+  ];
+
+  for (const { rows } of candidateSources) {
+    const row = pickRow(rows);
+    if (!row) continue;
+
+    const nlvMatch = findValue(row, NLV_KEYS);
+    if (!nlvMatch) continue;
+
+    const [nlvKey, nlvAmount] = nlvMatch;
+
+    // Determine the as_of date: prefer synthetic __rd (NAV rows lack a native ReportDate),
+    // then fall back to a native ReportDate key, then latestReportDate.
+    const reportDateKey = Object.keys(row).find(k => k.toLowerCase() === 'reportdate');
+    const asOf = (row.__rd) ? row.__rd
+      : (reportDateKey && row[reportDateKey]) ? row[reportDateKey]
+      : latestReportDate;
+
+    // Optional cash extraction.
+    const cashMatch = findValue(row, CASH_KEYS);
+    const summary: AccountSummary = {
+      netliquidation: { amount: nlvAmount, currency: 'USD' },
+      as_of: asOf,
+      source_field: nlvKey,
+    };
+    if (cashMatch) {
+      summary.totalcashvalue = { amount: cashMatch[1] };
+    }
+
+    console.log('[ib-sync] extractAccountSummary: NLV =', nlvAmount, 'field =', nlvKey, 'as_of =', asOf);
+    return summary;
+  }
+
+  console.log('[ib-sync] extractAccountSummary: no positive NLV found in NAV or Account sections');
+  return null;
+}
+
 // Sum PositionValue across all positions (cash positions in IBRIT carry their balance as PositionValue).
 function computeTotalsFromPositions(positions: Record<string, unknown>[]): { totalValue: number; cash: number } {
   let totalValue = 0;
@@ -426,10 +543,14 @@ async function upsertSnapshotForToday(
   connectionId: string,
   userId: string,
   positions: Record<string, unknown>[],
+  overrides?: { totalValue?: number; cash?: number },
 ): Promise<boolean> {
   // Cash-only IBRIT accounts always have at least one CASH position; empty array = sync produced nothing meaningful.
   if (positions.length === 0) return false;
-  const { totalValue, cash } = computeTotalsFromPositions(positions);
+  const { totalValue: posTotalValue, cash: posCash } = computeTotalsFromPositions(positions);
+  // Allow callers to pass NLV-authoritative values that supersede position-derived sums.
+  const totalValue = overrides?.totalValue ?? posTotalValue;
+  const cash = overrides?.cash ?? posCash;
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
   const { error } = await supabaseAdmin
     .from('portfolio_snapshots')
@@ -532,14 +653,17 @@ async function syncOneUser(userId: string): Promise<UserSyncSummary> {
   let positionsSnapshot: Record<string, unknown>[] = [];
   let positionsSource: 'position_section' | 'aggregated' | 'preserved' = 'aggregated';
 
+  // latestReportDate: needed both for position de-duplication and for extractAccountSummary row selection.
+  const latestReportDate = allSections.position.length > 0
+    ? (allSections.position
+        .map(r => r.ReportDate || '')
+        .filter(d => d !== '')
+        .sort()
+        .at(-1) ?? '')
+    : '';
+
   if (allSections.position.length > 0) {
     // Use only the most recent report date's position rows to get current state
-    const latestReportDate = allSections.position
-      .map(r => r.ReportDate || '')
-      .filter(d => d !== '')
-      .sort()
-      .at(-1) ?? '';
-
     const latestPositionRows = latestReportDate
       ? allSections.position.filter(r => r.ReportDate === latestReportDate)
       : allSections.position; // fallback: use all if ReportDate missing
@@ -563,16 +687,39 @@ async function syncOneUser(userId: string): Promise<UserSyncSummary> {
     positionsSource = 'preserved';
   }
 
+  // v10: extract authoritative account value from NAV/Account sections.
+  // Forward-only: preserve the previous value when extraction returns null this run.
+  const accountSummary = extractAccountSummary(allSections, latestReportDate);
+  const lastAccountSummary =
+    accountSummary ?? (cd as Record<string, unknown>).last_account_summary ?? null;
+
   const now = new Date().toISOString();
   await supabaseAdmin.from('broker_connections').update({
     last_sync_at: now, last_successful_sync_at: now,
     error_count: 0, last_error: firstErrorMsg, last_error_at: firstErrorMsg ? now : null,
     status: 'connected',
-    connection_data: { ...cd, last_positions: positionsForWrite, last_synced_date: formatYYYYMMDD(today), sync_meta: { http_ok: httpOk, http_empty: httpEmpty, http_err: httpErr, last_run: now, positions_source: positionsSource } },
+    connection_data: {
+      ...cd,
+      last_positions: positionsForWrite,
+      last_synced_date: formatYYYYMMDD(today),
+      sync_meta: { http_ok: httpOk, http_empty: httpEmpty, http_err: httpErr, last_run: now, positions_source: positionsSource },
+      last_account_summary: lastAccountSummary,
+    },
   }).eq('id', conn.id);
 
+  // v10: prefer authoritative NLV for snapshot total_value; fall back to position-derived sum.
+  const posTotals = computeTotalsFromPositions(positionsForWrite);
+  const snapshotTotalValue =
+    (accountSummary?.netliquidation?.amount && accountSummary.netliquidation.amount > 0)
+      ? accountSummary.netliquidation.amount
+      : posTotals.totalValue;
+  const snapshotCash = accountSummary?.totalcashvalue?.amount ?? posTotals.cash;
+
   // Snapshot uses whichever positions array we kept (Position section OR aggregated OR preserved prior).
-  const snapshotInserted = await upsertSnapshotForToday(conn.id, userId, positionsForWrite);
+  const snapshotInserted = await upsertSnapshotForToday(conn.id, userId, positionsForWrite, {
+    totalValue: snapshotTotalValue,
+    cash: snapshotCash,
+  });
 
   return { userId, tradesInserted, tradeErrors, positionsCount: positionsSnapshot.length, daysQueried: dates.length, daysWithData: httpOk, daysEmpty: httpEmpty, daysErrored: httpErr, firstError: firstErrorMsg, snapshotInserted, positionsSource };
 }
@@ -1006,11 +1153,38 @@ Deno.serve(async (req: Request) => {
     if (listErr) {
       return new Response(JSON.stringify({ error: 'list_failed', message: listErr.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    const startMs = Date.now();
     const summaries: UserSyncSummary[] = [];
+    let cronErrors = 0;
     for (const c of (conns || [])) {
       try { summaries.push(await syncOneUser(c.user_id)); }
-      catch (e) { summaries.push({ userId: c.user_id, tradesInserted: 0, tradeErrors: 0, positionsCount: 0, daysQueried: 0, daysWithData: 0, daysEmpty: 0, daysErrored: 0, firstError: e instanceof Error ? e.message : String(e) }); }
+      catch (e) {
+        cronErrors++;
+        summaries.push({ userId: c.user_id, tradesInserted: 0, tradeErrors: 0, positionsCount: 0, daysQueried: 0, daysWithData: 0, daysEmpty: 0, daysErrored: 0, firstError: e instanceof Error ? e.message : String(e) });
+      }
     }
+
+    // v10: write a heartbeat row so cron-health/observability can confirm ib-auto-sync ran.
+    // Convention (matches tradovate-sync): write 'ok'/'partial' only; on total failure SKIP the
+    // heartbeat so cron-health's staleness check drives alerting instead of a brittle 'failed' status.
+    // NOTE: cron_heartbeat.last_status has a CHECK constraint allowing only 'ok' | 'partial' | 'failed'.
+    const hbStatus: 'ok' | 'partial' | null =
+      cronErrors === 0 ? 'ok' : (summaries.length - cronErrors > 0 ? 'partial' : null);
+    if (hbStatus !== null) {
+      try {
+        await supabaseAdmin.from('cron_heartbeat').upsert({
+          job_name: 'ib-auto-sync',
+          last_run_at: new Date().toISOString(),
+          last_status: hbStatus,
+          last_duration_ms: Date.now() - startMs,
+          last_payload: { synced: summaries.length - cronErrors, errors: cronErrors },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'job_name' });
+      } catch (heartbeatErr) {
+        console.error('[ib-sync] cron heartbeat upsert failed (non-fatal):', heartbeatErr instanceof Error ? heartbeatErr.message : String(heartbeatErr));
+      }
+    }
+
     return new Response(JSON.stringify({ ok: true, mode: 'cron', users: summaries.length, summaries }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
