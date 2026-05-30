@@ -219,6 +219,35 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
         return { success: true };
       }
 
+      // Binance sync via exchange-sync edge function.
+      if (conn.broker === 'binance') {
+        const { data: sess } = await supabase.auth.getSession();
+        const jwt = sess.session?.access_token;
+        const { data, error: e } = await supabase.functions.invoke('exchange-sync', {
+          body: { broker: 'binance', mode: 'manual' },
+          headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+        });
+        if (e) {
+          toast.error('Binance sync failed — ' + (e.message || 'unknown'));
+          return { success: false, error: e.message };
+        }
+        invalidate();
+        qc.invalidateQueries({ queryKey: ['trades'] });
+        qc.invalidateQueries({ queryKey: ['dashboard'] });
+        const body = (data ?? {}) as { ok?: boolean; results?: Array<{ inserted?: number; error?: string }>; error?: string };
+        if (!body.ok || body.error) {
+          toast.error('Binance sync: ' + (body.error ?? 'Unknown error'));
+          return { success: false, error: body.error ?? 'Sync failed' };
+        }
+        const inserted = body.results?.reduce((sum, r) => sum + (r.inserted ?? 0), 0) ?? 0;
+        if (inserted > 0) {
+          toast.success(`Binance synced — ${inserted} trade${inserted === 1 ? '' : 's'} imported`);
+        } else {
+          toast.success('Binance sync complete — no new trades');
+        }
+        return { success: true };
+      }
+
       // NinjaTrader Web runs on Tradovate cloud, so both share tradovate-sync.
       if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
         toast.error(`Sync not yet implemented for ${conn.broker}`);
