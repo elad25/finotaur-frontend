@@ -97,6 +97,7 @@ export interface Trade {
   portfolio_id?: string | null;
   external_id?: string;
   multiplier?: number;
+  tags?: string[];
   // 🔥 ADD THESE FIELDS:
   input_mode?: 'summary' | 'risk-only';
   risk_usd?: number;

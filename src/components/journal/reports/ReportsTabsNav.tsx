@@ -3,6 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const TABS = [
   { label: 'Progress', path: '/app/journal/reports/progress' },
   { label: 'Day View', path: '/app/journal/reports/day-view' },
+  { label: 'Breakdowns', path: '/app/journal/reports/breakdowns' },
+  { label: 'Calendar', path: '/app/journal/reports/calendar' },
+  { label: 'Compare', path: '/app/journal/reports/compare' },
+  { label: 'Scores', path: '/app/journal/reports/scores' },
   { label: 'AI Recaps', path: '/app/journal/reports/recaps' },
 ];
 
@@ -12,7 +16,7 @@ export default function ReportsTabsNav() {
 
   return (
     <div className="rounded-2xl border border-yellow-200/15 bg-[#141414] mt-6">
-      <div className="sticky top-0 z-10 backdrop-blur supports-backdrop-blur:bg-black/20 border-b border-yellow-200/10 px-4 md:px-6 py-2 flex gap-2">
+      <div className="sticky top-0 z-10 backdrop-blur supports-backdrop-blur:bg-black/20 border-b border-yellow-200/10 px-4 md:px-6 py-2 flex gap-2 overflow-x-auto">
         {TABS.map(tab => {
           const isActive = location.pathname.startsWith(tab.path);
           return (
