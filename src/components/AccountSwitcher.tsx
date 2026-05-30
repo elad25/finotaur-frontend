@@ -12,7 +12,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { memo, useCallback, useMemo } from 'react';
-import { BookOpen, Link2, Layers, Check } from 'lucide-react';
+import { BookOpen, Link2, Layers, Check, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
 
@@ -21,6 +21,7 @@ export const AccountSwitcher = memo(function AccountSwitcher() {
     portfolios,
     manualPortfolios,
     tradovatePortfolios,
+    brokerPortfolios,
     selectedPortfolioIds,
     togglePortfolioSelection,
     isShowingAll,
@@ -102,6 +103,32 @@ export const AccountSwitcher = memo(function AccountSwitcher() {
           onToggle={handleToggle}
         />
       ))}
+
+      {/* ══ Broker accounts (non-Tradovate journal connections) ══ */}
+      {brokerPortfolios.length > 0 && (
+        <>
+          <div className="border-t border-zinc-800/60 my-1.5 mx-2" />
+          {/* Brokers section header */}
+          <div className="flex items-center gap-2 px-2 pt-2 pb-1">
+            <Building2 className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+            <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider flex-1 truncate">
+              Brokers
+            </span>
+          </div>
+          {brokerPortfolios.map(p => (
+            <AccountRow
+              key={p.id}
+              id={p.id}
+              label={p.name}
+              sublabel={p.environment === 'live' ? 'Live' : p.environment === 'demo' ? 'Demo' : 'Broker'}
+              checked={!isShowingAll && selectedPortfolioIds.includes(p.id)}
+              indent={false}
+              dot={p.environment === 'live' ? 'live' : p.environment === 'demo' ? 'demo' : null}
+              onToggle={handleToggle}
+            />
+          ))}
+        </>
+      )}
 
       {/* ══ Divider before ALL ══ */}
       <div className="border-t border-zinc-800/40 my-1.5 mx-2" />

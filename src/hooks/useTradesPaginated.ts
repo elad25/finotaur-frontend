@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 
 // ────────────────────────────────────────────────────────────────────────
 // Shape returned by the projection query — slim subset of `trades` row.
@@ -113,7 +114,14 @@ export function useTradesProjection(opts: UseTradesProjectionOptions = {}) {
         .is('deleted_at', null)
         .order('open_at', { ascending: false })
         .limit(limit);
-      if (portfolioId) q = q.eq('portfolio_id', portfolioId);
+      // broker_ prefix → filter by broker_connection_id instead of portfolio_id
+      if (portfolioId) {
+        if (isBrokerId(portfolioId)) {
+          q = q.eq('broker_connection_id', brokerConnId(portfolioId));
+        } else {
+          q = q.eq('portfolio_id', portfolioId);
+        }
+      }
       if (from) q = q.gte('open_at', from);
       if (to) q = q.lt('open_at', to);
 
@@ -203,7 +211,14 @@ export function useTradesPage(opts: UseTradesPageOptions = {}) {
         .order('id', { ascending: false })
         .limit(pageSize + 1); // fetch one extra to detect end-of-list
 
-      if (portfolioId) q = q.eq('portfolio_id', portfolioId);
+      // broker_ prefix → filter by broker_connection_id instead of portfolio_id
+      if (portfolioId) {
+        if (isBrokerId(portfolioId)) {
+          q = q.eq('broker_connection_id', brokerConnId(portfolioId));
+        } else {
+          q = q.eq('portfolio_id', portfolioId);
+        }
+      }
       if (pageParam) {
         // (open_at, id) lexicographic cursor — covers the equal-timestamp case.
         q = q.or(
