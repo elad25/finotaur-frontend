@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Star,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 
@@ -115,11 +116,11 @@ export function UpsellGate() {
           <div className="mt-ds-6 flex flex-wrap items-center gap-ds-5">
             {/* Gold CTA — asChild suppresses Button's built-in arrow; Crown + ArrowRight added manually */}
             <Button variant="gold" size="default" asChild>
-              <a href="/pricing" className="inline-flex items-center gap-2">
+              <Link to="/app/journal/pricing" className="inline-flex items-center gap-2">
                 <Crown className="h-4 w-4" />
                 Upgrade to Premium
                 <ArrowRight className="h-4 w-4" />
-              </a>
+              </Link>
             </Button>
 
             {/* Guarantee */}
@@ -142,7 +143,7 @@ export function UpsellGate() {
           {/* Bull image — rendered as-is (the asset is already on black); no blend
               so it shows exactly like the source PNG (warm glow preserved). */}
           <img
-            src="/bull-ai-coach.png"
+            src="/bull-ai-coach-v2.png"
             alt="FINOTAUR AI bull"
             className="mx-auto w-full max-w-[420px] object-contain lg:ml-auto lg:mr-0"
           />
