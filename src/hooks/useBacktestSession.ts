@@ -121,6 +121,12 @@ interface AddPendingPayload {
 }
 interface CancelPendingPayload { orderId: string; }
 interface FillPendingPayload { orderId: string; fillPrice: number; fillTime: number; }
+interface UpdatePendingPayload {
+  orderId: string;
+  stopLoss?: number;
+  takeProfit?: number;
+  triggerPrice?: number;
+}
 
 interface ClosePayload {
   price: number;
@@ -147,6 +153,7 @@ type Action =
   | { type: 'ADD_PENDING'; payload: AddPendingPayload }
   | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
   | { type: 'FILL_PENDING'; payload: FillPendingPayload }
+  | { type: 'UPDATE_PENDING'; payload: UpdatePendingPayload }
   | { type: 'LOAD_SESSION'; payload: LoadSessionPayload }
   // Replace the entire session state from a persisted/restored snapshot.
   // Used by the localStorage hydration effect once the user key is known.
@@ -298,6 +305,22 @@ function reducer(state: SessionState, action: Action): SessionState {
         activePosition: { ...state.activePosition, takeProfit: action.payload.price },
       };
     }
+    case 'UPDATE_PENDING': {
+      const { orderId, stopLoss, takeProfit, triggerPrice } = action.payload;
+      return {
+        ...state,
+        pendingOrders: state.pendingOrders.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                ...(triggerPrice !== undefined ? { triggerPrice } : {}),
+                ...(stopLoss !== undefined ? { stopLoss } : {}),
+                ...(takeProfit !== undefined ? { takeProfit } : {}),
+              }
+            : o,
+        ),
+      };
+    }
     case 'RESET': {
       return {
         startingBalance: action.payload.startingBalance,
@@ -400,6 +423,8 @@ export interface UseBacktestSessionReturn {
   addPendingOrder: (payload: AddPendingPayload) => void;
   cancelPendingOrder: (orderId: string) => void;
   fillPendingOrder: (orderId: string, fillPrice: number, fillTime: number) => void;
+  /** Update a pending order's SL/TP/trigger (used by the draggable position box). */
+  updatePendingRisk: (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => void;
   /** Hydrate the full session from a saved record (Phase 7+ load flow). */
   loadSession: (payload: LoadSessionPayload) => void;
 }
@@ -579,6 +604,13 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     dispatch({ type: 'FILL_PENDING', payload: { orderId, fillPrice, fillTime } });
   }, []);
 
+  const updatePendingRisk = useCallback(
+    (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => {
+      dispatch({ type: 'UPDATE_PENDING', payload: { orderId, ...changes } });
+    },
+    [],
+  );
+
   const loadSession = useCallback((payload: LoadSessionPayload) => {
     dispatch({ type: 'LOAD_SESSION', payload });
   }, []);
@@ -594,6 +626,7 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    updatePendingRisk,
     loadSession,
   };
 }

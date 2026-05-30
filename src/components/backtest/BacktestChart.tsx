@@ -28,6 +28,7 @@ import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play,
 
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
+import type { PositionBoxModel } from '@/components/charting/PositionBox';
 import {
   useBacktestSession,
   computeStatsByStrategy,
@@ -692,6 +693,7 @@ export function BacktestChart({
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    updatePendingRisk,
   } = session;
 
   // Phase 2: Supabase persistence for "Save Session" button.
@@ -1069,6 +1071,55 @@ export function BacktestChart({
     return (exit - activePos.entryPrice) * direction * activePos.size;
   }, [activePos, livePrice]);
 
+  // ─── Draggable risk/reward position box ──────────────────────
+  // Built from the active position, or — when none is open — the first pending
+  // (limit/stop) order so the box shows BEFORE the order fills. Dragging the
+  // stop/target handles commits the real SL/TP back to state. currentPrice is
+  // injected by BacktestReplayChart from the live cursor bar.
+  const positionOverlay = useMemo<
+    | {
+        model: PositionBoxModel;
+        onStopLossChange: (price: number) => void;
+        onTakeProfitChange: (price: number) => void;
+      }
+    | undefined
+  >(() => {
+    const tickSize = assetClass === 'futures' ? 0.25 : 0.01;
+    if (state.activePosition) {
+      const p = state.activePosition;
+      return {
+        model: {
+          side: p.side,
+          entryPrice: p.entryPrice,
+          size: p.size,
+          stopLoss: p.stopLoss,
+          takeProfit: p.takeProfit,
+          isPending: false,
+          tickSize,
+        },
+        onStopLossChange: (price: number) => updateStopLoss(price),
+        onTakeProfitChange: (price: number) => updateTakeProfit(price),
+      };
+    }
+    const pending = state.pendingOrders[0];
+    if (pending) {
+      return {
+        model: {
+          side: pending.side,
+          entryPrice: pending.triggerPrice,
+          size: pending.size,
+          stopLoss: pending.stopLoss,
+          takeProfit: pending.takeProfit,
+          isPending: true,
+          tickSize,
+        },
+        onStopLossChange: (price: number) => updatePendingRisk(pending.id, { stopLoss: price }),
+        onTakeProfitChange: (price: number) => updatePendingRisk(pending.id, { takeProfit: price }),
+      };
+    }
+    return undefined;
+  }, [state.activePosition, state.pendingOrders, assetClass, updateStopLoss, updateTakeProfit, updatePendingRisk]);
+
   // ─── Render ──────────────────────────────────────────────────
   // Phase 5: fullscreen-by-default. position:fixed inset-0 covers the
   // app-level topnav + journal sub-nav. Exit button returns to overview.
@@ -1253,6 +1304,7 @@ export function BacktestChart({
             onJumpToTime={(date) => setReplayStart(date)}
             showReplayCursor
             height="100%"
+            positionOverlay={positionOverlay}
           />
           {/* Floating Session Stats popup — top-right */}
           <div className="absolute right-3 top-3 z-20 w-72 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/95 shadow-2xl backdrop-blur-sm">
