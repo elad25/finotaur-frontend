@@ -139,12 +139,12 @@ export function UpsellGate() {
 
         {/* RIGHT: Bull image + feature list */}
         <div className="flex flex-col gap-ds-5">
-          {/* Bull image — mix-blend-screen drops the PNG's black backdrop so only the
-              glowing gold bull shows, blending seamlessly onto the dark page. */}
+          {/* Bull image — rendered as-is (the asset is already on black); no blend
+              so it shows exactly like the source PNG (warm glow preserved). */}
           <img
             src="/bull-ai-coach.png"
             alt="FINOTAUR AI bull"
-            className="mx-auto w-full max-w-[420px] object-contain mix-blend-screen lg:ml-auto lg:mr-0"
+            className="mx-auto w-full max-w-[420px] object-contain lg:ml-auto lg:mr-0"
           />
 
           {/* Feature list */}
