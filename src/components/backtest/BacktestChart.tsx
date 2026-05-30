@@ -1013,34 +1013,58 @@ export function BacktestChart({
             )}
           </div>
           {/* Floating trading bar — bottom-center, overlaid on the chart */}
-          <div className="absolute bottom-8 left-1/2 z-20 max-w-[95%] -translate-x-1/2 rounded-xl border border-[#C9A646]/40 bg-zinc-950/95 px-4 py-2 shadow-2xl shadow-[0_0_24px_rgba(201,166,70,0.12)] backdrop-blur-sm">
-            <div className="flex flex-wrap items-end justify-center gap-3">
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price (optional)</span>
-              <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
-                className="mt-1 w-28 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Size</span>
-              <input type="number" value={size} onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))} min="0.01" step="any"
-                className="mt-1 w-20 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Stop loss</span>
-              <input type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)} placeholder="optional" step="any"
-                className="mt-1 w-24 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            <label className="flex flex-col"><span className="text-[10px] uppercase tracking-wider text-zinc-500">Take profit</span>
-              <input type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)} placeholder="optional" step="any"
-                className="mt-1 w-24 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" /></label>
-            {!state.activePosition ? (
-              <>
-                <button onClick={() => handleOpen('LONG')} className="flex items-center gap-1.5 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-4 py-2 text-sm font-bold text-emerald-400 transition-colors hover:bg-emerald-950/60"><TrendingUp size={14} /> BUY <span className="text-[10px] uppercase tracking-wider text-emerald-600">Market</span></button>
-                <button onClick={() => handleOpen('SHORT')} className="flex items-center gap-1.5 rounded-md border border-rose-700/40 bg-rose-950/30 px-4 py-2 text-sm font-bold text-rose-400 transition-colors hover:bg-rose-950/60"><TrendingDown size={14} /> SELL <span className="text-[10px] uppercase tracking-wider text-rose-600">Market</span></button>
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className={`flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side === 'LONG' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}{state.activePosition.side} <span className="text-xs font-normal text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span></span>
-                <button onClick={() => handleClose('manual')} className="rounded-md border border-[#C9A646]/40 bg-[#C9A646]/10 px-4 py-2 text-sm font-semibold text-[#C9A646] transition-colors hover:bg-[#C9A646]/20">✕ Close at ${livePrice || '—'}</button>
+          <div className="absolute bottom-8 left-1/2 z-20 max-w-[95%] -translate-x-1/2">
+            <div className="relative overflow-hidden rounded-[14px] border border-[#C9A646]/25 bg-gradient-to-b from-[#14141b]/95 to-[#0a0a0c]/95 px-5 py-3 shadow-glow-gold-resting backdrop-blur-md">
+              {/* top-edge gold light bar (flagship accent) */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-px w-2/3 bg-gradient-to-r from-transparent via-[#C9A646]/70 to-transparent" />
+              <div className="flex flex-wrap items-end justify-center gap-4">
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Current price</span>
+                    <div className="flex items-center rounded-md border border-white/10 bg-black/50 px-2.5 transition-colors focus-within:border-[#C9A646]/70">
+                      <span className="mr-1 text-sm text-zinc-500">$</span>
+                      <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
+                        className="w-24 bg-transparent py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                    </div>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Size</span>
+                    <input type="number" value={size} onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))} min="0.01" step="any"
+                      className="w-16 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 text-center font-mono text-sm tabular-nums text-zinc-100 transition-colors focus:border-[#C9A646]/70 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-rose-400/80">Stop loss</span>
+                    <input type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)} placeholder="optional" step="any"
+                      className="w-24 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 transition-colors focus:border-rose-500/60 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-400/80">Take profit</span>
+                    <input type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)} placeholder="optional" step="any"
+                      className="w-24 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 transition-colors focus:border-emerald-500/60 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                  </label>
+                </div>
+                <div className="hidden h-10 w-px self-center bg-white/10 sm:block" />
+                {!state.activePosition ? (
+                  <div className="flex items-stretch gap-2">
+                    <button onClick={() => handleOpen('LONG')} className="flex flex-col items-center justify-center rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-5 py-1.5 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-emerald-400"><TrendingUp size={15} /> BUY</span><span className="text-[9px] uppercase tracking-wider text-emerald-600/80">Market</span></button>
+                    <button onClick={() => handleOpen('SHORT')} className="flex flex-col items-center justify-center rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-5 py-1.5 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><span className="flex items-center gap-1.5 text-sm font-bold text-rose-400"><TrendingDown size={15} /> SELL</span><span className="text-[9px] uppercase tracking-wider text-rose-600/80">Market</span></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5">
+                    <span className={`flex items-center gap-2 rounded-md border bg-black/40 px-3 py-2 ${state.activePosition.side === 'LONG' ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
+                      <span className={`h-2 w-2 rounded-full ${state.activePosition.side === 'LONG' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                      <span className={`text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side}</span>
+                      <span className="font-mono text-xs tabular-nums text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span>
+                    </span>
+                    <button onClick={() => handleClose('manual')} className="flex items-center gap-1.5 rounded-[10px] bg-gradient-gold px-5 py-2 text-sm font-semibold text-black shadow-glow-gold-resting transition-all hover:shadow-glow-gold-hover"><X size={15} strokeWidth={2.5} /> Close <span className="font-mono tabular-nums">${livePrice || '—'}</span></button>
+                  </div>
+                )}
               </div>
-            )}
-            <span className="ml-auto text-[11px] text-zinc-600">💡 Right-click the chart for LIMIT / STOP orders</span>
-          </div>
-          {tradeError && <p className="mt-1 text-xs text-rose-400">{tradeError}</p>}
+              <div className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-white/5 pt-2 text-[11px] text-zinc-500">
+                <span>💡</span><span>Right-click the chart for <span className="text-zinc-400">LIMIT</span> / <span className="text-zinc-400">STOP</span> orders</span>
+              </div>
+              {tradeError && <p className="mt-1.5 text-center text-xs text-rose-400">{tradeError}</p>}
+            </div>
           </div>
         </div>
       </div>
