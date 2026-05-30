@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import ReportsTabsNav from '@/components/journal/reports/ReportsTabsNav';
 import StreakBadge from '@/components/journal/reports/StreakBadge';
 import PeriodScoreCard from '@/components/journal/reports/PeriodScoreCard';
 import RulesList from '@/components/journal/reports/RulesList';
@@ -15,8 +14,6 @@ export default function ProgressTracker() {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
-      <ReportsTabsNav />
-
       <div>
         <h2 className="text-2xl font-semibold text-yellow-100">Progress Tracker</h2>
         <p className="text-sm text-zinc-400 mt-1">
