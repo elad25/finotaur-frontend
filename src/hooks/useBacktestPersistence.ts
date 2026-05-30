@@ -146,11 +146,12 @@ export interface UseBacktestPersistenceReturn {
 
 export function useBacktestPersistence(): UseBacktestPersistenceReturn {
   // The saved-sessions edge function is JWT-scoped to the caller. In Mentor View
-  // the caller is the mentor, so we must NOT surface the mentor's own sessions
-  // as if they were the student's. The student's backtest performance is shown
-  // via useBacktestStats (RLS-scoped). A dedicated student-sessions list is a
-  // follow-up; for now listSessions returns empty in Mentor View.
-  const { isMentorView } = useEffectiveUser();
+  // the caller is the mentor, so the edge function would return the MENTOR's own
+  // sessions. Instead we read the STUDENT's sessions directly from Supabase
+  // (RLS grants accepted mentors read on backtest_sessions_v2 / _trades_v2),
+  // read-only. Writes (save/delete) stay on the edge function and are DB-blocked
+  // for the mentor anyway (owner-only policies) + hidden in the UI.
+  const { isMentorView, id: effectiveUserId } = useEffectiveUser();
 
   const saveSession = useCallback(async (input: SaveSessionInput) => {
     const body = {
@@ -188,9 +189,27 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
   }, []);
 
   const listSessions = useCallback(async (options?: ListSessionsOptions): Promise<ListSessionsResult> => {
-    // Mentor View: do not list the mentor's own sessions while viewing a student.
+    // Mentor View: read the student's sessions directly from Supabase (RLS-scoped),
+    // not the mentor's own via the edge function.
     if (isMentorView) {
-      return { sessions: [], nextCursor: null };
+      if (!effectiveUserId) return { sessions: [], nextCursor: null };
+      const pageSize = options?.limit ?? 20;
+      let q = supabase
+        .from('backtest_sessions_v2')
+        .select('id,name,symbol,interval,asset_class,total_trades,win_rate,net_pnl,profit_factor,created_at')
+        .eq('user_id', effectiveUserId)
+        .order('created_at', { ascending: false })
+        .limit(pageSize + 1);
+      if (options?.before) q = q.lt('created_at', options.before);
+      const { data, error } = await q;
+      if (error) throw error;
+      const rows = (data ?? []) as SavedSessionSummary[];
+      const hasMore = rows.length > pageSize;
+      const sessions = hasMore ? rows.slice(0, pageSize) : rows;
+      return {
+        sessions,
+        nextCursor: hasMore ? sessions[sessions.length - 1]?.created_at ?? null : null,
+      };
     }
     // Build query string mirroring the loadSession pattern (append to function name).
     const qs = new URLSearchParams();
@@ -210,9 +229,24 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
       // Defensive: coerce missing next_cursor (pre-deploy edge fn) to null.
       nextCursor: data?.next_cursor ?? null,
     };
-  }, [isMentorView]);
+  }, [isMentorView, effectiveUserId]);
 
-  const loadSession = useCallback(async (id: string) => {
+  const loadSession = useCallback(async (id: string): Promise<SavedSessionDetail> => {
+    // Mentor View: load the student's session directly from Supabase (RLS-scoped).
+    if (isMentorView) {
+      const [{ data: session, error: sErr }, { data: trades, error: tErr }] = await Promise.all([
+        supabase.from('backtest_sessions_v2').select('*').eq('id', id).single(),
+        supabase
+          .from('backtest_trades_v2')
+          .select('id,session_id,side,entry_time,entry_price,exit_time,exit_price,size,stop_loss,take_profit,pnl,pnl_percent,exit_reason,strategy_id')
+          .eq('session_id', id)
+          .order('entry_time', { ascending: true }),
+      ]);
+      if (sErr) throw sErr;
+      if (tErr) throw tErr;
+      if (!session) throw new Error('Session not found');
+      return { session, trades: trades ?? [] } as unknown as SavedSessionDetail;
+    }
     // supabase.functions.invoke doesn't accept query strings directly — pass
     // via headers as a workaround? Actually invoke serializes query params
     // when you append them to the function name. Use the second arg pattern.
@@ -223,7 +257,7 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
     if (error) throw error;
     if (!data) throw new Error('Edge Function returned no data');
     return data;
-  }, []);
+  }, [isMentorView]);
 
   const deleteSession = useCallback(async (id: string) => {
     const { error } = await supabase.functions.invoke<{ ok: boolean }>(
