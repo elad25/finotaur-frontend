@@ -59,9 +59,6 @@ const BulkActionBar = memo(function BulkActionBar({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTagging, setIsTagging] = useState(false);
 
-  // Hide when nothing is selected
-  if (count === 0) return null;
-
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
@@ -98,6 +95,12 @@ const BulkActionBar = memo(function BulkActionBar({
       setIsTagging(false);
     }
   }, [tagValue, selectedIds, count, onBulkTag]);
+
+  // Hide when nothing is selected.
+  // NOTE: this early return MUST stay below every hook above — moving it up
+  // changes the hook count between renders (0 selected → 5 hooks, then
+  // selecting a trade → 7 hooks) and triggers React error #310.
+  if (count === 0) return null;
 
   // -------------------------------------------------------------------------
   // Render
