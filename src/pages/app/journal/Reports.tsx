@@ -5,7 +5,7 @@ export default function Reports() {
   const location = useLocation();
 
   if (location.pathname === '/app/journal/reports') {
-    return <Navigate to="/app/journal/reports/progress" replace />;
+    return <Navigate to="/app/journal/reports/overview" replace />;
   }
 
   return (

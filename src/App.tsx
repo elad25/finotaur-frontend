@@ -163,6 +163,8 @@ const JournalReportsBreakdowns = lazy(() => import("@/pages/app/journal/reports/
 const JournalReportsAnnualCalendar = lazy(() => import("@/pages/app/journal/reports/AnnualCalendar"));
 const JournalReportsCompare = lazy(() => import("@/pages/app/journal/reports/CompareReports"));
 const JournalReportsScores = lazy(() => import("@/pages/app/journal/reports/Scores"));
+const JournalReportsOverview = lazy(() => import("@/pages/app/journal/reports/Overview"));
+const JournalReportsSummary = lazy(() => import("@/pages/app/journal/reports/Summary"));
 const JournalAutoTagger = lazy(() => import("@/pages/app/journal/AutoTagger"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
@@ -584,6 +586,8 @@ function AppContent() {
 <Route path="journal/reports/calendar" element={<JournalRoute><JournalReportsAnnualCalendar /></JournalRoute>} />
 <Route path="journal/reports/compare" element={<JournalRoute><JournalReportsCompare /></JournalRoute>} />
 <Route path="journal/reports/scores" element={<JournalRoute><JournalReportsScores /></JournalRoute>} />
+<Route path="journal/reports/overview" element={<JournalRoute><JournalReportsOverview /></JournalRoute>} />
+<Route path="journal/reports/summary" element={<JournalRoute><JournalReportsSummary /></JournalRoute>} />
 <Route path="journal/auto-tagger" element={<JournalRoute><JournalAutoTagger /></JournalRoute>} />
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
