@@ -1,7 +1,8 @@
 // src/pages/app/journal/finotaur-ai/services/finotaurAIApi.ts
-// Auth: credentials: 'include' passes the Supabase session cookie.
-// The server's requireAuthJWT middleware validates the JWT from the cookie.
+// Auth: authFetch injects Authorization: Bearer <token> from supabase.auth.getSession().
+// The server's requireAuth middleware validates the Bearer JWT.
 
+import { authFetch } from '@/utils/authFetch';
 import type {
   BriefingResponse,
   ChatMessage,
@@ -14,7 +15,7 @@ import type {
 } from '../types';
 
 export async function fetchFinotaurScore(windowDays: number = 30): Promise<FinotaurScore> {
-  const res = await fetch(`/api/journal-ai/score?window=${windowDays}`, {
+  const res = await authFetch(`/api/journal-ai/score?window=${windowDays}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -56,7 +57,7 @@ export class BriefingApiError extends Error {
 }
 
 export async function fetchBriefing(): Promise<BriefingResponse> {
-  const res = await fetch('/api/journal-ai/briefing', {
+  const res = await authFetch('/api/journal-ai/briefing', {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -77,7 +78,7 @@ export async function fetchBriefing(): Promise<BriefingResponse> {
 }
 
 export async function refreshBriefing(): Promise<BriefingResponse> {
-  const res = await fetch('/api/journal-ai/briefing/refresh', {
+  const res = await authFetch('/api/journal-ai/briefing/refresh', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -108,7 +109,7 @@ export interface ExecuteToolCallArgs {
 }
 
 export async function executeToolCall(args: ExecuteToolCallArgs): Promise<ToolExecuteResponse> {
-  const res = await fetch('/api/journal-ai/tool/execute', {
+  const res = await authFetch('/api/journal-ai/tool/execute', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -128,7 +129,7 @@ export async function executeToolCall(args: ExecuteToolCallArgs): Promise<ToolEx
 }
 
 export async function listConversations(): Promise<ConversationListItem[]> {
-  const res = await fetch('/api/journal-ai/conversations', {
+  const res = await authFetch('/api/journal-ai/conversations', {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -147,7 +148,7 @@ export async function listConversations(): Promise<ConversationListItem[]> {
 }
 
 export async function fetchUsage(): Promise<UsageResponse> {
-  const res = await fetch('/api/journal-ai/usage', {
+  const res = await authFetch('/api/journal-ai/usage', {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -167,7 +168,7 @@ export async function fetchUsage(): Promise<UsageResponse> {
 export async function fetchConversation(
   id: string,
 ): Promise<{ conversation: ConversationListItem; messages: ChatMessage[] }> {
-  const res = await fetch(`/api/journal-ai/conversations/${encodeURIComponent(id)}`, {
+  const res = await authFetch(`/api/journal-ai/conversations/${encodeURIComponent(id)}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -202,7 +203,7 @@ export async function fetchConversation(
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  const res = await fetch(`/api/journal-ai/conversations/${encodeURIComponent(id)}`, {
+  const res = await authFetch(`/api/journal-ai/conversations/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
   });
