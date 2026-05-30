@@ -12,7 +12,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/providers/AuthProvider';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import type { PaperPosition, SessionStats } from '@/hooks/useBacktestSession';
 import { computeStats, computeStatsByStrategy } from '@/hooks/useBacktestSession';
 import dayjs from 'dayjs';
@@ -189,8 +189,9 @@ export const backtestStatsKeys = {
 };
 
 export function useBacktestStats() {
-  const { user } = useAuth();
-  const userId = user?.id;
+  // useEffectiveUser returns the student's id in Mentor View → scopes backtest
+  // stats to the student (RLS grants accepted mentors read access).
+  const { id: userId } = useEffectiveUser();
 
   return useQuery<BacktestStatsResult>({
     queryKey: backtestStatsKeys.byUser(userId ?? 'anon'),

@@ -910,7 +910,7 @@ function BacktestOverviewContent() {
   const navigate = useNavigate();
   useParams(); // backtestId available for future deep-link routing
 
-  const { isImpersonating } = useEffectiveUser();
+  const { isImpersonating, isMentorView } = useEffectiveUser();
   const { data: stats, isLoading } = useMockBacktestStats(); // Replace with actual hook
   // Raw equitySeries + trades for V2 chart components (camelCase, Journal-compatible)
   const { data: rawBacktest } = useBacktestStats();
@@ -1015,14 +1015,16 @@ function BacktestOverviewContent() {
               </div>
             )}
 
-            <button
-              onClick={handleRunAgain}
-              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-3 h-9 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors text-[12px]"
-              style={BORDER_STYLE}
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="font-medium">Run Again</span>
-            </button>
+            {!isMentorView && (
+              <button
+                onClick={handleRunAgain}
+                className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-3 h-9 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors text-[12px]"
+                style={BORDER_STYLE}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="font-medium">Run Again</span>
+              </button>
+            )}
 
             <button
               onClick={handleShareResults}
