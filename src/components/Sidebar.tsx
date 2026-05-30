@@ -277,7 +277,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
     { label: 'Auto-Tagger', path: '/app/journal/auto-tagger', icon: Sparkles },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
-    { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
