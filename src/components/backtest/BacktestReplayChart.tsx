@@ -797,7 +797,7 @@ export function BacktestReplayChart({
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-[2] select-none"
-          style={{ right: 64, bottom: TIMESCALE_HEIGHT + 8, width: 132, opacity: 0.16 }}
+          style={{ right: 64, bottom: TIMESCALE_HEIGHT + 12, width: 160, opacity: 0.6 }}
           draggable={false}
         />
 
