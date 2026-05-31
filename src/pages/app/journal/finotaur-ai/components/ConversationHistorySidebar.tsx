@@ -10,6 +10,16 @@ import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { deleteConversation, listConversations } from '../services/finotaurAIApi';
 import type { ConversationListItem } from '../types';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -57,23 +67,30 @@ export function ConversationHistorySidebar({
 
   // ── Delete handler ──────────────────────────────────────────────────────────
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  // Styled confirm dialog (replaces the native window.confirm).
+  const [pendingDelete, setPendingDelete] = React.useState<ConversationListItem | null>(null);
 
-  async function handleDelete(
-    e: React.MouseEvent,
-    id: string,
-  ): Promise<void> {
+  /** Open the styled confirm dialog for a conversation. */
+  function requestDelete(e: React.MouseEvent, conv: ConversationListItem): void {
     e.stopPropagation();
-    if (!window.confirm('Delete this conversation? This cannot be undone.')) return;
-    setDeletingId(id);
+    setPendingDelete(conv);
+  }
+
+  /** Perform the actual delete once the user confirms in the dialog. */
+  async function confirmDelete(): Promise<void> {
+    const conv = pendingDelete;
+    if (!conv) return;
+    setPendingDelete(null);
+    setDeletingId(conv.id);
     try {
-      await deleteConversation(id);
+      await deleteConversation(conv.id);
       // Optimistically remove from cache
       queryClient.setQueryData<ConversationListItem[]>(
         ['finotaur-conversations'],
-        (prev) => (prev ?? []).filter((c) => c.id !== id),
+        (prev) => (prev ?? []).filter((c) => c.id !== conv.id),
       );
       // If the deleted conversation was active, reset to new
-      if (activeConversationId === id) {
+      if (activeConversationId === conv.id) {
         onNew();
       }
     } catch {
@@ -167,7 +184,7 @@ export function ConversationHistorySidebar({
                 type="button"
                 aria-label="Delete conversation"
                 disabled={deletingId === conv.id}
-                onClick={(e) => void handleDelete(e, conv.id)}
+                onClick={(e) => requestDelete(e, conv)}
                 className={[
                   'shrink-0 p-0.5 rounded text-ink-muted',
                   'opacity-0 group-hover:opacity-100 focus:opacity-100',
@@ -181,6 +198,49 @@ export function ConversationHistorySidebar({
           );
         })}
       </div>
+
+      {/* Styled delete confirmation — replaces the native window.confirm */}
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#C9A646]">
+              Delete this conversation?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400">
+              {pendingDelete?.title ? (
+                <>
+                  You&apos;re about to delete{' '}
+                  <span className="font-semibold text-zinc-200">
+                    &ldquo;{pendingDelete.title}&rdquo;
+                  </span>{' '}
+                  permanently. This cannot be undone.
+                </>
+              ) : (
+                <>
+                  You&apos;re about to delete this conversation permanently. This
+                  cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void confirmDelete()}
+              className="bg-rose-600 text-white hover:bg-rose-500"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
