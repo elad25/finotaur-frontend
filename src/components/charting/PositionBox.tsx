@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp, Logical } from 'lightweight-charts';
 
 // ═══════════════════════════════════════════════════════════════
 // Model + props
@@ -61,7 +61,8 @@ const RED = '#ef4444';
 const GREEN_FILL = 'rgba(34, 197, 94, 0.12)';
 const RED_FILL = 'rgba(239, 68, 68, 0.12)';
 const ENTRY_LINE = '#d4d4d8'; // zinc-300 — neutral entry line
-const HANDLE = 8; // px — square handle half is 4
+const HANDLE_BLUE = '#2962FF'; // TradingView-style handle accent
+const HANDLE = 11; // px — resize-handle box size
 
 // Default zone offsets (fraction of entry) used only until the user sets a
 // real SL/TP. Keeps the band visible like TradingView's tool out of the box.
@@ -89,11 +90,14 @@ export function PositionBox({
 }: PositionBoxProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Drag state: which handle is active. Re-renders are driven by the commits +
-  // redrawKey, so we keep the live drag price in a ref and only setState to
-  // reflect the in-flight value for a snappy label.
-  const dragRef = useRef<null | 'tp' | 'sl'>(null);
+  // Drag state: which handle is active ('tp'/'sl' = price, 'time' = right-edge
+  // width). Re-renders are driven by the commits + redrawKey, so we keep the
+  // live drag price in a ref and only setState to reflect the in-flight value.
+  const dragRef = useRef<null | 'tp' | 'sl' | 'time'>(null);
   const [livePrice, setLivePrice] = useState<{ kind: 'tp' | 'sl'; price: number } | null>(null);
+  // Box width in BARS (logical units) so it scales with zoom and can extend
+  // past the last bar. Persists across re-renders; resized via the right handle.
+  const [widthBars, setWidthBars] = useState(50);
 
   const { side, entryPrice, entryTime, size, currentPrice, isPending } = model;
   const tickSize = model.tickSize && model.tickSize > 0 ? model.tickSize : 0.25;
@@ -125,6 +129,20 @@ export function PositionBox({
       if (!root || !kind) return;
       const rect = root.getBoundingClientRect();
 
+      // Right-edge handle → resize the box width in BAR (logical) units, so it
+      // represents a time span that scales with zoom and can run past the last bar.
+      if (kind === 'time') {
+        const x = e.clientX - rect.left;
+        const ts = chart.timeScale();
+        const ex = ts.timeToCoordinate(entryTime as UTCTimestamp);
+        if (ex == null) return;
+        const entryLogical = ts.coordinateToLogical(ex);
+        const dragLogical = ts.coordinateToLogical(x);
+        if (entryLogical == null || dragLogical == null) return;
+        setWidthBars(Math.max(3, Math.round((dragLogical as number) - (entryLogical as number))));
+        return;
+      }
+
       const localY = e.clientY - rect.top;
       const price = series.coordinateToPrice(localY);
       if (price == null || !Number.isFinite(price)) return;
@@ -141,7 +159,7 @@ export function PositionBox({
         setLivePrice({ kind: 'sl', price: p });
       }
     },
-    [series, side, entryPrice, tickSize],
+    [series, chart, side, entryPrice, entryTime, tickSize],
   );
 
   const endDrag = useCallback(() => {
@@ -157,7 +175,7 @@ export function PositionBox({
   }, [onPointerMove, onTakeProfitChange, onStopLossChange]);
 
   const startDrag = useCallback(
-    (kind: 'tp' | 'sl') => (e: React.PointerEvent) => {
+    (kind: 'tp' | 'sl' | 'time') => (e: React.PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
       dragRef.current = kind;
@@ -185,9 +203,22 @@ export function PositionBox({
   // scrolls with the chart (TradingView behaviour) instead of staying fixed on
   // screen. Recomputed every render via redrawKey (pan/zoom/resize). If the
   // entry scrolled off the left edge, clamp to 0 so the box still shows.
-  const rawEntryX = chart.timeScale().timeToCoordinate(entryTime as UTCTimestamp);
+  const ts = chart.timeScale();
+  const rawEntryX = ts.timeToCoordinate(entryTime as UTCTimestamp);
   const bandLeft = rawEntryX != null && Number.isFinite(rawEntryX) ? Math.max(0, Math.round(rawEntryX)) : 0;
-  const bandWidth = Math.max(180, Math.min(420, Math.round(widthPx * 0.4)));
+  // Right edge anchored in LOGICAL (bar) space → the width is a TIME span that
+  // scales with zoom and can extend past the last bar. Falls back to a pixel
+  // width if logical coords aren't available (entry off-screen / pre-paint).
+  let bandRight = bandLeft + Math.max(160, Math.min(520, Math.round(widthPx * 0.4)));
+  if (rawEntryX != null && Number.isFinite(rawEntryX)) {
+    const entryLogical = ts.coordinateToLogical(rawEntryX);
+    if (entryLogical != null) {
+      const rx = ts.logicalToCoordinate(((entryLogical as number) + widthBars) as Logical);
+      if (rx != null && Number.isFinite(rx)) bandRight = rx as number;
+    }
+  }
+  bandRight = Math.max(bandLeft + 60, Math.round(bandRight));
+  const bandWidth = bandRight - bandLeft;
 
   // ─── Metrics (real data) ────────────────────────────────────
   const tpDelta = Math.abs(shownTP - entryPrice);
@@ -255,33 +286,30 @@ export function PositionBox({
         Risk/reward ratio: {rr.toFixed(2)}
       </div>
 
-      {/* Drag handles (pointer-events enabled) */}
-      {/* Target handle — square on the target line */}
+      {/* Resize handles — TradingView layout: 3 on the LEFT (TP / entry / SL),
+          1 on the RIGHT (time width). Blue, matching the reference. */}
+      {/* Target — top-left: drag vertically → take-profit */}
       <div
         onPointerDown={startDrag('tp')}
-        className="absolute cursor-ns-resize rounded-sm"
-        style={{ left: bandLeft - HANDLE / 2, top: yTPN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1px solid ${GREEN}`, pointerEvents: 'auto' }}
+        className="absolute cursor-ns-resize"
+        style={{ left: bandLeft - HANDLE / 2, top: yTPN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
       />
+      {/* Entry — middle-left: anchor (entry price is the real fill, not draggable) */}
       <div
-        onPointerDown={startDrag('tp')}
-        className="absolute cursor-ns-resize rounded-sm"
-        style={{ left: bandLeft + bandWidth - HANDLE / 2, top: yTPN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1px solid ${GREEN}`, pointerEvents: 'auto' }}
+        className="absolute"
+        style={{ left: bandLeft - HANDLE / 2, top: yEntryN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: '50%', pointerEvents: 'none' }}
       />
-      {/* Stop handle — square on the stop line */}
-      <div
-        onPointerDown={startDrag('sl')}
-        className="absolute cursor-ns-resize rounded-sm"
-        style={{ left: bandLeft - HANDLE / 2, top: ySLN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1px solid ${RED}`, pointerEvents: 'auto' }}
-      />
+      {/* Stop — bottom-left: drag vertically → stop-loss */}
       <div
         onPointerDown={startDrag('sl')}
-        className="absolute cursor-ns-resize rounded-sm"
-        style={{ left: bandLeft + bandWidth - HANDLE / 2, top: ySLN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1px solid ${RED}`, pointerEvents: 'auto' }}
+        className="absolute cursor-ns-resize"
+        style={{ left: bandLeft - HANDLE / 2, top: ySLN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
       />
-      {/* Entry marker — small dot on the entry line (entry is fixed; not draggable) */}
+      {/* Time — middle-right: drag horizontally → extend / shorten the box in time */}
       <div
-        className="pointer-events-none absolute rounded-full"
-        style={{ left: bandLeft - 4, top: yEntryN - 4, width: 8, height: 8, background: ENTRY_LINE }}
+        onPointerDown={startDrag('time')}
+        className="absolute cursor-ew-resize"
+        style={{ left: bandRight - HANDLE / 2, top: yEntryN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
       />
     </div>
   );
