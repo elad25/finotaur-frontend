@@ -10,7 +10,9 @@ import { BriefingSkeleton } from './BriefingSkeleton';
 import { DailyLimitBanner } from './DailyLimitBanner';
 import { InsightCard } from './InsightCard';
 import { StaleBriefingBanner } from './StaleBriefingBanner';
+import { useTrades } from '@/hooks/useTradesData';
 import type { Briefing, Insight } from '../types';
+import type { RelatedTradeChip } from './InsightCard';
 
 dayjs.extend(relativeTime);
 
@@ -90,6 +92,30 @@ export function BriefingHero({
   refreshing429,
   onDiscuss,
 }: BriefingHeroProps) {
+  // Resolve related_trade_ids → trade summaries for the evidence chips.
+  // Uses the current user's trades; ids not found (e.g. mentor viewing a student)
+  // simply produce no chip — never wrong data. Hooks run before any early return.
+  const { data: trades = [] } = useTrades();
+  const tradeMap = React.useMemo(() => {
+    const m = new Map<string, { symbol: string; r: number | null; pnl: number }>();
+    for (const t of trades) {
+      if (!t?.id) continue;
+      const r = typeof t.metrics?.actual_r === 'number' ? t.metrics.actual_r : null;
+      m.set(t.id, { symbol: t.symbol ?? '—', r, pnl: t.pnl ?? 0 });
+    }
+    return m;
+  }, [trades]);
+  const resolveTrades = React.useCallback(
+    (ids?: string[]): RelatedTradeChip[] =>
+      (ids ?? [])
+        .map((id) => {
+          const t = tradeMap.get(id);
+          return t ? { id, ...t } : null;
+        })
+        .filter((x): x is RelatedTradeChip => x !== null),
+    [tradeMap],
+  );
+
   if (isLoading) return <BriefingSkeleton />;
   if (error) return <ErrorCard error={error} onRetry={onRefresh} />;
 
@@ -133,11 +159,21 @@ export function BriefingHero({
       <div className="grid grid-cols-1 gap-ds-4 md:grid-cols-2 xl:grid-cols-3">
         {featured && (
           <div className="md:col-span-2 xl:col-span-2">
-            <InsightCard insight={featured} featured onDiscuss={onDiscuss} />
+            <InsightCard
+              insight={featured}
+              featured
+              onDiscuss={onDiscuss}
+              relatedTrades={resolveTrades(featured.related_trade_ids)}
+            />
           </div>
         )}
         {rest.map((insight) => (
-          <InsightCard key={insight.id} insight={insight} onDiscuss={onDiscuss} />
+          <InsightCard
+            key={insight.id}
+            insight={insight}
+            onDiscuss={onDiscuss}
+            relatedTrades={resolveTrades(insight.related_trade_ids)}
+          />
         ))}
       </div>
 
