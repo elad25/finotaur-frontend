@@ -18,7 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
-import { usePortfolioMockData } from './usePortfolioMockData';
+import { EMPTY_SNAPSHOT } from './usePortfolioMockData';
 
 // Re-export stable type contract so consumers can import from one surface.
 export type { TimeRange, Holding, PerformancePoint, PortfolioSnapshot } from './usePortfolioMockData';
@@ -211,7 +211,6 @@ function buildSnapshot(
 export function usePortfolioData(range: TimeRange): PortfolioDataResult {
   const { isConnected, loading: ibLoading, lastSyncAt: ibLastSyncAt } = useIBConnection();
   const { id: userId } = useEffectiveUser();
-  const mockSnapshot = usePortfolioMockData(range);
 
   const { data: ibRow, isLoading: queryLoading } = useQuery({
     queryKey: ['portfolio-ib', userId ?? ''],
@@ -231,15 +230,15 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
   });
 
   return useMemo((): PortfolioDataResult => {
-    // Not connected, or still loading connection state → mock (no flicker)
+    // Not connected, or still loading connection state → empty (no fabricated data)
     if (!isConnected || ibLoading || queryLoading) {
-      return { ...mockSnapshot, source: 'mock', lastSyncAt: null, hasHistoricalSeries: false };
+      return { ...EMPTY_SNAPSHOT, source: 'mock', lastSyncAt: null, hasHistoricalSeries: false };
     }
 
     // Connected but sync hasn't run yet (no positions in connection_data)
     const positions = ibRow?.connection_data?.last_positions;
     if (!positions || positions.length === 0) {
-      return { ...mockSnapshot, source: 'mock', lastSyncAt: ibLastSyncAt, hasHistoricalSeries: false };
+      return { ...EMPTY_SNAPSHOT, source: 'mock', lastSyncAt: ibLastSyncAt, hasHistoricalSeries: false };
     }
 
     const holdings = transformPositions(positions);
@@ -249,5 +248,5 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
     const { snapshot, hasHistoricalSeries } = buildSnapshot(holdings, accountSummary, historicalSeries, range);
 
     return { ...snapshot, source: 'live', lastSyncAt, hasHistoricalSeries };
-  }, [isConnected, ibLoading, queryLoading, mockSnapshot, ibRow, ibLastSyncAt, range, snapshotSeries, seriesLoading]);
+  }, [isConnected, ibLoading, queryLoading, ibRow, ibLastSyncAt, range, snapshotSeries, seriesLoading]);
 }

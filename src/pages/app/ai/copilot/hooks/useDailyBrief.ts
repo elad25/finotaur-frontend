@@ -95,7 +95,10 @@ export function useDailyBrief(): UseDailyBriefResult {
   const greeting = useMemo(() => computeGreeting(), []);
 
   // Extract the stable PortfolioSnapshot (without the extra usePortfolioData fields).
+  // Only surface a snapshot when the data is LIVE — otherwise null, so the builder
+  // hides portfolio value / book rows instead of rendering empty zeros as if real.
   const snapshot = useMemo(() => {
+    if (portfolioResult.source !== 'live') return null;
     const { source: _source, lastSyncAt: _sync, hasHistoricalSeries: _hist, ...snap } = portfolioResult;
     return snap;
     // portfolioResult reference is stable across re-renders for the same input

@@ -28,90 +28,11 @@ import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 
-const FALLBACK_OPPORTUNITIES: Opportunity[] = [
-  {
-    rank: 1,
-    ticker: 'NVDA',
-    name: 'NVIDIA Corporation',
-    sector: 'Technology',
-    score: 92,
-    thesis: 'AI infrastructure demand accelerating. Strong earnings momentum and institutional accumulation.',
-    upside: '+18.4%',
-    price: '$1,152.00',
-    current: '$973.47',
-    confidence: 'High',
-    bars: 5,
-    timeframe: '1-3 Weeks',
-    catalysts: ['Earnings Beat', 'Blackwell Ramp', 'Institutional Flow'],
-  },
-  {
-    rank: 2,
-    ticker: 'MSFT',
-    name: 'Microsoft Corporation',
-    sector: 'Technology',
-    score: 89,
-    thesis: 'Cloud + AI growth re-acceleration. Strong Copilot adoption and enterprise demand.',
-    upside: '+11.2%',
-    price: '$468.00',
-    current: '$421.10',
-    confidence: 'High',
-    bars: 4,
-    timeframe: '1-3 Weeks',
-    catalysts: ['Copilot Adoption', 'Azure Growth', 'Cost Efficiency'],
-  },
-  {
-    rank: 3,
-    ticker: 'AMZN',
-    name: 'Amazon.com, Inc.',
-    sector: 'Consumer Cyclical',
-    score: 86,
-    thesis: 'Margin expansion + AWS acceleration. E-commerce stabilization and ad growth.',
-    upside: '+9.6%',
-    price: '$205.00',
-    current: '$188.93',
-    confidence: 'High',
-    bars: 4,
-    timeframe: '1-4 Weeks',
-    catalysts: ['AWS Growth', 'Ad Revenue', 'Prime Engagement'],
-  },
-  {
-    rank: 4,
-    ticker: 'META',
-    name: 'Meta Platforms Inc.',
-    sector: 'Communication Services',
-    score: 84,
-    thesis: 'Ad revenue strength and cost discipline driving margin expansion.',
-    upside: '+8.8%',
-    price: '$582.00',
-    current: '$535.10',
-    confidence: 'High',
-    bars: 4,
-    timeframe: '1-4 Weeks',
-    catalysts: ['Ad Demand', 'AI Efficiency', 'Reality Labs Progress'],
-  },
-  {
-    rank: 5,
-    ticker: 'TSLA',
-    name: 'Tesla, Inc.',
-    sector: 'Consumer Cyclical',
-    score: 81,
-    thesis: 'Volume recovery and energy business growth. FSD monetization ramp.',
-    upside: '+12.3%',
-    price: '$198.00',
-    current: '$176.21',
-    confidence: 'Medium-High',
-    bars: 3,
-    timeframe: '2-6 Weeks',
-    catalysts: ['Volume Recovery', 'FSD Progress', 'Energy Growth'],
-  },
-];
-
-
 export function CopilotTopOpportunitiesPage() {
   const { brief, loading: briefLoading, personal, personalLoading } = useSynthesisBrief();
 
   const opportunities = React.useMemo<Opportunity[]>(() => {
-    if (!brief?.trade_ideas?.length) return FALLBACK_OPPORTUNITIES;
+    if (!brief?.trade_ideas?.length) return [];
 
     const mapped = brief.trade_ideas.map((idea, i) =>
       ideaToOpportunity(idea, i, personal?.rankedTradeIdeas)
@@ -157,9 +78,17 @@ export function CopilotTopOpportunitiesPage() {
                 </tr>
               </thead>
               <tbody>
-                {opportunities.map((opportunity) => (
-                  <OpportunityTableRow key={opportunity.ticker} opportunity={opportunity} />
-                ))}
+                {opportunities.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-14 text-center text-[12px] leading-relaxed text-ink-tertiary">
+                      No live opportunities right now. AI-ranked ideas appear here after the next brief.
+                    </td>
+                  </tr>
+                ) : (
+                  opportunities.map((opportunity) => (
+                    <OpportunityTableRow key={opportunity.ticker} opportunity={opportunity} />
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -439,6 +368,18 @@ export function CopilotHoldingsPage() {
     );
   }
 
+  // Connected but positions not synced yet — show a sync state, never zeros.
+  if (snapshot.source !== 'live') {
+    return (
+      <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
+        <CopilotEmptyState
+          title="Syncing your holdings…"
+          description="Your broker is connected. We're pulling your live positions — this usually completes within a few minutes of the first sync."
+        />
+      </CopilotPageShell>
+    );
+  }
+
   // Sum unrealized P&L; sign drives the positive/negative tone on the Metric card.
   const totalPnl = snapshot.holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0);
   const pnlSign = totalPnl >= 0 ? '+' : '−';
@@ -483,6 +424,18 @@ export function CopilotRisksPage() {
         <CopilotEmptyState
           title="Connect to see your risk profile"
           description="Risk analysis shows your real exposure across concentration, equity beta, options leverage, and cash buffer — computed from your actual broker holdings."
+        />
+      </CopilotPageShell>
+    );
+  }
+
+  // Connected but positions not synced yet — show a sync state, never a fake score.
+  if (snapshot.source !== 'live') {
+    return (
+      <CopilotPageShell title="Risks" eyebrow="AI risk map for the portfolio" icon={Shield}>
+        <CopilotEmptyState
+          title="Syncing your risk profile…"
+          description="Your broker is connected. Risk analysis appears once your live positions finish syncing — usually within a few minutes of the first sync."
         />
       </CopilotPageShell>
     );
