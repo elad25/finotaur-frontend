@@ -11,7 +11,7 @@ const TABS = [
   { label: 'Compare', path: '/app/journal/reports/compare' },
   { label: 'Scores', path: '/app/journal/reports/scores' },
   { label: 'Summary', path: '/app/journal/reports/summary' },
-  // 'AI Recaps' tab hidden until journal-ai-recap edge function is deployed
+  { label: 'AI Recaps', path: '/app/journal/reports/recaps' },
 ];
 
 export default function ReportsTabsNav() {
