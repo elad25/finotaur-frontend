@@ -104,6 +104,20 @@ function maxLookbackSeconds(iv: Interval): number {
   }
 }
 
+/**
+ * Position the latest (cursor) bar at the horizontal CENTER of the viewport,
+ * leaving open "future" room to the right that fills in as the trader PLAYs —
+ * TradingView-style replay framing. The series only holds bars up to the
+ * cursor, so the cursor is the last bar; we scroll it left from the right edge
+ * by half a viewport-worth of bars.
+ */
+function centerCursorBar(chart: IChartApi, container: HTMLDivElement, animated: boolean): void {
+  const w = container.clientWidth;
+  if (w <= 0) return;
+  const barSpacing = chart.timeScale().options().barSpacing || 8;
+  chart.timeScale().scrollToPosition((w / barSpacing) / 2, animated);
+}
+
 export interface ContextMenuPriceInfo {
   /** Price the user right-clicked at (computed from screen Y via priceScale). */
   price: number;
@@ -372,9 +386,11 @@ export function BacktestReplayChart({
       close: b.close,
     }));
     series.setData(visible);
-    // Zoom to fit ALL seeded history (Elad 2026-05-29: "maximum bars"). Shows
-    // the most candles possible on load; the trader can scroll/zoom from there.
-    chart.timeScale().fitContent();
+    // Center the current (cursor) bar on load — history on the left half, open
+    // "future" room on the right that reveals as you PLAY (Elad 2026-05-31:
+    // "current bar exactly in the middle"). Deferred a frame so the chart has
+    // laid out (clientWidth / barSpacing ready) before we scroll.
+    requestAnimationFrame(() => { if (!cancelled) centerCursorBar(chart, container, false); });
 
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the
@@ -659,6 +675,10 @@ export function BacktestReplayChart({
       }));
       seriesRef.current.setData(visible);
       lastUpdatedIdxRef.current = playback.cursor;
+      // Re-center the cursor after a backward/skip jump (smooth).
+      const c = chartRef.current;
+      const cont = containerRef.current;
+      if (c && cont) requestAnimationFrame(() => { if (chartRef.current && containerRef.current) centerCursorBar(chartRef.current, containerRef.current, true); });
     }
   }, [playback.cursor, bars]);
 
@@ -778,6 +798,13 @@ export function BacktestReplayChart({
             model={{
               ...positionOverlay.model,
               currentPrice: bars[playback.cursor]?.close ?? positionOverlay.model.currentPrice,
+              // A pending order's createdAt is wall-clock "now" — off the chart's
+              // historical data, so its box couldn't anchor and floated at the
+              // left edge. Anchor it to the current cursor bar (the replay
+              // "now") so it stays glued to the chart.
+              entryTime: positionOverlay.model.isPending && bars[playback.cursor]
+                ? (bars[playback.cursor].time as number)
+                : positionOverlay.model.entryTime,
             }}
             redrawKey={overlayTick}
             onStopLossChange={positionOverlay.onStopLossChange}
