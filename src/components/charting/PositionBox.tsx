@@ -193,6 +193,30 @@ export function PositionBox({
     };
   }, [onPointerMove, endDrag]);
 
+  // Keep the overlay glued to the chart even when ONLY the price scale changes.
+  // Dragging the price axis (vertical zoom) fires no visible-time-range event,
+  // so the host's redrawKey never bumps and the box would stay at stale Y's —
+  // the "distortion" where the rectangle no longer matches the candles. A light
+  // rAF loop re-renders only when the entry's pixel coords actually move, so it
+  // catches price-scale + time + resize uniformly and stays idle when static.
+  const [, forceRerender] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    let prev = '';
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const y = series.priceToCoordinate(entryPrice);
+      const x = chart.timeScale().timeToCoordinate(entryTime as UTCTimestamp);
+      const key = `${y}|${x}`;
+      if (key !== prev) {
+        prev = key;
+        forceRerender((n) => n + 1);
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [series, chart, entryPrice, entryTime]);
+
   // Bail out cleanly if the chart can't place the entry (off-screen / pre-paint).
   if (yEntry == null || yTP == null || ySL == null) {
     return <div ref={rootRef} className="pointer-events-none absolute inset-0" />;
