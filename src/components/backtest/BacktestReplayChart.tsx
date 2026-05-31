@@ -206,6 +206,9 @@ export function BacktestReplayChart({
   // so its pixel coordinates stay glued to price (fixes the old static overlay
   // whose entry line / zones got stuck after zoom).
   const [overlayTick, setOverlayTick] = useState(0);
+  // Resize-cursor hint when hovering an axis: 'ns' over the price scale (drag to
+  // rescale price), 'ew' over the time scale (drag to rescale time). null = plot.
+  const [axisCursor, setAxisCursor] = useState<null | 'ns' | 'ew'>(null);
 
   // Replay-rewind ("REPLAY" button) armed state. Default OFF (Elad 2026-05-29):
   // the chart opens in normal mode — a click trades, no surprise jump. The
@@ -457,6 +460,30 @@ export function BacktestReplayChart({
     };
     container.addEventListener('mouseleave', handleMouseLeave);
 
+    // Axis resize-cursor hint: ns-resize over the right price scale, ew-resize
+    // over the bottom time scale (drag to rescale, TradingView-style). Only
+    // setState on region change so we don't re-render on every mouse move.
+    let prevAxis: null | 'ns' | 'ew' = null;
+    const handleAxisCursor = (e: MouseEvent) => {
+      const c = chartRef.current;
+      if (!c || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const priceW = c.priceScale('right').width();
+      const timeH = c.timeScale().height();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      let region: null | 'ns' | 'ew' = null;
+      if (x >= rect.width - priceW && y < rect.height - timeH) region = 'ns';
+      else if (y >= rect.height - timeH) region = 'ew';
+      if (region !== prevAxis) {
+        prevAxis = region;
+        setAxisCursor(region);
+      }
+    };
+    container.addEventListener('mousemove', handleAxisCursor);
+    const handleAxisLeave = () => { prevAxis = null; setAxisCursor(null); };
+    container.addEventListener('mouseleave', handleAxisLeave);
+
     // Phase 6: right-click → order context menu. Compute the clicked price
     // by converting the local Y coordinate via the candlestick series.
     // lightweight-charts has no native contextmenu hook, so we listen on
@@ -533,6 +560,8 @@ export function BacktestReplayChart({
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('mouseleave', handleMouseLeave);
+      container.removeEventListener('mousemove', handleAxisCursor);
+      container.removeEventListener('mouseleave', handleAxisLeave);
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.timeScale().unsubscribeVisibleTimeRangeChange(updateCursorX);
       if (jumpTimerRef.current !== null) {
@@ -727,7 +756,15 @@ export function BacktestReplayChart({
             itself, otherwise winning over the parent). */}
         <div
           ref={containerRef}
-          className={`absolute inset-0 ${showReplayCursor && scissorsArmed ? 'cursor-none [&_*]:cursor-none' : 'cursor-chart-cross'}`}
+          className={`absolute inset-0 ${
+            axisCursor === 'ns'
+              ? 'cursor-ns-resize [&_*]:cursor-ns-resize'
+              : axisCursor === 'ew'
+              ? 'cursor-ew-resize [&_*]:cursor-ew-resize'
+              : showReplayCursor && scissorsArmed
+              ? 'cursor-none [&_*]:cursor-none'
+              : 'cursor-chart-cross'
+          }`}
           style={{ height }}
         />
 
