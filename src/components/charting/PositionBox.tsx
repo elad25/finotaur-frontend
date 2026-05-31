@@ -302,14 +302,18 @@ export function PositionBox({
         style={{ left: bandLeft, width: bandWidth, top: yEntryN, height: 0, borderTop: `1px solid ${ENTRY_LINE}` }}
       />
 
-      {/* Target label */}
-      <div className={labelBase} style={{ left: center, top: yTPN - 18, background: GREEN }}>
-        Target: {fmtPrice(tpDelta)} ({tpPct.toFixed(3)}%) {tpTicks}, Amount: {fmtAmount(tpAmount)}
-      </div>
-      {/* Stop label */}
-      <div className={labelBase} style={{ left: center, top: ySLN + 6, background: RED }}>
-        Stop: {fmtPrice(slDelta)} ({slPct.toFixed(3)}%) {slTicks}, Amount: {fmtAmount(slAmount)}
-      </div>
+      {/* Target + Stop labels — shown only on hover (with the handles + P&L),
+          so the resting box is just the green/red zones + entry line. */}
+      {showControls && (
+        <>
+          <div className={labelBase} style={{ left: center, top: yTPN - 18, background: GREEN }}>
+            Target: {fmtPrice(tpDelta)} ({tpPct.toFixed(3)}%) {tpTicks}, Amount: {fmtAmount(tpAmount)}
+          </div>
+          <div className={labelBase} style={{ left: center, top: ySLN + 6, background: RED }}>
+            Stop: {fmtPrice(slDelta)} ({slPct.toFixed(3)}%) {slTicks}, Amount: {fmtAmount(slAmount)}
+          </div>
+        </>
+      )}
       {/* Hover region over the box — reveals the handles + middle Open P&L label
           only while the pointer is over the box. Handles + label live INSIDE
           this container (positioned relative to it) so moving the pointer from
