@@ -9,7 +9,7 @@ import ToolCallCard from './ToolCallCard';
 import TradeActionModal from './TradeActionModal';
 import type { useFinotaurChat } from '../hooks/useFinotaurChat';
 import { useTradeAction } from '../hooks/useTradeAction';
-import type { PendingToolCall, ChatToolUse, ChatMessage } from '../types';
+import type { PendingToolCall, ChatToolUse, ChatMessage, Briefing, Insight, FinotaurScore } from '../types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,12 @@ interface CoachChatPanelProps {
    * Ignored when isReadOnly is false/undefined.
    */
   messagesOverride?: ChatMessage[];
+  /** FINOTAUR score — rendered as a compact header strip at the top of the chat. */
+  score?: FinotaurScore | null;
+  /** Daily briefing — surfaced as condensed, clickable starter suggestions in the empty state. */
+  briefing?: Briefing | null;
+  /** Called when the user taps a briefing finding — prefills the chat to discuss it. */
+  onDiscuss?: (insight: Insight) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -56,6 +62,9 @@ export default function CoachChatPanel({
   chatInstance,
   isReadOnly = false,
   messagesOverride,
+  score,
+  briefing,
+  onDiscuss,
 }: CoachChatPanelProps): JSX.Element {
   const chat = chatInstance;
   const action = useTradeAction();
@@ -220,6 +229,9 @@ export default function CoachChatPanel({
           </p>
         )}
 
+        {/* Score strip — compact FINOTAUR SCORE header inside the chat */}
+        <ScoreStrip score={score} />
+
         {/* Message list */}
         <div className="flex-1 overflow-y-auto flex flex-col gap-ds-3 min-h-0">
           {isReadOnly ? (
@@ -237,7 +249,7 @@ export default function CoachChatPanel({
           ) : (
             // ── Owner view: existing behaviour ──────────────────────────────────
             chat.messages.length === 0 ? (
-              <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} />
+              <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} briefing={briefing} onDiscuss={onDiscuss} />
             ) : (
               <>
                 {chat.messages.map((msg) => (
@@ -335,7 +347,7 @@ export default function CoachChatPanel({
               ) : (
                 // ── Owner view ─────────────────────────────────────────────────
                 chat.messages.length === 0 ? (
-                  <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} />
+                  <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} briefing={briefing} onDiscuss={onDiscuss} />
                 ) : (
                   <>
                     {chat.messages.map((msg) => (
@@ -410,21 +422,108 @@ export default function CoachChatPanel({
   );
 }
 
+// ── Score strip — compact FINOTAUR SCORE header rendered inside the chat ──────
+
+function ScoreStrip({ score }: { score?: FinotaurScore | null }): JSX.Element | null {
+  if (!score || score.score == null) return null;
+  const delta = score.delta;
+  return (
+    <div className="shrink-0 mb-ds-3 flex items-center gap-ds-2 rounded-[10px] border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2">
+      <span className="font-sans text-[11px] uppercase tracking-wide text-ink-tertiary">
+        FINOTAUR Score · {score.window_days ?? 30}D
+      </span>
+      <span className="ml-auto font-mono text-h4 font-semibold tabular-nums text-ink-primary">
+        {score.score}
+      </span>
+      {delta != null && delta !== 0 && (
+        <span
+          className={[
+            'font-mono text-[11px] tabular-nums',
+            delta > 0 ? 'text-num-positive' : 'text-num-negative',
+          ].join(' ')}
+        >
+          {delta > 0 ? '+' : ''}
+          {delta}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Empty state sub-component ────────────────────────────────────────────────
+
+/** Build the chat prefill prompt for discussing a briefing finding. */
+function buildDiscussPrompt(insight: Insight): string {
+  return `Let's dig into this finding from my briefing: "${insight.title}". What's driving it and what should I do about it?`;
+}
 
 function EmptyState({
   onChipSelect,
   inputDisabled,
+  briefing,
+  onDiscuss,
 }: {
   onChipSelect: (text: string) => void;
   inputDisabled: boolean;
+  briefing?: Briefing | null;
+  onDiscuss?: (insight: Insight) => void;
 }): JSX.Element {
+  const insights = briefing?.insights ?? [];
+
+  // No briefing yet (generating, or genuinely none) → generic starter chips.
+  if (insights.length === 0) {
+    return (
+      <div className="flex flex-col gap-ds-4 py-ds-4">
+        <p className="text-ink-secondary text-sm">What would you like to analyze today?</p>
+        <PromptChips onSelect={onChipSelect} disabled={inputDisabled} />
+      </div>
+    );
+  }
+
+  // Briefing present → each finding is a condensed, tappable starter (featured first).
+  const ordered = [...insights].sort(
+    (a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)),
+  );
+  const handleSelect = (insight: Insight) => {
+    if (onDiscuss) onDiscuss(insight);
+    else onChipSelect(buildDiscussPrompt(insight));
+  };
+
   return (
-    <div className="flex flex-col gap-ds-4 py-ds-4">
-      <p className="text-ink-secondary text-sm">
-        What would you like to analyze today?
-      </p>
-      <PromptChips onSelect={onChipSelect} disabled={inputDisabled} />
+    <div className="flex flex-col gap-ds-3 py-ds-2">
+      <p className="text-ink-secondary text-sm">Today&apos;s briefing — tap a finding to dig in:</p>
+      <div className="flex flex-col gap-ds-2">
+        {ordered.map((insight) => (
+          <button
+            key={insight.id}
+            type="button"
+            disabled={inputDisabled}
+            onClick={() => handleSelect(insight)}
+            className={[
+              'group w-full rounded-[10px] border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2 text-left',
+              'transition-colors duration-base hover:border-gold-primary/50 hover:bg-surface-2',
+              'disabled:pointer-events-none disabled:opacity-50',
+            ].join(' ')}
+          >
+            <div className="flex items-start gap-ds-2">
+              {insight.featured && (
+                <span className="mt-0.5 shrink-0 rounded-full bg-gold-primary/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold-primary">
+                  Top
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="font-sans text-sm font-medium text-ink-primary">{insight.title}</p>
+                {insight.metric && (
+                  <p className="mt-0.5 font-mono text-[11px] tabular-nums text-ink-tertiary">
+                    {insight.metric}
+                  </p>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <p className="text-ink-muted text-xs">…or ask anything below.</p>
     </div>
   );
 }
