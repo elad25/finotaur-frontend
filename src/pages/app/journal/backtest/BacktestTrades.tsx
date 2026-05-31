@@ -22,6 +22,7 @@ import {
 import dayjs from 'dayjs';
 
 import { useBacktestStats, type BacktestTrade } from '@/hooks/useBacktestStats';
+import { displaySymbol } from '@/utils/displaySymbol';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -351,7 +352,7 @@ function BacktestTradesInner() {
                 {filteredSorted.map((t) => (
                   <TableRow key={t.id} className="border-zinc-900 hover:bg-zinc-900/40">
                     <TableCell>
-                      <span className="font-mono font-semibold text-[#C9A646]">{t.symbol}</span>
+                      <span className="font-mono font-semibold text-[#C9A646]">{displaySymbol(t.symbol)}</span>
                       <span className="ml-1.5 text-[10px] text-zinc-600">· {t.interval}</span>
                     </TableCell>
                     <TableCell>
@@ -382,7 +383,7 @@ function BacktestTradesInner() {
                       ) : <span className="text-zinc-600">—</span>}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-500">
-                      {t.sessionName ?? <span className="italic text-zinc-600">Untitled</span>}
+                      {t.sessionName ? displaySymbol(t.sessionName) : <span className="italic text-zinc-600">Untitled</span>}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-500">{dayjs(t.savedAt).format('MMM D, YYYY')}</TableCell>
                   </TableRow>

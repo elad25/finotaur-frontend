@@ -13,6 +13,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
+import { displaySymbol } from '@/utils/displaySymbol';
 import {
   useBacktestPersistence,
   type SavedSessionSummary,
@@ -182,10 +183,10 @@ export const BacktestResults = () => {
                     className="cursor-pointer border-t border-zinc-900 transition-colors hover:bg-zinc-900/40"
                   >
                     <td className="px-4 py-3 font-medium">
-                      {s.name ?? <span className="text-zinc-500 italic">Untitled</span>}
+                      {s.name ? displaySymbol(s.name) : <span className="text-zinc-500 italic">Untitled</span>}
                     </td>
                     <td className="px-4 py-3 text-zinc-400">
-                      <span className="text-[#C9A646]">{s.symbol}</span>
+                      <span className="text-[#C9A646]">{displaySymbol(s.symbol)}</span>
                       <span className="ml-1.5 text-zinc-600">· {s.interval}</span>
                     </td>
                     <td className="px-4 py-3 text-right">{s.total_trades}</td>

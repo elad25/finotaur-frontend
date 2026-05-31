@@ -29,6 +29,7 @@ import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play,
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
 import type { PositionBoxModel } from '@/components/charting/PositionBox';
+import { displaySymbol } from '@/utils/displaySymbol';
 import {
   useBacktestSession,
   computeStatsByStrategy,
@@ -1017,8 +1018,8 @@ export function BacktestChart({
         statistics: state.stats,
         trades: state.closedPositions,
         pendingOrders: state.pendingOrders,
-        // Auto-name: "<symbol> · <interval> · <date>"
-        name: `${symbol} · ${barInterval} · ${new Date().toLocaleDateString()}`,
+        // Auto-name: "<symbol> · <interval> · <date>" (display ticker, no =F/=X)
+        name: `${displaySymbol(symbol)} · ${barInterval} · ${new Date().toLocaleDateString()}`,
         // Session-level strategy link — last active strategy at save time.
         // Per-trade strategy_id is already persisted via trades[].strategy_id.
         // Enables FINOTAUR AI Phase F compare_live_vs_backtest. 2026-05-29.
