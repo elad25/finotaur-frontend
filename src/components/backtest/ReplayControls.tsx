@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, ChevronLeft, ChevronRight, ChevronDown, SkipBack, Gauge, Scissors } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, ChevronDown, SkipBack, Gauge, RotateCcw } from 'lucide-react';
 import { REPLAY_SPEEDS, type ReplaySpeed } from '@/hooks/useReplayPlayback';
 
 export interface ReplayControlsProps {
@@ -178,7 +178,7 @@ export function ReplayControls({
               : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
           }`}
         >
-          <Scissors size={12} />
+          <RotateCcw size={12} />
           REPLAY
         </button>
       )}
