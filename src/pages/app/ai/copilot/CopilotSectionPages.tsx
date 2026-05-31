@@ -16,8 +16,8 @@ import {
 import { CopilotChatPanel } from './components/CopilotChatPanel';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
 import { HoldingsTable } from './components/HoldingsTable';
-import { SynthesisBriefNarrative } from './components/SynthesisBriefNarrative';
 import { SynthesisBriefPersonalTwist } from './components/SynthesisBriefPersonalTwist';
+import { DailyBrief } from './DailyBrief';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
@@ -459,23 +459,8 @@ export function CopilotHoldingsPage() {
 }
 
 export function CopilotAIAnalystPage() {
-  const { brief, loading: briefLoading, error: briefError, personal, personalLoading } = useSynthesisBrief();
-
-  return (
-    <CopilotPageShell title="AI Analyst" eyebrow="Detailed per-user intelligence report" icon={Brain}>
-      <div className="space-y-3">
-        {/* Per-user personalization banner — short, live */}
-        <SynthesisBriefPersonalTwist
-          personal={personal}
-          personalLoading={personalLoading}
-          degenerate={personal?.degenerate}
-        />
-
-        {/* Live weekly synthesis brief — central thesis, weekly context, tactical view, key risks */}
-        <SynthesisBriefNarrative brief={brief} loading={briefLoading} error={briefError} />
-      </div>
-    </CopilotPageShell>
-  );
+  // The Daily Brief composition now lives under the AI Analyst tab.
+  return <DailyBrief />;
 }
 
 export function CopilotRisksPage() {
