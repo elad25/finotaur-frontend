@@ -14,7 +14,6 @@ import { useMentorChatHistory } from './hooks/useMentorChatHistory';
 import { EmptyState } from './components/EmptyState';
 import { UpsellGate } from './components/UpsellGate';
 import CoachChatPanel from './components/CoachChatPanel';
-import { ConversationHistorySidebar } from './components/ConversationHistorySidebar';
 import { useFinotaurChat } from './hooks/useFinotaurChat';
 import { DailyLimitBanner } from './components/DailyLimitBanner';
 import { useUsage } from './hooks/useUsage';
@@ -130,35 +129,19 @@ export default function FinotaurAI() {
         {/* Daily limit banner — suppressed in mentor view (mentor has no usage counter) */}
         {!isMentorView && <DailyLimitBanner usage={usageQuery.data ?? null} />}
 
-        {/* Two-column layout on large screens: history sidebar | wide chat.
-            The FINOTAUR score (header) and the daily briefing (as tappable
-            starter suggestions) now live INSIDE the chat panel. */}
-        <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr]">
-          {/* Conversation history sidebar — hidden in mentor view (student owns convos) */}
-          {!isMentorView && (
-            <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
-              <ConversationHistorySidebar
-                activeConversationId={chat.conversationId}
-                onSelect={(id) => void chat.loadConversation(id)}
-                onNew={() => chat.newConversation()}
-              />
-            </aside>
-          )}
-          {/* Spacer column placeholder in mentor view so grid alignment holds */}
-          {isMentorView && <div className="hidden lg:block" aria-hidden="true" />}
-
-          {/* Wide chat panel — score header + briefing-as-suggestions live inside it */}
-          <aside className="lg:sticky lg:top-ds-6 lg:self-start lg:h-[calc(100vh-120px)]">
-            <CoachChatPanel
-              prefillRequest={isMentorView ? null : prefillRequest}
-              chatInstance={chat}
-              isReadOnly={isMentorView}
-              messagesOverride={isMentorView ? mentorHistory.messages : undefined}
-              score={score ?? null}
-              briefing={briefingQuery.data?.briefing ?? null}
-              onDiscuss={handleDiscuss}
-            />
-          </aside>
+        {/* Full-width chat. History sidebar removed (per design) — the FINOTAUR
+            score (top, above the title) and the daily briefing (as tappable
+            starter suggestions) live INSIDE the chat panel. */}
+        <div className="mt-ds-4 lg:h-[calc(100vh-120px)]">
+          <CoachChatPanel
+            prefillRequest={isMentorView ? null : prefillRequest}
+            chatInstance={chat}
+            isReadOnly={isMentorView}
+            messagesOverride={isMentorView ? mentorHistory.messages : undefined}
+            score={score ?? null}
+            briefing={briefingQuery.data?.briefing ?? null}
+            onDiscuss={handleDiscuss}
+          />
         </div>
       </ErrorBoundary>
     </PageShell>
