@@ -244,6 +244,7 @@ export interface Trade {
   underlying_symbol?: string;
   option_outcome?: string | null;
   position_type?: string;
+  strategy_type?: string | null;
 }
 
 // ================================================================
@@ -741,6 +742,99 @@ export function getOptionContractLabel(
     }
   }
   return parts.join(' ');
+}
+
+// ================================================================
+// MULTI-LEG OPTIONS HELPERS
+// ================================================================
+//
+// A multi-leg options trade (vertical, iron condor, straddle, etc.) is one
+// parent trades row + N legs. Premium is per share; 1 contract = 100 shares.
+// Net P&L is the signed sum of each leg's P&L (computed here, written to the
+// parent row by the app). These helpers are pure and options-only.
+
+/** One option leg of a multi-leg trade. Mirrors the trade_legs table shape. */
+export interface TradeLeg {
+  option_type: 'CALL' | 'PUT';
+  strike_price: number;
+  expiration_date?: string;
+  side: 'LONG' | 'SHORT';
+  quantity: number;
+  entry_price: number;     // premium per share at entry
+  exit_price?: number;     // premium per share at close (undefined = open)
+  fees?: number;
+}
+
+/** Canonical options strategy archetypes (app-validated; no DB enum). */
+export const OPTION_STRATEGY_TYPES = [
+  { value: 'vertical',     label: 'Vertical Spread' },
+  { value: 'iron_condor',  label: 'Iron Condor' },
+  { value: 'iron_butterfly', label: 'Iron Butterfly' },
+  { value: 'straddle',     label: 'Straddle' },
+  { value: 'strangle',     label: 'Strangle' },
+  { value: 'calendar',     label: 'Calendar Spread' },
+  { value: 'butterfly',    label: 'Butterfly' },
+  { value: 'ratio',        label: 'Ratio Spread' },
+  { value: 'custom',       label: 'Custom / Other' },
+] as const;
+
+export function getStrategyLabel(value?: string | null): string | null {
+  if (!value) return null;
+  return OPTION_STRATEGY_TYPES.find(s => s.value === value)?.label ?? value;
+}
+
+/**
+ * Signed dollar P&L for a single leg (per-share premium × qty × 100, net fees).
+ * LONG  → (exit - entry) * qty * 100 - fees
+ * SHORT → (entry - exit) * qty * 100 - fees
+ * Returns null when the leg has no exit_price (still open).
+ */
+export function legSignedPnl(leg: TradeLeg): number | null {
+  if (leg.exit_price == null) return null;
+  const dir = leg.side === 'LONG' ? 1 : -1;
+  const gross = dir * (leg.exit_price - leg.entry_price) * leg.quantity * 100;
+  return gross - (leg.fees ?? 0);
+}
+
+/**
+ * Net entry premium per spread, per share, signed:
+ *   LONG leg adds debit (+entry), SHORT leg adds credit (-entry).
+ * Positive total = net DEBIT paid; negative = net CREDIT received.
+ */
+export function netPremiumPerShare(legs: TradeLeg[]): number {
+  return legs.reduce((sum, l) => sum + (l.side === 'LONG' ? l.entry_price : -l.entry_price), 0);
+}
+
+/** Net premium in dollars across all legs (per-share net × qty × 100, summed by leg). */
+export function netPremiumUsd(legs: TradeLeg[]): number {
+  return legs.reduce(
+    (sum, l) => sum + (l.side === 'LONG' ? 1 : -1) * l.entry_price * l.quantity * 100,
+    0,
+  );
+}
+
+/**
+ * Net realized P&L for the whole spread = sum of each leg's signed P&L.
+ * Returns null if NO leg is closed; partially-closed spreads sum only the
+ * closed legs (open legs contribute 0) — caller decides whether that is final.
+ */
+export function netMultiLegPnl(legs: TradeLeg[]): number | null {
+  const closed = legs.filter(l => l.exit_price != null);
+  if (closed.length === 0) return null;
+  return closed.reduce((sum, l) => sum + (legSignedPnl(l) ?? 0), 0);
+}
+
+/** True when every leg has an exit price (the spread is fully closed). */
+export function isMultiLegClosed(legs: TradeLeg[]): boolean {
+  return legs.length > 0 && legs.every(l => l.exit_price != null);
+}
+
+/** Human label for net premium: "Net Debit $1.20" / "Net Credit $0.80" (per share). */
+export function netDebitCreditLabel(legs: TradeLeg[]): string {
+  const net = netPremiumPerShare(legs);
+  if (net > 0) return `Net Debit $${net.toFixed(2)}`;
+  if (net < 0) return `Net Credit $${Math.abs(net).toFixed(2)}`;
+  return 'Even';
 }
 
 // ================================================================

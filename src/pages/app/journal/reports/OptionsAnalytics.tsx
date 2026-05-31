@@ -16,6 +16,7 @@ import {
   calculatePnL,
   calculateStats,
   getDTEAtEntry,
+  getStrategyLabel,
   type Trade as CalcTrade,
 } from '@/utils/tradeCalculations';
 
@@ -94,6 +95,22 @@ export default function JournalReportsOptionsAnalytics() {
     const map = new Map<string, GroupStat>();
     for (const t of closedOptions) {
       const key = t.underlying_symbol || t.symbol || '—';
+      const g = map.get(key) ?? { key, count: 0, wins: 0, pnl: 0 };
+      const pnl = calculatePnL(t);
+      g.count += 1;
+      if (pnl > 0) g.wins += 1;
+      g.pnl += pnl;
+      map.set(key, g);
+    }
+    return Array.from(map.values()).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
+  }, [closedOptions]);
+
+  // P&L by strategy type (multi-leg only). Sorted by absolute P&L descending.
+  const byStrategy = useMemo(() => {
+    const map = new Map<string, GroupStat>();
+    for (const t of closedOptions) {
+      if (!t.strategy_type) continue;
+      const key = t.strategy_type;
       const g = map.get(key) ?? { key, count: 0, wins: 0, pnl: 0 };
       const pnl = calculatePnL(t);
       g.count += 1;
@@ -214,6 +231,37 @@ export default function JournalReportsOptionsAnalytics() {
           </div>
         )}
       </div>
+
+      {/* Performance by Strategy (only shown when multi-leg trades exist) */}
+      {byStrategy.length > 0 && (
+        <div className={card}>
+          <h3 className="text-sm font-semibold text-zinc-200 mb-3">Performance by Strategy</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-zinc-500">
+                  <th className="py-2 pr-4 font-medium">Strategy</th>
+                  <th className="py-2 pr-4 font-medium text-right">Trades</th>
+                  <th className="py-2 pr-4 font-medium text-right">Win Rate</th>
+                  <th className="py-2 font-medium text-right">P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byStrategy.map((g) => (
+                  <tr key={g.key} className="border-t border-zinc-800/60">
+                    <td className="py-2 pr-4 text-zinc-200 font-medium">{getStrategyLabel(g.key) ?? g.key}</td>
+                    <td className="py-2 pr-4 text-right text-zinc-400">{g.count}</td>
+                    <td className="py-2 pr-4 text-right text-zinc-400">{winRate(g).toFixed(0)}%</td>
+                    <td className={`py-2 text-right font-semibold ${g.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {fmtCurrency(g.pnl)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* DTE buckets */}
       <div className={card}>

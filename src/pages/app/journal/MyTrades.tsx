@@ -39,7 +39,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
-import { getDTE, getOptionBreakeven, getOptionContractLabel } from "@/utils/tradeCalculations";
+import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel } from "@/utils/tradeCalculations";
 
 // Lazy-load TradeChart so lightweight-charts (~200KB) is NOT in the initial bundle.
 // The chunk starts downloading as soon as the journal page mounts (see useEffect below).
@@ -129,6 +129,8 @@ interface Trade {
   option_type?: "CALL" | "PUT";
   strike_price?: number;
   expiration_date?: string;
+  leg_count?: number;
+  strategy_type?: string;
   // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
@@ -583,6 +585,7 @@ const TradeRow = memo(({
     [trade, oneR]
   );
   const isOption = trade.asset_class === 'options';
+  const isMultiLeg = isOption && (trade.leg_count ?? 0) > 1;
   const optionDTE = isOption ? getDTE(trade.expiration_date) : null;
 
   const handleClick = useCallback(() => onOpen(trade), [trade, onOpen]);
@@ -638,13 +641,17 @@ const TradeRow = memo(({
       
       {/* Symbol */}
       <TableCell className="font-medium text-white">
-        {isOption ? getOptionContractLabel(trade) : trade.symbol}
+        {isOption
+          ? isMultiLeg
+            ? `${getStrategyLabel(trade.strategy_type) ?? 'Spread'} · ${trade.leg_count} legs`
+            : getOptionContractLabel(trade)
+          : trade.symbol}
         {isRiskOnlyMode && (
           <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
             $
           </span>
         )}
-        {isOption && (
+        {isOption && !isMultiLeg && (
           <span
             className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-normal ${
               trade.option_type === 'CALL'
@@ -655,7 +662,7 @@ const TradeRow = memo(({
             {trade.option_type ?? 'OPT'}
           </span>
         )}
-        {isOption && optionDTE !== null && (
+        {isOption && !isMultiLeg && optionDTE !== null && (
           <span
             className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-normal ${
               optionDTE < 0
@@ -1030,8 +1037,12 @@ const DaySummaryCard = memo(({
                   >
                     <span className="text-xs text-ink-secondary tabular-nums">{period === "week" ? formatTradeStamp(trade.open_at, timezone) : formatTradeTime(trade.open_at, timezone)}</span>
                     <span className="min-w-0 truncate font-semibold text-ink-primary">
-                      {trade.asset_class === 'options' ? getOptionContractLabel(trade) : trade.symbol}
-                      {trade.asset_class === 'options' && trade.expiration_date && (() => {
+                      {trade.asset_class === 'options'
+                        ? (trade.leg_count ?? 0) > 1
+                          ? `${getStrategyLabel(trade.strategy_type) ?? 'Spread'} · ${trade.leg_count} legs`
+                          : getOptionContractLabel(trade)
+                        : trade.symbol}
+                      {trade.asset_class === 'options' && (trade.leg_count ?? 0) <= 1 && trade.expiration_date && (() => {
                         const dte = getDTE(trade.expiration_date);
                         return dte !== null ? (
                           <span className={`ml-ds-2 text-xs font-normal ${dte < 0 ? 'text-ink-muted' : dte <= 7 ? 'text-amber-300' : 'text-ink-secondary'}`}>

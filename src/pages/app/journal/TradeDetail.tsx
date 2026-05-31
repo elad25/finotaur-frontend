@@ -7,7 +7,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
-import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit } from '@/utils/tradeCalculations';
+import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, type TradeLeg } from '@/utils/tradeCalculations';
+import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
 import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
@@ -57,6 +58,9 @@ interface Trade {
   strike_price?: number;
   expiration_date?: string;
   option_outcome?: string | null;
+  // Multi-leg options spread fields
+  leg_count?: number;
+  strategy_type?: string;
 }
 
 // Expiration-outcome values for single-leg options. Empty string = "normal
@@ -174,6 +178,7 @@ export default function JournalTradeDetail() {
 
   const [trade, setTrade] = useState<Trade | null>(null);
   const [loading, setLoading] = useState(true);
+  const [legs, setLegs] = useState<TradeLeg[]>([]);
 
   // ---- edit state ----
   const [isEditing, setIsEditing] = useState(false);
@@ -192,6 +197,16 @@ export default function JournalTradeDetail() {
       fetchTrade();
     }
   }, [id]);
+
+  // Fetch option spread legs when the trade is a multi-leg spread.
+  useEffect(() => {
+    if (!trade?.id || !trade.leg_count || trade.leg_count <= 1) return;
+    let cancelled = false;
+    fetchTradeLegs(trade.id).then((result) => {
+      if (!cancelled) setLegs(result);
+    });
+    return () => { cancelled = true; };
+  }, [trade?.id, trade?.leg_count]);
 
   // Warn before unload if the user has unsaved edits.
   useEffect(() => {
@@ -668,6 +683,62 @@ export default function JournalTradeDetail() {
           </div>
         );
       })()}
+
+      {/* Multi-Leg Spread — shown only when leg_count > 1 */}
+      {trade.leg_count && trade.leg_count > 1 && (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <h3 className="text-xl font-semibold text-white mb-4">
+            {getStrategyLabel(trade.strategy_type) ?? 'Multi-Leg'} &middot; {trade.leg_count} legs
+          </h3>
+          {legs.length === 0 ? (
+            <p className="text-zinc-600 text-sm italic">Loading legs…</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">#</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Type</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Side</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Strike</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Qty</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Entry</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Exit</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3">P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {legs.map((leg, idx) => {
+                    const pnl = legSignedPnl(leg);
+                    return (
+                      <tr key={idx}>
+                        <td className="py-3 pr-4 text-zinc-500">{idx + 1}</td>
+                        <td className={`py-3 pr-4 font-medium ${leg.option_type === 'CALL' ? 'text-green-400' : 'text-red-400'}`}>
+                          {leg.option_type ?? '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-zinc-300">{leg.side ?? '—'}</td>
+                        <td className="py-3 pr-4 text-zinc-300 font-mono">
+                          {leg.strike_price != null ? `$${leg.strike_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-zinc-300">{leg.quantity}</td>
+                        <td className="py-3 pr-4 text-zinc-300 font-mono">
+                          {leg.entry_price != null ? `$${leg.entry_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-zinc-300 font-mono">
+                          {leg.exit_price != null ? `$${leg.exit_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td className={`py-3 font-mono ${pnl == null ? 'text-zinc-500' : pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {pnl == null ? '—' : `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Risk Management */}
       {(trade.risk_usd || trade.reward_usd) && (

@@ -76,6 +76,7 @@ if (typeof window !== 'undefined') {
 
 // ✅ Multiplier lookup - delegates to canonical table in tradeCalculations.ts
 import { getAssetMultiplier, ASSET_MULTIPLIERS, getQuantityLabel } from "@/utils/tradeCalculations";
+import MultiLegBuilder from "@/components/journal/MultiLegBuilder";
 
 // 🔥 VALID SESSIONS - must match DB constraint!
 const VALID_SESSIONS = ['asia', 'london', 'newyork'];
@@ -676,6 +677,19 @@ export default function New() {
   const [showExitDatePicker, setShowExitDatePicker] = useState(false);
   const [autoSession, setAutoSession] = useState(true);
   
+  // Multi-leg options builder toggle (defaults OFF; single-leg path unchanged)
+  const [showMultiLeg, setShowMultiLeg] = useState(false);
+  // Auth user id for the multi-leg builder (component-scope; New.tsx otherwise
+  // reads the user only inside async loaders).
+  const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setEffectiveUserId(data.user?.id ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   // 🔥 Partial Exits State
   const [showPartialExits, setShowPartialExits] = useState(false);
   const [partialExits, setPartialExits] = useState<ExitPoint[]>([]);
@@ -2495,7 +2509,22 @@ if (hasResult && directRiskUSD > 0) {
                 {/* OPTIONS fields */}
                 {st.assetClass === 'options' && (
                   <div className="mb-6 p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
-                    <p className="text-xs text-yellow-400 uppercase tracking-wider mb-4">Options Details</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-xs text-yellow-400 uppercase tracking-wider">Options Details</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowMultiLeg((v) => !v)}
+                        className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                          showMultiLeg
+                            ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800'
+                        }`}
+                      >
+                        {showMultiLeg ? 'Single leg' : 'Multi-leg spread'}
+                      </button>
+                    </div>
+                    {!showMultiLeg && (
+                    <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <Label className="text-xs text-zinc-400 mb-2 block">Option Type</Label>
@@ -2543,6 +2572,20 @@ if (hasResult && directRiskUSD > 0) {
                       </div>
                     </div>
                     <p className="text-[10px] text-zinc-500 mt-3">Multiplier is fixed at 100 for options contracts.</p>
+                    </>
+                    )}
+                    {showMultiLeg && effectiveUserId && (
+                      <MultiLegBuilder
+                        userId={effectiveUserId}
+                        defaultSymbol={st.symbol}
+                        portfolioId={selectedPortfolioIds[0] ?? null}
+                        onSaved={async () => {
+                          await queryClient.invalidateQueries({ queryKey: ['trades'] });
+                          navigate('/app/journal/my-trades');
+                        }}
+                        onCancel={() => setShowMultiLeg(false)}
+                      />
+                    )}
                   </div>
                 )}
 
