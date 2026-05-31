@@ -1,9 +1,12 @@
 import { PremiumFrame } from '../PremiumFrame';
 import { PanelHeader } from './_shared';
+import { computeRiskAnalysis } from '../../utils/portfolioRisk';
+import type { PortfolioSnapshot } from '../../hooks/usePortfolioData';
 
-function RiskManagementGoldMark() {
+function RiskManagementGoldMark({ score }: { score: number }) {
   const totalTicks = 44;
-  const fillFraction = 0.72;
+  // Fill reflects the real computed risk score (0–100), not a fixed value.
+  const fillFraction = Math.max(0, Math.min(1, score / 100));
   const startDeg = -132;
   const endDeg = 132;
   const ticks = Array.from({ length: totalTicks }, (_, index) => {
@@ -98,9 +101,11 @@ function RiskManagementGoldMark() {
 export function RiskAnalysisPanel({
   className,
   isConnected,
+  snapshot,
 }: {
   className?: string;
   isConnected: boolean;
+  snapshot: PortfolioSnapshot;
 }) {
   if (!isConnected) {
     return (
@@ -115,26 +120,29 @@ export function RiskAnalysisPanel({
     );
   }
 
-  const rows = [
-    ['Market Risk', 'Medium'],
-    ['Credit Risk', 'Low'],
-    ['Liquidity Risk', 'Low'],
-    ['Volatility Risk', 'Medium'],
-    ['Concentration Risk', 'Low'],
-  ];
+  // Real risk profile computed from the user's live holdings — no hardcoded rows.
+  const analysis = computeRiskAnalysis(snapshot.holdings, snapshot.totalValue);
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
         <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/app/ai/copilot/risks" />
         <div className="mt-4 grid grid-cols-[130px_1fr] gap-4 items-center">
-          <RiskManagementGoldMark />
+          <RiskManagementGoldMark score={analysis.score} />
           <div className="space-y-2">
-            {rows.map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="text-ink-secondary">{label}</span>
-                <span className={value === 'Medium' ? 'text-gold-primary' : 'text-ink-primary'}>{value}</span>
-              </div>
-            ))}
+            <div className="flex items-center justify-between gap-3 pb-2 border-b border-gold-primary/10 text-[11px]">
+              <span className="text-ink-tertiary">Overall</span>
+              <span className="font-mono text-gold-primary">{analysis.score}/100 · {analysis.level}</span>
+            </div>
+            {analysis.drivers.length === 0 ? (
+              <p className="text-[11px] text-ink-tertiary">No drivers computed yet.</p>
+            ) : (
+              analysis.drivers.map((d) => (
+                <div key={d.label} className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="text-ink-secondary">{d.label}</span>
+                  <span className={d.tone === 'red' ? 'text-num-negative' : d.tone === 'green' ? 'text-status-success' : 'text-gold-primary'}>{d.level}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
