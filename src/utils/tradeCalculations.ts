@@ -241,6 +241,8 @@ export interface Trade {
   option_type?: "CALL" | "PUT";
   strike_price?: number;
   expiration_date?: string;
+  underlying_symbol?: string;
+  option_outcome?: string | null;
   position_type?: string;
 }
 
@@ -600,6 +602,145 @@ export function calculateDuration(openAt: string, closeAt?: string): string {
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m`;
   return `${seconds}s`;
+}
+
+// ================================================================
+// OPTIONS-SPECIFIC HELPERS (single-leg)
+// ================================================================
+//
+// All helpers below are options-only: they return null / no-op for any
+// trade whose asset_class is not 'options', or when the required option
+// fields (strike_price, expiration_date, option_type) are missing. They
+// never touch the stock / future / forex / crypto code paths.
+//
+// Premium convention: entry_price / exit_price hold the option PREMIUM
+// per share. One US equity option contract = 100 shares, so dollar
+// figures multiply by quantity * 100 (consistent with pointsToUsd()).
+
+/** Bounded/unbounded dollar figure for option max-loss / max-profit. */
+export interface OptionExtremum {
+  /** Dollar value when bounded; null when theoretically unbounded. */
+  value: number | null;
+  /** True when the figure is theoretically unlimited (e.g. long call upside). */
+  unlimited: boolean;
+}
+
+/** True when this trade is a single-leg option with the fields we need. */
+function isOptionTrade(trade: Pick<Trade, 'asset_class'>): boolean {
+  return (trade.asset_class ?? '') === 'options';
+}
+
+/** Strip time-of-day so DTE is measured in whole calendar days (local). */
+function toDayStart(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Days to expiration from `asOf` (default: now) to `expirationDate`.
+ * Returns null when no expiration date is provided / parseable.
+ * Can be negative for an already-expired contract.
+ */
+export function getDTE(expirationDate?: string, asOf?: string): number | null {
+  if (!expirationDate) return null;
+  const exp = new Date(expirationDate);
+  if (Number.isNaN(exp.getTime())) return null;
+  const from = asOf ? new Date(asOf) : new Date();
+  if (Number.isNaN(from.getTime())) return null;
+  return Math.round((toDayStart(exp) - toDayStart(from)) / 86400000);
+}
+
+/**
+ * Days to expiration measured at the moment the position was opened
+ * (open_at → expiration_date). Useful for DTE-bucket analytics.
+ */
+export function getDTEAtEntry(trade: Pick<Trade, 'asset_class' | 'expiration_date' | 'open_at'>): number | null {
+  if (!isOptionTrade(trade)) return null;
+  return getDTE(trade.expiration_date, trade.open_at);
+}
+
+/**
+ * Option breakeven at expiration (excludes fees/commissions for clarity):
+ *   CALL → strike + premium paid
+ *   PUT  → strike − premium paid
+ * Returns null for non-options or when strike/premium/type are missing.
+ */
+export function getOptionBreakeven(
+  trade: Pick<Trade, 'asset_class' | 'option_type' | 'strike_price' | 'entry_price'>
+): number | null {
+  if (!isOptionTrade(trade)) return null;
+  const { option_type, strike_price, entry_price } = trade;
+  if (!option_type || strike_price == null || entry_price == null) return null;
+  return option_type === 'CALL' ? strike_price + entry_price : strike_price - entry_price;
+}
+
+/**
+ * Maximum theoretical loss in account currency.
+ *   LONG option  → premium paid (entry_price * qty * 100) + fees. Bounded.
+ *   SHORT option → naked downside is large/undefined → reported as unlimited.
+ * (Defined spreads are out of scope for single-leg; SHORT is conservatively
+ *  flagged unlimited rather than guessing a bound.)
+ */
+export function getOptionMaxLoss(
+  trade: Pick<Trade, 'asset_class' | 'side' | 'entry_price' | 'quantity'> & { fees?: number }
+): OptionExtremum {
+  if (!isOptionTrade(trade) || trade.entry_price == null || trade.quantity == null) {
+    return { value: null, unlimited: false };
+  }
+  if (trade.side === 'LONG') {
+    const premium = trade.entry_price * trade.quantity * 100;
+    return { value: premium + (trade.fees ?? 0), unlimited: false };
+  }
+  // SHORT (naked) — undefined / very large downside.
+  return { value: null, unlimited: true };
+}
+
+/**
+ * Maximum theoretical profit in account currency.
+ *   LONG CALL  → unlimited upside.
+ *   LONG PUT   → (strike − premium) * qty * 100, floored at 0. Bounded.
+ *   SHORT      → premium received (entry_price * qty * 100). Bounded.
+ */
+export function getOptionMaxProfit(
+  trade: Pick<Trade, 'asset_class' | 'side' | 'option_type' | 'strike_price' | 'entry_price' | 'quantity'>
+): OptionExtremum {
+  if (!isOptionTrade(trade) || trade.entry_price == null || trade.quantity == null) {
+    return { value: null, unlimited: false };
+  }
+  if (trade.side === 'SHORT') {
+    return { value: trade.entry_price * trade.quantity * 100, unlimited: false };
+  }
+  // LONG
+  if (trade.option_type === 'CALL') {
+    return { value: null, unlimited: true };
+  }
+  if (trade.option_type === 'PUT' && trade.strike_price != null) {
+    const maxProfit = Math.max(0, (trade.strike_price - trade.entry_price) * trade.quantity * 100);
+    return { value: maxProfit, unlimited: false };
+  }
+  return { value: null, unlimited: false };
+}
+
+/**
+ * Compact contract label for list/detail display, e.g. "AAPL 150C 06/20".
+ * Falls back to the plain symbol for non-options or incomplete data.
+ */
+export function getOptionContractLabel(
+  trade: Pick<Trade, 'asset_class' | 'symbol' | 'option_type' | 'strike_price' | 'expiration_date'>
+): string {
+  if (!isOptionTrade(trade)) return trade.symbol;
+  const parts: string[] = [trade.symbol];
+  if (trade.strike_price != null && trade.option_type) {
+    parts.push(`${trade.strike_price}${trade.option_type === 'CALL' ? 'C' : 'P'}`);
+  }
+  if (trade.expiration_date) {
+    const exp = new Date(trade.expiration_date);
+    if (!Number.isNaN(exp.getTime())) {
+      const mm = String(exp.getMonth() + 1).padStart(2, '0');
+      const dd = String(exp.getDate()).padStart(2, '0');
+      parts.push(`${mm}/${dd}`);
+    }
+  }
+  return parts.join(' ');
 }
 
 // ================================================================

@@ -39,6 +39,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
+import { getDTE, getOptionBreakeven, getOptionContractLabel } from "@/utils/tradeCalculations";
 
 // Lazy-load TradeChart so lightweight-charts (~200KB) is NOT in the initial bundle.
 // The chunk starts downloading as soon as the journal page mounts (see useEffect below).
@@ -102,6 +103,7 @@ interface Trade {
   strategy_name?: string;
   setup?: string;
   notes?: string;
+  tags?: string[];
   screenshot_url?: string;
   screenshots?: string[];
   asset_class?: string;
@@ -123,6 +125,10 @@ interface Trade {
   user_risk_r?: number;
   user_reward_r?: number;
   input_mode?: 'summary' | 'risk-only';
+  // Options (single-leg) — populated only when asset_class === 'options'
+  option_type?: "CALL" | "PUT";
+  strike_price?: number;
+  expiration_date?: string;
   // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
@@ -573,10 +579,12 @@ const TradeRow = memo(({
   readOnly?: boolean;
 }) => {
   const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
-    () => getTradeData(trade, oneR), 
+    () => getTradeData(trade, oneR),
     [trade, oneR]
   );
-  
+  const isOption = trade.asset_class === 'options';
+  const optionDTE = isOption ? getDTE(trade.expiration_date) : null;
+
   const handleClick = useCallback(() => onOpen(trade), [trade, onOpen]);
   const handleEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -630,10 +638,35 @@ const TradeRow = memo(({
       
       {/* Symbol */}
       <TableCell className="font-medium text-white">
-        {trade.symbol}
+        {isOption ? getOptionContractLabel(trade) : trade.symbol}
         {isRiskOnlyMode && (
           <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
             $
+          </span>
+        )}
+        {isOption && (
+          <span
+            className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+              trade.option_type === 'CALL'
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'bg-red-500/15 text-red-300'
+            }`}
+          >
+            {trade.option_type ?? 'OPT'}
+          </span>
+        )}
+        {isOption && optionDTE !== null && (
+          <span
+            className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+              optionDTE < 0
+                ? 'bg-zinc-700/40 text-zinc-400'
+                : optionDTE <= 7
+                  ? 'bg-amber-500/20 text-amber-300'
+                  : 'bg-zinc-700/40 text-zinc-300'
+            }`}
+            title="Days to expiration"
+          >
+            {optionDTE < 0 ? 'Expired' : `${optionDTE}DTE`}
           </span>
         )}
       </TableCell>
@@ -997,7 +1030,15 @@ const DaySummaryCard = memo(({
                   >
                     <span className="text-xs text-ink-secondary tabular-nums">{period === "week" ? formatTradeStamp(trade.open_at, timezone) : formatTradeTime(trade.open_at, timezone)}</span>
                     <span className="min-w-0 truncate font-semibold text-ink-primary">
-                      {trade.symbol}
+                      {trade.asset_class === 'options' ? getOptionContractLabel(trade) : trade.symbol}
+                      {trade.asset_class === 'options' && trade.expiration_date && (() => {
+                        const dte = getDTE(trade.expiration_date);
+                        return dte !== null ? (
+                          <span className={`ml-ds-2 text-xs font-normal ${dte < 0 ? 'text-ink-muted' : dte <= 7 ? 'text-amber-300' : 'text-ink-secondary'}`}>
+                            {dte < 0 ? 'Expired' : `${dte}DTE`}
+                          </span>
+                        ) : null;
+                      })()}
                       {trade.strategy_name && <span className="ml-ds-2 text-xs font-normal text-ink-muted">{trade.strategy_name}</span>}
                     </span>
                     <span className={trade.side === "LONG" ? "text-emerald-400" : "text-num-negative"}>{trade.side}</span>
@@ -1338,7 +1379,8 @@ const stats = useMemo<Stats>(() => {
     const headers = [
       "Date", "Symbol", "Side", "Session", "Entry Price", "Exit Price", "Stop Price", "Take Profit",
       "Quantity", "P&L", "Outcome", "Actual R", "Quality", "Strategy", "Setup",
-      "Notes", "Fees", "Multiplier", "Risk USD"
+      "Notes", "Fees", "Multiplier", "Risk USD",
+      "Option Type", "Strike", "Expiration", "DTE"
     ];
 
     const rows = filteredTrades.map(trade => {
@@ -1363,7 +1405,11 @@ const stats = useMemo<Stats>(() => {
         trade.notes?.replace(/,/g, ";") || "",
         trade.fees,
         multiplier,
-        riskUSD.toFixed(2)
+        riskUSD.toFixed(2),
+        trade.asset_class === 'options' ? (trade.option_type || "") : "",
+        trade.asset_class === 'options' && trade.strike_price != null ? trade.strike_price : "",
+        trade.asset_class === 'options' ? (trade.expiration_date || "") : "",
+        trade.asset_class === 'options' ? (getDTE(trade.expiration_date) ?? "") : ""
       ].join(",");
     });
 
@@ -2017,6 +2063,42 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                         <div>
                           <div className="text-[11px] text-zinc-500 mb-1">Asset Class</div>
                           <div className="text-base font-semibold text-white capitalize">{selectedTrade.asset_class}</div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && selectedTrade.option_type && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Type</div>
+                          <div className={`text-base font-semibold ${selectedTrade.option_type === 'CALL' ? 'text-emerald-400' : 'text-red-300'}`}>
+                            {selectedTrade.option_type}
+                          </div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && selectedTrade.strike_price != null && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Strike</div>
+                          <div className="text-base font-semibold text-white">${formatNumber(selectedTrade.strike_price, 2)}</div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && selectedTrade.expiration_date && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Expiration</div>
+                          <div className="text-base font-semibold text-white">
+                            {selectedTrade.expiration_date}
+                            {(() => {
+                              const dte = getDTE(selectedTrade.expiration_date);
+                              return dte !== null ? (
+                                <span className={`ml-1.5 text-xs font-normal ${dte < 0 ? 'text-zinc-400' : dte <= 7 ? 'text-amber-300' : 'text-zinc-400'}`}>
+                                  ({dte < 0 ? 'expired' : `${dte}d`})
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && getOptionBreakeven(selectedTrade) != null && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Breakeven</div>
+                          <div className="text-base font-semibold text-white">${formatNumber(getOptionBreakeven(selectedTrade)!, 2)}</div>
                         </div>
                       )}
                       {selectedTrade.session && (

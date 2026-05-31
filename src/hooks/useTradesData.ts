@@ -121,6 +121,12 @@ export interface Trade {
   };
   created_at: string;
   updated_at: string;
+  // Options (single-leg) — populated only when asset_class === 'options'
+  option_type?: 'CALL' | 'PUT';
+  strike_price?: number;
+  expiration_date?: string;
+  underlying_symbol?: string;
+  option_outcome?: string | null;
 }
 export interface TradeStats {
   totalTrades: number;
