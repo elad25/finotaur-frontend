@@ -1,6 +1,7 @@
 // src/pages/app/journal/finotaur-ai/FinotaurAI.tsx
 // Page orchestrator for /app/journal/finotaur-ai.
-// Decision tree: Free → UpsellGate (no API), 0-trades → EmptyState, error → ErrorCard, happy path → ScoreHero + BriefingHero.
+// Decision tree: Free → UpsellGate (no API), 0-trades → EmptyState, happy path → wide CoachChatPanel
+// (score header + briefing-as-suggestions live inside the chat).
 // Mentor View: bypasses premium gate, reads student data read-only, hides all write affordances.
 
 import * as React from 'react';
@@ -8,10 +9,8 @@ import { useState } from 'react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useFinotaurScore } from './hooks/useFinotaurScore';
-import { useBriefing, useRefreshBriefing } from './hooks/useBriefing';
+import { useBriefing } from './hooks/useBriefing';
 import { useMentorChatHistory } from './hooks/useMentorChatHistory';
-import { BriefingHero } from './components/BriefingHero';
-import { ScoreHero } from './components/ScoreHero';
 import { EmptyState } from './components/EmptyState';
 import { UpsellGate } from './components/UpsellGate';
 import CoachChatPanel from './components/CoachChatPanel';
@@ -19,7 +18,6 @@ import { ConversationHistorySidebar } from './components/ConversationHistorySide
 import { useFinotaurChat } from './hooks/useFinotaurChat';
 import { DailyLimitBanner } from './components/DailyLimitBanner';
 import { useUsage } from './hooks/useUsage';
-import { BriefingApiError } from './services/finotaurAIApi';
 import type { Insight } from './types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
@@ -72,12 +70,9 @@ export default function FinotaurAI() {
   const {
     data: score,
     isLoading,
-    error,
-    refetch,
   } = useFinotaurScore(30, isPremium, overrideUserId);
 
   const briefingQuery = useBriefing(isPremium, overrideUserId);
-  const refreshMutation = useRefreshBriefing();
 
   // In mentor view: disable usage tracking — the mentor is not the rate-limited user.
   const usageQuery = useUsage(isMentorView ? false : isPremium);
@@ -89,13 +84,6 @@ export default function FinotaurAI() {
   // Mentor chat history: load the student's most-recent conversation read-only.
   // Enabled only in mentor view. Uses effectiveUserId (student's id).
   const mentorHistory = useMentorChatHistory(effectiveUserId, isMentorView);
-
-  const refreshing429 =
-    refreshMutation.error instanceof BriefingApiError &&
-    refreshMutation.error.status === 429;
-
-  // In mentor view: do not expose Refresh — it would write to the student's briefing.
-  const handleRefresh = isMentorView ? undefined : () => { refreshMutation.mutate(); };
 
   const [prefillRequest, setPrefillRequest] = useState<string | null>(null);
 
@@ -142,8 +130,10 @@ export default function FinotaurAI() {
         {/* Daily limit banner — suppressed in mentor view (mentor has no usage counter) */}
         {!isMentorView && <DailyLimitBanner usage={usageQuery.data ?? null} />}
 
-        {/* Three-column layout on large screens: history sidebar | main content | chat panel */}
-        <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr_380px]">
+        {/* Two-column layout on large screens: history sidebar | wide chat.
+            The FINOTAUR score (header) and the daily briefing (as tappable
+            starter suggestions) now live INSIDE the chat panel. */}
+        <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[220px_1fr]">
           {/* Conversation history sidebar — hidden in mentor view (student owns convos) */}
           {!isMentorView && (
             <aside className="hidden lg:flex lg:flex-col lg:sticky lg:top-ds-6 lg:self-start lg:max-h-[calc(100vh-120px)]">
@@ -157,36 +147,16 @@ export default function FinotaurAI() {
           {/* Spacer column placeholder in mentor view so grid alignment holds */}
           {isMentorView && <div className="hidden lg:block" aria-hidden="true" />}
 
-          {/* Main briefing content */}
-          <div>
-            <ScoreHero
-              score={score}
-              isLoading={isLoading}
-              error={error as Error | null}
-              onRefresh={isMentorView ? undefined : refetch}
-            />
-            <div className="mt-ds-6">
-              <BriefingHero
-                briefing={briefingQuery.data?.briefing ?? null}
-                stale={briefingQuery.data?.stale ?? false}
-                refreshing={briefingQuery.data?.refreshing ?? (isMentorView ? false : refreshMutation.isPending)}
-                generatedAt={briefingQuery.data?.generated_at ?? null}
-                isLoading={briefingQuery.isLoading}
-                error={briefingQuery.error as Error | null}
-                onRefresh={handleRefresh}
-                refreshing429={isMentorView ? false : refreshing429}
-                onDiscuss={handleDiscuss}
-              />
-            </div>
-          </div>
-
-          {/* Chat panel — in mentor view: read-only with student's history */}
-          <aside className="lg:sticky lg:top-ds-6 lg:self-start">
+          {/* Wide chat panel — score header + briefing-as-suggestions live inside it */}
+          <aside className="lg:sticky lg:top-ds-6 lg:self-start lg:h-[calc(100vh-120px)]">
             <CoachChatPanel
               prefillRequest={isMentorView ? null : prefillRequest}
               chatInstance={chat}
               isReadOnly={isMentorView}
               messagesOverride={isMentorView ? mentorHistory.messages : undefined}
+              score={score ?? null}
+              briefing={briefingQuery.data?.briefing ?? null}
+              onDiscuss={handleDiscuss}
             />
           </aside>
         </div>
