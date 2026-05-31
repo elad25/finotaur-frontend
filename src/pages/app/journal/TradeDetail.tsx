@@ -7,10 +7,12 @@ import { useToast } from '@/hooks/use-toast';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
-import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, type TradeLeg } from '@/utils/tradeCalculations';
+import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
 import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
+import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
+import OptionPayoffChart from '@/components/journal/OptionPayoffChart';
 import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
 
 interface PartialLeg {
@@ -61,6 +63,13 @@ interface Trade {
   // Multi-leg options spread fields
   leg_count?: number;
   strategy_type?: string;
+  // Forex — populated only when asset_class === 'forex'
+  base_currency?: string;
+  quote_currency?: string;
+  account_currency?: string;
+  quote_rate?: number;
+  pip_size?: number;
+  lot_size?: number;
 }
 
 // Expiration-outcome values for single-leg options. Empty string = "normal
@@ -684,6 +693,62 @@ export default function JournalTradeDetail() {
         );
       })()}
 
+      {/* Forex Details — forex trades only */}
+      {trade.asset_class === 'forex' && (() => {
+        const { base, quote } = parseForexPair(trade.symbol);
+        const pipSize = trade.pip_size ?? getPipSize(trade.symbol);
+        const acct = trade.account_currency ?? 'USD';
+        const rate = trade.quote_rate ?? 1;
+        const crossCurrency = !!quote && quote !== acct.toUpperCase();
+        return (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Forex Details</h3>
+              <ForexMarketStatusChip />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {base && quote && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Pair</label>
+                  <div className="text-lg font-semibold text-white">{base}/{quote}</div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Pip Size</label>
+                <div className="text-lg font-semibold text-white">{pipSize}</div>
+              </div>
+              {trade.lot_size != null && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Lot Size</label>
+                  <div className="text-lg font-semibold text-white">{trade.lot_size.toLocaleString()}</div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Account Currency</label>
+                <div className="text-lg font-semibold text-white">{acct}</div>
+              </div>
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Quote Rate</label>
+                <div className="text-lg font-semibold text-white">
+                  {rate}
+                  <span className="ml-2 text-sm font-normal text-zinc-400">
+                    {crossCurrency ? `${quote} → ${acct}` : 'no conversion'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {crossCurrency && rate === 1 && (
+              <p className="mt-4 text-xs text-amber-300">
+                Quote rate is 1.0 on a cross-currency pair — P&amp;L is not converted to {acct}. Edit the trade to set the {quote}→{acct} rate.
+              </p>
+            )}
+            <p className="mt-4 text-xs text-zinc-600">
+              P&amp;L is computed as price move × (lots × lot size) × quote rate, expressed in the account currency.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* Multi-Leg Spread — shown only when leg_count > 1 */}
       {trade.leg_count && trade.leg_count > 1 && (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
@@ -739,6 +804,24 @@ export default function JournalTradeDetail() {
           )}
         </div>
       )}
+
+      {/* Payoff at Expiration — options only (single-leg or multi-leg) */}
+      {trade.asset_class === 'options' && (() => {
+        const isMulti = !!trade.leg_count && trade.leg_count > 1;
+        const single = singleLegFromTrade(trade);
+        const chartLegs: TradeLeg[] = isMulti ? legs : (single ? [single] : []);
+        if (!chartLegs.length) return null;
+        return (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Payoff at Expiration</h3>
+            <OptionPayoffChart legs={chartLegs} />
+            <p className="mt-4 text-xs text-zinc-600">
+              Theoretical net P&amp;L if the underlying settles at each price on expiration day.
+              Intrinsic value only — excludes time value, commissions, and early assignment.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Risk Management */}
       {(trade.risk_usd || trade.reward_usd) && (

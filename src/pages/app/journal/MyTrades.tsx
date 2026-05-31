@@ -39,7 +39,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
-import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel } from "@/utils/tradeCalculations";
+import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
+import { ForexMarketStatusChip } from "@/components/journal/ForexMarketStatusChip";
 
 // Lazy-load TradeChart so lightweight-charts (~200KB) is NOT in the initial bundle.
 // The chunk starts downloading as soon as the journal page mounts (see useEffect below).
@@ -131,6 +132,13 @@ interface Trade {
   expiration_date?: string;
   leg_count?: number;
   strategy_type?: string;
+  // Forex — populated only when asset_class === 'forex'
+  base_currency?: string;
+  quote_currency?: string;
+  account_currency?: string;
+  quote_rate?: number;
+  pip_size?: number;
+  lot_size?: number;
   // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
@@ -585,6 +593,7 @@ const TradeRow = memo(({
     [trade, oneR]
   );
   const isOption = trade.asset_class === 'options';
+  const isForex = trade.asset_class === 'forex';
   const isMultiLeg = isOption && (trade.leg_count ?? 0) > 1;
   const optionDTE = isOption ? getDTE(trade.expiration_date) : null;
 
@@ -649,6 +658,11 @@ const TradeRow = memo(({
         {isRiskOnlyMode && (
           <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
             $
+          </span>
+        )}
+        {isForex && (
+          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 font-normal">
+            FX
           </span>
         )}
         {isOption && !isMultiLeg && (
@@ -2112,6 +2126,55 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           <div className="text-base font-semibold text-white">${formatNumber(getOptionBreakeven(selectedTrade)!, 2)}</div>
                         </div>
                       )}
+                      {selectedTrade.asset_class === 'forex' && (() => {
+                        const { base, quote } = parseForexPair(selectedTrade.symbol);
+                        const pipSize = selectedTrade.pip_size ?? getPipSize(selectedTrade.symbol);
+                        const acct = selectedTrade.account_currency ?? 'USD';
+                        const rate = selectedTrade.quote_rate ?? 1;
+                        const crossCurrency = !!quote && quote !== acct.toUpperCase();
+                        return (
+                          <>
+                            {base && quote && (
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Pair</div>
+                                <div className="text-base font-semibold text-white">{base}/{quote}</div>
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">Pip Size</div>
+                              <div className="text-base font-semibold text-white">{pipSize}</div>
+                            </div>
+                            {selectedTrade.lot_size != null && (
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Lot Size</div>
+                                <div className="text-base font-semibold text-white">{selectedTrade.lot_size.toLocaleString()}</div>
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">Account Currency</div>
+                              <div className="text-base font-semibold text-white">{acct}</div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">Quote Rate</div>
+                              <div className="text-base font-semibold text-white">
+                                {rate}
+                                <span className="ml-1.5 text-xs font-normal text-zinc-400">
+                                  {crossCurrency ? `${quote}→${acct}` : 'no conversion'}
+                                </span>
+                              </div>
+                              {crossCurrency && rate === 1 && (
+                                <div className="text-[11px] text-amber-300 mt-1">
+                                  Rate 1.0 — P&amp;L not converted to {acct}.
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">FX Market</div>
+                              <ForexMarketStatusChip />
+                            </div>
+                          </>
+                        );
+                      })()}
                       {selectedTrade.session && (
                         <div>
                           <div className="text-[11px] text-zinc-500 mb-1">Session</div>
