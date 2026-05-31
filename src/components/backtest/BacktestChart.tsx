@@ -449,17 +449,17 @@ function IntervalSelector({
 
   return (
     <div className="relative flex items-center" ref={containerRef}>
-      {/* Favorites row + chevron — unified rounded container */}
-      <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
+      {/* Favorites row + chevron — unified rounded pill container (brand gold) */}
+      <div className="flex items-center gap-0.5 rounded-lg border border-[#C9A646]/20 bg-zinc-900/80 p-1">
         {favoritesOrdered.map((iv) => (
           <button
             key={iv}
             type="button"
             onClick={() => selectInterval(iv)}
-            className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
               value === iv
-                ? 'bg-[#C9A646] text-black'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-gradient-to-b from-[#D9B65A] to-[#C9A646] font-semibold text-black shadow-[0_0_10px_rgba(201,166,70,0.45)]'
+                : 'text-zinc-400 hover:bg-[#C9A646]/10 hover:text-[#C9A646]'
             }`}
           >
             {intervalLabel(iv)}
@@ -470,8 +470,8 @@ function IntervalSelector({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-label="More intervals"
-          className={`flex items-center justify-center px-2 py-1.5 text-zinc-400 transition-colors hover:text-zinc-200 ${
-            open ? 'text-[#C9A646]' : ''
+          className={`flex items-center justify-center rounded-md px-2 py-1.5 transition-colors hover:bg-[#C9A646]/10 hover:text-[#C9A646] ${
+            open ? 'text-[#C9A646]' : 'text-zinc-400'
           }`}
         >
           <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -1183,14 +1183,14 @@ export function BacktestChart({
           <button
             onClick={() => setStrategyPickerOpen((v) => !v)}
             disabled={runStatus === 'running'}
-            className={`flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
               runStatus === 'done'
                 ? 'border-emerald-700 bg-emerald-950 text-emerald-400'
                 : runStatus === 'error'
                 ? 'border-rose-700 bg-rose-950 text-rose-400'
                 : runStatus === 'running'
                 ? 'border-zinc-700 bg-zinc-900 text-zinc-500 cursor-wait'
-                : 'border-emerald-700/40 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-950/60'
+                : 'border-[#C9A646]/50 bg-gradient-to-b from-[#D9B65A] to-[#C9A646] text-black shadow-[0_0_12px_rgba(201,166,70,0.4)] hover:shadow-[0_0_16px_rgba(201,166,70,0.55)]'
             }`}
             title={runError ?? runSummary ?? 'Run a saved strategy on this chart'}
           >
