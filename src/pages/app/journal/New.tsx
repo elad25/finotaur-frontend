@@ -2715,6 +2715,14 @@ if (hasResult && directRiskUSD > 0) {
                               </p>
                             );
                           }
+                          if (quote && quote !== acct && (st.quoteRate ?? 1) === 1) {
+                            return (
+                              <p className="text-xs text-amber-300 mt-1">
+                                Cross-currency pair: quote rate is still 1.0, so P&amp;L will not be
+                                converted to {acct}. Enter the {quote}→{acct} rate.
+                              </p>
+                            );
+                          }
                           return null;
                         })()}
                       </div>

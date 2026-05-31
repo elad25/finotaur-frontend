@@ -838,6 +838,91 @@ export function netDebitCreditLabel(legs: TradeLeg[]): string {
 }
 
 // ================================================================
+// OPTIONS PAYOFF (at expiration) — pure math, no external data
+// ================================================================
+//
+// Payoff at expiration is deterministic: the underlying's value at expiry
+// fully determines each leg's intrinsic value. Net P&L is the signed sum
+// across legs. No Greeks, no IV, no time value — strictly the terminal
+// payoff diagram. 1 contract = 100 shares.
+
+/**
+ * Signed dollar P&L for ONE leg if the underlying settles at price `S` at
+ * expiration. Intrinsic value: CALL → max(0, S − strike); PUT → max(0, strike − S).
+ *   LONG  → (intrinsic − entry) * qty * 100 − fees
+ *   SHORT → (entry − intrinsic) * qty * 100 − fees
+ */
+export function legPayoffAtPrice(leg: TradeLeg, S: number): number {
+  const intrinsic =
+    leg.option_type === 'CALL'
+      ? Math.max(0, S - leg.strike_price)
+      : Math.max(0, leg.strike_price - S);
+  const dir = leg.side === 'LONG' ? 1 : -1;
+  return dir * (intrinsic - leg.entry_price) * leg.quantity * 100 - (leg.fees ?? 0);
+}
+
+/** Net payoff across all legs at underlying price `S`. */
+export function netPayoffAtPrice(legs: TradeLeg[], S: number): number {
+  return legs.reduce((sum, l) => sum + legPayoffAtPrice(l, S), 0);
+}
+
+/**
+ * Sample the net payoff curve across [priceMin, priceMax] in `steps`
+ * intervals (inclusive of both endpoints → steps+1 points).
+ * Returns points usable directly by a recharts LineChart.
+ */
+export function payoffCurve(
+  legs: TradeLeg[],
+  priceMin: number,
+  priceMax: number,
+  steps = 80,
+): { price: number; pnl: number }[] {
+  if (!legs.length || !(priceMax > priceMin) || steps < 1) return [];
+  const out: { price: number; pnl: number }[] = [];
+  const stepSize = (priceMax - priceMin) / steps;
+  for (let i = 0; i <= steps; i++) {
+    const price = priceMin + stepSize * i;
+    out.push({ price, pnl: netPayoffAtPrice(legs, price) });
+  }
+  return out;
+}
+
+/**
+ * Adapt a single-leg options trade (fields on the parent row, not in
+ * trade_legs) into a TradeLeg so the same payoff math serves both paths.
+ * Returns null if the trade lacks the option fields.
+ */
+export function singleLegFromTrade(
+  trade: Pick<Trade, 'side' | 'option_type' | 'strike_price' | 'entry_price' | 'quantity' | 'exit_price'> & { fees?: number },
+): TradeLeg | null {
+  if (!trade.option_type || trade.strike_price == null || trade.entry_price == null) return null;
+  return {
+    option_type: trade.option_type,
+    strike_price: trade.strike_price,
+    side: trade.side ?? 'LONG',
+    quantity: trade.quantity ?? 1,
+    entry_price: trade.entry_price,
+    exit_price: trade.exit_price ?? undefined,
+    fees: trade.fees ?? undefined,
+  };
+}
+
+/**
+ * Sensible price domain for a payoff chart: spans the strikes with padding,
+ * so breakevens and the kink points are comfortably visible. Falls back to
+ * ±25% around a single strike.
+ */
+export function payoffPriceDomain(legs: TradeLeg[], padPct = 0.25): { min: number; max: number } | null {
+  const strikes = legs.map((l) => l.strike_price).filter((s) => Number.isFinite(s));
+  if (!strikes.length) return null;
+  const lo = Math.min(...strikes);
+  const hi = Math.max(...strikes);
+  const center = (lo + hi) / 2;
+  const span = Math.max(hi - lo, center * padPct * 2);
+  return { min: Math.max(0, center - span), max: center + span };
+}
+
+// ================================================================
 // AGGREGATE STATISTICS
 // ================================================================
 
