@@ -310,6 +310,7 @@ function ModuleBody({
         <SynthesisBriefPersonalTwist
           personal={synthesisBrief.personal}
           personalLoading={synthesisBrief.personalLoading}
+          degenerate={synthesisBrief.personal?.degenerate}
         />
       );
 
@@ -495,7 +496,10 @@ export function DailyBrief() {
 
   // Portfolio for the panels that need snapshot + isConnected
   const portfolioSnapshot = usePortfolioData('1M');
-  const { isConnected } = useIBConnection();
+  const { isConnected: brokerConnected } = useIBConnection();
+  // Treat "connected but not yet synced" as not-live, so portfolio panels show a
+  // connect/sync state instead of an empty (zero) snapshot — never fabricated data.
+  const isConnected = brokerConnected && portfolioSnapshot.source === 'live';
 
   // Controlled open map — lifted so Expand/Collapse-all can touch all modules.
   const initialOpenMap = useMemo(

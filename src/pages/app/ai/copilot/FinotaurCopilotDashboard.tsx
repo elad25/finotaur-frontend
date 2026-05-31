@@ -60,6 +60,27 @@ export function FinotaurCopilotDashboard() {
     );
   }
 
+  // Connected but positions not yet synced (source !== 'live') — never render
+  // the empty/zero snapshot as if it were the user's real portfolio.
+  if (snapshot.source !== 'live') {
+    return (
+      <ErrorBoundary boundary="ai-copilot">
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+          <div className="xl:col-span-8 xl:row-span-2">
+            <CopilotEmptyState
+              title="Syncing your portfolio…"
+              description="Your broker is connected. We're pulling your live positions — this usually completes within a few minutes of the first sync. Top opportunities and market signals are ready below."
+            />
+          </div>
+          <AiBrainPanel className="xl:col-span-4" />
+          <div className="xl:col-span-4">
+            <TopOpportunitiesPanel />
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
   // Connected — compute risk once and pass down
   const analysis = computeRiskAnalysis(snapshot.holdings, snapshot.totalValue);
 
@@ -419,17 +440,11 @@ function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): st
   return idea.sector || 'MULTI-FACTOR';
 }
 
-const FALLBACK_ITEMS = [
-  { ticker: 'NVDA', company: 'NVIDIA Corporation',   tag: 'AI/TECHNOLOGY', score: 92 },
-  { ticker: 'TSLA', company: 'Tesla, Inc.',           tag: 'GROWTH',        score: 88 },
-  { ticker: 'MSFT', company: 'Microsoft Corporation', tag: 'LONG TERM',     score: 85 },
-  { ticker: 'AMZN', company: 'Amazon.com, Inc.',      tag: 'E-COMMERCE',    score: 83 },
-] as const;
-
 function TopOpportunitiesPanel() {
   const { brief } = useSynthesisBrief();
 
-  // Build display items — use live data when available, fallback otherwise
+  // Build display items from live synthesis-brief trade ideas only — no fallback,
+  // no fabricated tickers. Empty when the brief has no ideas yet.
   const items: Array<{ ticker: string; company: string; tag: string; score: number }> =
     brief?.trade_ideas?.length
       ? brief.trade_ideas.slice(0, 4).map((idea, i) => {
@@ -441,13 +456,18 @@ function TopOpportunitiesPanel() {
             score:   opp.score,
           };
         })
-      : FALLBACK_ITEMS.map(f => ({ ...f }));
+      : [];
 
   return (
     <PremiumFrame className="min-h-[338px]">
       <div className="p-5">
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
+          {items.length === 0 && (
+            <p className="py-10 text-center text-[11px] leading-relaxed text-ink-tertiary">
+              No live trade ideas right now.<br />New ideas appear here after the next AI brief.
+            </p>
+          )}
           {items.map(({ ticker, company, tag, score }) => {
             return (
               <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
@@ -640,7 +660,7 @@ function RiskAnalysisPanel({ className, analysis }: { className?: string; analys
       <div className="p-5">
         <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/copilot/risks" />
         <div className="mt-4 grid grid-cols-[130px_1fr] gap-4 items-center">
-          <RiskManagementGoldMark />
+          <RiskManagementGoldMark score={analysis.score} />
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3 pb-2 border-b border-gold-primary/10 text-[11px]">
               <span className="text-ink-tertiary">Overall</span>
@@ -663,9 +683,10 @@ function RiskAnalysisPanel({ className, analysis }: { className?: string; analys
   );
 }
 
-function RiskManagementGoldMark() {
+function RiskManagementGoldMark({ score }: { score: number }) {
   const totalTicks = 44;
-  const fillFraction = 0.72;
+  // Fill reflects the real computed risk score (0–100), not a fixed value.
+  const fillFraction = Math.max(0, Math.min(1, score / 100));
   const startDeg = -132;
   const endDeg = 132;
   const ticks = Array.from({ length: totalTicks }, (_, index) => {
