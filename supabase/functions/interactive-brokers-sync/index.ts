@@ -575,6 +575,71 @@ async function upsertSnapshotForToday(
   return true;
 }
 
+// Resolve IBRIT credentials, preferring Vault. Falls back to legacy plaintext
+// in connection_data and lazy-migrates it to Vault on the spot. Returns null
+// when no usable credentials exist. NEVER logs secret values.
+async function resolveIBCreds(
+  conn: { id: string; connection_data: Record<string, unknown> | null },
+): Promise<{ token: string; queryId: string; serviceCode: string } | null> {
+  const cd = (conn.connection_data || {}) as Record<string, unknown>;
+  const serviceCode = (cd.service_code as string | undefined) || DEFAULT_SERVICE_CODE;
+
+  // Preferred path: read from Vault.
+  const vaultSecretId = cd.vault_secret_id as string | undefined;
+  if (vaultSecretId) {
+    const { data, error } = await supabaseAdmin.rpc('ib_vault_read', { p_secret_id: vaultSecretId });
+    if (!error && data) {
+      try {
+        const parsed = JSON.parse(data as string) as { token?: string; query_id?: string };
+        if (parsed.token && parsed.query_id) {
+          return { token: parsed.token, queryId: parsed.query_id, serviceCode };
+        }
+      } catch { /* fall through to legacy */ }
+    }
+    // vault_secret_id present but unreadable/invalid → fall through to legacy if any
+  }
+
+  // Legacy path: plaintext in connection_data → use now AND lazy-migrate to Vault.
+  const legacyToken = cd.token as string | undefined;
+  const legacyQueryId = cd.query_id as string | undefined;
+  if (legacyToken && legacyQueryId) {
+    await migrateIBCredsToVault(conn.id, legacyToken, legacyQueryId);
+    return { token: legacyToken, queryId: legacyQueryId, serviceCode };
+  }
+
+  return null;
+}
+
+// Store IBRIT creds in Vault and strip plaintext from connection_data,
+// preserving every other key (e.g. last_positions, integration_type,
+// service_code, vault_secret_id). Non-fatal: on failure, sync still proceeds
+// with the creds it already has this run. NEVER logs secret values.
+async function migrateIBCredsToVault(connId: string, token: string, queryId: string): Promise<void> {
+  try {
+    const secret = JSON.stringify({ token, query_id: queryId });
+    const { data: vaultId, error } = await supabaseAdmin.rpc('ib_vault_upsert_atomic', {
+      p_connection_id: connId,
+      p_name: 'ib-ibrit-' + connId,
+      p_secret: secret,
+    });
+    if (error || !vaultId) {
+      console.error('[ib-sync] vault upsert failed (non-fatal):', error?.message ?? 'no id returned');
+      return;
+    }
+    // Re-fetch AFTER the RPC (which set vault_secret_id) so we preserve last_positions etc.,
+    // then remove ONLY the plaintext keys.
+    const { data: fresh } = await supabaseAdmin
+      .from('broker_connections').select('connection_data').eq('id', connId).maybeSingle();
+    const cd = ((fresh?.connection_data) || {}) as Record<string, unknown>;
+    delete cd.token;
+    delete cd.query_id;
+    cd.vault_secret_id = vaultId; // ensure pointer set even if jsonb_set raced
+    await supabaseAdmin.from('broker_connections').update({ connection_data: cd }).eq('id', connId);
+  } catch (e) {
+    console.error('[ib-sync] vault migration error (non-fatal):', e instanceof Error ? e.message : String(e));
+  }
+}
+
 async function syncOneUser(userId: string): Promise<UserSyncSummary> {
   const { data: conn, error: connErr } = await supabaseAdmin
     .from('broker_connections').select('id, connection_data, is_active, account_id')
@@ -582,13 +647,13 @@ async function syncOneUser(userId: string): Promise<UserSyncSummary> {
   if (connErr || !conn || !conn.is_active) {
     return { userId, tradesInserted: 0, tradeErrors: 0, positionsCount: 0, daysQueried: 0, daysWithData: 0, daysEmpty: 0, daysErrored: 0, firstError: null, skipped: 'no_active_connection' };
   }
-  const cd = conn.connection_data || {};
-  const ibToken = cd.token as string | undefined;
-  const queryId = cd.query_id as string | undefined;
-  const serviceCode = (cd.service_code as string | undefined) || DEFAULT_SERVICE_CODE;
-  if (!ibToken || !queryId) {
+  const creds = await resolveIBCreds(conn);
+  if (!creds) {
     return { userId, tradesInserted: 0, tradeErrors: 0, positionsCount: 0, daysQueried: 0, daysWithData: 0, daysEmpty: 0, daysErrored: 0, firstError: 'missing_credentials' };
   }
+  const ibToken = creds.token;
+  const queryId = creds.queryId;
+  const serviceCode = creds.serviceCode;
 
   const today = new Date();
   const dates: Date[] = [];
@@ -1120,7 +1185,7 @@ Deno.serve(async (req: Request) => {
   const auth = await authenticate(req, supabaseAdmin);
   if (!auth.ok) return new Response(JSON.stringify({ error: auth.message }), { status: auth.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-  let body: { userId?: string; mode?: string; days?: number };
+  let body: { userId?: string; mode?: string; days?: number; token?: string; query_id?: string };
   try { body = await req.json(); } catch { body = {}; }
 
   // BACKFILL WITH MARKS MODE: mark-to-market historical reconstruction using Polygon closes
@@ -1193,6 +1258,16 @@ Deno.serve(async (req: Request) => {
   const { userId } = body;
   if (!userId) return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   if (!auth.isCron && auth.userId !== userId) return new Response(JSON.stringify({ error: 'Forbidden: userId mismatch' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  // Connect / re-auth: if fresh IBRIT creds were supplied in the body, store them in
+  // Vault now (so they are NEVER persisted as plaintext), then sync reads from Vault.
+  if (body.token && body.query_id) {
+    const { data: connRow } = await supabaseAdmin
+      .from('broker_connections').select('id').eq('user_id', userId).eq('broker', 'interactive_brokers').maybeSingle();
+    if (connRow?.id) {
+      await migrateIBCredsToVault(connRow.id, body.token, body.query_id);
+    }
+  }
 
   try {
     const summary = await syncOneUser(userId);

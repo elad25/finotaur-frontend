@@ -75,10 +75,11 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
       //    .upsert with onConflict='user_id,broker' fails (no matching constraint),
       //    and onConflict on the 3-col index would orphan rows once account_id is set.
       //    Robust pattern: UPDATE first; if 0 rows affected, INSERT.
+      // SECURITY: never persist IBRIT secrets as plaintext. The row stores only
+      // non-secret metadata; the token + query_id go to the edge fn (over TLS) which
+      // stores them in Supabase Vault and sets connection_data.vault_secret_id.
       const connectionData = {
         integration_type: 'ibrit',
-        token: token.trim(),
-        query_id: queryId.trim(),
         service_code: 'finotaur-ws',
       };
       const nowIso = new Date().toISOString();
@@ -121,7 +122,7 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
       const { data: sess } = await supabase.auth.getSession();
       const jwt = sess.session?.access_token;
       const { data: syncResult, error: syncErr } = await supabase.functions.invoke('interactive-brokers-sync', {
-        body: { userId: user.id, mode: 'manual' },
+        body: { userId: user.id, mode: 'manual', token: token.trim(), query_id: queryId.trim() },
         headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
       });
 
