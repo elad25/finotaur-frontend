@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit } from '@/utils/tradeCalculations';
 import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
@@ -29,6 +30,7 @@ interface Trade {
   entry_price: number;
   exit_price?: number;
   quantity: number;
+  fees?: number;
   stop_price?: number;
   take_profit_price?: number;
   open_at: string;
@@ -49,7 +51,27 @@ interface Trade {
   screenshots?: string[];
   partial_entries?: PartialLeg[];
   partial_exits?: PartialLeg[];
+  // Options (single-leg) — populated only when asset_class === 'options'
+  asset_class?: string;
+  option_type?: 'CALL' | 'PUT';
+  strike_price?: number;
+  expiration_date?: string;
+  option_outcome?: string | null;
 }
+
+// Expiration-outcome values for single-leg options. Empty string = "normal
+// close / not applicable" and is saved as NULL.
+const OPTION_OUTCOMES: { value: string; label: string }[] = [
+  { value: '', label: 'Normal close' },
+  { value: 'expired_worthless', label: 'Expired worthless' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'exercised', label: 'Exercised' },
+];
+
+const optionOutcomeLabel = (value?: string | null): string | null => {
+  if (!value) return null;
+  return OPTION_OUTCOMES.find((o) => o.value === value)?.label ?? value;
+};
 
 interface EditDraft {
   notes: string;
@@ -58,6 +80,7 @@ interface EditDraft {
   next_time: string;
   tags: string; // comma-separated; split on save
   actual_user_r: string; // string for input binding; parsed to number | null on save
+  option_outcome: string; // '' = normal close (saved as NULL)
 }
 
 // Local mirror of MultiUploadZone's internal Screenshot shape (not exported from that module).
@@ -139,6 +162,7 @@ function tradeToEditDraft(trade: Trade): EditDraft {
     tags: (trade.tags ?? []).join(', '),
     actual_user_r:
       trade.actual_user_r != null ? String(trade.actual_user_r) : '',
+    option_outcome: trade.option_outcome ?? '',
   };
 }
 
@@ -262,6 +286,7 @@ export default function JournalTradeDetail() {
       tags: string[] | null;
       actual_user_r: number | null;
       screenshots: string[];
+      option_outcome?: string | null;
     } = {
       notes: draft.notes || null,
       setup: draft.setup || null,
@@ -272,6 +297,12 @@ export default function JournalTradeDetail() {
         parsedR !== null && !isNaN(parsedR) ? parsedR : null,
       screenshots: finalScreenshots,
     };
+
+    // Options-only: persist the expiration outcome (empty string → NULL).
+    // Guarded so non-option trades never write this column.
+    if (trade.asset_class === 'options') {
+      payload.option_outcome = draft.option_outcome || null;
+    }
 
     try {
       const { data, error } = await supabase
@@ -359,6 +390,17 @@ export default function JournalTradeDetail() {
             }`}>
               {trade.side}
             </span>
+
+            {/* Option Type Badge */}
+            {trade.asset_class === 'options' && trade.option_type && (
+              <span className={`px-3 py-1 rounded-lg text-sm font-medium border ${
+                trade.option_type === 'CALL'
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  : 'bg-red-500/20 text-red-300 border-red-500/30'
+              }`}>
+                {trade.option_type}
+              </span>
+            )}
 
             {/* Outcome Badge */}
             {trade.outcome && trade.outcome !== 'OPEN' && (
@@ -559,6 +601,73 @@ export default function JournalTradeDetail() {
           );
         })()}
       </div>
+
+      {/* Option Details — single-leg options only */}
+      {trade.asset_class === 'options' && (() => {
+        const dte = getDTE(trade.expiration_date);
+        const breakeven = getOptionBreakeven(trade);
+        const maxLoss = getOptionMaxLoss(trade);
+        const maxProfit = getOptionMaxProfit(trade);
+        const fmtExtremum = (e: { value: number | null; unlimited: boolean }) =>
+          e.unlimited ? 'Unlimited' : e.value != null ? `$${e.value.toFixed(2)}` : '—';
+        return (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Option Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {trade.option_type && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Type</label>
+                  <div className={`text-lg font-semibold ${trade.option_type === 'CALL' ? 'text-emerald-400' : 'text-red-300'}`}>
+                    {trade.option_type}
+                  </div>
+                </div>
+              )}
+              {trade.strike_price != null && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Strike</label>
+                  <div className="text-lg font-semibold text-white">${trade.strike_price.toFixed(2)}</div>
+                </div>
+              )}
+              {trade.expiration_date && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Expiration</label>
+                  <div className="text-lg font-semibold text-white">
+                    {trade.expiration_date}
+                    {dte != null && (
+                      <span className={`ml-2 text-sm font-normal ${dte < 0 ? 'text-zinc-500' : dte <= 7 ? 'text-amber-300' : 'text-zinc-400'}`}>
+                        ({dte < 0 ? 'expired' : `${dte} DTE`})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {breakeven != null && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Breakeven</label>
+                  <div className="text-lg font-semibold text-white">${breakeven.toFixed(2)}</div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Max Loss</label>
+                <div className="text-lg font-semibold text-red-400">{fmtExtremum(maxLoss)}</div>
+              </div>
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Max Profit</label>
+                <div className="text-lg font-semibold text-green-400">{fmtExtremum(maxProfit)}</div>
+              </div>
+              {optionOutcomeLabel(trade.option_outcome) && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Outcome</label>
+                  <div className="text-lg font-semibold text-zinc-200">{optionOutcomeLabel(trade.option_outcome)}</div>
+                </div>
+              )}
+            </div>
+            <p className="mt-4 text-xs text-zinc-600">
+              Breakeven and max profit/loss are theoretical, at expiration, and exclude commissions. Short positions carry undefined risk.
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Risk Management */}
       {(trade.risk_usd || trade.reward_usd) && (

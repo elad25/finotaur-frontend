@@ -6,6 +6,7 @@ const TABS = [
   { label: 'Progress', path: '/app/journal/reports/progress' },
   { label: 'Day View', path: '/app/journal/reports/day-view' },
   { label: 'Breakdowns', path: '/app/journal/reports/breakdowns' },
+  { label: 'Options', path: '/app/journal/reports/options' },
   { label: 'Calendar', path: '/app/journal/reports/calendar' },
   { label: 'Compare', path: '/app/journal/reports/compare' },
   { label: 'Scores', path: '/app/journal/reports/scores' },
