@@ -244,6 +244,7 @@ export interface Trade {
   underlying_symbol?: string;
   option_outcome?: string | null;
   position_type?: string;
+  strategy_type?: string | null;
 }
 
 // ================================================================
