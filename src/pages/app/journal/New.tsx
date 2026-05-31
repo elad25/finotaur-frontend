@@ -679,6 +679,16 @@ export default function New() {
   
   // Multi-leg options builder toggle (defaults OFF; single-leg path unchanged)
   const [showMultiLeg, setShowMultiLeg] = useState(false);
+  // Auth user id for the multi-leg builder (component-scope; New.tsx otherwise
+  // reads the user only inside async loaders).
+  const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setEffectiveUserId(data.user?.id ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // 🔥 Partial Exits State
   const [showPartialExits, setShowPartialExits] = useState(false);
