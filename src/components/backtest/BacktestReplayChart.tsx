@@ -788,6 +788,19 @@ export function BacktestReplayChart({
           style={{ height }}
         />
 
+        {/* FINOTAUR brand watermark — bottom-right, faded ("watercolor"). Sits
+            above the canvas but below the cursor / position-box overlays, and
+            never intercepts pointer events. Offset to clear the price axis
+            (right) and time axis (bottom). */}
+        <img
+          src="/logo.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute z-[2] select-none"
+          style={{ right: 64, bottom: TIMESCALE_HEIGHT + 8, width: 132, opacity: 0.16 }}
+          draggable={false}
+        />
+
         {/* ── Draggable risk/reward position box — recomputes on overlayTick
             (pan/zoom/resize), so it never gets stuck like the old static overlay.
             currentPrice is injected from the live cursor bar so Open P&L tracks. ── */}
