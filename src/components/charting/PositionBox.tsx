@@ -98,6 +98,9 @@ export function PositionBox({
   // Box width in BARS (logical units) so it scales with zoom and can extend
   // past the last bar. Persists across re-renders; resized via the right handle.
   const [widthBars, setWidthBars] = useState(50);
+  // Hover state — handles + the middle Open P&L label only show while the
+  // pointer is over the box (TradingView-style). Zones + TP/SL labels stay.
+  const [hovered, setHovered] = useState(false);
 
   const { side, entryPrice, entryTime, size, currentPrice, isPending } = model;
   const tickSize = model.tickSize && model.tickSize > 0 ? model.tickSize : 0.25;
@@ -273,6 +276,13 @@ export function PositionBox({
     'pointer-events-none absolute -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-white shadow';
   const center = bandLeft + bandWidth / 2;
 
+  // Box bounding box (for the hover region). Handles live inside it so moving
+  // the pointer onto a handle doesn't fire the container's mouseleave.
+  const boxTop = Math.min(yTPN, ySLN);
+  const boxHeight = Math.abs(yTPN - ySLN);
+  // Show handles + middle label on hover, or while a drag is in progress.
+  const showControls = hovered || dragRef.current != null;
+
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
       {/* Target zone (green) */}
@@ -300,41 +310,56 @@ export function PositionBox({
       <div className={labelBase} style={{ left: center, top: ySLN + 6, background: RED }}>
         Stop: {fmtPrice(slDelta)} ({slPct.toFixed(3)}%) {slTicks}, Amount: {fmtAmount(slAmount)}
       </div>
-      {/* Entry / Open P&L label */}
-      <div
-        className={`${labelBase} text-zinc-100`}
-        style={{ left: center, top: yEntryN - 26, background: 'rgba(24,24,27,0.92)', border: `1px solid ${ENTRY_LINE}` }}
-      >
-        {isPending ? 'TRIGGER' : `Open P&L: ${openPnl != null ? fmtSigned(openPnl) : '—'}`}, Qty: {size}
-        <br />
-        Risk/reward ratio: {rr.toFixed(2)}
-      </div>
-
-      {/* Resize handles — TradingView layout: 3 on the LEFT (TP / entry / SL),
-          1 on the RIGHT (time width). Blue, matching the reference. */}
-      {/* Target — top-left: drag vertically → take-profit */}
-      <div
-        onPointerDown={startDrag('tp')}
-        className="absolute cursor-ns-resize"
-        style={{ left: bandLeft - HANDLE / 2, top: yTPN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
-      />
-      {/* Entry — middle-left: anchor (entry price is the real fill, not draggable) */}
+      {/* Hover region over the box — reveals the handles + middle Open P&L label
+          only while the pointer is over the box. Handles + label live INSIDE
+          this container (positioned relative to it) so moving the pointer from
+          the box onto a handle does NOT fire the container's mouseleave. */}
       <div
         className="absolute"
-        style={{ left: bandLeft - HANDLE / 2, top: yEntryN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: '50%', pointerEvents: 'none' }}
-      />
-      {/* Stop — bottom-left: drag vertically → stop-loss */}
-      <div
-        onPointerDown={startDrag('sl')}
-        className="absolute cursor-ns-resize"
-        style={{ left: bandLeft - HANDLE / 2, top: ySLN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
-      />
-      {/* Time — middle-right: drag horizontally → extend / shorten the box in time */}
-      <div
-        onPointerDown={startDrag('time')}
-        className="absolute cursor-ew-resize"
-        style={{ left: bandRight - HANDLE / 2, top: yEntryN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
-      />
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{ left: bandLeft, top: boxTop, width: bandWidth, height: boxHeight, pointerEvents: 'auto' }}
+      >
+        {showControls && (
+          <>
+            {/* Entry / Open P&L label (centered on the entry line) */}
+            <div
+              className={`${labelBase} text-zinc-100`}
+              style={{ left: bandWidth / 2, top: yEntryN - boxTop - 26, background: 'rgba(24,24,27,0.92)', border: `1px solid ${ENTRY_LINE}` }}
+            >
+              {isPending ? 'TRIGGER' : `Open P&L: ${openPnl != null ? fmtSigned(openPnl) : '—'}`}, Qty: {size}
+              <br />
+              Risk/reward ratio: {rr.toFixed(2)}
+            </div>
+
+            {/* Resize handles — TradingView layout: 3 on the LEFT (TP / entry /
+                SL), 1 on the RIGHT (time width). Blue, matching the reference. */}
+            {/* Target — top-left: drag vertically → take-profit */}
+            <div
+              onPointerDown={startDrag('tp')}
+              className="absolute cursor-ns-resize"
+              style={{ left: -HANDLE / 2, top: yTPN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
+            />
+            {/* Entry — middle-left: anchor (entry is the real fill, not draggable) */}
+            <div
+              className="absolute"
+              style={{ left: -HANDLE / 2, top: yEntryN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: '50%', pointerEvents: 'none' }}
+            />
+            {/* Stop — bottom-left: drag vertically → stop-loss */}
+            <div
+              onPointerDown={startDrag('sl')}
+              className="absolute cursor-ns-resize"
+              style={{ left: -HANDLE / 2, top: ySLN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
+            />
+            {/* Time — middle-right: drag horizontally → extend / shorten in time */}
+            <div
+              onPointerDown={startDrag('time')}
+              className="absolute cursor-ew-resize"
+              style={{ left: bandWidth - HANDLE / 2, top: yEntryN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 }
