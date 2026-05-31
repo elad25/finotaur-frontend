@@ -57,6 +57,20 @@ export function useBriefing(enabled = true, overrideUserId?: string) {
     enabled,
     staleTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
+    // First-visit auto-poll. When no briefing row exists, the GET endpoint kicks
+    // background generation (server PR #83). Poll so the first briefing surfaces
+    // without a manual refresh. We key off `briefing === null` (NOT `refreshing`):
+    // the server only returns refreshing:true on the request that STARTS generation;
+    // subsequent in-flight polls return refreshing:false, so keying off it would
+    // stop the poll one tick too early. Bounded to ~8 fetches (~35s) so a premium
+    // user with no eligible (closed) trades — generation yields nothing — doesn't
+    // poll forever.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data || data.briefing !== null) return false; // have a briefing → stop
+      if (overrideUserId) return false; // mentor view is read-only; nothing generates
+      return query.state.dataUpdateCount < 8 ? 5000 : false;
+    },
   });
 }
 
