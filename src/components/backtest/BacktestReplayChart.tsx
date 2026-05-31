@@ -342,6 +342,8 @@ export function BacktestReplayChart({
         textColor: THEME.text,
         fontSize: 11,
         fontFamily: 'system-ui, -apple-system, sans-serif',
+        // Hide the TradingView attribution logo (we show our own FINOTAUR mark).
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: THEME.grid, style: 1 },
@@ -788,16 +790,17 @@ export function BacktestReplayChart({
           style={{ height }}
         />
 
-        {/* FINOTAUR brand watermark — bottom-right, faded ("watercolor"). Sits
-            above the canvas but below the cursor / position-box overlays, and
-            never intercepts pointer events. Offset to clear the price axis
-            (right) and time axis (bottom). */}
+        {/* FINOTAUR brand watermark — bottom-LEFT, transparent. The logo PNG has
+            a black background, so mix-blend-mode:screen drops the black (black is
+            the identity for screen) and only the gold bull + wordmark blend onto
+            the dark chart — no opaque box. pointer-events-none; sits above the
+            canvas, below the cursor / position-box overlays. */}
         <img
           src="/logo.png"
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute z-[2] select-none"
-          style={{ right: 64, bottom: TIMESCALE_HEIGHT + 12, width: 160, opacity: 0.6 }}
+          style={{ left: 16, bottom: TIMESCALE_HEIGHT + 12, width: 160, opacity: 0.75, mixBlendMode: 'screen' }}
           draggable={false}
         />
 
