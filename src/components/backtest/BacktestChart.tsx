@@ -38,6 +38,8 @@ import {
   type PendingOrderType,
 } from '@/hooks/useBacktestSession';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
+import { useQueryClient } from '@tanstack/react-query';
+import { backtestStatsKeys } from '@/hooks/useBacktestStats';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { runStrategy } from '@/core/backtest/runStrategy';
 import { BacktestReplayChart, type ContextMenuPriceInfo } from './BacktestReplayChart';
@@ -698,6 +700,7 @@ export function BacktestChart({
 
   // Phase 2: Supabase persistence for "Save Session" button.
   const persistence = useBacktestPersistence();
+  const queryClient = useQueryClient();
   type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1021,6 +1024,10 @@ export function BacktestChart({
         // Enables FINOTAUR AI Phase F compare_live_vs_backtest. 2026-05-29.
         strategyId: activeStrategyId,
       });
+      // Refresh the aggregated backtest dashboard / My-Trades table so the
+      // just-saved session's trades appear immediately (they're React-Query
+      // cached with a 60s staleTime; without this they'd lag until refetch).
+      queryClient.invalidateQueries({ queryKey: backtestStatsKeys.all });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (err) {
