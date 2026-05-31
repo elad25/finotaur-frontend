@@ -1091,6 +1091,7 @@ export function BacktestChart({
         model: {
           side: p.side,
           entryPrice: p.entryPrice,
+          entryTime: p.entryTime as number,
           size: p.size,
           stopLoss: p.stopLoss,
           takeProfit: p.takeProfit,
@@ -1107,6 +1108,7 @@ export function BacktestChart({
         model: {
           side: pending.side,
           entryPrice: pending.triggerPrice,
+          entryTime: pending.createdAt,
           size: pending.size,
           stopLoss: pending.stopLoss,
           takeProfit: pending.takeProfit,

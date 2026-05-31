@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 
 // ═══════════════════════════════════════════════════════════════
 // Model + props
@@ -26,6 +26,9 @@ export interface PositionBoxModel {
   side: 'LONG' | 'SHORT';
   /** Entry price (active position) or trigger price (pending order). */
   entryPrice: number;
+  /** Entry time (UTC seconds) — anchors the box horizontally to the entry bar
+   *  so it scrolls with the chart instead of staying fixed on screen. */
+  entryTime: number;
   /** Position size / contracts — drives Qty + Amount. */
   size: number;
   /** Real stop-loss price, if set. */
@@ -86,17 +89,13 @@ export function PositionBox({
 }: PositionBoxProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Horizontal placement of the band, as a fraction of container width [0..1]
-  // of the band's left edge. Cosmetic only — survives resize.
-  const [bandLeftFrac, setBandLeftFrac] = useState(0.52);
-
   // Drag state: which handle is active. Re-renders are driven by the commits +
   // redrawKey, so we keep the live drag price in a ref and only setState to
   // reflect the in-flight value for a snappy label.
-  const dragRef = useRef<null | 'tp' | 'sl' | 'move'>(null);
+  const dragRef = useRef<null | 'tp' | 'sl'>(null);
   const [livePrice, setLivePrice] = useState<{ kind: 'tp' | 'sl'; price: number } | null>(null);
 
-  const { side, entryPrice, size, currentPrice, isPending } = model;
+  const { side, entryPrice, entryTime, size, currentPrice, isPending } = model;
   const tickSize = model.tickSize && model.tickSize > 0 ? model.tickSize : 0.25;
   const dir = side === 'LONG' ? 1 : -1;
 
@@ -125,13 +124,6 @@ export function PositionBox({
       const kind = dragRef.current;
       if (!root || !kind) return;
       const rect = root.getBoundingClientRect();
-
-      if (kind === 'move') {
-        const x = e.clientX - rect.left;
-        const frac = Math.min(0.92, Math.max(0, x / Math.max(rect.width, 1)));
-        setBandLeftFrac(frac);
-        return;
-      }
 
       const localY = e.clientY - rect.top;
       const price = series.coordinateToPrice(localY);
@@ -165,7 +157,7 @@ export function PositionBox({
   }, [onPointerMove, onTakeProfitChange, onStopLossChange]);
 
   const startDrag = useCallback(
-    (kind: 'tp' | 'sl' | 'move') => (e: React.PointerEvent) => {
+    (kind: 'tp' | 'sl') => (e: React.PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
       dragRef.current = kind;
@@ -189,7 +181,12 @@ export function PositionBox({
   }
 
   const widthPx = rootRef.current?.clientWidth ?? 0;
-  const bandLeft = Math.round(bandLeftFrac * widthPx);
+  // Anchor the band's left edge to the ENTRY BAR's x-coordinate so the box
+  // scrolls with the chart (TradingView behaviour) instead of staying fixed on
+  // screen. Recomputed every render via redrawKey (pan/zoom/resize). If the
+  // entry scrolled off the left edge, clamp to 0 so the box still shows.
+  const rawEntryX = chart.timeScale().timeToCoordinate(entryTime as UTCTimestamp);
+  const bandLeft = rawEntryX != null && Number.isFinite(rawEntryX) ? Math.max(0, Math.round(rawEntryX)) : 0;
   const bandWidth = Math.max(180, Math.min(420, Math.round(widthPx * 0.4)));
 
   // ─── Metrics (real data) ────────────────────────────────────
@@ -281,11 +278,10 @@ export function PositionBox({
         className="absolute cursor-ns-resize rounded-sm"
         style={{ left: bandLeft + bandWidth - HANDLE / 2, top: ySLN - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1px solid ${RED}`, pointerEvents: 'auto' }}
       />
-      {/* Entry move handle — circle, drag to reposition band horizontally */}
+      {/* Entry marker — small dot on the entry line (entry is fixed; not draggable) */}
       <div
-        onPointerDown={startDrag('move')}
-        className="absolute cursor-move rounded-full"
-        style={{ left: bandLeft - 5, top: yEntryN - 5, width: 10, height: 10, background: '#fff', border: `2px solid ${ENTRY_LINE}`, pointerEvents: 'auto' }}
+        className="pointer-events-none absolute rounded-full"
+        style={{ left: bandLeft - 4, top: yEntryN - 4, width: 8, height: 8, background: ENTRY_LINE }}
       />
     </div>
   );
