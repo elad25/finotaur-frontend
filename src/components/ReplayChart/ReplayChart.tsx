@@ -90,6 +90,8 @@ export interface ReplayChartRef {
   closeAllPositions: () => void;
   getPositions: () => Position[];
   getStats: () => any;
+  /** Current replay price (close of the candle at the current replay index). */
+  getCurrentPrice: () => number;
   
   // Drawings
   clearDrawings: () => void;
@@ -99,6 +101,13 @@ export interface ReplayChartRef {
   // Cut Point
   setCutPoint: (index: number) => void;
   clearCutPoint: () => void;
+
+  // Navigation
+  stepForward: () => void;
+  stepBackward: () => void;
+  jumpToIndex: (index: number) => void;
+  getTotalCandles: () => number;
+  getCurrentIndex: () => number;
 }
 
 // ===================================
@@ -548,6 +557,7 @@ export const ReplayChart = forwardRef<ReplayChartRef, ReplayChartProps>((
     },
     getPositions: () => tradingEngineRef.current.getPositions(),
     getStats: () => tradingEngineRef.current.getStats(),
+    getCurrentPrice: () => (currentIndex !== null ? allData[currentIndex]?.close ?? 0 : 0),
     clearDrawings: deleteAll,
     exportDrawings: () => drawings,
     importDrawings: (drw) => {
@@ -555,6 +565,11 @@ export const ReplayChart = forwardRef<ReplayChartRef, ReplayChartProps>((
     },
     setCutPoint: handleSetCutPoint,
     clearCutPoint: handleClearCutPoint,
+    stepForward,
+    stepBackward,
+    jumpToIndex,
+    getTotalCandles: () => allData.length,
+    getCurrentIndex: () => (currentIndex !== null ? currentIndex : allData.length - 1),
   }), [
     loadData,
     symbol,
