@@ -155,7 +155,6 @@ const JournalTradeDetail = lazy(() => import("@/pages/app/journal/TradeDetail"))
 const JournalImport = lazy(() => import("@/pages/app/journal/Import"));
 const JournalExport = lazy(() => import("@/pages/app/journal/Export"));
 const JournalNotes = lazy(() => import("@/pages/app/journal/Notes"));
-const JournalAnalytics = lazy(() => import("@/pages/app/journal/Analytics"));
 const JournalReportsLayout = lazy(() => import("@/pages/app/journal/reports/ReportsLayout"));
 const JournalReportsProgress = lazy(() => import("@/pages/app/journal/reports/ProgressTracker"));
 const JournalReportsDayView = lazy(() => import("@/pages/app/journal/reports/DayView"));
@@ -577,7 +576,8 @@ function AppContent() {
 <Route path="journal/import" element={<JournalRoute><JournalImport /></JournalRoute>} />
 <Route path="journal/export" element={<JournalRoute><JournalExport /></JournalRoute>} />
 <Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />
-<Route path="journal/analytics" element={<JournalRoute><JournalAnalytics /></JournalRoute>} />
+{/* "Statistics" retired — merged into the unified Reports & Stats hub. Redirect legacy links. */}
+<Route path="journal/analytics" element={<Navigate to="/app/journal/reports/overview" replace />} />
 {/* Legacy keyword/template "AI Review" retired; redirect to the real LLM-grounded coach (finotaur-ai) */}
 <Route path="journal/ai-review" element={<Navigate to="/app/journal/finotaur-ai" replace />} />
 <Route path="journal/reports" element={<JournalRoute><JournalReportsLayout /></JournalRoute>}>

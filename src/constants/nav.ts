@@ -252,7 +252,7 @@ ai: {
       { label: 'Add Trade', path: '/app/journal/new', icon: PlusSquare },
       { label: 'Trades Journal', path: '/app/journal/my-trades', icon: FileText },
       { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
-      { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
+      { label: 'Reports & Stats', path: '/app/journal/reports', icon: BarChart3 },
       { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
       { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
       { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks },

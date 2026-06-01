@@ -63,8 +63,7 @@ import {
   Link2
 } from 'lucide-react';
 import { 
-  prefetchSettingsData, 
-  prefetchAnalytics, 
+  prefetchSettingsData,
   prefetchStrategies,
   prefetchTrades,
   prefetchUserProfile
@@ -269,9 +268,8 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Add Trade', path: '/app/journal/new', icon: PlusCircle },
     { label: 'Trades Journal', path: '/app/journal/my-trades', icon: BookOpen },
     { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
-    { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
-    { label: 'Reports', path: '/app/journal/reports', icon: FileBarChart },
+    { label: 'Reports & Stats', path: '/app/journal/reports', icon: FileBarChart },
     { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
     { label: 'Auto-Tagger', path: '/app/journal/auto-tagger', icon: Sparkles },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
@@ -470,7 +468,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     
     const prefetchMap: Record<string, () => Promise<void>> = {
       '/app/journal/settings': prefetchSettingsData,
-      '/app/journal/analytics': prefetchAnalytics,
+      '/app/journal/reports': prefetchTrades,
       '/app/journal/strategies': prefetchStrategies,
       '/app/journal/my-trades': prefetchTrades,
       '/app/journal/performance': prefetchUserProfile,

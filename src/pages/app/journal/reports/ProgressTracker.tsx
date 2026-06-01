@@ -15,8 +15,8 @@ export default function ProgressTracker() {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-yellow-100">Progress Tracker</h2>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h2 className="text-2xl font-semibold text-ink-primary">Progress Tracker</h2>
+        <p className="text-sm text-ink-tertiary mt-1">
           A small daily habit, repeated, beats a one-time sprint.
         </p>
       </div>
@@ -27,10 +27,10 @@ export default function ProgressTracker() {
         <PeriodScoreCard label="Monthly score" score={tracker.monthlyScore} />
       </div>
 
-      <div className="rounded-2xl border border-yellow-200/15 bg-[#141414] p-5 space-y-4">
+      <div className="rounded-2xl border border-white/[0.06] bg-[#141414] p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-yellow-100">Today's rules</h3>
-          <span className="text-xs text-zinc-400">{activeCount}/10 active</span>
+          <h3 className="text-sm font-medium text-ink-primary">Today's rules</h3>
+          <span className="text-xs text-ink-tertiary">{activeCount}/10 active</span>
         </div>
         <RulesList
           rules={tracker.rules.filter(r => r.isActive).sort((a, b) => a.order - b.order)}

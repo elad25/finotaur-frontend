@@ -19,18 +19,18 @@ export default function ReportsTabsNav() {
   const location = useLocation();
 
   return (
-    <div className="rounded-2xl border border-yellow-200/15 bg-[#141414] mt-6">
-      <div className="sticky top-0 z-10 backdrop-blur supports-backdrop-blur:bg-black/20 border-b border-yellow-200/10 px-4 md:px-6 py-2 flex gap-2 overflow-x-auto">
+    <div className="rounded-2xl border border-white/[0.06] bg-[#141414] mt-6">
+      <div className="sticky top-0 z-10 backdrop-blur supports-backdrop-blur:bg-black/20 border-b border-white/[0.06] px-4 md:px-6 py-2 flex gap-2 overflow-x-auto">
         {TABS.map(tab => {
           const isActive = location.pathname.startsWith(tab.path);
           return (
             <button
               key={tab.path}
               onClick={() => navigate(tab.path)}
-              className={`px-3 py-1.5 rounded-full text-sm transition ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                 isActive
-                  ? 'bg-yellow-600/25 text-yellow-100 border border-yellow-500/40'
-                  : 'text-zinc-300 hover:bg-zinc-800'
+                  ? 'bg-[#C9A646]/55 text-white shadow-[0_0_18px_rgba(201,166,70,0.18)]'
+                  : 'text-ink-secondary hover:text-ink-primary'
               }`}
             >
               {tab.label}
