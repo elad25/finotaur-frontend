@@ -361,7 +361,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   const storageKey = collapseMode === 'collapsed-default'
     ? 'finotaur-copilot-sidebar-expanded'
     : 'finotaur-sidebar-expanded';
-  const defaultExpanded = collapseMode !== 'collapsed-default';
+  // Default to the narrow icon-rail on first visit for every surface
+  // (space-efficient). Users who explicitly expand via the toggle keep their
+  // choice — that preference is honored below via `saved !== 'false'`.
+  const defaultExpanded = false;
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
@@ -676,7 +679,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
 
               {/* Tooltip when collapsed */}
               {!isExpanded && (
-                <div className="absolute left-full ml-3 px-2 py-1 bg-base-900 border border-gray-600 rounded text-xs whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
+                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                   {item.label}
                   {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
                   {showBetaBadge && (
