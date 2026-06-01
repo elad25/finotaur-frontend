@@ -125,6 +125,8 @@ const TICKET_CATEGORIES: CategoryOption[] = [
 // ==================== ADMIN EMAIL CONSTANT ====================
 const ADMIN_EMAIL = 'elad2550@gmail.com';
 
+const AUTO_ESCALATE_REASONS = ['billing', 'bug', 'feature_request', 'frustrated'];
+
 const SUPPORT_TOPIC_SUGGESTIONS = [
   'I have a technical issue',
   'I need help with billing',
@@ -177,6 +179,7 @@ export default function SupportWidget() {
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [lastAiReason, setLastAiReason] = useState<string | null>(null);
   const [lastAiCategory, setLastAiCategory] = useState<string | null>(null);
+  const [autoEscalatedTicketId, setAutoEscalatedTicketId] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -761,6 +764,24 @@ async function loadTicketById(ticketId: string) {
           timestamp: new Date().toISOString(),
         },
       ]);
+
+      if (!isGuest && data?.escalate === true && AUTO_ESCALATE_REASONS.includes(data?.reason) && !autoEscalatedTicketId && !messageSent) {
+        try {
+          const id = await persistEscalationTicket();
+          if (id) {
+            setAutoEscalatedTicketId(id);
+            setGuidedMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                type: 'system',
+                content: "✓ I've shared this with our team — they'll follow up by email. You can keep adding details here.",
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+          }
+        } catch (e) { console.error('Auto-escalation failed:', e); }
+      }
     } catch (err) {
       console.error('Support AI error:', err);
       setAiUnavailable(true);
@@ -778,6 +799,67 @@ async function loadTicketById(ticketId: string) {
     }
   }
 
+  async function persistEscalationTicket(): Promise<string | null> {
+    if (isGuest && (!userName || !userEmail)) return null;
+
+    const transcript = guidedMessages.length > 0
+      ? guidedMessages
+      : [{
+          id: crypto.randomUUID(),
+          type: 'customer' as const,
+          content: currentMessage.trim() || 'I would like to talk to a person.',
+          timestamp: new Date().toISOString(),
+        }];
+
+    const firstCustomer = transcript.find((m) => m.type === 'customer');
+    const subjectLine = firstCustomer ? firstCustomer.content.slice(0, 80) : 'Support Request';
+
+    const escalationReason = lastAiReason;
+    const ticketCategory = lastAiCategory || (escalationReason === 'billing' ? 'payment' : escalationReason === 'bug' ? 'technical' : escalationReason === 'feature_request' ? 'feedback' : null);
+    const ticketPriority = (escalationReason === 'billing' || escalationReason === 'frustrated') ? 'high' : 'normal';
+    const ticketTags = escalationReason ? [escalationReason] : [];
+
+    const ticketPayload = {
+      user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
+      user_email: userEmail,
+      user_name: userName,
+      subject: subjectLine,
+      category: ticketCategory,
+      priority: ticketPriority,
+      tags: ticketTags,
+      metadata: { escalation_reason: escalationReason, source: 'ai_chat', summary: subjectLine },
+      message: firstCustomer?.content || 'Support Request',
+      messages: transcript,
+      status: 'open',
+    };
+
+    let data: any = null;
+    let dbSuccess = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { data: insertData, error } = await supabase
+        .from('support_tickets')
+        .insert(ticketPayload)
+        .select()
+        .single();
+      if (!error && insertData) { data = insertData; dbSuccess = true; break; }
+      console.error(`Escalation insert attempt ${attempt + 1} failed:`, error);
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-support-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ type: dbSuccess ? 'new_ticket' : 'fallback_ticket', record: data || ticketPayload, db_failed: !dbSuccess }),
+      });
+    } catch (e) { console.error('Escalation email fallback failed:', e); }
+
+    if (dbSuccess && !isGuest) { setSelectedTicket(data); setIsNewConversation(false); loadUserTickets(); }
+
+    return data?.id ?? null;
+  }
+
   async function escalateToHuman() {
     if (isGuest && (!userName || !userEmail)) {
       setShowGuestForm(true);
@@ -785,65 +867,21 @@ async function loadTicketById(ticketId: string) {
       return;
     }
     if (sending) return;
-    setSending(true);
-    try {
-      const transcript = guidedMessages.length > 0
-        ? guidedMessages
-        : [{
-            id: crypto.randomUUID(),
-            type: 'customer' as const,
-            content: currentMessage.trim() || 'I would like to talk to a person.',
-            timestamp: new Date().toISOString(),
-          }];
-
-      const firstCustomer = transcript.find((m) => m.type === 'customer');
-      const subjectLine = firstCustomer ? firstCustomer.content.slice(0, 80) : 'Support Request';
-
-      const escalationReason = lastAiReason;
-      const ticketCategory = lastAiCategory || (escalationReason === 'billing' ? 'payment' : escalationReason === 'bug' ? 'technical' : escalationReason === 'feature_request' ? 'feedback' : null);
-      const ticketPriority = (escalationReason === 'billing' || escalationReason === 'frustrated') ? 'high' : 'normal';
-      const ticketTags = escalationReason ? [escalationReason] : [];
-
-      const ticketPayload = {
-        user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
-        user_email: userEmail,
-        user_name: userName,
-        subject: subjectLine,
-        category: ticketCategory,
-        priority: ticketPriority,
-        tags: ticketTags,
-        metadata: { escalation_reason: escalationReason, source: 'ai_chat', summary: subjectLine },
-        message: firstCustomer?.content || 'Support Request',
-        messages: transcript,
-        status: 'open',
-      };
-
-      let data: any = null;
-      let dbSuccess = false;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const { data: insertData, error } = await supabase
-          .from('support_tickets')
-          .insert(ticketPayload)
-          .select()
-          .single();
-        if (!error && insertData) { data = insertData; dbSuccess = true; break; }
-        console.error(`Escalation insert attempt ${attempt + 1} failed:`, error);
-        if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
-      }
-
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-support-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
-          body: JSON.stringify({ type: dbSuccess ? 'new_ticket' : 'fallback_ticket', record: data || ticketPayload, db_failed: !dbSuccess }),
-        });
-      } catch (e) { console.error('Escalation email fallback failed:', e); }
-
-      if (dbSuccess && !isGuest) { setSelectedTicket(data); setIsNewConversation(false); loadUserTickets(); }
+    // If a ticket was already auto-created this conversation, don't create a duplicate.
+    if (autoEscalatedTicketId) {
       setMessageSent(true);
       toast.success("Connected — our team has your conversation and will follow up shortly.");
       if (isGuest) setTimeout(() => handleClose(), 3000);
+      return;
+    }
+    setSending(true);
+    try {
+      const id = await persistEscalationTicket();
+      if (id || true) { // email fallback may have run even if id is null
+        setMessageSent(true);
+        toast.success("Connected — our team has your conversation and will follow up shortly.");
+        if (isGuest) setTimeout(() => handleClose(), 3000);
+      }
     } catch (e) {
       console.error('Escalation error:', e);
       toast.error('Could not reach support. Please try again.');
@@ -1717,6 +1755,16 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         {isNewConversation ? (
                           <div className="min-h-full flex flex-col justify-end space-y-4 pb-2">
                             {guidedMessages.map((msg, idx) => (
+                              msg.type === 'system' ? (
+                                <div
+                                  key={msg.id || idx}
+                                  className="flex justify-center animate-in fade-in duration-200 py-1"
+                                >
+                                  <div className="text-[11px] text-[#64748B] italic text-center px-3">
+                                    {msg.content}
+                                  </div>
+                                </div>
+                              ) : (
                               <div
                                 key={msg.id || idx}
                                 className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200`}
@@ -1755,6 +1803,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   </div>
                                 </div>
                               </div>
+                              )
                             ))}
 
                             {showSupportPrompt && !messageSent && (
