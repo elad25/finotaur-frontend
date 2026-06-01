@@ -139,6 +139,12 @@ const SUPPORT_TOPIC_FOLLOW_UPS: Record<string, string> = {
   'I want to share feedback': 'Thanks. What feedback would you like to share, and what would make the experience better for you?',
 };
 
+const SUPPORT_AGENT_AVATARS = [
+  '/support-avatars/agent-1.jpg',
+  '/support-avatars/agent-2.jpg',
+  '/support-avatars/agent-3.jpg',
+];
+
 export default function SupportWidget() {
   // ==================== STATE ====================
   const [isOpen, setIsOpen] = useState(false);
@@ -167,6 +173,8 @@ export default function SupportWidget() {
   const [guidedMessages, setGuidedMessages] = useState<ChatMessage[]>([]);
   const [guidedStep, setGuidedStep] = useState<GuidedSupportStep>('idle');
   const [guidedTopic, setGuidedTopic] = useState('');
+  const [aiThinking, setAiThinking] = useState(false);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -205,7 +213,7 @@ export default function SupportWidget() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedTicket?.messages, guidedMessages, guidedStep, isNewConversation, messageSent, isTyping, showSupportPrompt]);
+  }, [selectedTicket?.messages, guidedMessages, guidedStep, isNewConversation, messageSent, isTyping, showSupportPrompt, aiThinking]);
 
   useEffect(() => {
     if (isOpen && !isGuest) {
@@ -262,7 +270,7 @@ export default function SupportWidget() {
     const timer = window.setTimeout(() => {
       setIsTyping(false);
       setShowSupportPrompt(true);
-    }, 900);
+    }, 2000);
 
     return () => {
       window.clearTimeout(timer);
@@ -705,7 +713,138 @@ async function loadTicketById(ticketId: string) {
     }
   }
 
+  async function sendToAi(userText: string) {
+    const trimmed = userText.trim();
+    if (!trimmed) return;
+
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      type: 'customer',
+      content: trimmed,
+      timestamp: new Date().toISOString(),
+    };
+    const baseHistory = [...guidedMessages, userMsg];
+    setGuidedMessages(baseHistory);
+    setCurrentMessage('');
+    setAiThinking(true);
+
+    try {
+      const apiMessages = baseHistory
+        .filter((m) => m.type === 'customer' || m.type === 'admin')
+        .map((m) => ({
+          role: m.type === 'customer' ? 'user' : 'assistant',
+          content: m.content,
+        }));
+
+      const res = await fetch('/api/support-ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: apiMessages, userName: userName || undefined }),
+      });
+
+      if (!res.ok) throw new Error(`AI ${res.status}`);
+      const data = await res.json();
+      const replyText = (data?.reply || '').trim();
+      if (!replyText) throw new Error('empty reply');
+
+      setGuidedMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: 'admin',
+          content: replyText,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } catch (err) {
+      console.error('Support AI error:', err);
+      setAiUnavailable(true);
+      setGuidedMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: 'admin',
+          content: "I'm having trouble answering right now. Tap \"Talk to a person\" below and our support team will help you directly.",
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setAiThinking(false);
+    }
+  }
+
+  async function escalateToHuman() {
+    if (isGuest && (!userName || !userEmail)) {
+      setShowGuestForm(true);
+      toast.error('Please add your contact info so we can reach you');
+      return;
+    }
+    if (sending) return;
+    setSending(true);
+    try {
+      const transcript = guidedMessages.length > 0
+        ? guidedMessages
+        : [{
+            id: crypto.randomUUID(),
+            type: 'customer' as const,
+            content: currentMessage.trim() || 'I would like to talk to a person.',
+            timestamp: new Date().toISOString(),
+          }];
+
+      const firstCustomer = transcript.find((m) => m.type === 'customer');
+      const subjectLine = firstCustomer ? firstCustomer.content.slice(0, 80) : 'Support Request';
+
+      const ticketPayload = {
+        user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
+        user_email: userEmail,
+        user_name: userName,
+        subject: subjectLine,
+        category: null,
+        message: firstCustomer?.content || 'Support Request',
+        messages: transcript,
+        status: 'open',
+      };
+
+      let data: any = null;
+      let dbSuccess = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { data: insertData, error } = await supabase
+          .from('support_tickets')
+          .insert(ticketPayload)
+          .select()
+          .single();
+        if (!error && insertData) { data = insertData; dbSuccess = true; break; }
+        console.error(`Escalation insert attempt ${attempt + 1} failed:`, error);
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+      }
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-support-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+          body: JSON.stringify({ type: dbSuccess ? 'new_ticket' : 'fallback_ticket', record: data || ticketPayload, db_failed: !dbSuccess }),
+        });
+      } catch (e) { console.error('Escalation email fallback failed:', e); }
+
+      if (dbSuccess && !isGuest) { setSelectedTicket(data); setIsNewConversation(false); loadUserTickets(); }
+      setMessageSent(true);
+      toast.success("Connected — our team has your conversation and will follow up shortly.");
+      if (isGuest) setTimeout(() => handleClose(), 3000);
+    } catch (e) {
+      console.error('Escalation error:', e);
+      toast.error('Could not reach support. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function handleSendMessage() {
+    if (isNewConversation && !messageSent && guidedStep === 'idle') {
+      await sendToAi(currentMessage);
+      return;
+    }
+
     if (isGuest && (!userName || !userEmail)) {
       toast.error('Please fill in your contact information first');
       return;
@@ -1088,21 +1227,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     resetGuidedSupportFlow();
   };
 
-  const handleTopicSuggestionClick = (topic: string) => {
-    const customerMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      type: 'customer',
-      content: topic,
-      timestamp: new Date().toISOString(),
-    };
-
-    setGuidedTopic(topic);
-    setGuidedStep('details');
-    setGuidedMessages([customerMessage]);
-    setCurrentMessage('');
+  function handleTopicSuggestionClick(topic: string) {
     setShowSupportPrompt(false);
-    appendGuidedAdminMessage(SUPPORT_TOPIC_FOLLOW_UPS[topic] || 'Got it. Tell me a bit more so we can understand the issue.');
-  };
+    sendToAi(topic);
+  }
 
   // ==================== RENDER ====================
 
@@ -1175,19 +1303,31 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     </button>
                   )}
                   
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-[#1E88E5] opacity-20 blur-lg rounded-lg"></div>
-                    <div className="relative h-10 w-10 rounded-lg bg-[#1E88E5]/10 flex items-center justify-center border border-[#42A5F5]/30">
-                      <UserRound className="h-5 w-5 text-[#42A5F5]" strokeWidth={2.5} />
-                    </div>
+                  <div className="flex -space-x-3">
+                    {SUPPORT_AGENT_AVATARS.map((src, i) => (
+                      <img
+                        key={src}
+                        src={src}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-9 w-9 rounded-full border-2 border-white object-cover shadow-sm"
+                        style={{ zIndex: SUPPORT_AGENT_AVATARS.length - i }}
+                      />
+                    ))}
                   </div>
-                  
+
                   <div>
-                    <h3 className="text-sm font-semibold text-[#111827] tracking-tight font-['Inter',sans-serif]">
-                      Finotaur
-                    </h3>
-                    <p className="text-[10px] text-[#1D4ED8] font-medium mt-0.5 font-['Inter',sans-serif]">
-                      Support & Updates
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="text-sm font-semibold text-[#111827] tracking-tight font-['Inter',sans-serif]">
+                        Finotaur
+                      </h3>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#1D4ED8]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                        AI Assistant
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#64748B] font-medium mt-0.5 font-['Inter',sans-serif]">
+                      Ask us anything, or share your feedback
                     </p>
                   </div>
                 </div>
@@ -1571,12 +1711,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                 <div className="max-w-[75%]">
                                   {msg.type === 'admin' && (
                                     <div className="flex items-center gap-2 mb-2">
-                                      <div className="h-6 w-6 rounded-lg bg-[#E5E7EB] flex items-center justify-center border border-[#C8CDD6]">
-                                        <Shield className="h-3.5 w-3.5 text-[#475569]" strokeWidth={2.5} />
-                                      </div>
-                                      <span className="text-xs font-medium text-[#475569]">
-                                        Support Team
-                                      </span>
+                                      <img src={SUPPORT_AGENT_AVATARS[0]} alt="" aria-hidden="true" className="h-6 w-6 rounded-full border border-white object-cover shadow-sm" />
+                                      <span className="text-xs font-semibold text-[#334155]">Finotaur AI</span>
                                     </div>
                                   )}
 
@@ -1612,14 +1748,17 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                               <>
                                 <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
                                   <div className="flex justify-start">
-                                    <div className="max-w-[75%]">
-                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm">
+                                    <div className="max-w-[82%]">
+                                      <div className="flex items-center gap-2 mb-1.5">
+                                        <img src={SUPPORT_AGENT_AVATARS[0]} alt="" aria-hidden="true" className="h-6 w-6 rounded-full border border-white object-cover shadow-sm" />
+                                        <span className="text-xs font-semibold text-[#334155] font-['Inter',sans-serif]">Support Assistant</span>
+                                        <span className="text-[10px] text-[#94A3B8] font-['Inter',sans-serif]">· AI Agent · Just now</span>
+                                      </div>
+                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm space-y-2">
                                         <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
-                                          ✨ How can we help?
+                                          👋 Hi {userName ? userName.split(' ')[0] : 'there'}! You're chatting with the Finotaur AI Assistant. Share your question in detail and I'll do my best to help instantly. If I can't, you'll see an option to talk to a person.
                                         </p>
-                                        <span className="text-[10px] text-[#64748B] mt-2 block">
-                                          {formatTime(new Date().toISOString())}
-                                        </span>
+                                        <p className="text-sm font-medium text-[#1F2937] font-['Inter',sans-serif]">How can I help?</p>
                                       </div>
                                     </div>
                                   </div>
@@ -1639,6 +1778,20 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   </div>
                                 </div>
                               </>
+                            )}
+
+                            {guidedMessages.some((m) => m.type === 'customer') && !messageSent && (
+                              <div className="flex justify-start animate-in fade-in duration-200">
+                                <button
+                                  type="button"
+                                  onClick={escalateToHuman}
+                                  disabled={sending}
+                                  className="inline-flex items-center gap-2 rounded-full border border-[#C8CDD6] bg-white/80 px-4 py-2 text-xs font-medium text-[#334155] transition-all duration-200 hover:border-[#1D4ED8]/45 hover:bg-[#EFF6FF] hover:text-[#1D4ED8] disabled:opacity-50"
+                                >
+                                  <UserRound className="h-3.5 w-3.5" />
+                                  Talk to a person
+                                </button>
+                              </div>
                             )}
 
                             {guidedStep === 'ready' && !messageSent && (
@@ -1769,7 +1922,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                           ))
                         )}
                         
-                        {isTyping && (
+                        {(isTyping || aiThinking) && (
                           <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
                             <div className="max-w-[75%]">
                               <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm">
