@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Square } from 'lucide-react';
+import { Send, Square, FileText } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import MessageBubble from './MessageBubble';
@@ -477,70 +477,95 @@ function EmptyState({
   onDiscuss?: (insight: Insight) => void;
 }): JSX.Element {
   const insights = briefing?.insights ?? [];
+  const hasBrief = insights.length > 0;
+  const [briefOpen, setBriefOpen] = useState(false);
 
-  // No briefing yet (generating, or genuinely none) → generic starter chips.
-  if (insights.length === 0) {
-    return (
-      <div className="m-auto flex w-full max-w-2xl flex-col items-center gap-ds-4 py-ds-6 text-center">
-        <div>
-          <p className="font-sans text-h4 font-medium text-ink-primary">
-            FINOTAUR <span className="text-gold-primary">AI Assistant</span>
-          </p>
-          <p className="mt-ds-1 text-ink-secondary text-sm">
-            Ask about your trades, setups, and performance to begin.
-          </p>
-        </div>
-        <PromptChips onSelect={onChipSelect} disabled={inputDisabled} />
-      </div>
-    );
-  }
-
-  // Briefing present → each finding is a condensed, tappable starter (featured first).
-  const ordered = [...insights].sort(
-    (a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)),
-  );
   const handleSelect = (insight: Insight) => {
     if (onDiscuss) onDiscuss(insight);
     else onChipSelect(buildDiscussPrompt(insight));
   };
 
-  return (
-    <div className="m-auto flex w-full max-w-2xl flex-col gap-ds-4 py-ds-6">
-      <p className="text-center text-ink-secondary text-sm">
-        Today&apos;s briefing — tap a finding to dig in
-      </p>
-      <div className="flex flex-col gap-ds-2">
-        {ordered.map((insight) => (
+  // ── Expanded brief — the full findings breakdown (featured first) ──
+  if (hasBrief && briefOpen) {
+    const ordered = [...insights].sort(
+      (a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)),
+    );
+    return (
+      <div className="m-auto flex w-full max-w-2xl flex-col gap-ds-4 py-ds-6">
+        <div className="flex items-center justify-between">
+          <p className="text-ink-secondary text-sm">Your situation — tap a finding to dig in</p>
           <button
-            key={insight.id}
             type="button"
-            disabled={inputDisabled}
-            onClick={() => handleSelect(insight)}
-            className={[
-              'group w-full rounded-[10px] border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2 text-left',
-              'transition-colors duration-base hover:border-gold-primary/50 hover:bg-surface-2',
-              'disabled:pointer-events-none disabled:opacity-50',
-            ].join(' ')}
+            onClick={() => setBriefOpen(false)}
+            className="font-sans text-xs text-ink-tertiary underline underline-offset-2 transition-colors duration-base hover:text-ink-primary"
           >
-            <div className="flex items-start gap-ds-2">
-              {insight.featured && (
-                <span className="mt-0.5 shrink-0 rounded-full bg-gold-primary/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold-primary">
-                  Top
-                </span>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="font-sans text-sm font-medium text-ink-primary">{insight.title}</p>
-                {insight.metric && (
-                  <p className="mt-0.5 font-mono text-[11px] tabular-nums text-ink-tertiary">
-                    {insight.metric}
-                  </p>
-                )}
-              </div>
-            </div>
+            ← Back
           </button>
-        ))}
+        </div>
+        <div className="flex flex-col gap-ds-2">
+          {ordered.map((insight) => (
+            <button
+              key={insight.id}
+              type="button"
+              disabled={inputDisabled}
+              onClick={() => handleSelect(insight)}
+              className={[
+                'group w-full rounded-[10px] border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2 text-left',
+                'transition-colors duration-base hover:border-gold-primary/50 hover:bg-surface-2',
+                'disabled:pointer-events-none disabled:opacity-50',
+              ].join(' ')}
+            >
+              <div className="flex items-start gap-ds-2">
+                {insight.featured && (
+                  <span className="mt-0.5 shrink-0 rounded-full bg-gold-primary/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold-primary">
+                    Top
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-sans text-sm font-medium text-ink-primary">{insight.title}</p>
+                  {insight.metric && (
+                    <p className="mt-0.5 font-mono text-[11px] tabular-nums text-ink-tertiary">
+                      {insight.metric}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <p className="text-center text-ink-muted text-xs">…or ask anything below.</p>
       </div>
-      <p className="text-center text-ink-muted text-xs">…or ask anything below.</p>
+    );
+  }
+
+  // ── Default — suggested questions; the first one opens the full brief ──
+  return (
+    <div className="m-auto flex w-full max-w-2xl flex-col items-center gap-ds-4 py-ds-6 text-center">
+      <div>
+        <p className="font-sans text-h4 font-medium text-ink-primary">
+          FINOTAUR <span className="text-gold-primary">AI Assistant</span>
+        </p>
+        <p className="mt-ds-1 text-ink-secondary text-sm">
+          {hasBrief
+            ? 'Get a brief on where you stand, or ask about your trades.'
+            : 'Ask about your trades, setups, and performance to begin.'}
+        </p>
+      </div>
+
+      {hasBrief && (
+        <button
+          type="button"
+          disabled={inputDisabled}
+          onClick={() => setBriefOpen(true)}
+          className="flex w-full items-center gap-ds-2 rounded-[12px] border border-gold-primary/40 bg-gold-primary/10 px-ds-3 py-ds-3 text-left text-sm font-medium text-ink-primary transition-colors duration-base hover:border-gold-primary/70 hover:bg-gold-primary/15 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <FileText size={16} className="shrink-0 text-gold-primary" />
+          <span>Brief me on my situation today</span>
+          <span className="ml-auto shrink-0 text-xs text-ink-tertiary">{insights.length} findings →</span>
+        </button>
+      )}
+
+      <PromptChips onSelect={onChipSelect} disabled={inputDisabled} />
     </div>
   );
 }
