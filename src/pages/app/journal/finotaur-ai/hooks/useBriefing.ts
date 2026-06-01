@@ -64,12 +64,13 @@ export function useBriefing(enabled = true, overrideUserId?: string) {
     // subsequent in-flight polls return refreshing:false, so keying off it would
     // stop the poll one tick too early. Bounded to ~8 fetches (~35s) so a premium
     // user with no eligible (closed) trades — generation yields nothing — doesn't
-    // poll forever.
+    // poll forever. Interval is 10s (not 5s) to stay well under the /briefing
+    // burst rate limit (~10 req/60s) — at 5s a slow generation could trip a 429.
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data || data.briefing !== null) return false; // have a briefing → stop
       if (overrideUserId) return false; // mentor view is read-only; nothing generates
-      return query.state.dataUpdateCount < 8 ? 5000 : false;
+      return query.state.dataUpdateCount < 9 ? 10000 : false; // ~90s ceiling
     },
   });
 }
