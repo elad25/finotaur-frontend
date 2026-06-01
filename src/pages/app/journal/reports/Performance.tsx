@@ -8,10 +8,10 @@
  * NOTE: <ReportsTabsNav> is mounted ABOVE this component by the route parent (ReportsLayout).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useId } from 'react';
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -321,6 +321,7 @@ function ChartPanel({
   granularity,
   onGranularityChange,
 }: ChartPanelProps) {
+  const uid = useId().replace(/:/g, '');
   const primaryDef = findMetric(primaryMetricKey);
   const secondaryDef = secondaryMetricKey ? findMetric(secondaryMetricKey) : null;
 
@@ -423,7 +424,27 @@ function ChartPanel({
       ) : (
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%" debounce={100}>
-            <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <defs>
+                {/* Primary area fill — gold, fades downward */}
+                <linearGradient id={`primaryFill-${uid}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#C9A646" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#C9A646" stopOpacity={0} />
+                </linearGradient>
+                {/* Secondary area fill — green, subtle downward fade */}
+                <linearGradient id={`secondaryFill-${uid}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#4AD295" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#4AD295" stopOpacity={0} />
+                </linearGradient>
+                {/* Glow filter */}
+                <filter id={`perfGlow-${uid}`}>
+                  <feGaussianBlur stdDeviation="3.5" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
               <CartesianGrid {...CHART_STYLE.grid} />
               <XAxis
                 dataKey="date"
@@ -440,7 +461,14 @@ function ChartPanel({
                 width={60}
               />
               <Tooltip
-                {...CHART_STYLE.tooltip}
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--surface-1, 220 14% 8%))',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                  borderRadius: 12,
+                  fontSize: '12px',
+                  color: '#fff',
+                  boxShadow: '0 0 20px rgba(201,166,70,0.15)',
+                }}
                 formatter={(value: number, name: string) => {
                   const def = name === 'primary' ? primaryDef : (secondaryDef ?? primaryDef);
                   return [fmtMetricValue(value, def.format), def.label];
@@ -448,26 +476,30 @@ function ChartPanel({
                 labelFormatter={(label: string) => `Date: ${label}`}
               />
               <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="primary"
-                stroke="#C9A84C"
-                strokeWidth={2}
+                stroke="#C9A646"
+                fill={`url(#primaryFill-${uid})`}
+                strokeWidth={2.5}
+                filter={`url(#perfGlow-${uid})`}
                 dot={false}
                 isAnimationActive={false}
+                activeDot={{ r: 5, fill: '#C9A646', stroke: '#0B0B0D', strokeWidth: 2 }}
               />
               {secondaryDef && (
-                <Line
+                <Area
                   type="monotone"
                   dataKey="secondary"
                   stroke="#4AD295"
+                  fill={`url(#secondaryFill-${uid})`}
                   strokeWidth={2}
                   dot={false}
                   isAnimationActive={false}
                   connectNulls
                 />
               )}
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       )}
@@ -660,8 +692,8 @@ function SubTabBar({ value, onChange }: SubTabBarProps) {
           onClick={() => onChange(opt.key)}
           className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
             value === opt.key
-              ? 'bg-yellow-600/25 text-yellow-100 border border-yellow-500/40'
-              : 'text-zinc-300 hover:bg-zinc-800'
+              ? 'bg-gold-primary/20 text-gold-primary border border-gold-primary/40'
+              : 'text-ink-secondary hover:text-ink-primary'
           }`}
         >
           {opt.label}
@@ -721,8 +753,8 @@ export default function JournalReportsPerformance() {
     return (
       <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-yellow-100">Performance</h2>
-          <p className="text-sm text-zinc-400 mt-1">Configurable charts for your trading metrics.</p>
+          <h2 className="text-2xl font-semibold text-ink-primary">Performance</h2>
+          <p className="text-sm text-ink-tertiary mt-1">Configurable charts for your trading metrics.</p>
         </div>
         <Card className="flex flex-col items-center justify-center py-16 gap-3 text-center">
           <Activity className="w-10 h-10 text-ink-tertiary" />
@@ -751,8 +783,8 @@ export default function JournalReportsPerformance() {
 
       {/* Heading */}
       <div>
-        <h2 className="text-2xl font-semibold text-yellow-100">Performance</h2>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h2 className="text-2xl font-semibold text-ink-primary">Performance</h2>
+        <p className="text-sm text-ink-tertiary mt-1">
           Configurable charts across {tradeCount} trades in {loggedDays} logged days.
         </p>
       </div>
