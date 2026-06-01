@@ -624,7 +624,6 @@ export function GlobalOmnibox() {
                 className="flex-1 bg-transparent text-sm text-[#F4F4F4] placeholder:text-[#555] outline-none"
                 autoComplete="off"
                 spellCheck={false}
-                // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
               />
               <button
