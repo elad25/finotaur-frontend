@@ -1254,10 +1254,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         >
           <div className="absolute inset-0 rounded-full bg-[#1E88E5] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
           
-          <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
-            <svg 
-              viewBox="0 0 24 24" 
-              className="h-7 w-7 text-white"
+          <div className="relative h-12 w-12 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 text-white"
               fill="currentColor"
             >
               <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
@@ -1284,7 +1284,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         The inner card also gets flex + max-h so content scrolls properly.
       */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-[200] w-[500px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed bottom-8 right-8 z-[200] w-[400px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="absolute -inset-1 bg-gradient-to-br from-[#1D4ED8]/10 via-transparent to-[#C8CDD6]/30 rounded-3xl blur-2xl"></div>
           
           <div className="relative bg-[#F4EFE4] rounded-2xl shadow-2xl overflow-hidden border border-[#C8CDD6] flex flex-col h-full max-h-[calc(100vh-80px-32px)]">
