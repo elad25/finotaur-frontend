@@ -9,7 +9,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { useMentorView } from '@/contexts/MentorViewContext';
-import { useAdminAuth } from '@/hooks/useAdminAuth';  // נ”¥ NEW
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { MarketsSidebar } from '@/components/MarketsSidebar';  // נ”¥ NEW
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
 import {
@@ -22,8 +23,8 @@ import {
   Building,
   Target, 
   Users,
-  Copy, 
-  GraduationCap, 
+  Copy,
+  GraduationCap,
   Settings,
   FlaskConical,
   TrendingUp,
@@ -101,7 +102,10 @@ type EnvironmentType =
   | 'copy-trade'
   | 'funding'
   | 'settings'
-  | 'connections';
+  | 'connections'
+  | 'markets'
+  | 'war-zone'
+  | 'top-secret';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -236,6 +240,21 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Reports & PDFs', path: '/app/macro/reports', icon: FileText },
     { label: 'Sentiment', path: '/app/macro/sentiment', icon: Activity },
     { label: 'News', path: '/app/macro/news', icon: Newspaper },
+  ],
+
+
+  // Markets — handled by MarketsSidebar; empty array is a fallback only
+  'markets': [],
+
+  // War Zone — light sidebar (Phase 1 nav redesign)
+  'war-zone': [
+    { label: 'Latest', path: '/app/all-markets/warzone', icon: Flame },
+  ],
+
+  // Top Secret — light sidebar (Phase 1 nav redesign)
+  'top-secret': [
+    { label: 'Latest Reports', path: '/app/top-secret',       icon: FileText },
+    { label: 'Admin',          path: '/app/top-secret/admin', icon: Shield, beta: true },
   ],
 
   'ai': [
@@ -407,15 +426,21 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/journal/affiliate')) return 'affiliate';
     if (path.startsWith('/app/journal/backtest')) return 'backtest';
     
-    // All other domains
-    if (path.startsWith('/app/all-markets')) return 'all-markets';
-    if (path.startsWith('/app/stocks')) return 'stocks';
-    if (path.startsWith('/app/crypto')) return 'crypto';
-    if (path.startsWith('/app/futures')) return 'futures';
-    if (path.startsWith('/app/forex')) return 'forex';
-    if (path.startsWith('/app/commodities')) return 'commodities';
+    // Phase 1 products — must come before generic all-markets check
+    if (path.startsWith('/app/all-markets/warzone') || path.startsWith('/app/warzone')) return 'war-zone';
+    if (path.startsWith('/app/top-secret')) return 'top-secret';
+    // Markets product: any per-asset URL resolves to Markets environment
+    if (
+      path.startsWith('/app/stocks') ||
+      path.startsWith('/app/crypto') ||
+      path.startsWith('/app/futures') ||
+      path.startsWith('/app/forex') ||
+      path.startsWith('/app/commodities') ||
+      path.startsWith('/app/macro') ||
+      path.startsWith('/app/all-markets')
+    ) return 'markets';
+    // Legacy individual domain names (kept for reference; should not normally hit)
     if (path.startsWith('/app/options')) return 'options';
-    if (path.startsWith('/app/macro')) return 'macro';
     if (path.startsWith('/app/ai/copilot') || path.startsWith('/copilot')) return 'ai-copilot';
     if (path.startsWith('/app/ai')) return 'ai';
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
@@ -446,10 +471,8 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   // ===============================================
   // נ”¥ HIDE SIDEBAR FOR SPECIFIC PAGES
   // ===============================================
-  const hideSidebarPaths = [
-    '/app/all-markets/warzone',
-    '/app/top-secret',
-  ];
+  // Phase 1: War Zone and Top Secret now have their own sidebars — no longer hidden.
+  const hideSidebarPaths: string[] = [];
   
   const isHiddenPath = hideSidebarPaths.some(p => location.pathname.startsWith(p));
   
@@ -564,7 +587,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       </div>
 
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
-        {sidebarItems.map((item, index) => {
+        {/* Phase 1: Markets product uses its own asset-aware sidebar */}
+        {currentEnvironment === 'markets' ? (
+          <MarketsSidebar isExpanded={isExpanded} />
+        ) : sidebarItems.map((item, index) => {
           if (item.divider) {
             return <div key={`divider-${index}`} className="my-2 border-t border-gray-700" />;
           }
