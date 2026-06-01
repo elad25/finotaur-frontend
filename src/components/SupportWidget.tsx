@@ -175,6 +175,8 @@ export default function SupportWidget() {
   const [guidedTopic, setGuidedTopic] = useState('');
   const [aiThinking, setAiThinking] = useState(false);
   const [aiUnavailable, setAiUnavailable] = useState(false);
+  const [lastAiReason, setLastAiReason] = useState<string | null>(null);
+  const [lastAiCategory, setLastAiCategory] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -747,6 +749,9 @@ async function loadTicketById(ticketId: string) {
       const replyText = (data?.reply || '').trim();
       if (!replyText) throw new Error('empty reply');
 
+      setLastAiReason(data?.reason ?? null);
+      setLastAiCategory(data?.category ?? null);
+
       setGuidedMessages((prev) => [
         ...prev,
         {
@@ -794,12 +799,20 @@ async function loadTicketById(ticketId: string) {
       const firstCustomer = transcript.find((m) => m.type === 'customer');
       const subjectLine = firstCustomer ? firstCustomer.content.slice(0, 80) : 'Support Request';
 
+      const escalationReason = lastAiReason;
+      const ticketCategory = lastAiCategory || (escalationReason === 'billing' ? 'payment' : escalationReason === 'bug' ? 'technical' : escalationReason === 'feature_request' ? 'feedback' : null);
+      const ticketPriority = (escalationReason === 'billing' || escalationReason === 'frustrated') ? 'high' : 'normal';
+      const ticketTags = escalationReason ? [escalationReason] : [];
+
       const ticketPayload = {
         user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
         user_email: userEmail,
         user_name: userName,
         subject: subjectLine,
-        category: null,
+        category: ticketCategory,
+        priority: ticketPriority,
+        tags: ticketTags,
+        metadata: { escalation_reason: escalationReason, source: 'ai_chat', summary: subjectLine },
         message: firstCustomer?.content || 'Support Request',
         messages: transcript,
         status: 'open',
