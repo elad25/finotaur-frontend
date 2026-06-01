@@ -18,11 +18,10 @@
 // - FIXED: Logo now navigates to /app/top-secret
 // =====================================================
 
-import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown, Sparkles } from 'lucide-react';
+import { Lock, Settings, Crown, LogOut, ChevronDown, Sparkles } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
-import { Input } from './ui/input';
 import { useEffect, useState } from 'react';
 import { domains, domainOrder } from '@/constants/nav';
 import { useDomain } from '@/hooks/useDomain';
@@ -32,6 +31,8 @@ import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
 import { AssetSelector } from '@/components/AssetSelector';
 import { isMarketsPath } from '@/constants/markets';
+import { GlobalOmnibox } from '@/components/GlobalOmnibox';
+import { useFinoChat } from '@/contexts/FinoChatContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,30 +42,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// ✅ קומפוננטת החיפוש (disabled for now)
-// import QuickSearch from '@/components/Search/QuickSearch';
-
 export const TopNav = () => {
   const navigate = useNavigate();
   const { domainId } = useDomain();
   const { user } = useAuth();
   const { hasBetaAccess, isAdmin } = useAdminAuth();
   const location = useLocation();
+  const { open: openFino } = useFinoChat();
   const isMarketsActive = isMarketsPath(location.pathname);
   const [userInitials, setUserInitials] = useState('U');
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
-
-  // 🔒 Search is LOCKED - no keyboard shortcut
-  // useEffect(() => {
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-  //       e.preventDefault();
-  //       setSearchOpen(true);
-  //     }
-  //   };
-  //   window.addEventListener('keydown', handleKeyDown);
-  //   return () => window.removeEventListener('keydown', handleKeyDown);
-  // }, []);
 
   // ✅ Get user initials and platform plan
   useEffect(() => {
@@ -256,54 +243,42 @@ export const TopNav = () => {
           </DSButton>
 
           {/* ═══════════════════════════════════════════
-              🔒 SEARCH - LOCKED (Coming Soon) - Unless Beta
+              🔍 GLOBAL OMNIBOX — Phase 3
           ═══════════════════════════════════════════ */}
-          <div className="relative hidden md:block group">
-            <Search className={`absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0] ${hasBetaAccess ? '' : 'opacity-40'}`} />
-            <Input
-              placeholder="Search..."
-              className={`w-40 lg:w-48 pl-8 pr-12 text-xs h-9 ${hasBetaAccess ? '' : 'cursor-not-allowed opacity-50'}`}
-              style={{
-                background: 'rgba(20,20,20,0.6)',
-                border: '1px solid rgba(255, 215, 0, 0.08)',
-                color: '#A0A0A0'
-              }}
-              readOnly={!hasBetaAccess}
-              disabled={!hasBetaAccess}
-            />
-            {/* Coming Soon indicator - Only show for non-beta users */}
-            {!hasBetaAccess && (
-              <span 
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#A0A0A0]/60 font-medium px-1.5 py-0.5 rounded border border-[#A0A0A0]/20 flex items-center gap-1"
-                style={{ background: 'rgba(30,30,30,0.8)' }}
-              >
-                <Lock className="w-2.5 h-2.5" />
-              </span>
-            )}
-            {/* Tooltip */}
-            {!hasBetaAccess && (
-              <span 
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
-                style={{ 
-                  background: '#0A0A0A',
-                  border: '1px solid rgba(201,166,70,0.2)',
-                  color: '#A0A0A0'
-                }}
-              >
-                Coming Soon
-              </span>
-            )}
-          </div>
+          <GlobalOmnibox />
 
-          {/* Mobile Search Button - LOCKED unless beta 🔒 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`md:hidden hover:bg-[#1A1A1A] ${hasBetaAccess ? '' : 'opacity-40 cursor-not-allowed'}`}
-            disabled={!hasBetaAccess}
+          {/* ═══════════════════════════════════════════
+              ✨ ASK FINO — Top-bar button (Phase 4)
+          ═══════════════════════════════════════════ */}
+          <button
+            type="button"
+            onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
+            className="hidden lg:flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10 flex-shrink-0"
+            aria-label="Ask FINO AI"
           >
-            <Search className="h-5 w-5 text-[#A0A0A0]" />
-          </Button>
+            <img
+              src="/fino-avatar.png"
+              alt=""
+              aria-hidden="true"
+              className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
+            />
+            <span>Ask Fino</span>
+          </button>
+
+          {/* Mobile Ask Fino icon */}
+          <button
+            type="button"
+            onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
+            className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors flex-shrink-0"
+            aria-label="Ask FINO AI"
+          >
+            <img
+              src="/fino-avatar.png"
+              alt=""
+              aria-hidden="true"
+              className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
+            />
+          </button>
 
           {/* ═══════════════════════════════════════════
               🔥 USER MENU - Settings UNLOCKED
@@ -443,8 +418,6 @@ export const TopNav = () => {
         })}
       </div>
 
-      {/* 🔒 Search Modal - DISABLED */}
-      {/* <QuickSearch open={searchOpen} onClose={() => setSearchOpen(false)} /> */}
     </div>
   );
 };
