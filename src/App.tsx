@@ -114,6 +114,7 @@ if (typeof window !== 'undefined') {
 }
 
 import SupportWidget from "@/components/SupportWidget";
+import { FinoChatProvider } from "@/contexts/FinoChatContext";
 import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
 import { FEATURES } from "@/config/features";
 
@@ -323,7 +324,7 @@ const AIMacroAnalyzer = lazy(() => import("@/pages/app/ai/macro-analyzer/MacroAn
 const AIOptionsIntelligence = lazy(() => import("@/pages/app/ai/OptionsIntelligenceAI"));
 const AIFlowScanner = lazy(() => import("@/pages/app/ai/flow-scanner"));
 const AITop5 = lazy(() => import("@/pages/app/ai/Top5"));
-const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
+// FINO AI: standalone AIAssistant page retired — /app/ai/assistant redirects to the AI Arena; the FINO AI side chat replaces it.
 const CopilotTopOpportunitiesPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotTopOpportunitiesPage })));
 const CopilotMacroPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotMacroPage })));
 const CopilotAIAnalystPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIAnalystPage })));
@@ -558,7 +559,8 @@ function AppContent() {
           <Route path="ai/flow-scanner" element={<SuspenseRoute><AIFlowScanner /></SuspenseRoute>} />
           <Route path="ai/top-5" element={<SuspenseRoute><AITop5 /></SuspenseRoute>} />
           <Route path="ai/upcoming-events" element={<SuspenseRoute><UpcomingEventsView /></SuspenseRoute>} />
-          <Route path="ai/assistant" element={<SuspenseRoute><AIAssistant /></SuspenseRoute>} />
+          {/* FINO AI: legacy AI Assistant page → redirect; chat now opens via the FINO AI side widget. */}
+          <Route path="ai/assistant" element={<Navigate to="/app/ai/stock-analyzer" replace />} />
           {/* JOURNAL */}
           <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
           <Route path="journal/overview" element={<JournalRoute><JournalOverview /></JournalRoute>} />
@@ -699,7 +701,9 @@ export const App = () => (
               <TimezoneProvider>
                 <RiskSettingsRealtimeProvider>
                   <ImpersonationProvider>
-                    <AppContent />
+                    <FinoChatProvider>
+                      <AppContent />
+                    </FinoChatProvider>
                   </ImpersonationProvider>
                 </RiskSettingsRealtimeProvider>
               </TimezoneProvider>
