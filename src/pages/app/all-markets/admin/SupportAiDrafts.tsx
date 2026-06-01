@@ -182,6 +182,7 @@ export default function SupportAiDrafts({ embedded = false }: { embedded?: boole
     initialLoad.current = true;
     loadDrafts();
     loadSettings();
+    loadKb();
   }, []);
 
   useEffect(() => {
