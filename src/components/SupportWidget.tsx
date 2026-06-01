@@ -12,6 +12,8 @@
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useFinoChat } from '@/contexts/FinoChatContext';
 import { 
   X, Send, MessageCircle, Shield, ArrowLeft, Plus, 
   Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, 
@@ -139,11 +141,9 @@ const SUPPORT_TOPIC_FOLLOW_UPS: Record<string, string> = {
   'I want to share feedback': 'Thanks. What feedback would you like to share, and what would make the experience better for you?',
 };
 
-const SUPPORT_AGENT_AVATARS = [
-  '/support-avatars/agent-1.jpg',
-  '/support-avatars/agent-2.jpg',
-  '/support-avatars/agent-3.jpg',
-];
+const FINO_AVATAR = '/fino-avatar.png';
+// FINO is the single face of the assistant (was a 3-agent support cluster).
+const SUPPORT_AGENT_AVATARS = [FINO_AVATAR];
 
 export default function SupportWidget() {
   // ==================== STATE ====================
@@ -180,6 +180,11 @@ export default function SupportWidget() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // FINO AI — current page + any context handed in by the opener (SubNav etc.)
+  const location = useLocation();
+  const { openSignal, consumeOpenContext } = useFinoChat();
+  const finoContextRef = useRef<Record<string, unknown> | null>(null);
+
   // ==================== EFFECTS ====================
 
   useEffect(() => {
@@ -187,6 +192,18 @@ export default function SupportWidget() {
       checkUserStatus();
     }
   }, [isOpen]);
+
+  // FINO AI — open the side chat from anywhere (SubNav, page buttons) via the global context.
+  useEffect(() => {
+    if (openSignal > 0) {
+      finoContextRef.current = consumeOpenContext();
+      setActiveTab('support');
+      setView('chat');
+      setIsNewConversation(true);
+      setIsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
 
   useEffect(() => {
     if (isGuest && isOpen && !userName && !userEmail) {
@@ -739,7 +756,12 @@ async function loadTicketById(ticketId: string) {
       const res = await fetch('/api/support-ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, userName: userName || undefined }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          userName: userName || undefined,
+          // FINO context: where the user is + anything the opener handed in.
+          context: { path: location.pathname, ...(finoContextRef.current || {}) },
+        }),
       });
 
       if (!res.ok) throw new Error(`AI ${res.status}`);
@@ -1252,17 +1274,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
           onClick={() => setIsOpen(true)}
           className="fixed bottom-8 right-8 z-[200] group"
         >
-          <div className="absolute inset-0 rounded-full bg-[#1E88E5] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
+          <div className="absolute inset-0 rounded-full bg-[#C9A646] opacity-25 blur-xl group-hover:opacity-45 transition-all duration-200"></div>
           
-          <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
-            <svg 
-              viewBox="0 0 24 24" 
-              className="h-7 w-7 text-white"
-              fill="currentColor"
-            >
-              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
-              <path d="M4 4h16v12H5.17L4 17.17V4z" opacity="0.9"/>
-            </svg>
+          <div className="relative h-14 w-14 rounded-full overflow-hidden bg-[#0A0A0A] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#C9A646]/40">
+            <img src={FINO_AVATAR} alt="FINO AI" className="h-full w-full object-cover" />
           </div>
           
           {!isGuest && (tickets.some(t => hasUnreadMessages(t)) || unreadUpdatesCount > 0) && (
@@ -1319,11 +1334,11 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   <div>
                     <div className="flex items-center gap-1.5">
                       <h3 className="text-sm font-semibold text-[#111827] tracking-tight font-['Inter',sans-serif]">
-                        Finotaur
+                        FINO AI
                       </h3>
                       <span className="inline-flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#1D4ED8]">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
-                        AI Assistant
+                        Online
                       </span>
                     </div>
                     <p className="text-[10px] text-[#64748B] font-medium mt-0.5 font-['Inter',sans-serif]">
@@ -1712,7 +1727,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   {msg.type === 'admin' && (
                                     <div className="flex items-center gap-2 mb-2">
                                       <img src={SUPPORT_AGENT_AVATARS[0]} alt="" aria-hidden="true" className="h-6 w-6 rounded-full border border-white object-cover shadow-sm" />
-                                      <span className="text-xs font-semibold text-[#334155]">Finotaur AI</span>
+                                      <span className="text-xs font-semibold text-[#334155]">FINO AI</span>
                                     </div>
                                   )}
 
@@ -1751,12 +1766,12 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                     <div className="max-w-[82%]">
                                       <div className="flex items-center gap-2 mb-1.5">
                                         <img src={SUPPORT_AGENT_AVATARS[0]} alt="" aria-hidden="true" className="h-6 w-6 rounded-full border border-white object-cover shadow-sm" />
-                                        <span className="text-xs font-semibold text-[#334155] font-['Inter',sans-serif]">Support Assistant</span>
-                                        <span className="text-[10px] text-[#94A3B8] font-['Inter',sans-serif]">· AI Agent · Just now</span>
+                                        <span className="text-xs font-semibold text-[#334155] font-['Inter',sans-serif]">FINO AI</span>
+                                        <span className="text-[10px] text-[#94A3B8] font-['Inter',sans-serif]">· AI · Just now</span>
                                       </div>
                                       <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm space-y-2">
                                         <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
-                                          👋 Hi {userName ? userName.split(' ')[0] : 'there'}! You're chatting with the Finotaur AI Assistant. Share your question in detail and I'll do my best to help instantly. If I can't, you'll see an option to talk to a person.
+                                          👋 Hi {userName ? userName.split(' ')[0] : 'there'}! I'm FINO, your Finotaur AI assistant. Share your question in detail and I'll do my best to help instantly. If I can't, you'll see an option to talk to a person.
                                         </p>
                                         <p className="text-sm font-medium text-[#1F2937] font-['Inter',sans-serif]">How can I help?</p>
                                       </div>

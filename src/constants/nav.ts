@@ -227,7 +227,6 @@ ai: {
     { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
     { label: 'Intelligence Desk', path: '/app/ai/top-5', icon: Award },
     { label: 'Upcoming Events', path: '/app/ai/upcoming-events', icon: Calendar },
-    { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
   ],
 },
 
