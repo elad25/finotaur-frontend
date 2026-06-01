@@ -32,7 +32,7 @@ import {
   Save,
   UserX,
   Target,
-Crown,
+  Crown,
   Sword,
   FileText,
   TrendingUp,
@@ -40,6 +40,7 @@ Crown,
   Download,
   Calendar,
   BarChart3,
+  Bot,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -48,6 +49,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import SupportAiDrafts from './SupportAiDrafts';
 
 // ==================== INTERFACES ====================
 
@@ -121,7 +123,7 @@ interface ChurnedUser {
   notes: string | null;
 }
 
-type TabType = 'support' | 'updates' | 'churned';
+type TabType = 'support' | 'ai_drafts' | 'updates' | 'churned';
 type TargetGroup = 'all' | 'trading_journal' | 'war_zone' | 'top_secret';
 
 const TARGET_GROUPS: { key: TargetGroup; label: string; icon: any; color: string }[] = [
@@ -1004,19 +1006,19 @@ toast.success('Update deleted');
       description="Manage support tickets, system updates, and user activity"
     >
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 mb-6 bg-[#111111] border border-gray-800 rounded-xl p-2 w-fit">
+      <div className="flex items-center gap-1.5 mb-6 bg-[#111111] border border-gray-800 rounded-xl p-1.5 w-fit">
         <button
           onClick={() => setActiveTab('support')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'support'
               ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
               : 'text-gray-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          <MessageCircle className="h-4 w-4" />
+          <MessageCircle className="h-3.5 w-3.5" />
           Support Tickets
           {awaitingCount > 0 && (
-            <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+            <span className={`ml-0.5 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center ${
               activeTab === 'support' ? 'bg-black/20' : 'bg-red-500 text-white animate-pulse'
             }`}>
               {awaitingCount}
@@ -1024,17 +1026,28 @@ toast.success('Update deleted');
           )}
         </button>
         <button
+          onClick={() => setActiveTab('ai_drafts')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'ai_drafts'
+              ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          AI Drafts
+        </button>
+        <button
           onClick={() => setActiveTab('updates')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'updates'
               ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
               : 'text-gray-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-3.5 w-3.5" />
           System Updates
-{(updateStats.active + reportStats.total) > 0 && (
-            <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+          {(updateStats.active + reportStats.total) > 0 && (
+            <span className={`ml-0.5 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center ${
               activeTab === 'updates' ? 'bg-black/20' : 'bg-blue-500/20 text-blue-400'
             }`}>
               {updateStats.active + reportStats.total}
@@ -1043,16 +1056,16 @@ toast.success('Update deleted');
         </button>
         <button
           onClick={() => setActiveTab('churned')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'churned'
               ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
               : 'text-gray-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          <UserX className="h-4 w-4" />
+          <UserX className="h-3.5 w-3.5" />
           Churned Users
           {churnedStats.total > 0 && (
-            <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+            <span className={`ml-0.5 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center ${
               activeTab === 'churned' ? 'bg-black/20' : 'bg-red-500/20 text-red-400'
             }`}>
               {churnedStats.total}
@@ -1061,120 +1074,105 @@ toast.success('Update deleted');
         </button>
       </div>
 
+      {/* ==================== AI DRAFTS TAB ==================== */}
+      {activeTab === 'ai_drafts' && (
+        <SupportAiDrafts embedded />
+      )}
+
       {/* ==================== SUPPORT TAB ==================== */}
       {activeTab === 'support' && (
         <>
           {/* Stats Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Total</p>
-                  <p className="text-2xl font-bold text-white">{ticketStats.total}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <MessageCircle className="h-6 w-6 text-blue-400" />
-                </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <MessageCircle className="h-4 w-4 text-blue-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Total</p>
               </div>
+              <p className="text-lg font-bold text-white">{ticketStats.total}</p>
             </div>
 
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Open</p>
-                  <p className="text-2xl font-bold text-white">{ticketStats.open}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-yellow-400" />
-                </div>
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Clock className="h-4 w-4 text-yellow-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Open</p>
               </div>
+              <p className="text-lg font-bold text-white">{ticketStats.open}</p>
             </div>
 
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Avg Response</p>
-                  <p className="text-2xl font-bold text-white">{ticketStats.avgResponseTime}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Zap className="h-6 w-6 text-green-400" />
-                </div>
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Zap className="h-4 w-4 text-green-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Avg Response</p>
               </div>
+              <p className="text-lg font-bold text-white">{ticketStats.avgResponseTime}</p>
             </div>
 
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Unread</p>
-                  <p className="text-2xl font-bold text-white">{unreadCount}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center">
-                  <AlertCircle className="h-6 w-6 text-red-400" />
-                </div>
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Unread</p>
               </div>
+              <p className="text-lg font-bold text-white">{unreadCount}</p>
             </div>
 
-            <div className="bg-[#111111] border border-orange-500 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-orange-400 mb-1 font-semibold">Awaiting Response</p>
-                  <p className="text-2xl font-bold text-orange-400">{awaitingCount}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-orange-500/10 flex items-center justify-center animate-pulse">
-                  <AlertTriangle className="h-6 w-6 text-orange-400" />
-                </div>
+            <div className="bg-[#111111] border border-orange-500/60 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <AlertTriangle className="h-4 w-4 text-orange-400 animate-pulse" />
+                <p className="text-[10px] uppercase tracking-wide text-orange-400/80 font-medium">Awaiting</p>
               </div>
+              <p className="text-lg font-bold text-orange-400">{awaitingCount}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-400px)] min-h-[600px]">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-320px)] min-h-[580px]">
             {/* Conversations List */}
             <div className="lg:col-span-1 bg-[#111111] border border-gray-800 rounded-xl overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-gray-800 bg-zinc-900/50">
-                <div className="flex items-center justify-between mb-4">
+              <div className="p-3 border-b border-gray-800 bg-zinc-900/50">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
-                    <h2 className="text-lg font-bold text-white">Conversations</h2>
+                    <MessageCircle className="h-4 w-4 text-[#D4AF37]" />
+                    <h2 className="text-sm font-bold text-white">Conversations</h2>
                   </div>
                   {unreadCount > 0 && (
-                    <Badge className="bg-red-500 text-white text-xs px-2 py-0.5 animate-pulse">
+                    <Badge className="bg-red-500 text-white text-[10px] px-1.5 py-0 animate-pulse">
                       {unreadCount}
                     </Badge>
                   )}
                 </div>
 
-                {/* Filter Tabs */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* Segmented filter control */}
+                <div className="inline-flex bg-zinc-900/60 border border-gray-800 p-1 rounded-lg">
                   {[
-                    { key: 'awaiting', label: 'Awaiting Response', count: awaitingCount },
+                    { key: 'awaiting', label: 'Awaiting', count: awaitingCount },
                     { key: 'responded', label: 'Responded', count: filterCounts.responded },
                     { key: 'all', label: 'All', count: filterCounts.all },
-                  ].map((tab) => (
+                  ].map((seg) => (
                     <button
-                      key={tab.key}
-                      onClick={() => setStatusFilter(tab.key)}
-                      className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                        statusFilter === tab.key
-                          ? 'bg-[#D4AF37] text-black shadow-lg'
-                          : 'bg-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-700'
+                      key={seg.key}
+                      onClick={() => setStatusFilter(seg.key)}
+                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition-all ${
+                        statusFilter === seg.key
+                          ? 'bg-[#D4AF37] text-black shadow'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="font-bold text-base">{tab.count}</span>
-                        <span className="text-[10px] opacity-80 leading-tight">{tab.label}</span>
-                      </div>
+                      {seg.label}
+                      <span className={`ml-1.5 text-[10px] font-normal ${statusFilter === seg.key ? 'text-black/60' : 'text-gray-600'}`}>
+                        {seg.count}
+                      </span>
                     </button>
                   ))}
                 </div>
 
                 {/* Category Filter Chips */}
-                <div className="flex flex-wrap gap-1.5 mt-3">
+                <div className="flex flex-wrap gap-1 mt-2">
                   <button
                     onClick={() => setCategoryFilter('all')}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                    className={`text-[11px] px-2.5 py-1 rounded-full border font-medium transition-all ${
                       categoryFilter === 'all'
-                        ? 'bg-zinc-600 text-white border-zinc-500 ring-1 ring-white/20'
-                        : 'bg-zinc-800 text-gray-400 border-zinc-700 hover:text-white hover:bg-zinc-700'
+                        ? 'bg-zinc-700 text-white border-zinc-600 ring-1 ring-[#D4AF37]/40'
+                        : 'bg-zinc-800/60 text-gray-500 border-zinc-700/60 hover:text-white hover:bg-zinc-700/60'
                     }`}
                   >
                     All ({tickets.length})
@@ -1185,10 +1183,10 @@ toast.success('Update deleted');
                       <button
                         key={pt}
                         onClick={() => setCategoryFilter(pt as typeof categoryFilter)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                        className={`text-[11px] px-2.5 py-1 rounded-full border font-medium transition-all ${
                           categoryFilter === pt
-                            ? `${PROBLEM_TYPE_STYLES[pt as keyof typeof PROBLEM_TYPE_STYLES]} ring-1 ring-white/20`
-                            : 'bg-zinc-800 text-gray-400 border-zinc-700 hover:text-white hover:bg-zinc-700'
+                            ? `${PROBLEM_TYPE_STYLES[pt as keyof typeof PROBLEM_TYPE_STYLES]} ring-1 ring-[#D4AF37]`
+                            : 'bg-zinc-800/60 text-gray-500 border-zinc-700/60 hover:text-white hover:bg-zinc-700/60'
                         }`}
                       >
                         {pt} ({count})
@@ -1203,10 +1201,10 @@ toast.success('Update deleted');
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
                   </div>
                 ) : tickets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400 p-4">
-                    <MessageCircle className="h-12 w-12 mb-3 opacity-30" />
-                    <p className="text-sm font-medium">No conversations</p>
-                    <p className="text-xs text-gray-500 mt-1">
+                  <div className="flex flex-col items-center justify-center py-10 text-gray-400 px-4">
+                    <MessageCircle className="h-10 w-10 mb-2 opacity-25" />
+                    <p className="text-xs font-medium text-gray-400">No conversations</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
                       {statusFilter === 'awaiting' && 'All caught up!'}
                       {statusFilter === 'responded' && 'No pending responses'}
                       {statusFilter === 'all' && 'No conversations yet'}
@@ -1454,13 +1452,11 @@ toast.success('Update deleted');
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center mb-4 shadow-inner">
-                    <MessageCircle className="h-12 w-12 opacity-30" />
-                  </div>
-                  <p className="text-lg font-semibold mb-2">No conversation selected</p>
-                  <p className="text-sm text-gray-500 text-center max-w-xs">
-                    Choose a conversation from the list to view and respond
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
+                  <MessageCircle className="h-10 w-10 opacity-20" />
+                  <p className="text-sm font-medium text-gray-500">No conversation selected</p>
+                  <p className="text-xs text-gray-600 text-center max-w-[200px] leading-relaxed">
+                    Pick a conversation from the list
                   </p>
                 </div>
               )}
