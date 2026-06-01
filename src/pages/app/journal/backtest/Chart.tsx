@@ -11,8 +11,6 @@ import {
 import { toast } from "sonner";
 import "@/styles/chart-animations.css";
 
-const GOLD = "#C9A646";
-
 const FEATURES = [
   {
     icon: History,
@@ -84,18 +82,16 @@ export default function Chart() {
 
       {/* Hero */}
       <div className="relative mx-8 mt-6 rounded-2xl overflow-hidden border border-[#C9A646]/20">
-        {/* Background glow */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#C9A646] rounded-full filter blur-[120px] animate-pulse" />
-          <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-[#C9A646] rounded-full filter blur-[120px] animate-pulse animation-delay-2000" />
-        </div>
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: `linear-gradient(${GOLD} 1px, transparent 1px), linear-gradient(90deg, ${GOLD} 1px, transparent 1px)`,
-            backgroundSize: "44px 44px",
-          }}
+        {/* Cinematic background image */}
+        <img
+          src="/backtest-hero.webp"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
         />
+        {/* Dark scrim for text legibility (center darkened) */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/60 to-black/85" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
 
         <div className="relative z-10 flex flex-col items-center text-center py-16 px-6">
           <div className="relative mb-6">
