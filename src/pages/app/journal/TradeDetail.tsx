@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { uploadScreenshot } from '@/lib/trades';
@@ -186,6 +187,36 @@ export default function JournalTradeDetail() {
   const { toast } = useToast();
 
   const [trade, setTrade] = useState<Trade | null>(null);
+
+  // FINO page context — this trade (incl. the trader's own reflections) + summary.
+  const finoEntity = useMemo(
+    () =>
+      trade
+        ? {
+            type: 'trade',
+            symbol: trade.symbol,
+            side: trade.side,
+            pnl: trade.pnl,
+            rr: trade.rr,
+            riskUsd: trade.risk_usd,
+            rewardUsd: trade.reward_usd,
+            entryPrice: trade.entry_price,
+            exitPrice: trade.exit_price,
+            stopPrice: trade.stop_price,
+            session: trade.session,
+            openAt: trade.open_at,
+            closeAt: trade.close_at,
+            assetClass: trade.asset_class,
+            tags: trade.tags,
+            setup: trade.setup,
+            mistake: trade.mistake,
+            nextTime: trade.next_time,
+            notes: trade.notes,
+          }
+        : null,
+    [trade],
+  );
+  useRegisterJournalFinoContext(finoEntity);
   const [loading, setLoading] = useState(true);
   const [legs, setLegs] = useState<TradeLeg[]>([]);
 
