@@ -16,8 +16,7 @@ import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
-
-const FINO_AVATAR = '/fino-avatar.png';
+import FinoAvatar from '@/components/fino/FinoAvatar';
 
 export default function FinoChatDrawer() {
   const { openSignal } = useFinoChat();
@@ -79,10 +78,12 @@ function FinoChatPanel({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <header className="flex flex-shrink-0 items-center justify-between border-b border-border-ds-subtle bg-surface-base px-5 py-4">
           <div className="flex items-center gap-3">
-            <img
-              src={FINO_AVATAR}
-              alt=""
-              aria-hidden="true"
+            <FinoAvatar
+              thinking={isLoading || isStreaming}
+              assistantCount={
+                messages.filter((m) => m.role === 'assistant' && m.content?.trim()).length
+              }
+              size={36}
               className="h-9 w-9 rounded-full border border-[#C9A646]/40 object-cover"
             />
             <div>
