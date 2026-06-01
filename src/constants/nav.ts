@@ -350,8 +350,11 @@ ai: {
   //   3. Uncomment 'options' in domainOrder
   options: {
     id: 'options',
+    // Not tier-locked — Options is simply not built yet (sealed pending a
+    // licensed data feed, Track B). locked:false ensures it is never surfaced
+    // as a paywalled/upgrade feature. It is hidden from nav via domainOrder.
+    locked: false,
     label: 'Options',
-    locked: true,
     beta: false,
     subNav: [],
     sidebar: [],
