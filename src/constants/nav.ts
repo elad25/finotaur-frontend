@@ -21,6 +21,11 @@ import {
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
 
+// Sealed pending licensed options data feed (Track B). Re-enable when built.
+// To re-enable: set OPTIONS_ENABLED = true, then restore subNav/sidebar below
+// and uncomment 'options' in domainOrder.
+export const OPTIONS_ENABLED = false;
+
 export interface NavItem { 
   label: string; 
   path: string; 
@@ -94,6 +99,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Catalysts', path: '/app/stocks/catalysts', icon: Zap },
       { label: 'Upgrades/Downgrades', path: '/app/stocks/upgrades', icon: Award },
       { label: 'Valuation', path: '/app/stocks/valuation', icon: DollarSign },
+      { label: 'Insider & 13F', path: '/app/stocks/insider', icon: Users },
       { label: 'Reports & PDFs', path: '/app/stocks/reports', icon: FileText },
       { label: 'Watchlists', path: '/app/stocks/watchlists', icon: Bell },
     ],
@@ -337,26 +343,17 @@ ai: {
     ],
   },
 
+  // Sealed pending licensed options data feed (Track B). Re-enable when built:
+  //   1. Set OPTIONS_ENABLED = true above
+  //   2. Restore the subNav and sidebar arrays below
+  //   3. Uncomment 'options' in domainOrder
   options: {
     id: 'options',
     label: 'Options',
     locked: true,
     beta: false,
-    subNav: [
-      { label: 'Chain', path: '/app/options/chain' },
-      { label: 'Flow', path: '/app/options/flow' },
-      { label: 'Volatility', path: '/app/options/volatility' },
-      { label: 'Strategy', path: '/app/options/strategy' },
-      { label: 'Simulator', path: '/app/options/simulator' },
-    ],
-    sidebar: [
-      { label: 'Greeks Monitor', path: '/app/options/greeks-monitor', icon: Activity },
-      { label: 'IV Rank / Percentile', path: '/app/options/iv-rank', icon: BarChart3 },
-      { label: 'OI / Volume', path: '/app/options/oi-volume', icon: BarChart3 },
-      { label: 'Unusual Activity', path: '/app/options/unusual-activity', icon: Flame },
-      { label: 'Earnings IV Crush', path: '/app/options/earnings-iv-crush', icon: FileText },
-      { label: 'Shortcuts', path: '/app/options/shortcuts', icon: Target },
-    ],
+    subNav: [],
+    sidebar: [],
   },
 };
 
@@ -367,7 +364,7 @@ export const domainOrder = [
   'futures',
   'forex',
   'commodities',
-  'options',
+  // 'options', // Sealed pending licensed options data feed (Track B). Re-enable when OPTIONS_ENABLED = true.
   'macro',
   'ai',
   'journal',

@@ -1276,7 +1276,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         >
           <div className="absolute inset-0 rounded-full bg-[#C9A646] opacity-25 blur-xl group-hover:opacity-45 transition-all duration-200"></div>
           
-          <div className="relative h-14 w-14 rounded-full overflow-hidden bg-[#0A0A0A] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#C9A646]/40">
+          <div className="relative h-12 w-12 rounded-full overflow-hidden bg-[#0A0A0A] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#C9A646]/40">
             <img src={FINO_AVATAR} alt="FINO AI" className="h-full w-full object-cover" />
           </div>
           
@@ -1299,7 +1299,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         The inner card also gets flex + max-h so content scrolls properly.
       */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-[200] w-[500px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed bottom-8 right-8 z-[200] w-[400px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="absolute -inset-1 bg-gradient-to-br from-[#1D4ED8]/10 via-transparent to-[#C8CDD6]/30 rounded-3xl blur-2xl"></div>
           
           <div className="relative bg-[#F4EFE4] rounded-2xl shadow-2xl overflow-hidden border border-[#C8CDD6] flex flex-col h-full max-h-[calc(100vh-80px-32px)]">

@@ -250,7 +250,7 @@ export function CreateBacktestSessionModal({
                 <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-[#C9A646]/40">
                   <SelectValue placeholder={strategiesLoading ? 'Loading…' : 'Select a strategy (optional)'} />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0A0A0A] border-[#C9A646]/20 text-white">
+                <SelectContent className="z-[10000] bg-[#0A0A0A] border-[#C9A646]/20 text-white">
                   {strategies.length === 0 && (
                     <div className="px-2 py-3 text-xs text-gray-500">No strategies yet — create one above.</div>
                   )}
@@ -302,7 +302,7 @@ export function CreateBacktestSessionModal({
               <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-[#C9A646]/40">
                 <SelectValue placeholder="Select a symbol" />
               </SelectTrigger>
-              <SelectContent className="bg-[#0A0A0A] border-[#C9A646]/20 text-white">
+              <SelectContent className="z-[10000] bg-[#0A0A0A] border-[#C9A646]/20 text-white">
                 {symbolOptions.map((sym) => (
                   <SelectItem key={sym} value={sym} className="focus:bg-[#C9A646]/10">
                     {sym}
@@ -348,7 +348,7 @@ export function CreateBacktestSessionModal({
                     </span>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-[#0A0A0A] border-[#C9A646]/20" align="end">
+                <PopoverContent className="z-[10000] w-auto p-0 bg-[#0A0A0A] border-[#C9A646]/20" align="end">
                   <Calendar
                     mode="range"
                     selected={range}
