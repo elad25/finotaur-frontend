@@ -3,7 +3,7 @@
 // mismatch. Imported by `pages/app/journal/backtest/Chart.tsx`, so tsconfig
 // `exclude` doesn't suppress. Real fix in MASTER_PLAN OQ-69; separate session.
 import { useState, useEffect, useCallback, useRef } from "react";
-import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Zap, Volume2, VolumeX, Save, CalendarDays } from "lucide-react";
+import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Zap, Volume2, VolumeX } from "lucide-react";
 import { ReplayChart, ReplayChartRef } from "@/components/ReplayChart";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -16,17 +16,11 @@ import {
 } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
 import { useBacktestSounds } from "@/hooks/useBacktestSounds";
-import {
-  TradeExecutionNotification,
-  useTradeNotifications
+import { 
+  TradeExecutionNotification, 
+  useTradeNotifications 
 } from "@/components/TradeExecutionNotification";
 import type { BacktestSession } from "@/types/backtestSession";
-import { PlaceOrderPanel, type PlaceOrderSubmit } from "@/components/backtest/PlaceOrderPanel";
-import { GoToControl } from "@/components/backtest/GoToControl";
-import { EconomicEventsPanel } from "@/components/backtest/EconomicEventsPanel";
-import { saveBacktestTradesToJournal } from "@/lib/backtest/journaling";
-import { useEffectiveUser } from "@/hooks/useEffectiveUser";
-import { toast } from "sonner";
 
 interface BacktestImmersiveModeProps {
   onExit?: () => void;
@@ -37,8 +31,28 @@ interface BacktestImmersiveModeProps {
 export function BacktestImmersiveMode({ onExit, session }: BacktestImmersiveModeProps) {
   const navigate = useNavigate();
   const chartRef = useRef<ReplayChartRef>(null);
-  const { id: userId } = useEffectiveUser();
-  const [isSaving, setIsSaving] = useState(false);
+
+  // Seed the replay chart with the active session's symbol/timeframe so the
+  // onboarding's symbol choice is honored (chart keeps its default if it fails).
+  useEffect(() => {
+    if (!session?.symbol) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      try {
+        const result = chartRef.current?.loadData?.(session.symbol, session.timeframe || "1m");
+        if (result && typeof (result as Promise<void>).catch === "function") {
+          (result as Promise<void>).catch(() => {});
+        }
+      } catch {
+        // Non-fatal: chart keeps its default data if the symbol can't be resolved.
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [session?.symbol, session?.timeframe]);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState("1");
@@ -48,15 +62,6 @@ export function BacktestImmersiveMode({ onExit, session }: BacktestImmersiveMode
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isSelectingStart, setIsSelectingStart] = useState(false);
   const [hasReplayPoint, setHasReplayPoint] = useState(false);
-
-  // Order panel state
-  const [showOrderPanel, setShowOrderPanel] = useState(true);
-  const [showEvents, setShowEvents] = useState(false);
-  const [marketPrice, setMarketPrice] = useState(0);
-  const [currentBalance, setCurrentBalance] = useState(session?.startBalance ?? 10000);
-  const [totalCandles, setTotalCandles] = useState(0);
-  const [candleIndex, setCandleIndex] = useState(0);
-  const initialBalance = session?.startBalance ?? 10000;
   
   const sounds = useBacktestSounds({ enabled: soundEnabled, volume: 0.3 });
   const {
@@ -133,101 +138,6 @@ export function BacktestImmersiveMode({ onExit, session }: BacktestImmersiveMode
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, [handleExit, isSelectingStart]);
-
-  // Seed the replay chart with the active session's symbol/timeframe.
-  useEffect(() => {
-    if (!session?.symbol) return;
-    let cancelled = false;
-    const t = setTimeout(() => {
-      if (cancelled) return;
-      try {
-        const result = chartRef.current?.loadData?.(session.symbol, session.timeframe || "1m");
-        if (result && typeof (result as Promise<void>).catch === "function") {
-          (result as Promise<void>).catch(() => {});
-        }
-      } catch {
-        // Non-fatal: chart keeps its default data if the symbol can't be resolved.
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [session?.symbol, session?.timeframe]);
-
-  // Poll live market price + balance from the chart for the order panel.
-  useEffect(() => {
-    const id = setInterval(() => {
-      try {
-        const price = chartRef.current?.getCurrentPrice?.();
-        if (typeof price === "number" && Number.isFinite(price) && price > 0) {
-          setMarketPrice(price);
-        }
-        const stats = chartRef.current?.getStats?.();
-        const pnl = typeof stats?.totalPnl === "number" ? stats.totalPnl : 0;
-        setCurrentBalance(initialBalance + pnl);
-
-        const total = chartRef.current?.getTotalCandles?.();
-        if (typeof total === "number") setTotalCandles(total);
-        const idx = chartRef.current?.getCurrentIndex?.();
-        if (typeof idx === "number") setCandleIndex(idx);
-      } catch {
-        // Non-fatal — keep last known values.
-      }
-    }, 500);
-    return () => clearInterval(id);
-  }, [initialBalance]);
-
-  const handlePlaceOrder = useCallback(
-    (order: PlaceOrderSubmit) => {
-      const side = order.side === "buy" ? "long" : "short";
-      try {
-        chartRef.current?.openPosition?.(side, order.size);
-        if (order.side === "buy") {
-          showBuyNotification({ price: order.price, quantity: order.size, symbol: session?.symbol ?? "" });
-          sounds.playBuySound?.();
-        } else {
-          showSellNotification({ price: order.price, quantity: order.size, symbol: session?.symbol ?? "" });
-          sounds.playSellSound?.();
-        }
-      } catch {
-        // Non-fatal — chart rejects invalid orders.
-      }
-    },
-    [session?.symbol, showBuyNotification, showSellNotification, sounds]
-  );
-
-  const handleSaveToJournal = useCallback(async () => {
-    if (!session) {
-      toast.error("No active session to save");
-      return;
-    }
-    if (!userId) {
-      toast.error("Sign in to save trades to your journal");
-      return;
-    }
-    const positions = chartRef.current?.getPositions?.() ?? [];
-    const closed = positions.filter((p: any) => p.isClosed || p.status === "closed" || p.exitPrice != null);
-    if (closed.length === 0) {
-      toast.info("No closed trades to save yet");
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const res = await saveBacktestTradesToJournal(positions as any, session, userId);
-      if (res.errors > 0) {
-        toast.error("Failed to save some trades to journal");
-      } else {
-        toast.success(
-          `Saved ${res.saved} trade${res.saved === 1 ? "" : "s"} to journal${session.strategyName ? ` · ${session.strategyName}` : ""}`
-        );
-      }
-    } catch {
-      toast.error("Failed to save trades to journal");
-    } finally {
-      setIsSaving(false);
-    }
-  }, [session, userId]);
 
   // Playback controls
   const handlePlay = () => {
@@ -361,16 +271,6 @@ export function BacktestImmersiveMode({ onExit, session }: BacktestImmersiveMode
         <span>Exit Immersive</span>
       </div>
 
-      {/* Active session label - Top Left */}
-      {session && (
-        <div className="absolute top-4 left-4 z-[10000] flex items-center gap-2 rounded-xl bg-black/60 backdrop-blur-sm border border-[#C9A646]/30 px-3 py-2">
-          <span className="text-white text-sm font-medium">{session.name}</span>
-          <span className="text-[#C9A646]/70 text-xs">
-            {session.symbol} · ${session.startBalance.toLocaleString()}
-          </span>
-        </div>
-      )}
-
       {/* Main Chart Container */}
       <div className="relative h-full w-full flex flex-col">
         {/* Replay Chart - Full Screen */}
@@ -406,66 +306,8 @@ export function BacktestImmersiveMode({ onExit, session }: BacktestImmersiveMode
           </div>
         )}
 
-        {/* Place Order Panel - docked right */}
-        {showOrderPanel && (
-          <div className="absolute top-20 right-4 z-[9998] w-[280px]">
-            <PlaceOrderPanel
-              symbol={session?.symbol ?? ""}
-              marketPrice={marketPrice}
-              currentBalance={currentBalance}
-              initialBalance={initialBalance}
-              onSubmit={handlePlaceOrder}
-            />
-          </div>
-        )}
-
-        {/* Toggle order panel */}
-        <Button
-          onClick={() => setShowOrderPanel((v) => !v)}
-          size="sm"
-          variant="ghost"
-          className="absolute top-4 right-56 z-[10000] h-12 rounded-xl bg-black/60 backdrop-blur-sm border border-[#C9A646]/30 hover:bg-[#C9A646]/20 text-[#C9A646] text-xs"
-        >
-          {showOrderPanel ? "Hide order" : "Place order"}
-        </Button>
-
-        {/* Save to journal */}
-        <Button
-          onClick={handleSaveToJournal}
-          disabled={isSaving}
-          size="sm"
-          variant="ghost"
-          className="absolute top-4 left-1/2 -translate-x-1/2 z-[10000] h-10 rounded-xl bg-black/60 backdrop-blur-sm border border-[#C9A646]/30 hover:bg-[#C9A646]/20 text-[#C9A646] text-xs flex items-center gap-2"
-        >
-          <Save className="h-4 w-4" />
-          {isSaving ? "Saving…" : "Save to journal"}
-        </Button>
-
-        {/* Economic events overlay - docked left */}
-        {showEvents && (
-          <div className="absolute top-20 left-4 z-[9998]">
-            <EconomicEventsPanel
-              from={session?.dateRange?.from}
-              to={session?.dateRange?.to}
-              onClose={() => setShowEvents(false)}
-            />
-          </div>
-        )}
-
-        {/* Toggle economic events */}
-        <Button
-          onClick={() => setShowEvents((v) => !v)}
-          size="icon"
-          variant="ghost"
-          className="absolute top-20 left-4 z-[9997] h-10 w-10 rounded-xl bg-black/60 backdrop-blur-sm border border-[#C9A646]/30 hover:bg-[#C9A646]/20 text-[#C9A646]"
-          style={{ display: showEvents ? "none" : undefined }}
-          title="Economic events"
-        >
-          <CalendarDays className="h-4 w-4" />
-        </Button>
-
         {/* Trade Execution Notification */}
-        <TradeExecutionNotification
+        <TradeExecutionNotification 
           notification={notification}
           onComplete={clearNotification}
         />
@@ -575,11 +417,6 @@ export function BacktestImmersiveMode({ onExit, session }: BacktestImmersiveMode
             {/* Speed Control & Stats */}
             <div className="flex items-center justify-between gap-6">
               <div className="flex items-center gap-2">
-                <GoToControl
-                  totalCandles={totalCandles}
-                  currentIndex={candleIndex}
-                  onGoToIndex={(i) => chartRef.current?.jumpToIndex?.(i)}
-                />
                 <Zap className="h-4 w-4 text-[#C9A646]" />
                 <span className="text-xs text-[#C9A646]/60">Speed:</span>
                 <Select value={playbackSpeed} onValueChange={handleSpeedChange}>
