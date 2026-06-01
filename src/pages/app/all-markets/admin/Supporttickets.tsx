@@ -78,6 +78,9 @@ interface Ticket {
   resolved_at: string | null;
   last_customer_message_at: string | null;
   last_admin_message_at: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+  metadata?: Record<string, any> | null;
 }
 
 interface SystemUpdateMetadata {
@@ -146,6 +149,7 @@ export default function SupportTickets() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [response, setResponse] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('awaiting');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'Billing' | 'Bug' | 'Feature' | 'Frustrated' | 'Technical' | 'Question' | 'Feedback' | 'Other'>('all');
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [responding, setResponding] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
@@ -831,6 +835,31 @@ toast.success('Update deleted');
     return config[status as keyof typeof config] || config.open;
   }
 
+  type ProblemType = 'Billing' | 'Bug' | 'Feature' | 'Frustrated' | 'Technical' | 'Question' | 'Feedback' | 'Other';
+
+  function getTicketProblemType(t: Ticket): ProblemType {
+    const tags = Array.isArray(t.tags) ? t.tags : [];
+    if (tags.includes('billing') || t.category === 'payment') return 'Billing';
+    if (tags.includes('bug')) return 'Bug';
+    if (tags.includes('feature_request')) return 'Feature';
+    if (tags.includes('frustrated')) return 'Frustrated';
+    if (t.category === 'technical') return 'Technical';
+    if (t.category === 'question') return 'Question';
+    if (t.category === 'feedback') return 'Feedback';
+    return 'Other';
+  }
+
+  const PROBLEM_TYPE_STYLES: Record<ProblemType, string> = {
+    Billing:    'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    Bug:        'bg-red-500/15 text-red-300 border-red-500/30',
+    Feature:    'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    Frustrated: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    Technical:  'bg-blue-500/15 text-blue-300 border-blue-500/30',
+    Question:   'bg-sky-500/15 text-sky-300 border-sky-500/30',
+    Feedback:   'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    Other:      'bg-gray-500/15 text-gray-300 border-gray-500/30',
+  };
+
   function getTypeConfig(type: SystemUpdate['type']) {
     const configs = {
       info: {
@@ -954,6 +983,18 @@ toast.success('Update deleted');
     }).length,
     all: ticketStats.total,
   };
+
+  // ==================== CATEGORY FILTER ====================
+
+  const categoryTypeCounts = tickets.reduce<Record<string, number>>((acc, t) => {
+    const pt = getTicketProblemType(t);
+    acc[pt] = (acc[pt] || 0) + 1;
+    return acc;
+  }, {});
+
+  const visibleTickets = categoryFilter === 'all'
+    ? tickets
+    : tickets.filter((t) => getTicketProblemType(t) === categoryFilter);
 
   // ==================== RENDER ====================
 
@@ -1125,6 +1166,35 @@ toast.success('Update deleted');
                     </button>
                   ))}
                 </div>
+
+                {/* Category Filter Chips */}
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  <button
+                    onClick={() => setCategoryFilter('all')}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                      categoryFilter === 'all'
+                        ? 'bg-zinc-600 text-white border-zinc-500 ring-1 ring-white/20'
+                        : 'bg-zinc-800 text-gray-400 border-zinc-700 hover:text-white hover:bg-zinc-700'
+                    }`}
+                  >
+                    All ({tickets.length})
+                  </button>
+                  {(Object.entries(categoryTypeCounts) as [string, number][])
+                    .filter(([, count]) => count > 0)
+                    .map(([pt, count]) => (
+                      <button
+                        key={pt}
+                        onClick={() => setCategoryFilter(pt as typeof categoryFilter)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                          categoryFilter === pt
+                            ? `${PROBLEM_TYPE_STYLES[pt as keyof typeof PROBLEM_TYPE_STYLES]} ring-1 ring-white/20`
+                            : 'bg-zinc-800 text-gray-400 border-zinc-700 hover:text-white hover:bg-zinc-700'
+                        }`}
+                      >
+                        {pt} ({count})
+                      </button>
+                    ))}
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto">
@@ -1143,11 +1213,12 @@ toast.success('Update deleted');
                     </p>
                   </div>
                 ) : (
-                  tickets.map((ticket) => {
+                  visibleTickets.map((ticket) => {
                     const statusBadge = getStatusBadge(ticket.status);
                     const StatusIcon = statusBadge.icon;
                     const isUnread = !ticket.is_read;
                     const needsResponse = ticketNeedsResponse(ticket);
+                    const problemType = getTicketProblemType(ticket);
 
                     return (
                       <button
@@ -1160,7 +1231,7 @@ toast.success('Update deleted');
                         {isUnread && (
                           <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                         )}
-                        
+
                         {needsResponse && (
                           <div className="absolute left-2 top-2 w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                         )}
@@ -1179,12 +1250,17 @@ toast.success('Update deleted');
                               <p className="text-xs text-gray-500 truncate">{ticket.user_email}</p>
                             </div>
                           </div>
-                          <Badge className={`${statusBadge.bg} ${statusBadge.text} text-[9px] px-1.5 py-0 h-5 flex-shrink-0`}>
-                            <StatusIcon className="h-2.5 w-2.5 mr-0.5" />
-                            {statusBadge.label}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <Badge className={`${statusBadge.bg} ${statusBadge.text} text-[9px] px-1.5 py-0 h-5`}>
+                              <StatusIcon className="h-2.5 w-2.5 mr-0.5" />
+                              {statusBadge.label}
+                            </Badge>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold ${PROBLEM_TYPE_STYLES[problemType]}`}>
+                              {problemType}
+                            </span>
+                          </div>
                         </div>
-                        
+
                         <p className="text-xs text-gray-400 mb-2 line-clamp-2 ml-4 leading-relaxed">
                           {ticket.subject}
                         </p>
@@ -1258,6 +1334,20 @@ toast.success('Update deleted');
                     <div className="mt-3 px-3 py-2 bg-zinc-800/50 rounded-lg border border-zinc-700">
                       <p className="text-xs text-gray-400 mb-0.5">Subject</p>
                       <p className="text-sm text-white font-medium">{selectedTicket.subject}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${PROBLEM_TYPE_STYLES[getTicketProblemType(selectedTicket)]}`}>
+                          {getTicketProblemType(selectedTicket)}
+                        </span>
+                        {selectedTicket.priority && selectedTicket.priority !== 'normal' && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
+                            selectedTicket.priority === 'high' || selectedTicket.priority === 'urgent'
+                              ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                              : 'bg-gray-500/15 text-gray-300 border-gray-500/30'
+                          }`}>
+                            {selectedTicket.priority} priority
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
