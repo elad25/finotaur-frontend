@@ -251,6 +251,7 @@ const StocksCatalysts = lazy(() => import("@/pages/app/stocks/Catalysts"));
 const StocksUpgrades = lazy(() => import("@/pages/app/stocks/Upgrades"));
 const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
 const StocksSentiment = lazy(() => import("@/pages/app/stocks/Sentiment"));
+const StocksInsider   = lazy(() => import("@/pages/app/stocks/Insider"));
 const StocksReports = lazy(() => import("@/pages/app/stocks/Reports"));
 const StocksWatchlists = lazy(() => import("@/pages/app/stocks/Watchlists"));
 
@@ -310,18 +311,9 @@ const MacroLiquidity = lazy(() => import("@/pages/app/macro/Liquidity"));
 const MacroRealYields = lazy(() => import("@/pages/app/macro/RealYields"));
 const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"));
 
-// Options
-const OptionsChain = lazy(() => import("@/pages/app/options/Chain"));
-const OptionsFlow = lazy(() => import("@/pages/app/options/Flow"));
-const OptionsVolatility = lazy(() => import("@/pages/app/options/Volatility"));
-const OptionsStrategy = lazy(() => import("@/pages/app/options/Strategy"));
-const OptionsSimulator = lazy(() => import("@/pages/app/options/Simulator"));
-const OptionsGreeksMonitor = lazy(() => import("@/pages/app/options/GreeksMonitor"));
-const OptionsIvRank = lazy(() => import("@/pages/app/options/IVRank"));
-const OptionsOIVolume = lazy(() => import("@/pages/app/options/OIVolume"));
-const OptionsUnusualActivity = lazy(() => import("@/pages/app/options/UnusualActivity"));
-const OptionsEarningsIVCrush = lazy(() => import("@/pages/app/options/EarningsIVCrush"));
-const OptionsShortcuts = lazy(() => import("@/pages/app/options/Shortcuts"));
+// Options — sealed pending licensed data feed (Track B). Pages kept on disk; routes serve ComingSoon.
+// To re-enable: restore lazy imports below, swap ComingSoon back in routes, set OPTIONS_ENABLED=true in constants/nav.ts
+import OptionsComingSoon from "@/pages/app/ComingSoon";
 
 // AI
 const AIMyPortfolio = lazy(() => import("@/pages/app/ai/MyPortfolio"));
@@ -460,19 +452,21 @@ function AppContent() {
           <Route path="admin/patterns" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibraryList /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/pricing" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
 
-          {/* OPTIONS */}
+          {/* OPTIONS — sealed pending licensed options data feed (Track B).
+              Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.
+              To re-enable: restore lazy imports + swap OptionsComingSoon back to real components. */}
           <Route path="options" element={<Navigate to="/app/options/chain" replace />} />
-          <Route path="options/chain" element={<LockedRoute domainId="options"><OptionsChain /></LockedRoute>} />
-          <Route path="options/flow" element={<LockedRoute domainId="options"><OptionsFlow /></LockedRoute>} />
-          <Route path="options/volatility" element={<LockedRoute domainId="options"><OptionsVolatility /></LockedRoute>} />
-          <Route path="options/strategy" element={<LockedRoute domainId="options"><OptionsStrategy /></LockedRoute>} />
-          <Route path="options/simulator" element={<LockedRoute domainId="options"><OptionsSimulator /></LockedRoute>} />
-          <Route path="options/greeks-monitor" element={<LockedRoute domainId="options"><OptionsGreeksMonitor /></LockedRoute>} />
-          <Route path="options/iv-rank" element={<LockedRoute domainId="options"><OptionsIvRank /></LockedRoute>} />
-          <Route path="options/oi-volume" element={<LockedRoute domainId="options"><OptionsOIVolume /></LockedRoute>} />
-          <Route path="options/unusual-activity" element={<LockedRoute domainId="options"><OptionsUnusualActivity /></LockedRoute>} />
-          <Route path="options/earnings-iv-crush" element={<LockedRoute domainId="options"><OptionsEarningsIVCrush /></LockedRoute>} />
-          <Route path="options/shortcuts" element={<LockedRoute domainId="options"><OptionsShortcuts /></LockedRoute>} />
+          <Route path="options/chain" element={<OptionsComingSoon title="Options Chain" description="Real-time options chain data is coming in a future release. We're securing the licensed data feed required to power this feature." />} />
+          <Route path="options/flow" element={<OptionsComingSoon title="Options Flow" description="Block trades, sweeps, and unusual flow analysis are coming in a future release." />} />
+          <Route path="options/volatility" element={<OptionsComingSoon title="Volatility" description="IV rank, skew, and term structure analysis are coming in a future release." />} />
+          <Route path="options/strategy" element={<OptionsComingSoon title="Strategy Builder" description="Multi-leg options strategy analysis and P&L modeling are coming in a future release." />} />
+          <Route path="options/simulator" element={<OptionsComingSoon title="Options Simulator" description="P&L scenarios, Greeks, and expiration modeling are coming in a future release." />} />
+          <Route path="options/greeks-monitor" element={<OptionsComingSoon title="Greeks Monitor" description="Portfolio-level Greeks monitoring is coming in a future release." />} />
+          <Route path="options/iv-rank" element={<OptionsComingSoon title="IV Rank / Percentile" description="IV rank and percentile screener are coming in a future release." />} />
+          <Route path="options/oi-volume" element={<OptionsComingSoon title="OI / Volume" description="Open interest and volume analysis are coming in a future release." />} />
+          <Route path="options/unusual-activity" element={<OptionsComingSoon title="Unusual Activity" description="Unusual options activity scanner is coming in a future release." />} />
+          <Route path="options/earnings-iv-crush" element={<OptionsComingSoon title="Earnings IV Crush" description="Earnings volatility crush analysis is coming in a future release." />} />
+          <Route path="options/shortcuts" element={<OptionsComingSoon title="Options Shortcuts" description="Quick-access options tools are coming in a future release." />} />
 
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
@@ -486,6 +480,7 @@ function AppContent() {
           <Route path="stocks/upgrades" element={<LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute>} />
           <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><StocksValuation /></LockedRoute>} />
           <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
+          <Route path="stocks/insider"  element={<LockedRoute domainId="stocks"><StocksInsider  /></LockedRoute>} />
           <Route path="stocks/reports" element={<LockedRoute domainId="stocks"><StocksReports /></LockedRoute>} />
           <Route path="stocks/watchlists" element={<LockedRoute domainId="stocks"><StocksWatchlists /></LockedRoute>} />
           

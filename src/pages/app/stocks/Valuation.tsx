@@ -45,6 +45,7 @@ import {
   Cell,
 } from "recharts";
 import { useFundamentals } from "@/hooks/useFundamentals";
+import { FinotaurSnowflake } from "@/components/stocks/FinotaurSnowflake";
 
 // ---------------------------------------------------------------------------
 // Types (local — matches fundamentals.all.ts composeMock output)
@@ -575,7 +576,17 @@ export default function StocksValuation() {
 
         <Card>
           <SectionTitle>Composite Grade Scorecard</SectionTitle>
-          <GradeScorecard grades={grades} />
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <FinotaurSnowflake
+              grades={grades}
+              symbol={symbol}
+              size={180}
+              className="shrink-0"
+            />
+            <div className="flex-1 w-full">
+              <GradeScorecard grades={grades} />
+            </div>
+          </div>
           <div className="mt-4 text-[10px] text-neutral-600">
             Scores computed from SEC-derived fundamentals. 100 = best in sector.
           </div>
