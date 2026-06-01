@@ -107,7 +107,7 @@ function fmtTime(ts: string): string {
 }
 
 // ==================== Main ====================
-export default function SupportAiDrafts() {
+export default function SupportAiDrafts({ embedded = false }: { embedded?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const focusDraftId = searchParams.get('draft');
 
@@ -308,11 +308,8 @@ export default function SupportAiDrafts() {
 
   const pendingCount = useMemo(() => drafts.filter((d) => d.status === 'pending').length, [drafts]);
 
-  return (
-    <AdminLayout
-      title="Support AI Drafts"
-      description={`${pendingCount} pending draft${pendingCount === 1 ? '' : 's'}. Billing/refund tickets are routed to you manually (never auto).`}
-    >
+  const content = (
+    <>
       {/* Settings strip */}
       <div className="mb-6 rounded-lg border border-gray-800 bg-[#111] p-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -592,6 +589,15 @@ export default function SupportAiDrafts() {
           </div>
         )}
       </div>
+    </>
+  );
+
+  return embedded ? content : (
+    <AdminLayout
+      title="Support AI Drafts"
+      description={`${pendingCount} pending draft${pendingCount === 1 ? '' : 's'}. Billing/refund tickets are routed to you manually (never auto).`}
+    >
+      {content}
     </AdminLayout>
   );
 }
