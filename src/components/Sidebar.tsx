@@ -675,9 +675,16 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 </>
               )}
 
-              {/* Tooltip when collapsed */}
+              {/* Collapsed-rail label: the ACTIVE item shows its label as a
+                  persistent pill ("Active Label" pattern); every other item
+                  reveals the same pill only on hover. */}
               {!isExpanded && (
-                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
+                <div className={cn(
+                  'absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 z-50 shadow-lg pointer-events-none',
+                  parentActive
+                    ? 'border border-gold/40 text-gold-bright opacity-100 visible'
+                    : 'border border-gray-600 opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                )}>
                   {item.label}
                   {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
                   {showBetaBadge && (
