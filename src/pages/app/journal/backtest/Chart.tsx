@@ -1,64 +1,216 @@
-/**
- * Backtest Chart page — interactive paper-trading view.
- *
- * Phase 1 (2026-05-27): Replaced the prior marketing landing page with the
- * real interactive BacktestChart wrapping FinotaurChart. Futures (CME via
- * Yahoo `=F` continuous), equities (Yahoo), and crypto (Binance direct) all
- * work without TradingView's paid plan gate.
- *
- * The legacy "Immersive Mode" (full-screen ReplayChart playback experience,
- * crypto-only) is preserved behind a top-right button — accessible but no
- * longer the only entry point.
- */
+import { useState, useEffect } from "react";
+import { BacktestImmersiveMode } from "@/components/BacktestImmersiveMode";
+import { CreateBacktestSessionModal } from "@/components/backtest/CreateBacktestSessionModal";
+import { useBacktestSessionStore } from "@/store/useBacktestSessionStore";
+import type { BacktestSession } from "@/types/backtestSession";
+import { Button } from "@/components/ui/button";
+import {
+  Plus, History, LineChart, BookOpen, Share2, Clock,
+  ChevronRight, Trash2, CornerDownLeft,
+} from "lucide-react";
+import { toast } from "sonner";
+import "@/styles/chart-animations.css";
 
-import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Maximize2, Sparkles } from 'lucide-react';
-import { BacktestChart } from '@/components/backtest/BacktestChart';
-import { BacktestImmersiveMode } from '@/components/BacktestImmersiveMode';
-import { useMentorView } from '@/contexts/MentorViewContext';
+const GOLD = "#C9A646";
+
+const FEATURES = [
+  {
+    icon: History,
+    title: "Travel Back In Time",
+    desc: "Navigate through historical market conditions and set the pace at your own speed.",
+  },
+  {
+    icon: LineChart,
+    title: "Simulate Trades",
+    desc: "Witness your strategy come to life in real time by simulating trades and putting it to the test.",
+  },
+  {
+    icon: BookOpen,
+    title: "Trading Journal & Analytics Unleashed",
+    desc: "Have a detailed record of every trade, reflect on each session, and access a wealth of analytics.",
+  },
+  {
+    icon: Share2,
+    title: "Share Your Sessions",
+    desc: "Collaborate with others by sharing your sessions — every trade, all the data, replayable at your fingertips.",
+    comingSoon: true,
+  },
+];
 
 export default function Chart() {
   const [isImmersiveMode, setIsImmersiveMode] = useState(false);
-  const { isMentorView } = useMentorView();
+  const [modalOpen, setModalOpen] = useState(false);
 
-  // Cleanup leftover TradingView widgets when leaving the page (legacy from
-  // the old marketing-page implementation — still needed because the immersive
-  // mode loads ReplayChart which may inject TradingView containers).
+  const sessions = useBacktestSessionStore((s) => s.sessions);
+  const activeSession = useBacktestSessionStore((s) => s.getActiveSession());
+  const setActiveSession = useBacktestSessionStore((s) => s.setActiveSession);
+  const deleteSession = useBacktestSessionStore((s) => s.deleteSession);
+
+  // Cleanup TradingView widgets on unmount
   useEffect(() => {
     return () => {
-      const tvWidgets = document.querySelectorAll('.tradingview-widget-container');
-      tvWidgets.forEach((widget) => {
-        const iframe = widget.querySelector('iframe');
-        if (iframe) iframe.src = 'about:blank';
+      document.querySelectorAll(".tradingview-widget-container").forEach((widget) => {
+        const iframe = widget.querySelector("iframe");
+        if (iframe) iframe.src = "about:blank";
       });
     };
   }, []);
 
+  const enterSession = (session: BacktestSession) => {
+    setActiveSession(session.id);
+    setIsImmersiveMode(true);
+  };
+
   if (isImmersiveMode) {
-    return <BacktestImmersiveMode onExit={() => setIsImmersiveMode(false)} />;
+    return (
+      <BacktestImmersiveMode
+        session={activeSession}
+        onExit={() => setIsImmersiveMode(false)}
+      />
+    );
   }
 
+  const recentSessions = sessions.filter((s) => s.status === "active").slice(0, 6);
+
   return (
-    <div className="relative flex h-full w-full flex-col">
-      {/* Immersive-mode entry — kept as legacy access to the playback experience.
-          Hidden in Mentor View (read-only — no paper-trading interaction). */}
-      {!isMentorView && (
-        <div className="absolute right-3 top-3 z-20">
+    <div className="h-full w-full overflow-y-auto bg-gradient-to-br from-black via-[#0A0A0A] to-black relative">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-8 pt-6">
+        <h2 className="text-lg font-semibold text-white">Backtesting</h2>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-black bg-[#C9A646] rounded-full px-2 py-0.5">
+          Beta
+        </span>
+      </div>
+
+      {/* Hero */}
+      <div className="relative mx-8 mt-6 rounded-2xl overflow-hidden border border-[#C9A646]/20">
+        {/* Background glow */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#C9A646] rounded-full filter blur-[120px] animate-pulse" />
+          <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-[#C9A646] rounded-full filter blur-[120px] animate-pulse animation-delay-2000" />
+        </div>
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: `linear-gradient(${GOLD} 1px, transparent 1px), linear-gradient(90deg, ${GOLD} 1px, transparent 1px)`,
+            backgroundSize: "44px 44px",
+          }}
+        />
+
+        <div className="relative z-10 flex flex-col items-center text-center py-16 px-6">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-[#C9A646] rounded-2xl filter blur-xl opacity-40 animate-pulse" />
+            <div className="relative h-16 w-16 rounded-2xl border-2 border-[#C9A646] flex items-center justify-center">
+              <CornerDownLeft className="h-8 w-8 text-[#C9A646]" strokeWidth={2} />
+            </div>
+          </div>
+
+          <h1 className="text-4xl md:text-5xl font-bold mb-6 text-white">
+            Start Backtesting Your Strategies
+          </h1>
+
           <Button
-            onClick={() => setIsImmersiveMode(true)}
-            size="sm"
-            className="bg-gradient-to-r from-[#C9A646] to-[#A68B3A] text-black shadow-lg shadow-[#C9A646]/30 hover:from-[#D4B55E] hover:to-[#C9A646]"
+            onClick={() => setModalOpen(true)}
+            size="lg"
+            className="h-12 px-6 bg-gradient-to-r from-[#C9A646] to-[#A68B3A] hover:from-[#D4B55E] hover:to-[#C9A646] text-black font-semibold rounded-xl shadow-2xl shadow-[#C9A646]/40 transition-all hover:scale-105"
           >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Immersive Mode
-            <Maximize2 className="ml-2 h-4 w-4 opacity-70" />
+            <Plus className="h-5 w-5 mr-2" />
+            Create backtesting session
           </Button>
+        </div>
+      </div>
+
+      {/* Recent sessions */}
+      {recentSessions.length > 0 && (
+        <div className="mx-8 mt-10">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-[#C9A646]" /> Your sessions
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentSessions.map((s) => (
+              <div
+                key={s.id}
+                className="group relative rounded-xl border border-white/10 bg-white/5 p-4 hover:border-[#C9A646]/40 hover:bg-white/[0.07] transition-all"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-white font-medium truncate">{s.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {s.symbol} · ${s.startBalance.toLocaleString()}
+                      {s.strategyName ? ` · ${s.strategyName}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      type="button"
+                      onClick={() => toast.info("Session sharing is coming soon")}
+                      className="text-gray-600 hover:text-[#C9A646] transition-colors"
+                      title="Share session (coming soon)"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteSession(s.id)}
+                      className="text-gray-600 hover:text-rose-400 transition-colors"
+                      title="Delete session"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => enterSession(s)}
+                  className="mt-4 w-full flex items-center justify-center gap-1.5 rounded-lg border border-[#C9A646]/30 py-2 text-sm text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors"
+                >
+                  Open session <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* The real chart */}
-      <BacktestChart />
+      {/* The Ultimate Tool section */}
+      <div className="mx-8 mt-14 mb-16 max-w-5xl lg:mx-auto px-2">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl font-bold text-white">The Ultimate Tool for Backtesting</h2>
+          <p className="text-sm text-gray-500 mt-2 max-w-2xl mx-auto">
+            Start backtesting different assets and have access to additional indicators, tools, and drawings.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {FEATURES.map((f) => {
+            const Icon = f.icon;
+            return (
+              <div key={f.title} className="flex items-start gap-4">
+                <div className="shrink-0 bg-[#C9A646]/10 border border-[#C9A646]/20 rounded-xl p-3">
+                  <Icon className="h-5 w-5 text-[#C9A646]" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold flex items-center gap-2">
+                    {f.title}
+                    {f.comingSoon && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#C9A646] border border-[#C9A646]/40 rounded px-1.5 py-0.5">
+                        Coming soon
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">{f.desc}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <CreateBacktestSessionModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onCreated={(session) => enterSession(session)}
+      />
     </div>
   );
 }
