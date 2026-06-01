@@ -6,8 +6,9 @@
 //     Tabs, TabNav, StockLoadingSkeleton preserved unchanged.
 // =====================================================
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
 import { Lock } from 'lucide-react';
 
 import { useStockAnalyzer } from '@/hooks/useStockAnalyzer';
@@ -39,6 +40,7 @@ import {
 
 export default function StockAnalyzer() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     searchQuery,
     setSearchQuery,
@@ -72,6 +74,22 @@ export default function StockAnalyzer() {
     if (!allowed) return;
     originalHandleSelectTicker(ticker);
   };
+
+  // Auto-select ticker from ?symbol= URL param (e.g. from omnibox navigation)
+  useEffect(() => {
+    const symbolParam = searchParams.get('symbol');
+    if (!symbolParam) return;
+    const sym = symbolParam.toUpperCase().trim();
+    if (!sym) return;
+    // Delay a tick so access/usage hooks have initialised
+    const timer = setTimeout(() => {
+      handleSelectTicker(sym);
+    }, 0);
+    return () => clearTimeout(timer);
+    // Intentionally only runs when the symbol param changes, not on every
+    // handleSelectTicker identity change (which would re-run on every render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Show gate if daily limit reached
   const access = canAccessPage('stock_analyzer');
