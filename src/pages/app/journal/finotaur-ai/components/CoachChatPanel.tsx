@@ -430,30 +430,32 @@ export default function CoachChatPanel({
   );
 }
 
-// ── Score strip — compact FINOTAUR SCORE header rendered inside the chat ──────
+// ── Score — centered FINOTAUR SCORE display at the top of the chat ───────────
 
 function ScoreStrip({ score }: { score?: FinotaurScore | null }): JSX.Element | null {
   if (!score || score.score == null) return null;
   const delta = score.delta;
   return (
-    <div className="shrink-0 mb-ds-3 flex items-center gap-ds-2 rounded-[10px] border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2">
-      <span className="font-sans text-[11px] uppercase tracking-wide text-ink-tertiary">
+    <div className="shrink-0 mb-ds-3 flex flex-col items-center gap-0.5">
+      <span className="font-sans text-[11px] uppercase tracking-[0.18em] text-ink-tertiary">
         FINOTAUR Score · {score.window_days ?? 30}D
       </span>
-      <span className="ml-auto font-mono text-h4 font-semibold tabular-nums text-ink-primary">
-        {score.score}
-      </span>
-      {delta != null && delta !== 0 && (
-        <span
-          className={[
-            'font-mono text-[11px] tabular-nums',
-            delta > 0 ? 'text-num-positive' : 'text-num-negative',
-          ].join(' ')}
-        >
-          {delta > 0 ? '+' : ''}
-          {delta}
+      <div className="flex items-baseline gap-ds-2">
+        <span className="font-mono text-[40px] font-semibold leading-none tabular-nums text-gold-primary">
+          {score.score}
         </span>
-      )}
+        {delta != null && delta !== 0 && (
+          <span
+            className={[
+              'font-mono text-xs tabular-nums',
+              delta > 0 ? 'text-num-positive' : 'text-num-negative',
+            ].join(' ')}
+          >
+            {delta > 0 ? '+' : ''}
+            {delta}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

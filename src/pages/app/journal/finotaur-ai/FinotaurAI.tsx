@@ -26,8 +26,8 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 // ---------------------------------------------------------------------------
 function PageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-bg-base">
-      <div className="mx-auto max-w-7xl px-ds-6 py-ds-7">
+    <div className="bg-bg-base">
+      <div className="mx-auto max-w-7xl px-ds-6 py-ds-3">
         {children}
       </div>
     </div>
@@ -132,7 +132,7 @@ export default function FinotaurAI() {
         {/* Full-width chat. History sidebar removed (per design) — the FINOTAUR
             score (top, above the title) and the daily briefing (as tappable
             starter suggestions) live INSIDE the chat panel. */}
-        <div className="mt-ds-4 lg:h-[calc(100vh-120px)]">
+        <div className="mt-ds-2 lg:h-[calc(100vh-150px)]">
           <CoachChatPanel
             prefillRequest={isMentorView ? null : prefillRequest}
             chatInstance={chat}
