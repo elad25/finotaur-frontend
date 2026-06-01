@@ -64,20 +64,20 @@ export default function DateNavigator({ value, onChange, mode }: DateNavigatorPr
     <div className="flex items-center gap-2">
       <button
         onClick={() => onChange(addDays(value, -step))}
-        className="p-1.5 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors"
+        className="p-1.5 rounded-md bg-white/[0.045] text-ink-secondary hover:text-ink-primary border border-white/[0.06] transition-colors"
         aria-label="Previous"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
 
-      <span className="text-sm text-yellow-100 font-medium min-w-[200px] text-center">
+      <span className="text-sm text-ink-primary font-medium min-w-[200px] text-center">
         {label}
       </span>
 
       <button
         onClick={() => !nextDisabled && onChange(next)}
         disabled={nextDisabled}
-        className="p-1.5 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="p-1.5 rounded-md bg-white/[0.045] text-ink-secondary hover:text-ink-primary border border-white/[0.06] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label="Next"
       >
         <ChevronRight className="w-4 h-4" />
@@ -88,7 +88,7 @@ export default function DateNavigator({ value, onChange, mode }: DateNavigatorPr
         value={value}
         max={today}
         onChange={(e) => e.target.value && onChange(e.target.value)}
-        className="ml-2 bg-black/30 border border-yellow-500/20 text-yellow-100 text-sm rounded-lg px-2 py-1 accent-yellow-500 [color-scheme:dark]"
+        className="ml-2 bg-white/[0.045] border border-white/[0.06] text-ink-primary text-sm rounded-md px-2 py-1 [color-scheme:dark]"
       />
     </div>
   );

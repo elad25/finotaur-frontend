@@ -12,8 +12,8 @@ export default function DayWeekToggle({ value, onChange }: DayWeekToggleProps) {
         onClick={() => onChange(v)}
         className={
           active
-            ? "px-4 py-1.5 rounded-full text-sm font-medium bg-yellow-600/25 text-yellow-100 border border-yellow-500/40 transition-colors"
-            : "px-4 py-1.5 rounded-full text-sm font-medium text-zinc-300 border border-transparent hover:bg-zinc-800 transition-colors"
+            ? "rounded-md px-4 py-1.5 text-xs font-medium bg-[#C9A646]/55 text-white shadow-[0_0_18px_rgba(201,166,70,0.18)] transition-all"
+            : "rounded-md px-4 py-1.5 text-xs font-medium bg-white/[0.045] text-ink-secondary hover:text-ink-primary transition-all"
         }
       >
         {label}
@@ -22,7 +22,7 @@ export default function DayWeekToggle({ value, onChange }: DayWeekToggleProps) {
   };
 
   return (
-    <div className="inline-flex rounded-full bg-black/30 p-1 gap-1">
+    <div className="inline-flex gap-2">
       {btn("day", "Day")}
       {btn("week", "Week")}
     </div>

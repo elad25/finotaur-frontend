@@ -41,8 +41,8 @@ export default function DayView() {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold text-yellow-100">Day View</h2>
-        <p className="text-sm text-zinc-400 mt-1">Drill into a single day or week of trading.</p>
+        <h2 className="text-2xl font-semibold text-ink-primary">Day View</h2>
+        <p className="text-sm text-ink-tertiary mt-1">Drill into a single day or week of trading.</p>
       </div>
 
       <StartMyDayCTA />

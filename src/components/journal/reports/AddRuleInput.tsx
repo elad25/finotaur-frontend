@@ -26,12 +26,12 @@ export default function AddRuleInput({ onAdd, disabled }: Props) {
         onKeyDown={handleKey}
         disabled={disabled}
         maxLength={200}
-        className="flex-1 bg-black/30 border border-yellow-200/15 rounded-xl px-3 py-2 text-sm text-zinc-200 outline-none focus:ring-1 focus:ring-[#C9A646]/40 disabled:opacity-40 disabled:cursor-not-allowed placeholder:text-zinc-600"
+        className="flex-1 bg-black/30 border border-white/[0.06] rounded-xl px-3 py-2 text-sm text-ink-primary outline-none focus:ring-1 focus:ring-[#C9A646]/40 disabled:opacity-40 disabled:cursor-not-allowed placeholder:text-ink-tertiary"
       />
       <button
         onClick={submit}
         disabled={disabled || !value.trim()}
-        className="px-4 py-2 rounded-xl border border-yellow-500/40 bg-yellow-600/25 text-yellow-100 hover:bg-yellow-600/35 disabled:opacity-40 disabled:cursor-not-allowed text-sm transition"
+        className="px-4 py-2 rounded-xl border border-[#C9A646]/40 bg-[#C9A646]/55 text-white hover:bg-[#C9A646]/65 shadow-[0_0_18px_rgba(201,166,70,0.18)] disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-all"
       >
         Add
       </button>

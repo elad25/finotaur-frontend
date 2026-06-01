@@ -291,10 +291,194 @@ const BreakdownTable: React.FC<BreakdownTableProps> = ({
 };
 
 // ---------------------------------------------------------------------------
+// Combination matrix helpers
+// ---------------------------------------------------------------------------
+
+/** Dimension accessor type for matrix rows/cols */
+type DimAccessor = (t: Trade) => string;
+
+const dimStrategy: DimAccessor = t => t.strategy_name?.trim() || '(unset)';
+const dimSession:  DimAccessor = t => t.session?.trim()       || '(unset)';
+const dimAsset:    DimAccessor = t => normalizeAssetClassLabel(t.asset_class ?? getAssetClass(t.symbol ?? ''));
+
+interface MatrixResult {
+  rowKeys: string[];
+  colKeys: string[];
+  cells: Map<string, BreakdownRow>;
+  bestCell: { rowKey: string; colKey: string; row: BreakdownRow } | null;
+}
+
+function buildMatrix(
+  trades: Trade[],
+  rowAccessor: DimAccessor,
+  colAccessor: DimAccessor,
+): MatrixResult {
+  const cells = new Map<string, BreakdownRow>();
+  const rowTotals = new Map<string, number>(); // rowKey → netPnl, for sorting
+  const colSet = new Set<string>();
+
+  for (const t of trades) {
+    const rk = rowAccessor(t);
+    const ck = colAccessor(t);
+    const key = `${rk}||${ck}`;
+    if (!cells.has(key)) cells.set(key, emptyRow(rk));
+    accumulateTrade(cells.get(key)!, t);
+    rowTotals.set(rk, (rowTotals.get(rk) ?? 0) + (t.pnl ?? 0));
+    colSet.add(ck);
+  }
+
+  // Sort rows by total netPnl desc, keep '(unset)' last
+  const rowKeys = Array.from(rowTotals.keys()).sort((a, b) => {
+    if (a === '(unset)') return 1;
+    if (b === '(unset)') return -1;
+    return (rowTotals.get(b) ?? 0) - (rowTotals.get(a) ?? 0);
+  });
+
+  // Sort cols alphabetically, keep '(unset)' last
+  const colKeys = Array.from(colSet).sort((a, b) => {
+    if (a === '(unset)') return 1;
+    if (b === '(unset)') return -1;
+    return a.localeCompare(b);
+  });
+
+  // Find best cell: highest netPnl among cells with count >= 3
+  let bestCell: MatrixResult['bestCell'] = null;
+  for (const [key, row] of cells.entries()) {
+    if (row.count < 3) continue;
+    if (bestCell === null || row.netPnl > bestCell.row.netPnl) {
+      const [rowKey, colKey] = key.split('||');
+      bestCell = { rowKey, colKey, row };
+    }
+  }
+
+  return { rowKeys, colKeys, cells, bestCell };
+}
+
+// ---------------------------------------------------------------------------
+// CombinationMatrix sub-component
+// ---------------------------------------------------------------------------
+
+interface CombinationMatrixProps {
+  trades: Trade[];
+  rowAccessor: DimAccessor;
+  colAccessor: DimAccessor;
+  rowLabel: string;
+  colLabel: string;
+}
+
+const CombinationMatrix: React.FC<CombinationMatrixProps> = ({
+  trades,
+  rowAccessor,
+  colAccessor,
+  rowLabel,
+  colLabel,
+}) => {
+  const { rowKeys, colKeys, cells, bestCell } = useMemo(
+    () => buildMatrix(trades, rowAccessor, colAccessor),
+    [trades, rowAccessor, colAccessor],
+  );
+
+  if (trades.length === 0) {
+    return (
+      <div className="py-10 text-center text-sm text-ink-tertiary">
+        No trades to display
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-white/[0.06]">
+              {/* top-left corner */}
+              <th className="px-3 py-2 text-left text-xs font-medium text-ink-tertiary min-w-[120px]">
+                {rowLabel} ↓ / {colLabel} →
+              </th>
+              {colKeys.map(ck => (
+                <th
+                  key={ck}
+                  className="px-3 py-2 text-center text-xs font-medium text-ink-tertiary min-w-[110px]"
+                >
+                  {ck}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rowKeys.map(rk => (
+              <tr key={rk} className="border-b border-white/[0.03]">
+                <td className="px-3 py-2.5 font-medium text-ink-primary whitespace-nowrap">
+                  {rk}
+                </td>
+                {colKeys.map(ck => {
+                  const row = cells.get(`${rk}||${ck}`);
+                  const isBest =
+                    bestCell?.rowKey === rk && bestCell?.colKey === ck;
+
+                  if (!row || row.count === 0) {
+                    return (
+                      <td
+                        key={ck}
+                        className="px-3 py-2.5 text-center text-ink-tertiary"
+                      >
+                        ·
+                      </td>
+                    );
+                  }
+
+                  const winPct = row.count > 0 ? (row.wins / row.count) * 100 : 0;
+                  const avgR   = row.rCount > 0 ? row.totalR / row.rCount : null;
+                  const bgClass =
+                    row.netPnl > 0
+                      ? 'bg-[#4AD295]/10'
+                      : row.netPnl < 0
+                        ? 'bg-[#E24B4A]/10'
+                        : '';
+
+                  return (
+                    <td
+                      key={ck}
+                      className={`px-3 py-2.5 text-center align-top ${bgClass} ${
+                        isBest ? 'ring-1 ring-[#C9A646] rounded' : ''
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Change value={row.netPnl} format="currency" decimals={2} />
+                        <span className="text-[10px] text-ink-tertiary whitespace-nowrap">
+                          {winPct.toFixed(1)}%&nbsp;·&nbsp;{row.count}t&nbsp;·&nbsp;
+                          {avgR != null ? `${avgR.toFixed(2)}R` : '—'}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {bestCell && (
+        <div className="mt-3 px-1 text-xs text-ink-secondary flex items-center gap-1.5">
+          <span className="text-[#C9A646] font-medium">Best:</span>
+          <span className="text-ink-primary font-medium">{bestCell.rowKey}</span>
+          <span className="text-ink-tertiary">×</span>
+          <span className="text-ink-primary font-medium">{bestCell.colKey}</span>
+          <span className="text-ink-tertiary">—</span>
+          <Change value={bestCell.row.netPnl} format="currency" decimals={2} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Tab keys
 // ---------------------------------------------------------------------------
 
-type TabKey = 'dayTime' | 'risk' | 'tags' | 'assetClass';
+type TabKey = 'dayTime' | 'risk' | 'tags' | 'assetClass' | 'combos';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -325,10 +509,11 @@ export default function JournalReportsBreakdowns() {
   const assetClassRows = useMemo(() => groupByAssetClass(trades),  [trades]);
 
   const tabs: { key: TabKey; label: string }[] = [
-    { key: 'dayTime',    label: 'Day & Time'  },
-    { key: 'risk',       label: 'Risk'        },
-    { key: 'tags',       label: 'Tags'        },
-    { key: 'assetClass', label: 'Asset Class' },
+    { key: 'dayTime',    label: 'Day & Time'   },
+    { key: 'risk',       label: 'Risk'         },
+    { key: 'tags',       label: 'Tags'         },
+    { key: 'assetClass', label: 'Asset Class'  },
+    { key: 'combos',     label: 'Combinations' },
   ];
 
   const hasRiskUsd = trades.some(t => t.risk_usd != null && t.risk_usd > 0);
@@ -436,6 +621,63 @@ export default function JournalReportsBreakdowns() {
           )}
         </Card>
       )}
+
+      {/* COMBINATIONS tab */}
+      {activeTab === 'combos' && (
+        <CombosPanel trades={trades} isLoading={isLoading} />
+      )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// CombosPanel — inner component so it can hold its own pairing state
+// ---------------------------------------------------------------------------
+
+type ComboKey = 'strategy-session' | 'asset-session' | 'strategy-asset';
+
+const COMBO_OPTIONS: { key: ComboKey; label: string; rowDim: DimAccessor; colDim: DimAccessor; rowLabel: string; colLabel: string }[] = [
+  { key: 'strategy-session', label: 'Strategy × Session', rowDim: dimStrategy, colDim: dimSession,  rowLabel: 'Strategy', colLabel: 'Session'  },
+  { key: 'asset-session',    label: 'Asset × Session',    rowDim: dimAsset,    colDim: dimSession,  rowLabel: 'Asset',    colLabel: 'Session'  },
+  { key: 'strategy-asset',   label: 'Strategy × Asset',   rowDim: dimStrategy, colDim: dimAsset,    rowLabel: 'Strategy', colLabel: 'Asset'    },
+];
+
+const CombosPanel: React.FC<{ trades: Trade[]; isLoading: boolean }> = ({ trades, isLoading }) => {
+  const [pairing, setPairing] = useState<ComboKey>('strategy-session');
+
+  const selected = COMBO_OPTIONS.find(o => o.key === pairing)!;
+
+  return (
+    <Card padding="compact">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h3 className="text-sm font-semibold text-ink-primary">Combination Matrix</h3>
+        <div className="flex gap-1.5 flex-wrap">
+          {COMBO_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setPairing(opt.key)}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                pairing === opt.key
+                  ? 'bg-[#C9A646]/55 text-white shadow-[0_0_18px_rgba(201,166,70,0.18)]'
+                  : 'bg-white/[0.045] text-ink-secondary hover:text-ink-primary'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {isLoading ? (
+        <Skeleton />
+      ) : (
+        <CombinationMatrix
+          trades={trades}
+          rowAccessor={selected.rowDim}
+          colAccessor={selected.colDim}
+          rowLabel={selected.rowLabel}
+          colLabel={selected.colLabel}
+        />
+      )}
+    </Card>
+  );
+};
