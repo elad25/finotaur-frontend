@@ -996,7 +996,7 @@ const BillingTab = () => {
             <h2 className="font-medium text-white">Finotaur Platform</h2>
           </div>
           <a 
-            href="https://whop.com/finotaur" 
+            href="https://whop.com/@me/settings/orders/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
@@ -1198,7 +1198,7 @@ const BillingTab = () => {
             <h2 className="font-medium text-white">Trading Journal</h2>
           </div>
           <a 
-            href="https://whop.com/finotaur" 
+            href="https://whop.com/@me/settings/orders/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
@@ -1323,7 +1323,7 @@ const BillingTab = () => {
             </div>
             {newsletterIsActive && (
               <a 
-                href="https://whop.com/finotaur" 
+                href="https://whop.com/@me/settings/orders/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-xs text-zinc-500 hover:text-purple-300 flex items-center gap-1.5 transition-colors"
@@ -1628,7 +1628,7 @@ const BillingTab = () => {
             </div>
             {topSecretIsActive && (
               <a 
-                href="https://whop.com/finotaur" 
+                href="https://whop.com/@me/settings/orders/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className={cn(
