@@ -72,28 +72,20 @@ export default function Chart() {
 
   return (
     <div className="h-full w-full overflow-y-auto bg-gradient-to-br from-black via-[#0A0A0A] to-black relative">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-8 pt-6">
-        <h2 className="text-lg font-semibold text-white">Backtesting</h2>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-black bg-[#C9A646] rounded-full px-2 py-0.5">
-          Beta
-        </span>
-      </div>
-
       {/* Hero */}
-      <div className="relative mx-8 mt-6 rounded-2xl overflow-hidden border border-[#C9A646]/20">
+      <div className="relative mx-8 mt-8 rounded-2xl overflow-hidden border border-[#C9A646]/20">
         {/* Cinematic background image */}
         <img
           src="/backtest-hero.webp"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-bottom"
+          className="absolute inset-0 h-full w-full object-cover object-center"
         />
         {/* Dark scrim for text legibility (center darkened) */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/60 to-black/85" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
 
-        <div className="relative z-10 flex flex-col items-center text-center py-16 px-6">
+        <div className="relative z-10 flex flex-col items-center text-center py-24 px-6">
           <h1 className="text-4xl md:text-5xl font-bold mb-6 text-white">
             Start Backtesting Your Strategies
           </h1>
