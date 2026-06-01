@@ -30,9 +30,13 @@ export function AssetSelectorProvider({ children }: { children: React.ReactNode 
     if (isMarketsPath(location.pathname)) {
       return assetFromPathname(location.pathname);
     }
-    const stored = localStorage.getItem(STORAGE_KEY) as AssetClass | null;
-    if (stored && ['stocks', 'crypto', 'futures', 'forex', 'commodities', 'macro'].includes(stored)) {
-      return stored;
+    // SSR-safe: localStorage only exists in the browser (this initializer runs
+    // during render, including server-side render / prerender in Node).
+    if (typeof window !== 'undefined') {
+      const stored = window.localStorage.getItem(STORAGE_KEY) as AssetClass | null;
+      if (stored && ['stocks', 'crypto', 'futures', 'forex', 'commodities', 'macro'].includes(stored)) {
+        return stored;
+      }
     }
     return DEFAULT_ASSET;
   });
