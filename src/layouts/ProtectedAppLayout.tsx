@@ -10,11 +10,13 @@ import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { cn } from '@/lib/utils';
+import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
-  '/app/all-markets/warzone',
-  '/app/top-secret',
+  // Phase 1: War Zone and Top Secret now have their own sidebars — removed from this list.
+  // '/app/all-markets/warzone',  // War Zone has sidebar now
+  // '/app/top-secret',           // Top Secret has sidebar now
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
   '/app/settings',
@@ -65,6 +67,7 @@ export const ProtectedAppLayout = () => {
   }
 
   return (
+    <AssetSelectorProvider>
     <PortfolioProvider>
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
         <ImpersonationBanner />
@@ -88,5 +91,6 @@ export const ProtectedAppLayout = () => {
         <ComplianceFooterBar />
       </div>
     </PortfolioProvider>
+    </AssetSelectorProvider>
   );
 };

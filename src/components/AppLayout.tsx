@@ -4,6 +4,7 @@ import { SubNav } from "@/components/SubNav";
 import SideMenu from "@/components/SideMenu";
 import { Outlet } from "react-router-dom";
 import { NavProvider } from "@/state/NavContext";
+import { AssetSelectorProvider } from "@/contexts/AssetSelectorContext";
 import { TrialWarningBanner } from "@/components/subscription/TrialWarningBanner";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 
@@ -34,6 +35,7 @@ const AppLayout: React.FC = () => {
       `}</style>
       
       <NavProvider initial="all-markets">
+        <AssetSelectorProvider>
         {/* 🎭 IMPERSONATION BANNER - MUST BE FIRST! */}
         <ImpersonationBanner />
         
@@ -47,6 +49,7 @@ const AppLayout: React.FC = () => {
             <Outlet />
           </main>
         </div>
+        </AssetSelectorProvider>
       </NavProvider>
     </div>
   );

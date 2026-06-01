@@ -19,8 +19,9 @@
 // =====================================================
 
 import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
+import { Button as DSButton } from '@/components/ds/Button';
 import { Input } from './ui/input';
 import { useEffect, useState } from 'react';
 import { domains, domainOrder } from '@/constants/nav';
@@ -29,6 +30,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
 import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
+import { AssetSelector } from '@/components/AssetSelector';
+import { isMarketsPath } from '@/constants/markets';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,7 +48,9 @@ export const TopNav = () => {
   const navigate = useNavigate();
   const { domainId } = useDomain();
   const { user } = useAuth();
-  const { hasBetaAccess, isAdmin } = useAdminAuth();  // 🔥 NEW: Beta access check
+  const { hasBetaAccess, isAdmin } = useAdminAuth();
+  const location = useLocation();
+  const isMarketsActive = isMarketsPath(location.pathname);
   const [userInitials, setUserInitials] = useState('U');
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
@@ -230,8 +235,26 @@ export const TopNav = () => {
           </nav>
         </div>
 
+        {/* Asset Selector — visible only when Markets product is active */}
+        {isMarketsActive && (
+          <div className="hidden lg:flex items-center">
+            <AssetSelector />
+          </div>
+        )}
+
         {/* Right Side */}
         <div className="flex items-center gap-3">
+          {/* ✨ Upgrade CTA — primary gold button, top bar */}
+          <DSButton
+            variant="gold"
+            size="compact"
+            showArrow={false}
+            onClick={() => navigate('/app/all-markets/pricing')}
+            className="hidden lg:inline-flex"
+          >
+            ✨ Upgrade
+          </DSButton>
+
           {/* ═══════════════════════════════════════════
               🔒 SEARCH - LOCKED (Coming Soon) - Unless Beta
           ═══════════════════════════════════════════ */}
@@ -343,13 +366,13 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* ✅ Upgrade - UNLOCKED */}
+              {/* Plans & Billing — moved Upgrade to top bar gold CTA */}
               <DropdownMenuItem 
-                onClick={() => navigate('/app/all-markets/pricing')}
+                onClick={() => navigate('/app/settings')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
                 <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
-                <span className="text-white">Upgrade</span>
+                <span className="text-white">Plans & Billing</span>
               </DropdownMenuItem>
 
               {/* ✅ Settings - UNLOCKED */}
