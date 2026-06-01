@@ -115,6 +115,7 @@ if (typeof window !== 'undefined') {
 
 import SupportWidget from "@/components/SupportWidget";
 import { FinoChatProvider } from "@/contexts/FinoChatContext";
+import FinoChatDrawer from "@/components/fino/FinoChatDrawer";
 import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
 import { FEATURES } from "@/config/features";
 
@@ -683,6 +684,7 @@ function AppContent() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <SupportWidget />
+      <FinoChatDrawer />
     </>
   );
 }
