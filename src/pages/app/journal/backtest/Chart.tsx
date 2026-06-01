@@ -6,7 +6,7 @@ import type { BacktestSession } from "@/types/backtestSession";
 import { Button } from "@/components/ui/button";
 import {
   Plus, History, LineChart, BookOpen, Share2, Clock,
-  ChevronRight, Trash2, CornerDownLeft,
+  ChevronRight, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import "@/styles/chart-animations.css";
@@ -87,20 +87,13 @@ export default function Chart() {
           src="/backtest-hero.webp"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover object-bottom"
         />
         {/* Dark scrim for text legibility (center darkened) */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/60 to-black/85" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
 
         <div className="relative z-10 flex flex-col items-center text-center py-16 px-6">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-[#C9A646] rounded-2xl filter blur-xl opacity-40 animate-pulse" />
-            <div className="relative h-16 w-16 rounded-2xl border-2 border-[#C9A646] flex items-center justify-center">
-              <CornerDownLeft className="h-8 w-8 text-[#C9A646]" strokeWidth={2} />
-            </div>
-          </div>
-
           <h1 className="text-4xl md:text-5xl font-bold mb-6 text-white">
             Start Backtesting Your Strategies
           </h1>
