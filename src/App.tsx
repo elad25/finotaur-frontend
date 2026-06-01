@@ -250,6 +250,7 @@ const StocksSectors = lazy(() => import("@/pages/app/stocks/Sectors"));
 const StocksCatalysts = lazy(() => import("@/pages/app/stocks/Catalysts"));
 const StocksUpgrades = lazy(() => import("@/pages/app/stocks/Upgrades"));
 const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
+const StocksSentiment = lazy(() => import("@/pages/app/stocks/Sentiment"));
 const StocksReports = lazy(() => import("@/pages/app/stocks/Reports"));
 const StocksWatchlists = lazy(() => import("@/pages/app/stocks/Watchlists"));
 
@@ -484,6 +485,7 @@ function AppContent() {
           <Route path="stocks/catalysts" element={<LockedRoute domainId="stocks"><StocksCatalysts /></LockedRoute>} />
           <Route path="stocks/upgrades" element={<LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute>} />
           <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><StocksValuation /></LockedRoute>} />
+          <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
           <Route path="stocks/reports" element={<LockedRoute domainId="stocks"><StocksReports /></LockedRoute>} />
           <Route path="stocks/watchlists" element={<LockedRoute domainId="stocks"><StocksWatchlists /></LockedRoute>} />
           
