@@ -8,6 +8,7 @@ import * as React from 'react';
 import { useState } from 'react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useAuth } from '@/hooks/useAuth';
 import { useFinotaurScore } from './hooks/useFinotaurScore';
 import { useBriefing } from './hooks/useBriefing';
 import { useMentorChatHistory } from './hooks/useMentorChatHistory';
@@ -84,6 +85,11 @@ export default function FinotaurAI() {
   // Enabled only in mentor view. Uses effectiveUserId (student's id).
   const mentorHistory = useMentorChatHistory(effectiveUserId, isMentorView);
 
+  // First name for the empty-state greeting ("Good morning, Elad").
+  const { user } = useAuth();
+  const rawName = (user?.name ?? '').trim().split(/\s+/)[0];
+  const firstName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : undefined;
+
   const [prefillRequest, setPrefillRequest] = useState<string | null>(null);
 
   // In mentor view: "Discuss" would open the mentor's own chat, not the student's.
@@ -141,6 +147,7 @@ export default function FinotaurAI() {
             score={score ?? null}
             briefing={briefingQuery.data?.briefing ?? null}
             onDiscuss={handleDiscuss}
+            userName={firstName}
           />
         </div>
       </ErrorBoundary>

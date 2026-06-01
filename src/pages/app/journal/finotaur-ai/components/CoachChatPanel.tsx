@@ -1,10 +1,9 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Square, FileText } from 'lucide-react';
+import { Send, Square, Sparkles, ArrowRight } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import MessageBubble from './MessageBubble';
-import PromptChips from './PromptChips';
 import ToolCallCard from './ToolCallCard';
 import TradeActionModal from './TradeActionModal';
 import type { useFinotaurChat } from '../hooks/useFinotaurChat';
@@ -52,6 +51,8 @@ interface CoachChatPanelProps {
   briefing?: Briefing | null;
   /** Called when the user taps a briefing finding — prefills the chat to discuss it. */
   onDiscuss?: (insight: Insight) => void;
+  /** First name for the empty-state greeting ("Good morning, Elad"). */
+  userName?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ export default function CoachChatPanel({
   score,
   briefing,
   onDiscuss,
+  userName,
 }: CoachChatPanelProps): JSX.Element {
   const chat = chatInstance;
   const action = useTradeAction();
@@ -257,7 +259,7 @@ export default function CoachChatPanel({
           ) : (
             // ── Owner view: existing behaviour ──────────────────────────────────
             chat.messages.length === 0 ? (
-              <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} briefing={briefing} onDiscuss={onDiscuss} />
+              <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} briefing={briefing} onDiscuss={onDiscuss} userName={userName} />
             ) : (
               <>
                 {chat.messages.map((msg) => (
@@ -355,7 +357,7 @@ export default function CoachChatPanel({
               ) : (
                 // ── Owner view ─────────────────────────────────────────────────
                 chat.messages.length === 0 ? (
-                  <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} briefing={briefing} onDiscuss={onDiscuss} />
+                  <EmptyState onChipSelect={handleChipSelect} inputDisabled={inputDisabled} briefing={briefing} onDiscuss={onDiscuss} userName={userName} />
                 ) : (
                   <>
                     {chat.messages.map((msg) => (
@@ -472,11 +474,13 @@ function EmptyState({
   inputDisabled,
   briefing,
   onDiscuss,
+  userName,
 }: {
   onChipSelect: (text: string) => void;
   inputDisabled: boolean;
   briefing?: Briefing | null;
   onDiscuss?: (insight: Insight) => void;
+  userName?: string;
 }): JSX.Element {
   const insights = briefing?.insights ?? [];
   const hasBrief = insights.length > 0;
@@ -540,34 +544,59 @@ function EmptyState({
     );
   }
 
-  // ── Default — suggested questions; the first one opens the full brief ──
+  // ── Default — greeting, a prominent brief card, and quick-question pills ──
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const pills = [
+    'Show my best setups',
+    "Review yesterday's trades",
+    'What mistakes am I repeating?',
+    'Build my game plan',
+    'Ask FINOTAUR anything',
+  ];
+
   return (
-    <div className="m-auto flex w-full max-w-2xl flex-col items-center gap-ds-4 py-ds-6 text-center">
-      <div>
-        <p className="font-sans text-h4 font-medium text-ink-primary">
-          FINOTAUR <span className="text-gold-primary">AI Assistant</span>
-        </p>
-        <p className="mt-ds-1 text-ink-secondary text-sm">
-          {hasBrief
-            ? 'Get a brief on where you stand, or ask about your trades.'
-            : 'Ask about your trades, setups, and performance to begin.'}
-        </p>
-      </div>
+    <div className="m-auto flex w-full max-w-2xl flex-col items-center gap-ds-5 px-ds-3 py-ds-6">
+      <h1 className="text-center font-sans text-h2 font-bold text-ink-primary">
+        {greeting}
+        {userName ? `, ${userName}` : ''}
+      </h1>
 
       {hasBrief && (
         <button
           type="button"
           disabled={inputDisabled}
           onClick={() => setBriefOpen(true)}
-          className="flex w-full items-center gap-ds-2 rounded-[12px] border border-gold-primary/40 bg-gold-primary/10 px-ds-3 py-ds-3 text-left text-sm font-medium text-ink-primary transition-colors duration-base hover:border-gold-primary/70 hover:bg-gold-primary/15 disabled:pointer-events-none disabled:opacity-50"
+          className="group flex w-full items-center gap-ds-3 rounded-[16px] border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-3 text-left transition-colors duration-base hover:border-gold-primary/50 disabled:pointer-events-none disabled:opacity-50"
         >
-          <FileText size={16} className="shrink-0 text-gold-primary" />
-          <span>Brief me on my situation today</span>
-          <span className="ml-auto shrink-0 text-xs text-ink-tertiary">{insights.length} findings →</span>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold-primary/15">
+            <Sparkles size={18} className="text-gold-primary" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-sans text-sm font-semibold text-ink-primary">FINOTAUR AI</span>
+            <span className="block truncate font-sans text-sm text-ink-tertiary">
+              Brief me on my situation today
+            </span>
+          </span>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-2 text-ink-secondary transition-colors duration-base group-hover:bg-gold-primary/20 group-hover:text-gold-primary">
+            <ArrowRight size={16} />
+          </span>
         </button>
       )}
 
-      <PromptChips onSelect={onChipSelect} disabled={inputDisabled} />
+      <div className="flex flex-wrap justify-center gap-ds-2">
+        {pills.map((pill) => (
+          <button
+            key={pill}
+            type="button"
+            disabled={inputDisabled}
+            onClick={() => onChipSelect(pill === 'Ask FINOTAUR anything' ? '' : pill)}
+            className="rounded-full border border-border-ds-subtle bg-surface-1 px-ds-4 py-1.5 font-sans text-sm text-ink-secondary transition-colors duration-base hover:border-gold-primary/50 hover:text-ink-primary disabled:pointer-events-none disabled:opacity-50"
+          >
+            {pill}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
