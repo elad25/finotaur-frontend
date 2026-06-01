@@ -20,6 +20,7 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { domains } from '@/constants/nav';
 import { useFinoChat } from '@/contexts/FinoChatContext';
+import { MarketsAssetTabs } from '@/components/MarketsAssetTabs';
 import {
   Tooltip,
   TooltipContent,
@@ -333,6 +334,29 @@ export const SubNav = () => {
       }}
     >
       <div className="flex h-12 items-center gap-1 overflow-x-auto px-4 lg:px-6 scrollbar-hide">
+
+        {/* Markets product: show asset-class tab row instead of domain subNav */}
+        {activeDomain.id === 'markets' ? (
+          <>
+            <MarketsAssetTabs />
+            {/* FINO AI stays on the right even in Markets mode */}
+            <button
+              type="button"
+              onClick={() => openFino({ path: location.pathname })}
+              className="relative ml-auto flex-shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10"
+              aria-label="Ask FINO AI"
+            >
+              <img
+                src="/fino-avatar.png"
+                alt=""
+                aria-hidden="true"
+                className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
+              />
+              <span>FINO AI</span>
+            </button>
+          </>
+        ) : (
+        <>
         {activeDomain.subNav
           .filter(shouldShowItem)
           .map((item) => {
@@ -478,6 +502,8 @@ export const SubNav = () => {
           />
           <span>FINO AI</span>
         </button>
+        </>
+        )}
       </div>
     </div>
   );

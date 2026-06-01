@@ -1,38 +1,30 @@
 // src/components/TopNav.tsx
 // =====================================================
-// FINOTAUR TOP NAVIGATION - v3.0.0 (BETA ACCESS)
+// FINOTAUR TOP NAVIGATION - v4.0.0 (HAMBURGER NAV)
 // =====================================================
-// 
-// 🔥 v3.0.0 CHANGES:
-// - ADDED: Beta access system - admins can access locked domains
-// - ADDED: useAdminAuth hook for hasBetaAccess check
-// 
-// 🔥 v2.3.0 CHANGES:
-// - UNLOCKED: Settings menu item (now navigates to /app/settings)
-// 
-// 🔥 v2.2.0 CHANGES:
-// - LOCKED: Search functionality (Coming Soon)
-// - LOCKED: Upgrade menu item (Coming Soon)
-// 
-// 🔥 v2.0.2 CHANGES:
-// - FIXED: Logo now navigates to /app/top-secret
+//
+// 🔥 v4.0.0 CHANGES:
+// - REMOVED: horizontal product tabs (desktop + mobile scrollable strip)
+// - REMOVED: AssetSelector from top bar (moved into Markets SubNav)
+// - ADDED: ☰ hamburger button (opens ProductDrawer via ProductDrawerContext)
+// - EXPANDED: GlobalOmnibox takes more horizontal space
+//
+// Layout (left→right):
+//   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Lock, Settings, Crown, LogOut, ChevronDown, Sparkles } from 'lucide-react';
+import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
 import { useEffect, useState } from 'react';
-import { domains, domainOrder } from '@/constants/nav';
-import { useDomain } from '@/hooks/useDomain';
 import { useAuth } from '@/providers/AuthProvider';
-import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
-import { AssetSelector } from '@/components/AssetSelector';
-import { isMarketsPath } from '@/constants/markets';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
 import { useFinoChat } from '@/contexts/FinoChatContext';
+import { useProductDrawer } from '@/contexts/ProductDrawerContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,22 +36,20 @@ import {
 
 export const TopNav = () => {
   const navigate = useNavigate();
-  const { domainId } = useDomain();
-  const { user } = useAuth();
-  const { hasBetaAccess, isAdmin } = useAdminAuth();
   const location = useLocation();
+  const { user } = useAuth();
+  const { hasBetaAccess } = useAdminAuth();
   const { open: openFino } = useFinoChat();
-  const isMarketsActive = isMarketsPath(location.pathname);
+  const { toggle: toggleDrawer } = useProductDrawer();
   const [userInitials, setUserInitials] = useState('U');
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
-  // ✅ Get user initials and platform plan
+  // Get user initials and platform plan
   useEffect(() => {
     const fetchUserData = async () => {
       if (!user?.id) return;
 
       try {
-        // 🔥 FIXED: Changed first_name, last_name to display_name
         const { data } = await supabase
           .from('profiles')
           .select('display_name, platform_plan')
@@ -67,29 +57,23 @@ export const TopNav = () => {
           .maybeSingle();
 
         if (data) {
-          // Build initials from display_name
           const displayName = data.display_name || '';
           const nameParts = displayName.trim().split(' ');
-          
+
           if (nameParts.length >= 2) {
-            // First letter of first name + first letter of last name
             setUserInitials((nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase());
           } else if (nameParts.length === 1 && nameParts[0]) {
-            // Just first letter of single name
             setUserInitials(nameParts[0][0].toUpperCase());
           } else if (user.email) {
-            // Fallback to email
             setUserInitials(user.email[0].toUpperCase());
           }
-          
-          // Platform plan
+
           setPlatformPlan(data.platform_plan);
         } else if (user.email) {
           setUserInitials(user.email[0].toUpperCase());
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
-        // Fallback to email initial
         if (user.email) {
           setUserInitials(user.email[0].toUpperCase());
         }
@@ -99,139 +83,65 @@ export const TopNav = () => {
     fetchUserData();
   }, [user]);
 
-  const handleTabClick = (id: string) => {
-    const domain = domains[id];
-
-    // 🔥 BETA ACCESS: Allow navigation to locked/beta domains for beta users only
-    if ((domain?.locked || domain?.beta) && !hasBetaAccess) {
-      return;
-    }
-    
-    if (domain?.defaultPath) {
-      navigate(domain.defaultPath);
-      return;
-    }
-    
-    if (domain?.subNav[0]) {
-      navigate(domain.subNav[0].path);
-    }
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
   };
 
-  // ✅ Get plan badge color
   const getPlanBadge = () => {
     if (!platformPlan || platformPlan === 'free') return null;
-    
+
     const colors: Record<string, string> = {
-      core: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
-      pro: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40',
+      core:       'bg-blue-500/20 text-blue-400 border-blue-500/40',
+      pro:        'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40',
       enterprise: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
     };
-    
+
     return colors[platformPlan] || null;
   };
 
   const planBadgeClass = getPlanBadge();
 
   return (
-    <div 
+    <div
       className="sticky top-0 z-[100] border-b"
-      style={{ 
+      style={{
         borderColor: 'rgba(255, 215, 0, 0.08)',
-        backgroundColor: '#0A0A0A'
+        backgroundColor: '#0A0A0A',
       }}
     >
-      <div className="flex h-16 items-center justify-between px-6 lg:px-10">
-        {/* Logo - 🔥 NOW NAVIGATES TO TOP SECRET */}
-        <div className="flex items-center gap-6 lg:gap-8">
-          <button
-            onClick={() => navigate('/app/top-secret')}
-            className="flex items-center cursor-pointer"
-            aria-label="FINOTAUR home"
-          >
-            <Wordmark size="default" interactive />
-          </button>
+      <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
 
-          {/* Main Tabs - Desktop */}
-          <nav className="hidden items-center gap-0.5 lg:flex">
-            {domainOrder.map((id) => {
-              const domain = domains[id];
-              const isActive = domainId === id;
-              const isBetaDomain = domain?.beta === true;
+        {/* ── Logo ─────────────────────────────────────────── */}
+        <button
+          onClick={() => navigate('/app/top-secret')}
+          className="flex items-center cursor-pointer flex-shrink-0"
+          aria-label="FINOTAUR home"
+        >
+          <Wordmark size="nav" interactive />
+        </button>
 
-              // 🔥 BETA ACCESS: Override locked status for beta users
-              const locked = (domain?.locked || isBetaDomain) && !hasBetaAccess;
+        {/* ── ☰ Hamburger — opens Product Drawer ───────────── */}
+        <button
+          type="button"
+          onClick={toggleDrawer}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4]"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-              // 🔥 Hide beta domains from non-beta users entirely.
-              if (isBetaDomain && !hasBetaAccess) {
-                return null;
-              }
-
-              return (
-                <button
-                  key={id}
-                  onClick={() => handleTabClick(id)}
-                  disabled={locked}
-                  className={`group relative rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all duration-300 ${
-                    locked
-                      ? 'cursor-not-allowed opacity-40 text-[#A0A0A0] hover:bg-[#1A1A1A]/50'
-                      : isBetaDomain
-                      ? isActive
-                        ? 'bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
-                        : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
-                      : isActive
-                      ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
-                      : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
-                  }`}
-                  title={locked ? 'Beta access required' : isBetaDomain ? 'Beta Feature' : undefined}
-                  style={isActive && !locked ? { 
-                    borderBottom: isBetaDomain ? '2px solid #f97316' : '2px solid #C9A646' 
-                  } : {}}
-                >
-                  <span className="flex flex-col items-center gap-0.5 whitespace-nowrap">
-                    <span className="flex items-center gap-1">
-                      {domain.label}
-                      {isBetaDomain && (
-                        <span className="px-1 py-0.5 text-[8px] font-bold bg-orange-500/20 text-orange-400 rounded">
-                          BETA
-                        </span>
-                      )}
-                    </span>
-                    {locked && <Lock className="h-2.5 w-2.5 opacity-60" />}
-                  </span>
-                  
-                  {locked && (
-                    <span 
-                      className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
-                      style={{ 
-                        background: '#0A0A0A',
-                        border: '1px solid rgba(201,166,70,0.2)',
-                        color: '#A0A0A0'
-                      }}
-                    >
-                      Coming Soon
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+        {/* ── GlobalOmnibox — expands to fill available space ─ */}
+        <div className="flex-1 min-w-0 flex items-center">
+          <div className="w-full max-w-2xl">
+            <GlobalOmnibox />
+          </div>
         </div>
 
-        {/* Asset Selector — visible only when Markets product is active */}
-        {isMarketsActive && (
-          <div className="hidden lg:flex items-center">
-            <AssetSelector />
-          </div>
-        )}
+        {/* ── Right-side actions ────────────────────────────── */}
+        <div className="flex items-center gap-2 flex-shrink-0">
 
-        {/* Right Side */}
-        <div className="flex items-center gap-3">
-          {/* ✨ Upgrade CTA — primary gold button, top bar */}
+          {/* ✨ Upgrade CTA */}
           <DSButton
             variant="gold"
             size="compact"
@@ -242,14 +152,7 @@ export const TopNav = () => {
             ✨ Upgrade
           </DSButton>
 
-          {/* ═══════════════════════════════════════════
-              🔍 GLOBAL OMNIBOX — Phase 3
-          ═══════════════════════════════════════════ */}
-          <GlobalOmnibox />
-
-          {/* ═══════════════════════════════════════════
-              ✨ ASK FINO — Top-bar button (Phase 4)
-          ═══════════════════════════════════════════ */}
+          {/* Ask Fino — desktop */}
           <button
             type="button"
             onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
@@ -265,7 +168,7 @@ export const TopNav = () => {
             <span>Ask Fino</span>
           </button>
 
-          {/* Mobile Ask Fino icon */}
+          {/* Ask Fino — mobile icon */}
           <button
             type="button"
             onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
@@ -280,44 +183,40 @@ export const TopNav = () => {
             />
           </button>
 
-          {/* ═══════════════════════════════════════════
-              🔥 USER MENU - Settings UNLOCKED
-          ═══════════════════════════════════════════ */}
+          {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 className="flex items-center gap-2 rounded-full hover:bg-[#1A1A1A] px-2 py-1"
               >
-                {/* User Avatar/Initials */}
-                <div 
+                <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
                   style={{
-                    background: hasBetaAccess 
-                      ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' 
+                    background: hasBetaAccess
+                      ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
                       : 'linear-gradient(135deg, #C9A646 0%, #8B7355 100%)',
-                    color: '#000'
+                    color: '#000',
                   }}
                 >
                   {userInitials}
                 </div>
-                
-                {/* Plan Badge (Desktop only) */}
+
                 {planBadgeClass && (
                   <span className={`hidden lg:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${planBadgeClass}`}>
                     <Crown className="w-3 h-3" />
-                    {platformPlan?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    {platformPlan?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   </span>
                 )}
-                
+
                 <ChevronDown className="w-4 h-4 text-[#A0A0A0]" />
               </Button>
             </DropdownMenuTrigger>
-<DropdownMenuContent 
-  align="end" 
-  className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20 z-[150]"
->
-              {/* User Info */}
+
+            <DropdownMenuContent
+              align="end"
+              className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20 z-[150]"
+            >
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium text-white truncate">
@@ -331,7 +230,7 @@ export const TopNav = () => {
                   ) : platformPlan && platformPlan !== 'free' ? (
                     <p className="text-xs text-[#C9A646] flex items-center gap-1">
                       <Crown className="w-3 h-3" />
-                      {platformPlan.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Plan
+                      {platformPlan.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Plan
                     </p>
                   ) : (
                     <p className="text-xs text-zinc-500">Free Plan</p>
@@ -341,8 +240,7 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* Plans & Billing — moved Upgrade to top bar gold CTA */}
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => navigate('/app/settings')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
@@ -350,8 +248,7 @@ export const TopNav = () => {
                 <span className="text-white">Plans & Billing</span>
               </DropdownMenuItem>
 
-              {/* ✅ Settings - UNLOCKED */}
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => navigate('/app/settings')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
@@ -361,8 +258,7 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* Logout - Still Active */}
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={handleLogout}
                 className="cursor-pointer hover:bg-red-500/10 focus:bg-red-500/10 text-red-400"
               >
@@ -373,51 +269,6 @@ export const TopNav = () => {
           </DropdownMenu>
         </div>
       </div>
-
-      {/* Mobile Tabs - Scrollable */}
-      <div className="flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden scrollbar-hide">
-        {domainOrder.map((id) => {
-          const domain = domains[id];
-          const isActive = domainId === id;
-          const isBetaDomain = domain?.beta === true;
-
-          // 🔥 BETA ACCESS: Override locked status for beta users
-          const locked = (domain?.locked || isBetaDomain) && !hasBetaAccess;
-
-          // 🔥 Hide beta domains from non-beta users entirely.
-          if (isBetaDomain && !hasBetaAccess) {
-            return null;
-          }
-
-          return (
-            <button
-              key={id}
-              onClick={() => handleTabClick(id)}
-              disabled={locked}
-              className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-300 flex items-center gap-1.5 ${
-                locked
-                  ? 'cursor-not-allowed opacity-40 text-[#A0A0A0]'
-                  : isBetaDomain
-                  ? isActive
-                    ? 'bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
-                    : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
-                  : isActive
-                  ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
-                  : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
-              }`}
-            >
-              {domain.label}
-              {isBetaDomain && (
-                <span className="px-1 py-0.5 text-[8px] font-bold bg-orange-500/20 text-orange-400 rounded">
-                  BETA
-                </span>
-              )}
-              {locked && <Lock className="h-3 w-3 opacity-60" />}
-            </button>
-          );
-        })}
-      </div>
-
     </div>
   );
 };
