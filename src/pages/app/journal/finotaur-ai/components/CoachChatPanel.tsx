@@ -212,13 +212,24 @@ export default function CoachChatPanel({
           .filter(Boolean)
           .join(' ')}
       >
+        {/* Score — at the very top of the page, above the title (per design) */}
+        <ScoreStrip score={score} />
+
         {/* Header */}
         <div className="flex items-center justify-between mb-ds-4 shrink-0">
           <h2 className="font-sans text-h4 font-medium text-ink-primary">
-            AI Coach
+            FINOTAUR <span className="text-gold-primary">AI</span>
           </h2>
-          {isReadOnly && (
+          {isReadOnly ? (
             <span className="text-xs text-ink-tertiary italic">read-only</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => chat.newConversation()}
+              className="rounded-md border border-border-ds-subtle px-ds-3 py-1 font-sans text-sm text-ink-secondary transition-colors duration-base hover:border-gold-primary/50 hover:text-ink-primary"
+            >
+              + New Chat
+            </button>
           )}
         </div>
 
@@ -228,9 +239,6 @@ export default function CoachChatPanel({
             Viewing student&apos;s chat history (read-only)
           </p>
         )}
-
-        {/* Score strip — compact FINOTAUR SCORE header inside the chat */}
-        <ScoreStrip score={score} />
 
         {/* Message list */}
         <div className="flex-1 overflow-y-auto flex flex-col gap-ds-3 min-h-0">
@@ -473,8 +481,15 @@ function EmptyState({
   // No briefing yet (generating, or genuinely none) → generic starter chips.
   if (insights.length === 0) {
     return (
-      <div className="flex flex-col gap-ds-4 py-ds-4">
-        <p className="text-ink-secondary text-sm">What would you like to analyze today?</p>
+      <div className="m-auto flex w-full max-w-2xl flex-col items-center gap-ds-4 py-ds-6 text-center">
+        <div>
+          <p className="font-sans text-h4 font-medium text-ink-primary">
+            FINOTAUR <span className="text-gold-primary">AI Assistant</span>
+          </p>
+          <p className="mt-ds-1 text-ink-secondary text-sm">
+            Ask about your trades, setups, and performance to begin.
+          </p>
+        </div>
         <PromptChips onSelect={onChipSelect} disabled={inputDisabled} />
       </div>
     );
@@ -490,8 +505,10 @@ function EmptyState({
   };
 
   return (
-    <div className="flex flex-col gap-ds-3 py-ds-2">
-      <p className="text-ink-secondary text-sm">Today&apos;s briefing — tap a finding to dig in:</p>
+    <div className="m-auto flex w-full max-w-2xl flex-col gap-ds-4 py-ds-6">
+      <p className="text-center text-ink-secondary text-sm">
+        Today&apos;s briefing — tap a finding to dig in
+      </p>
       <div className="flex flex-col gap-ds-2">
         {ordered.map((insight) => (
           <button
@@ -523,7 +540,7 @@ function EmptyState({
           </button>
         ))}
       </div>
-      <p className="text-ink-muted text-xs">…or ask anything below.</p>
+      <p className="text-center text-ink-muted text-xs">…or ask anything below.</p>
     </div>
   );
 }
