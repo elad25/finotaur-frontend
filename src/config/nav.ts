@@ -243,24 +243,13 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
+  // Sealed pending licensed options data feed (Track B). Re-enable when built.
+  // To re-enable: set OPTIONS_ENABLED = true below, then restore the subNav/sidebar arrays.
   options: {
     id: 'options',
     label: 'Options',
-    subNav: [
-      { label: 'Chain', path: '/app/options/chain' },
-      { label: 'Flow', path: '/app/options/flow' },
-      { label: 'Volatility', path: '/app/options/volatility' },
-      { label: 'Strategy', path: '/app/options/strategy' },
-      { label: 'Simulator', path: '/app/options/simulator' },
-    ],
-    sidebar: [
-      { label: 'Greeks Monitor', path: '/app/options/greeks-monitor', icon: Activity },
-      { label: 'IV Rank / Percentile', path: '/app/options/iv-rank', icon: BarChart3 },
-      { label: 'OI / Volume', path: '/app/options/oi-volume', icon: BarChart3 },
-      { label: 'Unusual Activity', path: '/app/options/unusual-activity', icon: Flame },
-      { label: 'Earnings IV Crush', path: '/app/options/earnings-iv-crush', icon: FileText },
-      { label: 'Shortcuts', path: '/app/options/shortcuts', icon: Target },
-    ],
+    subNav: [],
+    sidebar: [],
   },
 };
 
