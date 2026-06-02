@@ -198,9 +198,16 @@ export function WelcomePopup() {
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-fadeIn">
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full shadow-2xl relative"
+        className="rounded-2xl max-w-4xl w-full relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(180deg, #111111 0%, #0a0a0a 100%)',
+          border: '1px solid rgba(201,166,70,0.3)',
+          boxShadow: '0 25px 80px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.08)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Gold top accent line */}
+        <div className="h-[2px] w-full" style={{ background: 'linear-gradient(90deg, transparent, #C9A646, #F4D97B, #C9A646, transparent)' }} />
         {/* Close button only on steps 1-2 */}
         {step <= 2 && (
           <button
