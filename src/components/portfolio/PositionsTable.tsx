@@ -10,6 +10,7 @@ import { Plus, X } from 'lucide-react';
 import { Lot } from '@/lib/portfolio/types';
 import { TickerCell } from './TickerCell';
 import { cn } from '@/lib/utils';
+import { currencySymbol } from '@/lib/portfolio/currencies';
 
 export interface PositionsTableProps {
   positions: Lot[];
@@ -17,6 +18,9 @@ export interface PositionsTableProps {
   onAddLot: (ticker: string) => void;
   onUpdateLot: (i: number, patch: Partial<Lot>) => void;
   onRemoveLot: (i: number) => void;
+  /** Currency code for the active account (e.g. 'USD', 'EUR').
+   *  Drives the Cost/Share prefix symbol. Defaults to 'USD'. */
+  currency?: string;
   /** Called when the built-in "Upload CSV" header link is clicked.
    *  If `uploadSlot` is provided, this prop is ignored and the slot
    *  is rendered in the header instead. */
@@ -48,6 +52,7 @@ export function PositionsTable({
   onAddLot,
   onUpdateLot,
   onRemoveLot,
+  currency = 'USD',
   onUploadCsvClick,
   uploadSlot,
 }: PositionsTableProps) {
@@ -100,6 +105,7 @@ export function PositionsTable({
           key={i}
           lot={lot}
           index={i}
+          currency={currency}
           onUpdate={(patch) => onUpdateLot(i, patch)}
           onAddLot={() => onAddLot(lot.ticker)}
           onRemove={() => onRemoveLot(i)}
@@ -124,12 +130,13 @@ export function PositionsTable({
 interface PositionRowProps {
   lot: Lot;
   index: number;
+  currency: string;
   onUpdate: (patch: Partial<Lot>) => void;
   onAddLot: () => void;
   onRemove: () => void;
 }
 
-function PositionRow({ lot, onUpdate, onAddLot, onRemove }: PositionRowProps) {
+function PositionRow({ lot, currency, onUpdate, onAddLot, onRemove }: PositionRowProps) {
   function handleQuantityChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value;
     if (raw === '') {
@@ -186,20 +193,32 @@ function PositionRow({ lot, onUpdate, onAddLot, onRemove }: PositionRowProps) {
         />
       </div>
 
-      {/* Cost / Share */}
+      {/* Cost / Share — symbol prefix derived from active account currency */}
       <div className={COL_COST}>
-        <input
-          type="number"
-          min={0}
-          step="any"
-          value={lot.costPerShare ?? ''}
-          onChange={handleCostChange}
-          placeholder="Optional"
-          className={cn(
-            cellInput,
-            '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
-          )}
-        />
+        <div className="flex items-center">
+          <span
+            className={cn(
+              'inline-flex items-center px-1.5 py-1.5 text-xs text-ink-secondary',
+              'border border-r-0 border-border-ds-subtle rounded-l-md bg-surface-1',
+              'shrink-0',
+            )}
+          >
+            {currencySymbol(currency)}
+          </span>
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={lot.costPerShare ?? ''}
+            onChange={handleCostChange}
+            placeholder="Optional"
+            className={cn(
+              cellInput,
+              'rounded-l-none',
+              '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
+            )}
+          />
+        </div>
       </div>
 
       {/* Purchase Date */}

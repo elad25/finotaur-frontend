@@ -6,8 +6,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS', 'JPY', 'CAD', 'AUD'] as const;
+import { CURRENCIES, currencySymbol } from '@/lib/portfolio/currencies';
 
 export interface CashPositionInputProps {
   amount: number;
@@ -39,14 +38,14 @@ export function CashPositionInput({
     <div className="flex flex-col gap-1.5">
       <label className="text-xs text-ink-secondary font-medium">Cash Position</label>
       <div className="flex items-center gap-0">
-        {/* Dollar / currency prefix */}
+        {/* Currency symbol prefix — reflects selected currency */}
         <span
           className={cn(
             'inline-flex items-center px-2.5 py-1.5 text-sm text-ink-secondary',
             'border border-r-0 border-border-ds-subtle rounded-l-md bg-surface-1',
           )}
         >
-          $
+          {currencySymbol(currency)}
         </span>
 
         {/* Numeric input */}
@@ -77,7 +76,7 @@ export function CashPositionInput({
           )}
         >
           {CURRENCIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
+            <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
           ))}
         </select>
       </div>
