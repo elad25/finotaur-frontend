@@ -146,6 +146,7 @@ const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccess
 const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailurePage"));
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
 const DesignLab = lazy(() => import("@/pages/DesignLab"));
+const PlansPage = lazy(() => import("@/pages/app/Plans"));
 
 // Journal Pages
 const JournalOverview = lazy(() => import("@/pages/app/journal/Overview"));
@@ -452,6 +453,7 @@ function AppContent() {
           <Route path="admin/upcoming-events" element={<ProtectedAdminRoute><SuspenseRoute><AdminUpcomingEvents /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="admin/patterns" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibraryList /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/pricing" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
+          <Route path="plans" element={<SuspenseRoute><PlansPage /></SuspenseRoute>} />
 
           {/* OPTIONS — sealed pending licensed options data feed (Track B).
               Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.

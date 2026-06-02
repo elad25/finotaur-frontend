@@ -127,10 +127,10 @@ export const TopNav = () => {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => navigate('/app/top-secret')}
-            className="flex items-center cursor-pointer flex-shrink-0"
+            className="flex items-center cursor-pointer flex-shrink-0 pr-2 lg:pr-4"
             aria-label="FINOTAUR home"
           >
-            <Wordmark size="nav" interactive />
+            <Wordmark size="large" interactive />
           </button>
 
           <button
@@ -156,7 +156,7 @@ export const TopNav = () => {
             variant="gold"
             size="compact"
             showArrow={false}
-            onClick={() => navigate('/app/all-markets/pricing')}
+            onClick={() => navigate('/app/plans')}
             className="hidden lg:inline-flex"
           >
             ✨ Upgrade
