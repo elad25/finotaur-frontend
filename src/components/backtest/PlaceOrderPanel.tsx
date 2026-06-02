@@ -6,7 +6,7 @@
 // Advanced mode: risk-based auto position sizing (% or $) against current/initial
 // balance, plus Market/Limit/Stop order kinds. Built on lib/backtest/orderEngine.
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -28,6 +28,12 @@ export interface PlaceOrderSubmit {
   takeProfit: number | null;
 }
 
+export interface PlaceOrderDraft {
+  size: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+}
+
 interface PlaceOrderPanelProps {
   /** Live market price for the active symbol. */
   marketPrice: number;
@@ -37,6 +43,12 @@ interface PlaceOrderPanelProps {
   initialBalance: number;
   contractMultiplier?: number;
   onSubmit?: (order: PlaceOrderSubmit) => void;
+  /**
+   * Optional callback fired whenever the computed draft values change.
+   * Lets a parent read the live size/SL/TP without coupling to internal state.
+   * Purely additive — existing usage without this prop is unaffected.
+   */
+  onDraftChange?: (draft: PlaceOrderDraft) => void;
   className?: string;
 }
 
@@ -51,6 +63,7 @@ export function PlaceOrderPanel({
   initialBalance,
   contractMultiplier = 1,
   onSubmit,
+  onDraftChange,
   className,
 }: PlaceOrderPanelProps) {
   const [advanced, setAdvanced] = useState(false);
@@ -118,6 +131,20 @@ export function PlaceOrderPanel({
     const side: OrderSide = tp >= entryPrice ? 'buy' : 'sell';
     return calcRewardRisk(side, entryPrice, sl, tp, computedSize, contractMultiplier);
   }, [stopLoss, takeProfit, computedSize, entryPrice, contractMultiplier]);
+
+  // Emit live draft values so a parent (e.g. BacktestChart) can read the current
+  // size/SL/TP without needing to own those inputs. Fires only when values change.
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const sl = num(stopLoss);
+    const tp = num(takeProfit);
+    onDraftChange({
+      size: computedSize,
+      stopLoss: Number.isFinite(sl) ? sl : null,
+      takeProfit: Number.isFinite(tp) ? tp : null,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedSize, stopLoss, takeProfit]);
 
   const place = (side: OrderSide) => {
     const sl = num(stopLoss);

@@ -24,7 +24,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft, Star } from 'lucide-react';
+import { X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, ArrowLeft, Star } from 'lucide-react';
+import { toast } from 'sonner';
+import { PlaceOrderPanel, type PlaceOrderDraft, type PlaceOrderSubmit } from '@/components/backtest/PlaceOrderPanel';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { saveBacktestTradesToJournal } from '@/lib/backtest/journaling';
+import type { BacktestSession } from '@/types/backtestSession';
 
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
@@ -683,6 +688,22 @@ export function BacktestChart({
   // The chart visualizes; the trader picks the entry price.
   const [livePrice, setLivePrice] = useState('');
 
+  // Live market price, updated from currentBarRef on each bar change.
+  const [marketPrice, setMarketPrice] = useState(0);
+
+  // Live draft from PlaceOrderPanel — lets right-click and click-to-place use
+  // the panel's current size/SL/TP without duplicating input state here.
+  const [orderDraft, setOrderDraft] = useState<PlaceOrderDraft>({ size: 0, stopLoss: null, takeProfit: null });
+
+  // Click-to-place LIMIT armed toggle. When true, left-click on the chart drops
+  // a LIMIT order at that price instead of opening/jumping.
+  const [placeArmed, setPlaceArmed] = useState(false);
+
+  // Journal save state
+  const [isSaving, setIsSaving] = useState(false);
+
+  const { id: userId } = useEffectiveUser();
+
   const session = useBacktestSession(startingBalance);
   const {
     state,
@@ -948,22 +969,44 @@ export function BacktestChart({
     }
   }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder]);
 
-  // Phase 6: place a pending order from the context-menu selection. SL/TP
-  // come from the side-panel inputs (same as MARKET orders). Size from the
-  // size input. Strategy tag from active.
+  // Phase 6: place a pending order from the context-menu selection. Size/SL/TP
+  // come from the PlaceOrderPanel draft (orderDraft), falling back to the legacy
+  // input state so existing behaviour is preserved when the panel has no values.
   const handlePlacePendingOrder = useCallback((side: PaperSide, type: PendingOrderType, info: ContextMenuPriceInfo) => {
     addPendingOrder({
       side,
       type,
       triggerPrice: info.price,
-      size,
-      stopLoss: slInput ? parseFloat(slInput) : undefined,
-      takeProfit: tpInput ? parseFloat(tpInput) : undefined,
+      size: orderDraft.size > 0 ? orderDraft.size : size,
+      stopLoss: orderDraft.stopLoss ?? (slInput ? parseFloat(slInput) : undefined),
+      takeProfit: orderDraft.takeProfit ?? (tpInput ? parseFloat(tpInput) : undefined),
       strategyId: activeStrategyId,
       time: Math.floor(Date.now() / 1000),
     });
     setContextMenu(null);
-  }, [addPendingOrder, size, slInput, tpInput, activeStrategyId]);
+  }, [addPendingOrder, orderDraft, size, slInput, tpInput, activeStrategyId]);
+
+  // Click-to-place LIMIT: the trader arms a mode, then clicks a price level.
+  // Below current price → BUY LIMIT (buy the dip); above → SELL LIMIT (sell the rip).
+  const handlePlaceLimitAtPrice = useCallback((price: number, currentPrice: number) => {
+    if (state.activePosition) {
+      flashTradeError('Position already open — close it or wait for SL/TP.');
+      return;
+    }
+    const side: PaperSide = price <= currentPrice ? 'LONG' : 'SHORT';
+    addPendingOrder({
+      side,
+      type: 'LIMIT',
+      triggerPrice: price,
+      size: orderDraft.size > 0 ? orderDraft.size : size,
+      stopLoss: orderDraft.stopLoss ?? undefined,
+      takeProfit: orderDraft.takeProfit ?? undefined,
+      strategyId: activeStrategyId,
+      time: (currentBarRef.current?.time as number) ?? Math.floor(Date.now() / 1000),
+    });
+    // Auto-disarm after placing so the next click is a normal bar-click.
+    setPlaceArmed(false);
+  }, [state.activePosition, addPendingOrder, orderDraft, size, activeStrategyId, flashTradeError]);
 
   // Stats breakdown by strategy — only show panel when ≥1 trade has been
   // tagged with a (non-manual) strategy id, so live-only sessions stay clean.
@@ -987,14 +1030,22 @@ export function BacktestChart({
   // True when no trades have been made yet — used to allow editing starting balance.
   const sessionEmpty = state.closedPositions.length === 0 && !state.activePosition;
 
-  const handleClose = (reason: 'manual' | 'sl' | 'tp' = 'manual') => {
-    const price = parseFloat(livePrice);
-    if (!price || isNaN(price) || price <= 0) {
-      flashTradeError('Enter the exit price before closing the position.');
+  const handleClose = useCallback((reason: 'manual' | 'sl' | 'tp' = 'manual') => {
+    // Prefer the replay cursor price (currentBarRef); fall back to manually
+    // typed livePrice; fail clearly if neither is available.
+    const cursorPrice = currentBarRef.current?.close;
+    const manualPrice = parseFloat(livePrice);
+    const price = (cursorPrice && cursorPrice > 0) ? cursorPrice : (!isNaN(manualPrice) && manualPrice > 0) ? manualPrice : null;
+    if (price == null) {
+      flashTradeError('No price yet — wait for the replay chart to reveal a bar.');
       return;
     }
-    closePosition({ price, time: Math.floor(Date.now() / 1000), reason });
-  };
+    closePosition({
+      price,
+      time: (currentBarRef.current?.time as number) ?? Math.floor(Date.now() / 1000),
+      reason,
+    });
+  }, [currentBarRef, livePrice, flashTradeError, closePosition]);
 
   const handleSaveSession = async () => {
     if (state.closedPositions.length === 0 && !state.activePosition) {
@@ -1037,6 +1088,95 @@ export function BacktestChart({
       setTimeout(() => setSaveStatus('idle'), 4000);
     }
   };
+
+  // ─── PlaceOrderPanel adapter ──────────────────────────────────
+  // Translates PlaceOrderPanel's submit payload into useBacktestSession actions.
+  const handlePanelSubmit = useCallback((order: PlaceOrderSubmit) => {
+    if (state.activePosition) {
+      flashTradeError('Position already open — close it or wait for SL/TP.');
+      return;
+    }
+    const time = (currentBarRef.current?.time as number) ?? Math.floor(Date.now() / 1000);
+    const sl = order.stopLoss ?? undefined;
+    const tp = order.takeProfit ?? undefined;
+    const side: PaperSide = order.side === 'buy' ? 'LONG' : 'SHORT';
+    if (order.kind === 'market') {
+      openPosition({
+        side,
+        price: order.price,
+        time,
+        size: order.size,
+        stopLoss: sl,
+        takeProfit: tp,
+        strategyId: activeStrategyId,
+      });
+    } else {
+      addPendingOrder({
+        side,
+        type: order.kind === 'limit' ? 'LIMIT' : 'STOP',
+        triggerPrice: order.price,
+        size: order.size,
+        stopLoss: sl,
+        takeProfit: tp,
+        strategyId: activeStrategyId,
+        time,
+      });
+    }
+  }, [state.activePosition, openPosition, addPendingOrder, activeStrategyId, flashTradeError]);
+
+  // ─── Save-to-journal handler ──────────────────────────────────
+  const handleSaveToJournal = useCallback(async () => {
+    if (!userId) {
+      toast.error('Sign in to save trades to your journal');
+      return;
+    }
+    // Map closed PaperPositions to BacktestPositionLike for journaling.ts
+    const closed = state.closedPositions.filter((p) => p.exitPrice != null);
+    if (closed.length === 0) {
+      toast.info('No closed trades to save yet');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      // Reconstruct a minimal BacktestSession from available state.
+      const sessionObj: BacktestSession = {
+        id: `chart:${symbol}:${barInterval}`,
+        name: `${displaySymbol(symbol)} · ${barInterval} · ${new Date().toLocaleDateString()}`,
+        symbol,
+        timeframe: barInterval,
+        assetType: assetClass,
+        startBalance: state.startingBalance,
+        leverage: 1,
+        strategyId: activeStrategyId ?? null,
+        strategyName: activeStrategy?.name ?? null,
+        dateRange: {
+          from: new Date(from * 1000).toISOString().slice(0, 10),
+          to: new Date(to * 1000).toISOString().slice(0, 10),
+        },
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const res = await saveBacktestTradesToJournal(
+        // PaperPosition is a superset of BacktestPositionLike — safe cast; any
+        // unrecognised fields are ignored by the journal function.
+        closed as Parameters<typeof saveBacktestTradesToJournal>[0],
+        sessionObj,
+        userId,
+      );
+      if (res.errors > 0) {
+        toast.error('Failed to save some trades to journal');
+      } else {
+        toast.success(
+          `Saved ${res.saved} trade${res.saved === 1 ? '' : 's'} to journal${activeStrategy ? ` · ${activeStrategy.name}` : ''}`,
+        );
+      }
+    } catch {
+      toast.error('Failed to save trades to journal');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [userId, state.closedPositions, state.startingBalance, symbol, barInterval, assetClass, activeStrategyId, activeStrategy, from, to]);
 
   const handleRunStrategy = async (strategyId: string) => {
     const strategy = strategyLib.strategies.find((s) => s.id === strategyId);
@@ -1296,9 +1436,11 @@ export function BacktestChart({
         </div>
       </div>
 
-      {/* Main: full-width chart with floating stats popup + bottom trading bar */}
+      {/* Main: chart area + right-rail PlaceOrderPanel. The inner container
+          reserves pr-80 (= w-80 = 320px) so BacktestReplayChart renders in
+          the left portion while the right rail overlays the reserved space. */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="relative flex-1 min-w-0 bg-[#08080a]">
+        <div className="relative flex-1 min-w-0 bg-[#08080a] pr-80">
           <BacktestReplayChart
             symbol={symbol}
             interval={barInterval}
@@ -1309,15 +1451,17 @@ export function BacktestChart({
             pendingOrders={state.pendingOrders}
             onBarReveal={handleReplayBarReveal}
             onBarClick={handleReplayBarClick}
-            onCurrentBarChange={(b) => { currentBarRef.current = b; }}
+            onCurrentBarChange={(b) => { currentBarRef.current = b; if (b) setMarketPrice(b.close); }}
             onContextMenu={(info) => setContextMenu(info)}
             onJumpToTime={(date) => setReplayStart(date)}
             showReplayCursor
             height="100%"
             positionOverlay={positionOverlay}
+            placeOrderArmed={placeArmed}
+            onPlaceLimitAtPrice={handlePlaceLimitAtPrice}
           />
-          {/* Floating Session Stats popup — top-right */}
-          <div className="absolute right-3 top-3 z-20 w-72 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/95 shadow-2xl backdrop-blur-sm">
+          {/* Floating Session Stats popup — shifted left to avoid the right-rail PlaceOrderPanel (w-80 = 20rem + gap) */}
+          <div className="absolute right-[21rem] top-3 z-20 w-72 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/95 shadow-2xl backdrop-blur-sm">
             <button type="button" onClick={() => setStatsPanelOpen((v) => !v)}
               className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646] hover:bg-zinc-900/60">
               <span>Session Stats</span>
@@ -1400,61 +1544,94 @@ export function BacktestChart({
               </div>
             )}
           </div>
-          {/* Floating trading bar — bottom-center, overlaid on the chart */}
-          <div className="absolute bottom-8 left-1/2 z-20 max-w-[95%] -translate-x-1/2">
-            <div className="relative rounded-[14px] border border-[#C9A646]/30 bg-gradient-to-b from-[#15151c]/95 to-[#0a0a0c]/95 px-6 py-3.5 shadow-[0_8px_40px_-8px_rgba(201,166,70,0.22)] ring-1 ring-inset ring-white/5 backdrop-blur-md">
-              {/* top-edge gold light bar (flagship accent) */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-px w-2/3 bg-gradient-to-r from-transparent via-[#C9A646]/80 to-transparent" />
-              {/* corner brackets — premium terminal frame */}
-              <span className="pointer-events-none absolute left-2 top-2 h-2.5 w-2.5 border-l border-t border-[#C9A646]/60" />
-              <span className="pointer-events-none absolute right-2 top-2 h-2.5 w-2.5 border-r border-t border-[#C9A646]/60" />
-              <span className="pointer-events-none absolute bottom-2 left-2 h-2.5 w-2.5 border-b border-l border-[#C9A646]/60" />
-              <span className="pointer-events-none absolute bottom-2 right-2 h-2.5 w-2.5 border-b border-r border-[#C9A646]/60" />
-              <div className="flex flex-wrap items-end justify-center gap-4">
-                <div className="flex flex-wrap items-end gap-3">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Current price</span>
-                    <div className="flex items-center rounded-md border border-white/10 bg-black/50 px-2.5 transition-colors focus-within:border-[#C9A646]/70">
-                      <span className="mr-1 text-sm text-zinc-500">$</span>
-                      <input type="number" value={livePrice} onChange={(e) => setLivePrice(e.target.value)} placeholder="market" step="any"
-                        className="w-24 bg-transparent py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                    </div>
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Size</span>
-                    <input type="number" value={size} onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))} min="0.01" step="any"
-                      className="w-16 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 text-center font-mono text-sm tabular-nums text-zinc-100 transition-colors focus:border-[#C9A646]/70 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-rose-400/80">Stop loss</span>
-                    <input type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)} placeholder="optional" step="any"
-                      className="w-24 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 transition-colors focus:border-rose-500/60 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-400/80">Take profit</span>
-                    <input type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)} placeholder="optional" step="any"
-                      className="w-24 rounded-md border border-white/10 bg-black/50 px-2.5 py-1.5 font-mono text-sm tabular-nums text-zinc-100 placeholder:font-sans placeholder:text-zinc-600 transition-colors focus:border-emerald-500/60 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                  </label>
-                </div>
-                <div className="hidden h-10 w-px self-center bg-white/10 sm:block" />
-                {state.activePosition && (
-                  <span className={`flex items-center gap-2 self-center rounded-md border bg-black/40 px-3 py-2 ${state.activePosition.side === 'LONG' ? 'border-emerald-500/30' : 'border-rose-500/30'}`}>
-                    <span className={`h-2 w-2 rounded-full ${state.activePosition.side === 'LONG' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                    <span className={`text-sm font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>{state.activePosition.side}</span>
-                    <span className="font-mono text-xs tabular-nums text-zinc-400">{state.activePosition.size}× @ ${state.activePosition.entryPrice.toFixed(2)}</span>
+          {/* Right rail — PlaceOrderPanel + open-position card + Save to journal */}
+          <div className="absolute right-0 top-0 bottom-0 z-30 w-80 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]/95 p-3 flex flex-col gap-3">
+            <PlaceOrderPanel
+              marketPrice={marketPrice}
+              symbol={displaySymbol(symbol)}
+              currentBalance={state.startingBalance + state.stats.netPnl}
+              initialBalance={state.startingBalance}
+              onSubmit={handlePanelSubmit}
+              onDraftChange={setOrderDraft}
+            />
+
+            {/* Open position card — only when a position is live */}
+            {state.activePosition && (
+              <div className={`rounded-xl border p-3 ${state.activePosition.side === 'LONG' ? 'border-emerald-500/30 bg-emerald-950/20' : 'border-rose-500/30 bg-rose-950/20'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-white">Open Position</span>
+                  <span className={`flex items-center gap-1.5 text-xs font-bold ${state.activePosition.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${state.activePosition.side === 'LONG' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                    {state.activePosition.side}
                   </span>
-                )}
-                <div className="flex items-stretch gap-2">
-                  <button onClick={() => handleOpen('LONG')} className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-gradient-to-b from-emerald-500/15 to-emerald-500/5 px-4 py-2 transition-all hover:border-emerald-400/60 hover:from-emerald-500/25"><TrendingUp size={15} className="text-emerald-400" /><span className="text-sm font-bold text-emerald-400">BUY</span><span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600/90">Market</span></button>
-                  <button onClick={() => handleOpen('SHORT')} className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-gradient-to-b from-rose-500/15 to-rose-500/5 px-4 py-2 transition-all hover:border-rose-400/60 hover:from-rose-500/25"><TrendingDown size={15} className="text-rose-400" /><span className="text-sm font-bold text-rose-400">SELL</span><span className="text-[10px] font-semibold uppercase tracking-wider text-rose-600/90">Market</span></button>
-                  <button onClick={() => handleClose('manual')} disabled={!state.activePosition} className={`flex items-center gap-2 rounded-md border px-4 py-2 transition-all ${state.activePosition ? 'border-zinc-700 bg-black hover:border-zinc-600 hover:bg-zinc-900' : 'cursor-not-allowed border-white/10 bg-black/40'}`}><X size={15} strokeWidth={2.5} className={state.activePosition ? 'text-zinc-100' : 'text-zinc-600'} /><span className={`text-sm font-bold ${state.activePosition ? 'text-zinc-100' : 'text-zinc-600'}`}>CLOSE</span><span className={`text-[10px] font-semibold uppercase tracking-wider ${state.activePosition ? 'text-zinc-500' : 'text-zinc-700'}`}>{state.activePosition ? `$${livePrice || '—'}` : 'Flat'}</span></button>
                 </div>
+                <div className="grid grid-cols-2 gap-1.5 text-xs mb-3">
+                  <div>
+                    <span className="text-gray-500">Size</span>
+                    <span className="ml-2 font-mono text-white">{state.activePosition.size}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Entry</span>
+                    <span className="ml-2 font-mono text-white">${state.activePosition.entryPrice.toFixed(2)}</span>
+                  </div>
+                  {state.activePosition.stopLoss != null && (
+                    <div>
+                      <span className="text-rose-400/70">SL</span>
+                      <span className="ml-2 font-mono text-rose-400">${state.activePosition.stopLoss.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {state.activePosition.takeProfit != null && (
+                    <div>
+                      <span className="text-emerald-400/70">TP</span>
+                      <span className="ml-2 font-mono text-emerald-400">${state.activePosition.takeProfit.toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleClose('manual')}
+                  className="w-full rounded-lg border border-zinc-700 bg-black py-2 text-xs font-bold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-900"
+                >
+                  Close Position
+                </button>
               </div>
-              <div className="mt-2.5 flex items-center justify-center gap-1.5 border-t border-white/5 pt-2 text-[11px] text-zinc-500">
-                <span>💡</span><span>Right-click the chart for <span className="text-zinc-400">LIMIT</span> / <span className="text-zinc-400">STOP</span> orders</span>
-              </div>
-              {tradeError && <p className="mt-1.5 text-center text-xs text-rose-400">{tradeError}</p>}
-            </div>
+            )}
+
+            {/* Trade error display */}
+            {tradeError && (
+              <p className="rounded-md border border-rose-800 bg-rose-950/40 px-3 py-2 text-xs text-rose-400">{tradeError}</p>
+            )}
+
+            {/* Save to journal */}
+            <button
+              onClick={handleSaveToJournal}
+              disabled={isSaving}
+              className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-[#C9A646]/40 bg-[#C9A646]/5 py-2.5 text-xs font-semibold text-[#C9A646] transition-colors hover:bg-[#C9A646]/10 disabled:cursor-wait disabled:opacity-60"
+            >
+              <Save size={13} />
+              {isSaving ? 'Saving…' : 'Save to journal'}
+            </button>
+
+            {/* Click-to-place LIMIT toggle */}
+            <button
+              type="button"
+              onClick={() => setPlaceArmed((v) => !v)}
+              className={`w-full rounded-xl border py-2 text-xs font-semibold transition-colors ${
+                placeArmed
+                  ? 'border-[#C9A646]/60 bg-[#C9A646]/10 text-[#C9A646]'
+                  : 'border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:border-[#C9A646]/30 hover:text-zinc-200'
+              }`}
+            >
+              {placeArmed ? 'Armed — click a price' : 'Click-to-place limit'}
+            </button>
+
+            {/* Contextual hint */}
+            {placeArmed ? (
+              <p className="text-center text-[10px] text-[#C9A646]/80">
+                Click a price on the chart to drop a LIMIT order.
+              </p>
+            ) : (
+              <p className="text-center text-[10px] text-zinc-600">Right-click the chart for <span className="text-zinc-500">LIMIT</span> / <span className="text-zinc-500">STOP</span> orders</p>
+            )}
           </div>
         </div>
       </div>
