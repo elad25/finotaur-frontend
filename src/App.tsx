@@ -469,6 +469,15 @@ function AppContent() {
           <Route path="options/earnings-iv-crush" element={<OptionsComingSoon title="Earnings IV Crush" description="Earnings volatility crush analysis is coming in a future release." />} />
           <Route path="options/shortcuts" element={<OptionsComingSoon title="Options Shortcuts" description="Quick-access options tools are coming in a future release." />} />
 
+          {/* ETF — sealed pending data feed; reuse ComingSoon (same as Options).
+              Routes kept so direct URLs don't 404. */}
+          <Route path="etf" element={<Navigate to="/app/etf/overview" replace />} />
+          <Route path="etf/overview" element={<OptionsComingSoon title="ETF — Overview" description="ETF overview is coming in a future release." />} />
+          <Route path="etf/screener" element={<OptionsComingSoon title="ETF — Screener" description="ETF screener is coming in a future release." />} />
+          <Route path="etf/holdings" element={<OptionsComingSoon title="ETF — Holdings" description="ETF holdings breakdown is coming in a future release." />} />
+          <Route path="etf/flows" element={<OptionsComingSoon title="ETF — Fund Flows" description="ETF fund flows is coming in a future release." />} />
+          <Route path="etf/performance" element={<OptionsComingSoon title="ETF — Performance" description="ETF performance analytics is coming in a future release." />} />
+
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
           <Route path="stocks/screener" element={<LockedRoute domainId="stocks"><StocksScreener /></LockedRoute>} />
