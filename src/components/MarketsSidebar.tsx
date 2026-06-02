@@ -14,7 +14,6 @@
 // =====================================================
 
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { getMarketsItemsForAsset } from '@/constants/markets';
 import { cn } from '@/lib/utils';
@@ -40,11 +39,10 @@ interface MarketsSidebarProps {
 export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { hasBetaAccess } = useAdminAuth();
   const { selectedAsset } = useAssetSelector();
 
-  // Markets product is tier-gated; hasBetaAccess unlocks
-  const domainLocked = !hasBetaAccess;
+  // Research Lab is free ($0/user: SEC/FRED/Polygon-flat/cache) — open to all, no tier lock.
+  const domainLocked = false;
 
   // Only the functions that have a route for the selected asset.
   const items = getMarketsItemsForAsset(selectedAsset);

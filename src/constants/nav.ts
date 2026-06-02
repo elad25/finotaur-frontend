@@ -69,7 +69,7 @@ export const domains: Record<string, Domain> = {
   'markets': {
     id: 'markets',
     label: 'Markets',
-    locked: true,    // tier-gated (same as individual asset domains today)
+    locked: false,   // Research Lab — free ($0/user: SEC/FRED/Polygon-flat/cache). Open to all.
     beta: false,
     defaultPath: '/app/stocks/overview',
     subNav: [
@@ -247,7 +247,7 @@ export const domains: Record<string, Domain> = {
   stocks: {
     id: 'stocks',
     label: 'Stocks',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/stocks/overview' },
@@ -274,7 +274,7 @@ export const domains: Record<string, Domain> = {
   crypto: {
     id: 'crypto',
     label: 'Crypto',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [
       { label: 'Overview',    path: '/app/crypto/overview' },
@@ -300,7 +300,7 @@ export const domains: Record<string, Domain> = {
   futures: {
     id: 'futures',
     label: 'Futures',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [{ label: 'Overview', path: '/app/futures/overview' }],
     sidebar: [
@@ -313,7 +313,7 @@ export const domains: Record<string, Domain> = {
   forex: {
     id: 'forex',
     label: 'Forex',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/forex/overview' },
@@ -334,7 +334,7 @@ export const domains: Record<string, Domain> = {
   commodities: {
     id: 'commodities',
     label: 'Commodities',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/commodities/overview' },
@@ -356,7 +356,7 @@ export const domains: Record<string, Domain> = {
   macro: {
     id: 'macro',
     label: 'Macro & News',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [
       { label: 'Overview',      path: '/app/macro/overview' },
