@@ -21,7 +21,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, TrendingUp, MessageSquare, ArrowRight, Command } from 'lucide-react';
+import { Search, X, TrendingUp, ArrowRight, Command } from 'lucide-react';
 import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxIntent';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 
@@ -518,25 +518,50 @@ export function GlobalOmnibox() {
 
   return (
     <>
-      {/* ── Desktop: inline input ───────────────────────────────────────── */}
+      {/*
+        ── Desktop: luxurious centered command bar ─────────────────────────
+        Width is fixed via the parent wrapper in TopNav (max-w-xl/2xl).
+        We fill that wrapper 100% so the bar spans it edge-to-edge.
+        The JS-animated width has been removed; CSS handles all transitions.
+      */}
       <div
         ref={containerRef}
-        className="relative hidden md:block"
-        style={{ width: isOpen ? 420 : 280, transition: 'width 0.2s ease' }}
+        className="relative hidden md:block w-full"
       >
-        {/* Input */}
+        {/* ── Input trigger ── */}
         <div
-          className="relative flex items-center"
+          className="omnibox-trigger relative flex items-center w-full rounded-xl transition-all duration-200"
           style={{
-            background: 'rgba(20,20,20,0.6)',
+            height: 42,
+            background: '#111111',
             border: isOpen
-              ? '1px solid rgba(201,166,70,0.35)'
-              : '1px solid rgba(255,215,0,0.08)',
-            borderRadius: 8,
-            transition: 'border-color 0.15s ease',
+              ? '1px solid rgba(201,166,70,0.40)'
+              : '1px solid rgba(201,166,70,0.18)',
+            boxShadow: isOpen
+              ? '0 0 0 3px rgba(201,166,70,0.08), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(201,166,70,0.04)'
+              : '0 0 0 1px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)',
+          }}
+          onMouseEnter={(e) => {
+            if (!isOpen) {
+              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.30)';
+              (e.currentTarget as HTMLDivElement).style.boxShadow =
+                '0 0 0 1px rgba(0,0,0,0.3), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.02)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isOpen) {
+              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.18)';
+              (e.currentTarget as HTMLDivElement).style.boxShadow =
+                '0 0 0 1px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)';
+            }
           }}
         >
-          <Search className="absolute left-2.5 h-3.5 w-3.5 text-[#555] flex-shrink-0" />
+          {/* Search icon — muted gold */}
+          <Search
+            className="absolute left-3.5 h-4 w-4 flex-shrink-0 pointer-events-none"
+            style={{ color: isOpen ? 'rgba(201,166,70,0.7)' : 'rgba(201,166,70,0.40)' }}
+          />
+
           <input
             ref={inputRef}
             type="text"
@@ -547,39 +572,63 @@ export function GlobalOmnibox() {
             }}
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search ticker, company or ask Fino..."
-            className="w-full bg-transparent pl-8 pr-16 py-2 text-xs text-[#F4F4F4] placeholder:text-[#555] outline-none"
+            placeholder="Search ticker, company, or ask Fino…"
+            className="w-full bg-transparent pl-10 pr-20 text-sm text-[#E8E8E8] outline-none"
+            style={{
+              caretColor: '#C9A646',
+            }}
+            // placeholder color applied via global CSS in index.css / globals.css;
+            // inline fallback via the class below
             autoComplete="off"
             spellCheck={false}
           />
-          {/* Kbd hint / clear */}
-          {query ? (
-            <button
-              type="button"
-              onClick={() => { setQuery(''); inputRef.current?.focus(); }}
-              className="absolute right-2.5 flex items-center justify-center h-5 w-5 rounded text-[#555] hover:text-[#F4F4F4] transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <span
-              className="absolute right-2.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] text-[#555] border border-[#2A2A2A] select-none"
-              style={{ background: 'rgba(30,30,30,0.8)' }}
-            >
-              <Command className="h-2.5 w-2.5" />
-              K
-            </span>
-          )}
+
+          {/* Right side: clear button OR ⌘K kbd chip */}
+          <div className="absolute right-3 flex items-center">
+            {query ? (
+              <button
+                type="button"
+                onClick={() => { setQuery(''); inputRef.current?.focus(); }}
+                className="flex items-center justify-center h-5 w-5 rounded transition-colors"
+                style={{ color: 'rgba(160,160,160,0.6)' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.6)'; }}
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              /* ⌘K pill — tasteful bordered kbd chip */
+              <span
+                className="flex items-center gap-0.5 select-none"
+                style={{
+                  padding: '2px 6px',
+                  borderRadius: 5,
+                  border: '1px solid rgba(201,166,70,0.20)',
+                  background: 'rgba(201,166,70,0.05)',
+                  color: 'rgba(201,166,70,0.50)',
+                  fontSize: 10,
+                  fontFamily: 'ui-monospace, monospace',
+                  letterSpacing: '0.03em',
+                  lineHeight: 1,
+                }}
+              >
+                <Command className="h-2.5 w-2.5" />
+                K
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Dropdown */}
+        {/* ── Dropdown / results panel ── */}
         {isOpen && (
           <div
-            className="absolute left-0 right-0 top-full mt-1.5 rounded-xl overflow-hidden z-[200]"
+            className="absolute left-0 right-0 top-full mt-2 rounded-xl z-[200]"
             style={{
-              background: '#0F0F0F',
-              border: '1px solid rgba(201,166,70,0.15)',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,166,70,0.05)',
+              background: '#0D0D0D',
+              border: '1px solid rgba(201,166,70,0.18)',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,166,70,0.04), inset 0 1px 0 rgba(201,166,70,0.03)',
               maxHeight: 420,
               overflowY: 'auto',
             }}
