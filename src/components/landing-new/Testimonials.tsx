@@ -126,7 +126,7 @@ function TestimonialCard({ t }: { t: Testimonial }) {
   return (
     <div
       className={[
-        "flex-shrink-0 w-[380px] p-6 rounded-2xl relative group transition-all duration-300",
+        "flex-shrink-0 w-[300px] sm:w-[340px] md:w-[380px] p-5 sm:p-6 rounded-2xl relative group transition-all duration-300",
         "bg-section-card-rest border border-gold-border",
         "shadow-card-rest hover:shadow-card-hover",
       ].join(" ")}
@@ -212,7 +212,9 @@ const Testimonials = () => {
     if (!scrollContainer) return;
 
     const scrollSpeed = 0.5;
-    const cardWidth = 400;
+    const gap = 24; // matches the flex `gap-6`
+    const firstCard = scrollContainer.querySelector(':scope > div') as HTMLElement | null;
+    const cardWidth = firstCard ? Math.round(firstCard.getBoundingClientRect().width) + gap : 404;
     const totalWidth = cardWidth * testimonials.length;
 
     let animationId: number;
@@ -247,8 +249,8 @@ const Testimonials = () => {
       {/* ========== SCROLLING CAROUSEL ========== */}
       <div className="relative">
         {/* Fade edges — use section-base so they match the shell background */}
-        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-section-base to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-section-base to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-10 sm:w-20 md:w-32 bg-gradient-to-r from-section-base to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-10 sm:w-20 md:w-32 bg-gradient-to-l from-section-base to-transparent z-10 pointer-events-none" />
 
         <div
           ref={scrollRef}

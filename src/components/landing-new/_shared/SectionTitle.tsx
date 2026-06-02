@@ -38,7 +38,7 @@ type Props = {
 // ---------------------------------------------------------------------------
 const sizeClasses: Record<SizeVariant, string> = {
   default: 'text-4xl md:text-6xl tracking-[-0.02em]',
-  large:   'text-5xl md:text-7xl tracking-[-0.03em]',
+  large:   'text-4xl sm:text-5xl md:text-7xl tracking-[-0.03em]',
   display: 'text-6xl md:text-8xl tracking-[-0.04em]',
 };
 
