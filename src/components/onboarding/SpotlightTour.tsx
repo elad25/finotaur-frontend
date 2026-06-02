@@ -121,7 +121,7 @@ function SpotlightHighlight({ rect }: SpotlightProps) {
         top: y,
         width: w,
         height: h,
-        boxShadow: '0 0 0 9999px rgba(10,10,10,0.72)',
+        boxShadow: '0 0 0 9999px rgba(0,0,0,0.88)',
         border: '2px solid #C9A646',
         borderRadius: 8,
         filter: 'drop-shadow(0 0 8px rgba(201,166,70,0.5))',
@@ -292,6 +292,9 @@ function HeroCard({
         variant="featured"
         padding="spacious"
         className="relative shadow-glow-gold-resting"
+        // Force a fully opaque panel so dimmed page content never bleeds
+        // through the card (DS surface-1 is intentionally semi-transparent).
+        style={{ backgroundColor: '#0F0F0F' }}
       >
         {/* Skip (X) button */}
         <button
@@ -600,7 +603,7 @@ export default function SpotlightTour() {
           <SpotlightHighlight rect={targetRect} />
         ) : mode === 'fallback' ? (
           <div
-            className="fixed inset-0 bg-surface-base/70 pointer-events-none"
+            className="fixed inset-0 bg-black/90 pointer-events-none"
             style={{ zIndex: 9990 }}
           />
         ) : null}
