@@ -175,11 +175,11 @@ export function ProductDrawer() {
                           BETA
                         </span>
                       )}
-                      {locked && <Lock className="h-3 w-3 opacity-60" />}
+                      {locked && <Lock className="h-2.5 w-2.5 opacity-60" />}
                       {/* Admin indicator: gated item the admin can access — subtle lock so they know it's restricted for regular users */}
                       {(isLocked || isBeta) && hasBetaAccess && (
                         <Lock
-                          className="h-3 w-3 flex-shrink-0"
+                          className="h-2.5 w-2.5 flex-shrink-0"
                           style={{ color: 'rgba(201,166,70,0.55)' }}
                           aria-label="Locked for regular users"
                           title="Locked for regular users"

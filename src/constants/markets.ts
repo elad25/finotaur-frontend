@@ -113,6 +113,8 @@ export interface MarketFunctionMeta {
   icon: LucideIcon;
   /** Which assets support this function (keys present = route exists). */
   routes: Partial<Record<AssetClass, string>>;
+  /** Closed to the general public (paywall). Free Research Lab items omit this. */
+  locked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +203,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       commodities: '/app/commodities/reports',
       macro:       '/app/macro/reports',
     },
+    locked: true, // closed to public (not in free Research Lab list)
   },
 
   // ── Stocks-specific ──────────────────────────────────────────────────────
@@ -228,6 +231,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       stocks:      '/app/stocks/catalysts',
       commodities: '/app/commodities/catalysts',
     },
+    locked: true, // closed to public (not in free Research Lab list)
   },
   {
     id: 'upgrades',
@@ -407,6 +411,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       macro: '/app/macro/models',
     },
+    locked: true, // closed to public (not in free Research Lab list)
   },
   {
     id: 'indicators',
@@ -423,6 +428,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       macro: '/app/macro/events',
     },
+    locked: true, // closed to public (not in free Research Lab list)
   },
 
   // ── Options-specific ─────────────────────────────────────────────────────
@@ -557,6 +563,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       home: '/app/ai/my-portfolio',
     },
+    locked: true, // Copilot/portfolio — closed to public (not free Research Lab data)
   },
 ];
 
