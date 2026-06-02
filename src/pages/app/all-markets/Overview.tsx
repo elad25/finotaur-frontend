@@ -2,6 +2,8 @@
 import { api } from '@/lib/apiBase';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useMarketStatus } from '@/lib/marketStatus';
+import { MARKET_DATA_LICENSED } from '@/constants/nav';
+import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import { useCreditSpreadsSnapshot } from '@/hooks/macro/useCreditSpreads';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1752,8 +1754,11 @@ export default function AllMarketsOverview() {
       {/* Market Regime Timeline — regime from FRED credit spreads */}
       <MarketRegimeTimeline regime={regime} confidence={confidence} />
 
-      {/* Market Ticker Strip — real news passed from API */}
-      <MarketTickerStrip newsItems={tickerNewsItems} />
+      {/* Market Ticker Strip — raw Polygon prices; gated until licensed */}
+      {MARKET_DATA_LICENSED
+        ? <MarketTickerStrip newsItems={tickerNewsItems} />
+        : <LicensedDataPlaceholder minHeight={260} />
+      }
 
       {/* Main Content Grid: Left stacked content + Right Movers (full height) */}
       <div className="grid gap-4 lg:grid-cols-[1fr,320px]">
@@ -1764,14 +1769,17 @@ export default function AllMarketsOverview() {
 
           {/* What Matters This Week - Key Events */}
           <WhatMattersThisWeek calendarData={calendarData} earningsData={earningsData} />
-          
+
           {/* Macro Economic News */}
           <MacroNews newsData={newsData} loading={loading} />
         </div>
-        
-        {/* Right Column: Market Movers Widget - Sticky, full height */}
+
+        {/* Right Column: Market Movers — raw Polygon heatmap data; gated until licensed */}
         <div className="lg:sticky lg:top-4 lg:self-start">
-          <MarketMoversWidget data={moversData} loading={loading} />
+          {MARKET_DATA_LICENSED
+            ? <MarketMoversWidget data={moversData} loading={loading} />
+            : <LicensedDataPlaceholder minHeight={400} />
+          }
         </div>
       </div>
     </div>

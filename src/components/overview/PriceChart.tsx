@@ -2,6 +2,8 @@
 // src/components/overview/PriceChart.tsx
 import React from "react";
 import { fetchJSON, getSymbolFromContext, PricePoint } from "./api";
+import { MARKET_DATA_LICENSED } from "@/constants/nav";
+import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
 
 type Props = { symbol?: string; range?: "1D"|"1W"|"1M"|"6M"|"1Y"|"5Y" };
 
@@ -16,6 +18,10 @@ const PriceChart: React.FC<Props> = ({ symbol, range="6M" }) => {
       .catch(() => {});
     return () => { mounted = false; };
   }, [sym, range]);
+
+  // Gate: raw Polygon price data — not licensed for redistribution.
+  // All hooks (useState, useEffect) have already been called above.
+  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={260} />;
 
   if (!points.length) return <div className="h-[260px]" />;
 

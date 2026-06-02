@@ -3,6 +3,8 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { MARKET_DATA_LICENSED } from '@/constants/nav';
+import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 
 type Mover = { symbol: string; price: number|null; chp: number|null; name?: string };
 type MoversResp = { gainers: Mover[]; losers: Mover[]; source: string; ts: number };
@@ -22,6 +24,16 @@ export default function AllMarketsMovers() {
       .finally(()=> { if(alive) setLoading(false); });
     return ()=> { alive = false; };
   },[]);
+
+  // Gate: raw Polygon top-movers data (price + change%) — not licensed for redistribution.
+  // All hooks (useState, useEffect) have already been called above.
+  if (!MARKET_DATA_LICENSED) {
+    return (
+      <PageTemplate title="Top Movers" description="Biggest gainers and losers for major US equities (S&P 500).">
+        <LicensedDataPlaceholder minHeight={200} />
+      </PageTemplate>
+    );
+  }
 
   const renderTable = (list: Mover[]) => (
     <Table>

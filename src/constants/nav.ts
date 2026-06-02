@@ -31,6 +31,10 @@ import {
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
 
+// Polygon redistribution license ($2k/mo) not held — raw price/quote/chart
+// display is gated off. Flip to true when licensed.
+export const MARKET_DATA_LICENSED = false;
+
 // Sealed pending licensed options data feed (Track B). Re-enable when built.
 // To re-enable: set OPTIONS_ENABLED = true, then restore subNav/sidebar below
 // and uncomment 'options' in domainOrder.

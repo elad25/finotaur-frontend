@@ -1,5 +1,7 @@
 // src/pages/app/all-markets/Chart.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { MARKET_DATA_LICENSED } from '@/constants/nav';
+import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import {
   createChart,
   IChartApi,
@@ -2199,6 +2201,16 @@ export default function ChartPage() {
       if (targetY !== null) setToolbarPos({ x: drawing.x + (drawing.width || 150) / 2, y: targetY - 50 });
     }
   }, [selectedDrawingIndex, drawings, canvasSize]);
+
+  // Gate: raw Polygon OHLCV candlestick chart — not licensed for redistribution.
+  // All hooks (useState, useRef, useCallback, useEffect) have already been called above.
+  if (!MARKET_DATA_LICENSED) {
+    return (
+      <div className="flex items-center justify-center w-full p-8 min-h-screen">
+        <LicensedDataPlaceholder minHeight={300} />
+      </div>
+    );
+  }
 
   const isPositive = lastPrice ? lastPrice.change >= 0 : true;
 
