@@ -239,6 +239,10 @@ const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsA
 // admin SEO widget. Remove import + route + delete src/__dev/SeoAnalyticsDevPage.tsx
 // before merging Wave 5 to main (the admin route at /app/admin/seo is the prod surface).
 import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
+// ETFs
+const ETFOverview = lazy(() => import("@/pages/app/etfs/Overview"));
+const ETFDetail  = lazy(() => import("@/pages/app/etfs/ETFDetail"));
+
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -467,14 +471,17 @@ function AppContent() {
           <Route path="options/earnings-iv-crush" element={<OptionsComingSoon title="Earnings IV Crush" description="Earnings volatility crush analysis is coming in a future release." />} />
           <Route path="options/shortcuts" element={<OptionsComingSoon title="Options Shortcuts" description="Quick-access options tools are coming in a future release." />} />
 
-          {/* ETF — sealed pending data feed; reuse ComingSoon (same as Options).
-              Routes kept so direct URLs don't 404. */}
-          <Route path="etf" element={<Navigate to="/app/etf/overview" replace />} />
-          <Route path="etf/overview" element={<OptionsComingSoon title="ETF — Overview" description="ETF overview is coming in a future release." />} />
-          <Route path="etf/screener" element={<OptionsComingSoon title="ETF — Screener" description="ETF screener is coming in a future release." />} />
-          <Route path="etf/holdings" element={<OptionsComingSoon title="ETF — Holdings" description="ETF holdings breakdown is coming in a future release." />} />
-          <Route path="etf/flows" element={<OptionsComingSoon title="ETF — Fund Flows" description="ETF fund flows is coming in a future release." />} />
-          <Route path="etf/performance" element={<OptionsComingSoon title="ETF — Performance" description="ETF performance analytics is coming in a future release." />} />
+          {/* ETFs — live section (ETF Analyzer) */}
+          <Route path="etfs" element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etfs/overview" element={<LockedRoute domainId="etfs"><ETFOverview /></LockedRoute>} />
+          <Route path="etfs/:symbol"  element={<LockedRoute domainId="etfs"><ETFDetail  /></LockedRoute>} />
+          {/* Legacy /app/etf/* → redirect to new /app/etfs/* */}
+          <Route path="etf" element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/overview"    element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/screener"    element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/holdings"    element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/flows"       element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/performance" element={<Navigate to="/app/etfs/overview" replace />} />
 
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
