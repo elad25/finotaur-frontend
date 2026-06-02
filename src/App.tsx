@@ -140,10 +140,10 @@ const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailure
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
 const DesignLab = lazy(() => import("@/pages/DesignLab"));
 const PlansPage = lazy(() => import("@/pages/app/Plans"));
-const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout").then(m => ({ default: m.ProtectedAppLayout })));
-const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout").then(m => ({ default: m.CopilotStandaloneLayout })));
+const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
+const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
 const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
-const WelcomePopup = lazy(() => import("@/components/WelcomePopup").then(m => ({ default: m.WelcomePopup })));
+const WelcomePopup = lazy(() => import("@/components/WelcomePopup"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
 const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
