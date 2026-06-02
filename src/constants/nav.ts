@@ -36,6 +36,11 @@ import { FEATURES } from '@/config/features';
 // and uncomment 'options' in domainOrder.
 export const OPTIONS_ENABLED = false;
 
+// Sealed pending licensed futures data feed (CME licensed; Yahoo gray).
+// To re-enable: set FUTURES_ENABLED = true, then restore subNav/sidebar in
+// the futures domain below and swap ComingSoon back to real components in App.tsx.
+export const FUTURES_ENABLED = false;
+
 export interface NavItem {
   label: string;
   path: string;
@@ -257,13 +262,15 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard',          path: '/app/stocks/overview',     icon: LayoutDashboard },
       { label: 'Screener',           path: '/app/stocks/screener',     icon: Search },
-      { label: 'Coming Soon',        path: '/app/stocks/earnings',     icon: Calendar },
+      // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
+      { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
       { label: 'Fundamentals',       path: '/app/stocks/fundamentals', icon: BarChart3 },
       { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp },
       { label: 'News',               path: '/app/stocks/news',         icon: Newspaper },
       { label: 'Sector Analysis',    path: '/app/stocks/sectors',      icon: Target },
       { label: 'Catalysts',          path: '/app/stocks/catalysts',    icon: Zap },
-      { label: 'Upgrades/Downgrades', path: '/app/stocks/upgrades',   icon: Award },
+      // Analyst-ratings source (Finnhub/FMP) not licensed for redistribution. Sealed pending licensed source.
+      { label: 'Upgrades/Downgrades', path: '/app/stocks/upgrades',   icon: Award,      locked: true },
       { label: 'Valuation',          path: '/app/stocks/valuation',    icon: DollarSign },
       { label: 'Insider & 13F',      path: '/app/stocks/insider',      icon: Users },
       { label: 'Reports & PDFs',     path: '/app/stocks/reports',      icon: FileText },
@@ -297,17 +304,15 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
+  // No free/legal futures data feed (CME licensed; Yahoo gray). Sealed pending licensed source.
+  // To re-enable: set FUTURES_ENABLED = true above and restore subNav/sidebar entries below.
   futures: {
     id: 'futures',
     label: 'Futures',
     locked: false,
     beta: false,
-    subNav: [{ label: 'Overview', path: '/app/futures/overview' }],
-    sidebar: [
-      { label: 'Overview',       path: '/app/futures/overview',       icon: LayoutDashboard },
-      { label: 'Open Interests', path: '/app/futures/open-interests', icon: BarChart3 },
-      { label: 'Calendar',       path: '/app/futures/calendar',       icon: Calendar },
-    ],
+    subNav: [],
+    sidebar: [],
   },
 
   forex: {
