@@ -339,25 +339,38 @@ function HeroCard({
           {/* Fino mascot lens — only on the fino step */}
           {isFinoStep && (
             <div className="flex justify-center">
-              <motion.div
-                style={{
-                  width: 112,
-                  height: 112,
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  border: '3px solid #C9A646',
-                  boxShadow: '0 0 24px rgba(201,166,70,0.45)',
-                  transformOrigin: 'bottom center',
-                }}
-                animate={{ rotate: [0, -12, 10, -8, 8, 0] }}
-                transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 1.2, ease: 'easeInOut' }}
-              >
-                <img
-                  src="/fino-avatar.png"
-                  alt="Fino"
-                  className="h-full w-full object-cover scale-110"
-                />
-              </motion.div>
+              <div className="relative" style={{ width: 112, height: 112 }}>
+                {/* Avatar lens — stays put (gentle float only) */}
+                <motion.div
+                  style={{
+                    width: 112,
+                    height: 112,
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    border: '3px solid #C9A646',
+                    boxShadow: '0 0 24px rgba(201,166,70,0.45)',
+                  }}
+                  animate={{ y: [0, -4, 0] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <img
+                    src="/fino-avatar.png"
+                    alt="Fino"
+                    className="h-full w-full object-cover scale-110"
+                  />
+                </motion.div>
+
+                {/* Waving hand — a real "hello" wave, pivoting at the wrist */}
+                <motion.span
+                  aria-hidden="true"
+                  className="absolute -bottom-1 -right-1 select-none"
+                  style={{ fontSize: 34, transformOrigin: '70% 80%' }}
+                  animate={{ rotate: [0, 18, -8, 18, -8, 0] }}
+                  transition={{ duration: 1.3, repeat: Infinity, repeatDelay: 0.7, ease: 'easeInOut' }}
+                >
+                  👋
+                </motion.span>
+              </div>
             </div>
           )}
 
@@ -620,7 +633,7 @@ export default function SpotlightTour() {
     closeDrawer();
     finishOnboarding();
     setActive(false);
-    navigate('/app/stocks/overview', { replace: true });
+    navigate('/app/all-markets/overview', { replace: true });
   }, [setTourMode, closeDrawer, navigate]);
 
   const handleNext = useCallback(() => {
