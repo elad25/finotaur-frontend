@@ -47,9 +47,11 @@ const supabaseAnonKey = rawSupabaseAnonKey;
 
 // Boot-time observability — URL is public, key prefix is the public anon key
 // (NOT service_role). Safe to log; helps debugging stale CDN caches.
-console.log('🔑 [Supabase Init] URL:', supabaseUrl);
-console.log('🔑 [Supabase Init] Anon Key loaded:', !!supabaseAnonKey);
-console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey.substring(0, 20) + '...');
+if (import.meta.env.DEV) {
+  console.log('🔑 [Supabase Init] URL:', supabaseUrl);
+  console.log('🔑 [Supabase Init] Anon Key loaded:', !!supabaseAnonKey);
+  console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey.substring(0, 20) + '...');
+}
 
 // 🔥 SINGLETON - instance יחיד לכל האפליקציה
 let supabaseInstance: SupabaseClient | null = null;
