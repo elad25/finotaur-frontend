@@ -126,7 +126,7 @@ export const TopNav = () => {
         {/* ── LEFT: Logo + Hamburger ────────────────────────── */}
         <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() => navigate('/app/top-secret')}
+            onClick={() => navigate('/app/all-markets/overview')}
             className="flex items-center cursor-pointer flex-shrink-0"
             aria-label="FINOTAUR home"
           >
