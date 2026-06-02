@@ -273,7 +273,7 @@ export const domains: Record<string, Domain> = {
       // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
       { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
       { label: 'Fundamentals',       path: '/app/stocks/fundamentals', icon: BarChart3 },
-      { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp },
+      { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp,  locked: true },
       { label: 'News',               path: '/app/stocks/news',         icon: Newspaper },
       { label: 'Sector Analysis',    path: '/app/stocks/sectors',      icon: Target },
       { label: 'Catalysts',          path: '/app/stocks/catalysts',    icon: Zap },
