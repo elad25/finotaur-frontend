@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState } from 'react';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, PencilLine, Upload } from 'lucide-react';
 import { useMyPortfolio } from '@/hooks/useMyPortfolio';
 import { CreatePortfolioModal } from '@/components/portfolio/CreatePortfolioModal';
 import type { MyPortfolio, PortfolioAccount, Lot } from '@/lib/portfolio/types';
@@ -45,22 +45,43 @@ function LoadingSpinner() {
 
 function EmptyState({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="flex min-h-[50vh] items-center justify-center px-4">
-      <Card className="max-w-md w-full text-center p-ds-6">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-surface-1 border border-border-ds-subtle">
-          <Briefcase className="h-7 w-7 text-gold-primary" />
+    <div className="min-h-[70vh] flex items-center justify-center px-4">
+      <Card className="max-w-lg w-full text-center p-ds-7 rounded-[12px] bg-surface-1 border border-border-ds-subtle shadow-glow-gold-resting relative overflow-hidden">
+        {/* Thin gold top light bar */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[1.5px] w-[60%] bg-gradient-gold rounded-full" />
+
+        {/* Icon badge */}
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-gold shadow-glow-gold-resting mt-ds-4">
+          <Briefcase className="h-8 w-8 text-surface-base" />
         </div>
-        <h2 className="text-xl font-semibold text-ink-primary">My Portfolio</h2>
-        <p className="text-ink-secondary mt-1 text-sm">
+
+        {/* Title */}
+        <h2 className="text-2xl font-semibold text-ink-primary mt-ds-4">My Portfolio</h2>
+
+        {/* Subtitle */}
+        <p className="text-ink-secondary text-sm mt-2 max-w-sm mx-auto">
           Build your portfolio manually or import positions by CSV.
         </p>
-        <div className="pt-4">
+
+        {/* Feature hint chips */}
+        <div className="flex items-center justify-center gap-ds-2 mt-ds-4">
+          <span className="flex items-center gap-1.5 rounded-full border border-border-ds-subtle bg-surface-base px-3 py-1 text-xs text-ink-secondary">
+            <PencilLine className="h-3.5 w-3.5" />
+            Manual entry
+          </span>
+          <span className="flex items-center gap-1.5 rounded-full border border-border-ds-subtle bg-surface-base px-3 py-1 text-xs text-ink-secondary">
+            <Upload className="h-3.5 w-3.5" />
+            CSV import
+          </span>
+        </div>
+
+        {/* Primary CTA */}
+        <div className="mt-ds-5">
           <Button
             variant="gold"
-            size="default"
+            size="lg"
             showArrow={false}
             onClick={onOpen}
-            className="mt-2"
           >
             Create Portfolio
           </Button>
@@ -170,7 +191,7 @@ export default function MyPortfolioPage() {
   const isEmpty = portfolio === null || !hasPositions(portfolio);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 bg-surface-base min-h-full">
+    <div className="mx-auto max-w-5xl px-4 py-8 min-h-full">
       {isEmpty ? (
         <EmptyState onOpen={() => setModalOpen(true)} />
       ) : (
