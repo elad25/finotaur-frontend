@@ -11,6 +11,8 @@ import ComplianceFooterBar from '@/components/ComplianceFooterBar';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { cn } from '@/lib/utils';
 import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
+import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
+import { ProductDrawer } from '@/components/ProductDrawer';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -68,6 +70,7 @@ export const ProtectedAppLayout = () => {
 
   return (
     <AssetSelectorProvider>
+    <ProductDrawerProvider>
     <PortfolioProvider>
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
         <ImpersonationBanner />
@@ -75,6 +78,8 @@ export const ProtectedAppLayout = () => {
         {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
         <SubNav />
+        {/* Product Drawer — rendered at layout level so it overlays everything */}
+        <ProductDrawer />
         <div className="flex flex-1">
           {!hideSidebar && <Sidebar isOpen={sidebarOpen} />}
           <main
@@ -91,6 +96,7 @@ export const ProtectedAppLayout = () => {
         <ComplianceFooterBar />
       </div>
     </PortfolioProvider>
+    </ProductDrawerProvider>
     </AssetSelectorProvider>
   );
 };
