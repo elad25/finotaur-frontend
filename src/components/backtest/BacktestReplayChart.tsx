@@ -169,6 +169,14 @@ export interface BacktestReplayChartProps {
     onStopLossChange: (price: number) => void;
     onTakeProfitChange: (price: number) => void;
   };
+  /**
+   * When true, the next left-click on the chart places a LIMIT order via
+   * onPlaceLimitAtPrice instead of triggering the normal bar-click/jump flow.
+   * The parent is responsible for disarming after the order is placed.
+   */
+  placeOrderArmed?: boolean;
+  /** Called with (price, currentPrice) when the user clicks while placeOrderArmed. */
+  onPlaceLimitAtPrice?: (price: number, currentPrice: number) => void;
 }
 
 type LoadState =
@@ -192,6 +200,8 @@ export function BacktestReplayChart({
   showReplayCursor = false,
   height = '100%',
   positionOverlay,
+  placeOrderArmed = false,
+  onPlaceLimitAtPrice,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -231,6 +241,11 @@ export function BacktestReplayChart({
   const [scissorsArmed, setScissorsArmed] = useState(false);
   const scissorsArmedRef = useRef(scissorsArmed);
 
+  // Click-to-place LIMIT armed mode. Mirrored as a ref so the DOM mousedown
+  // listener (captured once per chart mount) always reads the latest value.
+  const placeOrderArmedRef = useRef(placeOrderArmed);
+  const onPlaceLimitAtPriceRef = useRef(onPlaceLimitAtPrice);
+
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
@@ -238,6 +253,8 @@ export function BacktestReplayChart({
   useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
   useEffect(() => { showReplayCursorRef.current = showReplayCursor; }, [showReplayCursor]);
   useEffect(() => { scissorsArmedRef.current = scissorsArmed; }, [scissorsArmed]);
+  useEffect(() => { placeOrderArmedRef.current = placeOrderArmed; }, [placeOrderArmed]);
+  useEffect(() => { onPlaceLimitAtPriceRef.current = onPlaceLimitAtPrice; }, [onPlaceLimitAtPrice]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -399,6 +416,10 @@ export function BacktestReplayChart({
     // DOM contextmenu listener below — this only fires on left-click.
     chart.subscribeClick((param) => {
       if (!param.time) return;
+      // Place-order armed: the DOM mousedown listener handled this click already
+      // (it fired before subscribeClick). Skip all other click behaviours so we
+      // don't also trigger jump/trade on the same click.
+      if (placeOrderArmedRef.current) return;
       const clickedTime = param.time as number;
       // Scissors armed → this click is a time-rewind (jump). Disarm right after
       // so the next click trades normally and the scissors cursor disappears.
@@ -527,6 +548,26 @@ export function BacktestReplayChart({
     };
     container.addEventListener('contextmenu', handleContextMenu);
 
+    // Click-to-place LIMIT: left mousedown while placeOrderArmed. We use
+    // mousedown (not click) so we can call preventDefault/stopPropagation
+    // before lightweight-charts' own pointer-up click fires — otherwise
+    // subscribeClick would still fire for the same event.
+    const handlePlaceOrderMousedown = (e: MouseEvent) => {
+      if (e.button !== 0) return; // left button only
+      if (!placeOrderArmedRef.current || !onPlaceLimitAtPriceRef.current) return;
+      if (!seriesRef.current || !containerRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = containerRef.current.getBoundingClientRect();
+      const localY = e.clientY - rect.top;
+      const price = seriesRef.current.coordinateToPrice(localY);
+      if (price == null || !Number.isFinite(price)) return;
+      const currentPrice = bars[lastUpdatedIdxRef.current]?.close;
+      if (currentPrice == null) return;
+      onPlaceLimitAtPriceRef.current(Number(price), currentPrice);
+    };
+    container.addEventListener('mousedown', handlePlaceOrderMousedown);
+
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -577,6 +618,7 @@ export function BacktestReplayChart({
       if (coalesceRaf) cancelAnimationFrame(coalesceRaf);
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
+      container.removeEventListener('mousedown', handlePlaceOrderMousedown);
       container.removeEventListener('mouseleave', handleMouseLeave);
       container.removeEventListener('mousemove', handleAxisCursor);
       container.removeEventListener('mouseleave', handleAxisLeave);
