@@ -699,7 +699,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                   {/* Admin indicator: item is gated for regular users; admin can still access */}
                   {showAdminLockIndicator && !isLocked && (
                     <Lock
-                      className="h-3 w-3 flex-shrink-0"
+                      className="h-2.5 w-2.5 flex-shrink-0"
                       style={{ color: 'rgba(201,166,70,0.55)' }}
                       aria-label="Locked for regular users"
                       title="Locked for regular users"
@@ -727,7 +727,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                   )}
                   {showAdminLockIndicator && !isLocked && (
                     <Lock
-                      className="inline h-3 w-3 ml-1 flex-shrink-0"
+                      className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
                       style={{ color: 'rgba(201,166,70,0.55)' }}
                       title="Locked for regular users"
                     />
