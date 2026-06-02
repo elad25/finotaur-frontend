@@ -110,7 +110,7 @@ interface QuotesApiResponse {
 }
 
 async function fetchLiveQuotes(symbols: string[]): Promise<QuotesApiResponse> {
-  const res = await fetch(`/api/quotes?symbols=${symbols.join(',')}`);
+  const res = await fetch(`/api/portfolio-quotes?symbols=${symbols.join(',')}`);
   if (!res.ok) throw new Error(`quotes fetch failed: ${res.status}`);
   return res.json() as Promise<QuotesApiResponse>;
 }
