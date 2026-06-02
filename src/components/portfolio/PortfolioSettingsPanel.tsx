@@ -8,8 +8,7 @@ import React from 'react';
 import { UsePortfolioBuilderReturn } from '@/hooks/usePortfolioBuilder';
 import { BenchmarkSearch } from './BenchmarkSearch';
 import { cn } from '@/lib/utils';
-
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'ILS', 'JPY', 'CAD', 'AUD'] as const;
+import { CURRENCIES } from '@/lib/portfolio/currencies';
 
 export interface PortfolioSettingsPanelProps {
   builder: UsePortfolioBuilderReturn;
@@ -44,7 +43,7 @@ export function PortfolioSettingsPanel({ builder }: PortfolioSettingsPanelProps)
           )}
         >
           {CURRENCIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
+            <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
           ))}
         </select>
       </div>

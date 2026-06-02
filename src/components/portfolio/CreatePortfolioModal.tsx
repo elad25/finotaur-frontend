@@ -164,6 +164,7 @@ export function CreatePortfolioModal({
                 {/* Positions table — CsvUploadButton embedded in header slot */}
                 <PositionsTable
                   positions={activeAccount.positions}
+                  currency={activeAccount.cashCurrency ?? portfolio.currency ?? 'USD'}
                   onAddTicker={addTicker}
                   onAddLot={addLot}
                   onUpdateLot={updateLot}
