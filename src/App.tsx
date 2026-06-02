@@ -265,7 +265,6 @@ const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
 const StocksSentiment = lazy(() => import("@/pages/app/stocks/Sentiment"));
 const StocksInsider   = lazy(() => import("@/pages/app/stocks/Insider"));
 const StocksReports = lazy(() => import("@/pages/app/stocks/Reports"));
-const StocksWatchlists = lazy(() => import("@/pages/app/stocks/Watchlists"));
 
 // Crypto — 7 Consolidated Pages
 const CryptoOverview = lazy(() => import("@/pages/app/crypto/Overview"));
@@ -329,6 +328,9 @@ import OptionsComingSoon from "@/pages/app/ComingSoon";
 
 // Portfolio
 const MyPortfolioPage = lazy(() => import("@/pages/app/portfolio/MyPortfolioPage"));
+
+// Watch List
+const MyWatchlistPage = lazy(() => import("@/pages/app/watchlist/MyWatchlistPage"));
 
 // AI
 const AIMyPortfolio = lazy(() => import("@/pages/app/ai/MyPortfolio"));
@@ -511,7 +513,8 @@ function AppContent() {
           <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
           <Route path="stocks/insider"  element={<LockedRoute domainId="stocks"><StocksInsider  /></LockedRoute>} />
           <Route path="stocks/reports" element={<LockedRoute domainId="stocks"><StocksReports /></LockedRoute>} />
-          <Route path="stocks/watchlists" element={<LockedRoute domainId="stocks"><StocksWatchlists /></LockedRoute>} />
+          {/* stocks/watchlists now redirects to the real Watch List page under all-markets */}
+          <Route path="stocks/watchlists" element={<Navigate to="/app/all-markets/watchlist" replace />} />
           
           {/* CRYPTO — 7 Consolidated Pages */}
           <Route path="crypto/overview" element={<LockedRoute domainId="crypto"><CryptoOverview /></LockedRoute>} />
@@ -597,6 +600,8 @@ function AppContent() {
           <Route path="all-markets/portfolio" element={<SuspenseRoute><MyPortfolioPage /></SuspenseRoute>} />
           {/* Redirect old /app/portfolio links to the new canonical URL */}
           <Route path="portfolio" element={<Navigate to="/app/all-markets/portfolio" replace />} />
+          {/* MY WATCH LIST — canonical URL under all-markets so Markets chrome stays visible */}
+          <Route path="all-markets/watchlist" element={<SuspenseRoute><MyWatchlistPage /></SuspenseRoute>} />
 
           {/* JOURNAL */}
           <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
