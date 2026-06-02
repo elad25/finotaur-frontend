@@ -169,6 +169,7 @@ export const TopNav = () => {
             onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
             className="hidden lg:flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10 flex-shrink-0"
             aria-label="Ask FINO AI"
+            data-tour="fino"
           >
             <FinoAvatar size={36} thinking={false} assistantCount={0} className="h-9 w-9" />
             <span>Ask Fino</span>

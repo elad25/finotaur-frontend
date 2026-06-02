@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
 import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
 import { ProductDrawer } from '@/components/ProductDrawer';
+import SpotlightTour from '@/components/onboarding/SpotlightTour';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -94,6 +95,8 @@ export const ProtectedAppLayout = () => {
           </main>
         </div>
         <ComplianceFooterBar />
+        {/* Spotlight onboarding tour — renders null when tour is not active */}
+        <SpotlightTour />
       </div>
     </PortfolioProvider>
     </ProductDrawerProvider>

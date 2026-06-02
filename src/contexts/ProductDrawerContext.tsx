@@ -13,19 +13,23 @@ interface ProductDrawerContextValue {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  /** true while the onboarding spotlight tour is running */
+  tourMode: boolean;
+  setTourMode: (v: boolean) => void;
 }
 
 const ProductDrawerContext = createContext<ProductDrawerContextValue | null>(null);
 
 export function ProductDrawerProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [tourMode, setTourMode] = useState(false);
 
   const open   = useCallback(() => setIsOpen(true),  []);
   const close  = useCallback(() => setIsOpen(false), []);
   const toggle = useCallback(() => setIsOpen((v) => !v), []);
 
   return (
-    <ProductDrawerContext.Provider value={{ isOpen, open, close, toggle }}>
+    <ProductDrawerContext.Provider value={{ isOpen, open, close, toggle, tourMode, setTourMode }}>
       {children}
     </ProductDrawerContext.Provider>
   );
