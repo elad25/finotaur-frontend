@@ -458,21 +458,21 @@ const JournalToolsTabs = () => {
               />
 
               {/* Browser chrome */}
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900">
-                <div className="flex gap-1.5">
+              <div className="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900">
+                <div className="flex gap-1.5 shrink-0">
                   <div className="w-3 h-3 rounded-full bg-status-error/60" />
                   <div className="w-3 h-3 rounded-full bg-status-warning/60" />
                   <div className="w-3 h-3 rounded-full bg-status-success/60" />
                 </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06]">
-                    <span className="text-[11px] text-ink-tertiary font-mono">
+                <div className="flex-1 min-w-0 flex justify-center">
+                  <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06] min-w-0 max-w-full overflow-hidden">
+                    <span className="block truncate text-[11px] text-ink-tertiary font-mono">
                       {activeTab.screenshot?.url ??
                         `finotaur.com/app/journal/${activeTab.key}`}
                     </span>
                   </div>
                 </div>
-                <div className="w-12" />
+                <div className="w-6 sm:w-12 shrink-0" />
               </div>
 
               {/* Body */}

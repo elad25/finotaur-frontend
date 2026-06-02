@@ -120,7 +120,7 @@ function StatCell({ stat, index, active }: StatCellProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
       transition={{ duration: 0.5, delay: index * 0.12, ease: "easeOut" }}
-      className="flex flex-col items-center gap-2 px-3 sm:px-6 py-4 md:py-0 flex-1 min-w-0"
+      className="flex flex-col items-center gap-2 px-6 py-4 md:py-0 flex-1 min-w-0"
     >
       {/* Tiny gold icon */}
       <Icon
@@ -133,14 +133,14 @@ function StatCell({ stat, index, active }: StatCellProps) {
       <span
         className={cn(
           "font-wordmark font-medium tabular-nums tracking-[-0.02em]",
-          "text-3xl sm:text-5xl md:text-6xl lg:text-7xl",
+          "text-5xl md:text-6xl lg:text-7xl",
           "bg-gradient-gold-vertical bg-clip-text text-transparent",
           "leading-none",
         )}
         aria-label={`${display}${stat.suffix}`}
       >
         {display}
-        <span className="text-xl sm:text-3xl md:text-4xl lg:text-5xl">{stat.suffix}</span>
+        <span className="text-3xl md:text-4xl lg:text-5xl">{stat.suffix}</span>
       </span>
 
       {/* Micro hairline under number */}
