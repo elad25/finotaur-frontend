@@ -10,6 +10,8 @@
 // =====================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { MARKET_DATA_LICENSED } from "@/constants/nav";
+import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
 import { getJSON } from "@/lib/api";
 
 type Pt = { t: number; close: number };
@@ -193,6 +195,10 @@ function PriceChartLite({ symbol }: { symbol: string }){
   const priceChange = currentPrice - firstPrice;
   const priceChangePercent = firstPrice > 0 ? (priceChange / firstPrice) * 100 : 0;
   const isPositive = priceChange >= 0;
+
+  // Gate: raw Polygon price data — not licensed for redistribution.
+  // All hooks have already been called above; this return is safe.
+  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={280} />;
 
   function nearestEvent(t: number) {
     if (!events.length) return undefined;

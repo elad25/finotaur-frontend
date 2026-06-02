@@ -1,5 +1,7 @@
 import React from "react";
 import { PriceChartLite } from "./PriceChartLite";
+import { MARKET_DATA_LICENSED } from "@/constants/nav";
+import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
 
 type Props = { symbol: string };
 
@@ -7,6 +9,9 @@ type Props = { symbol: string };
 // Uses PriceChartLite (lightweight-charts) with our brand gold line and no tooltip text.
 // No manual width math, no ResizeObserver here — PriceChartLite manages sizing internally.
 export default function OverviewPriceChart({ symbol }: Props) {
+  // Gate: raw Polygon price data — not licensed for redistribution.
+  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={200} />;
+
   return (
     <div className="rounded-2xl bg-[#0F1114] p-4 border border-white/5">
       <div className="flex items-center justify-between mb-3">

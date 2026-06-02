@@ -6,6 +6,8 @@
 // =====================================================
 
 import React, { useMemo } from "react";
+import { MARKET_DATA_LICENSED } from "@/constants/nav";
+import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
 import {
   AreaChart,
   Area,
@@ -180,9 +182,13 @@ const PriceChartWithScale: React.FC<PriceChartWithScaleProps> = ({
   const gradientId = `priceGradient-${symbol}`;
   const gradientColor = isPositive ? "#10b981" : "#ef4444";
 
+  // Gate: raw Polygon price data — not licensed for redistribution.
+  // useMemo has already been called above; this return is safe.
+  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={height} />;
+
   if (!data || data.length === 0) {
     return (
-      <div 
+      <div
         className="flex items-center justify-center bg-zinc-900/40 rounded-xl border border-zinc-800/60"
         style={{ height }}
       >

@@ -5,6 +5,8 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { RefreshCw, Maximize2, Share2, Clock, AlertCircle } from 'lucide-react';
+import { MARKET_DATA_LICENSED } from '@/constants/nav';
+import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 
 // ============ TYPES ============
 interface StockData {
@@ -1143,6 +1145,23 @@ export default function HeatmapPage() {
     return `${hours}h ago`;
   };
 
+  // Gate: entire page is raw Polygon price data — hide until licensed
+  if (!MARKET_DATA_LICENSED) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] text-white p-4">
+        {/* Header shell preserved so the page title is still visible */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-lg font-semibold text-white">
+              Standard and Poor's 500 index stocks categorized by sectors and industries. Size represents market cap.
+            </h1>
+          </div>
+        </div>
+        <LicensedDataPlaceholder minHeight={700} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white p-4">
       {/* Header */}
@@ -1154,13 +1173,13 @@ export default function HeatmapPage() {
           {/* Market Status Banner */}
           <div className="flex items-center gap-2 mt-1 text-sm">
             <div className={`w-2 h-2 rounded-full ${
-              marketStatus.session === 'regular' ? 'bg-green-400 animate-pulse' : 
+              marketStatus.session === 'regular' ? 'bg-green-400 animate-pulse' :
               marketStatus.session === 'premarket' ? 'bg-blue-400 animate-pulse' :
               marketStatus.session === 'afterhours' ? 'bg-purple-400 animate-pulse' :
               'bg-yellow-400'
             }`} />
             <span className={
-              marketStatus.session === 'regular' ? 'text-green-400' : 
+              marketStatus.session === 'regular' ? 'text-green-400' :
               marketStatus.session === 'premarket' ? 'text-blue-400' :
               marketStatus.session === 'afterhours' ? 'text-purple-400' :
               'text-yellow-400'
@@ -1170,7 +1189,7 @@ export default function HeatmapPage() {
             <SessionBadge session={marketStatus.session} />
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {lastUpdate && (
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -1178,7 +1197,7 @@ export default function HeatmapPage() {
               <span>Updated {formatTimeSinceUpdate(lastUpdate)}</span>
             </div>
           )}
-          
+
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#1A1A1A] hover:bg-[#252525] text-gray-400 text-sm transition-colors"
@@ -1186,7 +1205,7 @@ export default function HeatmapPage() {
             <Maximize2 className="h-3.5 w-3.5" />
             Fullscreen
           </button>
-          
+
           <button className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#1A1A1A] hover:bg-[#252525] text-gray-400 text-sm transition-colors">
             <Share2 className="h-3.5 w-3.5" />
             Share Map

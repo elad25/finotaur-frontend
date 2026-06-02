@@ -203,7 +203,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       commodities: '/app/commodities/reports',
       macro:       '/app/macro/reports',
     },
-    locked: true, // closed to public (not in free Research Lab list)
   },
 
   // ── Stocks-specific ──────────────────────────────────────────────────────
@@ -231,7 +230,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       stocks:      '/app/stocks/catalysts',
       commodities: '/app/commodities/catalysts',
     },
-    locked: true, // closed to public (not in free Research Lab list)
   },
   {
     id: 'upgrades',

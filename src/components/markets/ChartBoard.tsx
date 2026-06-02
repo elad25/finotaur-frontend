@@ -1,5 +1,7 @@
 // src/components/markets/ChartBoard.tsx
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { MARKET_DATA_LICENSED } from "@/constants/nav";
+import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
 import {
   createChart,
   IChartApi,
@@ -479,6 +481,10 @@ export const ChartBoard: React.FC<Props> = ({ initialSymbol }) => {
     setSymbol(sym);
     try { localStorage.setItem("finotaur.activeSymbol", sym); } catch {}
   }, []);
+
+  // Gate: raw Polygon OHLCV chart data — not licensed for redistribution.
+  // All hooks have already been called above; this return is safe.
+  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={400} />;
 
   const isPositive = lastPrice ? lastPrice.change >= 0 : true;
 
