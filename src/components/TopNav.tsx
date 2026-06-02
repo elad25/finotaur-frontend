@@ -25,6 +25,7 @@ import { Wordmark } from '@/components/ds/Wordmark';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useProductDrawer } from '@/contexts/ProductDrawerContext';
+import FinoAvatar from '@/components/fino/FinoAvatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -169,12 +170,7 @@ export const TopNav = () => {
             className="hidden lg:flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10 flex-shrink-0"
             aria-label="Ask FINO AI"
           >
-            <img
-              src="/fino-avatar.png"
-              alt=""
-              aria-hidden="true"
-              className="h-9 w-9 object-contain animate-fino-wiggle motion-reduce:animate-none"
-            />
+            <FinoAvatar size={36} thinking={false} assistantCount={0} className="h-9 w-9" />
             <span>Ask Fino</span>
           </button>
 
@@ -185,12 +181,7 @@ export const TopNav = () => {
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors flex-shrink-0"
             aria-label="Ask FINO AI"
           >
-            <img
-              src="/fino-avatar.png"
-              alt=""
-              aria-hidden="true"
-              className="h-9 w-9 object-contain animate-fino-wiggle motion-reduce:animate-none"
-            />
+            <FinoAvatar size={36} thinking={false} assistantCount={0} className="h-9 w-9" />
           </button>
 
           {/* User menu */}
