@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { ASSET_CLASSES, getMarketsItemsForAsset } from '@/constants/markets';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { cn } from '@/lib/utils';
+import { Lock } from 'lucide-react';
 
 export function MarketsAssetTabs() {
   const navigate = useNavigate();
@@ -62,16 +63,24 @@ export function MarketsAssetTabs() {
             <Icon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
             <span>{asset.label}</span>
             {asset.comingSoon && (
-              <span
-                className="ml-0.5 rounded px-1 py-px text-[9px] font-semibold leading-none tracking-wide"
-                style={{
-                  color: 'rgba(201,166,70,0.65)',
-                  background: 'rgba(201,166,70,0.08)',
-                  border: '1px solid rgba(201,166,70,0.18)',
-                }}
-              >
-                Soon
-              </span>
+              <>
+                <Lock
+                  className="h-3 w-3 flex-shrink-0"
+                  style={{ color: 'rgba(201,166,70,0.55)' }}
+                  aria-label="Coming soon"
+                  title="Coming soon"
+                />
+                <span
+                  className="ml-0.5 rounded px-1 py-px text-[9px] font-semibold leading-none tracking-wide"
+                  style={{
+                    color: 'rgba(201,166,70,0.65)',
+                    background: 'rgba(201,166,70,0.08)',
+                    border: '1px solid rgba(201,166,70,0.18)',
+                  }}
+                >
+                  Soon
+                </span>
+              </>
             )}
           </button>
         );

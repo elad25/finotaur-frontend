@@ -114,12 +114,14 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   divider?: boolean;
   locked?: boolean;
   beta?: boolean;  // נ”¥ NEW
+  adminOnly?: boolean; // items only accessible to admins/beta viewers
   newTab?: boolean; // open in new browser tab instead of in-place navigation
   children?: Array<{
     label: string;
     path: string;
     icon: any;
     beta?: boolean;
+    adminOnly?: boolean;
   }>;
 }>> = {
   // ===============================================
@@ -254,7 +256,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // Top Secret — light sidebar (Phase 1 nav redesign)
   'top-secret': [
     { label: 'Latest Reports', path: '/app/top-secret',       icon: FileText },
-    { label: 'Admin',          path: '/app/top-secret/admin', icon: Shield, beta: true },
+    { label: 'Admin',          path: '/app/top-secret/admin', icon: Shield, beta: true, adminOnly: true },
   ],
 
   'ai': [
@@ -396,7 +398,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--finotaur-sidebar-width',
-      isExpanded ? '14rem' : '60px'
+      isExpanded ? '12rem' : '60px'
     );
 
     return () => {
@@ -556,7 +558,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       className={cn(
         'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
-        isExpanded ? 'w-56' : 'w-[60px]'
+        isExpanded ? 'w-48' : 'w-[60px]'
       )}
     >
       {/* נ”¥ Gold Toggle Tab */}
@@ -599,8 +601,11 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           const active = isItemActive(item.path);
           const isBackButton = item.label === 'Back to Journal';
           const isBetaItem = item.beta === true;
+          const isAdminOnlyItem = item.adminOnly === true;
           const isCopilotItem = item.path === '/copilot';
           const showBetaBadge = isBetaItem && !isCopilotItem;
+          // Show a subtle lock indicator to beta/admin viewers for items gated from regular users
+          const showAdminLockIndicator = hasBetaAccess && (item.locked === true || isBetaItem || isAdminOnlyItem);
           const hasChildren = Boolean(item.children?.length);
           const childrenOpen = isExpanded && hasChildren && openGroups[item.path];
           const parentActive = hasChildren
@@ -691,6 +696,15 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                       BETA
                     </span>
                   )}
+                  {/* Admin indicator: item is gated for regular users; admin can still access */}
+                  {showAdminLockIndicator && !isLocked && (
+                    <Lock
+                      className="h-3 w-3 flex-shrink-0"
+                      style={{ color: 'rgba(201,166,70,0.55)' }}
+                      aria-label="Locked for regular users"
+                      title="Locked for regular users"
+                    />
+                  )}
                   {hasChildren && (
                     <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.12em] text-gold/70">
                       {childrenOpen ? 'Open' : 'Pages'}
@@ -710,6 +724,13 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                     <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
                       BETA
                     </span>
+                  )}
+                  {showAdminLockIndicator && !isLocked && (
+                    <Lock
+                      className="inline h-3 w-3 ml-1 flex-shrink-0"
+                      style={{ color: 'rgba(201,166,70,0.55)' }}
+                      title="Locked for regular users"
+                    />
                   )}
                 </div>
               )}

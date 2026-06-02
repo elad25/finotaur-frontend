@@ -16,6 +16,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { getMarketsItemsForAsset } from '@/constants/markets';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { cn } from '@/lib/utils';
 import { Lock } from 'lucide-react';
 
@@ -40,6 +41,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { selectedAsset } = useAssetSelector();
+  const { hasBetaAccess } = useAdminAuth();
 
   // Research Lab is free ($0/user: SEC/FRED/Polygon-flat/cache) — open to all, no tier lock.
   const domainLocked = false;
@@ -83,6 +85,15 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
               <>
                 <span className={labelClass}>{fn.label}</span>
                 {domainLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
+                {/* Defensive: if a future market function gains a locked flag, show indicator for admin viewers */}
+                {hasBetaAccess && !domainLocked && (fn as { locked?: boolean }).locked && (
+                  <Lock
+                    className="h-3 w-3 flex-shrink-0"
+                    style={{ color: 'rgba(201,166,70,0.55)' }}
+                    title="Locked for regular users"
+                    aria-label="Locked for regular users"
+                  />
+                )}
               </>
             )}
 
@@ -91,6 +102,14 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
               <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                 {fn.label}
                 {domainLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
+                {/* Defensive indicator for future gated market functions */}
+                {hasBetaAccess && !domainLocked && (fn as { locked?: boolean }).locked && (
+                  <Lock
+                    className="inline h-3 w-3 ml-1 flex-shrink-0"
+                    style={{ color: 'rgba(201,166,70,0.55)' }}
+                    title="Locked for regular users"
+                  />
+                )}
               </div>
             )}
           </button>
