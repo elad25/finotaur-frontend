@@ -1,18 +1,18 @@
 // src/components/onboarding/WelcomeIntro.tsx
 // ================================================
 // Full-screen welcome screen that precedes the spotlight tour.
-// Shown once, before the carousel (now replaced by SpotlightTour).
+// Fires the same celebratory confetti as the first-trade moment.
 //
-// "Begin" → sets TOUR_ACTIVE_KEY in sessionStorage then navigates to
-//   /app/top-secret (SpotlightTour opens the drawer from there).
-// "Skip for now" → calls finishOnboarding() and navigates to /app/top-secret.
+// "Let's Start!" → sets TOUR_ACTIVE_KEY in sessionStorage then navigates
+//   to /app/top-secret (SpotlightTour opens the drawer from there).
 // ================================================
 
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
-import { TOUR_ACTIVE_KEY, finishOnboarding } from './onboardingFlags';
+import { TOUR_ACTIVE_KEY } from './onboardingFlags';
 
 export default function WelcomeIntro() {
   const navigate = useNavigate();
@@ -32,15 +32,39 @@ export default function WelcomeIntro() {
     return '';
   })();
 
-  const handleBegin = () => {
+  // Celebrate the welcome — same dual-cannon gold confetti used for the
+  // first journal trade (src/pages/app/journal/New.tsx). Imported lazily so
+  // it never blocks first paint; cleaned up on unmount.
+  useEffect(() => {
+    let raf = 0;
+    let cancelled = false;
+    import('canvas-confetti')
+      .then((m) => {
+        if (cancelled) return;
+        const confetti = m.default;
+        const end = Date.now() + 3000;
+        const colors = ['#C9A646', '#E6C675', '#B8944E', '#FFD700'];
+        (function frame() {
+          confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.6 }, colors });
+          confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 0.6 }, colors });
+          if (!cancelled && Date.now() < end) {
+            raf = requestAnimationFrame(frame);
+          }
+        })();
+      })
+      .catch(() => {
+        /* confetti is non-essential — silent fail */
+      });
+    return () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  const handleStart = () => {
     sessionStorage.setItem(TOUR_ACTIVE_KEY, '1');
     // Navigate to a known-valid route; SpotlightTour opens the drawer
     // and spotlights the first item regardless of current route.
-    navigate('/app/top-secret', { replace: true });
-  };
-
-  const handleSkip = () => {
-    finishOnboarding();
     navigate('/app/top-secret', { replace: true });
   };
 
@@ -102,26 +126,16 @@ export default function WelcomeIntro() {
             built.
           </p>
 
-          {/* CTAs — stacked on mobile, row on sm+ */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:justify-center">
-            <Button
-              variant="gold"
-              size="xl"
-              showArrow={false}
-              onClick={handleBegin}
-              className="flex-1 sm:flex-initial"
-            >
-              Begin
-            </Button>
-
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="px-5 py-2 text-sm text-ink-tertiary hover:text-ink-secondary transition-colors"
-            >
-              Skip for now
-            </button>
-          </div>
+          {/* CTA */}
+          <Button
+            variant="gold"
+            size="xl"
+            showArrow={false}
+            onClick={handleStart}
+            className="w-full sm:w-auto"
+          >
+            Let's Start!
+          </Button>
         </div>
       </Card>
     </div>
