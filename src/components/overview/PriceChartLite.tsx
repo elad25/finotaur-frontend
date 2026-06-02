@@ -10,8 +10,9 @@
 // =====================================================
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { MARKET_DATA_LICENSED } from "@/constants/nav";
 import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
+import { AdminGateBadge } from "@/components/markets/AdminGateBadge";
+import { useMarketGate } from "@/hooks/useMarketGate";
 import { getJSON } from "@/lib/api";
 
 type Pt = { t: number; close: number };
@@ -109,6 +110,7 @@ function formatDateLabel(timestamp: number, tf: string): string {
 // ═══════════════════════════════════════════════════════════════
 
 function PriceChartLite({ symbol }: { symbol: string }){
+  const { gated, isAdmin } = useMarketGate();
   const [tf,setTf]=useState<string>(TF_DEFAULT);
   const [data,setData]=useState<Pt[]>([]);
   const [events,setEvents]=useState<Ev[]>([]);
@@ -198,7 +200,7 @@ function PriceChartLite({ symbol }: { symbol: string }){
 
   // Gate: raw Polygon price data — not licensed for redistribution.
   // All hooks have already been called above; this return is safe.
-  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={280} />;
+  if (gated) return <LicensedDataPlaceholder minHeight={280} />;
 
   function nearestEvent(t: number) {
     if (!events.length) return undefined;
@@ -215,7 +217,8 @@ function PriceChartLite({ symbol }: { symbol: string }){
   }
 
   return (
-    <div ref={wrapRef} className="rounded-2xl p-4 bg-[#0D0E10] border border-[#1b1d21] w-full">
+    <div ref={wrapRef} className="relative rounded-2xl p-4 bg-[#0D0E10] border border-[#1b1d21] w-full">
+      {isAdmin && <AdminGateBadge />}
       {/* Header with price info */}
       <div className="flex items-center justify-between mb-3">
         {/* Timeframe buttons */}

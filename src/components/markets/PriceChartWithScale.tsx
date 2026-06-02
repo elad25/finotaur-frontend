@@ -6,8 +6,9 @@
 // =====================================================
 
 import React, { useMemo } from "react";
-import { MARKET_DATA_LICENSED } from "@/constants/nav";
 import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
+import { AdminGateBadge } from "@/components/markets/AdminGateBadge";
+import { useMarketGate } from "@/hooks/useMarketGate";
 import {
   AreaChart,
   Area,
@@ -153,6 +154,7 @@ const PriceChartWithScale: React.FC<PriceChartWithScaleProps> = ({
   showGrid = true,
   showVolume = false,
 }) => {
+  const { gated, isAdmin } = useMarketGate();
   // Calculate price range and ticks
   const { minPrice, maxPrice, ticks, isPositive } = useMemo(() => {
     if (!data || data.length === 0) {
@@ -184,7 +186,7 @@ const PriceChartWithScale: React.FC<PriceChartWithScaleProps> = ({
 
   // Gate: raw Polygon price data — not licensed for redistribution.
   // useMemo has already been called above; this return is safe.
-  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={height} />;
+  if (gated) return <LicensedDataPlaceholder minHeight={height} />;
 
   if (!data || data.length === 0) {
     return (
@@ -199,6 +201,7 @@ const PriceChartWithScale: React.FC<PriceChartWithScaleProps> = ({
 
   return (
     <div className="relative rounded-xl bg-zinc-900/40 border border-zinc-800/60 overflow-hidden">
+      {isAdmin && <AdminGateBadge />}
       {/* Header with current price */}
       <div className="px-4 py-3 border-b border-zinc-800/60 flex items-center justify-between">
         <div className="flex items-center gap-3">
