@@ -68,6 +68,8 @@ interface ChatResponse {
 
 interface StreamCallbacks {
   message: string;
+  /** Page-aware context (route + page-specific data) so FINO can ground its answer. */
+  context?: unknown;
   conversationId?: string | null;
   onConversation?: (id: string) => void;
   onChunk?: (chunk: string) => void;
@@ -136,6 +138,7 @@ export const aiCopilotApi = {
   async chatStream(options: StreamCallbacks): Promise<void> {
     const {
       message,
+      context,
       conversationId,
       onConversation,
       onChunk,
@@ -158,6 +161,7 @@ export const aiCopilotApi = {
       body: JSON.stringify({
         message,
         conversationId,
+        pageContext: context ?? undefined,
       }),
       signal,
     });

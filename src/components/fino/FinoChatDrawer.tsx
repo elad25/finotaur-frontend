@@ -16,7 +16,34 @@ import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
+import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
+
+// Human-readable label for the current route, so FINO knows which screen the
+// user is on. First matching pattern wins; falls back to the title-cased path.
+const FINO_PAGE_LABELS: Array<[RegExp, string]> = [
+  [/^\/app\/journal\/trades/, 'Journal · My Trades'],
+  [/^\/app\/journal\/trade\//, 'Journal · Trade Detail'],
+  [/^\/app\/journal\/performance/, 'Journal · Performance'],
+  [/^\/app\/journal\/calendar/, 'Journal · Calendar'],
+  [/^\/app\/journal/, 'Journal'],
+  [/^\/app\/ai\/stock-analyzer/, 'AI · Stock Analyzer'],
+  [/^\/app\/ai/, 'AI Arena'],
+  [/^\/app\/dashboard/, 'Dashboard'],
+];
+
+function deriveFinoLabel(path: string): string {
+  for (const [re, label] of FINO_PAGE_LABELS) if (re.test(path)) return label;
+  const seg = path.split('/').filter(Boolean).pop() ?? 'app';
+  return seg.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Page-aware context FINO always sends with each message: where the user is
+// (live route + label) plus any page-specific data a screen has registered.
+function buildFinoContext(getPageData: () => FinoPageData | null) {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
+  return { path, label: deriveFinoLabel(path), data: getPageData() ?? undefined };
+}
 
 export default function FinoChatDrawer() {
   const { openSignal } = useFinoChat();
@@ -68,6 +95,7 @@ function FinoChatPanel({ onClose }: { onClose: () => void }) {
     startNewConversation,
     clearError,
   } = useAICopilot();
+  const { getPageData } = useFinoChat();
 
   const iconBtn =
     'flex h-8 w-8 items-center justify-center rounded-lg border border-border-ds-subtle text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary';
@@ -144,7 +172,7 @@ function FinoChatPanel({ onClose }: { onClose: () => void }) {
                 isStreaming={isStreaming}
                 error={error}
                 onSendMessage={async (message: string) => {
-                  await sendMessage(message);
+                  await sendMessage(message, buildFinoContext(getPageData));
                 }}
                 onClearError={clearError}
                 limitReached={usage?.limit_reached || false}

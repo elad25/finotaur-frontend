@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useState, useMemo, useCallback, memo, useRef, lazy, Suspense } from "react";
+import { useRegisterJournalFinoContext } from "@/components/fino/useJournalFinoContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -1152,6 +1153,31 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
 
   // ── Bulk selection state ───────────────────────────────────────────────────
   const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(() => new Set());
+
+  // ── FINO page context — overall journal summary + the trade currently open ──
+  const finoEntity = useMemo(
+    () =>
+      selectedTrade
+        ? {
+            type: 'trade',
+            symbol: selectedTrade.symbol,
+            side: selectedTrade.side,
+            pnl: selectedTrade.pnl,
+            rr: selectedTrade.rr,
+            riskUsd: selectedTrade.risk_usd,
+            rewardUsd: selectedTrade.reward_usd,
+            entryPrice: selectedTrade.entry_price,
+            exitPrice: selectedTrade.exit_price,
+            stopPrice: selectedTrade.stop_price,
+            qualityTag: selectedTrade.quality_tag,
+            session: selectedTrade.session,
+            openAt: selectedTrade.open_at,
+            closeAt: selectedTrade.close_at,
+          }
+        : null,
+    [selectedTrade],
+  );
+  useRegisterJournalFinoContext(finoEntity);
 
   // ✅ 3. useEffect
 

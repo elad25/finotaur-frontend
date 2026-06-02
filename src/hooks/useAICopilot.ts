@@ -54,7 +54,7 @@ interface UseAICopilotReturn {
   currentConversation: Conversation | null;
   
   // Actions
-  sendMessage: (message: string) => Promise<string | null>;
+  sendMessage: (message: string, context?: unknown) => Promise<string | null>;
   startNewConversation: () => void;
   loadConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -161,7 +161,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   }, [currentConversation, startNewConversation]);
   
   // Send message (streaming)
-  const sendMessage = useCallback(async (message: string): Promise<string | null> => {
+  const sendMessage = useCallback(async (message: string, context?: unknown): Promise<string | null> => {
     if (!user || !message.trim()) return null;
     
     // Check usage limit
@@ -198,6 +198,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
       // Use streaming endpoint
       await aiCopilotApi.chatStream({
         message,
+        context,
         conversationId,
         onConversation: (id) => {
           conversationId = id;
