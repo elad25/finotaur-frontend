@@ -139,6 +139,23 @@ createRoot(rootElement).render(
   </HelmetProvider>
 );
 
+// Remove the instant boot splash once React's first frame has painted.
+// Double rAF waits for the browser to paint the first React frame before fading,
+// so there is no flash of an empty #root between splash removal and content.
+const hideBootSplash = () => {
+  const splash = document.getElementById('boot-splash');
+  if (!splash) return;
+  splash.classList.add('boot-splash--hide');
+  splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+  // Safety net: force-remove if transitionend never fires (e.g. reduced-motion).
+  setTimeout(() => splash.remove(), 600);
+};
+if (typeof requestAnimationFrame !== 'undefined') {
+  requestAnimationFrame(() => requestAnimationFrame(hideBootSplash));
+} else {
+  hideBootSplash();
+}
+
 // Prefetch after initial render
 prefetchCriticalData();
 
