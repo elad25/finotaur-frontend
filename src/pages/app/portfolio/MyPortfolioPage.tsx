@@ -1,16 +1,20 @@
 // src/pages/app/portfolio/MyPortfolioPage.tsx
 // ═══════════════════════════════════════════════════════════════
-// My Portfolio — v1 summary view.
-// Empty state: prompt to create. Saved state: read-only account/position table.
+// My Portfolio — v2 summary view with live return tracking.
+// Empty state: prompt to create. Saved state: read-only account/position table
+// with current prices, market value, return %, and unrealized P&L.
 // ═══════════════════════════════════════════════════════════════
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Briefcase, PencilLine, Upload } from 'lucide-react';
 import { useMyPortfolio } from '@/hooks/useMyPortfolio';
 import { CreatePortfolioModal } from '@/components/portfolio/CreatePortfolioModal';
 import type { MyPortfolio, PortfolioAccount, Lot } from '@/lib/portfolio/types';
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
+import { Price, Change } from '@/components/ds/NumberDisplay';
+import { useBulkQuotes } from '@/hooks/useMarketData';
+import { useMarketStatus } from '@/lib/marketStatus';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -91,39 +95,149 @@ function EmptyState({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+// ── Market status indicator (inline, not fixed-position) ──────
+
+function PortfolioMarketStatus() {
+  const ms = useMarketStatus();
+  if (ms.isOpen) return null;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border-ds-subtle bg-surface-base px-2.5 py-1 text-xs text-ink-secondary">
+      <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--gold-primary,#C9A646)]" aria-hidden="true" />
+      Market closed — showing {ms.lastTradingDayLabel}
+    </span>
+  );
+}
+
+// ── Position row ──────────────────────────────────────────────
+
 interface PositionRowProps {
   lot: Lot;
   currency: string;
+  currentPrice: number | null;
+  quotesLoading: boolean;
 }
 
-function PositionRow({ lot, currency }: PositionRowProps) {
+function PositionRow({ lot, currency, currentPrice, quotesLoading }: PositionRowProps) {
+  const dash = <span className="text-ink-tertiary">—</span>;
+
+  // Market value: qty × current price
+  const marketValue =
+    currentPrice !== null ? lot.quantity * currentPrice : null;
+
+  // Return %: (price - cost) / cost × 100
+  const returnPct =
+    currentPrice !== null && lot.costPerShare !== null && lot.costPerShare > 0
+      ? ((currentPrice - lot.costPerShare) / lot.costPerShare) * 100
+      : null;
+
+  // Unrealized P&L: (price - cost) × qty
+  const unrealizedPnl =
+    currentPrice !== null && lot.costPerShare !== null
+      ? (currentPrice - lot.costPerShare) * lot.quantity
+      : null;
+
+  // Skeleton dash while loading
+  const loadingCell = (
+    <span className="text-ink-tertiary animate-pulse">—</span>
+  );
+
   return (
     <tr className="border-b border-border-ds-subtle last:border-0">
-      <td className="py-2 pr-4 text-sm font-medium text-ink-primary">{lot.ticker}</td>
-      <td className="py-2 pr-4 text-sm text-ink-primary text-right font-mono tabular-nums">
+      {/* Ticker */}
+      <td className="py-2 pr-3 text-sm font-medium text-ink-primary">{lot.ticker}</td>
+
+      {/* Quantity */}
+      <td className="py-2 pr-3 text-sm text-ink-primary text-right font-mono tabular-nums">
         {lot.quantity.toLocaleString('en-US')}
       </td>
-      <td className="py-2 pr-4 text-sm text-ink-primary text-right font-mono tabular-nums">
+
+      {/* Cost / Share */}
+      <td className="py-2 pr-3 text-sm text-right font-mono tabular-nums">
         {lot.costPerShare !== null
           ? formatCurrency(lot.costPerShare, currency)
-          : '—'}
+          : dash}
       </td>
-      <td className="py-2 text-sm text-ink-secondary text-right">
-        {formatDate(lot.purchaseDate)}
+
+      {/* Current Price */}
+      <td className="py-2 pr-3 text-sm text-right">
+        {quotesLoading
+          ? loadingCell
+          : currentPrice !== null
+            ? <Price value={currentPrice} format="currency" size="small" />
+            : dash}
+      </td>
+
+      {/* Market Value */}
+      <td className="py-2 pr-3 text-sm text-right">
+        {quotesLoading
+          ? loadingCell
+          : marketValue !== null
+            ? <Price value={marketValue} format="currency" size="small" />
+            : dash}
+      </td>
+
+      {/* Return % */}
+      <td className="py-2 pr-3 text-sm text-right">
+        {quotesLoading
+          ? loadingCell
+          : returnPct !== null
+            ? <Change value={returnPct} format="percent" decimals={2} />
+            : dash}
+      </td>
+
+      {/* Unrealized P&L */}
+      <td className="py-2 text-sm text-right">
+        {quotesLoading
+          ? loadingCell
+          : unrealizedPnl !== null
+            ? <Change value={unrealizedPnl} format="currency" decimals={2} />
+            : dash}
       </td>
     </tr>
   );
 }
 
+// ── Account card ──────────────────────────────────────────────
+
 interface AccountCardProps {
   account: PortfolioAccount;
   currency: string;
+  priceMap: Map<string, number>;
+  quotesLoading: boolean;
 }
 
-function AccountCard({ account, currency }: AccountCardProps) {
-  const holdingsCount = account.positions.filter(
+function AccountCard({ account, currency, priceMap, quotesLoading }: AccountCardProps) {
+  const activeLots = account.positions.filter(
     (l) => l.ticker.trim() !== '' && l.quantity > 0,
-  ).length;
+  );
+  const holdingsCount = activeLots.length;
+
+  // Per-account totals (equity positions only — cash handled separately)
+  const { totalCostBasis, totalMarketValue, hasCompleteData } = useMemo(() => {
+    let costBasis = 0;
+    let marketVal = 0;
+    let complete = true;
+
+    for (const lot of activeLots) {
+      const price = priceMap.get(lot.ticker.toUpperCase()) ?? null;
+      if (price !== null) {
+        marketVal += lot.quantity * price;
+      } else {
+        complete = false;
+      }
+      if (lot.costPerShare !== null) {
+        costBasis += lot.quantity * lot.costPerShare;
+      } else {
+        complete = false;
+      }
+    }
+    return { totalCostBasis: costBasis, totalMarketValue: marketVal, hasCompleteData: complete };
+  }, [activeLots, priceMap]);
+
+  const accountReturnPct =
+    hasCompleteData && totalCostBasis > 0
+      ? ((totalMarketValue - totalCostBasis) / totalCostBasis) * 100
+      : null;
 
   return (
     <Card className="overflow-hidden p-0">
@@ -141,27 +255,46 @@ function AccountCard({ account, currency }: AccountCardProps) {
             Holdings:{' '}
             <span className="text-ink-primary font-medium">{holdingsCount}</span>
           </span>
+          {holdingsCount > 0 && !quotesLoading && totalMarketValue > 0 && (
+            <span className="flex items-center gap-1.5">
+              Mkt Value:{' '}
+              <Price value={totalMarketValue} format="currency" size="small" />
+              {accountReturnPct !== null && (
+                <Change value={accountReturnPct} format="percent" decimals={2} />
+              )}
+            </span>
+          )}
+          {holdingsCount > 0 && quotesLoading && (
+            <span className="text-ink-tertiary animate-pulse">Loading prices…</span>
+          )}
         </div>
       </div>
 
       {/* Positions table */}
       {holdingsCount > 0 ? (
         <div className="px-5 py-3 overflow-x-auto">
-          <table className="w-full min-w-[480px]">
+          <table className="w-full min-w-[700px]">
             <thead>
               <tr className="border-b border-border-ds-subtle">
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-left">Ticker</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-4">Quantity</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-4">Cost / Share</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right">Purchase Date</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-left pr-3">Ticker</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Quantity</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Cost / Share</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Current Price</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Mkt Value</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Return %</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right">Unr. P&amp;L</th>
               </tr>
             </thead>
             <tbody>
-              {account.positions
-                .filter((l) => l.ticker.trim() !== '' && l.quantity > 0)
-                .map((lot, i) => (
-                  <PositionRow key={lot.id ?? i} lot={lot} currency={currency} />
-                ))}
+              {activeLots.map((lot, i) => (
+                <PositionRow
+                  key={lot.id ?? i}
+                  lot={lot}
+                  currency={currency}
+                  currentPrice={priceMap.get(lot.ticker.toUpperCase()) ?? null}
+                  quotesLoading={quotesLoading}
+                />
+              ))}
             </tbody>
           </table>
         </div>
@@ -184,11 +317,75 @@ export default function MyPortfolioPage() {
   const { portfolio, loading, reload } = useMyPortfolio();
   const [modalOpen, setModalOpen] = useState(false);
 
+  // Collect unique tickers unconditionally (empty array when no portfolio).
+  // Hook rules: useBulkQuotes must be called at the top level every render.
+  const tickers = useMemo<string[]>(() => {
+    if (!portfolio) return [];
+    const seen = new Set<string>();
+    for (const acc of portfolio.accounts) {
+      for (const lot of acc.positions) {
+        const t = lot.ticker.trim().toUpperCase();
+        if (t && lot.quantity > 0) seen.add(t);
+      }
+    }
+    return Array.from(seen);
+  }, [portfolio]);
+
+  const { quotes, loading: quotesLoading } = useBulkQuotes(tickers);
+
+  // Build a fast lookup: TICKER → current price
+  const priceMap = useMemo<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    for (const q of quotes) {
+      map.set(q.symbol.toUpperCase(), q.price);
+    }
+    return map;
+  }, [quotes]);
+
   if (loading) {
     return <LoadingSpinner />;
   }
 
   const isEmpty = portfolio === null || !hasPositions(portfolio);
+
+  // Portfolio-wide totals (equity positions across all accounts)
+  let portfolioTotalCost = 0;
+  let portfolioTotalMarketValue = 0;
+  let portfolioCash = 0;
+  let portfolioHasComplete = true;
+
+  if (!isEmpty && portfolio) {
+    for (const acc of portfolio.accounts) {
+      portfolioCash += acc.cashPosition;
+      for (const lot of acc.positions) {
+        if (!lot.ticker.trim() || lot.quantity <= 0) continue;
+        const price = priceMap.get(lot.ticker.trim().toUpperCase()) ?? null;
+        if (price !== null) {
+          portfolioTotalMarketValue += lot.quantity * price;
+        } else {
+          portfolioHasComplete = false;
+        }
+        if (lot.costPerShare !== null) {
+          portfolioTotalCost += lot.quantity * lot.costPerShare;
+        } else {
+          portfolioHasComplete = false;
+        }
+      }
+    }
+  }
+
+  const portfolioReturnPct =
+    portfolioHasComplete && portfolioTotalCost > 0
+      ? ((portfolioTotalMarketValue - portfolioTotalCost) / portfolioTotalCost) * 100
+      : null;
+
+  const portfolioUnrealizedPnl =
+    portfolioHasComplete ? portfolioTotalMarketValue - portfolioTotalCost : null;
+
+  const totalPositions = portfolio?.accounts.reduce(
+    (sum, acc) => sum + acc.positions.filter((l) => l.ticker.trim() !== '' && l.quantity > 0).length,
+    0,
+  ) ?? 0;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 min-h-full">
@@ -199,7 +396,10 @@ export default function MyPortfolioPage() {
           {/* Page header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-xl font-semibold text-ink-primary">{portfolio!.name}</h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-semibold text-ink-primary">{portfolio!.name}</h1>
+                <PortfolioMarketStatus />
+              </div>
               <p className="text-xs text-ink-secondary mt-0.5">
                 Currency: {portfolio!.currency}
               </p>
@@ -221,22 +421,69 @@ export default function MyPortfolioPage() {
                 key={account.id ?? i}
                 account={account}
                 currency={portfolio!.currency}
+                priceMap={priceMap}
+                quotesLoading={quotesLoading}
               />
             ))}
           </div>
 
-          {/* Summary footer */}
-          <p className="mt-4 text-xs text-ink-tertiary">
-            Total holdings:{' '}
-            {portfolio!.accounts.reduce(
-              (sum, acc) =>
-                sum +
-                acc.positions.filter((l) => l.ticker.trim() !== '' && l.quantity > 0).length,
-              0,
-            )}{' '}
-            position{portfolio!.accounts.reduce((s, a) => s + a.positions.filter(l => l.ticker.trim() !== '' && l.quantity > 0).length, 0) === 1 ? '' : 's'} across{' '}
-            {portfolio!.accounts.length} account{portfolio!.accounts.length === 1 ? '' : 's'}.
-          </p>
+          {/* Portfolio totals footer */}
+          <Card className="mt-4 px-5 py-4 bg-surface-base border border-border-ds-subtle">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              {/* Left: holdings count */}
+              <p className="text-xs text-ink-tertiary">
+                {totalPositions} position{totalPositions === 1 ? '' : 's'} across{' '}
+                {portfolio!.accounts.length} account{portfolio!.accounts.length === 1 ? '' : 's'}
+              </p>
+
+              {/* Right: financial totals */}
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-ink-secondary">
+                {/* Cash */}
+                <span>
+                  Cash:{' '}
+                  <span className="font-mono tabular-nums text-ink-primary font-medium">
+                    {formatCurrency(portfolioCash, portfolio!.currency)}
+                  </span>
+                </span>
+
+                {/* Cost basis */}
+                {portfolioTotalCost > 0 && (
+                  <span>
+                    Cost Basis:{' '}
+                    <span className="font-mono tabular-nums text-ink-primary font-medium">
+                      {formatCurrency(portfolioTotalCost, portfolio!.currency)}
+                    </span>
+                  </span>
+                )}
+
+                {/* Market value */}
+                {!quotesLoading && portfolioTotalMarketValue > 0 ? (
+                  <span className="flex items-center gap-1.5">
+                    Mkt Value:{' '}
+                    <Price value={portfolioTotalMarketValue} format="currency" size="small" />
+                  </span>
+                ) : quotesLoading ? (
+                  <span className="text-ink-tertiary animate-pulse">Loading market value…</span>
+                ) : null}
+
+                {/* Unrealized P&L */}
+                {!quotesLoading && portfolioUnrealizedPnl !== null && (
+                  <span className="flex items-center gap-1.5">
+                    Unr. P&amp;L:{' '}
+                    <Change value={portfolioUnrealizedPnl} format="currency" decimals={2} />
+                  </span>
+                )}
+
+                {/* Total return % */}
+                {!quotesLoading && portfolioReturnPct !== null && (
+                  <span className="flex items-center gap-1.5">
+                    Total Return:{' '}
+                    <Change value={portfolioReturnPct} format="percent" decimals={2} />
+                  </span>
+                )}
+              </div>
+            </div>
+          </Card>
         </>
       )}
 
