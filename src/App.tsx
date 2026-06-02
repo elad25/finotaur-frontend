@@ -579,8 +579,10 @@ function AppContent() {
           <Route path="ai/upcoming-events" element={<SuspenseRoute><UpcomingEventsView /></SuspenseRoute>} />
           {/* FINO AI: legacy AI Assistant page → redirect; chat now opens via the FINO AI side widget. */}
           <Route path="ai/assistant" element={<Navigate to="/app/ai/stock-analyzer" replace />} />
-          {/* MY PORTFOLIO */}
-          <Route path="portfolio" element={<SuspenseRoute><MyPortfolioPage /></SuspenseRoute>} />
+          {/* MY PORTFOLIO — lives under all-markets so Markets chrome stays visible */}
+          <Route path="all-markets/portfolio" element={<SuspenseRoute><MyPortfolioPage /></SuspenseRoute>} />
+          {/* Redirect old /app/portfolio links to the new canonical URL */}
+          <Route path="portfolio" element={<Navigate to="/app/all-markets/portfolio" replace />} />
 
           {/* JOURNAL */}
           <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
