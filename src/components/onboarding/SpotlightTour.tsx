@@ -17,8 +17,17 @@
 // The hero card is the only interactive element above the overlay.
 //
 // Steps 1-4, 6: drawer item buttons on the left edge → hero card placed
-//   to the RIGHT of the target with the arrow pointing left.
+//   to the RIGHT of the drawer panel with the arrow pointing left.
 // Step 5 (Fino): top-right button → hero card placed below-left.
+//
+// Positioning fix (animation race):
+//   The ProductDrawer slides in over ~200ms. A one-shot getBoundingClientRect
+//   mid-animation yields a stale rect (e.g. right≈4 instead of ≈280).
+//   We run a requestAnimationFrame loop for up to 1500ms after the element
+//   first appears (well past the 200ms slide), updating targetRect every
+//   frame so the card/ring always reflect the SETTLED position.
+//   The hero card is additionally anchored to [data-tour="drawer-panel"]
+//   right edge (not the item rect) so it never overlaps the drawer.
 // ================================================
 
 import {
@@ -86,88 +95,6 @@ const STEPS: TourStep[] = [
     isLast: true,
   },
 ];
-
-// ---------------------------------------------------------------------------
-// waitForTarget — polls rAF + MutationObserver until element found or deadline
-// ---------------------------------------------------------------------------
-
-function waitForTarget(
-  key: string,
-  deadlineMs: number,
-): Promise<DOMRect | null> {
-  return new Promise((resolve) => {
-    const deadline = Date.now() + deadlineMs;
-
-    const tryFind = (): DOMRect | null => {
-      const el = document.querySelector<HTMLElement>(`[data-tour="${key}"]`);
-      if (!el) return null;
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) return null;
-      return rect;
-    };
-
-    // Immediate check
-    const initialRect = tryFind();
-    if (initialRect) {
-      resolve(initialRect);
-      return;
-    }
-
-    let rafId: number;
-    let observer: MutationObserver | null = null;
-
-    const cleanup = () => {
-      cancelAnimationFrame(rafId);
-      observer?.disconnect();
-    };
-
-    const check = () => {
-      if (Date.now() > deadline) {
-        cleanup();
-        resolve(null);
-        return;
-      }
-
-      const rect = tryFind();
-      if (rect) {
-        cleanup();
-        const el = document.querySelector<HTMLElement>(`[data-tour="${key}"]`);
-        if (el) {
-          el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-          requestAnimationFrame(() => {
-            resolve(el.getBoundingClientRect());
-          });
-        } else {
-          resolve(rect);
-        }
-        return;
-      }
-
-      rafId = requestAnimationFrame(check);
-    };
-
-    // MutationObserver as a secondary trigger (handles async renders)
-    observer = new MutationObserver(() => {
-      const rect = tryFind();
-      if (rect) {
-        cleanup();
-        const el = document.querySelector<HTMLElement>(`[data-tour="${key}"]`);
-        if (el) {
-          el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-          requestAnimationFrame(() => {
-            resolve(el.getBoundingClientRect());
-          });
-        } else {
-          resolve(rect);
-        }
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    rafId = requestAnimationFrame(check);
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Spotlight overlay — box-shadow cutout, pointer-events:none (purely visual)
@@ -279,6 +206,8 @@ interface HeroCardProps {
 
 const CARD_ESTIMATE_H = 270;
 const CARD_WIDTH = 340;
+// Gap between the drawer panel right edge and the hero card left edge
+const PANEL_GAP = 24;
 
 function HeroCard({
   step,
@@ -311,29 +240,39 @@ function HeroCard({
         zIndex: 9991,
       };
     } else {
-      // Drawer items on the left — place card to the right of the target
-      const spaceRight = vpW - targetRect.right;
-      let cardLeft: number;
-      if (spaceRight >= CARD_WIDTH + 32) {
-        cardLeft = targetRect.right + 20;
+      // Drawer items: anchor card to the PANEL's right edge, not the item rect.
+      // This guarantees the card never overlaps the drawer regardless of when
+      // the rect was sampled during the slide-in animation.
+      const panelEl = document.querySelector<HTMLElement>('[data-tour="drawer-panel"]');
+      const panelRight = panelEl ? panelEl.getBoundingClientRect().right : targetRect.right;
+
+      const cardLeft = panelRight + PANEL_GAP;
+
+      // If there's not enough room to the right (e.g. narrow/mobile viewport),
+      // fall back to a centered layout so the card never clips off-screen.
+      if (cardLeft + CARD_WIDTH > vpW - 12) {
+        cardStyle = {
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: `min(${CARD_WIDTH}px, calc(100vw - 2rem))`,
+          zIndex: 9991,
+        };
       } else {
-        // Not enough space right — fall back to centering in remaining area
-        cardLeft = targetRect.right + 12;
+        // Vertically center on the target item, clamped inside the viewport
+        const targetCenterY = targetRect.top + targetRect.height / 2;
+        let cardTop = targetCenterY - CARD_ESTIMATE_H / 2;
+        cardTop = Math.max(8, Math.min(cardTop, vpH - CARD_ESTIMATE_H - 8));
+
+        cardStyle = {
+          position: 'fixed',
+          top: cardTop,
+          left: cardLeft,
+          width: CARD_WIDTH,
+          zIndex: 9991,
+        };
       }
-      cardLeft = Math.max(12, Math.min(cardLeft, vpW - CARD_WIDTH - 12));
-
-      // Vertically align with the target center, clamped into viewport
-      const targetCenterY = targetRect.top + targetRect.height / 2;
-      let cardTop = targetCenterY - CARD_ESTIMATE_H / 2;
-      cardTop = Math.max(8, Math.min(cardTop, vpH - CARD_ESTIMATE_H - 8));
-
-      cardStyle = {
-        position: 'fixed',
-        top: cardTop,
-        left: cardLeft,
-        width: CARD_WIDTH,
-        zIndex: 9991,
-      };
     }
   } else {
     // Fallback: centered
@@ -439,6 +378,13 @@ function HeroCard({
 // Main component
 // ---------------------------------------------------------------------------
 
+// How long (ms) the rAF tracking loop runs after the element is FIRST found.
+// Must comfortably exceed the drawer slide-in duration (~200ms). 1500ms gives
+// a 7.5× safety margin and stops well before any user interaction.
+const RAF_TRACK_DURATION_MS = 1500;
+// Overall deadline before giving up and switching to fallback mode.
+const ACQUIRE_DEADLINE_MS = 2500;
+
 export default function SpotlightTour() {
   // Keep useNavigate/useLocation for potential future use and for the
   // location-change reactivation check.
@@ -474,35 +420,103 @@ export default function SpotlightTour() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // ── Target acquisition per step ────────────────────────────────────────
+  // ── Continuous rAF tracking per step ───────────────────────────────────
+  //
+  // Why rAF loop instead of one-shot waitForTarget:
+  //   The ProductDrawer panel slides in from translateX(-100%) over ~200ms.
+  //   A one-shot measurement mid-animation yields a stale rect (right≈4
+  //   instead of ≈280). By running a rAF loop we update targetRect EVERY
+  //   FRAME for the first RAF_TRACK_DURATION_MS after the element first
+  //   appears, so the card/ring converge to the settled final position
+  //   automatically — no timer guessing required.
+  //
+  // Lifecycle:
+  //   - Start time: step change.
+  //   - firstFoundAt: timestamp when element was first seen with non-zero size.
+  //   - Loop continues until (now - firstFoundAt) > RAF_TRACK_DURATION_MS.
+  //   - If element never found within ACQUIRE_DEADLINE_MS → fallback mode.
+  //   - Cleanup (cancel): on step change or unmount.
+  //   - After loop stops: scroll/resize listeners keep the rect fresh for
+  //     later layout changes (e.g. user scrolls the drawer list).
+
+  // Ref so the cleanup callback in useEffect can cancel the outstanding rAF.
+  const rafIdRef = useRef<number | null>(null);
+
+  // Whether the rAF tracking loop is still running (blocks the scroll/resize
+  // listeners from racing with it).
+  const rafRunningRef = useRef(false);
+
   useEffect(() => {
     if (!active || !currentStep) return;
 
-    let cancelled = false;
-
+    // Reset state for the new step
     setTargetRect(null);
     setMode('spotlight');
 
-    waitForTarget(currentStep.key, 2500).then((rect) => {
-      if (cancelled) return;
-      if (rect) {
-        setTargetRect(rect);
-        setMode('spotlight');
-      } else {
+    const startTime = Date.now();
+    let firstFoundAt: number | null = null;
+    let stopped = false;
+
+    const loop = () => {
+      if (stopped) return;
+
+      const now = Date.now();
+
+      // Hard deadline — give up and show fallback
+      if (now - startTime > ACQUIRE_DEADLINE_MS) {
+        rafRunningRef.current = false;
         setMode('fallback');
+        return;
       }
-    });
+
+      const el = document.querySelector<HTMLElement>(`[data-tour="${currentStep.key}"]`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 || rect.height > 0) {
+          // Element found with non-zero size — record first-found time
+          if (firstFoundAt === null) {
+            firstFoundAt = now;
+          }
+          setTargetRect(rect);
+          setMode('spotlight');
+
+          // Keep tracking until RAF_TRACK_DURATION_MS has elapsed since
+          // first found (covers the full slide-in animation + buffer)
+          if (now - firstFoundAt < RAF_TRACK_DURATION_MS) {
+            rafIdRef.current = requestAnimationFrame(loop);
+          } else {
+            // Settled — stop the loop, hand off to scroll/resize listeners
+            rafRunningRef.current = false;
+            rafIdRef.current = null;
+          }
+          return;
+        }
+      }
+
+      // Element not yet found (or zero-size) — keep polling
+      rafIdRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRunningRef.current = true;
+    rafIdRef.current = requestAnimationFrame(loop);
 
     return () => {
-      cancelled = true;
+      stopped = true;
+      rafRunningRef.current = false;
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, stepIndex]);
 
-  // ── Reposition on scroll / resize ──────────────────────────────────────
+  // ── Reposition on scroll / resize (post-rAF-loop) ──────────────────────
   const rafPending = useRef<number | null>(null);
 
   const reposition = useCallback(() => {
+    // Don't race with the rAF tracking loop
+    if (rafRunningRef.current) return;
     if (rafPending.current !== null) return;
     rafPending.current = requestAnimationFrame(() => {
       rafPending.current = null;

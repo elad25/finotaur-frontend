@@ -89,6 +89,7 @@ export function ProductDrawer() {
         {/* Panel */}
         <DrawerPrimitive.Content
           aria-label="Product navigation"
+          data-tour="drawer-panel"
           className={cn(
             'fixed left-0 top-0 bottom-0 z-[201]',
             'flex flex-col w-[280px] max-w-[85vw]',
