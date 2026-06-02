@@ -67,7 +67,7 @@ export default function WelcomeIntro() {
     sessionStorage.setItem(TOUR_ACTIVE_KEY, '1');
     // Navigate to Research Lab — the tour's backdrop and destination.
     // SpotlightTour opens the drawer and spotlights the first item from there.
-    navigate('/app/stocks/overview', { replace: true });
+    navigate('/app/all-markets/overview', { replace: true });
   };
 
   return (
