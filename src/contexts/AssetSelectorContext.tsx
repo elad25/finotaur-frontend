@@ -34,7 +34,7 @@ export function AssetSelectorProvider({ children }: { children: React.ReactNode 
     // during render, including server-side render / prerender in Node).
     if (typeof window !== 'undefined') {
       const stored = window.localStorage.getItem(STORAGE_KEY) as AssetClass | null;
-      if (stored && ['stocks', 'options', 'crypto', 'futures', 'forex', 'commodities', 'macro', 'etf'].includes(stored)) {
+      if (stored && ['home', 'stocks', 'options', 'crypto', 'futures', 'forex', 'commodities', 'macro', 'etf'].includes(stored)) {
         return stored;
       }
     }
