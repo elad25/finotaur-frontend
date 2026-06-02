@@ -65,7 +65,7 @@ export function MarketsAssetTabs() {
             {asset.comingSoon && (
               <>
                 <Lock
-                  className="h-3 w-3 flex-shrink-0"
+                  className="h-2.5 w-2.5 flex-shrink-0"
                   style={{ color: 'rgba(201,166,70,0.55)' }}
                   aria-label="Coming soon"
                   title="Coming soon"
