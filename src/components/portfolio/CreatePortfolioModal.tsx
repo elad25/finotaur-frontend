@@ -17,6 +17,8 @@ import {
 import { Button } from '@/components/ds/Button';
 import { usePortfolioBuilder } from '@/hooks/usePortfolioBuilder';
 import { useMyPortfolio } from '@/hooks/useMyPortfolio';
+import { useWatchlist } from '@/hooks/useWatchlist';
+import { toast } from '@/hooks/use-toast';
 import { MyPortfolio, Lot } from '@/lib/portfolio/types';
 import { PortfolioSettingsPanel } from './PortfolioSettingsPanel';
 import { AccountTabs } from './AccountTabs';
@@ -47,6 +49,9 @@ export function CreatePortfolioModal({
 
   // I/O — we only consume save / saving / error from this hook
   const { save, saving, error } = useMyPortfolio();
+
+  // Watchlist sync — called after a successful portfolio save
+  const { syncPortfolioTickers } = useWatchlist();
 
   // Track a local footer error message (save failure or validation)
   const [footerError, setFooterError] = useState<string | null>(null);
@@ -103,13 +108,47 @@ export function CreatePortfolioModal({
 
     try {
       const saved = await save(portfolio);
+
+      // ── Post-save: sync tickers to the watchlist ─────────────
+      // Collect unique, non-empty tickers with quantity > 0.
+      const tickers = Array.from(
+        new Set(
+          portfolio.accounts
+            .flatMap((acc) => acc.positions)
+            .filter((lot) => lot.ticker.trim() !== '' && lot.quantity > 0)
+            .map((lot) => lot.ticker.trim().toUpperCase()),
+        ),
+      );
+
+      if (tickers.length > 0) {
+        try {
+          const { added, skipped } = await syncPortfolioTickers(tickers);
+
+          if (added > 0) {
+            toast({
+              title: 'Added to Watch List',
+              description: `${added} ${added === 1 ? 'stock' : 'stocks'} added to your Watch List for tracking.`,
+            });
+          }
+          if (skipped > 0) {
+            toast({
+              title: 'Watch List limit reached',
+              description: 'Your FREE plan tracks up to 20 tickers. Upgrade to add more.',
+            });
+          }
+        } catch (watchlistErr: unknown) {
+          // Watchlist failure must never block the portfolio save success.
+          console.error('[CreatePortfolioModal] watchlist sync failed:', watchlistErr);
+        }
+      }
+
       onSaved?.(saved);
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save portfolio. Please try again.';
       setFooterError(msg);
     }
-  }, [save, portfolio, onSaved, onClose]);
+  }, [save, portfolio, onSaved, onClose, syncPortfolioTickers]);
 
   function handleCsvRowsParsed(lots: Lot[]) {
     addLotsToActive(lots);

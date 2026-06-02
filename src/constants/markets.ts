@@ -192,7 +192,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Watchlists',
     icon: Bell,
     routes: {
-      home: '/app/stocks/watchlists',
+      home: '/app/all-markets/watchlist',
     },
   },
   {
