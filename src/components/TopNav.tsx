@@ -173,7 +173,7 @@ export const TopNav = () => {
               src="/fino-avatar.png"
               alt=""
               aria-hidden="true"
-              className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
+              className="h-9 w-9 object-contain"
             />
             <span>Ask Fino</span>
           </button>
@@ -189,7 +189,7 @@ export const TopNav = () => {
               src="/fino-avatar.png"
               alt=""
               aria-hidden="true"
-              className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
+              className="h-9 w-9 object-contain"
             />
           </button>
 

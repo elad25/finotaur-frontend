@@ -6,9 +6,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, TrendingUp, Globe, Check } from "lucide-react";
+import { TrendingUp, Globe, Check } from "lucide-react";
 import { Button } from "@/components/ds/Button";
-import { SectionEyebrow } from "@/components/landing-new/_shared/SectionEyebrow";
 import { SectionTitle } from "@/components/landing-new/_shared/SectionTitle";
 
 // ---------------------------------------------------------------------------
@@ -254,21 +253,6 @@ export default function PlansPage() {
       {/* ===== PAGE CONTENT ===== */}
       <div className="relative z-10 flex flex-col flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10 pb-16">
 
-        {/* Back button */}
-        <motion.div
-          initial={{ opacity: 0, x: -8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <button
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 text-sm text-ink-secondary hover:text-ink-primary transition-colors duration-200 mb-10"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back
-          </button>
-        </motion.div>
-
         {/* ===== HEADING ===== */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -276,8 +260,6 @@ export default function PlansPage() {
           transition={{ duration: 0.5, delay: 0.05 }}
           className="text-center mb-12 md:mb-14"
         >
-          <SectionEyebrow>Pricing</SectionEyebrow>
-
           <SectionTitle as="h1" size="large" gradient="split" className="mb-4">
             Choose <span className="text-gold-primary">Your</span> Plan
           </SectionTitle>
