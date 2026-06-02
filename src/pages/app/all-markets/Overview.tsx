@@ -2,8 +2,9 @@
 import { api } from '@/lib/apiBase';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useMarketStatus } from '@/lib/marketStatus';
-import { MARKET_DATA_LICENSED } from '@/constants/nav';
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
+import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
+import { useMarketGate, useFinnhubGate } from '@/hooks/useMarketGate';
 import { useCreditSpreadsSnapshot } from '@/hooks/macro/useCreditSpreads';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1542,6 +1543,8 @@ function creditRegimeToMarketRegime(cr: string | undefined): MarketRegime {
 }
 
 export default function AllMarketsOverview() {
+  const { gated: marketGated, isAdmin } = useMarketGate();
+  const { gated: finnhubGated } = useFinnhubGate();
   const [marketData, setMarketData] = useState<any>(null);
   const [calendarData, setCalendarData] = useState<any[]>([]);
   const [earningsData, setEarningsData] = useState<any[]>([]);
@@ -1755,30 +1758,48 @@ export default function AllMarketsOverview() {
       <MarketRegimeTimeline regime={regime} confidence={confidence} />
 
       {/* Market Ticker Strip — raw Polygon prices; gated until licensed */}
-      {MARKET_DATA_LICENSED
-        ? <MarketTickerStrip newsItems={tickerNewsItems} />
-        : <LicensedDataPlaceholder minHeight={260} />
+      {marketGated
+        ? <LicensedDataPlaceholder minHeight={260} />
+        : <div className="relative">
+            {isAdmin && <AdminGateBadge />}
+            <MarketTickerStrip newsItems={tickerNewsItems} />
+          </div>
       }
 
       {/* Main Content Grid: Left stacked content + Right Movers (full height) */}
       <div className="grid gap-4 lg:grid-cols-[1fr,320px]">
         {/* Left Column: All content stacked */}
         <div className="space-y-4">
-          {/* Earnings Today — real API data; hidden when no data */}
-          <EarningsToday earningsData={earningsData} />
+          {/* Earnings Today — Finnhub-sourced; gated until licensed */}
+          {finnhubGated
+            ? <LicensedDataPlaceholder minHeight={200} />
+            : <div className="relative">
+                {isAdmin && <AdminGateBadge label="Earnings: hidden from public (Finnhub)" />}
+                <EarningsToday earningsData={earningsData} />
+              </div>
+          }
 
-          {/* What Matters This Week - Key Events */}
+          {/* What Matters This Week - Key Events (economic calendar — FRED/safe sources, always visible) */}
           <WhatMattersThisWeek calendarData={calendarData} earningsData={earningsData} />
 
-          {/* Macro Economic News */}
-          <MacroNews newsData={newsData} loading={loading} />
+          {/* Macro Economic News — Finnhub corporate_news feed; gated until licensed */}
+          {finnhubGated
+            ? <LicensedDataPlaceholder minHeight={200} />
+            : <div className="relative">
+                {isAdmin && <AdminGateBadge label="News: hidden from public (Finnhub)" />}
+                <MacroNews newsData={newsData} loading={loading} />
+              </div>
+          }
         </div>
 
         {/* Right Column: Market Movers — raw Polygon heatmap data; gated until licensed */}
         <div className="lg:sticky lg:top-4 lg:self-start">
-          {MARKET_DATA_LICENSED
-            ? <MarketMoversWidget data={moversData} loading={loading} />
-            : <LicensedDataPlaceholder minHeight={400} />
+          {marketGated
+            ? <LicensedDataPlaceholder minHeight={400} />
+            : <div className="relative">
+                {isAdmin && <AdminGateBadge />}
+                <MarketMoversWidget data={moversData} loading={loading} />
+              </div>
           }
         </div>
       </div>

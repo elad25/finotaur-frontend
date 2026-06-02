@@ -35,6 +35,10 @@ import { FEATURES } from '@/config/features';
 // display is gated off. Flip to true when licensed.
 export const MARKET_DATA_LICENSED = false;
 
+// Finnhub commercial redistribution license not held — earnings calendar and
+// corporate news feed are gated off. Flip to true when licensed.
+export const FINNHUB_LICENSED = false;
+
 // Sealed pending licensed options data feed (Track B). Re-enable when built.
 // To re-enable: set OPTIONS_ENABLED = true, then restore subNav/sidebar below
 // and uncomment 'options' in domainOrder.

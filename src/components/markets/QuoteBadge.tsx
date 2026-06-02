@@ -1,7 +1,7 @@
 // src/components/markets/QuoteBadge.tsx
-// Data source: /api/quote — Polygon snapshot. Gated by MARKET_DATA_LICENSED.
+// Data source: /api/quote — Polygon snapshot. Gated by useMarketGate.
 import React, { useEffect, useState } from "react";
-import { MARKET_DATA_LICENSED } from "@/constants/nav";
+import { useMarketGate } from "@/hooks/useMarketGate";
 
 type Props = { symbol: string };
 
@@ -13,6 +13,7 @@ type Quote = {
 };
 
 export const QuoteBadge: React.FC<Props> = ({ symbol }) => {
+  const { gated } = useMarketGate();
   const [q, setQ] = useState<Quote | null>(null);
   useEffect(() => {
     let alive = true;
@@ -25,7 +26,8 @@ export const QuoteBadge: React.FC<Props> = ({ symbol }) => {
 
   // Gate: raw Polygon quote — not licensed for redistribution.
   // All hooks (useState, useEffect) have already been called above.
-  if (!MARKET_DATA_LICENSED) return null;
+  // Return a neutral dash placeholder instead of null so the watchlist row layout stays intact.
+  if (gated) return <span className="text-xs text-zinc-600 select-none" aria-hidden="true">—</span>;
 
   if (!q) return <span className="text-xs opacity-60">—</span>;
 

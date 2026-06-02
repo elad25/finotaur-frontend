@@ -1,7 +1,8 @@
 // src/components/markets/ChartBoard.tsx
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { MARKET_DATA_LICENSED } from "@/constants/nav";
 import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
+import { AdminGateBadge } from "@/components/markets/AdminGateBadge";
+import { useMarketGate } from "@/hooks/useMarketGate";
 import {
   createChart,
   IChartApi,
@@ -176,6 +177,7 @@ const formatVolume = (vol: number): string => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const ChartBoard: React.FC<Props> = ({ initialSymbol }) => {
+  const { gated, isAdmin } = useMarketGate();
   const [symbol, setSymbol] = useState<string>(() => {
     try {
       const saved = localStorage.getItem("finotaur.activeSymbol");
@@ -484,12 +486,13 @@ export const ChartBoard: React.FC<Props> = ({ initialSymbol }) => {
 
   // Gate: raw Polygon OHLCV chart data — not licensed for redistribution.
   // All hooks have already been called above; this return is safe.
-  if (!MARKET_DATA_LICENSED) return <LicensedDataPlaceholder minHeight={400} />;
+  if (gated) return <LicensedDataPlaceholder minHeight={400} />;
 
   const isPositive = lastPrice ? lastPrice.change >= 0 : true;
 
   return (
-    <div className="flex gap-4 h-full w-full p-4">
+    <div className="relative flex gap-4 h-full w-full p-4">
+      {isAdmin && <AdminGateBadge />}
       {/* ═══════════════════════════════════════════════════════════════════════
           CHART SECTION - 70% width
           ═══════════════════════════════════════════════════════════════════════ */}

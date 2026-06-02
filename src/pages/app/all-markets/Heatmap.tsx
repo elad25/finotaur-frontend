@@ -5,8 +5,9 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { RefreshCw, Maximize2, Share2, Clock, AlertCircle } from 'lucide-react';
-import { MARKET_DATA_LICENSED } from '@/constants/nav';
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
+import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
+import { useMarketGate } from '@/hooks/useMarketGate';
 
 // ============ TYPES ============
 interface StockData {
@@ -863,6 +864,7 @@ function SessionBadge({ session }: { session: MarketSession }) {
 
 // ============ MAIN COMPONENT ============
 export default function HeatmapPage() {
+  const { gated, isAdmin } = useMarketGate();
   const [selectedMarket, setSelectedMarket] = useState<MarketKey>('stocks');
   const [stockData, setStockData] = useState<StockData[]>(SP500_STOCKS);
   const [loading, setLoading] = useState(true);
@@ -1146,7 +1148,7 @@ export default function HeatmapPage() {
   };
 
   // Gate: entire page is raw Polygon price data — hide until licensed
-  if (!MARKET_DATA_LICENSED) {
+  if (gated) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] text-white p-4">
         {/* Header shell preserved so the page title is still visible */}
@@ -1163,7 +1165,8 @@ export default function HeatmapPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white p-4">
+    <div className="relative min-h-screen bg-[#0A0A0A] text-white p-4">
+      {isAdmin && <AdminGateBadge />}
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
