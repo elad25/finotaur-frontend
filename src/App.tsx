@@ -481,13 +481,17 @@ function AppContent() {
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
           <Route path="stocks/screener" element={<LockedRoute domainId="stocks"><StocksScreener /></LockedRoute>} />
-          <Route path="stocks/earnings" element={<LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute>} />
+          {/* Stocks Earnings — sealed: earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
+              To re-enable: restore <LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute> and remove locked:true from nav.ts. */}
+          <Route path="stocks/earnings" element={<OptionsComingSoon title="Earnings" description="Earnings calendar data is coming soon — we're securing a commercially licensed data feed." />} />
           <Route path="stocks/fundamentals" element={<LockedRoute domainId="stocks"><StocksFundamentals /></LockedRoute>} />
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />
           <Route path="stocks/catalysts" element={<LockedRoute domainId="stocks"><StocksCatalysts /></LockedRoute>} />
-          <Route path="stocks/upgrades" element={<LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute>} />
+          {/* Stocks Upgrades/Downgrades — sealed: analyst-ratings source (Finnhub/FMP) not licensed for redistribution. Sealed pending licensed source.
+              To re-enable: restore <LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute> and remove locked:true from nav.ts. */}
+          <Route path="stocks/upgrades" element={<OptionsComingSoon title="Upgrades / Downgrades" description="Analyst ratings data is coming soon — we're securing a licensed data feed." />} />
           <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><StocksValuation /></LockedRoute>} />
           <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
           <Route path="stocks/insider"  element={<LockedRoute domainId="stocks"><StocksInsider  /></LockedRoute>} />
@@ -506,10 +510,14 @@ function AppContent() {
           <Route path="crypto/stablecoins" element={<LockedRoute domainId="crypto"><CryptoStablecoins /></LockedRoute>} />
           <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
 
-          {/* FUTURES */}
-          <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
-          <Route path="futures/open-interests" element={<LockedRoute domainId="futures"><FuturesOpenInterests /></LockedRoute>} />
-          <Route path="futures/calendar" element={<LockedRoute domainId="futures"><FuturesCalendar /></LockedRoute>} />
+          {/* FUTURES — sealed pending licensed data feed (CME licensed; Yahoo gray).
+              Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.
+              To re-enable: swap OptionsComingSoon back to FuturesOverview/FuturesOpenInterests/FuturesCalendar
+              and set FUTURES_ENABLED=true in constants/nav.ts. */}
+          <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />
+          <Route path="futures/overview" element={<OptionsComingSoon title="Futures" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
+          <Route path="futures/open-interests" element={<OptionsComingSoon title="Futures — Open Interests" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
+          <Route path="futures/calendar" element={<OptionsComingSoon title="Futures — Calendar" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
           
           {/* FOREX */}
           <Route path="forex/overview" element={<LockedRoute domainId="forex"><ForexOverview /></LockedRoute>} />
