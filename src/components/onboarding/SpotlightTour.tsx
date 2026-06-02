@@ -6,19 +6,22 @@
 // sessionStorage 'finotaur_tour_active' === '1'.
 //
 // Flow:
-//   1. Sets tourMode=true, opens the ProductDrawer.
-//   2. Spotlights each drawer product button in sequence.
-//   3. Advancement is exclusively via the hero card "Next" button —
-//      the dim overlay captures pointer events so stray clicks on
-//      spotlighted items cannot navigate or close the drawer.
-//   4. On finish/skip: setTourMode(false) → close() → finishOnboarding().
+//   1. Sets tourMode=true (drawer open/close is managed per-step).
+//   2. Step 'menu': drawer is CLOSED — hamburger is visible in the top bar.
+//   3. Steps 'drawer-product-*': drawer is OPEN — spotlights each product.
+//   4. Step 'fino': drawer stays OPEN — spotlights the Ask Fino top-bar button.
+//   5. On finish/skip: setTourMode(false) → close() → finishOnboarding()
+//      → navigate to /app/stocks/overview.
 //
 // Spotlight is a box-shadow cutout — purely visual, pointer-events:none.
 // The hero card is the only interactive element above the overlay.
 //
-// Steps 1-4, 6: drawer item buttons on the left edge → hero card placed
-//   to the RIGHT of the drawer panel with the arrow pointing left.
-// Step 5 (Fino): top-right button → hero card placed below-left.
+// Step placement:
+//   menu / fino: top-bar targets → hero card placed BELOW the target.
+//     menu: card left-aligned to button.
+//     fino: card right-aligned (right edge of card = right edge of button).
+//   drawer-product-*: drawer item buttons on the left edge → hero card
+//     placed to the RIGHT of the drawer panel with the arrow pointing left.
 //
 // Positioning fix (animation race):
 //   The ProductDrawer slides in over ~200ms. A one-shot getBoundingClientRect
@@ -58,6 +61,12 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   {
+    key: 'menu',
+    title: 'Your menu',
+    body: 'Every tool lives here. Tap this button anytime to jump between Markets, the AI Arena, your Journal and more.',
+    breadcrumb: 'Top bar → Menu',
+  },
+  {
     key: 'drawer-product-markets',
     title: 'Markets',
     body: 'Your command center for every market — indices, movers, sentiment and the macro picture, all in one hub.',
@@ -84,7 +93,7 @@ const STEPS: TourStep[] = [
   {
     key: 'fino',
     title: 'Meet Fino',
-    body: 'Your AI trading assistant. Ask it anything — a ticker, a setup, a macro question — and get an instant answer.',
+    body: 'Ask me anything — a ticker, a setup, or a macro question — and get an instant, grounded answer.',
     breadcrumb: 'Top bar → Ask Fino',
   },
   {
@@ -151,7 +160,7 @@ interface ArrowPointerProps {
 function ArrowPointer({ targetRect, cardIsRight }: ArrowPointerProps) {
   // For drawer items (card to the right): arrow sits at the right edge of the
   // target, pointing right (toward the card).
-  // For Fino (card below-left): arrow sits below the target, pointing up.
+  // For menu/fino (card below target): arrow sits below the target, pointing up.
   if (cardIsRight) {
     const arrowX = targetRect.right + 6;
     const arrowY = targetRect.top + targetRect.height / 2 - 12;
@@ -174,7 +183,7 @@ function ArrowPointer({ targetRect, cardIsRight }: ArrowPointerProps) {
     );
   }
 
-  // Fino: card is below-left, arrow points up toward button
+  // menu/fino: card is below, arrow points up toward button
   const arrowX = targetRect.left + targetRect.width / 2 - 12;
   const arrowY = targetRect.bottom + 6;
   return (
@@ -211,7 +220,7 @@ interface HeroCardProps {
   onSkip: () => void;
 }
 
-const CARD_ESTIMATE_H = 270;
+const CARD_ESTIMATE_H = 300; // slightly taller to accommodate Fino lens
 const CARD_WIDTH = 340;
 // Gap between the drawer panel right edge and the hero card left edge
 const PANEL_GAP = 24;
@@ -228,17 +237,26 @@ function HeroCard({
 }: HeroCardProps) {
   let cardStyle: React.CSSProperties = {};
 
+  // Top-bar steps: menu and fino both sit BELOW their respective buttons
+  const isTopBarStep = step.key === 'menu' || step.key === 'fino';
+
   if (mode === 'spotlight' && targetRect) {
     const vpW = window.innerWidth;
     const vpH = window.innerHeight;
 
-    const isFinoStep = step.key === 'fino';
-
-    if (isFinoStep) {
-      // Fino is in the top-right — place card below and to the left of it
+    if (isTopBarStep) {
       const cardTop = targetRect.bottom + PAD + 12;
-      let cardLeft = targetRect.right - CARD_WIDTH;
-      cardLeft = Math.max(12, Math.min(cardLeft, vpW - CARD_WIDTH - 12));
+
+      let cardLeft: number;
+      if (step.key === 'menu') {
+        // Left-align the card to the hamburger button
+        cardLeft = Math.max(12, Math.min(targetRect.left, vpW - CARD_WIDTH - 12));
+      } else {
+        // fino: right-align (right edge of card = right edge of button)
+        cardLeft = targetRect.right - CARD_WIDTH;
+        cardLeft = Math.max(12, Math.min(cardLeft, vpW - CARD_WIDTH - 12));
+      }
+
       cardStyle = {
         position: 'fixed',
         top: Math.min(cardTop, vpH - CARD_ESTIMATE_H - 12),
@@ -295,6 +313,8 @@ function HeroCard({
     };
   }
 
+  const isFinoStep = step.key === 'fino';
+
   return (
     <div style={cardStyle}>
       <Card
@@ -316,6 +336,31 @@ function HeroCard({
         </button>
 
         <div className="flex flex-col gap-4">
+          {/* Fino mascot lens — only on the fino step */}
+          {isFinoStep && (
+            <div className="flex justify-center">
+              <motion.div
+                style={{
+                  width: 112,
+                  height: 112,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '3px solid #C9A646',
+                  boxShadow: '0 0 24px rgba(201,166,70,0.45)',
+                  transformOrigin: 'bottom center',
+                }}
+                animate={{ rotate: [0, -12, 10, -8, 8, 0] }}
+                transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 1.2, ease: 'easeInOut' }}
+              >
+                <img
+                  src="/fino-avatar.png"
+                  alt="Fino"
+                  className="h-full w-full object-cover scale-110"
+                />
+              </motion.div>
+            </div>
+          )}
+
           <Eyebrow>
             STEP {stepIndex + 1} OF {totalSteps}
           </Eyebrow>
@@ -398,12 +443,8 @@ const RAF_TRACK_DURATION_MS = 1500;
 const ACQUIRE_DEADLINE_MS = 2500;
 
 export default function SpotlightTour() {
-  // Keep useNavigate/useLocation for potential future use and for the
-  // location-change reactivation check.
   const navigate = useNavigate();
   const location = useLocation();
-  // Suppress "unused variable" lint — navigate is kept for forward-compat.
-  void navigate;
 
   const { open: openDrawer, close: closeDrawer, setTourMode } = useProductDrawer();
 
@@ -423,16 +464,18 @@ export default function SpotlightTour() {
 
   const currentStep = STEPS[stepIndex];
 
-  // ── Activate: set tourMode + open drawer ───────────────────────────────
+  // ── Activate: set tourMode only (drawer managed per-step below) ────────
   useEffect(() => {
     if (!active) return;
     setTourMode(true);
-    openDrawer();
-    // Only run on activation — intentionally empty dep after `active`
+    // Intentionally NOT opening the drawer here — the per-step effect handles it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // ── Continuous rAF tracking per step ───────────────────────────────────
+  // ── Per-step drawer orchestration + rAF tracking ───────────────────────
+  //
+  // 'menu' step: drawer CLOSED so the hamburger is fully visible.
+  // All other steps: drawer OPEN (products are in the drawer; fino keeps it open too).
   //
   // Why rAF loop instead of one-shot waitForTarget:
   //   The ProductDrawer panel slides in from translateX(-100%) over ~200ms.
@@ -460,6 +503,13 @@ export default function SpotlightTour() {
 
   useEffect(() => {
     if (!active || !currentStep) return;
+
+    // Open/close drawer based on step
+    if (currentStep.key === 'menu') {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
 
     // Keep the previous targetRect in place so the spotlight + hero card
     // GLIDE to the new target (CSS transition) instead of detouring through
@@ -570,7 +620,8 @@ export default function SpotlightTour() {
     closeDrawer();
     finishOnboarding();
     setActive(false);
-  }, [setTourMode, closeDrawer]);
+    navigate('/app/stocks/overview', { replace: true });
+  }, [setTourMode, closeDrawer, navigate]);
 
   const handleNext = useCallback(() => {
     if (currentStep?.isLast) {
@@ -588,10 +639,10 @@ export default function SpotlightTour() {
 
   if (!active || !currentStep) return null;
 
-  // Determine arrow direction based on step key:
-  // Fino (top-right target) → card is below-left → cardIsRight=false
-  // All drawer items → card is to the right → cardIsRight=true
-  const cardIsRight = currentStep.key !== 'fino';
+  // Determine arrow direction:
+  // Drawer items (card to the right of drawer) → cardIsRight=true → arrow points left toward item.
+  // menu & fino (card below top-bar target) → cardIsRight=false → arrow points up toward button.
+  const cardIsRight = currentStep.key.startsWith('drawer-product-');
 
   return (
     <AnimatePresence>

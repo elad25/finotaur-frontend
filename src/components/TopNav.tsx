@@ -138,6 +138,7 @@ export const TopNav = () => {
             onClick={toggleDrawer}
             className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4]"
             aria-label="Open menu"
+            data-tour="menu"
           >
             <Menu className="h-5 w-5" />
           </button>
