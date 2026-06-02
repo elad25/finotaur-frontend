@@ -13,13 +13,14 @@ import {
   LayoutDashboard, Search, Map, TrendingUp, Calendar, Newspaper,
   Activity, Bell, FileText, BarChart3, DollarSign, Target, Zap, Award,
   Users, LineChart, Globe, Coins, Flame, Brain, Droplet, Layers, PieChart,
+  Home, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Asset classes
 // ---------------------------------------------------------------------------
-export type AssetClass = 'stocks' | 'options' | 'crypto' | 'futures' | 'forex' | 'commodities' | 'macro' | 'etf';
+export type AssetClass = 'home' | 'stocks' | 'options' | 'crypto' | 'futures' | 'forex' | 'commodities' | 'macro' | 'etf';
 
 export interface AssetClassMeta {
   id: AssetClass;
@@ -30,6 +31,7 @@ export interface AssetClassMeta {
 }
 
 export const ASSET_CLASSES: AssetClassMeta[] = [
+  { id: 'home',        label: 'Home',        icon: Home },
   { id: 'stocks',      label: 'Stocks',      icon: TrendingUp },
   { id: 'options',     label: 'Options',     icon: Layers,    comingSoon: true },
   { id: 'crypto',      label: 'Crypto',      icon: Coins },
@@ -54,6 +56,7 @@ export type MarketFunction =
   | 'sentiment'
   | 'watchlists'
   | 'reports'
+  | 'portfolio'
   // Stocks-specific
   | 'fundamentals'
   | 'sectors'
@@ -123,6 +126,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Overview',
     icon: LayoutDashboard,
     routes: {
+      home:        '/app/all-markets/overview',
       stocks:      '/app/stocks/overview',
       crypto:      '/app/crypto/overview',
       futures:     '/app/futures/overview',
@@ -136,9 +140,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Screener',
     icon: Search,
     routes: {
-      stocks:      '/app/stocks/screener',
-      crypto:      '/app/crypto/screener',
-      commodities: '/app/commodities/screener',
+      home: '/app/stocks/screener',
     },
   },
   {
@@ -146,8 +148,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Heatmap',
     icon: Map,
     routes: {
-      crypto: '/app/crypto/heatmap',
-      macro:  '/app/macro/global-heatmap',
+      home: '/app/all-markets/heatmap',
     },
   },
   {
@@ -155,18 +156,15 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Top Movers',
     icon: TrendingUp,
     routes: {
-      stocks: '/app/stocks/movers',
+      home: '/app/all-markets/movers',
     },
   },
   {
     id: 'calendar',
-    label: 'Calendar',
+    label: 'Economic Calendar',
     icon: Calendar,
     routes: {
-      futures:     '/app/futures/calendar',
-      forex:       '/app/forex/calendar',
-      commodities: '/app/commodities/calendar',
-      macro:       '/app/macro/calendar',
+      home: '/app/all-markets/calendar',
     },
   },
   {
@@ -174,10 +172,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'News',
     icon: Newspaper,
     routes: {
-      stocks:      '/app/stocks/news',
-      crypto:      '/app/crypto/sentiment',
-      forex:       '/app/forex/news',
-      commodities: '/app/commodities/news',
+      home: '/app/all-markets/news',
     },
   },
   {
@@ -185,8 +180,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Sentiment',
     icon: Activity,
     routes: {
-      crypto: '/app/crypto/sentiment',
-      macro:  '/app/macro/sentiment',
+      home: '/app/all-markets/sentiment',
     },
   },
   {
@@ -194,9 +188,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Watchlists',
     icon: Bell,
     routes: {
-      stocks: '/app/stocks/watchlists',
-      crypto: '/app/crypto/watchlist',
-      forex:  '/app/forex/alerts',
+      home: '/app/stocks/watchlists',
     },
   },
   {
@@ -556,6 +548,16 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       etf: '/app/etf/performance',
     },
   },
+
+  // ── Home-only ─────────────────────────────────────────────────────────────
+  {
+    id: 'portfolio',
+    label: 'My Portfolio',
+    icon: Wallet,
+    routes: {
+      home: '/app/ai/my-portfolio',
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -610,6 +612,7 @@ export function isMarketsPath(pathname: string): boolean {
  */
 export function assetFromPathname(pathname: string): AssetClass {
   const map: Array<[string, AssetClass]> = [
+    ['/app/all-markets', 'home'],
     ['/app/stocks',      'stocks'],
     ['/app/options',     'options'],
     ['/app/crypto',      'crypto'],
