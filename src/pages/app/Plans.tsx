@@ -433,10 +433,10 @@ export default function PlansPage() {
                 Perfect for
               </p>
               <ul className="space-y-1.5">
+                <CheckItem label="Fundamentals-driven day traders" />
+                <CheckItem label="Swing traders" />
                 <CheckItem label="Long-term investors" />
-                <CheckItem label="Fundamental &amp; macro researchers" />
-                <CheckItem label="Market analysts" />
-                <CheckItem label="Traders who also invest" />
+                <CheckItem label="Seasonal &amp; broad-trend traders" />
               </ul>
             </div>
 
