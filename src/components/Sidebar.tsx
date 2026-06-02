@@ -62,7 +62,6 @@ import {
   FileBarChart,
   Sparkles, // נ”¥ For beta items
   Link2,
-  Briefcase,
 } from 'lucide-react';
 import { 
   prefetchSettingsData,
@@ -106,8 +105,7 @@ type EnvironmentType =
   | 'connections'
   | 'markets'
   | 'war-zone'
-  | 'top-secret'
-  | 'portfolio';
+  | 'top-secret';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -360,9 +358,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Usage', path: '/app/settings/usage', icon: Activity },
   ],
 
-  portfolio: [
-    { label: 'My Portfolio', path: '/app/portfolio', icon: Briefcase },
-  ],
 };
 
 const sidebarItemBaseClass =
@@ -454,7 +449,6 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
     if (path.startsWith('/app/connections')) return 'connections';
-    if (path.startsWith('/app/portfolio')) return 'portfolio';
     if (path.startsWith('/app/journal')) return 'journal';
     
     // Default
