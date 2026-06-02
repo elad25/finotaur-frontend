@@ -110,36 +110,46 @@ export const TopNav = () => {
         backgroundColor: '#0A0A0A',
       }}
     >
-      <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
+      {/*
+        3-column grid layout:
+          col 1 (1fr)  — left cluster: logo + hamburger, left-aligned
+          col 2 (auto) — center cluster: omnibox, truly centered in the viewport
+          col 3 (1fr)  — right cluster: Upgrade · Ask Fino · user menu, right-aligned
 
-        {/* ── Logo ─────────────────────────────────────────── */}
-        <button
-          onClick={() => navigate('/app/top-secret')}
-          className="flex items-center cursor-pointer flex-shrink-0"
-          aria-label="FINOTAUR home"
-        >
-          <Wordmark size="nav" interactive />
-        </button>
+        On < md screens the center column collapses to a compact search icon
+        (handled inside GlobalOmnibox via its own mobile overlay).
+      */}
+      <div className="grid h-16 items-center px-4 lg:px-6"
+        style={{ gridTemplateColumns: '1fr auto 1fr' }}
+      >
 
-        {/* ── ☰ Hamburger — opens Product Drawer ───────────── */}
-        <button
-          type="button"
-          onClick={toggleDrawer}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4]"
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        {/* ── LEFT: Logo + Hamburger ────────────────────────── */}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => navigate('/app/top-secret')}
+            className="flex items-center cursor-pointer flex-shrink-0"
+            aria-label="FINOTAUR home"
+          >
+            <Wordmark size="nav" interactive />
+          </button>
 
-        {/* ── GlobalOmnibox — expands to fill available space ─ */}
-        <div className="flex-1 min-w-0 flex items-center">
-          <div className="w-full max-w-2xl">
-            <GlobalOmnibox />
-          </div>
+          <button
+            type="button"
+            onClick={toggleDrawer}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4]"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* ── Right-side actions ────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* ── CENTER: GlobalOmnibox — truly viewport-centered ── */}
+        <div className="flex items-center justify-center w-full max-w-xl lg:max-w-2xl px-3">
+          <GlobalOmnibox />
+        </div>
+
+        {/* ── RIGHT: Upgrade · Ask Fino · user menu ────────────── */}
+        <div className="flex items-center gap-2 justify-end flex-shrink-0">
 
           {/* ✨ Upgrade CTA */}
           <DSButton

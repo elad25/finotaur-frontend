@@ -502,9 +502,28 @@ All colors MUST be HSL.
     hsl(var(--gold) / 0.5) 50%,
     hsl(var(--gold) / 0.7) 100%
   );
-  box-shadow: 
+  box-shadow:
     0 0 10px hsl(var(--gold) / 0.4),
     inset 0 0 5px hsl(var(--gold) / 0.2);
+}
+
+/* ============================================
+   GLOBAL OMNIBOX — luxury placeholder + focus
+   ============================================ */
+
+/* Muted gold placeholder for the desktop command bar input */
+.omnibox-trigger input::placeholder {
+  color: rgba(201, 166, 70, 0.28);
+  font-size: 0.8125rem; /* 13px — slightly refined vs body */
+  letter-spacing: 0.01em;
+}
+
+/* Suppress browser default blue focus outline — our gold box-shadow ring
+   (set inline on the wrapper div) is the visible focus indicator.
+   The input itself should be transparent on outline. */
+.omnibox-trigger input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Hide scrollbar but keep functionality */
