@@ -637,3 +637,7 @@ export function WelcomePopup() {
     </div>
   );
 }
+
+// Default export required by the finotaur:assert-lazy-default-exports build guard
+// (this module is loaded via lazy() in App.tsx).
+export default WelcomePopup;

@@ -44,8 +44,8 @@ const LandingPage = () => {
         ]}
       />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
-
+        /* Playfair Display is loaded via the consolidated font <link> in index.html.
+           The former inline @import here caused a second render-blocking request after mount. */
         .heading-serif {
           font-family: 'Playfair Display', Georgia, serif;
         }

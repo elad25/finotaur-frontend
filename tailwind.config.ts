@@ -17,7 +17,7 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         serif: ['"Cormorant Garamond"', 'Playfair Display', 'serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-        display: ['"Cinzel"', '"Cormorant Garamond"', 'serif'],
+        display: ['"Cormorant Garamond"', 'serif'],
         wordmark: ['"Outfit"', '"Inter"', 'system-ui', 'sans-serif'],
       },
       colors: {

@@ -139,6 +139,25 @@ createRoot(rootElement).render(
   </HelmetProvider>
 );
 
+// Remove the instant boot splash once React has taken over the first paint.
+// Idempotent — may be called by both the fast path and the fallback below.
+let bootSplashHidden = false;
+const hideBootSplash = () => {
+  if (bootSplashHidden) return;
+  const splash = document.getElementById('boot-splash');
+  if (!splash) { bootSplashHidden = true; return; }
+  bootSplashHidden = true;
+  splash.classList.add('boot-splash--hide');
+  setTimeout(() => splash.remove(), 350); // match the CSS opacity transition
+};
+// Fast path (foreground tab): remove right after the first painted frame.
+requestAnimationFrame(() => requestAnimationFrame(hideBootSplash));
+// Robust fallback: requestAnimationFrame is PAUSED in background/unfocused tabs,
+// so the rAF path alone would leave the splash covering the page when the site
+// is opened in a background tab. A plain timer still fires while hidden and
+// guarantees the splash is always removed.
+setTimeout(hideBootSplash, 1500);
+
 // Prefetch after initial render
 prefetchCriticalData();
 

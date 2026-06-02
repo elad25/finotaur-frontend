@@ -528,9 +528,10 @@ const Hero = () => {
 
       {/* ========== BULL SILHOUETTE — atmospheric brand backdrop, anchored to upper viewport ========== */}
       <img
-        src="/logo.png"
+        src="/logo.webp"
         alt=""
         aria-hidden="true"
+        decoding="async"
         className="absolute pointer-events-none select-none"
         style={{
           left: '-18%',

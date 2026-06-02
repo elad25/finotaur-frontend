@@ -13,8 +13,6 @@ import { MentorViewProvider } from "@/contexts/MentorViewContext";
 import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DomainGuard } from "@/components/DomainGuard";
-import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
-import { CopilotStandaloneLayout } from "@/layouts/CopilotStandaloneLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { Suspense, memo } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
@@ -32,8 +30,6 @@ import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 import { BetaRoute } from "@/components/routes/BetaRoute";
 
-import WelcomeOffer from "@/components/onboarding/WelcomeOffer";
-import { WelcomePopup } from "@/components/WelcomePopup";
 import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
@@ -129,7 +125,6 @@ import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
 import LinksPage from "@/pages/LinksPage";
-import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, FuturesRiskDisclosure, CftcHypotheticalDisclosure, TestimonialDisclaimer, AffiliateDisclosure, RefundPolicy, DMCA, LegalHub } from "@/components/legal";
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
@@ -145,6 +140,23 @@ const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailure
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
 const DesignLab = lazy(() => import("@/pages/DesignLab"));
 const PlansPage = lazy(() => import("@/pages/app/Plans"));
+const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
+const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
+const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
+const WelcomePopup = lazy(() => import("@/components/WelcomePopup"));
+const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
+const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
+const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
+const Disclaimer = lazy(() => import("@/components/legal").then(m => ({ default: m.Disclaimer })));
+const Copyright = lazy(() => import("@/components/legal").then(m => ({ default: m.Copyright })));
+const CookiePolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.CookiePolicy })));
+const RiskDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.RiskDisclosure })));
+const FuturesRiskDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.FuturesRiskDisclosure })));
+const CftcHypotheticalDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.CftcHypotheticalDisclosure })));
+const TestimonialDisclaimer = lazy(() => import("@/components/legal").then(m => ({ default: m.TestimonialDisclaimer })));
+const AffiliateDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.AffiliateDisclosure })));
+const RefundPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.RefundPolicy })));
+const DMCA = lazy(() => import("@/components/legal").then(m => ({ default: m.DMCA })));
 
 // Journal Pages
 const JournalOverview = lazy(() => import("@/pages/app/journal/Overview"));
@@ -375,9 +387,11 @@ function AppContent() {
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
       {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
-      <WelcomeOffer />
-      {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
-      <WelcomePopup />
+      <Suspense fallback={null}>
+        <WelcomeOffer />
+        {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
+        <WelcomePopup />
+      </Suspense>
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
         {import.meta.env.DEV && (
@@ -407,23 +421,23 @@ function AppContent() {
         <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
-        <Route path="/legal" element={<LegalHub />} />
-        <Route path="/legal/terms" element={<TermsOfUse />} />
-        <Route path="/legal/privacy" element={<PrivacyPolicy />} />
-        <Route path="/legal/disclaimer" element={<Disclaimer />} />
-        <Route path="/legal/copyright" element={<Copyright />} />
-        <Route path="/legal/cookies" element={<CookiePolicy />} />
-        <Route path="/legal/risk-disclosure" element={<RiskDisclosure />} />
-        <Route path="/legal/futures-risk" element={<FuturesRiskDisclosure />} />
-        <Route path="/legal/cftc-hypothetical-performance" element={<CftcHypotheticalDisclosure />} />
-        <Route path="/legal/testimonial-disclaimer" element={<TestimonialDisclaimer />} />
-        <Route path="/legal/affiliate-disclosure" element={<AffiliateDisclosure />} />
-        <Route path="/legal/refund" element={<RefundPolicy />} />
-        <Route path="/legal/dmca" element={<DMCA />} />
+        <Route path="/legal" element={<SuspenseRoute><LegalHub /></SuspenseRoute>} />
+        <Route path="/legal/terms" element={<SuspenseRoute><TermsOfUse /></SuspenseRoute>} />
+        <Route path="/legal/privacy" element={<SuspenseRoute><PrivacyPolicy /></SuspenseRoute>} />
+        <Route path="/legal/disclaimer" element={<SuspenseRoute><Disclaimer /></SuspenseRoute>} />
+        <Route path="/legal/copyright" element={<SuspenseRoute><Copyright /></SuspenseRoute>} />
+        <Route path="/legal/cookies" element={<SuspenseRoute><CookiePolicy /></SuspenseRoute>} />
+        <Route path="/legal/risk-disclosure" element={<SuspenseRoute><RiskDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/futures-risk" element={<SuspenseRoute><FuturesRiskDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/cftc-hypothetical-performance" element={<SuspenseRoute><CftcHypotheticalDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/testimonial-disclaimer" element={<SuspenseRoute><TestimonialDisclaimer /></SuspenseRoute>} />
+        <Route path="/legal/affiliate-disclosure" element={<SuspenseRoute><AffiliateDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/refund" element={<SuspenseRoute><RefundPolicy /></SuspenseRoute>} />
+        <Route path="/legal/dmca" element={<SuspenseRoute><DMCA /></SuspenseRoute>} />
         <Route path="/pricing-selection" element={<Navigate to="/onboarding" replace />} />
         
         {/* PROTECTED ROUTES */}
-        <Route path="/app" element={<ProtectedRoute><MentorViewProvider><ProtectedAppLayout /></MentorViewProvider></ProtectedRoute>}>
+        <Route path="/app" element={<ProtectedRoute><MentorViewProvider><SuspenseRoute><ProtectedAppLayout /></SuspenseRoute></MentorViewProvider></ProtectedRoute>}>
           <Route index element={<Navigate to="/app/top-secret" replace />} />
           
           {/* ALL MARKETS */}
@@ -689,7 +703,7 @@ function AppContent() {
         </Route>
 
         {/* COPILOT STANDALONE SHELL — opens in new tab, no TopNav/SubNav */}
-        <Route path="/copilot" element={<ProtectedRoute><CopilotStandaloneLayout /></ProtectedRoute>}>
+        <Route path="/copilot" element={<ProtectedRoute><SuspenseRoute><CopilotStandaloneLayout /></SuspenseRoute></ProtectedRoute>}>
           <Route index element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
           <Route path="top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
           <Route path="macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />

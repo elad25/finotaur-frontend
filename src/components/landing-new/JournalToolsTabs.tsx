@@ -25,7 +25,7 @@ interface Tab {
   title: string;
   description: string;
   bullets: string[];
-  screenshot?: { src: string; alt: string; url: string };
+  screenshot?: { src: string; alt: string; url: string; w?: number; h?: number };
 }
 
 const tabs: Tab[] = [
@@ -44,9 +44,11 @@ const tabs: Tab[] = [
       "Notes, screenshots, voice memos",
     ],
     screenshot: {
-      src: "/assets/finotaur-calender.png",
+      src: "/assets/finotaur-calender.webp",
       alt: "Finotaur Trading Journal — performance dashboard with equity curve",
       url: "finotaur.com/app/journal/dashboard",
+      w: 1462,
+      h: 853,
     },
   },
   {
@@ -480,6 +482,10 @@ const JournalToolsTabs = () => {
                 <img
                   src={activeTab.screenshot.src}
                   alt={activeTab.screenshot.alt}
+                  width={activeTab.screenshot.w}
+                  height={activeTab.screenshot.h}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-auto block"
                   draggable={false}
                 />
