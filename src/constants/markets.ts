@@ -563,7 +563,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'My Portfolio',
     icon: Wallet,
     routes: {
-      home: '/app/portfolio',
+      home: '/app/all-markets/portfolio',
     },
     locked: false, // Manual portfolio builder — free, open to all signed-in users
   },

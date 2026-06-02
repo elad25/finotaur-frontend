@@ -476,18 +476,6 @@ export const domains: Record<string, Domain> = {
     sidebar: [],
   },
 
-  // ===========================================================================
-  // MY PORTFOLIO — manual portfolio tracking + CSV import
-  // ===========================================================================
-  portfolio: {
-    id: 'portfolio',
-    label: 'My Portfolio',
-    locked: false,
-    beta: false,
-    defaultPath: '/app/portfolio',
-    subNav: [],
-    sidebar: [],
-  },
 };
 
 // ===========================================================================
@@ -502,12 +490,12 @@ export const domainOrder = [
   'war-zone',
   'top-secret',
   'journal',
-  'portfolio',
   'copy-trade', // hidden for non-beta; admin-only in practice
   // Removed from Drawer (routes/pages/domain defs preserved):
   //   'all-markets', 'stocks', 'crypto', 'futures', 'forex',
   //   'commodities', 'macro', 'funding'
   // Options sealed: 'options'
+  // portfolio removed: page now lives under /app/all-markets/portfolio (Markets chrome)
 ] as const;
 
 // =====================================================
