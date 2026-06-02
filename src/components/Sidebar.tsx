@@ -432,15 +432,15 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     // Markets product: any per-asset URL resolves to Markets environment
     if (
       path.startsWith('/app/stocks') ||
+      path.startsWith('/app/options') ||
       path.startsWith('/app/crypto') ||
       path.startsWith('/app/futures') ||
       path.startsWith('/app/forex') ||
       path.startsWith('/app/commodities') ||
       path.startsWith('/app/macro') ||
+      path.startsWith('/app/etf') ||
       path.startsWith('/app/all-markets')
     ) return 'markets';
-    // Legacy individual domain names (kept for reference; should not normally hit)
-    if (path.startsWith('/app/options')) return 'options';
     if (path.startsWith('/app/ai/copilot') || path.startsWith('/copilot')) return 'ai-copilot';
     if (path.startsWith('/app/ai')) return 'ai';
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';

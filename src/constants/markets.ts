@@ -12,28 +12,32 @@
 import {
   LayoutDashboard, Search, Map, TrendingUp, Calendar, Newspaper,
   Activity, Bell, FileText, BarChart3, DollarSign, Target, Zap, Award,
-  Users, LineChart, Globe, Coins, Flame, Brain, Droplet, Layers,
+  Users, LineChart, Globe, Coins, Flame, Brain, Droplet, Layers, PieChart,
   type LucideIcon,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Asset classes
 // ---------------------------------------------------------------------------
-export type AssetClass = 'stocks' | 'crypto' | 'futures' | 'forex' | 'commodities' | 'macro';
+export type AssetClass = 'stocks' | 'options' | 'crypto' | 'futures' | 'forex' | 'commodities' | 'macro' | 'etf';
 
 export interface AssetClassMeta {
   id: AssetClass;
   label: string;
   icon: LucideIcon;
+  /** True when the asset is sealed (coming soon) — tabs show a "Soon" badge. */
+  comingSoon?: boolean;
 }
 
 export const ASSET_CLASSES: AssetClassMeta[] = [
   { id: 'stocks',      label: 'Stocks',      icon: TrendingUp },
-  { id: 'crypto',      label: 'Crypto',       icon: Coins },
-  { id: 'futures',     label: 'Futures',      icon: BarChart3 },
-  { id: 'forex',       label: 'Forex',        icon: Globe },
-  { id: 'commodities', label: 'Commodities',  icon: Flame },
-  { id: 'macro',       label: 'Macro',        icon: Brain },
+  { id: 'options',     label: 'Options',     icon: Layers,    comingSoon: true },
+  { id: 'crypto',      label: 'Crypto',      icon: Coins },
+  { id: 'futures',     label: 'Futures',     icon: BarChart3 },
+  { id: 'forex',       label: 'Forex',       icon: Globe },
+  { id: 'commodities', label: 'Commodities', icon: Flame },
+  { id: 'macro',       label: 'Macro',       icon: Brain },
+  { id: 'etf',         label: 'ETF',         icon: PieChart,  comingSoon: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -81,7 +85,24 @@ export type MarketFunction =
   | 'cross-asset'
   | 'macro-models'
   | 'indicators'
-  | 'events';
+  | 'events'
+  // Options-specific
+  | 'options-chain'
+  | 'options-flow'
+  | 'options-volatility'
+  | 'options-greeks'
+  | 'options-iv-rank'
+  | 'options-oi-volume'
+  | 'options-unusual'
+  | 'options-strategy'
+  | 'options-simulator'
+  | 'options-earnings-iv'
+  // ETF-specific
+  | 'etf-overview'
+  | 'etf-screener'
+  | 'etf-holdings'
+  | 'etf-flows'
+  | 'etf-performance';
 
 export interface MarketFunctionMeta {
   id: MarketFunction;
@@ -411,6 +432,130 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       macro: '/app/macro/events',
     },
   },
+
+  // ── Options-specific ─────────────────────────────────────────────────────
+  {
+    id: 'options-chain',
+    label: 'Options Chain',
+    icon: Layers,
+    routes: {
+      options: '/app/options/chain',
+    },
+  },
+  {
+    id: 'options-flow',
+    label: 'Options Flow',
+    icon: Activity,
+    routes: {
+      options: '/app/options/flow',
+    },
+  },
+  {
+    id: 'options-volatility',
+    label: 'Volatility',
+    icon: LineChart,
+    routes: {
+      options: '/app/options/volatility',
+    },
+  },
+  {
+    id: 'options-greeks',
+    label: 'Greeks Monitor',
+    icon: Target,
+    routes: {
+      options: '/app/options/greeks-monitor',
+    },
+  },
+  {
+    id: 'options-iv-rank',
+    label: 'IV Rank',
+    icon: BarChart3,
+    routes: {
+      options: '/app/options/iv-rank',
+    },
+  },
+  {
+    id: 'options-oi-volume',
+    label: 'OI / Volume',
+    icon: BarChart3,
+    routes: {
+      options: '/app/options/oi-volume',
+    },
+  },
+  {
+    id: 'options-unusual',
+    label: 'Unusual Activity',
+    icon: Zap,
+    routes: {
+      options: '/app/options/unusual-activity',
+    },
+  },
+  {
+    id: 'options-strategy',
+    label: 'Strategy Builder',
+    icon: Brain,
+    routes: {
+      options: '/app/options/strategy',
+    },
+  },
+  {
+    id: 'options-simulator',
+    label: 'Simulator',
+    icon: Map,
+    routes: {
+      options: '/app/options/simulator',
+    },
+  },
+  {
+    id: 'options-earnings-iv',
+    label: 'Earnings IV Crush',
+    icon: Calendar,
+    routes: {
+      options: '/app/options/earnings-iv-crush',
+    },
+  },
+
+  // ── ETF-specific ──────────────────────────────────────────────────────────
+  {
+    id: 'etf-overview',
+    label: 'Overview',
+    icon: LayoutDashboard,
+    routes: {
+      etf: '/app/etf/overview',
+    },
+  },
+  {
+    id: 'etf-screener',
+    label: 'Screener',
+    icon: Search,
+    routes: {
+      etf: '/app/etf/screener',
+    },
+  },
+  {
+    id: 'etf-holdings',
+    label: 'Holdings',
+    icon: FileText,
+    routes: {
+      etf: '/app/etf/holdings',
+    },
+  },
+  {
+    id: 'etf-flows',
+    label: 'Fund Flows',
+    icon: TrendingUp,
+    routes: {
+      etf: '/app/etf/flows',
+    },
+  },
+  {
+    id: 'etf-performance',
+    label: 'Performance',
+    icon: LineChart,
+    routes: {
+      etf: '/app/etf/performance',
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -436,11 +581,13 @@ export function getMarketRoute(fn: MarketFunction, asset: AssetClass): string | 
 export const MARKETS_PATH_PREFIXES = [
   '/app/all-markets',
   '/app/stocks',
+  '/app/options',
   '/app/crypto',
   '/app/futures',
   '/app/forex',
   '/app/commodities',
   '/app/macro',
+  '/app/etf',
 ] as const;
 
 /** Paths that share a Markets prefix but belong to a different top-level product. */
@@ -464,11 +611,13 @@ export function isMarketsPath(pathname: string): boolean {
 export function assetFromPathname(pathname: string): AssetClass {
   const map: Array<[string, AssetClass]> = [
     ['/app/stocks',      'stocks'],
+    ['/app/options',     'options'],
     ['/app/crypto',      'crypto'],
     ['/app/futures',     'futures'],
     ['/app/forex',       'forex'],
     ['/app/commodities', 'commodities'],
     ['/app/macro',       'macro'],
+    ['/app/etf',         'etf'],
   ];
   for (const [prefix, asset] of map) {
     if (pathname.startsWith(prefix)) return asset;

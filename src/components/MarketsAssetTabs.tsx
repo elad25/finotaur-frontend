@@ -4,13 +4,14 @@
 // rendered inside SubNav when the active product is Markets.
 //
 // Replaces the AssetSelector dropdown from the top bar.
-// Clicking a tab: sets selectedAsset + navigates to that
-// asset's overview page (reuses AssetSelector onSelect logic).
+// Clicking a tab: sets selectedAsset + navigates to the FIRST
+// available function route for that asset (getMarketsItemsForAsset).
+// Tabs with comingSoon=true show a subtle "Soon" badge.
 // SSR-safe: no window/document access.
 // =====================================================
 
 import { useNavigate } from 'react-router-dom';
-import { ASSET_CLASSES } from '@/constants/markets';
+import { ASSET_CLASSES, getMarketsItemsForAsset } from '@/constants/markets';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +21,11 @@ export function MarketsAssetTabs() {
 
   const handleSelect = (assetId: (typeof ASSET_CLASSES)[number]['id']) => {
     setSelectedAsset(assetId);
-    navigate(`/app/${assetId}/overview`);
+    // Navigate to the first function route available for the chosen asset.
+    // Falls back to /app/<asset>/overview if no mapped functions exist yet.
+    const items = getMarketsItemsForAsset(assetId);
+    const firstRoute = items[0]?.routes[assetId] ?? `/app/${assetId}/overview`;
+    navigate(firstRoute);
   };
 
   return (
@@ -56,6 +61,18 @@ export function MarketsAssetTabs() {
           >
             <Icon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
             <span>{asset.label}</span>
+            {asset.comingSoon && (
+              <span
+                className="ml-0.5 rounded px-1 py-px text-[9px] font-semibold leading-none tracking-wide"
+                style={{
+                  color: 'rgba(201,166,70,0.65)',
+                  background: 'rgba(201,166,70,0.08)',
+                  border: '1px solid rgba(201,166,70,0.18)',
+                }}
+              >
+                Soon
+              </span>
+            )}
           </button>
         );
       })}
