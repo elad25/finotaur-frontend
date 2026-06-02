@@ -43,9 +43,8 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
   const { selectedAsset } = useAssetSelector();
   const { hasBetaAccess } = useAdminAuth();
 
-  // Research Lab is free ($0/user: SEC/FRED/Polygon-flat/cache) — open to all, no tier lock.
-  const domainLocked = false;
-
+  // Research Lab data is free; specific non-data items (Reports, Catalysts,
+  // Macro Models, Major Events, My Portfolio) carry fn.locked = closed to public.
   // Only the functions that have a route for the selected asset.
   const items = getMarketsItemsForAsset(selectedAsset);
 
@@ -55,24 +54,25 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
         const Icon = fn.icon;
         const route = fn.routes[selectedAsset]!; // always defined — getMarketsItemsForAsset filters these
 
-        const locked = domainLocked;
+        const itemLocked = fn.locked === true;         // closed to the public (paywall)
+        const blocked = itemLocked && !hasBetaAccess;   // regular users cannot open it
 
-        const active = !domainLocked &&
+        const active = !blocked &&
           (location.pathname === route || location.pathname.startsWith(route + '/'));
 
         return (
           <button
             key={fn.id}
             onClick={() => {
-              if (locked) return;
+              if (blocked) return;
               navigate(route);
             }}
-            disabled={locked}
+            disabled={blocked}
             title={!isExpanded ? fn.label : undefined}
             className={cn(
               itemBase,
               isExpanded ? itemExpanded : itemCollapsed,
-              locked
+              blocked
                 ? itemDisabled
                 : active
                   ? itemActive
@@ -84,14 +84,12 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
             {isExpanded && (
               <>
                 <span className={labelClass}>{fn.label}</span>
-                {domainLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
-                {/* Defensive: if a future market function gains a locked flag, show indicator for admin viewers */}
-                {hasBetaAccess && !domainLocked && (fn as { locked?: boolean }).locked && (
+                {itemLocked && (
                   <Lock
-                    className="h-3 w-3 flex-shrink-0"
+                    className="h-2.5 w-2.5 flex-shrink-0"
                     style={{ color: 'rgba(201,166,70,0.55)' }}
-                    title="Locked for regular users"
-                    aria-label="Locked for regular users"
+                    title="Closed to the public"
+                    aria-label="Closed to the public"
                   />
                 )}
               </>
@@ -101,13 +99,11 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
             {!isExpanded && (
               <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                 {fn.label}
-                {domainLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
-                {/* Defensive indicator for future gated market functions */}
-                {hasBetaAccess && !domainLocked && (fn as { locked?: boolean }).locked && (
+                {itemLocked && (
                   <Lock
-                    className="inline h-3 w-3 ml-1 flex-shrink-0"
+                    className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
                     style={{ color: 'rgba(201,166,70,0.55)' }}
-                    title="Locked for regular users"
+                    title="Closed to the public"
                   />
                 )}
               </div>
