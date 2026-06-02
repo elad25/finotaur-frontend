@@ -32,8 +32,6 @@ import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 import { BetaRoute } from "@/components/routes/BetaRoute";
 
-// 🎯 Guided Tour
-import GuidedTour from "@/components/onboarding/GuidedTour";
 import WelcomeOffer from "@/components/onboarding/WelcomeOffer";
 import { WelcomePopup } from "@/components/WelcomePopup";
 import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
@@ -374,8 +372,6 @@ function AppContent() {
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
       {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
-      {/* 🎯 Guided Tour Overlay - renders on top of everything */}
-      <GuidedTour />
       <WelcomeOffer />
       {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
       <WelcomePopup />
