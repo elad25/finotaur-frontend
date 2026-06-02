@@ -4,17 +4,16 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  Eye,
   Layers3,
   ShieldCheck,
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
-import type { PortfolioSnapshot, PerformancePoint } from './hooks/usePortfolioData';
+import type { PortfolioSnapshot } from './hooks/usePortfolioData';
+import { PortfolioValuePanel } from './brief/panels/PortfolioValuePanel';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { ideaToOpportunity, TICKER_TO_NAME } from './utils/opportunityMapper';
@@ -22,12 +21,11 @@ import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
-import { robustExtent, clampToRange } from '@/lib/portfolio/metrics';
 
 // Time-range list lives inside PerformanceChart now.
 
 export function FinotaurCopilotDashboard() {
-  const [range, setRange] = useState<TimeRange>('1Y');
+  const [range, setRange] = useState<TimeRange>('1M');
   const snapshot = usePortfolioData(range);
   const ib = useIBConnection();
 
@@ -231,99 +229,6 @@ function PremiumFrame({ children, className = '' }: { children: ReactNode; class
   );
 }
 
-function PortfolioValuePanel({
-  className,
-  range,
-  snapshot,
-}: {
-  className?: string;
-  range: TimeRange;
-  snapshot: PortfolioSnapshot;
-}) {
-  // Sum all CASH-class holdings to derive cash balance.
-  // assetClass is carried on Holding when sourced from IBRIT; absent on mock holdings.
-  const cashBalance = snapshot.holdings
-    .filter((h) => h.assetClass === 'CASH')
-    .reduce((sum, h) => sum + h.marketValue, 0);
-
-  return (
-    <PremiumFrame className={`min-h-[260px] ${className}`}>
-      <div className="p-5 h-full grid grid-rows-[1fr_auto]">
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="text-eyebrow uppercase text-ink-tertiary">TOTAL PORTFOLIO VALUE</p>
-            <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
-          </div>
-          <Price
-            value={snapshot.totalValue}
-            size="display"
-            className="mt-5 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
-          />
-          {/* Period change (% + $ sub) on the left, real sparkline on the right. */}
-          <div className="mt-6 grid grid-cols-[1fr_auto] gap-5 items-end">
-            <Stat
-              label="PERIOD CHANGE"
-              value={<Change value={snapshot.changePercent} />}
-              sub={<Change value={snapshot.changeAbs} format="currency" />}
-            />
-            <PortfolioSparkline series={snapshot.series} />
-          </div>
-        </div>
-        {/* Single AVAILABLE CASH stat — cash and buying power are identical for cash-only accounts. */}
-        {/* TODO: when IB account summary surfaces margin, split into two stats again. */}
-        <div className="border-t border-gold-primary/12 mt-6 pt-5">
-          <Stat label="AVAILABLE CASH" value={<Price value={cashBalance} size="small" />} />
-        </div>
-        <div className="absolute right-4 top-4 text-[10px] text-gold-primary/70">{range}</div>
-      </div>
-    </PremiumFrame>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode | null }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">{label}</p>
-      <div className="mt-2 text-sm leading-none">{value}</div>
-      {sub && <div className="mt-1 text-xs leading-none">{sub}</div>}
-    </div>
-  );
-}
-
-/**
- * PortfolioSparkline — small inline curve derived from the live series.
- * Replaces the previous MiniReturn component whose SVG path was hardcoded
- * (mock decoration that never reflected real portfolio history).
- * Shows the last 30 points so the curve has visible shape even for short ranges.
- */
-function PortfolioSparkline({ series }: { series: PerformancePoint[] }) {
-  if (series.length < 2) {
-    // No history yet — render an empty box at the same footprint to keep layout stable.
-    return <div className="h-7 w-28" aria-hidden="true" />;
-  }
-  const recent = series.slice(-30);
-  const values = recent.map((p) => p.value);
-  const { min, max } = robustExtent(values);
-  const valueRange = max - min || 1;
-  const W = 120;
-  const H = 28;
-
-  const points = recent.map((p, i) => {
-    const x = (i / Math.max(recent.length - 1, 1)) * W;
-    const clampedValue = clampToRange(p.value, min, max);
-    const y = H - ((clampedValue - min) / valueRange) * H;
-    return [x, y] as const;
-  });
-  const line = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
-  const area = `${line} L${W} ${H} L0 ${H} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-7 w-28 text-gold-primary" aria-hidden="true">
-      <path d={area} fill="currentColor" opacity="0.12" />
-      <path d={line} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function AiBrainPanel({ className }: { className?: string }) {
   return (

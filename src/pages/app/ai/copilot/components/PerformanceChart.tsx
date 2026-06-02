@@ -223,13 +223,15 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
         >
           <defs>
             <linearGradient id="copilotSvgArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#F4D97B" stopOpacity="0.30" />
-              <stop offset="100%" stopColor="#C9A646" stopOpacity="0.02" />
+              <stop offset="0%"   stopColor="#F4D97B" stopOpacity="0.52" />
+              <stop offset="28%"  stopColor="#E8C96A" stopOpacity="0.28" />
+              <stop offset="68%"  stopColor="#C9A646" stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#C9A646" stopOpacity="0.01" />
             </linearGradient>
             <linearGradient id="copilotSvgLine" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#A98220" />
-              <stop offset="42%" stopColor="#F4D97B" />
-              <stop offset="100%" stopColor="#C9A646" />
+              <stop offset="0%"   stopColor="#B8911F" />
+              <stop offset="42%"  stopColor="#F4D97B" />
+              <stop offset="100%" stopColor="#D4B04E" />
             </linearGradient>
           </defs>
 
@@ -272,7 +274,7 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
           })}
 
           <path d={chart.areaPath} fill="url(#copilotSvgArea)" />
-          <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
           {xAxisLabels.map(({ ratio, label }) => {
             const x = PADDING.left + ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
