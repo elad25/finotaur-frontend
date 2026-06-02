@@ -164,8 +164,12 @@ const ProductShowcase = () => {
 
             {/* Calendar image */}
             <img
-              src="/assets/finotaur-calender.png"
+              src="/assets/finotaur-calender.webp"
               alt="Finotaur Trading Journal — Calendar View with P&L tracking"
+              width={1462}
+              height={853}
+              loading="lazy"
+              decoding="async"
               className="w-full h-auto block"
               style={{ pointerEvents: 'none' }}
               draggable={false}
