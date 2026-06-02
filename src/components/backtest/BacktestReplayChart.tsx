@@ -43,6 +43,9 @@ import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { PositionBox, type PositionBoxModel } from '@/components/charting/PositionBox';
 import { ReplayControls } from './ReplayControls';
+import { useDrawings } from '@/components/ReplayChart/hooks/useDrawings';
+import { DrawingLayer } from '@/components/ReplayChart/drawings/DrawingLayer';
+import { DrawingToolbar } from '@/components/ReplayChart/ui/DrawingToolbar';
 
 // Height of the time-axis row (lightweight-charts default is ~28px).
 const TIMESCALE_HEIGHT = 28;
@@ -177,6 +180,11 @@ export interface BacktestReplayChartProps {
   placeOrderArmed?: boolean;
   /** Called with (price, currentPrice) when the user clicks while placeOrderArmed. */
   onPlaceLimitAtPrice?: (price: number, currentPrice: number) => void;
+  /**
+   * Mount the TradingView-style drawing tools overlay (toolbar + canvas layer).
+   * Defaults to true. Set to false to suppress drawing tools entirely.
+   */
+  enableDrawings?: boolean;
 }
 
 type LoadState =
@@ -202,6 +210,7 @@ export function BacktestReplayChart({
   positionOverlay,
   placeOrderArmed = false,
   onPlaceLimitAtPrice,
+  enableDrawings = true,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -255,6 +264,32 @@ export function BacktestReplayChart({
   useEffect(() => { scissorsArmedRef.current = scissorsArmed; }, [scissorsArmed]);
   useEffect(() => { placeOrderArmedRef.current = placeOrderArmed; }, [placeOrderArmed]);
   useEffect(() => { onPlaceLimitAtPriceRef.current = onPlaceLimitAtPrice; }, [onPlaceLimitAtPrice]);
+
+  // ─── Drawing tools ───────────────────────────────────────────
+  const {
+    drawings,
+    activeDrawing,
+    selectedDrawing,
+    currentTool,
+    canUndo,
+    canRedo,
+    setCurrentTool,
+    deleteSelected,
+    lockSelected,
+    toggleVisibility,
+    undo,
+    redo,
+  } = useDrawings({
+    symbol,
+    theme: 'dark',
+    autoSave: true,
+  });
+
+  // Mirror current drawing tool into a ref so chart-lifecycle closures
+  // (subscribeClick, mousedown) can read the latest value without being
+  // re-registered — same pattern as scissorsArmedRef / placeOrderArmedRef.
+  const currentToolRef = useRef(currentTool);
+  useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -420,6 +455,9 @@ export function BacktestReplayChart({
       // (it fired before subscribeClick). Skip all other click behaviours so we
       // don't also trigger jump/trade on the same click.
       if (placeOrderArmedRef.current) return;
+      // Drawing tool active: the DrawingLayer overlay handles pointer events.
+      // Suppress all trading/jump interactions while any drawing tool is selected.
+      if (currentToolRef.current !== 'cursor' && currentToolRef.current !== 'cross') return;
       const clickedTime = param.time as number;
       // Scissors armed → this click is a time-rewind (jump). Disarm right after
       // so the next click trades normally and the scissors cursor disappears.
@@ -554,6 +592,8 @@ export function BacktestReplayChart({
     // subscribeClick would still fire for the same event.
     const handlePlaceOrderMousedown = (e: MouseEvent) => {
       if (e.button !== 0) return; // left button only
+      // Drawing tool active: let the DrawingLayer handle this pointer event.
+      if (currentToolRef.current !== 'cursor' && currentToolRef.current !== 'cross') return;
       if (!placeOrderArmedRef.current || !onPlaceLimitAtPriceRef.current) return;
       if (!seriesRef.current || !containerRef.current) return;
       e.preventDefault();
@@ -867,6 +907,43 @@ export function BacktestReplayChart({
             redrawKey={overlayTick}
             onStopLossChange={positionOverlay.onStopLossChange}
             onTakeProfitChange={positionOverlay.onTakeProfitChange}
+          />
+        )}
+
+        {/* ── Drawing canvas overlay — sits above chart canvas, below UI chrome.
+            pointer-events are managed by DrawingLayer itself: auto when a draw
+            tool is active, none in cursor/cross mode so chart interactions pass
+            through. Re-renders on overlayTick (pan/zoom/resize) to keep coords
+            in sync — same pattern as PositionBox. ── */}
+        {enableDrawings && chartRef.current && seriesRef.current && (
+          <DrawingLayer
+            key={`drawing-layer-${overlayTick}`}
+            drawings={drawings}
+            activeDrawing={activeDrawing}
+            chart={chartRef.current}
+            candlestickSeries={seriesRef.current}
+            containerRef={containerRef}
+            theme="dark"
+          />
+        )}
+
+        {/* ── Drawing toolbar — vertical strip on the left edge, below the
+            ReplayControls top bar. z-[30] keeps it above all overlays. ── */}
+        {enableDrawings && (
+          <DrawingToolbar
+            currentTool={currentTool}
+            hasSelection={!!selectedDrawing}
+            isSelectionLocked={selectedDrawing?.locked ?? false}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            theme="dark"
+            onToolSelect={setCurrentTool}
+            onDeleteSelected={deleteSelected}
+            onUndo={undo}
+            onRedo={redo}
+            onLockToggle={lockSelected}
+            onVisibilityToggle={toggleVisibility}
+            className="absolute left-2 top-2 z-[30]"
           />
         )}
 
