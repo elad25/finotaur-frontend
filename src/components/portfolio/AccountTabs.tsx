@@ -134,11 +134,11 @@ export function AccountTabs({
 
             {/* Dropdown menu */}
             {openDropdownIndex === i && (
-              <div className="absolute top-full left-0 mt-1 z-50 w-36 rounded-md border border-border-ds-subtle bg-surface-1 shadow-lg overflow-hidden">
+              <div className="absolute top-full left-0 mt-1 z-[60] w-36 rounded-md border border-border-ds-subtle bg-surface-base shadow-xl overflow-hidden">
                 <button
                   type="button"
                   onClick={() => startRename(i)}
-                  className="w-full text-left px-3 py-2 text-sm text-ink-primary hover:bg-white/5 transition-colors"
+                  className="w-full text-left px-3 py-2 text-sm text-ink-primary hover:bg-white/10 transition-colors"
                 >
                   Rename
                 </button>
@@ -153,7 +153,7 @@ export function AccountTabs({
                     'w-full text-left px-3 py-2 text-sm transition-colors',
                     accounts.length <= 1
                       ? 'text-ink-tertiary cursor-not-allowed'
-                      : 'text-num-negative hover:bg-white/5',
+                      : 'text-num-negative hover:bg-white/10',
                   )}
                 >
                   Remove
