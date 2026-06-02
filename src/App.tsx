@@ -315,6 +315,9 @@ const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"))
 // To re-enable: restore lazy imports below, swap ComingSoon back in routes, set OPTIONS_ENABLED=true in constants/nav.ts
 import OptionsComingSoon from "@/pages/app/ComingSoon";
 
+// Portfolio
+const MyPortfolioPage = lazy(() => import("@/pages/app/portfolio/MyPortfolioPage"));
+
 // AI
 const AIMyPortfolio = lazy(() => import("@/pages/app/ai/MyPortfolio"));
 const AIStockAnalyzer = lazy(() => import("@/pages/app/ai/StockAnalyzer"));
@@ -576,6 +579,9 @@ function AppContent() {
           <Route path="ai/upcoming-events" element={<SuspenseRoute><UpcomingEventsView /></SuspenseRoute>} />
           {/* FINO AI: legacy AI Assistant page → redirect; chat now opens via the FINO AI side widget. */}
           <Route path="ai/assistant" element={<Navigate to="/app/ai/stock-analyzer" replace />} />
+          {/* MY PORTFOLIO */}
+          <Route path="portfolio" element={<SuspenseRoute><MyPortfolioPage /></SuspenseRoute>} />
+
           {/* JOURNAL */}
           <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
           <Route path="journal/overview" element={<JournalRoute><JournalOverview /></JournalRoute>} />
