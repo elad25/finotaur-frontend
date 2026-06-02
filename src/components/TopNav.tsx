@@ -25,7 +25,6 @@ import { Wordmark } from '@/components/ds/Wordmark';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useProductDrawer } from '@/contexts/ProductDrawerContext';
-import FinoAvatar from '@/components/fino/FinoAvatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -171,7 +170,16 @@ export const TopNav = () => {
             aria-label="Ask FINO AI"
             data-tour="fino"
           >
-            <FinoAvatar size={36} thinking={false} assistantCount={0} className="h-9 w-9" />
+            <video
+              src="/fino/fino-idle-long.mp4"
+              poster="/fino/fino-idle-long-poster.png"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-hidden="true"
+              className="h-9 w-9 object-contain"
+            />
             <span>Ask Fino</span>
           </button>
 
@@ -182,7 +190,16 @@ export const TopNav = () => {
             className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors flex-shrink-0"
             aria-label="Ask FINO AI"
           >
-            <FinoAvatar size={36} thinking={false} assistantCount={0} className="h-9 w-9" />
+            <video
+              src="/fino/fino-idle-long.mp4"
+              poster="/fino/fino-idle-long-poster.png"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-hidden="true"
+              className="h-9 w-9 object-contain"
+            />
           </button>
 
           {/* User menu */}
