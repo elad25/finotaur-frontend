@@ -206,7 +206,7 @@ export function cleanupMigration() {
 }
 
 // Export for console access
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).finotaurMigration = {
     run: runFullMigration,
     restore: restoreFromBackup,

@@ -251,7 +251,7 @@ export const TopNav = () => {
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
               <DropdownMenuItem
-                onClick={() => navigate('/app/settings')}
+                onClick={() => navigate('/app/settings?tab=billing')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
                 <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
