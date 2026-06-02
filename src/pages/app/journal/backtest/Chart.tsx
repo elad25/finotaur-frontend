@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BacktestImmersiveMode } from "@/components/BacktestImmersiveMode";
+import { BacktestChart } from "@/components/backtest/BacktestChart";
 import { CreateBacktestSessionModal } from "@/components/backtest/CreateBacktestSessionModal";
 import { useBacktestSessionStore } from "@/store/useBacktestSessionStore";
 import type { BacktestSession } from "@/types/backtestSession";
@@ -61,10 +61,28 @@ export default function Chart() {
 
   if (isImmersiveMode) {
     return (
-      <BacktestImmersiveMode
-        session={activeSession}
-        onExit={() => setIsImmersiveMode(false)}
-      />
+      <div className="h-full w-full flex flex-col bg-[#0A0A0A]">
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-white/10 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsImmersiveMode(false)}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-[#C9A646] transition-colors"
+          >
+            <ChevronRight className="h-4 w-4 rotate-180" /> Back
+          </button>
+          {activeSession && (
+            <span className="text-sm text-white font-medium">
+              {activeSession.name}
+              <span className="text-gray-500 font-normal">
+                {" · "}{activeSession.symbol} · ${activeSession.startBalance.toLocaleString()}
+              </span>
+            </span>
+          )}
+        </div>
+        <div className="flex-1 min-h-0">
+          <BacktestChart startingBalance={activeSession?.startBalance} />
+        </div>
+      </div>
     );
   }
 
