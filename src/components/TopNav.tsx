@@ -127,10 +127,10 @@ export const TopNav = () => {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => navigate('/app/top-secret')}
-            className="flex items-center cursor-pointer flex-shrink-0 pr-2 lg:pr-4"
+            className="flex items-center cursor-pointer flex-shrink-0"
             aria-label="FINOTAUR home"
           >
-            <Wordmark size="large" interactive />
+            <Wordmark size="nav" interactive />
           </button>
 
           <button
