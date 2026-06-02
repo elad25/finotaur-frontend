@@ -152,6 +152,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       home: '/app/all-markets/heatmap',
     },
+    locked: true, // Polygon redistribution license required — closed to public
   },
   {
     id: 'movers',
@@ -160,6 +161,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       home: '/app/all-markets/movers',
     },
+    locked: true, // Polygon redistribution license required — closed to public
   },
   {
     id: 'calendar',
@@ -238,6 +240,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       stocks: '/app/stocks/upgrades',
     },
+    locked: true, // analyst ratings = Finnhub/FMP, no redistribution license — closed to public
   },
   {
     id: 'valuation',
@@ -262,6 +265,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       stocks: '/app/stocks/earnings',
     },
+    locked: true, // earnings calendar = Finnhub, no commercial license — closed to public
   },
 
   // ── Crypto-specific ───────────────────────────────────────────────────────
