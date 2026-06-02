@@ -254,6 +254,13 @@ export default {
           "0%, 100%": { opacity: "0.3" },
           "50%": { opacity: "0.6" }
         },
+        "fino-wiggle": {
+          "0%, 78%, 100%": { transform: "rotate(0deg) scale(1)" },
+          "82%": { transform: "rotate(-8deg) scale(1.08)" },
+          "86%": { transform: "rotate(6deg) scale(1.06)" },
+          "90%": { transform: "rotate(-4deg) scale(1.05)" },
+          "94%": { transform: "rotate(2deg) scale(1.03)" }
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -267,6 +274,7 @@ export default {
         "gradient-x": "gradient-x 3s ease infinite",
         "pulse-glow": "pulse-glow 3s ease-in-out infinite",
         "subtle-glow": "subtle-glow 4s ease-in-out infinite",
+        "fino-wiggle": "fino-wiggle 4s ease-in-out infinite",
       },
       backgroundColor: {
         // FINOTAUR — Section/Atmospheric (added 2026-05-03)
