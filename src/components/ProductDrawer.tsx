@@ -45,7 +45,7 @@ const PRODUCT_META: Record<string, { icon: LucideIcon; sublabel: string }> = {
 // ProductDrawer
 // ---------------------------------------------------------------------------
 export function ProductDrawer() {
-  const { isOpen, close } = useProductDrawer();
+  const { isOpen, close, tourMode } = useProductDrawer();
   const { domainId } = useDomain();
   const { hasBetaAccess, isAdmin } = useAdminAuth();
   const navigate = useNavigate();
@@ -71,12 +71,20 @@ export function ProductDrawer() {
       direction="left"
       // Disable body scale for left-side drawers (scale is a bottom-sheet affordance)
       shouldScaleBackground={false}
+      // During the tour: disable modal behaviours so the hero card overlay
+      // remains interactive (no focus trap, no scroll lock, no inert siblings,
+      // no outside-click close).
+      modal={!tourMode}
+      dismissible={!tourMode}
     >
       <DrawerPrimitive.Portal>
-        {/* Overlay */}
-        <DrawerPrimitive.Overlay
-          className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-[2px]"
-        />
+        {/* Overlay — suppressed during the onboarding tour so the SpotlightTour
+            overlay is the sole dim layer (no double-dim). */}
+        {!tourMode && (
+          <DrawerPrimitive.Overlay
+            className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-[2px]"
+          />
+        )}
 
         {/* Panel */}
         <DrawerPrimitive.Content
@@ -132,6 +140,7 @@ export function ProductDrawer() {
               return (
                 <button
                   key={id}
+                  data-tour={`drawer-product-${id}`}
                   onClick={() => handleProductClick(id)}
                   disabled={locked}
                   className={cn(
