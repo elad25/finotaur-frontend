@@ -102,6 +102,12 @@ const STEPS: TourStep[] = [
 
 const PAD = 6; // px padding around the target
 
+// Smooth glide between steps so the spotlight/card never "jumps" (and never
+// detours through the centered layout) when moving from one target to the next.
+const GLIDE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
+const SPOT_TRANSITION = `left 0.4s ${GLIDE_EASE}, top 0.4s ${GLIDE_EASE}, width 0.4s ${GLIDE_EASE}, height 0.4s ${GLIDE_EASE}`;
+const POS_TRANSITION = `left 0.4s ${GLIDE_EASE}, top 0.4s ${GLIDE_EASE}`;
+
 interface SpotlightProps {
   rect: DOMRect;
 }
@@ -125,6 +131,7 @@ function SpotlightHighlight({ rect }: SpotlightProps) {
         border: '2px solid #C9A646',
         borderRadius: 8,
         filter: 'drop-shadow(0 0 8px rgba(201,166,70,0.5))',
+        transition: SPOT_TRANSITION,
         zIndex: 9990,
       }}
     />
@@ -152,7 +159,7 @@ function ArrowPointer({ targetRect, cardIsRight }: ArrowPointerProps) {
       <motion.div
         aria-hidden="true"
         className="pointer-events-none fixed"
-        style={{ left: arrowX, top: arrowY, zIndex: 9991, color: '#C9A646' }}
+        style={{ left: arrowX, top: arrowY, zIndex: 9991, color: '#C9A646', transition: POS_TRANSITION }}
         animate={{ x: [0, 6, 0] }}
         transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
       >
@@ -174,7 +181,7 @@ function ArrowPointer({ targetRect, cardIsRight }: ArrowPointerProps) {
     <motion.div
       aria-hidden="true"
       className="pointer-events-none fixed"
-      style={{ left: arrowX, top: arrowY, zIndex: 9991, color: '#C9A646' }}
+      style={{ left: arrowX, top: arrowY, zIndex: 9991, color: '#C9A646', transition: POS_TRANSITION }}
       animate={{ y: [0, 6, 0] }}
       transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
     >
@@ -237,6 +244,7 @@ function HeroCard({
         top: Math.min(cardTop, vpH - CARD_ESTIMATE_H - 12),
         left: cardLeft,
         width: CARD_WIDTH,
+        transition: POS_TRANSITION,
         zIndex: 9991,
       };
     } else {
@@ -270,6 +278,7 @@ function HeroCard({
           top: cardTop,
           left: cardLeft,
           width: CARD_WIDTH,
+          transition: POS_TRANSITION,
           zIndex: 9991,
         };
       }
@@ -452,8 +461,10 @@ export default function SpotlightTour() {
   useEffect(() => {
     if (!active || !currentStep) return;
 
-    // Reset state for the new step
-    setTargetRect(null);
+    // Keep the previous targetRect in place so the spotlight + hero card
+    // GLIDE to the new target (CSS transition) instead of detouring through
+    // the centered (null-rect) layout — which caused visible "jumps" between
+    // steps, especially 4→5→6 where the targets are far apart.
     setMode('spotlight');
 
     const startTime = Date.now();
