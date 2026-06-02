@@ -563,9 +563,9 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'My Portfolio',
     icon: Wallet,
     routes: {
-      home: '/app/ai/my-portfolio',
+      home: '/app/portfolio',
     },
-    locked: true, // Copilot/portfolio — closed to public (not free Research Lab data)
+    locked: false, // Manual portfolio builder — free, open to all signed-in users
   },
 ];
 
