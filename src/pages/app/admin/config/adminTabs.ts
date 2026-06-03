@@ -22,6 +22,7 @@ import {
   Crown,
   TrendingUp,
   Brain,
+  Search,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -78,6 +79,16 @@ export const ADMIN_TABS: AdminTab[] = [
     phase: 2,
     enabled: true,
     description: 'Per-user AI usage leaderboard + per-tier cost averages',
+  },
+  {
+    id: 'seo',
+    label: 'SEO',
+    path: '/app/admin/seo',
+    icon: Search,
+    phase: 5,
+    enabled: true,
+    description: 'Organic traffic analytics for /research/* pages',
+    planned: false,
   },
   {
     id: 'billing',

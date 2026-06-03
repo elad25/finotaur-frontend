@@ -1,6 +1,7 @@
 // index.ts
-export { ReplayChart } from './ReplayChart';
-export type { ReplayChartProps, ReplayChartRef } from './ReplayChart';
+// (ReplayChart standalone immersive shell removed — superseded by
+//  BacktestChart + BacktestReplayChart. Drawing engine under
+//  drawings/ hooks/ ui/ is still consumed via full-path imports.)
 
 // Re-export types for convenience
 export type {

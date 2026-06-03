@@ -174,7 +174,7 @@ export default function WelcomeOffer() {
             className="absolute inset-0 rounded-full"
             animate={pulseGift ? { scale: [1, 1.6, 1.8], opacity: [0.4, 0.15, 0] } : {}}
             transition={{ duration: 1.2, ease: 'easeOut' }}
-            style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.5) 0%, transparent 70%)' }}
+            style={{ background: 'radial-gradient(circle, rgba(201,166,70,0.5) 0%, transparent 70%)' }}
           />
 
           {/* Button — solid purple circle */}
@@ -183,11 +183,11 @@ export default function WelcomeOffer() {
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
             style={{
-              background: 'linear-gradient(135deg, #7C3AED, #8B5CF6)',
-              boxShadow: '0 8px 32px rgba(139,92,246,0.4), 0 0 20px rgba(139,92,246,0.2)',
+              background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
+              boxShadow: '0 8px 32px rgba(201,166,70,0.4), 0 0 20px rgba(201,166,70,0.2)',
             }}
           >
-            <Gift className="w-6 h-6 text-white" />
+            <Gift className="w-6 h-6 text-[#1a1510]" />
             {/* Timer badge */}
             <div
               className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
@@ -206,9 +206,9 @@ export default function WelcomeOffer() {
             <div
               className="px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap"
               style={{
-                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                border: '1px solid rgba(139,92,246,0.4)',
-                color: '#fff',
+                background: 'linear-gradient(135deg, #1a1510, #0a0a0a)',
+                border: '1px solid rgba(201,166,70,0.4)',
+                color: '#F4D97B',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
               }}
             >

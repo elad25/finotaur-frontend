@@ -68,6 +68,7 @@ async function generateAISectionAnthropic(
 
 interface UseServerAIResult {
   response: string | null;
+  structured: { headline: string; points: string[] } | null;
   isLoading: boolean;
   error: string | null;
   generate: () => void;
@@ -78,6 +79,7 @@ interface UseServerAIResult {
 
 function useServerAI(section: 'regime' | 'positioning' | 'risk'): UseServerAIResult {
   const [response, setResponse] = useState<string | null>(null);
+  const [structured, setStructured] = useState<{ headline: string; points: string[] } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
@@ -100,6 +102,15 @@ function useServerAI(section: 'regime' | 'positioning' | 'risk'): UseServerAIRes
         const sectionData = cached?.[section];
         if (sectionData?.analysis) {
           setResponse(sectionData.analysis);
+          // Prefer the structured field; fall back to parsing the analysis string.
+          if (sectionData.structured) {
+            setStructured(sectionData.structured);
+          } else {
+            try {
+              const parsed = JSON.parse(sectionData.analysis) as { headline: string; points: string[] };
+              if (parsed?.headline && Array.isArray(parsed?.points)) setStructured(parsed);
+            } catch { /* legacy plain-text analysis — keep structured null */ }
+          }
           setFromCache(true);
           setAgeMinutes(sectionData.ageMinutes ?? null);
         }
@@ -110,7 +121,7 @@ function useServerAI(section: 'regime' | 'positioning' | 'risk'): UseServerAIRes
     return () => { cancelled = true; };
   }, [section]);
 
-  // Generate (calls backend POST, which calls OpenAI once for all users)
+  // Generate (calls backend POST, which calls Anthropic once for all users)
   const generate = useCallback(async () => {
     if (isLoading) return;
     setIsLoading(true);
@@ -132,6 +143,14 @@ function useServerAI(section: 'regime' | 'positioning' | 'risk'): UseServerAIRes
 
       if (result.analysis) {
         setResponse(result.analysis);
+        if (result.structured) {
+          setStructured(result.structured);
+        } else {
+          try {
+            const parsed = JSON.parse(result.analysis) as { headline: string; points: string[] };
+            if (parsed?.headline && Array.isArray(parsed?.points)) setStructured(parsed);
+          } catch { /* legacy plain-text — keep structured null */ }
+        }
         setFromCache(result.cached);
         setAgeMinutes(result.ageMinutes ?? 0);
       }
@@ -144,7 +163,7 @@ function useServerAI(section: 'regime' | 'positioning' | 'risk'): UseServerAIRes
     }
   }, [section, isLoading]);
 
-  return { response, isLoading, error, generate, fromCache, ageMinutes, rateLimited };
+  return { response, structured, isLoading, error, generate, fromCache, ageMinutes, rateLimited };
 }
 
 // =====================================================
@@ -156,6 +175,7 @@ const AISectionCard = memo(({
   title,
   subtitle,
   response,
+  structured,
   isLoading,
   error,
   fromCache,
@@ -169,6 +189,7 @@ const AISectionCard = memo(({
   title: string;
   subtitle: string;
   response: string | null;
+  structured: { headline: string; points: string[] } | null;
   isLoading: boolean;
   error: string | null;
   fromCache: boolean;
@@ -271,10 +292,26 @@ const AISectionCard = memo(({
           </div>
         )}
 
-        {/* Response */}
+        {/* Response — structured (headline + bullets) preferred, plain-text fallback */}
         {response && (
           <div className="p-5 rounded-xl" style={{ background: `${accentColor}08`, border: `1px solid ${accentColor}20` }}>
-            <p className="text-sm text-[#E8DCC4] leading-relaxed whitespace-pre-wrap">{response}</p>
+            {structured ? (
+              <>
+                <p className="text-sm font-semibold text-[#E8DCC4] leading-snug mb-ds-3">
+                  {structured.headline}
+                </p>
+                <ul className="space-y-ds-2">
+                  {structured.points.map((point, i) => (
+                    <li key={i} className="flex items-baseline gap-ds-2 text-sm text-ink-primary">
+                      <span className="text-gold-primary shrink-0 select-none">•</span>
+                      <span className="text-[#E8DCC4] leading-relaxed">{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-sm text-[#E8DCC4] leading-relaxed whitespace-pre-wrap">{response}</p>
+            )}
           </div>
         )}
 
@@ -730,6 +767,7 @@ function AITab() {
         title="Market Regime Analysis"
         subtitle="AI assessment of current economic regime & key drivers"
         response={regime.response}
+        structured={regime.structured}
         isLoading={regime.isLoading}
         error={regime.error}
         fromCache={regime.fromCache}
@@ -748,6 +786,7 @@ function AITab() {
             title="Portfolio Positioning"
             subtitle="Sector allocation, factor tilts & trade ideas"
             response={positioning.response}
+            structured={positioning.structured}
             isLoading={positioning.isLoading}
             error={positioning.error}
             fromCache={positioning.fromCache}
@@ -763,6 +802,7 @@ function AITab() {
             title="Risk Radar"
             subtitle="Tail risks, early warnings & hedging playbook"
             response={risk.response}
+            structured={risk.structured}
             isLoading={risk.isLoading}
             error={risk.error}
             fromCache={risk.fromCache}

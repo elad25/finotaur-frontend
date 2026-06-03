@@ -37,6 +37,18 @@ async function safeFetch<T>(url: string): Promise<T | null> {
 // SERVER CACHE HELPERS
 // =====================================================
 
+const TYPE_BODY_KEY: Record<string, string> = {
+  'brief': 'briefData',
+  'valuation': 'valuationData',
+  'data': 'marketData',
+  'analyst': 'analystData',
+  'quote': 'quoteData',
+  'earnings-tab': 'earningsData',
+  'wallstreet': 'wallStreetData',
+  'quarterly': 'quarterlyData',
+  'investor-profile': 'profileData',
+};
+
 export async function saveToServerCache(
   ticker: string,
   type: string,
@@ -45,9 +57,10 @@ export async function saveToServerCache(
 ) {
   try {
     const BASE = import.meta.env.VITE_API_URL || '';
+    const bodyKey = TYPE_BODY_KEY[type] ?? 'data';
 await authFetch(`${BASE}/api/stock-cache/${ticker}/${type}`, {      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data, earningsDate: earningsDate || null }),
+      body: JSON.stringify({ [bodyKey]: data, earningsDate: earningsDate || null }),
     });
   } catch { /* non-critical */ }
 }

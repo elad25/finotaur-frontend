@@ -1,49 +1,222 @@
 import { useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  Eye,
   Layers3,
   ShieldCheck,
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
 import type { PortfolioSnapshot } from './hooks/usePortfolioData';
+import { PortfolioValuePanel } from './brief/panels/PortfolioValuePanel';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { ideaToOpportunity, TICKER_TO_NAME } from './utils/opportunityMapper';
 import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
+import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
+import { CopilotEmptyState } from './components/CopilotEmptyState';
 
 // Time-range list lives inside PerformanceChart now.
 
 export function FinotaurCopilotDashboard() {
-  const [range, setRange] = useState<TimeRange>('1Y');
+  const [range, setRange] = useState<TimeRange>('1M');
   const snapshot = usePortfolioData(range);
   const ib = useIBConnection();
 
+  if (ib.loading) {
+    return (
+      <ErrorBoundary boundary="ai-copilot">
+        <div className="mt-5 flex items-center justify-center py-20">
+          <Spinner size="md" />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  if (!ib.isConnected) {
+    return (
+      <ErrorBoundary boundary="ai-copilot">
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+          <div className="xl:col-span-8 xl:row-span-2">
+            <CopilotEmptyState
+              title="Connect to unlock your portfolio command center"
+              description="Real-time portfolio value, allocation, sector exposure, risk analysis, and AI insights — all computed from your live broker holdings. Top opportunities and market signals work without a broker."
+            />
+          </div>
+          <AiBrainPanel className="xl:col-span-4" />
+          <div className="xl:col-span-4">
+            <TopOpportunitiesPanel />
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  // Connected but positions not yet synced (source !== 'live') — never render
+  // the empty/zero snapshot as if it were the user's real portfolio.
+  if (snapshot.source !== 'live') {
+    return (
+      <ErrorBoundary boundary="ai-copilot">
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+          <div className="xl:col-span-8 xl:row-span-2">
+            <CopilotEmptyState
+              title="Syncing your portfolio…"
+              description="Your broker is connected. We're pulling your live positions — this usually completes within a few minutes of the first sync. Top opportunities and market signals are ready below."
+            />
+          </div>
+          <AiBrainPanel className="xl:col-span-4" />
+          <div className="xl:col-span-4">
+            <TopOpportunitiesPanel />
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  // Connected — compute risk once and pass down
+  const analysis = computeRiskAnalysis(snapshot.holdings, snapshot.totalValue);
+
   return (
-    <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
-      <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} isConnected={ib.isConnected} />
-      <AiBrainPanel className="xl:col-span-4" />
-      <InsightsPanel className="xl:col-span-4" />
+    <ErrorBoundary boundary="ai-copilot">
+      <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} />
+        <AiBrainPanel className="xl:col-span-4" />
+        <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
-      <div className="xl:col-span-8">
-        <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
-      </div>
-      <div className="xl:col-span-4">
-        <TopOpportunitiesPanel />
-      </div>
+        {/* Action Items strip — the portfolio-manager voice. Turns analysis into
+            "what should I do today" cards. Each card links to the relevant page. */}
+        <ActionItemsStrip analysis={analysis} />
 
-      <AllocationPanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
-      <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
-      <RiskAnalysisPanel className="xl:col-span-4" />
-    </div>
+        <div className="xl:col-span-8">
+          <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
+        </div>
+        <div className="xl:col-span-4">
+          <TopOpportunitiesPanel />
+        </div>
+
+        <AllocationPanel className="xl:col-span-4" snapshot={snapshot} />
+        <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} />
+        <RiskAnalysisPanel className="xl:col-span-4" analysis={analysis} />
+      </div>
+    </ErrorBoundary>
+  );
+}
+
+interface ActionItem {
+  icon: ElementType;
+  title: string;
+  body: string;
+  toneClass: string;
+  href: string;
+}
+
+/**
+ * Build up to 3 prioritized action items from real analysis + live brief.
+ * Items are ordered by severity — red drivers first, then gold, then the
+ * weekly thesis fallback so the strip is never empty.
+ */
+function buildActionItems(
+  analysis: PortfolioRiskAnalysis,
+  centralThesis: string | undefined,
+): ActionItem[] {
+  const items: ActionItem[] = [];
+
+  const concentration = analysis.drivers.find((d) => d.iconKey === 'concentration');
+  if (concentration && concentration.tone !== 'green') {
+    const top = analysis.topExposures[0];
+    items.push({
+      icon: Layers3,
+      title: top ? `${top.ticker} is ${top.weightPct.toFixed(0)}% of the portfolio` : 'High concentration',
+      body: 'Consider trimming to reduce single-name risk.',
+      toneClass: concentration.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
+      href: '/copilot/risks',
+    });
+  }
+
+  const cashBuffer = analysis.drivers.find((d) => d.iconKey === 'liquidity');
+  if (cashBuffer && cashBuffer.tone !== 'green') {
+    items.push({
+      icon: ShieldCheck,
+      title: 'Low cash buffer',
+      body: cashBuffer.text,
+      toneClass: cashBuffer.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
+      href: '/copilot/holdings',
+    });
+  }
+
+  const options = analysis.drivers.find((d) => d.iconKey === 'options');
+  if (options && options.tone !== 'green') {
+    items.push({
+      icon: Zap,
+      title: 'Options leverage elevated',
+      body: options.text,
+      toneClass: options.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
+      href: '/copilot/risks',
+    });
+  }
+
+  if (items.length < 3 && centralThesis) {
+    items.push({
+      icon: TrendingUp,
+      title: "This week's thesis",
+      body: centralThesis.length > 120 ? `${centralThesis.slice(0, 117)}…` : centralThesis,
+      toneClass: 'text-gold-primary',
+      href: '/copilot/ai-analyst',
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      icon: ShieldCheck,
+      title: 'Portfolio in good shape',
+      body: 'Risk dimensions look balanced. Review the weekly brief for tactical views.',
+      toneClass: 'text-status-success',
+      href: '/copilot/ai-analyst',
+    });
+  }
+
+  return items.slice(0, 3);
+}
+
+function ActionItemsStrip({ analysis }: { analysis: PortfolioRiskAnalysis }) {
+  const { brief } = useSynthesisBrief();
+  const items = buildActionItems(analysis, brief?.central_thesis);
+
+  return (
+    <section className="xl:col-span-12 rounded-[7px] border border-gold-primary/14 bg-[#050505]/92 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Zap className="h-3.5 w-3.5 text-gold-primary" />
+        <p className="text-[10px] uppercase tracking-[0.14em] text-gold-primary">Action Items</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {items.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={i}
+              to={item.href}
+              className="group flex gap-3 rounded-[6px] border border-gold-primary/12 bg-black/30 p-3 transition hover:border-gold-primary/30 hover:bg-gold-primary/[0.04]"
+            >
+              <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-[7px] border border-gold-primary/18 bg-gold-primary/[0.055] ${item.toneClass}`}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[12px] font-semibold leading-tight ${item.toneClass}`}>{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink-secondary">{item.body}</p>
+              </div>
+              <ArrowRight className="h-3.5 w-3.5 flex-none self-center text-ink-tertiary transition group-hover:text-gold-primary" />
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -57,83 +230,6 @@ function PremiumFrame({ children, className = '' }: { children: ReactNode; class
   );
 }
 
-function PortfolioValuePanel({
-  className,
-  range,
-  snapshot,
-  isConnected,
-}: {
-  className?: string;
-  range: TimeRange;
-  snapshot: PortfolioSnapshot;
-  isConnected: boolean;
-}) {
-  // Sum all CASH-class holdings to derive cash balance.
-  // assetClass is carried on Holding when sourced from IBRIT; absent on mock holdings.
-  const cashBalance = snapshot.holdings
-    .filter((h) => h.assetClass === 'CASH')
-    .reduce((sum, h) => sum + h.marketValue, 0);
-  // Buying power = cash balance for cash-only accounts.
-  // TODO: when margin data is available from IB account summary, add margin here.
-  const buyingPower = cashBalance;
-
-  return (
-    <PremiumFrame className={`min-h-[260px] ${className}`}>
-      <div className="p-5 h-full grid grid-rows-[1fr_auto]">
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="text-eyebrow uppercase text-ink-tertiary">TOTAL PORTFOLIO VALUE</p>
-            <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
-          </div>
-          <Price
-            value={isConnected ? snapshot.totalValue : 1247842.35}
-            size="display"
-            className="mt-5 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
-          />
-          <div className="mt-6 grid grid-cols-2 gap-5">
-            <Stat
-              label="24H CHANGE"
-              value={isConnected ? <span className="text-ink-tertiary">—</span> : <Change value={2.34} />}
-              sub={isConnected ? null : <Change value={28472.11} format="currency" />}
-            />
-            <MiniReturn changePercent={snapshot.changePercent} isConnected={isConnected} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 border-t border-gold-primary/12 mt-6 pt-5">
-          <Stat label="CASH BALANCE" value={<Price value={isConnected ? cashBalance : 87432.21} size="small" />} />
-          <Stat label="BUYING POWER" value={<Price value={isConnected ? buyingPower : 163210.09} size="small" />} />
-        </div>
-        <div className="absolute right-4 top-4 text-[10px] text-gold-primary/70">{range}</div>
-      </div>
-    </PremiumFrame>
-  );
-}
-
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode | null }) {
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">{label}</p>
-      <div className="mt-2 text-sm leading-none">{value}</div>
-      {sub && <div className="mt-1 text-xs leading-none">{sub}</div>}
-    </div>
-  );
-}
-
-function MiniReturn({ changePercent, isConnected }: { changePercent?: number; isConnected?: boolean }) {
-  const display = isConnected ? (changePercent ?? 0) : 24.67;
-  return (
-    <div>
-      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">ALL TIME RETURN</p>
-      <p className="mt-2 text-sm leading-none">
-        <Change value={display} />
-      </p>
-      <svg viewBox="0 0 120 28" className="mt-2 h-7 w-28 text-gold-primary">
-        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10" fill="none" stroke="currentColor" strokeWidth="2" />
-        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10V28H0Z" fill="currentColor" opacity="0.12" />
-      </svg>
-    </div>
-  );
-}
 
 function AiBrainPanel({ className }: { className?: string }) {
   return (
@@ -157,26 +253,54 @@ function AiBrainPanel({ className }: { className?: string }) {
   );
 }
 
-function InsightsPanel({ className }: { className?: string }) {
+// Map driver iconKey → Lucide icon. Aligned with portfolioRisk.ts's iconKey enum.
+const DRIVER_ICON_MAP: Record<RiskDriver['iconKey'], ElementType> = {
+  concentration: Layers3,
+  equity: TrendingUp,
+  options: Zap,
+  liquidity: ShieldCheck,
+};
+
+function InsightsPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
+  // Health = inverse of risk score. 100 = perfectly safe, 0 = max risk.
+  const health = Math.max(0, 100 - analysis.score);
+  const healthLabel = analysis.level === 'Low' ? 'Strong' : analysis.level === 'Moderate' ? 'Balanced' : 'Concentrated';
+  const healthDescription =
+    analysis.level === 'Low' ? 'Portfolio is well balanced across exposures.' :
+    analysis.level === 'Moderate' ? 'Some exposures elevated — monitor key drivers.' :
+    'High concentration or leverage — consider rebalancing.';
+
+  // Top 3 drivers by progress, descending — most material risks first
+  const topDrivers = [...analysis.drivers].sort((a, b) => b.progress - a.progress).slice(0, 3);
+
   return (
     <PremiumFrame className={`min-h-[260px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="AI INSIGHTS" action="CHAT" actionTo="/app/ai/copilot/ai-chat" />
+        <PanelHeader title="AI INSIGHTS" action="ANALYST" actionTo="/copilot/ai-analyst" />
         <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
           <div className="relative h-24 w-24 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
             <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-2xl tabular-nums">
-              <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">78%</span>
+              <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">{health}%</span>
             </div>
           </div>
           <div>
             <p className="text-[10px] uppercase text-ink-tertiary">PORTFOLIO HEALTH</p>
-            <p className="mt-1 text-lg text-gold-primary">Strong</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-secondary">Your portfolio is well balanced with optimal risk exposure.</p>
+            <p className="mt-1 text-lg text-gold-primary">{healthLabel}</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{healthDescription}</p>
           </div>
         </div>
-        <InsightRow icon={Layers3} title="DIVERSIFICATION" text="Well diversified across assets and sectors." />
-        <InsightRow icon={ShieldCheck} title="RISK EXPOSURE" text="Risk level is optimal for your profile." />
-        <InsightRow icon={TrendingUp} title="PERFORMANCE" text="Outperforming 78% of similar portfolios." />
+        {topDrivers.length === 0 ? (
+          <p className="mt-4 text-xs text-ink-tertiary">Holdings will appear here once positions are loaded.</p>
+        ) : (
+          topDrivers.map((d) => (
+            <InsightRow
+              key={d.label}
+              icon={DRIVER_ICON_MAP[d.iconKey]}
+              title={d.label.toUpperCase()}
+              text={d.text}
+            />
+          ))
+        )}
       </div>
     </PremiumFrame>
   );
@@ -222,17 +346,11 @@ function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): st
   return idea.sector || 'MULTI-FACTOR';
 }
 
-const FALLBACK_ITEMS = [
-  { ticker: 'NVDA', company: 'NVIDIA Corporation',   tag: 'AI/TECHNOLOGY', score: 92 },
-  { ticker: 'TSLA', company: 'Tesla, Inc.',           tag: 'GROWTH',        score: 88 },
-  { ticker: 'MSFT', company: 'Microsoft Corporation', tag: 'LONG TERM',     score: 85 },
-  { ticker: 'AMZN', company: 'Amazon.com, Inc.',      tag: 'E-COMMERCE',    score: 83 },
-] as const;
-
 function TopOpportunitiesPanel() {
   const { brief } = useSynthesisBrief();
 
-  // Build display items — use live data when available, fallback otherwise
+  // Build display items from live synthesis-brief trade ideas only — no fallback,
+  // no fabricated tickers. Empty when the brief has no ideas yet.
   const items: Array<{ ticker: string; company: string; tag: string; score: number }> =
     brief?.trade_ideas?.length
       ? brief.trade_ideas.slice(0, 4).map((idea, i) => {
@@ -244,13 +362,18 @@ function TopOpportunitiesPanel() {
             score:   opp.score,
           };
         })
-      : FALLBACK_ITEMS.map(f => ({ ...f }));
+      : [];
 
   return (
     <PremiumFrame className="min-h-[338px]">
       <div className="p-5">
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
+          {items.length === 0 && (
+            <p className="py-10 text-center text-[11px] leading-relaxed text-ink-tertiary">
+              No live trade ideas right now.<br />New ideas appear here after the next AI brief.
+            </p>
+          )}
           {items.map(({ ticker, company, tag, score }) => {
             return (
               <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
@@ -313,42 +436,27 @@ function buildConicGradient(rows: Array<[string, number]>): string {
 function AllocationPanel({
   className,
   snapshot,
-  isConnected,
 }: {
   className?: string;
   snapshot: PortfolioSnapshot;
-  isConnected: boolean;
 }) {
-  // Mock allocation used pre-connection. After connect, real holdings drive the donut + rows.
-  const mockRows: Array<[string, number]> = [
-    ['EQUITIES', 68.4],
-    ['ETFs', 15.7],
-    ['BONDS', 7.3],
-    ['CASH', 5.6],
-    ['OTHER', 2.0],
-  ];
+  const total = snapshot.totalValue || 1;
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketAssetClass(h.assetClass);
+    groups.set(label, (groups.get(label) || 0) + h.marketValue);
+  }
+  const rows: Array<[string, number]> = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, val]) => [label, (val / total) * 100]);
 
-  let rows: Array<[string, number]> = mockRows;
-  let totalDisplay = '$1.25M';
-
-  if (isConnected) {
-    const total = snapshot.totalValue || 1;
-    const groups = new Map<string, number>();
-    for (const h of snapshot.holdings) {
-      const label = bucketAssetClass(h.assetClass);
-      groups.set(label, (groups.get(label) || 0) + h.marketValue);
-    }
-    rows = Array.from(groups.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, (val / total) * 100]);
-    if (rows.length === 0) rows = [['CASH', 100]]; // defensive: empty holdings
-    if (snapshot.totalValue >= 1_000_000) {
-      totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
-    } else if (snapshot.totalValue >= 10_000) {
-      totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
-    } else {
-      totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
-    }
+  let totalDisplay: string;
+  if (snapshot.totalValue >= 1_000_000) {
+    totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
+  } else if (snapshot.totalValue >= 10_000) {
+    totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
+  } else {
+    totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
   }
 
   const conic = buildConicGradient(rows);
@@ -357,23 +465,29 @@ function AllocationPanel({
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
         <PanelHeader title="HOLDINGS" action="VIEW ALL" actionTo="/app/ai/copilot/holdings" />
-        <div className="mt-4 flex items-center gap-5">
-          <div className="relative h-28 w-28 rounded-full p-4" style={{ background: conic }}>
-            <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
-              <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
-              <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
+        {rows.length === 0 ? (
+          <p className="mt-4 text-xs text-ink-tertiary">
+            No positions to allocate yet — once your broker sync completes, your allocation will appear here.
+          </p>
+        ) : (
+          <div className="mt-4 flex items-center gap-5">
+            <div className="relative h-28 w-28 rounded-full p-4" style={{ background: conic }}>
+              <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
+                <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
+                <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2">
+              {rows.map(([label, pct], i) => (
+                <div key={label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]">
+                  <span className={`h-2 w-2 ${ALLOC_PALETTE[i % ALLOC_PALETTE.length].swatch}`} />
+                  <span className="text-ink-secondary">{label}</span>
+                  <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex-1 space-y-2">
-            {rows.map(([label, pct], i) => (
-              <div key={label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]">
-                <span className={`h-2 w-2 ${ALLOC_PALETTE[i % ALLOC_PALETTE.length].swatch}`} />
-                <span className="text-ink-secondary">{label}</span>
-                <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </PremiumFrame>
   );
@@ -400,34 +514,19 @@ function bucketSector(cls: string | undefined): string {
 function SectorExposurePanel({
   className,
   snapshot,
-  isConnected,
 }: {
   className?: string;
   snapshot: PortfolioSnapshot;
-  isConnected: boolean;
 }) {
-  const mockSectors: Array<[string, number]> = [
-    ['Technology', 28.7],
-    ['Financials', 14.3],
-    ['Health Care', 12.6],
-    ['Consumer Cyclical', 11.8],
-    ['Industrials', 8.7],
-    ['Other', 23.9],
-  ];
-
-  let sectors: Array<[string, number]> = mockSectors;
-  if (isConnected) {
-    const total = snapshot.totalValue || 1;
-    const groups = new Map<string, number>();
-    for (const h of snapshot.holdings) {
-      const label = bucketSector(h.assetClass);
-      groups.set(label, (groups.get(label) || 0) + h.marketValue);
-    }
-    sectors = Array.from(groups.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, (val / total) * 100]);
-    if (sectors.length === 0) sectors = [['Other', 100]];
+  const total = snapshot.totalValue || 1;
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketSector(h.assetClass);
+    groups.set(label, (groups.get(label) || 0) + h.marketValue);
   }
+  const sectors: Array<[string, number]> = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, val]) => [label, (val / total) * 100]);
 
   // Bars scale so the largest sector fills the available width; tiny allocations stay visible.
   const maxPct = Math.max(...sectors.map((s) => s[1]), 1);
@@ -436,46 +535,53 @@ function SectorExposurePanel({
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
         <PanelHeader title="MACRO" action="VIEW ALL" actionTo="/app/ai/copilot/macro" />
-        <div className="mt-4 space-y-3">
-          {sectors.map(([name, value]) => (
-            <div key={name} className="grid grid-cols-[1fr_130px_42px] items-center gap-3 text-[11px]">
-              <span className="text-ink-secondary truncate">{name}</span>
-              <div className="h-2 rounded-full bg-white/8 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
-                  style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
-                />
+        {sectors.length === 0 ? (
+          <p className="mt-4 text-xs text-ink-tertiary">
+            No sector data yet — connect a broker and sync your holdings to see exposure.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {sectors.map(([name, value]) => (
+              <div key={name} className="grid grid-cols-[1fr_130px_42px] items-center gap-3 text-[11px]">
+                <span className="text-ink-secondary truncate">{name}</span>
+                <div className="h-2 rounded-full bg-white/8 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
+                    style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
+                  />
+                </div>
+                <span className="font-mono text-ink-tertiary text-right">{value.toFixed(1)}%</span>
               </div>
-              <span className="font-mono text-ink-tertiary text-right">{value.toFixed(1)}%</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </PremiumFrame>
   );
 }
 
-function RiskAnalysisPanel({ className }: { className?: string }) {
-  const rows = [
-    ['Market Risk', 'Medium'],
-    ['Credit Risk', 'Low'],
-    ['Liquidity Risk', 'Low'],
-    ['Volatility Risk', 'Medium'],
-    ['Concentration Risk', 'Low'],
-  ];
+function RiskAnalysisPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/app/ai/copilot/risks" />
+        <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/copilot/risks" />
         <div className="mt-4 grid grid-cols-[130px_1fr] gap-4 items-center">
-          <RiskManagementGoldMark />
+          <RiskManagementGoldMark score={analysis.score} />
           <div className="space-y-2">
-            {rows.map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="text-ink-secondary">{label}</span>
-                <span className={value === 'Medium' ? 'text-gold-primary' : 'text-ink-primary'}>{value}</span>
-              </div>
-            ))}
+            <div className="flex items-center justify-between gap-3 pb-2 border-b border-gold-primary/10 text-[11px]">
+              <span className="text-ink-tertiary">Overall</span>
+              <span className="font-mono text-gold-primary">{analysis.score}/100 · {analysis.level}</span>
+            </div>
+            {analysis.drivers.length === 0 ? (
+              <p className="text-[11px] text-ink-tertiary">No drivers computed yet.</p>
+            ) : (
+              analysis.drivers.map((d) => (
+                <div key={d.label} className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="text-ink-secondary">{d.label}</span>
+                  <span className={d.tone === 'red' ? 'text-num-negative' : d.tone === 'green' ? 'text-status-success' : 'text-gold-primary'}>{d.level}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -483,9 +589,10 @@ function RiskAnalysisPanel({ className }: { className?: string }) {
   );
 }
 
-function RiskManagementGoldMark() {
+function RiskManagementGoldMark({ score }: { score: number }) {
   const totalTicks = 44;
-  const fillFraction = 0.72;
+  // Fill reflects the real computed risk score (0–100), not a fixed value.
+  const fillFraction = Math.max(0, Math.min(1, score / 100));
   const startDeg = -132;
   const endDeg = 132;
   const ticks = Array.from({ length: totalTicks }, (_, index) => {

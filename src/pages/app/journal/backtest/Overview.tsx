@@ -1,8 +1,10 @@
 // ================================================
 // FINOTAUR BACKTEST DASHBOARD - MIRRORS JOURNAL OVERVIEW
 // File: src/pages/app/journal/backtest/BacktestOverview.tsx
-// ✅ Identical layout to JournalOverview.tsx
-// ✅ Beautiful circular progress indicators for backtest metrics
+// ✅ Visual design matches JournalOverview.tsx (refactored 2026-05-28)
+// ✅ bg-[#070808] outer shell, JOURNAL_PANEL chart wrappers
+// ✅ JournalKpiCard replaces DashboardKpiCard (5-card grid)
+// ✅ Inline h1 header pattern matching Journal Dashboard
 // ✅ Backtest-specific KPIs with dynamic data
 // ✅ Trade Time & Duration Performance Charts
 // ✅ AI Insights for backtest analysis
@@ -10,39 +12,36 @@
 // ✅ Production ready for 5000+ users
 // ================================================
 
-import React, { useState, lazy, Suspense, useMemo, useCallback } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import PageTitle from "@/components/PageTitle";
+import React, { lazy, Suspense, useMemo, useCallback } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import {
-  FileText, Layers, BarChart3, Calendar as CalendarIcon,
-  TrendingUp, TrendingDown, Crown, X, Sparkles, 
-  RefreshCw, Download, Share2, HelpCircle, CheckCircle2
+  TrendingUp, TrendingDown, Crown,
+  RefreshCw, Download, Share2, HelpCircle, Target
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
-import { useSubscription } from "@/hooks/useSubscription";
 import {
   formatCurrency,
   formatPercentage,
-  getPnLColor,
 } from "@/hooks/useDashboardData";
-import { BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
+import { BORDER_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { DashboardKpiCard } from "@/components/DashboardKpiCard";
+import { useBacktestStats } from "@/hooks/useBacktestStats";
+import { Spinner } from "@/components/ui/Spinner";
 
 // ================================================
 // LAZY LOAD HEAVY COMPONENTS
 // ================================================
 
-const BacktestEquityChart = lazy(() => import("@/components/charts/BacktestEquityChart"));
-const BacktestDailyPnLChart = lazy(() => import("@/components/charts/BacktestDailyPnLChart"));
+const BacktestEquityChartV2 = lazy(() => import("@/components/charts/BacktestEquityChartV2"));
+const BacktestDailyPnLChartV2 = lazy(() => import("@/components/charts/BacktestDailyPnLChartV2"));
 
 // ================================================
 // LOADING SKELETONS
 // ================================================
 
 const ChartSkeleton = React.memo(() => (
-  <div className="w-full h-[380px] bg-[#0A0A0A] rounded-[20px] animate-pulse flex items-center justify-center border" style={BORDER_STYLE}>
+  <div className="w-full h-[380px] rounded-[12px] bg-[#0E0E0E] border border-white/[0.05] animate-pulse flex items-center justify-center">
     <div className="text-[#A0A0A0] text-sm">Loading backtest chart...</div>
   </div>
 ));
@@ -123,144 +122,190 @@ interface BacktestStats {
 }
 
 // ================================================
-// MOCK BACKTEST DATA (replace with actual API call)
+// REAL BACKTEST STATS — adapter over useBacktestStats hook
+// Phase 7: replaces mock data with aggregate of all saved backtest sessions
+// from backtest_sessions_v2 + backtest_trades_v2 (RLS-scoped).
 // ================================================
 
+// Trading-days per year for annualization (US equity convention).
+const TRADING_DAYS_PER_YEAR = 252;
+
+// Daily return series from per-day P&L vs deployed capital. The denominator
+// is the user's total initial balance (sum across sessions), so a $100 day
+// on a $10K baseline reads as 1.00% — comparable across sessions.
+function dailyReturnsFromEquitySeries(
+  equitySeries: ReadonlyArray<{ pnl: number }>,
+  baseline: number,
+): number[] {
+  if (baseline <= 0) return [];
+  return equitySeries.map((pt) => pt.pnl / baseline);
+}
+
+// Sharpe = mean(returns) / std(returns) * sqrt(252). Risk-free rate assumed 0
+// (per Sprint D decision 2026-05-29). Returns 0 when sample is too small or
+// std collapses — caller renders the literal 0 (UI does not show ∞).
+function computeSharpe(returns: number[]): number {
+  if (returns.length < 2) return 0;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance =
+    returns.reduce((acc, r) => acc + (r - mean) ** 2, 0) / returns.length;
+  const std = Math.sqrt(variance);
+  if (!Number.isFinite(std) || std === 0) return 0;
+  return (mean / std) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
+// Sortino = mean(returns) / std(downside returns) * sqrt(252). Downside
+// deviation uses only r < 0 (treats upside volatility as harmless).
+function computeSortino(returns: number[]): number {
+  if (returns.length < 2) return 0;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const negatives = returns.filter((r) => r < 0);
+  if (negatives.length === 0) return 0;
+  const downsideVar =
+    negatives.reduce((acc, r) => acc + r ** 2, 0) / negatives.length;
+  const downsideStd = Math.sqrt(downsideVar);
+  if (!Number.isFinite(downsideStd) || downsideStd === 0) return 0;
+  return (mean / downsideStd) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
 const useMockBacktestStats = (): { data: BacktestStats | null; isLoading: boolean } => {
-  const [isLoading, setIsLoading] = useState(true);
-  
+  const { data: real, isLoading } = useBacktestStats();
+
   const data = useMemo<BacktestStats | null>(() => {
-    // Simulate API loading
-    setTimeout(() => setIsLoading(false), 500);
-    
-    return {
-      strategy_name: "Moving Average Crossover Strategy",
-      backtest_period_start: "2023-01-01",
-      backtest_period_end: "2024-12-31",
-      initial_capital: 100000,
-      final_capital: 142750,
-      net_pnl: 42750,
-      net_pnl_percent: 42.75,
-      
-      total_trades: 156,
-      winning_trades: 94,
-      losing_trades: 58,
-      breakeven_trades: 4,
-      win_rate: 0.603,
-      
-      sharpe_ratio: 1.85,
-      sortino_ratio: 2.42,
-      max_drawdown: -8450,
-      max_drawdown_percent: -7.2,
-      recovery_factor: 5.06,
-      profit_factor: 2.34,
-      
-      avg_win: 856,
-      avg_loss: -542,
-      avg_win_percent: 2.8,
-      avg_loss_percent: -1.6,
-      avg_rr: 1.58,
-      avg_trade_duration_hours: 72,
-      
-      best_trade: {
-        id: "bt_1",
-        symbol: "AAPL",
-        open_at: "2024-03-15T09:30:00Z",
-        close_at: "2024-03-18T16:00:00Z",
-        pnl: 4250,
-        pnl_percent: 8.5,
-        side: "long" as const,
-        entry_price: 170.50,
-        exit_price: 185.00,
-        size: 100,
-        rr: 3.2
-      },
-      worst_trade: {
-        id: "bt_2",
-        symbol: "TSLA",
-        open_at: "2024-07-22T09:30:00Z",
-        close_at: "2024-07-23T16:00:00Z",
-        pnl: -2180,
-        pnl_percent: -4.8,
-        side: "long" as const,
-        entry_price: 245.00,
-        exit_price: 233.00,
-        size: 50,
-        rr: -1.8
-      },
-      longest_winning_streak: 12,
-      longest_losing_streak: 5,
-      
-      equity_curve: generateMockEquityCurve(),
-      monthly_returns: generateMockMonthlyReturns(),
-      trades: generateMockTrades(156)
+    if (!real) return null;
+    const { stats, trades, equitySeries, totalInitialBalance } = real;
+    const INITIAL_CAPITAL = totalInitialBalance;
+    const finalCapital = INITIAL_CAPITAL + stats.netPnl;
+    const dailyReturns = dailyReturnsFromEquitySeries(equitySeries, INITIAL_CAPITAL);
+
+    // Build cumulative equity curve from equitySeries (date label → cumulative).
+    // For the Overview chart we approximate ISO dates by adding day offsets
+    // from the first trade — sufficient for "last 2 years" display.
+    const baseDate = trades.length > 0
+      ? dayjs((trades[trades.length - 1]?.exitTime ?? trades[trades.length - 1]?.entryTime ?? Date.now() / 1000) * 1000)
+      : dayjs();
+    let runningPeak = 0;
+    const equityCurve: BacktestStats['equity_curve'] = equitySeries.map((pt, i) => {
+      const eqAbs = INITIAL_CAPITAL + pt.equity;
+      if (eqAbs > runningPeak) runningPeak = eqAbs;
+      const dd = runningPeak > 0 ? ((eqAbs - runningPeak) / runningPeak) * 100 : 0;
+      return {
+        date: baseDate.add(i, 'day').format('YYYY-MM-DD'),
+        value: Math.round(eqAbs),
+        drawdown: Math.round(dd * 100) / 100,
+      };
+    });
+    const maxDrawdown = equityCurve.length > 0
+      ? Math.min(...equityCurve.map((p) => p.drawdown)) * (INITIAL_CAPITAL / 100)
+      : 0;
+    const maxDrawdownPercent = equityCurve.length > 0
+      ? Math.min(...equityCurve.map((p) => p.drawdown))
+      : 0;
+
+    // Monthly returns: bucket equity series by month.
+    const monthly = new Map<string, number>();
+    for (const pt of equitySeries) {
+      const month = baseDate.add(equitySeries.indexOf(pt), 'day').format('YYYY-MM');
+      monthly.set(month, (monthly.get(month) ?? 0) + pt.pnl);
+    }
+    const monthlyReturns: BacktestStats['monthly_returns'] = Array.from(monthly.entries()).map(([month, pnl]) => ({
+      month,
+      return: (pnl / INITIAL_CAPITAL) * 100,
+    }));
+
+    // Best/worst trade
+    let bestTrade: BacktestStats['best_trade'] = {
+      id: '', symbol: '?', open_at: '', close_at: '', pnl: 0, pnl_percent: 0,
+      side: 'long', entry_price: 0, exit_price: 0, size: 0, rr: 0,
     };
-  }, []);
+    let worstTrade: BacktestStats['worst_trade'] = { ...bestTrade };
+    if (trades.length > 0) {
+      const best = trades.reduce((a, b) => (b.pnl > a.pnl ? b : a));
+      const worst = trades.reduce((a, b) => (b.pnl < a.pnl ? b : a));
+      const mapTrade = (t: typeof best): BacktestStats['best_trade'] => ({
+        id: t.id,
+        symbol: t.symbol,
+        open_at: new Date(t.entryTime * 1000).toISOString(),
+        close_at: t.exitTime ? new Date(t.exitTime * 1000).toISOString() : new Date(t.entryTime * 1000).toISOString(),
+        pnl: t.pnl,
+        pnl_percent: t.pnlPercent,
+        side: t.side === 'LONG' ? 'long' : 'short',
+        entry_price: t.entryPrice,
+        exit_price: t.exitPrice ?? t.entryPrice,
+        size: t.size,
+        rr: stats.avgRR,
+      });
+      bestTrade = mapTrade(best);
+      worstTrade = mapTrade(worst);
+    }
+
+    // Avg trade duration
+    const durations = trades
+      .filter((t) => t.exitTime != null)
+      .map((t) => (t.exitTime! - t.entryTime) / 3600);
+    const avgDurationHours = durations.length > 0
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : 0;
+
+    // Backtest period from trade extremes
+    const allTimes = trades.flatMap((t) => [t.entryTime, t.exitTime ?? t.entryTime]);
+    const startTs = allTimes.length > 0 ? Math.min(...allTimes) : Date.now() / 1000;
+    const endTs = allTimes.length > 0 ? Math.max(...allTimes) : Date.now() / 1000;
+
+    // Map all trades to the BacktestTrade shape Overview expects.
+    const mappedTrades: BacktestTrade[] = trades.map((t) => ({
+      id: t.id,
+      symbol: t.symbol,
+      open_at: new Date(t.entryTime * 1000).toISOString(),
+      close_at: t.exitTime ? new Date(t.exitTime * 1000).toISOString() : null,
+      pnl: t.pnl,
+      pnl_percent: t.pnlPercent,
+      side: t.side === 'LONG' ? 'long' : 'short',
+      entry_price: t.entryPrice,
+      exit_price: t.exitPrice ?? 0,
+      size: t.size,
+      rr: 0,
+    }));
+
+    return {
+      strategy_name: real.sessionCount === 1 ? 'Single Session' : `${real.sessionCount} Sessions`,
+      backtest_period_start: new Date(startTs * 1000).toISOString().slice(0, 10),
+      backtest_period_end: new Date(endTs * 1000).toISOString().slice(0, 10),
+      initial_capital: INITIAL_CAPITAL,
+      final_capital: finalCapital,
+      net_pnl: stats.netPnl,
+      net_pnl_percent: stats.netPnlPercent,
+      total_trades: stats.totalTrades,
+      winning_trades: stats.winners,
+      losing_trades: stats.losers,
+      breakeven_trades: stats.breakeven,
+      win_rate: stats.winRate / 100,
+      sharpe_ratio: computeSharpe(dailyReturns),
+      sortino_ratio: computeSortino(dailyReturns),
+      max_drawdown: maxDrawdown,
+      max_drawdown_percent: maxDrawdownPercent,
+      recovery_factor: maxDrawdown !== 0 ? stats.netPnl / Math.abs(maxDrawdown) : 0,
+      // Preserve Infinity → UI renders as ∞. Mapping to 0 hid the
+      // "winning session with no losses" case as "no profit factor at all"
+      // (which surfaces as red 0.00 on the dashboard).
+      profit_factor: stats.profitFactor,
+      avg_win: stats.avgWin,
+      avg_loss: -stats.avgLoss,
+      avg_win_percent: INITIAL_CAPITAL > 0 ? (stats.avgWin / INITIAL_CAPITAL) * 100 : 0,
+      avg_loss_percent: INITIAL_CAPITAL > 0 ? -(stats.avgLoss / INITIAL_CAPITAL) * 100 : 0,
+      avg_rr: stats.avgRR,
+      avg_trade_duration_hours: avgDurationHours,
+      best_trade: bestTrade,
+      worst_trade: worstTrade,
+      longest_winning_streak: stats.longestWinStreak,
+      longest_losing_streak: stats.longestLossStreak,
+      equity_curve: equityCurve.length > 0 ? equityCurve : [],
+      monthly_returns: monthlyReturns,
+      trades: mappedTrades,
+    };
+  }, [real]);
   
   return { data, isLoading };
-};
-
-// Helper functions for mock data
-const generateMockEquityCurve = () => {
-  const curve = [];
-  let equity = 100000;
-  let maxEquity = 100000;
-  const startDate = dayjs("2023-01-01");
-  
-  for (let i = 0; i <= 730; i++) {
-    const randomChange = (Math.random() - 0.45) * 800;
-    equity += randomChange;
-    maxEquity = Math.max(maxEquity, equity);
-    const drawdown = ((equity - maxEquity) / maxEquity) * 100;
-    
-    curve.push({
-      date: startDate.add(i, 'day').format('YYYY-MM-DD'),
-      value: Math.round(equity),
-      drawdown: Math.round(drawdown * 100) / 100
-    });
-  }
-  
-  return curve;
-};
-
-const generateMockMonthlyReturns = () => {
-  const months = [];
-  const startDate = dayjs("2023-01-01");
-  
-  for (let i = 0; i < 24; i++) {
-    months.push({
-      month: startDate.add(i, 'month').format('YYYY-MM'),
-      return: (Math.random() - 0.35) * 8
-    });
-  }
-  
-  return months;
-};
-
-const generateMockTrades = (count: number): BacktestTrade[] => {
-  const trades: BacktestTrade[] = [];
-  const symbols = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'META', 'AMZN'];
-  
-  for (let i = 0; i < count; i++) {
-    const isWin = Math.random() > 0.4;
-    const pnl = isWin ? Math.random() * 2000 + 200 : -(Math.random() * 1200 + 100);
-    
-    trades.push({
-      id: `bt_trade_${i}`,
-      symbol: symbols[Math.floor(Math.random() * symbols.length)],
-      open_at: dayjs("2023-01-01").add(i * 4, 'day').toISOString(),
-      close_at: dayjs("2023-01-01").add(i * 4 + 2, 'day').toISOString(),
-      pnl: Math.round(pnl),
-      pnl_percent: Math.round((pnl / 50000) * 100 * 100) / 100,
-      side: Math.random() > 0.5 ? ('long' as const) : ('short' as const),
-      entry_price: 100 + Math.random() * 200,
-      exit_price: 100 + Math.random() * 200,
-      size: Math.floor(Math.random() * 100) + 10,
-      rr: isWin ? Math.random() * 3 + 0.5 : -(Math.random() * 2)
-    });
-  }
-  
-  return trades;
 };
 
 // ================================================
@@ -647,58 +692,216 @@ const BacktestBestWorstTrades = React.memo(({ stats }: { stats: BacktestStats })
 BacktestBestWorstTrades.displayName = 'BacktestBestWorstTrades';
 
 // ================================================
-// AI BACKTEST INSIGHT
+// BACKTEST KPI PRIMITIVES (blue accent — mirrors Journal gold strip)
 // ================================================
 
-const BacktestAIInsight = React.memo(({ stats }: { stats: BacktestStats }) => {
-  const insight = useMemo(() => {
-    if (stats.total_trades < 20) {
-      return "Limited sample size. Consider running a longer backtest for more reliable results.";
-    }
-    
-    if (stats.sharpe_ratio > 2 && stats.profit_factor > 2) {
-      return "Excellent risk-adjusted returns! Strategy shows strong edge with solid Sharpe ratio and profit factor.";
-    }
-    
-    if (stats.win_rate > 0.75) {
-      return "Very high win rate detected. Verify results for potential overfitting—consider walk-forward analysis.";
-    }
-    
-    if (Math.abs(stats.max_drawdown_percent) > 20) {
-      return "High drawdown detected. Consider reducing position size or tightening risk management.";
-    }
-    
-    if (stats.sharpe_ratio > 1.5) {
-      return "Good risk-adjusted performance. Strategy demonstrates consistent edge over backtest period.";
-    }
-    
-    return "Backtest complete. Review all metrics carefully before live trading.";
-  }, [stats]);
-  
-  return (
-    <div 
-      className="rounded-[20px] border p-5 flex items-start gap-4 shadow-[0_0_30px_rgba(201,166,70,0.08)] animate-fadeIn relative overflow-hidden"
-      style={{ 
-        background: 'linear-gradient(90deg, rgba(201,166,70,0.1), rgba(201,166,70,0.05))',
-        borderColor: 'rgba(255, 215, 0, 0.08)',
-        borderLeft: '3px solid #C9A646'
-      }}
-    >
-      <div className="rounded-lg bg-[#C9A646]/10 p-2.5 animate-pulse-gold">
-        <Sparkles className="w-5 h-5 text-[#C9A646]" />
+const JOURNAL_PANEL =
+  "relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]";
+
+/** Small inline '?' help icon — matches Journal pattern verbatim. */
+const BacktestInfoIcon = ({
+  label,
+  className = "h-3.5 w-3.5",
+}: {
+  label: string;
+  className?: string;
+}) => (
+  <HelpCircle
+    className={`${className} shrink-0 cursor-help text-white/38 transition-colors hover:text-[#7AB6F4]`}
+    aria-label={label}
+    role="img"
+  />
+);
+
+/** Signed-currency helper — Journal has this, Backtest needs it locally. */
+function formatSignedCurrency(value: number): string {
+  const abs = Math.abs(value || 0);
+  const formatted = abs.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${value >= 0 ? "+" : "-"}$${formatted}`;
+}
+
+/** Sparkline visuals — mirrors KpiSparkline from Journal/Overview.tsx.
+ *  Line/fill gradient unchanged; accent changes:
+ *    - line gradient 3rd stop: #C9A646 → #7AB6F4
+ *    - circle indicator: #E8C766 → #7AB6F4
+ *    - target ring/dot/icon: gold → blue (#7AB6F4)
+ *  Bars stay semantic green/red (positive/negative P&L). */
+const BacktestKpiSparkline = React.memo(({ type = "line" }: { type?: "line" | "bars" | "target" }) => {
+  if (type === "bars") {
+    const bars = [28, 42, 34, 62, -36, 44, 88];
+    return (
+      <div className="relative flex h-12 w-[72px] items-center justify-end overflow-hidden rounded-md">
+        <div className="absolute inset-x-1 top-1/2 h-px bg-[#7AB6F4]/12" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_74%_35%,rgba(122,182,244,0.16),transparent_48%)]" />
+        <div className="relative flex h-full items-center justify-end gap-1.5">
+          {bars.map((bar, index) => {
+            const positive = bar >= 0;
+            return (
+              <span
+                key={index}
+                className="relative flex w-2 justify-center"
+                style={{
+                  height: `${Math.abs(bar)}%`,
+                  alignSelf: positive ? "flex-start" : "flex-end",
+                  marginTop: positive ? `${100 - Math.abs(bar)}%` : 0,
+                }}
+              >
+                <span
+                  className={`absolute inset-0 rounded-full shadow-[0_0_10px_rgba(59,199,110,0.26)] ${
+                    positive
+                      ? "bg-[linear-gradient(180deg,#6FE49B_0%,#2CBD67_58%,#176C3D_100%)]"
+                      : "bg-[linear-gradient(180deg,#FF756F_0%,#EF4444_64%,#8F1F24_100%)] shadow-[0_0_10px_rgba(239,68,68,0.22)]"
+                  }`}
+                />
+                <span className="absolute left-1 top-1 h-[55%] w-px rounded-full bg-white/32" />
+              </span>
+            );
+          })}
+        </div>
       </div>
-      <div className="flex-1">
-        <div className="text-[#C9A646] text-[10px] font-semibold uppercase tracking-[0.15em] mb-1.5">
-          AI Backtest Insights
+    );
+  }
+
+  if (type === "target") {
+    return (
+      <div className="relative flex h-14 w-14 items-center justify-center">
+        <div className="absolute inset-1 rounded-full border border-white/10" />
+        <div className="absolute inset-3 rounded-full border border-[#7AB6F4]/55" />
+        <div className="absolute inset-[1.35rem] rounded-full bg-[#7AB6F4]" />
+        <Target className="relative h-8 w-8 text-[#7AB6F4]" strokeWidth={1.8} />
+      </div>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 120 52" className="h-12 w-[78px] overflow-visible" aria-hidden="true">
+      <defs>
+        <linearGradient id="backtest-kpi-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#173B27" />
+          <stop offset="42%" stopColor="#45D982" />
+          <stop offset="72%" stopColor="#7AB6F4" />
+          <stop offset="100%" stopColor="#35D879" />
+        </linearGradient>
+        <linearGradient id="backtest-kpi-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#45D982" stopOpacity="0.24" />
+          <stop offset="100%" stopColor="#45D982" stopOpacity="0" />
+        </linearGradient>
+        <filter id="backtest-kpi-glow" x="-40%" y="-70%" width="180%" height="220%">
+          <feGaussianBlur stdDeviation="2.4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <path
+        d="M8 42 C24 38 28 17 43 22 S63 43 78 26 S94 11 112 10 L112 52 L8 52 Z"
+        fill="url(#backtest-kpi-fill)"
+        opacity="0.75"
+      />
+      <path
+        d="M8 42 C24 38 28 17 43 22 S63 43 78 26 S94 11 112 10"
+        fill="none"
+        stroke="rgba(255,255,255,0.28)"
+        strokeWidth="5"
+        strokeLinecap="round"
+        opacity="0.18"
+      />
+      <path
+        d="M8 42 C24 38 28 17 43 22 S63 43 78 26 S94 11 112 10"
+        fill="none"
+        stroke="url(#backtest-kpi-line)"
+        strokeWidth="2.3"
+        strokeLinecap="round"
+        filter="url(#backtest-kpi-glow)"
+      />
+      <circle cx="112" cy="10" r="2.5" fill="#7AB6F4" opacity="0.95" />
+    </svg>
+  );
+});
+BacktestKpiSparkline.displayName = "BacktestKpiSparkline";
+
+/** KPI card — exact copy of Journal's inline JournalKpiCard, blue accent.
+ *  tone: "green" | "blue" | "red"  (no gold)
+ *  valueColor map: green=#3BC76E  red=#EF4444  blue=#7AB6F4
+ *  Gauge conic: #F2C85F → #7AB6F4
+ *  Icon circle: text-[#7AB6F4]
+ *  Default tone = "blue" */
+const BacktestKpiCard = React.memo(({
+  label,
+  value,
+  hint,
+  tone = "blue",
+  icon,
+  visual = "icon",
+  gaugeFillPct,
+  tooltip,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "green" | "blue" | "red";
+  icon?: React.ReactNode;
+  visual?: "icon" | "gauge" | "line" | "bars" | "target";
+  gaugeFillPct?: number;
+  tooltip: string;
+}) => {
+  const valueColor =
+    tone === "green" ? "text-[#3BC76E]" : tone === "red" ? "text-[#EF4444]" : "text-[#7AB6F4]";
+
+  const gaugeEndDeg = Math.max(0, Math.min(360, (gaugeFillPct ?? 0) * 3.6));
+
+  return (
+    <div className={`${JOURNAL_PANEL} min-h-[94px] px-4 py-3`}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_50%,rgba(255,255,255,0.035),transparent_32%)]" />
+      <div className="relative grid h-full grid-cols-[minmax(0,1fr)_66px] items-center gap-3">
+        <div className="min-w-0 pr-1">
+          <div className="mb-2 flex min-w-0 items-center gap-1.5">
+            <span className="truncate whitespace-nowrap text-[11px] font-semibold text-white/82">{label}</span>
+            <BacktestInfoIcon label={tooltip} className="h-3 w-3" />
+          </div>
+          <div className={`max-w-full whitespace-nowrap font-sans text-[clamp(22px,1.55vw,28px)] font-semibold leading-none tracking-normal tabular-nums ${valueColor}`}>
+            {value}
+          </div>
+          {hint && (
+            <div className="mt-2 max-w-full break-words text-[11px] font-medium leading-snug text-white/72">{hint}</div>
+          )}
         </div>
-        <div className="text-[#F4F4F4] text-sm leading-relaxed font-light">
-          {insight}
-        </div>
+
+        {visual === "icon" && (
+          <div className="ml-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/[0.035] text-[#7AB6F4]">
+            {icon}
+          </div>
+        )}
+        {visual === "gauge" && (
+          <div className="relative ml-auto h-16 w-16 shrink-0">
+            <div className="absolute inset-1 rounded-full border-[7px] border-white/[0.08]" />
+            <div
+              className="absolute inset-1 rounded-full transition-[background] duration-500"
+              style={{
+                background:
+                  `conic-gradient(from 210deg, #7AB6F4 0deg, #7AB6F4 ${gaugeEndDeg}deg, transparent ${gaugeEndDeg}deg, transparent 360deg)`,
+                mask: "radial-gradient(circle, transparent 54%, #000 56%)",
+                WebkitMask: "radial-gradient(circle, transparent 54%, #000 56%)",
+              }}
+            />
+          </div>
+        )}
+        {(visual === "line" || visual === "bars" || visual === "target") && (
+          <div className="ml-auto flex w-[66px] justify-end overflow-hidden">
+            {visual === "line" && <BacktestKpiSparkline type="line" />}
+            {visual === "bars" && <BacktestKpiSparkline type="bars" />}
+            {visual === "target" && <BacktestKpiSparkline type="target" />}
+          </div>
+        )}
       </div>
     </div>
   );
 });
-BacktestAIInsight.displayName = 'BacktestAIInsight';
+BacktestKpiCard.displayName = "BacktestKpiCard";
 
 // ================================================
 // MAIN BACKTEST DASHBOARD COMPONENT
@@ -706,10 +909,22 @@ BacktestAIInsight.displayName = 'BacktestAIInsight';
 
 function BacktestOverviewContent() {
   const navigate = useNavigate();
-  const { backtestId } = useParams();
-  
-  const { id: userId, isImpersonating } = useEffectiveUser();
+  useParams(); // backtestId available for future deep-link routing
+
+  const { isImpersonating, isMentorView } = useEffectiveUser();
   const { data: stats, isLoading } = useMockBacktestStats(); // Replace with actual hook
+  // Raw equitySeries + trades for V2 chart components (camelCase, Journal-compatible)
+  const { data: rawBacktest } = useBacktestStats();
+  const chartEquitySeries = rawBacktest?.equitySeries ?? [];
+  // Map BacktestTrade → shape expected by DailyPnLChart (open_at + pnl)
+  const chartTrades = useMemo(
+    () =>
+      (rawBacktest?.trades ?? []).map((t) => ({
+        open_at: new Date(t.entryTime * 1000).toISOString(),
+        pnl: t.pnl,
+      })),
+    [rawBacktest]
+  );
   
   // Generate chart data
   const tradeTimeData = useMemo(() => {
@@ -735,21 +950,30 @@ function BacktestOverviewContent() {
     // TODO: Navigate to backtest configuration with same parameters
     navigate('/app/journal/backtest/new');
   }, [navigate]);
-  
+
+  // Expectancy = (winRate * avgWin) - ((1 - winRate) * |avgLoss|)
+  // win_rate from the adapter is already 0–1 (stats.winRate / 100).
+  // MUST be declared before any early return — hooks rule (#310 fix).
+  const expectancy = useMemo(() => {
+    if (!stats) return 0;
+    const winRate = stats.win_rate; // 0–1
+    return (winRate * stats.avg_win) - ((1 - winRate) * Math.abs(stats.avg_loss));
+  }, [stats]);
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
+      <div className="min-h-screen flex items-center justify-center bg-[#070808]">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[#C9A646] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <Spinner size="lg" className="mx-auto mb-4" />
           <div className="text-[#A0A0A0] text-xl">Loading backtest results...</div>
         </div>
       </div>
     );
   }
-  
+
   if (!stats) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
+      <div className="min-h-screen flex items-center justify-center bg-[#070808]">
         <div className="text-center">
           <div className="text-[#E36363] text-xl mb-2">Backtest not found</div>
           <button
@@ -762,139 +986,160 @@ function BacktestOverviewContent() {
       </div>
     );
   }
-  
+
+  // Backtest accent = BLUE (Elad 2026-05-29). The Journal Dashboard runs
+  // gold; Backtest distinguishes itself with #7AB6F4 sky-blue across neutral
+  // KPIs. Profit Factor + Net P&L still use semantic colors (green/red).
+  const netPnlPositive = stats.net_pnl >= 0;
+
   return (
-    <div className="min-h-screen" style={{ 
-      background: 'radial-gradient(circle at top, #0A0A0A 0%, #121212 100%)'
-    }}>
+    <div className="min-h-screen bg-[#070808] text-white">
       <style>{ANIMATION_STYLES}</style>
-      
-      <div className="p-6 space-y-6">
-        {/* Header - NO BACK ARROW */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <PageTitle 
-            title="Backtest Dashboard"
-            subtitle={`${stats.strategy_name} • ${dayjs(stats.backtest_period_start).format('MMM DD, YYYY')} - ${dayjs(stats.backtest_period_end).format('MMM DD, YYYY')}`}
-          />
-          
-          <div className="flex items-center gap-3">
+
+      <div className="mx-auto max-w-[1360px] space-y-4 px-1 py-3 sm:px-3 lg:px-1">
+        {/* Header — Journal inline pattern */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="pt-0.5">
+            <h1 className="text-[17px] font-semibold leading-tight tracking-normal text-white">
+              Backtest Dashboard
+            </h1>
+            <p className="mt-2 text-[11px] text-white/60">
+              {stats.strategy_name} • {dayjs(stats.backtest_period_start).format('MMM DD, YYYY')} – {dayjs(stats.backtest_period_end).format('MMM DD, YYYY')}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {isImpersonating && (
-              <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
+              <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 h-9">
                 <Crown className="w-4 h-4 text-orange-400" />
-                <span className="text-orange-400 text-sm font-medium">Admin View</span>
+                <span className="text-orange-400 text-[12px] font-medium">Admin View</span>
               </div>
             )}
 
-            <button
-              onClick={handleRunAgain}
-              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-4 py-2.5 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors"
-              style={BORDER_STYLE}
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span className="text-sm font-medium">Run Again</span>
-            </button>
+            {!isMentorView && (
+              <button
+                onClick={handleRunAgain}
+                className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-3 h-9 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors text-[12px]"
+                style={BORDER_STYLE}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="font-medium">Run Again</span>
+              </button>
+            )}
 
             <button
               onClick={handleShareResults}
-              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-4 py-2.5 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors"
+              className="flex items-center gap-2 bg-[#141414] border rounded-[12px] px-3 h-9 text-[#F4F4F4] hover:bg-[#1A1A1A] transition-colors text-[12px]"
               style={BORDER_STYLE}
             >
-              <Share2 className="w-4 h-4" />
-              <span className="text-sm font-medium">Share</span>
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="font-medium">Share</span>
             </button>
 
             <button
               onClick={handleExportResults}
-              className="flex items-center gap-2 bg-gradient-to-r from-[#C9A646] to-[#E5C158] text-black rounded-[12px] px-4 py-2.5 font-medium hover:from-[#B39540] hover:to-[#D4B55E] transition-all"
+              className="flex items-center gap-2 bg-gradient-to-r from-[#7AB6F4] to-[#5C9BDF] text-black rounded-[12px] px-3 h-9 font-medium hover:from-[#5C9BDF] hover:to-[#4A8AD4] transition-all text-[12px]"
             >
-              <Download className="w-4 h-4" />
-              <span className="text-sm">Download Report (AI-Enhanced)</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Report (AI-Enhanced)</span>
             </button>
           </div>
         </div>
 
-        {/* AI Insights */}
-        <BacktestAIInsight stats={stats} />
-
-        {/* Main KPIs - IDENTICAL TO JOURNAL OVERVIEW */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DashboardKpiCard 
-            label="Net P&L" 
-            value={formatCurrency(stats.net_pnl)} 
-            color={getPnLColor(stats.net_pnl)}
+        {/* Main KPIs — BacktestKpiCard blue accent, 5-col on lg (mirrors Journal strip) */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {/* 1. Net P&L */}
+          <BacktestKpiCard
+            label="Net P&L"
+            value={formatCurrency(stats.net_pnl)}
+            tone={netPnlPositive ? "green" : "red"}
+            visual="icon"
+            icon={netPnlPositive
+              ? <TrendingUp className="h-8 w-8" strokeWidth={2} />
+              : <TrendingDown className="h-8 w-8" strokeWidth={2} />}
             hint={`${stats.total_trades} closed trades`}
-            tooltip="Total profit or loss from backtest period"
+            tooltip="Total profit or loss from backtest period."
           />
-          
-          <DashboardKpiCard 
-            label="Win Rate" 
-            value={formatPercentage(stats.win_rate)} 
+
+          {/* 2. Win Rate */}
+          <BacktestKpiCard
+            label="Win Rate"
+            value={formatPercentage(stats.win_rate)}
+            tone="blue"
+            visual="gauge"
+            gaugeFillPct={(stats.win_rate ?? 0) * 100}
             hint={`${stats.winning_trades}W / ${stats.losing_trades}L / ${stats.breakeven_trades}BE`}
-            color="text-[#C9A646]"
-            tooltip="Percentage of winning trades vs total trades"
-            showGauge={true}
-            gaugeData={{ 
-              wins: stats.winning_trades, 
-              losses: stats.losing_trades, 
-              breakeven: stats.breakeven_trades 
-            }}
+            tooltip="Percentage of winning trades vs total trades."
           />
-          
-          <DashboardKpiCard 
-            label="Profit Factor" 
-            value={stats.profit_factor.toFixed(2)}
-            color={
-              stats.profit_factor > 2 ? "text-[#4AD295]" :
-              stats.profit_factor > 1 ? "text-[#C9A646]" :
-              "text-[#E36363]"
+
+          {/* 3. Profit Factor */}
+          <BacktestKpiCard
+            label="Profit Factor"
+            value={Number.isFinite(stats.profit_factor) ? stats.profit_factor.toFixed(2) : '∞'}
+            tone={
+              !Number.isFinite(stats.profit_factor) ? "green" :
+              stats.profit_factor > 1 ? "green" : "red"
             }
-            tooltip="Gross profit divided by gross loss. >1 means profitable"
+            visual="line"
+            tooltip="Gross profit divided by gross loss. >1 means profitable. ∞ = no losing trades."
           />
-          
-          <DashboardKpiCard 
-            label="Avg Win/Loss Trade" 
-            value={`${(stats.avg_win / Math.abs(stats.avg_loss)).toFixed(2)}`}
+
+          {/* 4. Avg Win / Loss */}
+          <BacktestKpiCard
+            label="Avg Win / Loss"
+            value={stats.avg_loss !== 0 ? (stats.avg_win / Math.abs(stats.avg_loss)).toFixed(2) : '—'}
+            tone="blue"
+            visual="bars"
             hint={`${formatCurrency(stats.avg_win)} / ${formatCurrency(stats.avg_loss)}`}
-            color="text-[#C9A646]"
-            tooltip="Average size of winning trades vs losing trades"
-            showGauge={true}
-            gaugeData={{ 
-              avgWin: stats.avg_win, 
-              avgLoss: stats.avg_loss 
-            }}
+            tooltip="Average size of winning trades compared with average losing trade."
+          />
+
+          {/* 5. Expectancy */}
+          <BacktestKpiCard
+            label="Expectancy"
+            value={formatSignedCurrency(expectancy)}
+            tone={expectancy >= 0 ? "green" : "red"}
+            visual="target"
+            hint="Per Trade"
+            tooltip="Estimated average P&L per trade based on win rate, average win, and average loss."
           />
         </div>
 
-        {/* Best/Worst Trades */}
-        <BacktestBestWorstTrades stats={stats} />
+        {/* Equity + Daily P&L charts row — V2 components bring their own panel chrome */}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1fr]">
+          <ErrorBoundary fallback={
+            <div className="rounded-[12px] bg-[#0E0E0E] border border-white/[0.05] p-6 text-center text-[#E36363]">
+              Failed to load chart
+            </div>
+          }>
+            <Suspense fallback={<ChartSkeleton />}>
+              <BacktestEquityChartV2 data={chartEquitySeries} trades={[]} />
+            </Suspense>
+          </ErrorBoundary>
 
-        {/* Equity Chart */}
-        <ErrorBoundary fallback={
-          <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-            Failed to load equity curve. Please refresh the page.
-          </div>
-        }>
-          <Suspense fallback={<ChartSkeleton />}>
-            <BacktestEquityChart data={stats.equity_curve} />
-          </Suspense>
-        </ErrorBoundary>
-
-        {/* Daily P&L Chart */}
-        <ErrorBoundary fallback={
-          <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-            Failed to load daily P&L chart. Please refresh the page.
-          </div>
-        }>
-          <Suspense fallback={<ChartSkeleton />}>
-            <BacktestDailyPnLChart data={stats.equity_curve} />
-          </Suspense>
-        </ErrorBoundary>
+          <ErrorBoundary fallback={
+            <div className="rounded-[12px] bg-[#0E0E0E] border border-white/[0.05] p-6 text-center text-[#E36363]">
+              Failed to load chart
+            </div>
+          }>
+            <Suspense fallback={<ChartSkeleton />}>
+              <BacktestDailyPnLChartV2 data={chartEquitySeries} trades={chartTrades} />
+            </Suspense>
+          </ErrorBoundary>
+        </div>
 
         {/* Trade Time & Duration Performance Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TradeTimePerformanceChart data={tradeTimeData} />
-          <TradeDurationPerformanceChart data={tradeDurationData} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
+            <h2 className="text-[14px] font-semibold text-white mb-3">Trade Time Performance</h2>
+            <TradeTimePerformanceChart data={tradeTimeData} />
+          </div>
+          <div className="relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4">
+            <h2 className="text-[14px] font-semibold text-white mb-3">Trade Duration Performance</h2>
+            <TradeDurationPerformanceChart data={tradeDurationData} />
+          </div>
         </div>
+
       </div>
     </div>
   );
@@ -902,7 +1147,7 @@ function BacktestOverviewContent() {
 
 export default function BacktestOverview() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary boundary="backtest-overview">
       <BacktestOverviewContent />
     </ErrorBoundary>
   );

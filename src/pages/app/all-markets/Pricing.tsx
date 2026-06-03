@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Spinner } from '@/components/ui/Spinner';
 import { useAuth } from '@/providers/AuthProvider';
 import { 
   Check, Shield, Zap, Clock, TrendingUp, Gift, X, AlertTriangle, Crown
@@ -465,7 +466,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
+          <Spinner size="lg" />
           <p className="text-sm text-zinc-400">Loading...</p>
         </div>
       </div>

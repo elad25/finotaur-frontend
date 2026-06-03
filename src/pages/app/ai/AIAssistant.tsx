@@ -10,9 +10,12 @@ import { useSearchParams } from 'react-router-dom';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Plus, Sparkles } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 export default function AIAssistant() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,7 +47,7 @@ export default function AIAssistant() {
   if (accessLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }
@@ -76,6 +79,7 @@ export default function AIAssistant() {
   };
 
   return (
+    <ErrorBoundary boundary="ai-assistant" fallback={<AiToolErrorFallback />}>
     <div className="relative flex h-[calc(100vh-4rem)] overflow-hidden bg-surface-base">
       {/* Main Chat Area */}
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
@@ -126,5 +130,6 @@ export default function AIAssistant() {
         />
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

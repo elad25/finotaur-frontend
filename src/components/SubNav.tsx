@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { domains } from '@/constants/nav';
+import { MarketsAssetTabs } from '@/components/MarketsAssetTabs';
 import {
   Tooltip,
   TooltipContent,
@@ -56,7 +57,7 @@ export const SubNav = () => {
   const { user } = useAuth();
   const { isImpersonating } = useImpersonation();
   const { hasAccess: hasBacktestAccess } = useBacktestAccess();
-  const { hasBetaAccess } = useAdminAuth();
+  const { hasBetaAccess, isAdmin: isAdminFromHook } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAffiliate, setIsAffiliate] = useState(false);
 
@@ -191,12 +192,15 @@ export const SubNav = () => {
       return location.pathname.startsWith('/app/top-secret/admin');
     }
     
-    // Journal tab — must exclude /affiliate paths
+    // Journal tab — must exclude sibling sub-routes that have their own sub-nav entries
+    // (backtest / affiliate / admin / finotaur-ai). Otherwise Journal stays highlighted
+    // alongside the actual active sibling tab.
     if (itemPath === '/app/journal/overview' || itemPath === '/app/journal') {
-      return location.pathname.startsWith('/app/journal') && 
+      return location.pathname.startsWith('/app/journal') &&
              !location.pathname.startsWith('/app/journal/backtest') &&
              !location.pathname.startsWith('/app/journal/affiliate') &&
-             !location.pathname.startsWith('/app/journal/admin');
+             !location.pathname.startsWith('/app/journal/admin') &&
+             !location.pathname.startsWith('/app/journal/finotaur-ai');
     }
     
     if (itemPath.includes('/backtest')) {
@@ -217,8 +221,11 @@ export const SubNav = () => {
   }, [location.pathname, isActive]);
 
   const handleNavigation = useCallback((path: string, itemLocked?: boolean) => {
-    // 🔥 BETA ACCESS: Allow navigation if user has beta access
-    if (itemLocked && !hasBetaAccess) {
+    // Admin/beta users can bypass all locks (indicator-only, not access gate).
+    const canBypass = hasBetaAccess || isAdminFromHook;
+
+    // 🔥 BETA/ADMIN BYPASS: Allow navigation if user has beta access or is admin
+    if (itemLocked && !canBypass) {
       console.log('🔒 Item is locked - Coming Soon:', path);
       return;
     }
@@ -244,14 +251,14 @@ export const SubNav = () => {
     }
 
     // BACKTEST LOCKED CHECK
-    if (path.includes('/backtest') && isPathLocked(path) && !hasBetaAccess) {
+    if (path.includes('/backtest') && isPathLocked(path) && !canBypass) {
       console.log('🔒 Backtest is locked - Coming Soon');
       return;
     }
 
     // BACKTEST ACCESS CONTROL
     if (path.includes('/backtest')) {
-      if (!hasBacktestAccess && !hasBetaAccess) {
+      if (!hasBacktestAccess && !canBypass) {
         navigate('/app/journal/backtest/landing');
         return;
       }
@@ -275,14 +282,14 @@ export const SubNav = () => {
       return;
     }
     
-    // 🔥 Domain locked check with beta access override
-    const isLocked = (activeDomain as any).locked === true && !hasBetaAccess;
+    // 🔥 Domain locked check — bypassed for admin/beta
+    const isLocked = (activeDomain as any).locked === true && !canBypass;
     
     if (isLocked) {
       return;
     }
     navigate(path);
-  }, [navigate, isPathLocked, hasBacktestAccess, isAffiliate, isAdmin, activeDomain, hasBetaAccess]);
+  }, [navigate, isPathLocked, hasBacktestAccess, isAffiliate, isAdmin, activeDomain, hasBetaAccess, isAdminFromHook]);
 
   // Filter function to check if item should be shown
   const shouldShowItem = useCallback((item: any): boolean => {
@@ -328,6 +335,12 @@ export const SubNav = () => {
       }}
     >
       <div className="flex h-12 items-center gap-1 overflow-x-auto px-4 lg:px-6 scrollbar-hide">
+
+        {/* Markets product: show asset-class tab row instead of domain subNav */}
+        {activeDomain.id === 'markets' ? (
+          <MarketsAssetTabs />
+        ) : (
+        <>
         {activeDomain.subNav
           .filter(shouldShowItem)
           .map((item) => {
@@ -336,9 +349,16 @@ export const SubNav = () => {
             const itemLocked = (item as any).locked === true;
             const isBetaItem = (item as any).beta === true;
             const isAffiliateSmartItem = (item as any).affiliateSmartPage === true;
-            
-            // 🔥 BETA ACCESS: Override locked status for beta users
-            const locked = (domainLocked || backtestLocked || itemLocked) && !hasBetaAccess;
+
+            // lockedForPublic: true whenever the item is gated — used for the lock ICON (indicator).
+            // Admin/beta users still see the icon so they know what is hidden from the public.
+            const lockedForPublic = domainLocked || backtestLocked || itemLocked;
+
+            // canBypass: admin/beta can click through even if locked for public.
+            const canBypass = hasBetaAccess || isAdminFromHook;
+
+            // locked: drives disabled state + click-blocking (public only).
+            const locked = lockedForPublic && !canBypass;
             const active = isTabActive(item.path);
 
             // Is this the affiliate tab and the user is an active affiliate or admin?
@@ -373,14 +393,24 @@ export const SubNav = () => {
                   borderBottom: isBetaItem ? '2px solid #f97316' : '2px solid #C9A646'
                 } : {}}
               >
-                {item.label === 'FINOTAUR Copilot' ? (
+                {item.label.startsWith('FINOTAUR ') ? (
                   <span className="relative z-10">
                     <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text font-bold tracking-[0.04em] text-transparent">
                       FINOTAUR
                     </span>{' '}
-                    <span className="font-semibold text-ink-primary">Copilot</span>
+                    <span className="font-semibold text-ink-primary">{item.label.slice('FINOTAUR '.length)}</span>
                   </span>
                 ) : item.label}
+                {/* Lock icon: shown for ALL users when item is gated.
+                    Admin/beta can still click (not disabled) — the icon is an indicator only.
+                    For admin bypass: slightly dimmer + tooltip "Hidden from public — admin view". */}
+                {lockedForPublic && !locked && (
+                  <Lock
+                    className="h-3 w-3 opacity-30"
+                    title="Hidden from public — admin view"
+                    aria-label="Hidden from public"
+                  />
+                )}
                 {locked && <Lock className="h-3 w-3 opacity-60" />}
                 
                 {/* 🔥 Beta badge */}
@@ -457,6 +487,8 @@ export const SubNav = () => {
             
             return buttonContent;
           })}
+        </>
+        )}
       </div>
     </div>
   );

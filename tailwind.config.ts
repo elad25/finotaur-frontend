@@ -17,7 +17,7 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         serif: ['"Cormorant Garamond"', 'Playfair Display', 'serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
-        display: ['"Cinzel"', '"Cormorant Garamond"', 'serif'],
+        display: ['"Cormorant Garamond"', 'serif'],
         wordmark: ['"Outfit"', '"Inter"', 'system-ui', 'sans-serif'],
       },
       colors: {
@@ -232,6 +232,12 @@ export default {
           "0%, 100%": { transform: "translateY(0px)" },
           "50%": { transform: "translateY(-10px)" }
         },
+        "fino-idle": {
+          "0%, 100%": { transform: "translateY(0) rotate(0deg) scale(1)" },
+          "25%": { transform: "translateY(-16px) rotate(-2deg) scale(1.015)" },
+          "50%": { transform: "translateY(-7px) rotate(0deg) scale(1.03)" },
+          "75%": { transform: "translateY(-16px) rotate(2deg) scale(1.015)" }
+        },
         "shimmer": {
           "0%": { backgroundPosition: "-200% center" },
           "100%": { backgroundPosition: "200% center" }
@@ -254,6 +260,7 @@ export default {
           "0%, 100%": { opacity: "0.3" },
           "50%": { opacity: "0.6" }
         },
+
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -262,11 +269,13 @@ export default {
         "slide-up": "slide-up 0.5s ease-out",
         "glow-pulse": "glow-pulse 2s ease-in-out infinite",
         "float": "float 3s ease-in-out infinite",
+        "fino-idle": "fino-idle 5s ease-in-out infinite",
         "shimmer": "shimmer 3s linear infinite",
         "gold-pulse": "goldPulse 6s ease-in-out infinite",
         "gradient-x": "gradient-x 3s ease infinite",
         "pulse-glow": "pulse-glow 3s ease-in-out infinite",
         "subtle-glow": "subtle-glow 4s ease-in-out infinite",
+
       },
       backgroundColor: {
         // FINOTAUR — Section/Atmospheric (added 2026-05-03)

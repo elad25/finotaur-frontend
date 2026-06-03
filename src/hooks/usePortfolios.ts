@@ -1,6 +1,6 @@
 // src/hooks/usePortfolios.ts
 // ═══════════════════════════════════════════════════════════════
-// Loads user portfolios (Tradovate accounts + manual).
+// Loads user portfolios (Tradovate accounts + manual + broker connections).
 // Uses React Query for caching — 10k users ready.
 // ═══════════════════════════════════════════════════════════════
 
@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { BROKER_CONFIGS } from '@/lib/brokers/types';
 
 export interface Portfolio {
   id: string;
@@ -16,7 +17,8 @@ export interface Portfolio {
   tradovate_account_id: number | null;
   tradovate_account_spec: string | null;
   environment: 'live' | 'demo' | null;
-  source: 'manual' | 'tradovate';
+  source: 'manual' | 'tradovate' | 'broker';
+  broker_connection_id?: string;
   is_active: boolean;
   created_at: string;
   connection_label: string | null;
@@ -28,6 +30,32 @@ export interface Portfolio {
   // Sprint 4c: hard-stop fields
   max_loss_per_trade_usd:  number | null;
   daily_stop_loss_usd:     number | null;
+}
+
+// ── Broker portfolio ID helpers ─────────────────────────────────────────────
+/** Returns true when id is a synthetic broker portfolio id (prefix: "broker_"). */
+export function isBrokerId(id: string | null | undefined): id is string {
+  return typeof id === 'string' && id.startsWith('broker_');
+}
+
+/** Extracts the broker_connections UUID from a synthetic broker portfolio id. */
+export function brokerConnId(id: string): string {
+  return id.slice('broker_'.length);
+}
+
+/** Build a human-readable name for a broker_connections row (English only). */
+function buildBrokerPortfolioName(c: {
+  broker: string;
+  connection_name?: string | null;
+  account_name?: string | null;
+  account_id?: string | null;
+}): string {
+  if (c.connection_name?.trim()) return c.connection_name.trim();
+  if (c.account_name?.trim()) return c.account_name.trim();
+  const brokerLabel =
+    BROKER_CONFIGS[c.broker as keyof typeof BROKER_CONFIGS]?.displayName ?? c.broker;
+  if (c.account_id) return `${brokerLabel} ${c.account_id}`;
+  return brokerLabel;
 }
 
 // ── Virtual MANUAL portfolio ID — stable, never conflicts with real UUIDs ──
@@ -94,7 +122,45 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
     }
   }
 
-  // ── 3. ALWAYS guarantee a Manual portfolio exists ──────────
+  // ── 3. Append non-Tradovate broker journal accounts ─────────
+  // Query broker_connections with purpose='journal', is_active=true, broker != 'tradovate'.
+  // Errors are swallowed so a broken broker_connections query never breaks the hook.
+  try {
+    const { data: brokerConns, error: brokerError } = await supabase
+      .from('broker_connections')
+      .select('id,broker,connection_name,account_name,account_id,environment,is_active')
+      .eq('user_id', userId)
+      .eq('purpose', 'journal')
+      .eq('is_active', true)
+      .neq('broker', 'tradovate');
+
+    if (!brokerError && brokerConns && brokerConns.length > 0) {
+      const brokerPortfolios: Portfolio[] = brokerConns.map(c => ({
+        id: `broker_${c.id}`,
+        name: buildBrokerPortfolioName(c),
+        description: null,
+        tradovate_account_id: null,
+        tradovate_account_spec: null,
+        environment: (c.environment as 'live' | 'demo') ?? null,
+        source: 'broker' as const,
+        broker_connection_id: c.id,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        connection_label: c.connection_name ?? null,
+        kill_switch_active: null,
+        max_daily_loss_usd: null,
+        max_position_size: null,
+        max_contracts_per_trade: null,
+        max_loss_per_trade_usd: null,
+        daily_stop_loss_usd: null,
+      }));
+      portfolios = [...portfolios, ...brokerPortfolios];
+    }
+  } catch {
+    // Non-blocking — broker_connections failure must not crash portfolio loading.
+  }
+
+  // ── 4. ALWAYS guarantee a Manual portfolio exists ──────────
   // If there's no manual portfolio in the DB result, inject a virtual one.
   const hasManual = portfolios.some(p => p.source === 'manual');
   if (!hasManual) {
@@ -254,6 +320,7 @@ export function usePortfolios() {
 
   // effectivePortfolioIds — for multi-filter queries
   // null = no filter (ALL), string[] = filter to these IDs
+  // NOTE: keeps broker_ ids in the array — callers must handle them via isBrokerId().
   const effectivePortfolioIds: string[] | null = (() => {
     if (isShowingAll || isShowingTrader) return null;
     const realIds = selectedIds.filter(id =>
@@ -269,6 +336,7 @@ export function usePortfolios() {
     refetch:      query.refetch,
     tradovatePortfolios: portfolios.filter(p => p.source === 'tradovate'),
     manualPortfolios:    portfolios.filter(p => p.source === 'manual'),
+    brokerPortfolios:    portfolios.filter(p => p.source === 'broker'),
     // Legacy single-select
     activePortfolio,
     activePortfolioId: activePortfolioId ?? activePortfolio?.id ?? null,

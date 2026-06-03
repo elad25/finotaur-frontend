@@ -41,7 +41,7 @@ import { cn } from "@/lib/utils";
 import {
   Settings, Loader2, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
   Clock, Calendar, CheckCircle2, AlertCircle, Key, Eye, EyeOff, Check,
-  TrendingUp, Newspaper, AlertTriangle, Sparkles, Brain, Flame,
+  TrendingUp, Newspaper, AlertTriangle, Flame,
   Pencil, X, Globe, User, BookOpen, ExternalLink, Mail
 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,7 +51,7 @@ import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation"
 // TYPES - Matches actual DB schema
 // ============================================
 
-type TabId = "general" | "billing" | "credits" | "notifications" | "security";
+type TabId = "general" | "billing" | "notifications" | "security";
 
 // Newsletter preferences JSONB structure
 interface NewsletterPreferences {
@@ -165,7 +165,6 @@ const useSettings = () => {
 const tabs: { id: TabId; label: string; icon: typeof Settings }[] = [
   { id: "general", label: "General", icon: Settings },
   { id: "billing", label: "Subscription", icon: CreditCard },
-  { id: "credits", label: "AI Credits", icon: Sparkles },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "security", label: "Security", icon: Shield },
 ];
@@ -192,6 +191,24 @@ function formatDate(dateString: string | null): string {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric'
   });
+}
+
+// Compute the next upcoming billing date by advancing the anchor date by the
+// billing interval until it lands in the future. Returns null if no anchor.
+function computeNextBilling(anchorISO: string | null | undefined, interval: string | null | undefined): string | null {
+  if (!anchorISO) return null;
+  const anchor = new Date(anchorISO);
+  if (isNaN(anchor.getTime())) return null;
+  const now = new Date();
+  const next = new Date(anchor.getTime());
+  const stepMonths = interval === 'yearly' ? 12 : 1;
+  // Advance until strictly in the future (cap iterations to avoid infinite loop)
+  let guard = 0;
+  while (next.getTime() <= now.getTime() && guard < 600) {
+    next.setMonth(next.getMonth() + stepMonths);
+    guard++;
+  }
+  return next.toISOString();
 }
 
 function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platform') {
@@ -445,10 +462,10 @@ const GeneralTab = () => {
                 <p className="text-sm text-zinc-400">Unlimited trades & premium features</p>
               </div>
             </div>
-<Button 
-  disabled
-  size="sm" 
-  className="bg-zinc-600 text-zinc-400 cursor-not-allowed opacity-50"
+<Button
+  size="sm"
+  onClick={() => navigate('/app/all-markets/pricing')}
+  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
 >
   Upgrade <ArrowRight className="w-4 h-4 ml-1" />
 </Button>
@@ -996,7 +1013,7 @@ const BillingTab = () => {
             <h2 className="font-medium text-white">Finotaur Platform</h2>
           </div>
           <a 
-            href="https://whop.com/finotaur" 
+            href="https://whop.com/@me/settings/orders/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
@@ -1198,7 +1215,7 @@ const BillingTab = () => {
             <h2 className="font-medium text-white">Trading Journal</h2>
           </div>
           <a 
-            href="https://whop.com/finotaur" 
+            href="https://whop.com/@me/settings/orders/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
@@ -1323,7 +1340,7 @@ const BillingTab = () => {
             </div>
             {newsletterIsActive && (
               <a 
-                href="https://whop.com/finotaur" 
+                href="https://whop.com/@me/settings/orders/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-xs text-zinc-500 hover:text-purple-300 flex items-center gap-1.5 transition-colors"
@@ -1440,7 +1457,7 @@ const BillingTab = () => {
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       {newsletterPricing.isInTrial && profile?.newsletter_started_at
                         ? formatDate(new Date(new Date(profile.newsletter_started_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString())
-                        : formatDate(profile?.newsletter_expires_at)
+                        : formatDate(profile?.newsletter_expires_at ?? computeNextBilling(profile?.newsletter_paid_at ?? profile?.newsletter_started_at, profile?.newsletter_interval))
                       }
                     </p>
                   </div>
@@ -1628,7 +1645,7 @@ const BillingTab = () => {
             </div>
             {topSecretIsActive && (
               <a 
-                href="https://whop.com/finotaur" 
+                href="https://whop.com/@me/settings/orders/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className={cn(
@@ -1753,7 +1770,7 @@ const BillingTab = () => {
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       {topSecretPricing.isInTrial && profile?.top_secret_started_at
                         ? formatDate(new Date(new Date(profile.top_secret_started_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString())
-                        : formatDate(profile?.top_secret_expires_at)
+                        : formatDate(profile?.top_secret_expires_at ?? computeNextBilling(profile?.top_secret_trial_ends_at ?? profile?.top_secret_started_at, profile?.top_secret_interval))
                       }
                     </p>
                   </div>
@@ -2178,76 +2195,6 @@ const BillingTab = () => {
 // ============================================
 // TAB: CREDITS (Placeholder - needs credits table)
 // ============================================
-
-const CreditsTab = () => {
-  const { profile } = useSettings();
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-purple-400" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-white">AI Credits</h1>
-          <p className="text-sm text-zinc-500">Manage your AI usage credits</p>
-        </div>
-      </div>
-
-      {/* Coming Soon Card */}
-      <Card className="p-8 border-dashed border-2 border-zinc-700 bg-zinc-900/30">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
-            <Sparkles className="w-8 h-8 text-[#C9A646]" />
-          </div>
-          <h3 className="text-lg font-semibold text-white mb-2">AI Credits Coming Soon</h3>
-          <p className="text-sm text-zinc-400 max-w-md mx-auto mb-6">
-            We're building a powerful AI credit system for advanced analysis, 
-            automated insights, and intelligent trade suggestions.
-          </p>
-          <Badge variant="outline" className="bg-[#C9A646]/10 text-[#C9A646] border-[#C9A646]/30">
-            <Clock className="w-3 h-3 mr-1" /> Coming Q2 2025
-          </Badge>
-        </div>
-      </Card>
-
-      {/* How It Will Work */}
-      <Card className="p-5 bg-zinc-900/50 border-zinc-700/50">
-        <p className="text-sm font-medium text-white mb-4">How Credits Will Work</p>
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-              <Zap className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <span className="text-emerald-400 text-sm font-medium">Light Actions</span>
-              <p className="text-zinc-500 text-xs">FREE — View data, calendars, basic analysis</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <Brain className="w-4 h-4 text-blue-400" />
-            </div>
-            <div>
-              <span className="text-blue-400 text-sm font-medium">Medium Actions</span>
-              <p className="text-zinc-500 text-xs">3-8 credits — AI trade analysis, pattern detection</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
-              <Flame className="w-4 h-4 text-orange-400" />
-            </div>
-            <div>
-              <span className="text-orange-400 text-sm font-medium">Heavy Actions</span>
-              <p className="text-zinc-500 text-xs">10-20 credits — Deep reports, portfolio analysis</p>
-            </div>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-};
 
 // ============================================
 // TAB: NOTIFICATIONS
@@ -2881,7 +2828,6 @@ export const SettingsLayout = () => {
     switch (activeTab) {
       case 'general': return <GeneralTab />;
       case 'billing': return <BillingTab />;
-      case 'credits': return <CreditsTab />;
       case 'notifications': return <NotificationsTab />;
       case 'security': return <SecurityTab />;
       default: return <GeneralTab />;

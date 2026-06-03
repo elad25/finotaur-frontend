@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { classifyAsset, futuresMetaFor, AssetType } from '../assetMeta';
+import { getPipSize } from '@/utils/tradeCalculations';
 
 type RR = {
   direction: 'LONG'|'SHORT'|'';
@@ -77,8 +78,7 @@ export function useRiskRR(fields: {
       }
       case 'forex': {
         const lots = toNum(fields.lotSize) || 1;
-        const s = (fields.symbol || '').toUpperCase().replace('/', '');
-        const pipSize = /JPY$/.test(s) ? 0.01 : 0.0001;
+        const pipSize = getPipSize(fields.symbol);
         const pipsRisk = Math.round(Math.abs(entry - stop) / pipSize);
         const pipsReward = Math.round(Math.abs((tp || entry) - entry) / pipSize);
         const pipValue = 10 * 1 * fxUsd;

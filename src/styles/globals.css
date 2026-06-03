@@ -1,8 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
-
+/* Fonts are loaded via a single consolidated <link> in index.html (non-blocking).
+   The former @import here blocked CSSOM construction / first paint — removed. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Hide native number-input spinner arrows on opt-in inputs (.no-spinner).
+   Financial inputs use mono fields, not steppers. */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
@@ -277,6 +289,40 @@ All colors MUST be HSL.
   .num-change--positive { color: var(--num-positive); }
   .num-change--negative { color: var(--num-negative); }
 
+  /*
+   * Gold-on-black custom checkbox (FINOTAUR brand).
+   * Unchecked: black fill + gold border (never the browser-default white box).
+   * Checked: gold fill + black checkmark. Indeterminate: gold fill + black dash.
+   */
+  .checkbox-gold {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 1rem;
+    width: 1rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    border: 1px solid #c9a646;
+    background-color: #000000;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 0.7rem 0.7rem;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .checkbox-gold:checked {
+    background-color: #c9a646;
+    border-color: #c9a646;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  }
+  .checkbox-gold:indeterminate {
+    background-color: #c9a646;
+    border-color: #c9a646;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3C/svg%3E");
+  }
+  .checkbox-gold:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(201, 166, 70, 0.4);
+  }
+
   /* App data typography.
      Landing pages intentionally sit outside `.finotaur-app-shell`, so their
      existing marketing typography stays untouched. */
@@ -468,9 +514,28 @@ All colors MUST be HSL.
     hsl(var(--gold) / 0.5) 50%,
     hsl(var(--gold) / 0.7) 100%
   );
-  box-shadow: 
+  box-shadow:
     0 0 10px hsl(var(--gold) / 0.4),
     inset 0 0 5px hsl(var(--gold) / 0.2);
+}
+
+/* ============================================
+   GLOBAL OMNIBOX — luxury placeholder + focus
+   ============================================ */
+
+/* Muted gold placeholder for the desktop command bar input */
+.omnibox-trigger input::placeholder {
+  color: rgba(201, 166, 70, 0.28);
+  font-size: 0.8125rem; /* 13px — slightly refined vs body */
+  letter-spacing: 0.01em;
+}
+
+/* Suppress browser default blue focus outline — our gold box-shadow ring
+   (set inline on the wrapper div) is the visible focus indicator.
+   The input itself should be transparent on outline. */
+.omnibox-trigger input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 /* Hide scrollbar but keep functionality */
@@ -664,5 +729,11 @@ nav[class*="flex-col"] button.active {
   border-radius: 999px;
   background: #c9a646;
   box-shadow: 0 0 0 1px rgba(201, 166, 70, 0.9), 0 0 16px rgba(201, 166, 70, 0.28);
+}
+
+/* Large thin "+" crosshair cursor for the backtest chart (overrides lightweight-charts' native canvas crosshair) */
+.cursor-chart-cross,
+.cursor-chart-cross * {
+  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='32'%20height='32'%3E%3Cline%20x1='16'%20y1='1'%20x2='16'%20y2='31'%20stroke='white'%20stroke-width='1'/%3E%3Cline%20x1='1'%20y1='16'%20x2='31'%20y2='16'%20stroke='white'%20stroke-width='1'/%3E%3C/svg%3E") 16 16, crosshair !important;
 }
 

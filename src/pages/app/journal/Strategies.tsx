@@ -8,6 +8,7 @@ import {
   Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
 } from "lucide-react";
 import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
+import { Spinner } from '@/components/ui/Spinner';
 import { useTrades } from "@/hooks/useTradesData";
 import EquityCurveChart from '@/components/charts/EquityCurveChart';
 import { 
@@ -293,8 +294,7 @@ const strategyTrades = useMemo(() => {
     return (
       <div style={{ background: '#0A0A0A', minHeight: '100vh' }} className="flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-t-transparent animate-spin" 
-               style={{ borderColor: '#C9A646', borderTopColor: 'transparent' }} />
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p style={{ color: '#9A9A9A' }}>Loading strategy...</p>
         </div>
       </div>
@@ -2063,12 +2063,12 @@ const strategiesWithStats = useMemo(() => {
 
         {!userId ? (
           <div className="text-center py-12">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-t-transparent animate-spin" style={{ borderColor: '#C9A646', borderTopColor: 'transparent' }} />
+            <Spinner size="lg" className="mx-auto mb-4" />
             <p style={{ color: '#9A9A9A' }}>Loading user...</p>
           </div>
         ) : loading ? (
           <div className="text-center py-12">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-t-transparent animate-spin" style={{ borderColor: '#C9A646', borderTopColor: 'transparent' }} />
+            <Spinner size="lg" className="mx-auto mb-4" />
             <p style={{ color: '#9A9A9A' }}>Loading strategies...</p>
           </div>
         ) : strategies.length === 0 ? (

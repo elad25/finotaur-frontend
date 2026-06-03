@@ -25,6 +25,7 @@ import {
 import { BROKER_CONFIGS, BrokerName } from '@/lib/brokers/types';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
+import BinanceConnectionPopup from '@/components/brokers/BinanceConnectionPopup';
 
 const CONNECTION_NAME_MAX = 32;
 const NINJATRADER_AFFILIATE_URL = 'https://ninjatraderdomesticvendor.sjv.io/c/7301959/3069488/37581';
@@ -35,6 +36,7 @@ const STRIP_BROKERS: BrokerName[] = [
   'mt5',
   'interactive_brokers',
   'tradingview',
+  'binance',
 ];
 
 // NinjaTrader Web accounts run on Tradovate cloud (post-2022 acquisition),
@@ -48,6 +50,7 @@ const BROKER_MARKS: Partial<Record<BrokerName, string>> = {
   mt5: '/brokers/metatrader5-mark.svg',
   interactive_brokers: '/brokers/ibkr-mark.svg',
   tradingview: '/brokers/tradingview-mark.svg',
+  binance: '/brokers/binance.svg',
 };
 
 interface Props {
@@ -184,6 +187,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const [env, setEnv] = useState<TradovateEnv>('live');
   const [error, setError] = useState('');
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
+  const [showBinancePopup, setShowBinancePopup] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -192,6 +196,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       setEnv('live');
       setError('');
       setRiskAcknowledged(false);
+      setShowBinancePopup(false);
     }
   }, [open]);
 
@@ -214,6 +219,9 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
 
   const canSubmit = useMemo(() => {
     if (!riskAcknowledged) return false;
+    if (selectedBroker === 'binance') {
+      return Boolean(user);
+    }
     if (usesTradovateAuth) {
       return Boolean(user) && !isLoading;
     }
@@ -221,10 +229,16 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       return Boolean(user) && !isLoading;
     }
     return false;
-  }, [riskAcknowledged, usesTradovateAuth, selectedBroker, isLoading, user]);
+  }, [riskAcknowledged, selectedBroker, usesTradovateAuth, isLoading, user]);
 
   const handleConnect = async () => {
     setError('');
+
+    // Binance uses a dedicated API-key popup (not OAuth redirect).
+    if (selectedBroker === 'binance' && user) {
+      setShowBinancePopup(true);
+      return;
+    }
 
     if (usesTradovateAuth && user) {
       try {
@@ -255,6 +269,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[96vh] w-[calc(100vw-24px)] max-w-[560px] overflow-hidden rounded-[9px] border border-[#C9A646]/18 bg-[#070707] p-0 text-ink-primary shadow-[0_0_42px_rgba(201,166,70,0.16)] [&>button]:hidden"
@@ -323,7 +338,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
             <label className="mb-2 block text-[10px] uppercase tracking-[0.18em] text-ink-secondary">
               Select Broker
             </label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
               {STRIP_BROKERS.map((broker) => (
                 <BrokerTile
                   key={broker}
@@ -381,7 +396,13 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               </div>
             )}
 
-            {!usesTradovateAuth && selectedBroker !== 'interactive_brokers' && (
+            {selectedBroker === 'binance' && (
+              <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
+                Click Connect to enter your Binance read-only API key and secret. Your credentials are encrypted in Vault — Finotaur cannot execute trades.
+              </div>
+            )}
+
+            {!usesTradovateAuth && selectedBroker !== 'interactive_brokers' && selectedBroker !== 'binance' && (
               <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
                 {config.displayName} is prepared in the broker ecosystem UI. Live credential exchange will be enabled in a later broker-activation pass.
               </div>
@@ -504,5 +525,19 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
         </div>
       </DialogContent>
     </Dialog>
+
+      {showBinancePopup && (
+        <BinanceConnectionPopup
+          onClose={() => {
+            setShowBinancePopup(false);
+            onOpenChange(false);
+          }}
+          onSuccess={() => {
+            setShowBinancePopup(false);
+            onOpenChange(false);
+          }}
+        />
+      )}
+    </>
   );
 }

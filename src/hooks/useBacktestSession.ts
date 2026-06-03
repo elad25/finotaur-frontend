@@ -13,7 +13,13 @@
  * 2 will introduce a single proper store if persistence demands it.
  */
 
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+
+// localStorage key prefix — actual key is `<prefix><userId>` so two accounts
+// sharing a browser don't see each other's in-flight session.
+const STORAGE_PREFIX = 'finotaur:backtest:session:';
+const PERSIST_THROTTLE_MS = 500;
 
 export type PaperSide = 'LONG' | 'SHORT';
 export type ExitReason = 'manual' | 'sl' | 'tp';
@@ -115,11 +121,23 @@ interface AddPendingPayload {
 }
 interface CancelPendingPayload { orderId: string; }
 interface FillPendingPayload { orderId: string; fillPrice: number; fillTime: number; }
+interface UpdatePendingPayload {
+  orderId: string;
+  stopLoss?: number;
+  takeProfit?: number;
+  triggerPrice?: number;
+}
 
 interface ClosePayload {
   price: number;
   time: number;
   reason: ExitReason;
+}
+
+export interface LoadSessionPayload {
+  startingBalance: number;
+  closedPositions: PaperPosition[];
+  pendingOrders: PendingOrder[];
 }
 
 type Action =
@@ -134,7 +152,12 @@ type Action =
   // Phase 6
   | { type: 'ADD_PENDING'; payload: AddPendingPayload }
   | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
-  | { type: 'FILL_PENDING'; payload: FillPendingPayload };
+  | { type: 'FILL_PENDING'; payload: FillPendingPayload }
+  | { type: 'UPDATE_PENDING'; payload: UpdatePendingPayload }
+  | { type: 'LOAD_SESSION'; payload: LoadSessionPayload }
+  // Replace the entire session state from a persisted/restored snapshot.
+  // Used by the localStorage hydration effect once the user key is known.
+  | { type: 'HYDRATE'; payload: SessionState };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -163,8 +186,11 @@ function computePnL(p: PaperPosition, exitPrice: number): { pnl: number; pnlPerc
   return { pnl, pnlPercent };
 }
 
-function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
-  if (closed.length === 0) return EMPTY_STATS;
+export function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
+  // #6: headline stats reflect only configured trades (a defined SL and/or TP).
+  // Purely discretionary trades (neither SL nor TP) are excluded from the metrics.
+  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null);
+  if (configured.length === 0) return EMPTY_STATS;
 
   let winners = 0;
   let losers = 0;
@@ -178,7 +204,7 @@ function computeStats(closed: PaperPosition[], startingBalance: number): Session
   let longestWinStreak = 0;
   let longestLossStreak = 0;
 
-  for (const p of closed) {
+  for (const p of configured) {
     const pnl = p.pnl ?? 0;
     if (pnl > 0) {
       winners++;
@@ -201,7 +227,7 @@ function computeStats(closed: PaperPosition[], startingBalance: number): Session
     }
   }
 
-  const totalTrades = closed.length;
+  const totalTrades = configured.length;
   const netPnl = grossProfit - grossLoss;
   const avgWin = winners > 0 ? grossProfit / winners : 0;
   const avgLoss = losers > 0 ? grossLoss / losers : 0;
@@ -279,6 +305,22 @@ function reducer(state: SessionState, action: Action): SessionState {
         activePosition: { ...state.activePosition, takeProfit: action.payload.price },
       };
     }
+    case 'UPDATE_PENDING': {
+      const { orderId, stopLoss, takeProfit, triggerPrice } = action.payload;
+      return {
+        ...state,
+        pendingOrders: state.pendingOrders.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                ...(triggerPrice !== undefined ? { triggerPrice } : {}),
+                ...(stopLoss !== undefined ? { stopLoss } : {}),
+                ...(takeProfit !== undefined ? { takeProfit } : {}),
+              }
+            : o,
+        ),
+      };
+    }
     case 'RESET': {
       return {
         startingBalance: action.payload.startingBalance,
@@ -296,6 +338,21 @@ function reducer(state: SessionState, action: Action): SessionState {
         closedPositions,
         stats: computeStats(closedPositions, state.startingBalance),
       };
+    }
+    case 'LOAD_SESSION': {
+      const { startingBalance, closedPositions, pendingOrders } = action.payload;
+      return {
+        startingBalance,
+        activePosition: undefined,
+        closedPositions,
+        pendingOrders,
+        stats: computeStats(closedPositions, startingBalance),
+      };
+    }
+    case 'HYDRATE': {
+      // Full-state replace from a validated persisted snapshot. The payload is
+      // already shape-checked + stats-recomputed by loadPersistedState.
+      return action.payload;
     }
     case 'ADD_PENDING': {
       const { side, type: orderType, triggerPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
@@ -366,6 +423,10 @@ export interface UseBacktestSessionReturn {
   addPendingOrder: (payload: AddPendingPayload) => void;
   cancelPendingOrder: (orderId: string) => void;
   fillPendingOrder: (orderId: string, fillPrice: number, fillTime: number) => void;
+  /** Update a pending order's SL/TP/trigger (used by the draggable position box). */
+  updatePendingRisk: (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => void;
+  /** Hydrate the full session from a saved record (Phase 7+ load flow). */
+  loadSession: (payload: LoadSessionPayload) => void;
 }
 
 /**
@@ -378,7 +439,8 @@ export function computeStatsByStrategy(
   startingBalance: number,
 ): Map<string, SessionStats> {
   const buckets = new Map<string, PaperPosition[]>();
-  for (const p of closed) {
+  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null);
+  for (const p of configured) {
     const key = p.strategyId || 'manual';
     const arr = buckets.get(key);
     if (arr) arr.push(p);
@@ -391,14 +453,120 @@ export function computeStatsByStrategy(
   return out;
 }
 
-export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
-  const [state, dispatch] = useReducer(reducer, {
+function makeEmptyState(initialBalance: number): SessionState {
+  return {
     startingBalance: initialBalance,
     activePosition: undefined,
     closedPositions: [],
     pendingOrders: [],
     stats: EMPTY_STATS,
-  });
+  };
+}
+
+function storageKeyFor(userId: string | null | undefined): string | null {
+  return userId ? STORAGE_PREFIX + userId : null;
+}
+
+// Per-position field validation. A persisted trade from an older schema (or a
+// corrupted blob) could carry bad fields that produce NaN P&L or div-by-zero in
+// computeStats/computePnL (e.g. entryPrice: 0). Drop anything that doesn't pass.
+function isValidPaperPosition(p: unknown): p is PaperPosition {
+  if (!p || typeof p !== 'object') return false;
+  const o = p as Record<string, unknown>;
+  return (
+    typeof o.id === 'string'
+    && (o.side === 'LONG' || o.side === 'SHORT')
+    && typeof o.entryTime === 'number' && Number.isFinite(o.entryTime)
+    && typeof o.entryPrice === 'number' && Number.isFinite(o.entryPrice) && o.entryPrice > 0
+    && typeof o.size === 'number' && Number.isFinite(o.size) && o.size > 0
+  );
+}
+
+function loadPersistedState(initialBalance: number, key: string | null): SessionState {
+  const empty = makeEmptyState(initialBalance);
+  if (!key || typeof window === 'undefined') return empty;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return empty;
+    if (!Array.isArray(parsed.closedPositions) || !Array.isArray(parsed.pendingOrders)) return empty;
+
+    // Field-level sanitization: keep only well-formed positions, validate the
+    // active one, and ALWAYS recompute stats from the cleaned set so the
+    // persisted `stats` can never disagree with the trades (or carry NaN).
+    const startingBalance =
+      typeof parsed.startingBalance === 'number' && Number.isFinite(parsed.startingBalance) && parsed.startingBalance > 0
+        ? parsed.startingBalance
+        : initialBalance;
+    const closedPositions = (parsed.closedPositions as unknown[]).filter(isValidPaperPosition) as PaperPosition[];
+    const activePosition = isValidPaperPosition(parsed.activePosition)
+      ? (parsed.activePosition as PaperPosition)
+      : undefined;
+    const pendingOrders = parsed.pendingOrders as PendingOrder[];
+
+    return {
+      startingBalance,
+      activePosition,
+      closedPositions,
+      pendingOrders,
+      stats: computeStats(closedPositions, startingBalance),
+    };
+  } catch {
+    // corrupt JSON / quota / blocked storage — fall through to empty.
+  }
+  return empty;
+}
+
+export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
+  // useEffectiveUser returns the student's id in Mentor View (read-only there).
+  const { id: userId } = useEffectiveUser();
+  const key = storageKeyFor(userId);
+
+  // Initialize empty. The real restore happens in the hydration effect below
+  // once `key` is known — `useAuth().user` is frequently null on first render
+  // (auth resolves async), and useReducer's lazy initializer runs only ONCE,
+  // so loading here would permanently miss the late-arriving user id.
+  const [state, dispatch] = useReducer(reducer, null, () => makeEmptyState(initialBalance));
+
+  // Tracks which user key we've already hydrated, so we restore exactly once
+  // per key and never re-clobber mid-session. Also gates the write effect.
+  const hydratedKeyRef = useRef<string | null>(null);
+
+  // Hydrate from localStorage as soon as the user key becomes available.
+  useEffect(() => {
+    if (!key) return;
+    if (hydratedKeyRef.current === key) return;
+    hydratedKeyRef.current = key;
+    dispatch({ type: 'HYDRATE', payload: loadPersistedState(initialBalance, key) });
+  }, [key, initialBalance]);
+
+  // Throttled persistence: every state change schedules a write ~500ms out; a
+  // fresh change before the timer fires resets it (collapses bursts like SL
+  // drag into one write). Gated on hydratedKeyRef so the initial empty state
+  // never overwrites saved data before the hydration dispatch lands.
+  const writeTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!key || typeof window === 'undefined') return;
+    if (hydratedKeyRef.current !== key) return;
+    if (writeTimerRef.current !== null) {
+      window.clearTimeout(writeTimerRef.current);
+    }
+    writeTimerRef.current = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(state));
+      } catch {
+        // quota exceeded / private-mode / disabled — silently drop.
+      }
+      writeTimerRef.current = null;
+    }, PERSIST_THROTTLE_MS);
+    return () => {
+      if (writeTimerRef.current !== null) {
+        window.clearTimeout(writeTimerRef.current);
+        writeTimerRef.current = null;
+      }
+    };
+  }, [state, key]);
 
   const openPosition = useCallback((payload: OpenPayload) => {
     dispatch({ type: 'OPEN', payload });
@@ -436,6 +604,17 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     dispatch({ type: 'FILL_PENDING', payload: { orderId, fillPrice, fillTime } });
   }, []);
 
+  const updatePendingRisk = useCallback(
+    (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => {
+      dispatch({ type: 'UPDATE_PENDING', payload: { orderId, ...changes } });
+    },
+    [],
+  );
+
+  const loadSession = useCallback((payload: LoadSessionPayload) => {
+    dispatch({ type: 'LOAD_SESSION', payload });
+  }, []);
+
   return {
     state,
     openPosition,
@@ -447,5 +626,7 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    updatePendingRisk,
+    loadSession,
   };
 }

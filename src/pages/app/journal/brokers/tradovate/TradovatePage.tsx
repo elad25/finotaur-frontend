@@ -5,6 +5,7 @@ import { useTradovate } from '@/hooks/brokers/tradovate/useTradovate';
 import { TradovateLogin } from '@/components/brokers/tradovate/TradovateLogin';
 import { TradovateAccountSelector } from '@/components/brokers/tradovate/TradovateAccountSelector';
 import { TradovateSyncDashboard } from '@/components/brokers/tradovate/TradovateSyncDashboard';
+import { Spinner } from '@/components/ui/Spinner';
 
 export const TradovatePage: React.FC = () => {
   const { isAuthenticated, isLoading } = useTradovate();
@@ -13,7 +14,7 @@ export const TradovatePage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gold-500 mx-auto mb-4"></div>
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p className="text-gray-400">Loading...</p>
         </div>
       </div>

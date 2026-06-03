@@ -5,21 +5,33 @@ import { TopNav } from '@/components/TopNav';
 import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
+import { MentorViewBanner } from '@/components/MentorViewBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { cn } from '@/lib/utils';
+import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
+import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
+import { ProductDrawer } from '@/components/ProductDrawer';
+import SpotlightTour from '@/components/onboarding/SpotlightTour';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
-  '/app/all-markets/warzone',
-  '/app/top-secret',
+  // Phase 1: War Zone and Top Secret now have their own sidebars — removed from this list.
+  // '/app/all-markets/warzone',  // War Zone has sidebar now
+  // '/app/top-secret',           // Top Secret has sidebar now
+  '/app/home',              // Home hub renders full-width (no product sidebar needed)
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
   '/app/settings',
   // Admin CRM ships its own internal sidebar (12 tabs), so the global one
   // would collide.
   '/app/admin',
+];
+
+// Home hub is standalone — no product SubNav (it is its own surface).
+const NO_SUBNAV_ROUTES = [
+  '/app/home',
 ];
 
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
@@ -39,6 +51,10 @@ export const ProtectedAppLayout = () => {
   );
 
   const hideChrome = HIDE_CHROME_ROUTES.some(route =>
+    location.pathname.startsWith(route)
+  );
+
+  const hideSubNav = NO_SUBNAV_ROUTES.some(route =>
     location.pathname.startsWith(route)
   );
 
@@ -64,12 +80,17 @@ export const ProtectedAppLayout = () => {
   }
 
   return (
+    <AssetSelectorProvider>
+    <ProductDrawerProvider>
     <PortfolioProvider>
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
         <ImpersonationBanner />
+        <MentorViewBanner />
         {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
-        <SubNav />
+        {!hideSubNav && <SubNav />}
+        {/* Product Drawer — rendered at layout level so it overlays everything */}
+        <ProductDrawer />
         <div className="flex flex-1">
           {!hideSidebar && <Sidebar isOpen={sidebarOpen} />}
           <main
@@ -84,7 +105,15 @@ export const ProtectedAppLayout = () => {
           </main>
         </div>
         <ComplianceFooterBar />
+        {/* Spotlight onboarding tour — renders null when tour is not active */}
+        <SpotlightTour />
       </div>
     </PortfolioProvider>
+    </ProductDrawerProvider>
+    </AssetSelectorProvider>
   );
 };
+
+// Default export required by the finotaur:assert-lazy-default-exports build guard
+// (this module is loaded via lazy() in App.tsx).
+export default ProtectedAppLayout;

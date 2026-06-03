@@ -15,6 +15,7 @@ import { Check, X, Eye, EyeOff, FileText } from 'lucide-react';
 import TermsAndConditionsModal from '@/components/legal/TermsAndConditionsModal';
 import { validatePassword, getPasswordStrength } from '@/lib/passwordValidation';
 import { SEO } from '@/components/seo/SEO';
+import { Spinner } from "@/components/ui/Spinner";
 
 // Current terms version - update when terms change
 const CURRENT_TERMS_VERSION = '2025.11';
@@ -46,10 +47,10 @@ const saveTermsAcceptance = async (userId: string) => {
 // Only allow redirects to internal /app/ paths (prevent open-redirect)
 function getSafeFrom(from: string | undefined): string {
   if (from && from.startsWith('/app/')) return from;
-  return '/app/top-secret';
+  return '/app/home';
 }
 
-// New users land on /welcome. Returning users (welcome seen) go to /app/top-secret.
+// New users land on /welcome. Returning users (welcome seen) go to /app/home.
 const POST_REGISTER_NEW_USER_DEST = '/welcome';
 
 export default function Register() {
@@ -263,7 +264,7 @@ export default function Register() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
+          <Spinner size="lg" />
           <p className="text-sm text-zinc-400">Loading...</p>
         </div>
       </div>

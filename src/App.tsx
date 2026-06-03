@@ -4,24 +4,26 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppQueryProvider } from "@/providers/QueryProvider";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { TimezoneProvider } from "@/contexts/TimezoneContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
+import { MentorViewProvider } from "@/contexts/MentorViewContext";
 import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DomainGuard } from "@/components/DomainGuard";
-import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
-import { CopilotStandaloneLayout } from "@/layouts/CopilotStandaloneLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { Suspense, memo } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
+import { Spinner } from "@/components/ui/Spinner";
 import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
 import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
 import JournalCopierPage from "@/pages/JournalCopierPage";
+import ResearchIndex from "@/pages/research/ResearchIndexPage";
+import TickerResearch from "@/pages/research/TickerResearchPage";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -29,13 +31,11 @@ import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 import { BetaRoute } from "@/components/routes/BetaRoute";
 
-// 🎯 Guided Tour
-import GuidedTour from "@/components/onboarding/GuidedTour";
-import WelcomeOffer from "@/components/onboarding/WelcomeOffer";
-import { WelcomePopup } from "@/components/WelcomePopup";
 import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
+import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
+import { logger } from '@/lib/logger';
 
 // =====================================================
 // 🔄 AUTO-RELOAD ON CHUNK LOAD FAILURE (after deploy)
@@ -98,13 +98,19 @@ if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     const msg =
       (event.reason && (event.reason.message || event.reason.toString?.())) || '';
+    // ChunkLoadError is handled by GlobalErrorBoundary (manual refresh UI).
+    // Do NOT auto-reload here — it causes infinite reload loops after deploys.
     if (matchesChunkError(msg)) {
-      tryReloadOnce();
+      logger.warn('[App] Chunk load rejection detected — GlobalErrorBoundary will handle UI', { msg });
+      return;
     }
+    logger.error('[App] Unhandled promise rejection', event.reason);
   });
 }
 
 import SupportWidget from "@/components/SupportWidget";
+import { FinoChatProvider } from "@/contexts/FinoChatContext";
+import FinoChatDrawer from "@/components/fino/FinoChatDrawer";
 import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
 import { FEATURES } from "@/config/features";
 
@@ -120,21 +126,12 @@ import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
 import LinksPage from "@/pages/LinksPage";
-import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, FuturesRiskDisclosure, CftcHypotheticalDisclosure, TestimonialDisclaimer, AffiliateDisclosure, RefundPolicy, DMCA, LegalHub } from "@/components/legal";
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
 
 // LAZY LOADED PAGES
-const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
-const AdminUsers = lazy(() => import("@/pages/app/journal/admin/Users"));
-const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"));
-const AdminSubscribers = lazy(() => import("@/pages/app/journal/admin/Subscribers"));
-const AdminTopTraders = lazy(() => import("@/pages/app/journal/admin/TopTraders"));
-const AdminAffiliate = lazy(() => import("@/pages/app/journal/admin/Affiliate"));
-const Cancellations = lazy(() => import("@/pages/app/journal/admin/Cancellations"));
-const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
-const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
+const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
 const SettingsLayout = lazy(() => import("@/layouts/SettingsLayout"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
@@ -143,6 +140,25 @@ const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccess
 const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailurePage"));
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
 const DesignLab = lazy(() => import("@/pages/DesignLab"));
+const PlansPage = lazy(() => import("@/pages/app/Plans"));
+const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
+const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
+const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
+const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
+const WelcomePopup = lazy(() => import("@/components/WelcomePopup"));
+const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
+const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
+const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
+const Disclaimer = lazy(() => import("@/components/legal").then(m => ({ default: m.Disclaimer })));
+const Copyright = lazy(() => import("@/components/legal").then(m => ({ default: m.Copyright })));
+const CookiePolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.CookiePolicy })));
+const RiskDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.RiskDisclosure })));
+const FuturesRiskDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.FuturesRiskDisclosure })));
+const CftcHypotheticalDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.CftcHypotheticalDisclosure })));
+const TestimonialDisclaimer = lazy(() => import("@/components/legal").then(m => ({ default: m.TestimonialDisclaimer })));
+const AffiliateDisclosure = lazy(() => import("@/components/legal").then(m => ({ default: m.AffiliateDisclosure })));
+const RefundPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.RefundPolicy })));
+const DMCA = lazy(() => import("@/components/legal").then(m => ({ default: m.DMCA })));
 
 // Journal Pages
 const JournalOverview = lazy(() => import("@/pages/app/journal/Overview"));
@@ -152,8 +168,19 @@ const JournalTradeDetail = lazy(() => import("@/pages/app/journal/TradeDetail"))
 const JournalImport = lazy(() => import("@/pages/app/journal/Import"));
 const JournalExport = lazy(() => import("@/pages/app/journal/Export"));
 const JournalNotes = lazy(() => import("@/pages/app/journal/Notes"));
-const JournalAnalytics = lazy(() => import("@/pages/app/journal/Analytics"));
-const JournalAIReview = lazy(() => import("@/pages/app/journal/AIReview"));
+const JournalReportsLayout = lazy(() => import("@/pages/app/journal/reports/ReportsLayout"));
+const JournalReportsProgress = lazy(() => import("@/pages/app/journal/reports/ProgressTracker"));
+const JournalReportsDayView = lazy(() => import("@/pages/app/journal/reports/DayView"));
+const JournalReportsRecaps = lazy(() => import("@/pages/app/journal/reports/AIRecaps"));
+const JournalReportsBreakdowns = lazy(() => import("@/pages/app/journal/reports/Breakdowns"));
+const JournalReportsAnnualCalendar = lazy(() => import("@/pages/app/journal/reports/AnnualCalendar"));
+const JournalReportsCompare = lazy(() => import("@/pages/app/journal/reports/CompareReports"));
+const JournalReportsScores = lazy(() => import("@/pages/app/journal/reports/Scores"));
+const JournalReportsOverview = lazy(() => import("@/pages/app/journal/reports/Overview"));
+const JournalReportsSummary = lazy(() => import("@/pages/app/journal/reports/Summary"));
+const JournalReportsPerformance = lazy(() => import("@/pages/app/journal/reports/Performance"));
+const JournalReportsOptions = lazy(() => import("@/pages/app/journal/reports/OptionsAnalytics"));
+const JournalAutoTagger = lazy(() => import("@/pages/app/journal/AutoTagger"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
 const Strategies = lazy(() => import("@/pages/app/journal/Strategies"));
@@ -176,6 +203,7 @@ const JournalSettings = lazy(async () => {
   return { default: Component };
 });
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
+const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
@@ -183,13 +211,8 @@ const BacktestOverview = lazy(() => import("@/pages/app/journal/backtest/Overvie
 const BacktestChart = lazy(() => import("@/pages/app/journal/backtest/Chart"));
 const BacktestResults = lazy(() => import("@/pages/app/journal/backtest/Results"));
 const BacktestBuilder = lazy(() => import("@/pages/app/journal/backtest/Builder"));
-const BacktestData = lazy(() => import("@/pages/app/journal/backtest/Data"));
 const BacktestAnalytics = lazy(() => import("@/pages/app/journal/backtest/Analytics"));
-const BacktestAIInsights = lazy(() => import("@/pages/app/journal/backtest/Aiinsights"));
-const BacktestMonteCarlo = lazy(() => import("@/pages/app/journal/backtest/Montecarlo"));
-const BacktestWalkForward = lazy(() => import("@/pages/app/journal/backtest/Walkforward"));
-const BacktestOptimization = lazy(() => import("@/pages/app/journal/backtest/Optimization"));
-const BacktestReplay = lazy(() => import("@/pages/app/journal/backtest/Replay"));
+const BacktestTrades = lazy(() => import("@/pages/app/journal/backtest/BacktestTrades"));
 
 // Affiliate Center Pages
 const AffiliateOverview = lazy(() => import("@/features/affiliate/pages/Affiliateoverview"));
@@ -226,6 +249,18 @@ const AdminPatternLibraryList = lazy(() => import("@/pages/app/admin/PatternLibr
 // Upcoming Events — forward-looking event calendar (Tree #2, 2026-05-27)
 const UpcomingEventsView = lazy(() => import("@/pages/app/ai/UpcomingEventsView"));
 const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsAdmin"));
+// DEV-ONLY: /__dev/seo-analytics — public screen-verification route for the
+// admin SEO widget. Remove import + route + delete src/__dev/SeoAnalyticsDevPage.tsx
+// before merging Wave 5 to main (the admin route at /app/admin/seo is the prod surface).
+import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
+// ETFs
+const ETFOverview   = lazy(() => import("@/pages/app/etfs/Overview"));
+const ETFLayout     = lazy(() => import("@/pages/app/etfs/ETFLayout"));
+const ETFDirectory  = lazy(() => import("@/pages/app/etfs/Directory"));
+const ETFScreener   = lazy(() => import("@/pages/app/etfs/Screener"));
+const ETFCompare    = lazy(() => import("@/pages/app/etfs/Compare"));
+const ETFNews       = lazy(() => import("@/pages/app/etfs/News"));
+
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -237,8 +272,9 @@ const StocksSectors = lazy(() => import("@/pages/app/stocks/Sectors"));
 const StocksCatalysts = lazy(() => import("@/pages/app/stocks/Catalysts"));
 const StocksUpgrades = lazy(() => import("@/pages/app/stocks/Upgrades"));
 const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
+const StocksSentiment = lazy(() => import("@/pages/app/stocks/Sentiment"));
+const StocksInsider   = lazy(() => import("@/pages/app/stocks/Insider"));
 const StocksReports = lazy(() => import("@/pages/app/stocks/Reports"));
-const StocksWatchlists = lazy(() => import("@/pages/app/stocks/Watchlists"));
 
 // Crypto — 7 Consolidated Pages
 const CryptoOverview = lazy(() => import("@/pages/app/crypto/Overview"));
@@ -248,6 +284,9 @@ const CryptoDerivatives = lazy(() => import("@/pages/app/crypto/Derivatives"));
 const CryptoSentiment = lazy(() => import("@/pages/app/crypto/Sentiment"));
 const CryptoWatchlist = lazy(() => import("@/pages/app/crypto/Watchlist"));
 const CryptoAcademy = lazy(() => import("@/pages/app/crypto/Academy"));
+const CryptoDefiTvl = lazy(() => import("@/pages/app/crypto/DefiTvl"));
+const CryptoStablecoins = lazy(() => import("@/pages/app/crypto/Stablecoins"));
+const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -293,19 +332,19 @@ const MacroEvents = lazy(() => import("@/pages/app/macro/Events"));
 const MacroReports = lazy(() => import("@/pages/app/macro/Reports"));
 const MacroSentiment = lazy(() => import("@/pages/app/macro/Sentiment"));
 const MacroNews = lazy(() => import("@/pages/app/macro/News"));
+const MacroLiquidity = lazy(() => import("@/pages/app/macro/Liquidity"));
+const MacroRealYields = lazy(() => import("@/pages/app/macro/RealYields"));
+const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"));
 
-// Options
-const OptionsChain = lazy(() => import("@/pages/app/options/Chain"));
-const OptionsFlow = lazy(() => import("@/pages/app/options/Flow"));
-const OptionsVolatility = lazy(() => import("@/pages/app/options/Volatility"));
-const OptionsStrategy = lazy(() => import("@/pages/app/options/Strategy"));
-const OptionsSimulator = lazy(() => import("@/pages/app/options/Simulator"));
-const OptionsGreeksMonitor = lazy(() => import("@/pages/app/options/GreeksMonitor"));
-const OptionsIvRank = lazy(() => import("@/pages/app/options/IVRank"));
-const OptionsOIVolume = lazy(() => import("@/pages/app/options/OIVolume"));
-const OptionsUnusualActivity = lazy(() => import("@/pages/app/options/UnusualActivity"));
-const OptionsEarningsIVCrush = lazy(() => import("@/pages/app/options/EarningsIVCrush"));
-const OptionsShortcuts = lazy(() => import("@/pages/app/options/Shortcuts"));
+// Options — sealed pending licensed data feed (Track B). Pages kept on disk; routes serve ComingSoon.
+// To re-enable: restore lazy imports below, swap ComingSoon back in routes, set OPTIONS_ENABLED=true in constants/nav.ts
+import OptionsComingSoon from "@/pages/app/ComingSoon";
+
+// Portfolio
+const MyPortfolioPage = lazy(() => import("@/pages/app/portfolio/MyPortfolioPage"));
+
+// Watch List
+const MyWatchlistPage = lazy(() => import("@/pages/app/watchlist/MyWatchlistPage"));
 
 // AI
 const AIMyPortfolio = lazy(() => import("@/pages/app/ai/MyPortfolio"));
@@ -315,13 +354,14 @@ const AIMacroAnalyzer = lazy(() => import("@/pages/app/ai/macro-analyzer/MacroAn
 const AIOptionsIntelligence = lazy(() => import("@/pages/app/ai/OptionsIntelligenceAI"));
 const AIFlowScanner = lazy(() => import("@/pages/app/ai/flow-scanner"));
 const AITop5 = lazy(() => import("@/pages/app/ai/Top5"));
-const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
+// FINO AI: standalone AIAssistant page retired — /app/ai/assistant redirects to the AI Arena; the FINO AI side chat replaces it.
 const CopilotTopOpportunitiesPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotTopOpportunitiesPage })));
 const CopilotMacroPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotMacroPage })));
 const CopilotAIAnalystPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIAnalystPage })));
 const CopilotHoldingsPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotHoldingsPage })));
 const CopilotRisksPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotRisksPage })));
 const CopilotAIChatPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIChatPage })));
+const CopilotSectorFlowPage = lazy(() => import("@/pages/app/ai/copilot/components/SectorFlowPage").then((m) => ({ default: m.SectorFlowPage })));
 
 // Funding
 const FundingOverview = lazy(() => import("@/pages/app/funding/Overview"));
@@ -333,7 +373,7 @@ const FundingTransactions = lazy(() => import("@/pages/app/funding/Transactions"
 const PageLoader = memo(() => (
   <div className="flex items-center justify-center min-h-screen bg-background">
     <div className="flex flex-col items-center gap-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <Spinner size="lg" />
       <p className="text-sm text-muted-foreground">Loading...</p>
     </div>
   </div>
@@ -353,6 +393,14 @@ const LockedRoute = memo(({ domainId, children }: { domainId: string; children: 
 ));
 LockedRoute.displayName = 'LockedRoute';
 
+// Redirects /app/etfs/:symbol → /app/etfs/:symbol/overview
+// so the old bare-symbol URL keeps working after the section-based routing change.
+function ETFSymbolRedirect() {
+  const { symbol } = useParams<{ symbol: string }>();
+  return <Navigate to={`/app/etfs/${symbol}/overview`} replace />;
+}
+
+
 // APP CONTENT
 function AppContent() {
   // Consent-gated analytics: boots GA4 + PostHog only after user accepts cookies.
@@ -362,12 +410,12 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
-      <AffiliateTracker />
-      {/* 🎯 Guided Tour Overlay - renders on top of everything */}
-      <GuidedTour />
-      <WelcomeOffer />
-      {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
-      <WelcomePopup />
+      {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
+      <Suspense fallback={null}>
+        <WelcomeOffer />
+        {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
+        <WelcomePopup />
+      </Suspense>
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
         {import.meta.env.DEV && (
@@ -392,28 +440,31 @@ function AppContent() {
         <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/glossary" element={<GlossaryIndex />} />
         <Route path="/glossary/:slug" element={<GlossaryTerm />} />
+        <Route path="/research" element={<ResearchIndex />} />
+        <Route path="/research/:ticker" element={<TickerResearch />} />
         <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
-        <Route path="/legal" element={<LegalHub />} />
-        <Route path="/legal/terms" element={<TermsOfUse />} />
-        <Route path="/legal/privacy" element={<PrivacyPolicy />} />
-        <Route path="/legal/disclaimer" element={<Disclaimer />} />
-        <Route path="/legal/copyright" element={<Copyright />} />
-        <Route path="/legal/cookies" element={<CookiePolicy />} />
-        <Route path="/legal/risk-disclosure" element={<RiskDisclosure />} />
-        <Route path="/legal/futures-risk" element={<FuturesRiskDisclosure />} />
-        <Route path="/legal/cftc-hypothetical-performance" element={<CftcHypotheticalDisclosure />} />
-        <Route path="/legal/testimonial-disclaimer" element={<TestimonialDisclaimer />} />
-        <Route path="/legal/affiliate-disclosure" element={<AffiliateDisclosure />} />
-        <Route path="/legal/refund" element={<RefundPolicy />} />
-        <Route path="/legal/dmca" element={<DMCA />} />
+        <Route path="/legal" element={<SuspenseRoute><LegalHub /></SuspenseRoute>} />
+        <Route path="/legal/terms" element={<SuspenseRoute><TermsOfUse /></SuspenseRoute>} />
+        <Route path="/legal/privacy" element={<SuspenseRoute><PrivacyPolicy /></SuspenseRoute>} />
+        <Route path="/legal/disclaimer" element={<SuspenseRoute><Disclaimer /></SuspenseRoute>} />
+        <Route path="/legal/copyright" element={<SuspenseRoute><Copyright /></SuspenseRoute>} />
+        <Route path="/legal/cookies" element={<SuspenseRoute><CookiePolicy /></SuspenseRoute>} />
+        <Route path="/legal/risk-disclosure" element={<SuspenseRoute><RiskDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/futures-risk" element={<SuspenseRoute><FuturesRiskDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/cftc-hypothetical-performance" element={<SuspenseRoute><CftcHypotheticalDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/testimonial-disclaimer" element={<SuspenseRoute><TestimonialDisclaimer /></SuspenseRoute>} />
+        <Route path="/legal/affiliate-disclosure" element={<SuspenseRoute><AffiliateDisclosure /></SuspenseRoute>} />
+        <Route path="/legal/refund" element={<SuspenseRoute><RefundPolicy /></SuspenseRoute>} />
+        <Route path="/legal/dmca" element={<SuspenseRoute><DMCA /></SuspenseRoute>} />
         <Route path="/pricing-selection" element={<Navigate to="/onboarding" replace />} />
         
         {/* PROTECTED ROUTES */}
-        <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/app/top-secret" replace />} />
-          
+        <Route path="/app" element={<ProtectedRoute><MentorViewProvider><SuspenseRoute><ProtectedAppLayout /></SuspenseRoute></MentorViewProvider></ProtectedRoute>}>
+          <Route index element={<Navigate to="/app/home" replace />} />
+          <Route path="home" element={<SuspenseRoute><HomePage /></SuspenseRoute>} />
+
           {/* ALL MARKETS */}
           <Route path="all-markets/overview" element={<SuspenseRoute><AllMarketsOverview /></SuspenseRoute>} />
           <Route path="all-markets/chart" element={<SuspenseRoute><AllMarketsChart /></SuspenseRoute>} />
@@ -423,6 +474,8 @@ function AppContent() {
           <Route path="all-markets/calendar" element={<SuspenseRoute><AllMarketsCalendar /></SuspenseRoute>} />
           <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
           <Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
+          {/* Canonical Screener — cross-asset (Stocks/Crypto toggle), lives at the home/all-markets level */}
+          <Route path="all-markets/screener" element={<SuspenseRoute><StocksScreener /></SuspenseRoute>} />
 <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
           <Route path="all-markets/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliateSmartPage /></SuspenseRoute> : <Navigate to="/app" replace />} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -440,34 +493,65 @@ function AppContent() {
           <Route path="admin/upcoming-events" element={<ProtectedAdminRoute><SuspenseRoute><AdminUpcomingEvents /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="admin/patterns" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibraryList /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/pricing" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
+          <Route path="plans" element={<SuspenseRoute><PlansPage /></SuspenseRoute>} />
 
-          {/* OPTIONS */}
+          {/* OPTIONS — sealed pending licensed options data feed (Track B).
+              Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.
+              To re-enable: restore lazy imports + swap OptionsComingSoon back to real components. */}
           <Route path="options" element={<Navigate to="/app/options/chain" replace />} />
-          <Route path="options/chain" element={<LockedRoute domainId="options"><OptionsChain /></LockedRoute>} />
-          <Route path="options/flow" element={<LockedRoute domainId="options"><OptionsFlow /></LockedRoute>} />
-          <Route path="options/volatility" element={<LockedRoute domainId="options"><OptionsVolatility /></LockedRoute>} />
-          <Route path="options/strategy" element={<LockedRoute domainId="options"><OptionsStrategy /></LockedRoute>} />
-          <Route path="options/simulator" element={<LockedRoute domainId="options"><OptionsSimulator /></LockedRoute>} />
-          <Route path="options/greeks-monitor" element={<LockedRoute domainId="options"><OptionsGreeksMonitor /></LockedRoute>} />
-          <Route path="options/iv-rank" element={<LockedRoute domainId="options"><OptionsIvRank /></LockedRoute>} />
-          <Route path="options/oi-volume" element={<LockedRoute domainId="options"><OptionsOIVolume /></LockedRoute>} />
-          <Route path="options/unusual-activity" element={<LockedRoute domainId="options"><OptionsUnusualActivity /></LockedRoute>} />
-          <Route path="options/earnings-iv-crush" element={<LockedRoute domainId="options"><OptionsEarningsIVCrush /></LockedRoute>} />
-          <Route path="options/shortcuts" element={<LockedRoute domainId="options"><OptionsShortcuts /></LockedRoute>} />
+          <Route path="options/chain" element={<OptionsComingSoon title="Options Chain" description="Real-time options chain data is coming in a future release. We're securing the licensed data feed required to power this feature." />} />
+          <Route path="options/flow" element={<OptionsComingSoon title="Options Flow" description="Block trades, sweeps, and unusual flow analysis are coming in a future release." />} />
+          <Route path="options/volatility" element={<OptionsComingSoon title="Volatility" description="IV rank, skew, and term structure analysis are coming in a future release." />} />
+          <Route path="options/strategy" element={<OptionsComingSoon title="Strategy Builder" description="Multi-leg options strategy analysis and P&L modeling are coming in a future release." />} />
+          <Route path="options/simulator" element={<OptionsComingSoon title="Options Simulator" description="P&L scenarios, Greeks, and expiration modeling are coming in a future release." />} />
+          <Route path="options/greeks-monitor" element={<OptionsComingSoon title="Greeks Monitor" description="Portfolio-level Greeks monitoring is coming in a future release." />} />
+          <Route path="options/iv-rank" element={<OptionsComingSoon title="IV Rank / Percentile" description="IV rank and percentile screener are coming in a future release." />} />
+          <Route path="options/oi-volume" element={<OptionsComingSoon title="OI / Volume" description="Open interest and volume analysis are coming in a future release." />} />
+          <Route path="options/unusual-activity" element={<OptionsComingSoon title="Unusual Activity" description="Unusual options activity scanner is coming in a future release." />} />
+          <Route path="options/earnings-iv-crush" element={<OptionsComingSoon title="Earnings IV Crush" description="Earnings volatility crush analysis is coming in a future release." />} />
+          <Route path="options/shortcuts" element={<OptionsComingSoon title="Options Shortcuts" description="Quick-access options tools are coming in a future release." />} />
+
+          {/* ETFs — live section (ETF Analyzer + multi-page section) */}
+          <Route path="etfs" element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etfs/overview"   element={<LockedRoute domainId="etfs"><ETFOverview /></LockedRoute>} />
+          <Route path="etfs/directory"  element={<LockedRoute domainId="etfs"><ETFDirectory /></LockedRoute>} />
+          <Route path="etfs/screener"   element={<LockedRoute domainId="etfs"><ETFScreener /></LockedRoute>} />
+          <Route path="etfs/compare"    element={<LockedRoute domainId="etfs"><ETFCompare /></LockedRoute>} />
+          <Route path="etfs/news"       element={<LockedRoute domainId="etfs"><ETFNews /></LockedRoute>} />
+          {/* /app/etfs/:symbol → redirect to /app/etfs/:symbol/overview */}
+          <Route path="etfs/:symbol" element={<LockedRoute domainId="etfs"><ETFSymbolRedirect /></LockedRoute>} />
+          {/* /app/etfs/:symbol/:section → ETFLayout with inline header tabs */}
+          <Route path="etfs/:symbol/:section" element={<LockedRoute domainId="etfs"><ETFLayout /></LockedRoute>} />
+          {/* Legacy /app/etf/* → redirect to new /app/etfs/* */}
+          <Route path="etf" element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/overview"    element={<Navigate to="/app/etfs/overview"  replace />} />
+          <Route path="etf/screener"    element={<Navigate to="/app/etfs/screener"  replace />} />
+          <Route path="etf/holdings"    element={<Navigate to="/app/etfs/overview"  replace />} />
+          <Route path="etf/flows"       element={<Navigate to="/app/etfs/overview"  replace />} />
+          <Route path="etf/performance" element={<Navigate to="/app/etfs/overview"  replace />} />
 
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
-          <Route path="stocks/screener" element={<LockedRoute domainId="stocks"><StocksScreener /></LockedRoute>} />
-          <Route path="stocks/earnings" element={<LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute>} />
+          {/* Screener now lives at the all-markets (home) level — see all-markets/screener below.
+              Redirect keeps old bookmarks/links working. */}
+          <Route path="stocks/screener" element={<Navigate to="/app/all-markets/screener" replace />} />
+          {/* Stocks Earnings — sealed: earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
+              To re-enable: restore <LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute> and remove locked:true from nav.ts. */}
+          <Route path="stocks/earnings" element={<OptionsComingSoon title="Earnings" description="Earnings calendar data is coming soon — we're securing a commercially licensed data feed." />} />
           <Route path="stocks/fundamentals" element={<LockedRoute domainId="stocks"><StocksFundamentals /></LockedRoute>} />
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />
           <Route path="stocks/catalysts" element={<LockedRoute domainId="stocks"><StocksCatalysts /></LockedRoute>} />
-          <Route path="stocks/upgrades" element={<LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute>} />
+          {/* Stocks Upgrades/Downgrades — sealed: analyst-ratings source (Finnhub/FMP) not licensed for redistribution. Sealed pending licensed source.
+              To re-enable: restore <LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute> and remove locked:true from nav.ts. */}
+          <Route path="stocks/upgrades" element={<OptionsComingSoon title="Upgrades / Downgrades" description="Analyst ratings data is coming soon — we're securing a licensed data feed." />} />
           <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><StocksValuation /></LockedRoute>} />
+          <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
+          <Route path="stocks/insider"  element={<LockedRoute domainId="stocks"><StocksInsider  /></LockedRoute>} />
           <Route path="stocks/reports" element={<LockedRoute domainId="stocks"><StocksReports /></LockedRoute>} />
-          <Route path="stocks/watchlists" element={<LockedRoute domainId="stocks"><StocksWatchlists /></LockedRoute>} />
+          {/* stocks/watchlists now redirects to the real Watch List page under all-markets */}
+          <Route path="stocks/watchlists" element={<Navigate to="/app/all-markets/watchlist" replace />} />
           
           {/* CRYPTO — 7 Consolidated Pages */}
           <Route path="crypto/overview" element={<LockedRoute domainId="crypto"><CryptoOverview /></LockedRoute>} />
@@ -477,11 +561,18 @@ function AppContent() {
           <Route path="crypto/sentiment" element={<LockedRoute domainId="crypto"><CryptoSentiment /></LockedRoute>} />
           <Route path="crypto/watchlist" element={<LockedRoute domainId="crypto"><CryptoWatchlist /></LockedRoute>} />
           <Route path="crypto/academy" element={<LockedRoute domainId="crypto"><CryptoAcademy /></LockedRoute>} />
-          
-          {/* FUTURES */}
-          <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
-          <Route path="futures/open-interests" element={<LockedRoute domainId="futures"><FuturesOpenInterests /></LockedRoute>} />
-          <Route path="futures/calendar" element={<LockedRoute domainId="futures"><FuturesCalendar /></LockedRoute>} />
+          <Route path="crypto/defi-tvl" element={<LockedRoute domainId="crypto"><CryptoDefiTvl /></LockedRoute>} />
+          <Route path="crypto/stablecoins" element={<LockedRoute domainId="crypto"><CryptoStablecoins /></LockedRoute>} />
+          <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
+
+          {/* FUTURES — sealed pending licensed data feed (CME licensed; Yahoo gray).
+              Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.
+              To re-enable: swap OptionsComingSoon back to FuturesOverview/FuturesOpenInterests/FuturesCalendar
+              and set FUTURES_ENABLED=true in constants/nav.ts. */}
+          <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />
+          <Route path="futures/overview" element={<OptionsComingSoon title="Futures" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
+          <Route path="futures/open-interests" element={<OptionsComingSoon title="Futures — Open Interests" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
+          <Route path="futures/calendar" element={<OptionsComingSoon title="Futures — Calendar" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
           
           {/* FOREX */}
           <Route path="forex/overview" element={<LockedRoute domainId="forex"><ForexOverview /></LockedRoute>} />
@@ -512,6 +603,9 @@ function AppContent() {
           
           {/* MACRO */}
           <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
+          <Route path="macro/liquidity" element={<LockedRoute domainId="macro"><MacroLiquidity /></LockedRoute>} />
+          <Route path="macro/real-yields" element={<LockedRoute domainId="macro"><MacroRealYields /></LockedRoute>} />
+          <Route path="macro/credit-spreads" element={<LockedRoute domainId="macro"><MacroCreditSpreads /></LockedRoute>} />
           <Route path="macro/cross-asset" element={<LockedRoute domainId="macro"><MacroCrossAsset /></LockedRoute>} />
           <Route path="macro/global-heatmap" element={<LockedRoute domainId="macro"><MacroGlobalHeatmap /></LockedRoute>} />
           <Route path="macro/models" element={<LockedRoute domainId="macro"><MacroModels /></LockedRoute>} />
@@ -527,6 +621,8 @@ function AppContent() {
           <Route path="ai/copilot" element={<Navigate to="/copilot" replace />} />
           <Route path="ai/copilot/top-opportunities" element={<Navigate to="/copilot/top-opportunities" replace />} />
           <Route path="ai/copilot/macro" element={<Navigate to="/copilot/macro" replace />} />
+          <Route path="ai/copilot/sector-flow" element={<Navigate to="/copilot/quant-flow" replace />} />
+          <Route path="ai/copilot/quant-flow" element={<Navigate to="/copilot/quant-flow" replace />} />
           <Route path="ai/copilot/ai-analyst" element={<Navigate to="/copilot/ai-analyst" replace />} />
           <Route path="ai/copilot/holdings" element={<Navigate to="/copilot/holdings" replace />} />
           <Route path="ai/copilot/risks" element={<Navigate to="/copilot/risks" replace />} />
@@ -539,7 +635,15 @@ function AppContent() {
           <Route path="ai/flow-scanner" element={<SuspenseRoute><AIFlowScanner /></SuspenseRoute>} />
           <Route path="ai/top-5" element={<SuspenseRoute><AITop5 /></SuspenseRoute>} />
           <Route path="ai/upcoming-events" element={<SuspenseRoute><UpcomingEventsView /></SuspenseRoute>} />
-          <Route path="ai/assistant" element={<SuspenseRoute><AIAssistant /></SuspenseRoute>} />
+          {/* FINO AI: legacy AI Assistant page → redirect; chat now opens via the FINO AI side widget. */}
+          <Route path="ai/assistant" element={<Navigate to="/app/ai/stock-analyzer" replace />} />
+          {/* MY PORTFOLIO — lives under all-markets so Markets chrome stays visible */}
+          <Route path="all-markets/portfolio" element={<SuspenseRoute><MyPortfolioPage /></SuspenseRoute>} />
+          {/* Redirect old /app/portfolio links to the new canonical URL */}
+          <Route path="portfolio" element={<Navigate to="/app/all-markets/portfolio" replace />} />
+          {/* MY WATCH LIST — canonical URL under all-markets so Markets chrome stays visible */}
+          <Route path="all-markets/watchlist" element={<SuspenseRoute><MyWatchlistPage /></SuspenseRoute>} />
+
           {/* JOURNAL */}
           <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
           <Route path="journal/overview" element={<JournalRoute><JournalOverview /></JournalRoute>} />
@@ -555,13 +659,34 @@ function AppContent() {
 <Route path="journal/import" element={<JournalRoute><JournalImport /></JournalRoute>} />
 <Route path="journal/export" element={<JournalRoute><JournalExport /></JournalRoute>} />
 <Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />
-<Route path="journal/analytics" element={<JournalRoute><JournalAnalytics /></JournalRoute>} />
-<Route path="journal/ai-review" element={<JournalRoute><JournalAIReview /></JournalRoute>} />
+{/* "Statistics" retired — merged into the unified Reports & Stats hub. Redirect legacy links. */}
+<Route path="journal/analytics" element={<Navigate to="/app/journal/reports/overview" replace />} />
+{/* Legacy keyword/template "AI Review" retired; redirect to the real LLM-grounded coach (finotaur-ai) */}
+<Route path="journal/ai-review" element={<Navigate to="/app/journal/finotaur-ai" replace />} />
+<Route path="journal/reports" element={<JournalRoute><JournalReportsLayout /></JournalRoute>}>
+  <Route index element={<Navigate to="/app/journal/reports/overview" replace />} />
+  <Route path="overview" element={<JournalReportsOverview />} />
+  <Route path="progress" element={<JournalReportsProgress />} />
+  <Route path="day-view" element={<JournalReportsDayView />} />
+  <Route path="breakdowns" element={<JournalReportsBreakdowns />} />
+  <Route path="options" element={<JournalReportsOptions />} />
+  <Route path="calendar" element={<JournalReportsAnnualCalendar />} />
+  <Route path="compare" element={<JournalReportsCompare />} />
+  <Route path="scores" element={<JournalReportsScores />} />
+  <Route path="summary" element={<JournalReportsSummary />} />
+  <Route path="recaps" element={<JournalReportsRecaps />} />
+  <Route path="performance" element={<JournalReportsPerformance />} />
+</Route>
+<Route path="journal/auto-tagger" element={<JournalRoute><JournalAutoTagger /></JournalRoute>} />
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
 <Route path="journal/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
 <Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
+{/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
+<Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
+{/* Mentor Mode — must be before journal/:id to avoid wildcard match */}
+<Route path="journal/mentor" element={<JournalRoute><Mentor /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
@@ -569,14 +694,9 @@ function AppContent() {
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
+          <Route path="journal/backtest/trades" element={<BacktestRoute><BacktestTrades /></BacktestRoute>} />
           <Route path="journal/backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
-          <Route path="journal/backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="journal/backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
-          <Route path="journal/backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
-          <Route path="journal/backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
-          <Route path="journal/backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
-          <Route path="journal/backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
-          <Route path="journal/backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           <Route path="journal/backtest/new" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
 
           {/* AFFILIATE CENTER — gated by FEATURES.AFFILIATE_TRACKING (re-enable for Stripe migration) */}
@@ -599,30 +719,13 @@ function AppContent() {
             </>
           )}
 
-          {/* JOURNAL ADMIN */}
-          <Route path="journal/admin" element={<ProtectedAdminRoute><SuspenseRoute><AdminDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/users" element={<ProtectedAdminRoute><SuspenseRoute><AdminUsers /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/users/:userId" element={<ProtectedAdminRoute><SuspenseRoute><UserDetails /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/analytics" element={<ProtectedAdminRoute><SuspenseRoute><AdminAnalytics /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/subscribers" element={<ProtectedAdminRoute><SuspenseRoute><AdminSubscribers /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/Cancellations" element={<ProtectedAdminRoute><SuspenseRoute><Cancellations /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/newsletter-sub" element={<ProtectedAdminRoute><SuspenseRoute><AdminNewsletterSub /></SuspenseRoute></ProtectedAdminRoute>} />
-          
           {/* BACKTEST BACKWARD COMPAT */}
           <Route path="backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
-          <Route path="backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
-          <Route path="backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
-          <Route path="backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
-          <Route path="backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
-          <Route path="backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
-          <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* TRADE COPIER */}
           {/* TRADE COPIER — beta-only (gated via DomainGuard, domain copy-trade has beta:true in constants/nav.ts) */}
@@ -646,45 +749,55 @@ function AppContent() {
         </Route>
 
         {/* COPILOT STANDALONE SHELL — opens in new tab, no TopNav/SubNav */}
-        <Route path="/copilot" element={<ProtectedRoute><CopilotStandaloneLayout /></ProtectedRoute>}>
+        <Route path="/copilot" element={<ProtectedRoute><SuspenseRoute><CopilotStandaloneLayout /></SuspenseRoute></ProtectedRoute>}>
           <Route index element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
           <Route path="top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
           <Route path="macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />
+          <Route path="quant-flow" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotSectorFlowPage /></BetaRoute>} />
+          <Route path="sector-flow" element={<Navigate to="/copilot/quant-flow" replace />} />
           <Route path="ai-analyst" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIAnalystPage /></BetaRoute>} />
           <Route path="holdings" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotHoldingsPage /></BetaRoute>} />
           <Route path="risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
           <Route path="ai-chat" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIChatPage /></BetaRoute>} />
         </Route>
 
+        {/* DEV-ONLY: public screen-verification for admin SEO widget */}
+        <Route path="/__dev/seo-analytics" element={<SeoAnalyticsDevPage />} />
+
         <Route path="*" element={<NotFound />} />
       </Routes>
       <SupportWidget />
+      <FinoChatDrawer />
     </>
   );
 }
 
 // MAIN APP
 export const App = () => (
-  <AppQueryProvider>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <ScrollToTop />
-          <AuthProvider>
-            <TimezoneProvider>
-              <RiskSettingsRealtimeProvider>
-                <ImpersonationProvider>
-                  <AppContent />
-                </ImpersonationProvider>
-              </RiskSettingsRealtimeProvider>
-            </TimezoneProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </AppQueryProvider>
+  <GlobalErrorBoundary>
+    <AppQueryProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <ScrollToTop />
+            <AuthProvider>
+              <TimezoneProvider>
+                <RiskSettingsRealtimeProvider>
+                  <ImpersonationProvider>
+                    <FinoChatProvider>
+                      <AppContent />
+                    </FinoChatProvider>
+                  </ImpersonationProvider>
+                </RiskSettingsRealtimeProvider>
+              </TimezoneProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </AppQueryProvider>
+  </GlobalErrorBoundary>
 );
 
 export default App;

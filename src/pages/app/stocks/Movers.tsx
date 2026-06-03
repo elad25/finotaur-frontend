@@ -3,11 +3,15 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
+import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
+import { useMarketGate } from '@/hooks/useMarketGate';
 
 type Mover = { symbol: string; price: number|null; chp: number|null; name?: string };
 type MoversResp = { gainers: Mover[]; losers: Mover[]; source: string; ts: number };
 
 export default function AllMarketsMovers() {
+  const { gated, isAdmin } = useMarketGate();
   const [data, setData] = useState<MoversResp| null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string| null>(null);
@@ -22,6 +26,16 @@ export default function AllMarketsMovers() {
       .finally(()=> { if(alive) setLoading(false); });
     return ()=> { alive = false; };
   },[]);
+
+  // Gate: raw Polygon top-movers data (price + change%) — not licensed for redistribution.
+  // All hooks (useState, useEffect) have already been called above.
+  if (gated) {
+    return (
+      <PageTemplate title="Top Movers" description="Biggest gainers and losers for major US equities (S&P 500).">
+        <LicensedDataPlaceholder minHeight={200} />
+      </PageTemplate>
+    );
+  }
 
   const renderTable = (list: Mover[]) => (
     <Table>
@@ -51,7 +65,8 @@ export default function AllMarketsMovers() {
       title="Top Movers"
       description="Biggest gainers and losers for major US equities (S&P 500)."
     >
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="relative grid grid-cols-1 gap-6 md:grid-cols-2">
+        {isAdmin && <AdminGateBadge />}
         <Card className="rounded-2xl border-border bg-base-800 shadow-premium">
           <CardHeader><CardTitle>Gainers</CardTitle></CardHeader>
           <CardContent>

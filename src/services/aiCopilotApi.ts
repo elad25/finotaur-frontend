@@ -68,7 +68,11 @@ interface ChatResponse {
 
 interface StreamCallbacks {
   message: string;
+  /** Page-aware context (route + page-specific data) so FINO can ground its answer. */
+  context?: unknown;
   conversationId?: string | null;
+  /** User tier string from usage info — used for cost-safe endpoint routing. */
+  tier?: string;
   onConversation?: (id: string) => void;
   onChunk?: (chunk: string) => void;
   onSources?: (sources: any[]) => void;
@@ -136,7 +140,9 @@ export const aiCopilotApi = {
   async chatStream(options: StreamCallbacks): Promise<void> {
     const {
       message,
+      context,
       conversationId,
+      tier,
       onConversation,
       onChunk,
       onSources,
@@ -144,12 +150,16 @@ export const aiCopilotApi = {
       onError,
       signal,
     } = options;
-    
+
     const headers = await getAuthHeaders();
 
     // Phase 5 N3 — flag-gated Anthropic chat path (no tools, prompt caching on system block).
-    // Default OFF; the legacy OpenAI orchestrator path (tools + RAG) remains the production behaviour.
-    const useAnthropic = import.meta.env.VITE_ENABLE_ANTHROPIC_AIASSISTANT === 'true';
+    // Cost-safe per-user routing: free/anon users → cheap tool-free Anthropic endpoint;
+    // explicitly paid platform plans → full tool-enabled endpoint.
+    const forceAnthropic = import.meta.env.VITE_ENABLE_ANTHROPIC_AIASSISTANT === 'true';
+    const t = (tier ?? 'free').toLowerCase();
+    const isPaid = ['platform_core', 'platform_finotaur', 'platform_enterprise', 'core', 'finotaur', 'enterprise', 'premium'].includes(t);
+    const useAnthropic = forceAnthropic || !isPaid;
     const chatPath = useAnthropic ? '/api/ai/chat/stream-anthropic' : '/api/ai/chat/stream';
 
     const response = await fetch(`${API_BASE}${chatPath}`, {
@@ -158,6 +168,7 @@ export const aiCopilotApi = {
       body: JSON.stringify({
         message,
         conversationId,
+        pageContext: context ?? undefined,
       }),
       signal,
     });

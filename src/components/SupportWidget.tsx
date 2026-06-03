@@ -12,12 +12,13 @@
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
-import { 
-  X, Send, MessageCircle, Shield, ArrowLeft, Plus, 
-  Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, 
+import {
+  X, Send, MessageCircle, Shield, ArrowLeft, Plus,
+  Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell,
   CheckCircle2, AlertCircle, Info, Megaphone, Download,
   TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -125,6 +126,8 @@ const TICKET_CATEGORIES: CategoryOption[] = [
 // ==================== ADMIN EMAIL CONSTANT ====================
 const ADMIN_EMAIL = 'elad2550@gmail.com';
 
+const AUTO_ESCALATE_REASONS = ['billing', 'bug', 'feature_request', 'frustrated'];
+
 const SUPPORT_TOPIC_SUGGESTIONS = [
   'I have a technical issue',
   'I need help with billing',
@@ -138,6 +141,12 @@ const SUPPORT_TOPIC_FOLLOW_UPS: Record<string, string> = {
   'I have a question about my account': 'Sure. What account question can we help with? Include what you expected to see or change.',
   'I want to share feedback': 'Thanks. What feedback would you like to share, and what would make the experience better for you?',
 };
+
+const SUPPORT_AGENT_AVATARS = [
+  '/support-avatars/agent-1.jpg',
+  '/support-avatars/agent-2.jpg',
+  '/support-avatars/agent-3.jpg',
+];
 
 export default function SupportWidget() {
   // ==================== STATE ====================
@@ -167,6 +176,11 @@ export default function SupportWidget() {
   const [guidedMessages, setGuidedMessages] = useState<ChatMessage[]>([]);
   const [guidedStep, setGuidedStep] = useState<GuidedSupportStep>('idle');
   const [guidedTopic, setGuidedTopic] = useState('');
+  const [aiThinking, setAiThinking] = useState(false);
+  const [aiUnavailable, setAiUnavailable] = useState(false);
+  const [lastAiReason, setLastAiReason] = useState<string | null>(null);
+  const [lastAiCategory, setLastAiCategory] = useState<string | null>(null);
+  const [autoEscalatedTicketId, setAutoEscalatedTicketId] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -205,7 +219,7 @@ export default function SupportWidget() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedTicket?.messages, guidedMessages, guidedStep, isNewConversation, messageSent, isTyping, showSupportPrompt]);
+  }, [selectedTicket?.messages, guidedMessages, guidedStep, isNewConversation, messageSent, isTyping, showSupportPrompt, aiThinking]);
 
   useEffect(() => {
     if (isOpen && !isGuest) {
@@ -262,7 +276,7 @@ export default function SupportWidget() {
     const timer = window.setTimeout(() => {
       setIsTyping(false);
       setShowSupportPrompt(true);
-    }, 900);
+    }, 2000);
 
     return () => {
       window.clearTimeout(timer);
@@ -705,7 +719,183 @@ async function loadTicketById(ticketId: string) {
     }
   }
 
+  async function sendToAi(userText: string) {
+    const trimmed = userText.trim();
+    if (!trimmed) return;
+
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      type: 'customer',
+      content: trimmed,
+      timestamp: new Date().toISOString(),
+    };
+    const baseHistory = [...guidedMessages, userMsg];
+    setGuidedMessages(baseHistory);
+    setCurrentMessage('');
+    setAiThinking(true);
+
+    try {
+      const apiMessages = baseHistory
+        .filter((m) => m.type === 'customer' || m.type === 'admin')
+        .map((m) => ({
+          role: m.type === 'customer' ? 'user' : 'assistant',
+          content: m.content,
+        }));
+
+      const res = await fetch('/api/support-ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: apiMessages, userName: userName || undefined }),
+      });
+
+      if (!res.ok) throw new Error(`AI ${res.status}`);
+      const data = await res.json();
+      const replyText = (data?.reply || '').trim();
+      if (!replyText) throw new Error('empty reply');
+
+      setLastAiReason(data?.reason ?? null);
+      setLastAiCategory(data?.category ?? null);
+
+      setGuidedMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: 'admin',
+          content: replyText,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+
+      if (!isGuest && data?.escalate === true && AUTO_ESCALATE_REASONS.includes(data?.reason) && !autoEscalatedTicketId && !messageSent) {
+        try {
+          const id = await persistEscalationTicket();
+          if (id) {
+            setAutoEscalatedTicketId(id);
+            setGuidedMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                type: 'system',
+                content: "✓ I've shared this with our team — they'll follow up by email. You can keep adding details here.",
+                timestamp: new Date().toISOString(),
+              },
+            ]);
+          }
+        } catch (e) { console.error('Auto-escalation failed:', e); }
+      }
+    } catch (err) {
+      console.error('Support AI error:', err);
+      setAiUnavailable(true);
+      setGuidedMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: 'admin',
+          content: "I'm having trouble answering right now. Tap \"Talk to a person\" below and our support team will help you directly.",
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setAiThinking(false);
+    }
+  }
+
+  async function persistEscalationTicket(): Promise<string | null> {
+    if (isGuest && (!userName || !userEmail)) return null;
+
+    const transcript = guidedMessages.length > 0
+      ? guidedMessages
+      : [{
+          id: crypto.randomUUID(),
+          type: 'customer' as const,
+          content: currentMessage.trim() || 'I would like to talk to a person.',
+          timestamp: new Date().toISOString(),
+        }];
+
+    const firstCustomer = transcript.find((m) => m.type === 'customer');
+    const subjectLine = firstCustomer ? firstCustomer.content.slice(0, 80) : 'Support Request';
+
+    const escalationReason = lastAiReason;
+    const ticketCategory = lastAiCategory || (escalationReason === 'billing' ? 'payment' : escalationReason === 'bug' ? 'technical' : escalationReason === 'feature_request' ? 'feedback' : null);
+    const ticketPriority = (escalationReason === 'billing' || escalationReason === 'frustrated') ? 'high' : 'normal';
+    const ticketTags = escalationReason ? [escalationReason] : [];
+
+    const ticketPayload = {
+      user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
+      user_email: userEmail,
+      user_name: userName,
+      subject: subjectLine,
+      category: ticketCategory,
+      priority: ticketPriority,
+      tags: ticketTags,
+      metadata: { escalation_reason: escalationReason, source: 'ai_chat', summary: subjectLine },
+      message: firstCustomer?.content || 'Support Request',
+      messages: transcript,
+      status: 'open',
+    };
+
+    let data: any = null;
+    let dbSuccess = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const { data: insertData, error } = await supabase
+        .from('support_tickets')
+        .insert(ticketPayload)
+        .select()
+        .single();
+      if (!error && insertData) { data = insertData; dbSuccess = true; break; }
+      console.error(`Escalation insert attempt ${attempt + 1} failed:`, error);
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-support-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ type: dbSuccess ? 'new_ticket' : 'fallback_ticket', record: data || ticketPayload, db_failed: !dbSuccess }),
+      });
+    } catch (e) { console.error('Escalation email fallback failed:', e); }
+
+    if (dbSuccess && !isGuest) { setSelectedTicket(data); setIsNewConversation(false); loadUserTickets(); }
+
+    return data?.id ?? null;
+  }
+
+  async function escalateToHuman() {
+    if (isGuest && (!userName || !userEmail)) {
+      setShowGuestForm(true);
+      toast.error('Please add your contact info so we can reach you');
+      return;
+    }
+    if (sending) return;
+    // If a ticket was already auto-created this conversation, don't create a duplicate.
+    if (autoEscalatedTicketId) {
+      setMessageSent(true);
+      toast.success("Connected — our team has your conversation and will follow up shortly.");
+      if (isGuest) setTimeout(() => handleClose(), 3000);
+      return;
+    }
+    setSending(true);
+    try {
+      await persistEscalationTicket();
+      // Email fallback may have run even if the ticket id is null — treat as connected either way.
+      setMessageSent(true);
+      toast.success("Connected — our team has your conversation and will follow up shortly.");
+      if (isGuest) setTimeout(() => handleClose(), 3000);
+    } catch (e) {
+      console.error('Escalation error:', e);
+      toast.error('Could not reach support. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function handleSendMessage() {
+    if (isNewConversation && !messageSent && guidedStep === 'idle') {
+      await sendToAi(currentMessage);
+      return;
+    }
+
     if (isGuest && (!userName || !userEmail)) {
       toast.error('Please fill in your contact information first');
       return;
@@ -1088,21 +1278,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     resetGuidedSupportFlow();
   };
 
-  const handleTopicSuggestionClick = (topic: string) => {
-    const customerMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      type: 'customer',
-      content: topic,
-      timestamp: new Date().toISOString(),
-    };
-
-    setGuidedTopic(topic);
-    setGuidedStep('details');
-    setGuidedMessages([customerMessage]);
-    setCurrentMessage('');
+  function handleTopicSuggestionClick(topic: string) {
     setShowSupportPrompt(false);
-    appendGuidedAdminMessage(SUPPORT_TOPIC_FOLLOW_UPS[topic] || 'Got it. Tell me a bit more so we can understand the issue.');
-  };
+    sendToAi(topic);
+  }
 
   // ==================== RENDER ====================
 
@@ -1126,10 +1305,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         >
           <div className="absolute inset-0 rounded-full bg-[#1E88E5] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
           
-          <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
-            <svg 
-              viewBox="0 0 24 24" 
-              className="h-7 w-7 text-white"
+          <div className="relative h-12 w-12 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 text-white"
               fill="currentColor"
             >
               <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
@@ -1156,7 +1335,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         The inner card also gets flex + max-h so content scrolls properly.
       */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-[200] w-[500px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed bottom-8 right-8 z-[200] w-[400px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="absolute -inset-1 bg-gradient-to-br from-[#1D4ED8]/10 via-transparent to-[#C8CDD6]/30 rounded-3xl blur-2xl"></div>
           
           <div className="relative bg-[#F4EFE4] rounded-2xl shadow-2xl overflow-hidden border border-[#C8CDD6] flex flex-col h-full max-h-[calc(100vh-80px-32px)]">
@@ -1175,19 +1354,31 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     </button>
                   )}
                   
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-[#1E88E5] opacity-20 blur-lg rounded-lg"></div>
-                    <div className="relative h-10 w-10 rounded-lg bg-[#1E88E5]/10 flex items-center justify-center border border-[#42A5F5]/30">
-                      <UserRound className="h-5 w-5 text-[#42A5F5]" strokeWidth={2.5} />
-                    </div>
+                  <div className="flex -space-x-3">
+                    {SUPPORT_AGENT_AVATARS.map((src, i) => (
+                      <img
+                        key={src}
+                        src={src}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-9 w-9 rounded-full border-2 border-white object-cover shadow-sm"
+                        style={{ zIndex: SUPPORT_AGENT_AVATARS.length - i }}
+                      />
+                    ))}
                   </div>
-                  
+
                   <div>
-                    <h3 className="text-sm font-semibold text-[#111827] tracking-tight font-['Inter',sans-serif]">
-                      Finotaur
-                    </h3>
-                    <p className="text-[10px] text-[#1D4ED8] font-medium mt-0.5 font-['Inter',sans-serif]">
-                      Support & Updates
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="text-sm font-semibold text-[#111827] tracking-tight font-['Inter',sans-serif]">
+                        Finotaur
+                      </h3>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#1D4ED8]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#1D4ED8]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                        AI Assistant
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-[#64748B] font-medium mt-0.5 font-['Inter',sans-serif]">
+                      Ask us anything, or share your feedback
                     </p>
                   </div>
                 </div>
@@ -1332,7 +1523,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                     {loadingUpdates ? (
                       <div className="flex items-center justify-center h-full">
-                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#D4AF37] border-t-transparent"></div>
+                        <Spinner size="md" />
                       </div>
                     ) : systemUpdates.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full p-8">
@@ -1564,6 +1755,16 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         {isNewConversation ? (
                           <div className="min-h-full flex flex-col justify-end space-y-4 pb-2">
                             {guidedMessages.map((msg, idx) => (
+                              msg.type === 'system' ? (
+                                <div
+                                  key={msg.id || idx}
+                                  className="flex justify-center animate-in fade-in duration-200 py-1"
+                                >
+                                  <div className="text-[11px] text-[#64748B] italic text-center px-3">
+                                    {msg.content}
+                                  </div>
+                                </div>
+                              ) : (
                               <div
                                 key={msg.id || idx}
                                 className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200`}
@@ -1571,12 +1772,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                 <div className="max-w-[75%]">
                                   {msg.type === 'admin' && (
                                     <div className="flex items-center gap-2 mb-2">
-                                      <div className="h-6 w-6 rounded-lg bg-[#E5E7EB] flex items-center justify-center border border-[#C8CDD6]">
-                                        <Shield className="h-3.5 w-3.5 text-[#475569]" strokeWidth={2.5} />
-                                      </div>
-                                      <span className="text-xs font-medium text-[#475569]">
-                                        Support Team
-                                      </span>
+                                      <img src={SUPPORT_AGENT_AVATARS[0]} alt="" aria-hidden="true" className="h-6 w-6 rounded-full border border-white object-cover shadow-sm" />
+                                      <span className="text-xs font-semibold text-[#334155]">Finotaur AI</span>
                                     </div>
                                   )}
 
@@ -1606,20 +1803,24 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   </div>
                                 </div>
                               </div>
+                              )
                             ))}
 
                             {showSupportPrompt && !messageSent && (
                               <>
                                 <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
                                   <div className="flex justify-start">
-                                    <div className="max-w-[75%]">
-                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm">
+                                    <div className="max-w-[82%]">
+                                      <div className="flex items-center gap-2 mb-1.5">
+                                        <img src={SUPPORT_AGENT_AVATARS[0]} alt="" aria-hidden="true" className="h-6 w-6 rounded-full border border-white object-cover shadow-sm" />
+                                        <span className="text-xs font-semibold text-[#334155] font-['Inter',sans-serif]">Support Assistant</span>
+                                        <span className="text-[10px] text-[#94A3B8] font-['Inter',sans-serif]">· AI Agent · Just now</span>
+                                      </div>
+                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm space-y-2">
                                         <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
-                                          ✨ How can we help?
+                                          👋 Hi {userName ? userName.split(' ')[0] : 'there'}! You're chatting with the Finotaur AI Assistant. Share your question in detail and I'll do my best to help instantly. If I can't, you'll see an option to talk to a person.
                                         </p>
-                                        <span className="text-[10px] text-[#64748B] mt-2 block">
-                                          {formatTime(new Date().toISOString())}
-                                        </span>
+                                        <p className="text-sm font-medium text-[#1F2937] font-['Inter',sans-serif]">How can I help?</p>
                                       </div>
                                     </div>
                                   </div>
@@ -1639,6 +1840,20 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   </div>
                                 </div>
                               </>
+                            )}
+
+                            {guidedMessages.some((m) => m.type === 'customer') && !messageSent && (
+                              <div className="flex justify-start animate-in fade-in duration-200">
+                                <button
+                                  type="button"
+                                  onClick={escalateToHuman}
+                                  disabled={sending}
+                                  className="inline-flex items-center gap-2 rounded-full border border-[#C8CDD6] bg-white/80 px-4 py-2 text-xs font-medium text-[#334155] transition-all duration-200 hover:border-[#1D4ED8]/45 hover:bg-[#EFF6FF] hover:text-[#1D4ED8] disabled:opacity-50"
+                                >
+                                  <UserRound className="h-3.5 w-3.5" />
+                                  Talk to a person
+                                </button>
+                              </div>
                             )}
 
                             {guidedStep === 'ready' && !messageSent && (
@@ -1769,7 +1984,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                           ))
                         )}
                         
-                        {isTyping && (
+                        {(isTyping || aiThinking) && (
                           <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
                             <div className="max-w-[75%]">
                               <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm">

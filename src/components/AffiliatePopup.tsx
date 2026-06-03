@@ -14,13 +14,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  Copy, 
-  Check, 
-  Gift, 
-  Users, 
-  DollarSign, 
+import {
+  X,
+  Copy,
+  Check,
+  Gift,
+  Users,
+  DollarSign,
   TrendingUp,
   Sparkles,
   Loader2,
@@ -36,6 +36,7 @@ import {
   ChevronDown,
   CheckCircle2
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -506,7 +507,7 @@ export default function AffiliatePopup({ onClose }: AffiliatePopupProps) {
           <div className="p-5 max-h-[70vh] overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" />
+                <Spinner size="md" />
               </div>
 
             ) : affiliateData.isAffiliate ? (

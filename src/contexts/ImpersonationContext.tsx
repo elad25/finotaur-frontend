@@ -13,6 +13,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { Spinner } from "@/components/ui/Spinner";
 
 interface ImpersonationContextType {
   isImpersonating: boolean;
@@ -203,7 +204,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         .from('profiles')
         .select('account_type, role, email')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle();
 
       const isAdmin = 
         currentProfile?.account_type === 'admin' || 
@@ -316,7 +317,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-[#C9A646] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <Spinner size="md" className="mx-auto mb-4" />
           <div className="text-[#A0A0A0] text-sm">Validating session...</div>
         </div>
       </div>

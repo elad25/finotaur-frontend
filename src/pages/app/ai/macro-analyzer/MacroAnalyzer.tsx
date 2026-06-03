@@ -13,6 +13,7 @@ import React, {
 } from 'react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
+import { Spinner } from '@/components/ui/Spinner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
@@ -233,7 +234,7 @@ export default function MacroAnalyzer() {
   if (accessLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-gold-primary" />
+        <Spinner size="md" />
       </div>
     );
   }

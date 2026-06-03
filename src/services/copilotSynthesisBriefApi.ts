@@ -151,3 +151,38 @@ export async function fetchPersonalizedSynthesisBrief(): Promise<PersonalizedRes
 
   return response.json() as Promise<PersonalizedResponse>;
 }
+
+// ---------------------------------------------------------------------------
+// Daily PM Brief — additional types (Phase 1)
+// ---------------------------------------------------------------------------
+
+/** A single upcoming macro or earnings event shown in the Event Radar module. */
+export interface EventRadarItem {
+  id: string;
+  /** Short title, e.g. "Core PCE" or "NVDA earnings" */
+  title: string;
+  /** Human-readable timing label, e.g. "Today 8:30 AM ET" */
+  when: string;
+  /** One sentence explaining why this event is relevant to the user */
+  whyItMatters: string;
+  /** Street consensus, e.g. "EPS $0.92 / Rev $26.1B" */
+  consensus?: string;
+  /** Prevailing crowd lean and directional tone */
+  crowdSentiment?: { label: string; tone: 'positive' | 'negative' | 'neutral' | 'watch' };
+  /** Tickers most likely impacted by this event */
+  affectedSymbols?: string[];
+}
+
+/** A single prioritized action from the AI Game Plan module. */
+export interface PlanAction {
+  /** Display rank (1 = highest priority) */
+  rank: number;
+  /** Short imperative action description, e.g. "Trim NVDA on strength" */
+  action: string;
+  /** Supporting reasoning for the action */
+  rationale: string;
+  /** Optional position sizing guidance, e.g. "2% of portfolio" */
+  sizing?: string;
+  /** Relevant tickers */
+  symbols?: string[];
+}

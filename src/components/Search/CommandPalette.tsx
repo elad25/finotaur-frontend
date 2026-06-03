@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createSearchParams, useNavigate } from 'react-router-dom';
 import { useTickerSuggest } from '@/hooks/useTickerSuggest';
+import { fetchETFList } from '@/services/etf-analyzer.api';
 
 type Props = { open: boolean; onClose: () => void };
 
@@ -32,10 +33,21 @@ export default function CommandPalette({ open, onClose }: Props) {
     if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
   }
 
-  function goSummary(sym: string) {
-    const search = createSearchParams({ symbol: sym.toUpperCase(), tab: 'overview' }).toString();
-    navigate({ pathname: '/app/all-markets/summary', search });
+  async function goSummary(sym: string) {
+    const upper = sym.toUpperCase();
     onClose();
+    try {
+      const result = await fetchETFList({ search: upper, limit: 5 });
+      const isEtf = result.etfs.some((e) => e.ticker.toUpperCase() === upper);
+      if (isEtf) {
+        navigate(`/app/etfs/${upper}/overview`);
+        return;
+      }
+    } catch {
+      // fall through to all-markets on error
+    }
+    const search = createSearchParams({ symbol: upper, tab: 'overview' }).toString();
+    navigate({ pathname: '/app/all-markets/summary', search });
   }
   function goChart(sym: string) {
     const search = createSearchParams({ symbol: sym.toUpperCase() }).toString();

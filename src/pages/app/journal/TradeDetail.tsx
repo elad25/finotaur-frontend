@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { uploadScreenshot } from '@/lib/trades';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
-import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil } from 'lucide-react';
+import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
+import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
+import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
+import MultiUploadZone from '@/components/journal/MultiUploadZone';
+import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
+import OptionPayoffChart from '@/components/journal/OptionPayoffChart';
+import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
 
 interface PartialLeg {
   // Common fields written by both the Tradovate edge fn (v48+) and the
@@ -26,6 +34,7 @@ interface Trade {
   entry_price: number;
   exit_price?: number;
   quantity: number;
+  fees?: number;
   stop_price?: number;
   take_profit_price?: number;
   open_at: string;
@@ -46,7 +55,37 @@ interface Trade {
   screenshots?: string[];
   partial_entries?: PartialLeg[];
   partial_exits?: PartialLeg[];
+  // Options (single-leg) — populated only when asset_class === 'options'
+  asset_class?: string;
+  option_type?: 'CALL' | 'PUT';
+  strike_price?: number;
+  expiration_date?: string;
+  option_outcome?: string | null;
+  // Multi-leg options spread fields
+  leg_count?: number;
+  strategy_type?: string;
+  // Forex — populated only when asset_class === 'forex'
+  base_currency?: string;
+  quote_currency?: string;
+  account_currency?: string;
+  quote_rate?: number;
+  pip_size?: number;
+  lot_size?: number;
 }
+
+// Expiration-outcome values for single-leg options. Empty string = "normal
+// close / not applicable" and is saved as NULL.
+const OPTION_OUTCOMES: { value: string; label: string }[] = [
+  { value: '', label: 'Normal close' },
+  { value: 'expired_worthless', label: 'Expired worthless' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'exercised', label: 'Exercised' },
+];
+
+const optionOutcomeLabel = (value?: string | null): string | null => {
+  if (!value) return null;
+  return OPTION_OUTCOMES.find((o) => o.value === value)?.label ?? value;
+};
 
 interface EditDraft {
   notes: string;
@@ -55,6 +94,15 @@ interface EditDraft {
   next_time: string;
   tags: string; // comma-separated; split on save
   actual_user_r: string; // string for input binding; parsed to number | null on save
+  option_outcome: string; // '' = normal close (saved as NULL)
+}
+
+// Local mirror of MultiUploadZone's internal Screenshot shape (not exported from that module).
+interface PendingScreenshot {
+  file: File;
+  preview: string;
+  compressed?: File;
+  compressing?: boolean;
 }
 
 const LEG_VISIBLE_CAP = 3;
@@ -128,6 +176,7 @@ function tradeToEditDraft(trade: Trade): EditDraft {
     tags: (trade.tags ?? []).join(', '),
     actual_user_r:
       trade.actual_user_r != null ? String(trade.actual_user_r) : '',
+    option_outcome: trade.option_outcome ?? '',
   };
 }
 
@@ -138,7 +187,38 @@ export default function JournalTradeDetail() {
   const { toast } = useToast();
 
   const [trade, setTrade] = useState<Trade | null>(null);
+
+  // FINO page context — this trade (incl. the trader's own reflections) + summary.
+  const finoEntity = useMemo(
+    () =>
+      trade
+        ? {
+            type: 'trade',
+            symbol: trade.symbol,
+            side: trade.side,
+            pnl: trade.pnl,
+            rr: trade.rr,
+            riskUsd: trade.risk_usd,
+            rewardUsd: trade.reward_usd,
+            entryPrice: trade.entry_price,
+            exitPrice: trade.exit_price,
+            stopPrice: trade.stop_price,
+            session: trade.session,
+            openAt: trade.open_at,
+            closeAt: trade.close_at,
+            assetClass: trade.asset_class,
+            tags: trade.tags,
+            setup: trade.setup,
+            mistake: trade.mistake,
+            nextTime: trade.next_time,
+            notes: trade.notes,
+          }
+        : null,
+    [trade],
+  );
+  useRegisterJournalFinoContext(finoEntity);
   const [loading, setLoading] = useState(true);
+  const [legs, setLegs] = useState<TradeLeg[]>([]);
 
   // ---- edit state ----
   const [isEditing, setIsEditing] = useState(false);
@@ -146,11 +226,27 @@ export default function JournalTradeDetail() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // ---- screenshot edit state ----
+  // existingScreenshots: URLs already persisted on the trade (user may remove some).
+  // pendingFiles: new File objects added in this edit session (not yet uploaded).
+  const [existingScreenshots, setExistingScreenshots] = useState<string[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<PendingScreenshot[]>([]);
+
   useEffect(() => {
     if (id) {
       fetchTrade();
     }
   }, [id]);
+
+  // Fetch option spread legs when the trade is a multi-leg spread.
+  useEffect(() => {
+    if (!trade?.id || !trade.leg_count || trade.leg_count <= 1) return;
+    let cancelled = false;
+    fetchTradeLegs(trade.id).then((result) => {
+      if (!cancelled) setLegs(result);
+    });
+    return () => { cancelled = true; };
+  }, [trade?.id, trade?.leg_count]);
 
   // Warn before unload if the user has unsaved edits.
   useEffect(() => {
@@ -189,12 +285,16 @@ export default function JournalTradeDetail() {
   const handleEditClick = () => {
     if (!trade) return;
     setDraft(tradeToEditDraft(trade));
+    setExistingScreenshots(trade.screenshots ?? []);
+    setPendingFiles([]);
     setSaveError(null);
     setIsEditing(true);
   };
 
   const handleCancel = () => {
     setDraft(null);
+    setExistingScreenshots([]);
+    setPendingFiles([]);
     setSaveError(null);
     setIsEditing(false);
   };
@@ -215,6 +315,22 @@ export default function JournalTradeDetail() {
         ? null
         : Number(draft.actual_user_r);
 
+    // Upload any pending screenshot files; skip nulls (failed uploads).
+    const filesToUpload = pendingFiles.map((s) => s.compressed ?? s.file);
+    const uploadedUrls = await Promise.all(filesToUpload.map((f) => uploadScreenshot(f)));
+    const successfulUrls = uploadedUrls.filter((url): url is string => url !== null);
+
+    if (uploadedUrls.some((url) => url === null)) {
+      // Surface partial-failure info; uploadScreenshot already calls its own
+      // toast.error internally, but we also set saveError so the banner shows.
+      const failCount = uploadedUrls.filter((url) => url === null).length;
+      setSaveError(
+        `${failCount} screenshot${failCount > 1 ? 's' : ''} failed to upload — other changes were still saved.`,
+      );
+    }
+
+    const finalScreenshots = [...existingScreenshots, ...successfulUrls];
+
     // Supabase update accepts null to clear a column; we type the payload
     // explicitly rather than fighting Partial<Trade> optional-vs-nullable.
     const payload: {
@@ -224,6 +340,8 @@ export default function JournalTradeDetail() {
       next_time: string | null;
       tags: string[] | null;
       actual_user_r: number | null;
+      screenshots: string[];
+      option_outcome?: string | null;
     } = {
       notes: draft.notes || null,
       setup: draft.setup || null,
@@ -232,7 +350,14 @@ export default function JournalTradeDetail() {
       tags: parsedTags.length > 0 ? parsedTags : null,
       actual_user_r:
         parsedR !== null && !isNaN(parsedR) ? parsedR : null,
+      screenshots: finalScreenshots,
     };
+
+    // Options-only: persist the expiration outcome (empty string → NULL).
+    // Guarded so non-option trades never write this column.
+    if (trade.asset_class === 'options') {
+      payload.option_outcome = draft.option_outcome || null;
+    }
 
     try {
       const { data, error } = await supabase
@@ -247,6 +372,8 @@ export default function JournalTradeDetail() {
       setTrade(data as Trade);
       setIsEditing(false);
       setDraft(null);
+      setExistingScreenshots([]);
+      setPendingFiles([]);
 
       // Invalidate React Query caches so MyTrades / stats reflect the change
       queryClient.invalidateQueries({ queryKey: queryKeys.tradeDetail(trade.id) });
@@ -318,6 +445,17 @@ export default function JournalTradeDetail() {
             }`}>
               {trade.side}
             </span>
+
+            {/* Option Type Badge */}
+            {trade.asset_class === 'options' && trade.option_type && (
+              <span className={`px-3 py-1 rounded-lg text-sm font-medium border ${
+                trade.option_type === 'CALL'
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  : 'bg-red-500/20 text-red-300 border-red-500/30'
+              }`}>
+                {trade.option_type}
+              </span>
+            )}
 
             {/* Outcome Badge */}
             {trade.outcome && trade.outcome !== 'OPEN' && (
@@ -519,6 +657,203 @@ export default function JournalTradeDetail() {
         })()}
       </div>
 
+      {/* Option Details — single-leg options only */}
+      {trade.asset_class === 'options' && (() => {
+        const dte = getDTE(trade.expiration_date);
+        const breakeven = getOptionBreakeven(trade);
+        const maxLoss = getOptionMaxLoss(trade);
+        const maxProfit = getOptionMaxProfit(trade);
+        const fmtExtremum = (e: { value: number | null; unlimited: boolean }) =>
+          e.unlimited ? 'Unlimited' : e.value != null ? `$${e.value.toFixed(2)}` : '—';
+        return (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Option Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {trade.option_type && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Type</label>
+                  <div className={`text-lg font-semibold ${trade.option_type === 'CALL' ? 'text-emerald-400' : 'text-red-300'}`}>
+                    {trade.option_type}
+                  </div>
+                </div>
+              )}
+              {trade.strike_price != null && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Strike</label>
+                  <div className="text-lg font-semibold text-white">${trade.strike_price.toFixed(2)}</div>
+                </div>
+              )}
+              {trade.expiration_date && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Expiration</label>
+                  <div className="text-lg font-semibold text-white">
+                    {trade.expiration_date}
+                    {dte != null && (
+                      <span className={`ml-2 text-sm font-normal ${dte < 0 ? 'text-zinc-500' : dte <= 7 ? 'text-amber-300' : 'text-zinc-400'}`}>
+                        ({dte < 0 ? 'expired' : `${dte} DTE`})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {breakeven != null && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Breakeven</label>
+                  <div className="text-lg font-semibold text-white">${breakeven.toFixed(2)}</div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Max Loss</label>
+                <div className="text-lg font-semibold text-red-400">{fmtExtremum(maxLoss)}</div>
+              </div>
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Max Profit</label>
+                <div className="text-lg font-semibold text-green-400">{fmtExtremum(maxProfit)}</div>
+              </div>
+              {optionOutcomeLabel(trade.option_outcome) && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Outcome</label>
+                  <div className="text-lg font-semibold text-zinc-200">{optionOutcomeLabel(trade.option_outcome)}</div>
+                </div>
+              )}
+            </div>
+            <p className="mt-4 text-xs text-zinc-600">
+              Breakeven and max profit/loss are theoretical, at expiration, and exclude commissions. Short positions carry undefined risk.
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* Forex Details — forex trades only */}
+      {trade.asset_class === 'forex' && (() => {
+        const { base, quote } = parseForexPair(trade.symbol);
+        const pipSize = trade.pip_size ?? getPipSize(trade.symbol);
+        const acct = trade.account_currency ?? 'USD';
+        const rate = trade.quote_rate ?? 1;
+        const crossCurrency = !!quote && quote !== acct.toUpperCase();
+        return (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-semibold text-white">Forex Details</h3>
+              <ForexMarketStatusChip />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {base && quote && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Pair</label>
+                  <div className="text-lg font-semibold text-white">{base}/{quote}</div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Pip Size</label>
+                <div className="text-lg font-semibold text-white">{pipSize}</div>
+              </div>
+              {trade.lot_size != null && (
+                <div>
+                  <label className="text-sm text-zinc-500 mb-1 block">Lot Size</label>
+                  <div className="text-lg font-semibold text-white">{trade.lot_size.toLocaleString()}</div>
+                </div>
+              )}
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Account Currency</label>
+                <div className="text-lg font-semibold text-white">{acct}</div>
+              </div>
+              <div>
+                <label className="text-sm text-zinc-500 mb-1 block">Quote Rate</label>
+                <div className="text-lg font-semibold text-white">
+                  {rate}
+                  <span className="ml-2 text-sm font-normal text-zinc-400">
+                    {crossCurrency ? `${quote} → ${acct}` : 'no conversion'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {crossCurrency && rate === 1 && (
+              <p className="mt-4 text-xs text-amber-300">
+                Quote rate is 1.0 on a cross-currency pair — P&amp;L is not converted to {acct}. Edit the trade to set the {quote}→{acct} rate.
+              </p>
+            )}
+            <p className="mt-4 text-xs text-zinc-600">
+              P&amp;L is computed as price move × (lots × lot size) × quote rate, expressed in the account currency.
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* Multi-Leg Spread — shown only when leg_count > 1 */}
+      {trade.leg_count && trade.leg_count > 1 && (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <h3 className="text-xl font-semibold text-white mb-4">
+            {getStrategyLabel(trade.strategy_type) ?? 'Multi-Leg'} &middot; {trade.leg_count} legs
+          </h3>
+          {legs.length === 0 ? (
+            <p className="text-zinc-600 text-sm italic">Loading legs…</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">#</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Type</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Side</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Strike</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Qty</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Entry</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3 pr-4">Exit</th>
+                    <th className="text-left text-zinc-500 font-medium pb-3">P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {legs.map((leg, idx) => {
+                    const pnl = legSignedPnl(leg);
+                    return (
+                      <tr key={idx}>
+                        <td className="py-3 pr-4 text-zinc-500">{idx + 1}</td>
+                        <td className={`py-3 pr-4 font-medium ${leg.option_type === 'CALL' ? 'text-green-400' : 'text-red-400'}`}>
+                          {leg.option_type ?? '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-zinc-300">{leg.side ?? '—'}</td>
+                        <td className="py-3 pr-4 text-zinc-300 font-mono">
+                          {leg.strike_price != null ? `$${leg.strike_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-zinc-300">{leg.quantity}</td>
+                        <td className="py-3 pr-4 text-zinc-300 font-mono">
+                          {leg.entry_price != null ? `$${leg.entry_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td className="py-3 pr-4 text-zinc-300 font-mono">
+                          {leg.exit_price != null ? `$${leg.exit_price.toFixed(2)}` : '—'}
+                        </td>
+                        <td className={`py-3 font-mono ${pnl == null ? 'text-zinc-500' : pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {pnl == null ? '—' : `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Payoff at Expiration — options only (single-leg or multi-leg) */}
+      {trade.asset_class === 'options' && (() => {
+        const isMulti = !!trade.leg_count && trade.leg_count > 1;
+        const single = singleLegFromTrade(trade);
+        const chartLegs: TradeLeg[] = isMulti ? legs : (single ? [single] : []);
+        if (!chartLegs.length) return null;
+        return (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Payoff at Expiration</h3>
+            <OptionPayoffChart legs={chartLegs} />
+            <p className="mt-4 text-xs text-zinc-600">
+              Theoretical net P&amp;L if the underlying settles at each price on expiration day.
+              Intrinsic value only — excludes time value, commissions, and early assignment.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* Risk Management */}
       {(trade.risk_usd || trade.reward_usd) && (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
@@ -539,6 +874,9 @@ export default function JournalTradeDetail() {
           </div>
         </div>
       )}
+
+      {/* Trade Scorecard */}
+      {id && <TradeScorecard tradeId={id} />}
 
       {/* Trade Notes — view mode or edit mode */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
@@ -687,22 +1025,64 @@ export default function JournalTradeDetail() {
         </div>
       )}
 
-      {/* Screenshots — display only; upload is deferred */}
-      {/* TODO(screenshots): add image upload UI when storage bucket + signed URL flow is ready */}
-      {trade.screenshots && trade.screenshots.length > 0 && (
+      {/* Screenshots */}
+      {isEditing ? (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
           <h3 className="text-xl font-semibold text-white mb-4">Screenshots</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {trade.screenshots.map((url, index) => (
-              <img
-                key={index}
-                src={url}
-                alt={`Trade screenshot ${index + 1}`}
-                className="w-full rounded-lg border border-zinc-800"
-              />
-            ))}
-          </div>
+
+          {/* Existing screenshot thumbnails with remove control */}
+          {existingScreenshots.length > 0 && (
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {existingScreenshots.map((url, index) => (
+                <div
+                  key={url}
+                  className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900/50"
+                >
+                  <div className="aspect-video">
+                    <img
+                      src={url}
+                      alt={`Screenshot ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExistingScreenshots((prev) => prev.filter((_, i) => i !== index))
+                    }
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-600/90 hover:bg-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label="Remove screenshot"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Upload zone for new files */}
+          <MultiUploadZone
+            screenshots={pendingFiles}
+            onScreenshotsChange={setPendingFiles}
+            maxFiles={Math.max(0, 4 - existingScreenshots.length)}
+          />
         </div>
+      ) : (
+        (trade.screenshots && trade.screenshots.length > 0) && (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Screenshots</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {trade.screenshots.map((url, index) => (
+                <img
+                  key={index}
+                  src={url}
+                  alt={`Trade screenshot ${index + 1}`}
+                  className="w-full rounded-lg border border-zinc-800"
+                />
+              ))}
+            </div>
+          </div>
+        )
       )}
     </div>
   );

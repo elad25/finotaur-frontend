@@ -18,7 +18,8 @@
  * ===============================================
  */
 
-import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, memo, useRef, lazy, Suspense } from "react";
+import { useRegisterJournalFinoContext } from "@/components/fino/useJournalFinoContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -26,7 +27,8 @@ import { usePortfolioContext } from "@/contexts/PortfolioContext";
 import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
-import { useTrades, useDeleteTrade, useUpdateTrade } from "@/hooks/useTradesData";
+import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
+import { BulkActionBar } from "@/components/journal/BulkActionBar";
 import { useStrategiesOptimized } from "@/hooks/useStrategies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +40,32 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
-import { TradeChart } from "@/components/journal/TradeChart";
+import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
+import { ForexMarketStatusChip } from "@/components/journal/ForexMarketStatusChip";
+
+// Lazy-load TradeChart so lightweight-charts (~200KB) is NOT in the initial bundle.
+// The chunk starts downloading as soon as the journal page mounts (see useEffect below).
+const TradeChart = lazy(() =>
+  import('@/components/journal/TradeChart').then((m) => ({ default: m.TradeChart }))
+);
+
+// Skeleton shown while the lazy chunk resolves and while bars are loading.
+function TradeChartSkeleton() {
+  return (
+    <div className="rounded-xl border-2 border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-6 shadow-2xl">
+      <div className="mb-4 h-5 w-28 animate-pulse rounded bg-zinc-800" />
+      <div className="h-[600px] w-full overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950 flex items-end justify-around px-6 pb-6 gap-3">
+        {[42, 65, 38, 80, 55, 70, 45].map((h, i) => (
+          <div
+            key={i}
+            className="animate-pulse rounded-sm bg-zinc-800"
+            style={{ height: `${h}%`, flex: 1 }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { toast } from "sonner";
 import {
@@ -59,6 +86,7 @@ import { updateTrade, deleteTrade } from "@/lib/trades";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+import { TradeGradeBadge } from '@/pages/app/journal/finotaur-ai/components/TradeGradeBadge';
 
 interface Trade {
   id: string;
@@ -77,6 +105,7 @@ interface Trade {
   strategy_name?: string;
   setup?: string;
   notes?: string;
+  tags?: string[];
   screenshot_url?: string;
   screenshots?: string[];
   asset_class?: string;
@@ -98,6 +127,19 @@ interface Trade {
   user_risk_r?: number;
   user_reward_r?: number;
   input_mode?: 'summary' | 'risk-only';
+  // Options (single-leg) — populated only when asset_class === 'options'
+  option_type?: "CALL" | "PUT";
+  strike_price?: number;
+  expiration_date?: string;
+  leg_count?: number;
+  strategy_type?: string;
+  // Forex — populated only when asset_class === 'forex'
+  base_currency?: string;
+  quote_currency?: string;
+  account_currency?: string;
+  quote_rate?: number;
+  pip_size?: number;
+  lot_size?: number;
   // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
@@ -521,17 +563,20 @@ const StatsCard = memo(({
 
 StatsCard.displayName = 'StatsCard';
 
-// 🚀 OPTIMIZATION: Memoized TradeRow Component - 🔥 UPDATED WITH SESSION!
-const TradeRow = memo(({ 
+// 🚀 OPTIMIZATION: Memoized TradeRow Component - 🔥 UPDATED WITH SESSION + BULK SELECTION!
+const TradeRow = memo(({
   trade,
   oneR,
   timezone,
   strategies,
-  onOpen, 
-  onEdit, 
+  onOpen,
+  onEdit,
   onDelete,
   onAssignStrategy,
-}: { 
+  isSelected,
+  onToggleSelect,
+  readOnly = false,
+}: {
   trade: Trade;
   oneR: number;
   timezone: string;
@@ -540,12 +585,19 @@ const TradeRow = memo(({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onAssignStrategy: (trade: Trade, strategyId: string) => void;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  readOnly?: boolean;
 }) => {
   const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
-    () => getTradeData(trade, oneR), 
+    () => getTradeData(trade, oneR),
     [trade, oneR]
   );
-  
+  const isOption = trade.asset_class === 'options';
+  const isForex = trade.asset_class === 'forex';
+  const isMultiLeg = isOption && (trade.leg_count ?? 0) > 1;
+  const optionDTE = isOption ? getDTE(trade.expiration_date) : null;
+
   const handleClick = useCallback(() => onOpen(trade), [trade, onOpen]);
   const handleEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -559,11 +611,39 @@ const TradeRow = memo(({
     onAssignStrategy(trade, strategyId);
   }, [trade, onAssignStrategy]);
 
+  const handleCheckboxChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    onToggleSelect(trade.id);
+  }, [trade.id, onToggleSelect]);
+
+  const handleCheckboxClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
-    <TableRow 
-      className="border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
+    <TableRow
+      className={`border-zinc-800 hover:bg-zinc-900/50 cursor-pointer transition-colors ${isSelected ? "bg-[#C9A646]/5 hover:bg-[#C9A646]/8" : ""}`}
       onClick={handleClick}
+      onMouseEnter={() => {
+        // Dynamic import keeps TradeChart out of MyTrades' eager bundle.
+        // The page-mount useEffect already triggered the chunk load, so on
+        // hover the Promise resolves synchronously from the module cache.
+        void import("@/components/journal/TradeChart").then((m) =>
+          m.prewarmTradeChart(trade),
+        );
+      }}
     >
+      {/* Checkbox */}
+      <TableCell className="w-10 pr-0" onClick={handleCheckboxClick}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={handleCheckboxChange}
+          aria-label={`Select trade ${trade.symbol}`}
+          className="checkbox-gold"
+        />
+      </TableCell>
+
       {/* Date */}
       <TableCell className="text-zinc-400">
         {formatTradeDate(trade.open_at, timezone)}
@@ -571,14 +651,53 @@ const TradeRow = memo(({
       
       {/* Symbol */}
       <TableCell className="font-medium text-white">
-        {trade.symbol}
+        {isOption
+          ? isMultiLeg
+            ? `${getStrategyLabel(trade.strategy_type) ?? 'Spread'} · ${trade.leg_count} legs`
+            : getOptionContractLabel(trade)
+          : trade.symbol}
         {isRiskOnlyMode && (
           <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
             $
           </span>
         )}
+        {isForex && (
+          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 font-normal">
+            FX
+          </span>
+        )}
+        {isOption && !isMultiLeg && (
+          <span
+            className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+              trade.option_type === 'CALL'
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'bg-red-500/15 text-red-300'
+            }`}
+          >
+            {trade.option_type ?? 'OPT'}
+          </span>
+        )}
+        {isOption && !isMultiLeg && optionDTE !== null && (
+          <span
+            className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-normal ${
+              optionDTE < 0
+                ? 'bg-zinc-700/40 text-zinc-400'
+                : optionDTE <= 7
+                  ? 'bg-amber-500/20 text-amber-300'
+                  : 'bg-zinc-700/40 text-zinc-300'
+            }`}
+            title="Days to expiration"
+          >
+            {optionDTE < 0 ? 'Expired' : `${optionDTE}DTE`}
+          </span>
+        )}
       </TableCell>
-      
+
+      {/* Grade badge */}
+      <TableCell className="w-10">
+        <TradeGradeBadge tradeId={trade.id} />
+      </TableCell>
+
       {/* Side */}
       <TableCell>
         <Badge 
@@ -729,27 +848,31 @@ const TradeRow = memo(({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={handleClick}
               className="text-zinc-300 hover:text-white hover:bg-zinc-800"
             >
               View Details
             </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={handleEdit}
-              className="text-zinc-300 hover:text-white hover:bg-zinc-800"
-            >
-              <Edit className="w-4 h-4 mr-2" />
-              Edit Trade
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-zinc-800" />
-            <DropdownMenuItem 
-              onClick={handleDelete}
-              className="text-red-400 hover:text-red-300 hover:bg-zinc-800"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Trade
-            </DropdownMenuItem>
+            {!readOnly && (
+              <>
+                <DropdownMenuItem
+                  onClick={handleEdit}
+                  className="text-zinc-300 hover:text-white hover:bg-zinc-800"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  Edit Trade
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <DropdownMenuItem
+                  onClick={handleDelete}
+                  className="text-red-400 hover:text-red-300 hover:bg-zinc-800"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Trade
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -929,7 +1052,19 @@ const DaySummaryCard = memo(({
                   >
                     <span className="text-xs text-ink-secondary tabular-nums">{period === "week" ? formatTradeStamp(trade.open_at, timezone) : formatTradeTime(trade.open_at, timezone)}</span>
                     <span className="min-w-0 truncate font-semibold text-ink-primary">
-                      {trade.symbol}
+                      {trade.asset_class === 'options'
+                        ? (trade.leg_count ?? 0) > 1
+                          ? `${getStrategyLabel(trade.strategy_type) ?? 'Spread'} · ${trade.leg_count} legs`
+                          : getOptionContractLabel(trade)
+                        : trade.symbol}
+                      {trade.asset_class === 'options' && (trade.leg_count ?? 0) <= 1 && trade.expiration_date && (() => {
+                        const dte = getDTE(trade.expiration_date);
+                        return dte !== null ? (
+                          <span className={`ml-ds-2 text-xs font-normal ${dte < 0 ? 'text-ink-muted' : dte <= 7 ? 'text-amber-300' : 'text-ink-secondary'}`}>
+                            {dte < 0 ? 'Expired' : `${dte}DTE`}
+                          </span>
+                        ) : null;
+                      })()}
                       {trade.strategy_name && <span className="ml-ds-2 text-xs font-normal text-ink-muted">{trade.strategy_name}</span>}
                     </span>
                     <span className={trade.side === "LONG" ? "text-emerald-400" : "text-num-negative"}>{trade.side}</span>
@@ -959,14 +1094,22 @@ const DaySummaryCard = memo(({
 
 DaySummaryCard.displayName = 'DaySummaryCard';
 
-export default function MyTrades() {
+interface MyTradesProps {
+  overrideUserId?: string;
+  readOnly?: boolean;
+}
+
+export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesProps = {}) {
   // ✅ 1. ALL HOOKS MUST BE AT THE TOP (Rules of Hooks!)
   const navigate = useNavigate();
   const queryClient = useQueryClient(); // 🔥 ADD: for cross-page cache invalidation
-  
+
   // 🔥 FIXED: Now using useEffectiveUser for admin impersonation support
-  const { id: userId, isImpersonating } = useEffectiveUser();
-  
+  const { id: fallbackUserId, isImpersonating, isMentorView } = useEffectiveUser();
+  const userId = overrideUserId ?? fallbackUserId;
+  // Mentor View browses a student's journal read-only; treat like the prop.
+  const effectiveReadOnly = readOnly || isMentorView;
+
   // 🔥 NEW: Timezone context
   const timezone = useTimezone();
   
@@ -976,12 +1119,16 @@ export default function MyTrades() {
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
   const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
-  const { data: trades = [], isLoading, error } = useTrades(userId, effectivePortfolioId);
+  // When viewing another user's journal (mentor view), do not apply the
+  // logged-in mentor's portfolio filter — show all of the student's trades.
+  const mentorPortfolioId = (overrideUserId || isMentorView) ? undefined : effectivePortfolioId;
+  const { data: trades = [], isLoading, error } = useTrades(userId, mentorPortfolioId);
   const { data: strategies = [] } = useStrategiesOptimized(userId);
   
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
   const { mutateAsync: updateTradeMutation } = useUpdateTrade();
+  const { mutateAsync: bulkDeleteMutation } = useBulkDeleteTrades();
   
   // ✅ 2. All useState together
   const [searchQuery, setSearchQuery] = useState("");
@@ -1004,7 +1151,42 @@ export default function MyTrades() {
   }, []);
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
 
+  // ── Bulk selection state ───────────────────────────────────────────────────
+  const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(() => new Set());
+
+  // ── FINO page context — overall journal summary + the trade currently open ──
+  const finoEntity = useMemo(
+    () =>
+      selectedTrade
+        ? {
+            type: 'trade',
+            symbol: selectedTrade.symbol,
+            side: selectedTrade.side,
+            pnl: selectedTrade.pnl,
+            rr: selectedTrade.rr,
+            riskUsd: selectedTrade.risk_usd,
+            rewardUsd: selectedTrade.reward_usd,
+            entryPrice: selectedTrade.entry_price,
+            exitPrice: selectedTrade.exit_price,
+            stopPrice: selectedTrade.stop_price,
+            qualityTag: selectedTrade.quality_tag,
+            session: selectedTrade.session,
+            openAt: selectedTrade.open_at,
+            closeAt: selectedTrade.close_at,
+          }
+        : null,
+    [selectedTrade],
+  );
+  useRegisterJournalFinoContext(finoEntity);
+
   // ✅ 3. useEffect
+
+  // Prime the TradeChart chunk immediately on page mount so that by the time
+  // the user clicks a trade, the lazy import is already resolved and parsed.
+  useEffect(() => {
+    void import('@/components/journal/TradeChart');
+  }, []);
+
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
@@ -1186,6 +1368,59 @@ const stats = useMemo<Stats>(() => {
     }
   }, [queryClient]);
 
+  // ── Bulk selection callbacks ───────────────────────────────────────────────
+
+  const handleToggleTradeSelection = useCallback((tradeId: string) => {
+    setSelectedTradeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tradeId)) {
+        next.delete(tradeId);
+      } else {
+        next.add(tradeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedTradeIds((prev) => {
+      const allVisible = filteredTrades.map((t) => t.id);
+      // If all visible are already selected → deselect all; otherwise select all.
+      const allSelected = allVisible.length > 0 && allVisible.every((id) => prev.has(id));
+      if (allSelected) return new Set();
+      return new Set(allVisible);
+    });
+  }, [filteredTrades]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedTradeIds(new Set());
+  }, []);
+
+  // ── Bulk-delete handler (passed to BulkActionBar) ─────────────────────────
+
+  const handleBulkDelete = useCallback(async (ids: string[]) => {
+    await bulkDeleteMutation(ids);
+    await queryClient.invalidateQueries({ queryKey: ['trades'] });
+    await queryClient.invalidateQueries({ queryKey: ['subscription'] });
+  }, [bulkDeleteMutation, queryClient]);
+
+  // ── Bulk-tag handler (passed to BulkActionBar) ────────────────────────────
+  // Merges a new tag into each selected trade's tags array (union).
+
+  const handleBulkTag = useCallback(async (ids: string[], tag: string) => {
+    const tradeMap = new Map(filteredTrades.map((t) => [t.id, t]));
+    await Promise.all(
+      ids.map(async (id) => {
+        const trade = tradeMap.get(id);
+        if (!trade) return;
+        const existingTags: string[] = Array.isArray(trade.tags) ? trade.tags : [];
+        if (existingTags.includes(tag)) return; // already has tag — skip
+        await updateTradeMutation({ id, data: { tags: [...existingTags, tag] } });
+      }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['trades'] });
+  }, [filteredTrades, updateTradeMutation, queryClient]);
+
   const exportTrades = useCallback(() => {
     if (filteredTrades.length === 0) {
       toast.error("No trades to export");
@@ -1195,7 +1430,8 @@ const stats = useMemo<Stats>(() => {
     const headers = [
       "Date", "Symbol", "Side", "Session", "Entry Price", "Exit Price", "Stop Price", "Take Profit",
       "Quantity", "P&L", "Outcome", "Actual R", "Quality", "Strategy", "Setup",
-      "Notes", "Fees", "Multiplier", "Risk USD"
+      "Notes", "Fees", "Multiplier", "Risk USD",
+      "Option Type", "Strike", "Expiration", "DTE"
     ];
 
     const rows = filteredTrades.map(trade => {
@@ -1220,7 +1456,11 @@ const stats = useMemo<Stats>(() => {
         trade.notes?.replace(/,/g, ";") || "",
         trade.fees,
         multiplier,
-        riskUSD.toFixed(2)
+        riskUSD.toFixed(2),
+        trade.asset_class === 'options' ? (trade.option_type || "") : "",
+        trade.asset_class === 'options' && trade.strike_price != null ? trade.strike_price : "",
+        trade.asset_class === 'options' ? (trade.expiration_date || "") : "",
+        trade.asset_class === 'options' ? (getDTE(trade.expiration_date) ?? "") : ""
       ].join(",");
     });
 
@@ -1379,13 +1619,15 @@ const stats = useMemo<Stats>(() => {
                 <TooltipContent>Export Trades</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <Button 
-              onClick={() => navigate("/app/journal/new")}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Trade
-            </Button>
+            {!effectiveReadOnly && (
+              <Button
+                onClick={() => navigate("/app/journal/new")}
+                className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Trade
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1407,8 +1649,8 @@ const stats = useMemo<Stats>(() => {
                 {searchQuery ? "Try adjusting your search" : "Start by adding your first trade"}
               </div>
             </div>
-            {!searchQuery && (
-              <Button 
+            {!searchQuery && !effectiveReadOnly && (
+              <Button
                 onClick={() => navigate("/app/journal/new")}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black font-medium mt-2"
               >
@@ -1488,8 +1730,29 @@ const stats = useMemo<Stats>(() => {
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"><Table>
             <TableHeader>
   <TableRow className="border-zinc-800 hover:bg-transparent">
+    {/* Select-all checkbox */}
+    <TableHead className="w-10 pr-0">
+      {(() => {
+        const allVisibleIds = filteredTrades.map((t) => t.id);
+        const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedTradeIds.has(id));
+        const someSelected = allVisibleIds.some((id) => selectedTradeIds.has(id));
+        return (
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected && !allSelected;
+            }}
+            onChange={handleToggleSelectAll}
+            aria-label="Select all visible trades"
+            className="checkbox-gold"
+          />
+        );
+      })()}
+    </TableHead>
     <TableHead className="text-zinc-500">Date</TableHead>
     <TableHead className="text-zinc-500">Symbol</TableHead>
+    <TableHead className="text-zinc-500 w-10">Grade</TableHead>
     <TableHead className="text-zinc-500">Side</TableHead>
     <TableHead className="text-zinc-500">Session</TableHead>
     <TableHead className="text-zinc-500">Entry / Risk</TableHead>
@@ -1513,12 +1776,23 @@ const stats = useMemo<Stats>(() => {
                   onEdit={handleEditTrade}
                   onDelete={handleDeleteClick}
                   onAssignStrategy={handleAssignStrategy}
+                  isSelected={selectedTradeIds.has(trade.id)}
+                  onToggleSelect={handleToggleTradeSelection}
+                  readOnly={effectiveReadOnly}
                 />
               ))}
             </TableBody>
           </Table></div>
         )}
       </div>
+
+      {/* Bulk Action Bar — mounts globally, visible when >=1 trade is selected */}
+      <BulkActionBar
+        selectedIds={selectedTradeIds}
+        onClearSelection={handleClearSelection}
+        onBulkDelete={handleBulkDelete}
+        onBulkTag={handleBulkTag}
+      />
 
       {/* Trade Details Dialog */}
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -1842,6 +2116,91 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           <div className="text-base font-semibold text-white capitalize">{selectedTrade.asset_class}</div>
                         </div>
                       )}
+                      {selectedTrade.asset_class === 'options' && selectedTrade.option_type && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Type</div>
+                          <div className={`text-base font-semibold ${selectedTrade.option_type === 'CALL' ? 'text-emerald-400' : 'text-red-300'}`}>
+                            {selectedTrade.option_type}
+                          </div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && selectedTrade.strike_price != null && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Strike</div>
+                          <div className="text-base font-semibold text-white">${formatNumber(selectedTrade.strike_price, 2)}</div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && selectedTrade.expiration_date && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Expiration</div>
+                          <div className="text-base font-semibold text-white">
+                            {selectedTrade.expiration_date}
+                            {(() => {
+                              const dte = getDTE(selectedTrade.expiration_date);
+                              return dte !== null ? (
+                                <span className={`ml-1.5 text-xs font-normal ${dte < 0 ? 'text-zinc-400' : dte <= 7 ? 'text-amber-300' : 'text-zinc-400'}`}>
+                                  ({dte < 0 ? 'expired' : `${dte}d`})
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'options' && getOptionBreakeven(selectedTrade) != null && (
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1">Breakeven</div>
+                          <div className="text-base font-semibold text-white">${formatNumber(getOptionBreakeven(selectedTrade)!, 2)}</div>
+                        </div>
+                      )}
+                      {selectedTrade.asset_class === 'forex' && (() => {
+                        const { base, quote } = parseForexPair(selectedTrade.symbol);
+                        const pipSize = selectedTrade.pip_size ?? getPipSize(selectedTrade.symbol);
+                        const acct = selectedTrade.account_currency ?? 'USD';
+                        const rate = selectedTrade.quote_rate ?? 1;
+                        const crossCurrency = !!quote && quote !== acct.toUpperCase();
+                        return (
+                          <>
+                            {base && quote && (
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Pair</div>
+                                <div className="text-base font-semibold text-white">{base}/{quote}</div>
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">Pip Size</div>
+                              <div className="text-base font-semibold text-white">{pipSize}</div>
+                            </div>
+                            {selectedTrade.lot_size != null && (
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Lot Size</div>
+                                <div className="text-base font-semibold text-white">{selectedTrade.lot_size.toLocaleString()}</div>
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">Account Currency</div>
+                              <div className="text-base font-semibold text-white">{acct}</div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">Quote Rate</div>
+                              <div className="text-base font-semibold text-white">
+                                {rate}
+                                <span className="ml-1.5 text-xs font-normal text-zinc-400">
+                                  {crossCurrency ? `${quote}→${acct}` : 'no conversion'}
+                                </span>
+                              </div>
+                              {crossCurrency && rate === 1 && (
+                                <div className="text-[11px] text-amber-300 mt-1">
+                                  Rate 1.0 — P&amp;L not converted to {acct}.
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-[11px] text-zinc-500 mb-1">FX Market</div>
+                              <ForexMarketStatusChip />
+                            </div>
+                          </>
+                        );
+                      })()}
                       {selectedTrade.session && (
                         <div>
                           <div className="text-[11px] text-zinc-500 mb-1">Session</div>
@@ -1864,25 +2223,27 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-3 border-t border-zinc-800/50">
-                    <Button 
-                      variant="outline" 
-                      className="flex-1 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all text-xs h-8"
-                      onClick={() => handleEditTrade(selectedTrade.id)}
-                    >
-                      <Edit className="w-3 h-3 mr-1.5" />
-                      Edit
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      className="flex-1 bg-red-600/90 hover:bg-red-600 transition-all text-xs h-8"
-                      onClick={() => handleDeleteClick(selectedTrade.id)}
-                    >
-                      <Trash2 className="w-3 h-3 mr-1.5" />
-                      Delete
-                    </Button>
-                  </div>
+                  {/* Actions — hidden in read-only/mentor view */}
+                  {!effectiveReadOnly && (
+                    <div className="flex gap-2 pt-3 border-t border-zinc-800/50">
+                      <Button
+                        variant="outline"
+                        className="flex-1 bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 transition-all text-xs h-8"
+                        onClick={() => handleEditTrade(selectedTrade.id)}
+                      >
+                        <Edit className="w-3 h-3 mr-1.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1 bg-red-600/90 hover:bg-red-600 transition-all text-xs h-8"
+                        onClick={() => handleDeleteClick(selectedTrade.id)}
+                      >
+                        <Trash2 className="w-3 h-3 mr-1.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  )}
                   
                   <div className="h-12"></div>
                 </div>
@@ -1893,7 +2254,9 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                 <div className="p-6 space-y-5 min-h-full">
                   
                   {/* 📊 CHART SECTION - FIRST */}
-                  <TradeChart trade={selectedTrade} />
+                  <Suspense fallback={<TradeChartSkeleton />}>
+                    <TradeChart trade={selectedTrade} />
+                  </Suspense>
 
                   {/* 📸 SCREENSHOT SECTION - SECOND (BLUE) - 🔥 UPDATED! */}
                   <div className="rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-900/20 via-zinc-900/60 to-zinc-900/30 p-5 shadow-xl">

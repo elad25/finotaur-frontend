@@ -1,38 +1,25 @@
 // src/pages/app/all-markets/Overview.tsx
 import { api } from '@/lib/apiBase';
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
+import { useMarketStatus } from '@/lib/marketStatus';
+import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
+import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
+import { useMarketGate, useFinnhubGate } from '@/hooks/useMarketGate';
+import { useCreditSpreadsSnapshot } from '@/hooks/macro/useCreditSpreads';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Activity, 
-  AlertTriangle,
+import {
+  TrendingUp,
+  Activity,
   BarChart3,
-  Zap,
   Target,
   Calendar,
-  Volume2,
-  ArrowUpRight,
-  ArrowDownRight,
   ChevronRight,
   Gauge,
   Shield,
-  Flame,
-  Clock,
-  DollarSign,
-  Coins,
-  LineChart as LineChartIcon,
-  ArrowUp,
-  ArrowDown,
-  ArrowRight,
-  History,
-  Focus,
-  Eye,
   Newspaper,
-  Globe
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -56,35 +43,6 @@ type MoversResp = {
 
 type MarketRegime = 'risk-on' | 'risk-off' | 'transitional' | 'distribution';
 
-// Mock data for regime timeline
-type RegimePoint = {
-  date: string;
-  regime: MarketRegime;
-  confidence: number;
-};
-
-const mockRegimeTimeline: RegimePoint[] = [
-  { date: 'Nov 1', regime: 'risk-off', confidence: 68 },
-  { date: 'Nov 8', regime: 'transitional', confidence: 55 },
-  { date: 'Nov 15', regime: 'transitional', confidence: 62 },
-  { date: 'Nov 22', regime: 'risk-on', confidence: 58 },
-  { date: 'Nov 29', regime: 'risk-on', confidence: 65 },
-  { date: 'Dec 6', regime: 'risk-on', confidence: 70 },
-  { date: 'Dec 13', regime: 'risk-on', confidence: 68 },
-  { date: 'Dec 20', regime: 'risk-on', confidence: 71 },
-  { date: 'Dec 27', regime: 'risk-on', confidence: 72 },
-  { date: 'Today', regime: 'risk-on', confidence: 72 },
-];
-
-// Cross-Asset signals
-type AssetSignal = 'up' | 'down' | 'neutral';
-type CrossAssetData = {
-  equities: { signal: AssetSignal; label: string };
-  bonds: { signal: AssetSignal; label: string };
-  dollar: { signal: AssetSignal; label: string };
-  gold: { signal: AssetSignal; label: string };
-};
-
 type EarningsStock = {
   symbol: string;
   name: string;
@@ -92,30 +50,6 @@ type EarningsStock = {
   estimate?: number;
 };
 
-const mockCrossAsset: CrossAssetData = {
-  equities: { signal: 'up', label: 'Momentum' },
-  bonds: { signal: 'neutral', label: 'Range-bound' },
-  dollar: { signal: 'down', label: 'Softening' },
-  gold: { signal: 'up', label: 'Bid under surface' },
-};
-
-// Today's focus
-const todaysFocus = {
-  headline: "Tech leads on AI optimism, but breadth isn't fully confirming",
-  subtext: "Markets pricing continued rate stability — watch for positioning shifts if data surprises"
-};
-
-function determineRegime(): { regime: MarketRegime; confidence: number } {
-  return { regime: 'risk-on', confidence: 72 };
-}
-
-function formatVolume(vol: number | undefined): string {
-  if (!vol) return '-';
-  if (vol >= 1e9) return `${(vol / 1e9).toFixed(1)}B`;
-  if (vol >= 1e6) return `${(vol / 1e6).toFixed(1)}M`;
-  if (vol >= 1e3) return `${(vol / 1e3).toFixed(0)}K`;
-  return vol.toString();
-}
 
 const regimeStyles: Record<MarketRegime, { bg: string; text: string; icon: typeof TrendingUp; color: string }> = {
   'risk-on': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', icon: TrendingUp, color: '#10b981' },
@@ -560,6 +494,10 @@ function transformMarketData(apiData: any): Record<MarketCategory, MarketIndexIt
   };
 }
 
+// Fallback: static snapshot used ONLY when the fetch-market-data API call fails.
+// Displayed with the "Simulated" badge on the chart and the market-status stale
+// indicator in the strip header — customers are not shown these as live prices.
+// NOTE: values are from a specific historical session; do NOT treat as current.
 function getFallbackData(category: MarketCategory): MarketIndexItem[] {
   const fallback: Record<MarketCategory, MarketIndexItem[]> = {
     US: [
@@ -593,12 +531,6 @@ function getFallbackData(category: MarketCategory): MarketIndexItem[] {
   return fallback[category];
 }
 
-const newsHeadlines = [
-  "S&P 500 finishes 2025 with 16% advance",
-  "Bulls on Parade", 
-  "What analysts are predicting for 2026",
-  "Fed signals patience on rate cuts",
-];
 
 const CustomTooltip = ({ active, payload, color }: any) => {
   if (active && payload && payload.length) {
@@ -614,8 +546,9 @@ const CustomTooltip = ({ active, payload, color }: any) => {
   return null;
 };
 
-function MarketTickerStrip() {
+function MarketTickerStrip({ newsItems = [] }: { newsItems?: { headline: string; url?: string }[] }) {
   const { data: apiData, loading, lastUpdate } = useOverviewMarketData();
+  const marketStatus = useMarketStatus();
   const [category, setCategory] = useState<MarketCategory>('US');
   const [timeframe, setTimeframe] = useState<TimeFrame>('1D');
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -695,6 +628,11 @@ function MarketTickerStrip() {
           ))}
         </div>
         <div className="flex items-center gap-2">
+          {!marketStatus.isOpen && (
+            <span className="text-amber-400/80 text-[10px] border border-amber-400/30 px-1.5 py-0.5 rounded">
+              {marketStatus.lastTradingDayShort}'s Close
+            </span>
+          )}
           {lastUpdate && (
             <span className="text-gray-600 text-[10px]">
               {loading ? '⟳' : '●'} {lastUpdate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
@@ -767,7 +705,7 @@ function MarketTickerStrip() {
           
           {chartLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/50 z-20">
-              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <Spinner size="sm" />
             </div>
           )}
           
@@ -818,19 +756,26 @@ function MarketTickerStrip() {
         </div>
       </div>
       
-      {/* News */}
-      <div className="flex items-center border-t border-[#2a2e39] text-[11px]">
-        <div className="bg-red-600 px-2 py-1 text-white font-bold">In Focus</div>
-        <div className="text-orange-400 font-semibold px-2">NEWS</div>
-        <div className="flex-1 flex items-center gap-2 px-2 py-1 text-gray-400 overflow-hidden">
-          {newsHeadlines.map((h, i) => (
-            <span key={i} className="whitespace-nowrap flex items-center gap-2">
-              {h}{i < newsHeadlines.length - 1 && <span className="text-gray-600">•</span>}
-            </span>
-          ))}
+      {/* News — only rendered when real headlines are available */}
+      {newsItems.length > 0 && (
+        <div className="flex items-center border-t border-[#2a2e39] text-[11px]">
+          <div className="bg-red-600 px-2 py-1 text-white font-bold">In Focus</div>
+          <div className="text-orange-400 font-semibold px-2">NEWS</div>
+          <div className="flex-1 flex items-center gap-2 px-2 py-1 text-gray-400 overflow-hidden">
+            {newsItems.slice(0, 4).map((item, i) => (
+              <span key={i} className="whitespace-nowrap flex items-center gap-2">
+                {item.url ? (
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="hover:text-gray-200 transition-colors">
+                    {item.headline}
+                  </a>
+                ) : item.headline}
+                {i < Math.min(newsItems.length, 4) - 1 && <span className="text-gray-600">•</span>}
+              </span>
+            ))}
+          </div>
+          <div className="border-l border-[#2a2e39] px-3 py-1 text-gray-500 font-semibold">ANALYSIS</div>
         </div>
-        <div className="border-l border-[#2a2e39] px-3 py-1 text-gray-500 font-semibold">ANALYSIS</div>
-      </div>
+      )}
     </div>
   );
 }
@@ -885,117 +830,38 @@ function MarketRegimeTimeline({ regime, confidence }: { regime: MarketRegime; co
         </div>
       </div>
 
-      {/* Timeline - Compact */}
-      <div className="mt-4 pt-4 border-t border-white/5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-base-500">60-day regime</span>
-          <Link 
-            to="/app/all-markets/regime-history" 
-            className="text-xs text-base-500 hover:text-white transition-colors"
-          >
-            History →
-          </Link>
-        </div>
-        
-        {/* Timeline bar */}
-        <div className="h-1.5 flex rounded-full overflow-hidden bg-base-700">
-          {mockRegimeTimeline.map((point, i) => (
-            <div
-              key={i}
-              className={cn(
-                "h-full",
-                point.regime === 'risk-on' && "bg-emerald-500",
-                point.regime === 'risk-off' && "bg-red-500",
-                point.regime === 'transitional' && "bg-amber-500"
-              )}
-              style={{ width: `${100 / mockRegimeTimeline.length}%` }}
-            />
-          ))}
-        </div>
-        
-        <div className="flex justify-between mt-1 text-[10px] text-base-600">
-          <span>Nov 1</span>
-          <span>Today</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Today's Market Focus Component - Compact version
-function TodaysMarketFocus() {
-  return (
-    <div className="rounded-xl border border-blue-500/20 bg-gradient-to-r from-blue-500/10 to-transparent backdrop-blur px-4 py-3">
-      <div className="flex items-start gap-3">
-        <Eye className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
-        <div>
-          <p className="text-sm font-medium text-white leading-snug">
-            {todaysFocus.headline}
-          </p>
-          <p className="text-xs text-base-400 mt-1">
-            {todaysFocus.subtext}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Cross-Asset Snapshot Component - Compact inline version
-function CrossAssetSnapshot() {
-  const getSignalIcon = (signal: AssetSignal) => {
-    switch (signal) {
-      case 'up': return <ArrowUp className="h-3.5 w-3.5" />;
-      case 'down': return <ArrowDown className="h-3.5 w-3.5" />;
-      case 'neutral': return <ArrowRight className="h-3.5 w-3.5" />;
-    }
-  };
-
-  const assets = [
-    { key: 'equities', name: 'Equities', data: mockCrossAsset.equities },
-    { key: 'bonds', name: 'Bonds', data: mockCrossAsset.bonds },
-    { key: 'dollar', name: 'Dollar', data: mockCrossAsset.dollar },
-    { key: 'gold', name: 'Gold', data: mockCrossAsset.gold },
-  ];
-
-  return (
-    <div className="rounded-xl border border-white/10 bg-base-800/50 backdrop-blur px-4 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          {assets.map(({ key, name, data }) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="text-sm text-base-400">{name}</span>
-              <div className={cn(
-                "flex items-center gap-1 text-sm font-medium",
-                data.signal === 'up' && "text-emerald-400",
-                data.signal === 'down' && "text-red-400",
-                data.signal === 'neutral' && "text-amber-400"
-              )}>
-                {getSignalIcon(data.signal)}
-                <span className="hidden sm:inline">{data.label}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-        <Link 
-          to="/app/all-markets/cross-asset" 
+      {/* Link to full history — timeline bar removed (real series requires dedicated endpoint) */}
+      <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+        <span className="text-xs text-base-500">Credit spread regime (FRED)</span>
+        <Link
+          to="/app/macro/credit-spreads"
           className="text-xs text-base-500 hover:text-white transition-colors"
         >
-          More →
+          Full history →
         </Link>
       </div>
     </div>
   );
 }
 
-// Earnings Today Component - Compact inline version
-function EarningsToday() {
-  const mockEarnings: EarningsStock[] = [
-    { symbol: 'NVDA', name: 'NVIDIA Corp', time: 'post', estimate: 0.74 },
-    { symbol: 'CRM', name: 'Salesforce', time: 'post', estimate: 2.44 },
-    { symbol: 'DELL', name: 'Dell Technologies', time: 'post', estimate: 1.72 },
-    { symbol: 'MRVL', name: 'Marvell Tech', time: 'post', estimate: 0.41 },
-  ];
+// Earnings Today Component - driven by real earningsData from API
+function EarningsToday({ earningsData }: { earningsData: any[] }) {
+  // Only show today's (and upcoming same-week) earnings from real API data
+  const today = new Date().toISOString().split('T')[0];
+  const todayEarnings: EarningsStock[] = earningsData
+    .filter((e: any) => {
+      const d = e.date || e.reportDate || '';
+      return d >= today;
+    })
+    .slice(0, 8)
+    .map((e: any) => ({
+      symbol: (e.symbol || e.ticker || '').toUpperCase(),
+      name: e.name || e.companyName || e.symbol || '',
+      time: (e.time || e.when || 'post') as 'pre' | 'post' | 'during',
+      estimate: e.epsEstimate ?? e.estimate ?? undefined,
+    }));
+
+  if (todayEarnings.length === 0) return null;
 
   return (
     <div className="rounded-xl border border-white/10 bg-base-800/50 backdrop-blur px-4 py-3">
@@ -1003,20 +869,22 @@ function EarningsToday() {
         <div className="flex items-center gap-2 text-sm text-base-400 shrink-0">
           <Calendar className="h-4 w-4 text-purple-400" />
           <span>Earnings</span>
-          <span className="text-xs text-base-500">({mockEarnings.length})</span>
+          <span className="text-xs text-base-500">({todayEarnings.length})</span>
         </div>
-        
+
         <div className="flex items-center gap-3 overflow-x-auto flex-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          {mockEarnings.map((stock) => (
-            <div 
+          {todayEarnings.map((stock) => (
+            <div
               key={stock.symbol}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer shrink-0"
             >
               <div>
                 <span className="font-medium text-sm">{stock.symbol}</span>
-                <span className="text-xs text-base-500 ml-1">${stock.estimate}</span>
+                {stock.estimate != null && (
+                  <span className="text-xs text-base-500 ml-1">${stock.estimate}</span>
+                )}
               </div>
-              <Badge 
+              <Badge
                 className={cn(
                   "text-[10px] px-1.5 py-0",
                   stock.time === 'pre' && "bg-amber-500/20 text-amber-300",
@@ -1029,9 +897,9 @@ function EarningsToday() {
             </div>
           ))}
         </div>
-        
-        <Link 
-          to="/app/all-markets/earnings" 
+
+        <Link
+          to="/app/all-markets/earnings"
           className="text-xs text-base-500 hover:text-white transition-colors shrink-0 ml-auto"
         >
           Calendar →
@@ -1414,39 +1282,8 @@ function WhatMattersThisWeek({ calendarData, earningsData }: { calendarData: any
 
 // Macro Economic News Component - Uses real API data
 function MacroNews({ newsData, loading }: { newsData: any[]; loading: boolean }) {
-  // Fallback mock data if API doesn't return news
-  const fallbackNews = [
-    { 
-      headline: 'Fed signals patience on rate cuts amid sticky inflation', 
-      source: 'Reuters', 
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      impact: 'high',
-      image: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=200&h=120&fit=crop'
-    },
-    { 
-      headline: 'US jobless claims fall to 211,000, labor market remains tight', 
-      source: 'Bloomberg', 
-      timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-      impact: 'medium',
-      image: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=200&h=120&fit=crop'
-    },
-    { 
-      headline: 'Treasury yields rise as investors digest economic data', 
-      source: 'WSJ', 
-      timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-      impact: 'high',
-      image: 'https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=200&h=120&fit=crop'
-    },
-    { 
-      headline: 'ECB holds rates steady, signals data-dependent approach', 
-      source: 'FT', 
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-      impact: 'medium',
-      image: 'https://images.unsplash.com/photo-1519999482648-25049ddd37b1?w=200&h=120&fit=crop'
-    },
-  ];
-
-  const news = newsData.length > 0 ? newsData : fallbackNews;
+  // Only show real news from API — no hardcoded fallback with fabricated bylines
+  const news = newsData;
 
   // Image mapping based on keywords
   const getImageForNews = (headline: string, existingImage?: string) => {
@@ -1500,6 +1337,11 @@ function MacroNews({ newsData, loading }: { newsData: any[]; loading: boolean })
                 </div>
               </div>
             ))}
+          </div>
+        ) : news.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-base-500">
+            <Newspaper className="h-8 w-8 mx-auto mb-2 opacity-20" />
+            <p>No news available — check back soon</p>
           </div>
         ) : (
           <div className="divide-y divide-white/5">
@@ -1693,12 +1535,30 @@ function MarketMoversWidget({
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 
+// Map CreditRegime (FRED-backed) to the local MarketRegime display type
+function creditRegimeToMarketRegime(cr: string | undefined): MarketRegime {
+  if (cr === 'risk-on') return 'risk-on';
+  if (cr === 'stress' || cr === 'crisis') return 'risk-off';
+  if (cr === 'neutral') return 'transitional';
+  return 'transitional';
+}
+
 export default function AllMarketsOverview() {
+  const { gated: marketGated, isAdmin } = useMarketGate();
+  const { gated: finnhubGated } = useFinnhubGate();
   const [marketData, setMarketData] = useState<any>(null);
   const [calendarData, setCalendarData] = useState<any[]>([]);
   const [earningsData, setEarningsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { regime, confidence } = determineRegime();
+
+  // Regime from FRED credit spreads (redistribution-safe derived metric)
+  const { data: creditData } = useCreditSpreadsSnapshot();
+  const regime: MarketRegime = creditRegimeToMarketRegime(creditData?.regime);
+  // Confidence derived from HY spread proximity to stress thresholds (300bp = stress onset)
+  // Lower spread → higher risk-on confidence; hy=200 → ~80%, hy=400 → ~40%
+  const confidence: number = creditData?.hy != null
+    ? Math.round(Math.max(20, Math.min(95, 100 - creditData.hy / 6)))
+    : 50;
 
   useEffect(() => {
     let ok = true;
@@ -1884,37 +1744,64 @@ export default function AllMarketsOverview() {
 
   // calendarData and earningsData are now fetched separately and stored in state
 
+  // Build news items for ticker strip (real headlines from corporate_news)
+  const tickerNewsItems = useMemo(() => {
+    if (!newsData || newsData.length === 0) return [];
+    return newsData.map((item: any) => ({
+      headline: item.headline || item.title || '',
+      url: item.url || undefined,
+    }));
+  }, [newsData]);
+
   return (
     <div className="space-y-4 pb-8">
-      {/* Market Regime Timeline */}
+      {/* Market Regime Timeline — regime from FRED credit spreads */}
       <MarketRegimeTimeline regime={regime} confidence={confidence} />
 
-      {/* Market Ticker Strip */}
-      <MarketTickerStrip />
+      {/* Market Ticker Strip — raw Polygon prices; gated until licensed */}
+      {marketGated
+        ? <LicensedDataPlaceholder minHeight={260} />
+        : <div className="relative">
+            {isAdmin && <AdminGateBadge />}
+            <MarketTickerStrip newsItems={tickerNewsItems} />
+          </div>
+      }
 
       {/* Main Content Grid: Left stacked content + Right Movers (full height) */}
       <div className="grid gap-4 lg:grid-cols-[1fr,320px]">
         {/* Left Column: All content stacked */}
         <div className="space-y-4">
-          {/* Today's Focus */}
-          <TodaysMarketFocus />
-          
-          {/* Cross-Asset Snapshot */}
-          <CrossAssetSnapshot />
-          
-          {/* Earnings Today */}
-          <EarningsToday />
-          
-          {/* What Matters This Week - Key Events */}
+          {/* Earnings Today — Finnhub-sourced; gated until licensed */}
+          {finnhubGated
+            ? <LicensedDataPlaceholder minHeight={200} />
+            : <div className="relative">
+                {isAdmin && <AdminGateBadge label="Earnings: hidden from public (Finnhub)" />}
+                <EarningsToday earningsData={earningsData} />
+              </div>
+          }
+
+          {/* What Matters This Week - Key Events (economic calendar — FRED/safe sources, always visible) */}
           <WhatMattersThisWeek calendarData={calendarData} earningsData={earningsData} />
-          
-          {/* Macro Economic News */}
-          <MacroNews newsData={newsData} loading={loading} />
+
+          {/* Macro Economic News — Finnhub corporate_news feed; gated until licensed */}
+          {finnhubGated
+            ? <LicensedDataPlaceholder minHeight={200} />
+            : <div className="relative">
+                {isAdmin && <AdminGateBadge label="News: hidden from public (Finnhub)" />}
+                <MacroNews newsData={newsData} loading={loading} />
+              </div>
+          }
         </div>
-        
-        {/* Right Column: Market Movers Widget - Sticky, full height */}
+
+        {/* Right Column: Market Movers — raw Polygon heatmap data; gated until licensed */}
         <div className="lg:sticky lg:top-4 lg:self-start">
-          <MarketMoversWidget data={moversData} loading={loading} />
+          {marketGated
+            ? <LicensedDataPlaceholder minHeight={400} />
+            : <div className="relative">
+                {isAdmin && <AdminGateBadge />}
+                <MarketMoversWidget data={moversData} loading={loading} />
+              </div>
+          }
         </div>
       </div>
     </div>

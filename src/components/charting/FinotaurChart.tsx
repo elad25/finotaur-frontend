@@ -31,6 +31,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import {
   createChart,
   ColorType,
@@ -39,6 +40,7 @@ import {
   type ISeriesApi,
   type DeepPartial,
   type ChartOptions,
+  type UTCTimestamp,
 } from 'lightweight-charts';
 
 import type {
@@ -425,6 +427,30 @@ function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Marker icon overlay type
+// ═══════════════════════════════════════════════════════════════
+/**
+ * Describes a single icon-in-circle marker rendered as an HTML overlay on top
+ * of the lightweight-charts canvas. Parallel to ChartMarker — the native circle
+ * dot lives on the canvas; the arrow icon lives in this overlay.
+ */
+export interface MarkerIcon {
+  /** UTC timestamp (seconds) matching the corresponding ChartMarker. */
+  time: UTCTimestamp;
+  /** Price level the icon should be anchored to. */
+  price: number;
+  /** 'up' = ArrowUp icon (BUY direction); 'down' = ArrowDown icon (SELL direction). */
+  direction: 'up' | 'down';
+  /** Background color of the circle (e.g. '#C9A646' or '#E24B4A'). */
+  color: string;
+  /**
+   * Vertical offset from the computed price coordinate.
+   * Positive = below (for belowBar markers), negative = above (for aboveBar markers).
+   */
+  offsetY: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Component props
 // ═══════════════════════════════════════════════════════════════
 export interface FinotaurChartProps {
@@ -440,6 +466,12 @@ export interface FinotaurChartProps {
   dataSource: ChartDataSource;
   /** Optional markers (entry/exit arrows etc.). */
   markers?: ChartMarker[];
+  /**
+   * Optional icon-in-circle overlay markers (ArrowUp / ArrowDown) positioned
+   * over the lightweight-charts canvas. Pass in parallel with `markers` —
+   * the native colored circle is the background dot; these icons sit on top.
+   */
+  markerIcons?: MarkerIcon[];
   /**
    * Optional technical indicators rendered as line overlays.
    *
@@ -476,6 +508,7 @@ export function FinotaurChart({
   to,
   dataSource,
   markers,
+  markerIcons,
   indicators,
   theme = 'dark',
   height = 600,
@@ -503,6 +536,11 @@ export function FinotaurChart({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [barCount, setBarCount] = useState(0);
+  /**
+   * Bumping counter that triggers a re-render of the icon overlay whenever
+   * the chart viewport changes (pan / zoom / resize). Increment to reposition.
+   */
+  const [overlayTick, setOverlayTick] = useState(0);
 
   // ─── Mount / unmount the chart ──────────────────────────────
   useEffect(() => {
@@ -561,6 +599,48 @@ export function FinotaurChart({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // ─── Overlay reposition: subscribe to pan/zoom + resize ────
+  // Fires setOverlayTick (bumping counter) whenever the visible time range
+  // changes or the container resizes — both events require re-computing pixel
+  // coordinates for each marker icon.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const bump = () => setOverlayTick((n) => n + 1);
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(bump);
+
+    // ResizeObserver on the container fires on container-size changes, which
+    // also shift pixel coordinates. We attach a second observer here rather
+    // than reusing the sizing observer above so the two concerns stay separate.
+    const el = containerRef.current;
+    let ro: ResizeObserver | null = null;
+    if (el) {
+      ro = new ResizeObserver(bump);
+      ro.observe(el);
+    }
+
+    // After first paint, defer 2 frames so the chart finishes its initial
+    // layout pass (setVisibleRange + fitContent). Without this, the first
+    // bump runs while timeToCoordinate / priceToCoordinate still return null
+    // and the icons render at top:-9 left:-9 — clipped by overflow-hidden.
+    const raf1 = requestAnimationFrame(() => {
+      const raf2 = requestAnimationFrame(bump);
+      // Store raf2 id for cleanup via the outer raf1Ref pattern below
+      (bump as unknown as { _raf2?: number })._raf2 = raf2;
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      const raf2 = (bump as unknown as { _raf2?: number })._raf2;
+      if (raf2 != null) cancelAnimationFrame(raf2);
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(bump);
+      ro?.disconnect();
+    };
+    // Re-subscribe whenever the chart is remounted (theme change rebuilds chartRef).
+  }, [barCount]); // barCount > 0 guarantees chart+series are initialized
 
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
@@ -770,6 +850,87 @@ export function FinotaurChart({
       {/* Chart canvas mount */}
       <div ref={containerRef} className="absolute inset-0" />
 
+      {/* Icon-in-circle overlay — ArrowUp / ArrowDown markers positioned via
+          pixel coordinates from the chart API. pointer-events:none so the overlay
+          never steals hover/click from the lightweight-charts canvas below. */}
+      {markerIcons && markerIcons.length > 0 && chartRef.current && seriesRef.current && (
+        <div
+          className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+          // overlayTick in key forces React to recompute coordinates on pan/zoom/resize
+          key={overlayTick}
+        >
+          {markerIcons.map((icon, idx) => {
+            const chart = chartRef.current;
+            const series = seriesRef.current;
+            if (!chart || !series) return null;
+
+            // Snap marker time to the nearest available bar — lightweight-charts
+            // returns null from timeToCoordinate for times that don't EXACTLY
+            // match a bar timestamp (fills between bar starts, after-hours
+            // executions). Without snapping, the overlay never renders for most
+            // real trades. Binary search over barsRef which the chart already
+            // keeps up to date.
+            const bars = barsRef.current;
+            if (bars.length === 0) return null;
+            let lo = 0, hi = bars.length - 1;
+            const targetTime = icon.time as unknown as number;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if ((bars[mid].time as unknown as number) < targetTime) lo = mid + 1;
+              else hi = mid;
+            }
+            const candidateAfter = bars[lo];
+            const candidateBefore = lo > 0 ? bars[lo - 1] : candidateAfter;
+            const beforeT = candidateBefore.time as unknown as number;
+            const afterT = candidateAfter.time as unknown as number;
+            const snappedBar = (
+              Math.abs(targetTime - beforeT) <= Math.abs(afterT - targetTime)
+                ? candidateBefore
+                : candidateAfter
+            );
+
+            // Anchor to the candle's high/low (not the fill price) so the
+            // marker floats above/below the candle instead of overlapping it.
+            const anchorPrice = icon.direction === 'down' ? snappedBar.high : snappedBar.low;
+            const x = chart.timeScale().timeToCoordinate(snappedBar.time as UTCTimestamp);
+            const y = series.priceToCoordinate(anchorPrice);
+
+            if (x === null || y === null) return null;
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+            // Push the marker clearly off the candle: 28px gap from the high/low.
+            const top = icon.direction === 'down' ? (y as number) - 28 : (y as number) + 28;
+            const left = x as number;
+
+            return (
+              <div
+                key={idx}
+                style={{
+                  position: 'absolute',
+                  top: top - 12,   // center the 24px circle vertically
+                  left: left - 12, // center the 24px circle horizontally on the bar
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  background: icon.color,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid #ffffff',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+                  pointerEvents: 'none',
+                }}
+              >
+                {icon.direction === 'up'
+                  ? <ArrowUp size={14} color="#fff" strokeWidth={3.5} absoluteStrokeWidth />
+                  : <ArrowDown size={14} color="#fff" strokeWidth={3.5} absoluteStrokeWidth />
+                }
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Watermark — subtle Finotaur signature, bottom-right above the timescale */}
       <div
         className="pointer-events-none absolute bottom-7 right-16 z-10 select-none text-[10px] font-bold uppercase tracking-[0.3em]"
@@ -798,16 +959,21 @@ export function FinotaurChart({
 
       {loading && (
         <div
-          className="absolute inset-0 flex items-center justify-center text-xs text-zinc-500"
+          className="absolute inset-0 flex items-end justify-around gap-1.5 px-6 pb-6"
           style={{ background: theme === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(8,8,10,0.6)' }}
+          aria-hidden="true"
         >
-          <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 animate-pulse rounded-full"
-              style={{ background: themeTokens.brandGold }}
+          {[38, 62, 45, 80, 55, 70, 42, 68].map((h, i) => (
+            <div
+              key={i}
+              className="animate-pulse rounded-sm"
+              style={{
+                flex: 1,
+                height: `${h}%`,
+                background: theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)',
+              }}
             />
-            Loading {symbol} {interval} bars…
-          </div>
+          ))}
         </div>
       )}
 

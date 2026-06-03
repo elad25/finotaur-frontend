@@ -1,176 +1,171 @@
-/**
- * Backtest Results — list of saved sessions.
- *
- * Phase 2 of the backtest marketing-ready sprint. Reads from the
- * backtest-sessions Edge Function (RLS-scoped to the current user). Each
- * row links back to the chart with the session pre-loaded — but that
- * load-from-saved flow lands in a later phase; for now clicking a row just
- * shows a detail panel inline.
- */
+// ==========================================
+// BACKTEST PLAYBOOK GRID (Phase 2 — image 3 parity)
+// ==========================================
+// TradeZella "Playbook" → our "Strategies". Grid of strategy cards showing
+// win rate, Net P&L, Profit Factor, Missed Trades, Expectancy, Avg Winner/Loser,
+// computed from the user's trades (live + backtest), in Finotaur gold-on-black.
 
-import { useEffect, useState, useCallback } from 'react';
-import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
-import {
-  useBacktestPersistence,
-  type SavedSessionSummary,
-} from '@/hooks/useBacktestPersistence';
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, TrendingUp, Plus } from 'lucide-react';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useTrades } from '@/hooks/useTradesData';
+import { useStrategiesOptimized } from '@/hooks/useStrategies';
+import { calculateAllStats, type Trade } from '@/utils/statsCalculations';
 
-export const BacktestResults = () => {
-  const persistence = useBacktestPersistence();
-  const [sessions, setSessions] = useState<SavedSessionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+interface PlaybookCardData {
+  id: string;
+  name: string;
+  tradeCount: number;
+  winRate: number;
+  netPnL: number;
+  profitFactor: number;
+  expectancy: number;
+  avgWinner: number;
+  avgLoser: number;
+  missedTrades: number;
+}
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await persistence.listSessions();
-      setSessions(list);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load sessions');
-    } finally {
-      setLoading(false);
-    }
-  }, [persistence]);
+const GREEN = '#34D399';
+const RED = '#E44545';
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+function isClosed(t: any): boolean {
+  return t.exit_price != null || (t.outcome != null && t.outcome !== 'OPEN' && t.pnl != null);
+}
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this saved session? This cannot be undone.')) return;
-    setDeletingId(id);
-    try {
-      await persistence.deleteSession(id);
-      setSessions((prev) => prev.filter((s) => s.id !== id));
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to delete');
-    } finally {
-      setDeletingId(null);
-    }
+function buildCard(strategy: any, allTrades: any[]): PlaybookCardData {
+  const trades = allTrades.filter(
+    (t: any) => t.strategy_id === strategy.id || t.strategy_name === strategy.name
+  );
+  const closed = trades.filter(isClosed);
+  const stats = calculateAllStats(closed as Trade[]);
+
+  // Avg winner/loser in $ (reference shows currency, not R).
+  const winners = closed.filter((t: any) => (t.pnl ?? 0) > 0);
+  const losers = closed.filter((t: any) => (t.pnl ?? 0) < 0);
+  const sum = (arr: any[]) => arr.reduce((acc, t) => acc + (t.pnl ?? 0), 0);
+  const avgWinner = winners.length ? sum(winners) / winners.length : 0;
+  const avgLoser = losers.length ? sum(losers) / losers.length : 0;
+
+  return {
+    id: strategy.id,
+    name: strategy.name,
+    tradeCount: closed.length,
+    winRate: stats.winRate,
+    netPnL: stats.netPnL,
+    profitFactor: stats.profitFactor,
+    expectancy: stats.expectancy,
+    avgWinner,
+    avgLoser,
+    // "Missed trades" has no source yet — surfaced as 0 (parity placeholder).
+    missedTrades: 0,
   };
+}
+
+function fmtUsd(v: number): string {
+  const sign = v > 0 ? '+' : v < 0 ? '-' : '';
+  return `${sign}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div>
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className="text-sm font-semibold mt-0.5" style={{ color: color ?? '#EAEAEA' }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function PlaybookCard({ data, onOpen }: { data: PlaybookCardData; onOpen: () => void }) {
+  const pnlColor = data.netPnL > 0 ? GREEN : data.netPnL < 0 ? RED : '#EAEAEA';
+  const wrColor = data.winRate >= 50 ? GREEN : RED;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-6 text-[#F4F4F4]">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="flex items-center gap-3 text-3xl font-bold text-[#C9A646]">
-              <BarChart3 size={28} />
-              My Backtests
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              All sessions you've saved to your journal.
-            </p>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="text-left rounded-2xl border border-white/10 bg-white/[0.03] p-5 hover:border-[#C9A646]/40 hover:bg-white/[0.05] transition-all"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="shrink-0 rounded-lg bg-[#C9A646]/10 border border-[#C9A646]/20 p-2">
+            <TrendingUp className="h-4 w-4 text-[#C9A646]" />
           </div>
-          <button
-            onClick={refresh}
-            className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition-colors hover:bg-zinc-800"
-          >
-            Refresh
-          </button>
+          <h3 className="text-white font-semibold truncate">{data.name}</h3>
         </div>
-
-        {/* Body */}
-        {loading && (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-12 text-center text-sm text-zinc-500">
-            Loading saved sessions…
-          </div>
-        )}
-
-        {!loading && error && (
-          <div className="flex items-start gap-3 rounded-lg border border-rose-900 bg-rose-950/40 p-4 text-sm text-rose-300">
-            <AlertCircle size={18} className="mt-0.5 shrink-0" />
-            <div>
-              <div className="font-semibold">Couldn't load sessions</div>
-              <div className="mt-1 text-rose-400">{error}</div>
-            </div>
-          </div>
-        )}
-
-        {!loading && !error && sessions.length === 0 && (
-          <div className="rounded-lg border border-dashed border-zinc-800 bg-zinc-950 p-12 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900">
-              <BarChart3 className="text-zinc-600" size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-zinc-300">No saved sessions yet</h3>
-            <p className="mt-1 text-sm text-zinc-500">
-              Open the Chart tab, run a backtest, and click <span className="text-[#C9A646]">Save</span> to keep it here.
-            </p>
-          </div>
-        )}
-
-        {!loading && !error && sessions.length > 0 && (
-          <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
-            <table className="w-full text-sm">
-              <thead className="bg-zinc-900 text-xs uppercase tracking-wider text-zinc-500">
-                <tr>
-                  <th className="px-4 py-3 text-left">Session</th>
-                  <th className="px-4 py-3 text-left">Symbol</th>
-                  <th className="px-4 py-3 text-right">Trades</th>
-                  <th className="px-4 py-3 text-right">Win rate</th>
-                  <th className="px-4 py-3 text-right">Net P&amp;L</th>
-                  <th className="px-4 py-3 text-right">Profit factor</th>
-                  <th className="px-4 py-3 text-left">Saved</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="border-t border-zinc-900 transition-colors hover:bg-zinc-900/40"
-                  >
-                    <td className="px-4 py-3 font-medium">
-                      {s.name ?? <span className="text-zinc-500 italic">Untitled</span>}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">
-                      <span className="text-[#C9A646]">{s.symbol}</span>
-                      <span className="ml-1.5 text-zinc-600">· {s.interval}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">{s.total_trades}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${
-                      s.win_rate >= 50 ? 'text-emerald-400' : 'text-zinc-400'
-                    }`}>
-                      {s.win_rate.toFixed(1)}%
-                    </td>
-                    <td className={`px-4 py-3 text-right font-bold ${
-                      s.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}>
-                      <span className="inline-flex items-center gap-1">
-                        {s.net_pnl >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                        {s.net_pnl >= 0 ? '+' : ''}${s.net_pnl.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-[#C9A646]">
-                      {s.profit_factor >= 9999 ? '∞' : s.profit_factor.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-500">
-                      <span className="inline-flex items-center gap-1">
-                        <Clock size={12} />
-                        {new Date(s.created_at).toLocaleDateString()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleDelete(s.id)}
-                        disabled={deletingId === s.id}
-                        className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400 disabled:cursor-wait"
-                        title="Delete session"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <span className="text-[11px] text-gray-500 shrink-0">
+          {data.tradeCount} trade{data.tradeCount === 1 ? '' : 's'}
+        </span>
       </div>
+
+      <div className="grid grid-cols-2 gap-y-4 gap-x-3">
+        <Stat label="Win rate" value={`${data.winRate.toFixed(2)}%`} color={wrColor} />
+        <Stat label="Net P&L" value={fmtUsd(data.netPnL)} color={pnlColor} />
+        <Stat
+          label="Profit Factor"
+          value={data.profitFactor ? data.profitFactor.toFixed(2) : 'N/A'}
+        />
+        <Stat label="Missed Trades" value={String(data.missedTrades)} />
+        <Stat label="Expectancy" value={fmtUsd(data.expectancy)} />
+        <Stat label="Avg Winner" value={fmtUsd(data.avgWinner)} color={GREEN} />
+        <Stat label="Avg Loser" value={fmtUsd(data.avgLoser)} color={data.avgLoser < 0 ? RED : '#EAEAEA'} />
+      </div>
+    </button>
+  );
+}
+
+export const BacktestResults = () => {
+  const navigate = useNavigate();
+  const { id: userId } = useEffectiveUser();
+  const { data: strategies = [], isLoading: stratLoading } = useStrategiesOptimized(userId);
+  const { data: allTrades = [], isLoading: tradesLoading } = useTrades(userId);
+
+  const cards = useMemo(
+    () => (strategies as any[]).map((s) => buildCard(s, allTrades as any[])),
+    [strategies, allTrades]
+  );
+
+  const loading = stratLoading || tradesLoading;
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] text-[#F4F4F4] px-8 py-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <BookOpen className="h-6 w-6 text-[#C9A646]" />
+          <h1 className="text-2xl font-bold text-white">Playbook</h1>
+          <span className="text-sm text-gray-500">
+            {strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/app/journal/strategies')}
+          className="flex items-center gap-1.5 rounded-lg border border-[#C9A646]/30 px-3 py-2 text-sm text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors"
+        >
+          <Plus className="h-4 w-4" /> New strategy
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-center text-gray-500 py-20">Loading playbook…</div>
+      ) : cards.length === 0 ? (
+        <div className="text-center py-20">
+          <BookOpen className="h-10 w-10 text-[#C9A646]/40 mx-auto mb-4" />
+          <p className="text-gray-400">No strategies yet.</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Create a strategy and link it to a backtest session to track its performance here.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {cards.map((c) => (
+            <PlaybookCard key={c.id} data={c} onOpen={() => navigate('/app/journal/strategies')} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

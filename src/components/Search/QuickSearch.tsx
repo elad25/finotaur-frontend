@@ -10,12 +10,17 @@ type Props = {
   buildChartHref?: (s: SuggestItem) => string;
 };
 
-// ---- ROUTE BUILDERS (All Markets) ----
+// ---- ROUTE BUILDERS ----
 const ALL_MARKETS_BASE = "/app/all-markets";
 
+// Routes ETFs to the ETF Analyzer; all other asset types to all-markets summary.
 // מעביר גם symbol וגם ticker כדי לכסות מימושים שונים באפליקציה בלי לשבור כלום
-const defaultSummaryHref = (s: SuggestItem) =>
-  `${ALL_MARKETS_BASE}/summary?symbol=${encodeURIComponent(s.symbol)}&ticker=${encodeURIComponent(s.symbol)}`;
+const defaultSummaryHref = (s: SuggestItem) => {
+  if (s.assetType === "etf") {
+    return `/app/etfs/${encodeURIComponent(s.symbol)}/overview`;
+  }
+  return `${ALL_MARKETS_BASE}/summary?symbol=${encodeURIComponent(s.symbol)}&ticker=${encodeURIComponent(s.symbol)}`;
+};
 
 const defaultChartHref = (s: SuggestItem) =>
   `${ALL_MARKETS_BASE}/chart?symbol=${encodeURIComponent(s.symbol)}&ticker=${encodeURIComponent(s.symbol)}`;

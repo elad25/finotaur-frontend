@@ -528,9 +528,10 @@ const Hero = () => {
 
       {/* ========== BULL SILHOUETTE — atmospheric brand backdrop, anchored to upper viewport ========== */}
       <img
-        src="/logo.png"
+        src="/logo.webp"
         alt=""
         aria-hidden="true"
+        decoding="async"
         className="absolute pointer-events-none select-none"
         style={{
           left: '-18%',
@@ -806,10 +807,8 @@ const Hero = () => {
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1.2, delay: 0.1, ease: 'easeOut' }}
-          className="font-wordmark font-medium text-center leading-[0.92] tracking-[-0.04em] mb-10 md:mb-14 select-none"
+          className="font-wordmark font-medium text-center leading-[0.92] tracking-[-0.04em] mb-10 md:mb-14 select-none text-[clamp(40px,12vw,70px)] max-w-[90vw] md:text-[clamp(70px,10vw,160px)] md:max-w-[55vw]"
           style={{
-            fontSize: 'clamp(70px, 10vw, 160px)',
-            maxWidth: '55vw',
             background: 'linear-gradient(to bottom, rgba(255, 230, 160, 1) 0%, rgba(230, 195, 100, 0.98) 25%, rgba(201, 166, 70, 0.92) 60%, rgba(150, 120, 50, 0.80) 100%)',
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',

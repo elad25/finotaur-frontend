@@ -8,7 +8,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
-import { useAdminAuth } from '@/hooks/useAdminAuth';  // נ”¥ NEW
+import { useMentorView } from '@/contexts/MentorViewContext';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { MarketsSidebar } from '@/components/MarketsSidebar';  // נ”¥ NEW
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
 import {
@@ -17,13 +19,12 @@ import {
   BookOpen, 
   Layers, 
   BarChart3, 
-  Calendar, 
-  MessageSquare, 
-  Building, 
+  Calendar,
+  Building,
   Target, 
   Users,
-  Copy, 
-  GraduationCap, 
+  Copy,
+  GraduationCap,
   Settings,
   FlaskConical,
   TrendingUp,
@@ -58,12 +59,12 @@ import {
   Bell,
   Coins,
   Flame,
-  Sparkles,  // נ”¥ For beta items
-  Link2
+  FileBarChart,
+  Sparkles, // נ”¥ For beta items
+  Link2,
 } from 'lucide-react';
 import { 
-  prefetchSettingsData, 
-  prefetchAnalytics, 
+  prefetchSettingsData,
   prefetchStrategies,
   prefetchTrades,
   prefetchUserProfile
@@ -101,7 +102,10 @@ type EnvironmentType =
   | 'copy-trade'
   | 'funding'
   | 'settings'
-  | 'connections';
+  | 'connections'
+  | 'markets'
+  | 'war-zone'
+  | 'top-secret';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -110,12 +114,14 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   divider?: boolean;
   locked?: boolean;
   beta?: boolean;  // נ”¥ NEW
+  adminOnly?: boolean; // items only accessible to admins/beta viewers
   newTab?: boolean; // open in new browser tab instead of in-place navigation
   children?: Array<{
     label: string;
     path: string;
     icon: any;
     beta?: boolean;
+    adminOnly?: boolean;
   }>;
 }>> = {
   // ===============================================
@@ -138,7 +144,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // ===============================================
   'stocks': [
     { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
-    { label: 'Screener', path: '/app/stocks/screener', icon: Search },
+    // Screener moved to the all-markets (home) level — see constants/markets.ts.
     { label: 'Earnings', path: '/app/stocks/earnings', icon: Calendar },
     { label: 'Fundamentals', path: '/app/stocks/fundamentals', icon: BarChart3 },
     { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
@@ -238,6 +244,21 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'News', path: '/app/macro/news', icon: Newspaper },
   ],
 
+
+  // Markets — handled by MarketsSidebar; empty array is a fallback only
+  'markets': [],
+
+  // War Zone — light sidebar (Phase 1 nav redesign)
+  'war-zone': [
+    { label: 'Latest', path: '/app/all-markets/warzone', icon: Flame },
+  ],
+
+  // Top Secret — light sidebar (Phase 1 nav redesign)
+  'top-secret': [
+    { label: 'Latest Reports', path: '/app/top-secret',       icon: FileText },
+    { label: 'Admin',          path: '/app/top-secret/admin', icon: Shield, beta: true, adminOnly: true },
+  ],
+
   'ai': [
     { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
     { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
@@ -246,13 +267,16 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
     { label: 'Intelligence Desk', path: '/app/ai/top-5', icon: Award },
     { label: 'Upcoming Events', path: '/app/ai/upcoming-events', icon: Calendar },
-    { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
   ],
 
+  // beta:true is preserved to keep COPILOT gated to hasBetaAccess users
+  // (see `if (isBetaItem && !hasBetaAccess) return null`). The visible BETA
+  // badge is suppressed for all /copilot items via showBetaBadge below.
   'ai-copilot': [
     { label: 'FINOTAUR Copilot', path: '/copilot', icon: LayoutDashboard, beta: true },
     { label: 'Top Opportunities', path: '/copilot/top-opportunities', icon: Zap, beta: true },
     { label: 'Macro', path: '/copilot/macro', icon: Globe, beta: true },
+    { label: 'Quant Flow', path: '/copilot/quant-flow', icon: Activity, beta: true },
     { label: 'Holdings', path: '/copilot/holdings', icon: Layers, beta: true },
     { label: 'Risks', path: '/copilot/risks', icon: Shield, beta: true },
     { label: 'AI Analyst', path: '/copilot/ai-analyst', icon: Brain, beta: true },
@@ -268,27 +292,27 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Add Trade', path: '/app/journal/new', icon: PlusCircle },
     { label: 'Trades Journal', path: '/app/journal/my-trades', icon: BookOpen },
     { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
-    { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
-    { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
+    { label: 'Reports & Stats', path: '/app/journal/reports', icon: FileBarChart },
+    { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
+    { label: 'Auto-Tagger', path: '/app/journal/auto-tagger', icon: Sparkles },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
-    { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
 
+  // Backtest sidebar — Sprint E (2026-05-28): trimmed to the 6 practical tabs
+  // the trader actually needs. Removed Historical Data / AI Insights / Monte
+  // Carlo / Walk Forward / Optimization / Market Replay stubs; AI insight
+  // surface lives inline on the Dashboard, and Market Replay is reachable via
+  // the Chart page's Immersive Mode button.
   backtest: [
     { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
     { label: 'Chart', path: '/app/journal/backtest/chart', icon: PlusCircle },
-    { label: 'Results', path: '/app/journal/backtest/results', icon: FileText },
+    { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
+    { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
     { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Layers },
     { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
-    { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Calendar },
-    { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
-    { label: 'Monte Carlo', path: '/app/journal/backtest/monte-carlo', icon: Shuffle },
-    { label: 'Walk Forward', path: '/app/journal/backtest/walk-forward', icon: Activity },
-    { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Calculator },
-    { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: Play },
   ],
 
   'copy-trade': [
@@ -311,7 +335,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Subscribers', path: '/app/journal/admin/subscribers', icon: CreditCard },
     { label: 'Support', path: '/app/journal/admin/support', icon: HeadphonesIcon },
     { label: 'Cancellations', path: '/app/journal/admin/Cancellations', icon: UserX },
-    { label: 'Affiliate', path: '/app/journal/admin/affiliate', icon: Gift },
+    ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/journal/admin/affiliate', icon: Gift }] : []),
     { label: 'Top Traders', path: '/app/journal/admin/top-traders', icon: Trophy },
     { label: 'divider', path: '', icon: null, divider: true },
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
@@ -336,7 +360,9 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Billing', path: '/app/settings/billing', icon: CreditCard },
     { label: 'Usage', path: '/app/settings/usage', icon: Activity },
   ],
+
 };
+
 
 const sidebarItemBaseClass =
   'relative group flex w-full min-h-[46px] items-center rounded-lg border-l-2 border-transparent py-2.5 text-[13px] font-medium leading-snug transition-all duration-200';
@@ -357,10 +383,14 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   const storageKey = collapseMode === 'collapsed-default'
     ? 'finotaur-copilot-sidebar-expanded'
     : 'finotaur-sidebar-expanded';
-  const defaultExpanded = collapseMode !== 'collapsed-default';
+  // Default to the narrow icon-rail on first visit for every surface
+  // (space-efficient). Users who explicitly expand via the toggle keep their
+  // choice — that preference is honored below via `saved !== 'false'`.
+  const defaultExpanded = false;
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
+  const { isMentorView } = useMentorView();
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
@@ -373,7 +403,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--finotaur-sidebar-width',
-      isExpanded ? '14rem' : '60px'
+      isExpanded ? '12rem' : '60px'
     );
 
     return () => {
@@ -403,15 +433,23 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/journal/affiliate')) return 'affiliate';
     if (path.startsWith('/app/journal/backtest')) return 'backtest';
     
-    // All other domains
-    if (path.startsWith('/app/all-markets')) return 'all-markets';
-    if (path.startsWith('/app/stocks')) return 'stocks';
-    if (path.startsWith('/app/crypto')) return 'crypto';
-    if (path.startsWith('/app/futures')) return 'futures';
-    if (path.startsWith('/app/forex')) return 'forex';
-    if (path.startsWith('/app/commodities')) return 'commodities';
-    if (path.startsWith('/app/options')) return 'options';
-    if (path.startsWith('/app/macro')) return 'macro';
+    // Phase 1 products — must come before generic all-markets check
+    if (path.startsWith('/app/all-markets/warzone') || path.startsWith('/app/warzone')) return 'war-zone';
+    if (path.startsWith('/app/top-secret')) return 'top-secret';
+    // Markets product: any per-asset URL resolves to Markets environment.
+    // /app/etfs is now a Markets member (same fixed sidebar as Stocks/Crypto/etc).
+    if (
+      path.startsWith('/app/stocks') ||
+      path.startsWith('/app/options') ||
+      path.startsWith('/app/crypto') ||
+      path.startsWith('/app/futures') ||
+      path.startsWith('/app/forex') ||
+      path.startsWith('/app/commodities') ||
+      path.startsWith('/app/macro') ||
+      path.startsWith('/app/etfs') ||
+      path.startsWith('/app/etf') ||
+      path.startsWith('/app/all-markets')
+    ) return 'markets';
     if (path.startsWith('/app/ai/copilot') || path.startsWith('/copilot')) return 'ai-copilot';
     if (path.startsWith('/app/ai')) return 'ai';
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
@@ -424,7 +462,12 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   const currentEnvironment = getCurrentEnvironment();
-  const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
+  // In Mentor View the journal is read-only, so hide mutation-oriented items
+  // (the student's data is browsed, not edited, by the mentor).
+  const MENTOR_HIDDEN_ITEMS = ['Add Trade', 'Settings'];
+  const sidebarItems = isMentorView
+    ? ENVIRONMENT_MENUS[currentEnvironment].filter((item) => !MENTOR_HIDDEN_ITEMS.includes(item.label))
+    : ENVIRONMENT_MENUS[currentEnvironment];
   // True when the user is already inside the /copilot/* standalone shell
   const inStandaloneCopilot = location.pathname.startsWith('/copilot');
   const sidebarTopClass = 'top-28 h-[calc(100vh-7rem)]';
@@ -437,10 +480,8 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   // ===============================================
   // נ”¥ HIDE SIDEBAR FOR SPECIFIC PAGES
   // ===============================================
-  const hideSidebarPaths = [
-    '/app/all-markets/warzone',
-    '/app/top-secret',
-  ];
+  // Phase 1: War Zone and Top Secret now have their own sidebars — no longer hidden.
+  const hideSidebarPaths: string[] = [];
   
   const isHiddenPath = hideSidebarPaths.some(p => location.pathname.startsWith(p));
   
@@ -459,7 +500,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     
     const prefetchMap: Record<string, () => Promise<void>> = {
       '/app/journal/settings': prefetchSettingsData,
-      '/app/journal/analytics': prefetchAnalytics,
+      '/app/journal/reports': prefetchTrades,
       '/app/journal/strategies': prefetchStrategies,
       '/app/journal/my-trades': prefetchTrades,
       '/app/journal/performance': prefetchUserProfile,
@@ -524,7 +565,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       className={cn(
         'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
-        isExpanded ? 'w-56' : 'w-[60px]'
+        isExpanded ? 'w-48' : 'w-[60px]'
       )}
     >
       {/* נ”¥ Gold Toggle Tab */}
@@ -555,7 +596,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       </div>
 
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
-        {sidebarItems.map((item, index) => {
+        {/* Phase 1: Markets product uses its own asset-aware sidebar */}
+        {currentEnvironment === 'markets' ? (
+          <MarketsSidebar isExpanded={isExpanded} />
+        ) : sidebarItems.map((item, index) => {
           if (item.divider) {
             return <div key={`divider-${index}`} className="my-2 border-t border-gray-700" />;
           }
@@ -564,8 +608,13 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           const active = isItemActive(item.path);
           const isBackButton = item.label === 'Back to Journal';
           const isBetaItem = item.beta === true;
+          const isAdminOnlyItem = item.adminOnly === true;
           const isCopilotItem = item.path === '/copilot';
-          const showBetaBadge = isBetaItem && !isCopilotItem;
+          // Suppress the visible BETA badge for ALL /copilot items (graduated
+          // out of beta visually) while keeping beta access-gating intact.
+          const showBetaBadge = isBetaItem && !item.path.startsWith('/copilot');
+          // Show a subtle lock indicator to beta/admin viewers for items gated from regular users
+          const showAdminLockIndicator = hasBetaAccess && (item.locked === true || isBetaItem || isAdminOnlyItem);
           const hasChildren = Boolean(item.children?.length);
           const childrenOpen = isExpanded && hasChildren && openGroups[item.path];
           const parentActive = hasChildren
@@ -642,12 +691,12 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 <>
                   <span className={item.label === 'FINOTAUR Copilot' ? sidebarBrandLabelClass : sidebarLabelClass}>
                     {item.label === 'FINOTAUR Copilot' ? (
-                      <>
+                      <span className="text-[11px]">
                         <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text font-bold tracking-[0.04em] text-transparent">
                           FINOTAUR
                         </span>{' '}
                         <span className="font-semibold text-ink-primary">Copilot</span>
-                      </>
+                      </span>
                     ) : item.label}
                   </span>
                   {isLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
@@ -655,6 +704,15 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                     <span className="rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
                       BETA
                     </span>
+                  )}
+                  {/* Admin indicator: item is gated for regular users; admin can still access */}
+                  {showAdminLockIndicator && !isLocked && (
+                    <Lock
+                      className="h-2.5 w-2.5 flex-shrink-0"
+                      style={{ color: 'rgba(201,166,70,0.55)' }}
+                      aria-label="Locked for regular users"
+                      title="Locked for regular users"
+                    />
                   )}
                   {hasChildren && (
                     <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.12em] text-gold/70">
@@ -664,15 +722,24 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 </>
               )}
 
-              {/* Tooltip when collapsed */}
+              {/* Collapsed rail = icons only. The label appears as a pill on
+                  hover (every item, including the active one). No persistent
+                  label — the active item is indicated by its icon highlight. */}
               {!isExpanded && (
-                <div className="absolute left-full ml-3 px-2 py-1 bg-base-900 border border-gray-600 rounded text-xs whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
+                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                   {item.label}
                   {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
                   {showBetaBadge && (
                     <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
                       BETA
                     </span>
+                  )}
+                  {showAdminLockIndicator && !isLocked && (
+                    <Lock
+                      className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
+                      style={{ color: 'rgba(201,166,70,0.55)' }}
+                      title="Locked for regular users"
+                    />
                   )}
                 </div>
               )}

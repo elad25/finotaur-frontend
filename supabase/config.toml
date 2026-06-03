@@ -1,4 +1,4 @@
-project_id = "dnnevwlzpurhbkzjocnp"
+project_id = "xsgbtptkueabylkxibly"
 
 # ============================================
 # FINOTAUR SUPABASE FUNCTIONS CONFIG
@@ -34,6 +34,21 @@ verify_jwt = false  # ← OQ-37+38: dual-auth via _shared/dualAuth.ts
 [functions.tradovate-auth]
 enabled = true
 verify_jwt = false  # ← OQ-37+38: dual-auth via _shared/dualAuth.ts
+
+# ============================================
+# 🪙 EXCHANGE FUNCTIONS (crypto brokers) — verify_jwt:false + in-function dual-auth (S2, 2026-05-30)
+# ============================================
+# Same rationale as Tradovate: exchange-sync cron sends sb_secret_* (not JWT) → would 401 with verify_jwt:true.
+# Frontend sends user JWT. Both validated by _shared/dualAuth.ts (authenticate) inside the function.
+# exchange-connect rejects cron callers in-function and requires a user.
+
+[functions.exchange-sync]
+enabled = true
+verify_jwt = false  # ← S2: dual-auth via _shared/dualAuth.ts (cron + user JWT)
+
+[functions.exchange-connect]
+enabled = true
+verify_jwt = false  # ← S2: dual-auth via _shared/dualAuth.ts (user-only, rejects cron in-function)
 
 # ============================================
 # 🔒 CHECKOUT FUNCTIONS - Require Auth

@@ -48,6 +48,7 @@ import { useRiskSettings } from '@/hooks/useRiskSettings';
 import { useCommissions } from '@/hooks/useRiskSettings';
 import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
+import { computeLiquidationPrice, getPipSize, parseForexPair, computeQuoteRate } from '@/utils/tradeCalculations';
 import { supabase } from '@/lib/supabase';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
@@ -73,54 +74,9 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// ✅ Centralized multiplier lookup - MATCHES DB ticker_symbols table!
-const ASSET_MULTIPLIERS: Record<string, { class: string; mult: number }> = {
-  // CME E-mini Indices
-  NQ: { class: "futures", mult: 20 },
-  MNQ: { class: "futures", mult: 2 },
-  ES: { class: "futures", mult: 50 },
-  MES: { class: "futures", mult: 5 },
-  YM: { class: "futures", mult: 5 },
-  MYM: { class: "futures", mult: 0.5 },
-  RTY: { class: "futures", mult: 50 },
-  M2K: { class: "futures", mult: 5 },
-  // Energy
-  CL: { class: "futures", mult: 1000 },
-  MCL: { class: "futures", mult: 100 },
-  QM: { class: "futures", mult: 500 },
-  NG: { class: "futures", mult: 10000 },
-  QG: { class: "futures", mult: 2500 },
-  // Metals
-  GC: { class: "futures", mult: 100 },
-  MGC: { class: "futures", mult: 10 },
-  SI: { class: "futures", mult: 5000 },
-  SIL: { class: "futures", mult: 1000 },
-  HG: { class: "futures", mult: 25000 },
-  // Bonds
-  ZB: { class: "futures", mult: 1000 },
-  ZN: { class: "futures", mult: 1000 },
-  ZF: { class: "futures", mult: 1000 },
-  ZT: { class: "futures", mult: 2000 },
-  // Currencies
-  "6E": { class: "futures", mult: 12.5 },
-  M6E: { class: "futures", mult: 6.25 },
-  "6B": { class: "futures", mult: 62500 },
-  "6J": { class: "futures", mult: 12500000 },
-  "6A": { class: "futures", mult: 100000 },
-  // Crypto Futures
-  BTC: { class: "futures", mult: 5 },
-  MBT: { class: "futures", mult: 0.1 },
-  // Agricultural
-  ZC: { class: "futures", mult: 50 },
-  ZW: { class: "futures", mult: 50 },
-  ZS: { class: "futures", mult: 50 },
-};
-
-function getAssetMultiplier(symbol: string): number {
-  const symbolUpper = symbol.toUpperCase().trim();
-  const found = ASSET_MULTIPLIERS[symbolUpper];
-  return found ? found.mult : 1;
-}
+// ✅ Multiplier lookup - delegates to canonical table in tradeCalculations.ts
+import { getAssetMultiplier, ASSET_MULTIPLIERS, getQuantityLabel } from "@/utils/tradeCalculations";
+import MultiLegBuilder from "@/components/journal/MultiLegBuilder";
 
 // 🔥 VALID SESSIONS - must match DB constraint!
 const VALID_SESSIONS = ['asia', 'london', 'newyork'];
@@ -721,6 +677,19 @@ export default function New() {
   const [showExitDatePicker, setShowExitDatePicker] = useState(false);
   const [autoSession, setAutoSession] = useState(true);
   
+  // Multi-leg options builder toggle (defaults OFF; single-leg path unchanged)
+  const [showMultiLeg, setShowMultiLeg] = useState(false);
+  // Auth user id for the multi-leg builder (component-scope; New.tsx otherwise
+  // reads the user only inside async loaders).
+  const [effectiveUserId, setEffectiveUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setEffectiveUserId(data.user?.id ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   // 🔥 Partial Exits State
   const [showPartialExits, setShowPartialExits] = useState(false);
   const [partialExits, setPartialExits] = useState<ExitPoint[]>([]);
@@ -930,7 +899,18 @@ const {
           st.setNotes(trade.notes || '');
           st.setMistake(trade.mistake || '');
           st.setNextTime(trade.next_time || '');
-          
+
+          // Asset-class-specific fields
+          if (trade.option_type) st.setOptionType(trade.option_type as 'CALL' | 'PUT');
+          if (trade.strike_price) st.setStrikePrice(trade.strike_price);
+          if (trade.expiration_date) st.setExpirationDate(trade.expiration_date);
+          if (trade.leverage) st.setLeverage(trade.leverage);
+          if (trade.position_type) st.setPositionType(trade.position_type as 'Spot' | 'Perpetual');
+          if (trade.funding_paid != null) st.setFundingPaid(trade.funding_paid);
+          if (trade.lot_size) st.setLotSize(trade.lot_size);
+          if (trade.account_currency) st.setAccountCurrency(trade.account_currency);
+          if (trade.quote_rate) st.setQuoteRate(trade.quote_rate);
+
           const mult = getAssetMultiplier(trade.symbol);
           st.setMultiplier(mult);
           
@@ -1155,17 +1135,24 @@ const {
     
     // Regular single exit calculation
     if (!st.exitPrice || st.exitPrice <= 0) return 0;
-    
-    const priceChange = st.side === "LONG" 
+
+    const priceChange = st.side === "LONG"
       ? st.exitPrice - st.entryPrice
       : st.entryPrice - st.exitPrice;
-    
-    const multiplier = getAssetMultiplier(st.symbol);
-    const grossPnL = priceChange * st.quantity * multiplier;
+
+    // Asset-class-aware multiplier:
+    // - options: fixed 100 per contract
+    // - forex: quote_rate conversion (default 1)
+    // - others: symbol-based lookup
+    const effectiveMultiplier = st.assetClass === 'options'
+      ? 100
+      : getAssetMultiplier(st.symbol);
+    const quoteRate = st.assetClass === 'forex' ? (st.quoteRate ?? 1) : 1;
+    const grossPnL = priceChange * st.quantity * effectiveMultiplier * quoteRate;
     const netPnL = grossPnL - st.fees;
-    
+
     return netPnL;
-  }, [st.exitPrice, st.entryPrice, st.side, st.quantity, st.fees, st.symbol, st.multiplier, usePartialExits, partialExits]);
+  }, [st.exitPrice, st.entryPrice, st.side, st.quantity, st.fees, st.symbol, st.multiplier, st.assetClass, st.quoteRate, usePartialExits, partialExits]);
 
   // Calculate Outcome (Trade Summary mode only)
   const calculateOutcome = useCallback((): "WIN" | "LOSS" | "BE" | "OPEN" => {
@@ -1285,7 +1272,7 @@ const {
     </button>
   );
 
-  const quantityLabel = st.assetClass === "futures" ? "Contracts" : st.assetClass === "forex" ? "Lots" : st.assetClass === "crypto" ? "Units" : "Shares";
+  const quantityLabel = getQuantityLabel(st.assetClass || 'stocks');
 
   // ================================================================
   // 🔥🔥🔥 SUBMIT FUNCTION - v15 WITH RISK-ONLY MODE! 🔥🔥🔥
@@ -1515,6 +1502,19 @@ if (hasResult && directRiskUSD > 0) {
           // PARTIAL EXITS (not used in risk-only)
           // ═══════════════════════════════════════════
           partial_exits: null,
+
+          // ═══════════════════════════════════════════
+          // ASSET-CLASS-SPECIFIC (null in risk-only)
+          // ═══════════════════════════════════════════
+          option_type: null,
+          strike_price: null,
+          expiration_date: null,
+          leverage: null,
+          position_type: null,
+          funding_paid: null,
+          lot_size: null,
+          account_currency: null,
+          quote_rate: null,
         };
         
        // 🔥 DEBUG: Log the FULL payload to verify all fields
@@ -1605,7 +1605,8 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           // CALCULATED FIELDS (FLAT - NOT NESTED!)
           // ═══════════════════════════════════════════
-          multiplier: finalMultiplier,
+          // Options always use multiplier 100; other assets use symbol lookup
+          multiplier: st.assetClass === 'options' ? 100 : finalMultiplier,
           rr: st.rr || null,
           risk_usd: st.riskUSD || null,
           reward_usd: st.rewardUSD || null,
@@ -1642,7 +1643,7 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           // PARTIAL EXITS DATA
           // ═══════════════════════════════════════════
-          partial_exits: usePartialExits && partialExits.length > 0 
+          partial_exits: usePartialExits && partialExits.length > 0
             ? partialExits
                 .filter(e => e.price > 0 && (e.percentage || 0) > 0)
                 .map(e => ({
@@ -1650,6 +1651,21 @@ if (hasResult && directRiskUSD > 0) {
                   quantity: (st.quantity * (e.percentage || 0)) / 100,
                 }))
             : null,
+
+          // ═══════════════════════════════════════════
+          // ASSET-CLASS-SPECIFIC FIELDS
+          // ═══════════════════════════════════════════
+          option_type: st.assetClass === 'options' ? (st.optionType ?? null) : null,
+          strike_price: st.assetClass === 'options' ? (st.strikePrice ?? null) : null,
+          expiration_date: st.assetClass === 'options' ? (st.expirationDate ?? null) : null,
+          // Crypto
+          leverage: st.assetClass === 'crypto' ? (st.leverage ?? null) : null,
+          position_type: st.assetClass === 'crypto' ? (st.positionType ?? null) : null,
+          funding_paid: (st.assetClass === 'crypto' && st.positionType === 'Perpetual') ? (st.fundingPaid ?? null) : null,
+          // Forex
+          lot_size: st.assetClass === 'forex' ? (st.lotSize ?? null) : null,
+          account_currency: st.assetClass === 'forex' ? (st.accountCurrency ?? 'USD') : null,
+          quote_rate: st.assetClass === 'forex' ? (st.quoteRate ?? 1) : null,
         };
         
         if (isDev) {
@@ -1975,6 +1991,27 @@ if (hasResult && directRiskUSD > 0) {
                   Auto-detected from prices
                 </div>
               )}
+            </div>
+
+            {/* Asset Class Selector */}
+            <div className="mb-6">
+              <Label className="text-xs text-zinc-400 mb-2 block">Asset Class</Label>
+              <div className="flex flex-wrap gap-2">
+                {(['stocks', 'futures', 'options', 'crypto', 'forex'] as const).map((cls) => (
+                  <button
+                    key={cls}
+                    type="button"
+                    onClick={() => st.setAssetClass(cls as any)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 border ${
+                      st.assetClass === cls
+                        ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 shadow-[0_0_12px_rgba(201,166,70,0.15)]'
+                        : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    {cls.charAt(0).toUpperCase() + cls.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Grid: Symbol, Date/Time */}
@@ -2431,7 +2468,7 @@ if (hasResult && directRiskUSD > 0) {
                             ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
                             : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-yellow-500/40 hover:text-yellow-400'
                         }`}
-                        title="יציאות חלקיות"
+                        title="Partial exits"
                       >
                         <Plus className="w-4 h-4" />
                         <span className="text-xs font-medium hidden sm:inline">Partials</span>
@@ -2466,6 +2503,245 @@ if (hasResult && directRiskUSD > 0) {
                     )}
                   </div>
                 </div>
+
+                {/* ─── CONDITIONAL ASSET-CLASS FIELDS ─── */}
+
+                {/* OPTIONS fields */}
+                {st.assetClass === 'options' && (
+                  <div className="mb-6 p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-xs text-yellow-400 uppercase tracking-wider">Options Details</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowMultiLeg((v) => !v)}
+                        className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                          showMultiLeg
+                            ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800'
+                        }`}
+                      >
+                        {showMultiLeg ? 'Single leg' : 'Multi-leg spread'}
+                      </button>
+                    </div>
+                    {!showMultiLeg && (
+                    <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Option Type</Label>
+                        <div className="flex gap-2">
+                          {(['CALL', 'PUT'] as const).map((ot) => (
+                            <button
+                              key={ot}
+                              type="button"
+                              onClick={() => st.setOptionType(ot)}
+                              className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all border ${
+                                st.optionType === ot
+                                  ? ot === 'CALL'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                    : 'bg-red-500/20 text-red-300 border-red-500/40'
+                                  : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800'
+                              }`}
+                            >
+                              {ot}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Strike Price</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={st.strikePrice || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            st.setStrikePrice(isNaN(val) ? undefined : val);
+                          }}
+                          placeholder="150.00"
+                          className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Expiration Date</Label>
+                        <Input
+                          type="date"
+                          value={st.expirationDate || ''}
+                          onChange={(e) => st.setExpirationDate(e.target.value || undefined)}
+                          className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-3">Multiplier is fixed at 100 for options contracts.</p>
+                    </>
+                    )}
+                    {showMultiLeg && effectiveUserId && (
+                      <MultiLegBuilder
+                        userId={effectiveUserId}
+                        defaultSymbol={st.symbol}
+                        portfolioId={selectedPortfolioIds[0] ?? null}
+                        onSaved={async () => {
+                          await queryClient.invalidateQueries({ queryKey: ['trades'] });
+                          navigate('/app/journal/my-trades');
+                        }}
+                        onCancel={() => setShowMultiLeg(false)}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* CRYPTO fields */}
+                {st.assetClass === 'crypto' && (
+                  <div className="mb-6 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
+                    <p className="text-xs text-blue-400 uppercase tracking-wider mb-4">Crypto Details</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Position Type</Label>
+                        <div className="flex gap-2">
+                          {(['Spot', 'Perpetual'] as const).map((pt) => (
+                            <button
+                              key={pt}
+                              type="button"
+                              onClick={() => st.setPositionType(pt)}
+                              className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all border ${
+                                st.positionType === pt
+                                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                                  : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800'
+                              }`}
+                            >
+                              {pt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Leverage</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="1"
+                          value={st.leverage || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            st.setLeverage(isNaN(val) ? undefined : val);
+                          }}
+                          placeholder="1"
+                          className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
+                        />
+                      </div>
+                      {(() => {
+                        const liqPrice = computeLiquidationPrice({ entryPrice: st.entryPrice, leverage: st.leverage, side: st.side });
+                        return liqPrice !== null ? (
+                          <div>
+                            <Label className="text-xs text-zinc-400 mb-2 block">Est. Liquidation Price</Label>
+                            <div className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 flex items-center justify-end px-3 text-zinc-200 text-sm tabular-nums">
+                              {liqPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                            </div>
+                            <p className="text-xs text-zinc-500 mt-1">Estimate — excludes maintenance margin &amp; fees.</p>
+                          </div>
+                        ) : null;
+                      })()}
+                      {st.positionType === 'Perpetual' && (
+                        <div>
+                          <Label className="text-xs text-zinc-400 mb-2 block">Funding Paid (optional)</Label>
+                          <Input
+                            type="number"
+                            step="any"
+                            value={st.fundingPaid ?? ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              st.setFundingPaid(isNaN(val) ? undefined : val);
+                            }}
+                            placeholder="0.00"
+                            className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* FOREX fields */}
+                {st.assetClass === 'forex' && (
+                  <div className="mb-6 p-4 rounded-xl border border-purple-500/20 bg-purple-500/5">
+                    <p className="text-xs text-purple-400 uppercase tracking-wider mb-4">Forex Details</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Lot Size</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={st.lotSize || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            st.setLotSize(isNaN(val) ? undefined : val);
+                          }}
+                          placeholder="1.0"
+                          className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Account Currency</Label>
+                        <Input
+                          type="text"
+                          value={st.accountCurrency ?? 'USD'}
+                          onChange={(e) => st.setAccountCurrency(e.target.value.toUpperCase() || 'USD')}
+                          placeholder="USD"
+                          maxLength={3}
+                          className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right uppercase"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-zinc-400 mb-2 block">Quote Rate</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={st.quoteRate ?? 1}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            st.setQuoteRate(isNaN(val) ? 1 : val);
+                          }}
+                          placeholder="1.0"
+                          className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
+                        />
+                        {(() => {
+                          const { quote } = parseForexPair(st.symbol);
+                          const acct = (st.accountCurrency ?? 'USD').toUpperCase();
+                          if (quote && quote === acct) {
+                            return (
+                              <p className="text-xs text-zinc-500 mt-1">
+                                Auto: quote currency = account currency → 1.0
+                              </p>
+                            );
+                          }
+                          if (quote && quote !== acct && (st.quoteRate ?? 1) === 1) {
+                            return (
+                              <p className="text-xs text-amber-300 mt-1">
+                                Cross-currency pair: quote rate is still 1.0, so P&amp;L will not be
+                                converted to {acct}. Enter the {quote}→{acct} rate.
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    </div>
+                    {(() => {
+                      const pipSize = getPipSize(st.symbol);
+                      const { base, quote } = parseForexPair(st.symbol);
+                      if (!base && !quote) return null;
+                      return (
+                        <div className="mt-3 flex gap-4 text-xs text-zinc-500">
+                          {base && quote && (
+                            <span>Base: <span className="text-zinc-400">{base}</span> / Quote: <span className="text-zinc-400">{quote}</span></span>
+                          )}
+                          <span>Pip size: <span className="text-zinc-400">{pipSize}</span></span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Exit Time — shown only when exit price is set */}
                 {(st.exitPrice && st.exitPrice > 0) && (

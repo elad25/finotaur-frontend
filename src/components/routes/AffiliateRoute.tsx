@@ -5,12 +5,13 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { FEATURES } from '@/config/features';
+import { Spinner } from "@/components/ui/Spinner";
 
 // Loading component
 const PageLoader = memo(() => (
   <div className="flex items-center justify-center min-h-screen bg-background">
     <div className="flex flex-col items-center gap-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <Spinner size="lg" />
       <p className="text-sm text-muted-foreground">Loading...</p>
     </div>
   </div>
