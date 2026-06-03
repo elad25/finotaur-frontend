@@ -37,6 +37,7 @@ import {
   Activity,
   Zap,
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
 
@@ -450,7 +451,7 @@ const DrilldownModal: React.FC<{
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {isLoading && (
             <div className="flex items-center justify-center py-12 text-ink-tertiary gap-3">
-              <Loader2 className="w-5 h-5 animate-spin text-gold-primary" />
+              <Spinner size="md" />
               <span className="text-small">Loading ticker data...</span>
             </div>
           )}

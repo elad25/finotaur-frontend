@@ -4,7 +4,6 @@
 import { useState } from 'react';
 import {
   X,
-  Loader2,
   CheckCircle,
   AlertCircle,
   ExternalLink,
@@ -13,6 +12,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { supabase } from '@/lib/supabase';
 import BinanceApiKeyGuide from './BinanceApiKeyGuide';
 
@@ -377,7 +377,7 @@ export default function BinanceConnectionPopup({ onClose, onSuccess }: Props) {
 
   const renderConnecting = () => (
     <div className="flex flex-col items-center justify-center gap-6 py-12">
-      <Loader2 className="h-12 w-12 animate-spin text-[#F0B90B]" />
+      <Spinner size="md" />
       <div className="text-center">
         <p className="mb-2 text-lg font-semibold text-white">Connecting to Binance...</p>
         <p className="text-sm text-zinc-400">Validating your API key</p>
