@@ -24,6 +24,8 @@ export interface FinoChatContextData {
   ticker?: string;
   /** Free-form label describing the current surface. */
   label?: string;
+  /** Optional prompt to auto-submit when the drawer opens. */
+  query?: string;
   [key: string]: unknown;
 }
 

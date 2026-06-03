@@ -8,7 +8,7 @@
 // SSR-safe: no window/document access; state in ProductDrawerContext.
 // =====================================================
 
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { X, Lock, Shield, Sparkles } from 'lucide-react';
 import { Drawer as DrawerPrimitive } from 'vaul';
 import { useProductDrawer } from '@/contexts/ProductDrawerContext';
@@ -25,6 +25,7 @@ import {
   FileText,
   BookOpen,
   Zap,
+  Home,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -49,6 +50,8 @@ export function ProductDrawer() {
   const { domainId } = useDomain();
   const { hasBetaAccess, isAdmin } = useAdminAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const homeActive = location.pathname.startsWith('/app/home');
 
   const handleProductClick = (id: string) => {
     const domain = domains[id];
@@ -105,7 +108,14 @@ export function ProductDrawer() {
             className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
             style={{ borderColor: 'rgba(201,166,70,0.08)' }}
           >
-            <Wordmark size="nav" interactive />
+            <button
+              type="button"
+              onClick={() => { navigate('/app/home'); close(); }}
+              className="flex items-center cursor-pointer"
+              aria-label="FINOTAUR home"
+            >
+              <Wordmark size="nav" interactive />
+            </button>
             <DrawerPrimitive.Close asChild>
               <button
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4]"
@@ -118,6 +128,53 @@ export function ProductDrawer() {
 
           {/* Product list */}
           <nav className="flex-1 overflow-y-auto py-3" aria-label="Products">
+            {/* Home — hardcoded, always first */}
+            <button
+              type="button"
+              data-tour="drawer-home"
+              onClick={() => { navigate('/app/home'); close(); }}
+              className={cn(
+                'w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-200 cursor-pointer hover:bg-[#1A1A1A]',
+                homeActive ? 'bg-[#C9A646]/08' : '',
+              )}
+              aria-current={homeActive ? 'page' : undefined}
+            >
+              {/* Icon container */}
+              <span
+                className={cn(
+                  'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors',
+                  homeActive
+                    ? 'bg-[#C9A646]/20 text-[#C9A646]'
+                    : 'bg-[#1A1A1A] text-[#A0A0A0]',
+                )}
+              >
+                <Home className="h-[18px] w-[18px]" />
+              </span>
+
+              {/* Label + sublabel */}
+              <span className="flex flex-col min-w-0">
+                <span
+                  className={cn(
+                    'text-sm font-medium leading-tight flex items-center gap-1.5',
+                    homeActive ? 'text-[#C9A646]' : 'text-[#F4F4F4]',
+                  )}
+                >
+                  Home
+                </span>
+                <span className="text-[11px] text-[#606060] leading-tight mt-0.5">
+                  Your dashboard
+                </span>
+              </span>
+
+              {/* Active indicator */}
+              {homeActive && (
+                <span
+                  className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                  style={{ background: '#C9A646' }}
+                />
+              )}
+            </button>
+
             {domainOrder.map((id) => {
               const domain = domains[id];
               if (!domain) return null;

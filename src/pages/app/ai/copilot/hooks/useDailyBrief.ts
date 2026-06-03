@@ -41,7 +41,7 @@ function deriveSessionPhase(marketStatus: MarketStatusResult): SessionPhase {
  * Intentionally uses local time (not ET) so the greeting matches the
  * user's subjective experience regardless of timezone.
  */
-function computeGreeting(): string {
+export function computeGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';

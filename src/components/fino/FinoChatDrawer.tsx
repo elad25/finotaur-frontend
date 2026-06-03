@@ -6,7 +6,7 @@
 // engine the retired /app/ai/assistant page used (useAICopilot + ChatInterface).
 // =====================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Sparkles } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
@@ -46,13 +46,19 @@ function buildFinoContext(getPageData: () => FinoPageData | null) {
 }
 
 export default function FinoChatDrawer() {
-  const { openSignal } = useFinoChat();
+  const { openSignal, consumeOpenContext } = useFinoChat();
   const [isOpen, setIsOpen] = useState(false);
+  const [initialQuery, setInitialQuery] = useState<string | null>(null);
 
   // Open whenever something (the SubNav button) calls open().
+  // Consume the open context exactly once per signal so the query is not re-sent on re-renders.
   useEffect(() => {
-    if (openSignal > 0) setIsOpen(true);
-  }, [openSignal]);
+    if (openSignal > 0) {
+      const ctx = consumeOpenContext();
+      setIsOpen(true);
+      setInitialQuery(typeof ctx?.query === 'string' && ctx.query.trim() ? ctx.query : null);
+    }
+  }, [openSignal, consumeOpenContext]);
 
   // Close on Escape.
   useEffect(() => {
@@ -76,13 +82,19 @@ export default function FinoChatDrawer() {
         className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
       />
       <aside className="relative z-10 flex h-full w-full max-w-[460px] flex-col border-l border-[#C9A646]/20 bg-surface-base shadow-2xl animate-in slide-in-from-right duration-200">
-        <FinoChatPanel onClose={() => setIsOpen(false)} />
+        <FinoChatPanel onClose={() => setIsOpen(false)} initialQuery={initialQuery} />
       </aside>
     </div>
   );
 }
 
-function FinoChatPanel({ onClose }: { onClose: () => void }) {
+function FinoChatPanel({
+  onClose,
+  initialQuery,
+}: {
+  onClose: () => void;
+  initialQuery?: string | null;
+}) {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('ai_assistant');
   const {
@@ -96,6 +108,17 @@ function FinoChatPanel({ onClose }: { onClose: () => void }) {
     clearError,
   } = useAICopilot();
   const { getPageData } = useFinoChat();
+
+  // Auto-submit the initial query once per unique query string.
+  // Guards against double-send (StrictMode double-mount) via lastSentRef.
+  const lastSentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialQuery) return;
+    if (accessLoading || !access.hasAccess) return;
+    if (lastSentRef.current === initialQuery) return;
+    lastSentRef.current = initialQuery;
+    void sendMessage(initialQuery, buildFinoContext(getPageData));
+  }, [initialQuery, accessLoading, access.hasAccess, sendMessage, getPageData]);
 
   const iconBtn =
     'flex h-8 w-8 items-center justify-center rounded-lg border border-border-ds-subtle text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary';

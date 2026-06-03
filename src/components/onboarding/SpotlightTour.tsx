@@ -101,6 +101,12 @@ const STEPS: TourStep[] = [
     title: 'Trading Journal',
     body: "Where discipline compounds. Log trades, track P&L in R, and let AI surface your patterns. It's free to try — jump in.",
     breadcrumb: 'Open the menu → Journal',
+  },
+  {
+    key: 'drawer-home',
+    title: 'Home',
+    body: 'Your command center — jump into any product, ask Fino, and pick up where you left off.',
+    breadcrumb: 'Open the menu → Home',
     isLast: true,
   },
 ];
@@ -633,7 +639,7 @@ export default function SpotlightTour() {
     closeDrawer();
     finishOnboarding();
     setActive(false);
-    navigate('/app/all-markets/overview', { replace: true });
+    navigate('/app/home', { replace: true });
   }, [setTourMode, closeDrawer, navigate]);
 
   const handleNext = useCallback(() => {
@@ -655,7 +661,9 @@ export default function SpotlightTour() {
   // Determine arrow direction:
   // Drawer items (card to the right of drawer) → cardIsRight=true → arrow points left toward item.
   // menu & fino (card below top-bar target) → cardIsRight=false → arrow points up toward button.
-  const cardIsRight = currentStep.key.startsWith('drawer-product-');
+  const cardIsRight =
+    currentStep.key.startsWith('drawer-product-') ||
+    currentStep.key === 'drawer-home';
 
   return (
     <AnimatePresence>
