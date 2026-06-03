@@ -215,19 +215,19 @@ const JournalDashboardMock = () => {
 
 const MeetFinoIntro = () => {
   return (
-    <div className="relative flex flex-col items-start text-left px-4 sm:px-8 py-6 overflow-hidden">
-      {/* left radial gold glow */}
+    <div className="relative flex flex-col items-center justify-center px-3 py-4 overflow-hidden">
+      {/* radial gold glow */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at left center, var(--gold-border) 0%, transparent 60%)",
+            "radial-gradient(circle at center, var(--gold-border) 0%, transparent 65%)",
         }}
         aria-hidden="true"
       />
-      <div className="relative z-10 flex flex-col items-start">
+      <div className="relative z-10 flex flex-col items-center w-full">
         <img
-          className="w-full max-w-[320px] sm:max-w-[480px] h-auto animate-fino-idle [transform-origin:50%_92%] motion-reduce:animate-none"
+          className="w-full max-w-[440px] sm:max-w-[620px] h-auto mx-auto animate-fino-idle [transform-origin:50%_92%] motion-reduce:animate-none"
           src="/assets/fino-mascot-transparent.png"
           alt="FINO — the FINOTAUR AI assistant"
           loading="lazy"
