@@ -16,7 +16,7 @@ import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { Suspense, memo } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoader } from '@/components/ds/Spinner';
 import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
@@ -369,16 +369,7 @@ const FundingBrokers = lazy(() => import("@/pages/app/funding/Brokers"));
 const FundingAdvance = lazy(() => import("@/pages/app/funding/Advance"));
 const FundingTransactions = lazy(() => import("@/pages/app/funding/Transactions"));
 
-// LOADING COMPONENT
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <Spinner size="lg" />
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// LOADING COMPONENT — imported from @/components/ds/Spinner
 
 // WRAPPERS
 const SuspenseRoute = memo(({ children }: { children: React.ReactNode }) => (

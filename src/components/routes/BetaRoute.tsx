@@ -14,23 +14,14 @@
 import { ReactNode, Suspense, memo } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoader } from '@/components/ds/Spinner';
 
 interface BetaRouteProps {
   children: ReactNode;
   fallbackPath?: string;
 }
 
-// Loading component
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <Spinner size="lg" />
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// PageLoader imported from @/components/ds/Spinner
 
 /**
  * BetaRoute - Protects routes that are in beta

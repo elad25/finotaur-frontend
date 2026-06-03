@@ -8,7 +8,7 @@
 // =====================================================
 
 import { memo, useMemo } from 'react';
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoader } from '@/components/ds/Spinner';
 
 // ============================================
 // ICONS
@@ -239,12 +239,7 @@ export const GlowingBadge = memo(function GlowingBadge({ className }: { classNam
 // ============================================
 
 export const FullPageLoader = memo(function FullPageLoader({ text = 'Loading...' }: { text?: string }) {
-  return (
-    <div className="min-h-screen bg-[#0a0806] flex flex-col items-center justify-center">
-      <Spinner size="lg" className="mb-4" />
-      <p className="text-[#C9A646]/60">{text}</p>
-    </div>
-  );
+  return <PageLoader text={text} />;
 });
 
 // ============================================

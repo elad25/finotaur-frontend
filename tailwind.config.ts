@@ -275,6 +275,7 @@ export default {
         "gradient-x": "gradient-x 3s ease infinite",
         "pulse-glow": "pulse-glow 3s ease-in-out infinite",
         "subtle-glow": "subtle-glow 4s ease-in-out infinite",
+        spin: "spin 1.2s linear infinite",
 
       },
       backgroundColor: {

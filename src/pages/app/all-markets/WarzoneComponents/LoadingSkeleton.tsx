@@ -4,7 +4,7 @@
 // =====================================================
 
 import { memo } from 'react';
-import { Spinner as UiSpinner } from "@/components/ui/Spinner";
+import { Spinner as DsSpinner } from '@/components/ds/Spinner';
 
 // ============================================
 // SKELETON COMPONENTS
@@ -142,14 +142,8 @@ export const ButtonSkeleton = memo(function ButtonSkeleton({
 // SIMPLE SPINNER
 // ============================================
 
-export const Spinner = memo(function Spinner({
-  size = 'md',
-  className = '',
-}: {
-  size?: 'sm' | 'md' | 'lg';
-  className?: string;
-}) {
-  return <UiSpinner size={size} className={className} />;
+export const Spinner = memo(function Spinner({ size = 'md', className }: { size?: 'sm' | 'md' | 'lg'; className?: string }) {
+  return <DsSpinner size={size} className={className} />;
 });
 
 // ============================================
