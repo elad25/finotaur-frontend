@@ -215,7 +215,7 @@ const JournalDashboardMock = () => {
 
 const MeetFinoIntro = () => {
   return (
-    <div className="relative flex flex-col items-center justify-center text-center px-6 py-10 overflow-hidden">
+    <div className="relative flex flex-col items-center justify-center text-center px-4 py-6 overflow-hidden">
       {/* center radial gold glow */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -227,7 +227,7 @@ const MeetFinoIntro = () => {
       />
       <div className="relative z-10 flex flex-col items-center">
         <video
-          className="w-52 h-52 sm:w-72 sm:h-72 rounded-2xl object-cover shadow-card-featured bg-section-card-deep"
+          className="w-full max-w-[320px] sm:max-w-[480px] h-auto"
           src="/fino/fino-meet-loop.mp4"
           poster="/fino/fino-idle-long-poster.png"
           autoPlay
