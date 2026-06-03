@@ -911,12 +911,14 @@ export function BacktestReplayChart({
     }
 
     // Add or update lines for current pending orders.
+    // title is intentionally '' — the label is rendered as a custom React pill
+    // overlay (below) so the native on-chart text label is suppressed. The
+    // dashed line + right-axis price tag (axisLabelVisible:true) are kept.
     for (const o of pendingOrders) {
       const color = o.side === 'LONG' ? THEME.candleUp : THEME.candleDown;
-      const title = `${o.side === 'LONG' ? 'BUY' : 'SELL'} ${o.type} ${o.size}× @ ${o.triggerPrice.toFixed(2)}`;
       const cached = existing.get(o.id);
       if (cached) {
-        cached.applyOptions({ price: o.triggerPrice, color, title });
+        cached.applyOptions({ price: o.triggerPrice, color, title: '' });
       } else {
         const line = series.createPriceLine({
           price: o.triggerPrice,
@@ -924,7 +926,7 @@ export function BacktestReplayChart({
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title,
+          title: '',
         });
         existing.set(o.id, line);
       }
@@ -1038,11 +1040,13 @@ export function BacktestReplayChart({
           />
         )}
 
-        {/* ── Cancel buttons for pending orders — one X button per order, pinned
-            to the order's price level just left of the right price axis.
-            pointer-events-none on the container (never blocks chart interaction);
-            each button gets pointer-events-auto. Re-evaluates on overlayTick so
-            buttons stay glued after pan / zoom / resize. ── */}
+        {/* ── Pending order label pills — one pill per order, positioned just
+            left of the right price axis at the order's trigger price.
+            Each pill shows the order label text with a hover-only ✕ cancel
+            button on the LEFT side. The outer container is pointer-events-none
+            so it never blocks chart pan/zoom; only the pill itself (and the ✕
+            button inside it on hover) gets pointer-events. Re-evaluates on
+            overlayTick so pills stay glued after pan / zoom / resize. ── */}
         {onCancelPending && seriesRef.current && chartRef.current && pendingOrders.length > 0 && (
           // key={overlayTick} forces React to re-evaluate coordinate math on
           // every pan / zoom / resize — same pattern used by DrawingLayer above.
@@ -1051,23 +1055,37 @@ export function BacktestReplayChart({
               const y = seriesRef.current!.priceToCoordinate(o.triggerPrice);
               const containerHeight = containerRef.current?.clientHeight ?? 0;
               if (y == null || y < 0 || y > containerHeight) return null;
-              const priceScaleWidth = chartRef.current!.priceScale('right').width() ?? 60;
+              const axisW = chartRef.current!.priceScale('right').width() ?? 60;
+              const pillColor = o.side === 'LONG' ? THEME.candleUp : THEME.candleDown;
+              const label = `${o.side === 'LONG' ? 'BUY' : 'SELL'} ${o.type} ${o.size}× @ ${o.triggerPrice.toFixed(2)}`;
               return (
-                <button
+                <div
                   key={o.id}
-                  type="button"
-                  className="pointer-events-auto absolute flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/70 transition-colors hover:border-rose-500/60 hover:bg-rose-600 hover:text-white"
-                  style={{ top: y - 9, right: priceScaleWidth + 6 }}
-                  title="Cancel order"
-                  aria-label="Cancel order"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onCancelPending(o.id);
+                  className="group pointer-events-auto absolute flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow"
+                  style={{
+                    top: y - 10,
+                    right: axisW + 4,
+                    backgroundColor: pillColor,
+                    color: '#fff',
                   }}
                 >
-                  <X size={12} />
-                </button>
+                  {/* ✕ cancel button — hidden until the pill is hovered, then
+                      becomes visible and clickable on the LEFT side of the label. */}
+                  <button
+                    type="button"
+                    className="pointer-events-none -ml-0.5 rounded opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-black/25"
+                    title="Cancel order"
+                    aria-label="Cancel order"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onCancelPending(o.id);
+                    }}
+                  >
+                    <X size={11} />
+                  </button>
+                  <span>{label}</span>
+                </div>
               );
             })}
           </div>
