@@ -278,6 +278,12 @@ export function BacktestReplayChart({
     canUndo,
     canRedo,
     setCurrentTool,
+    startDrawing,
+    updateDrawing,
+    finishDrawing,
+    cancelDrawing,
+    selectDrawing,
+    deselectAll,
     deleteSelected,
     lockSelected,
     toggleVisibility,
@@ -294,6 +300,61 @@ export function BacktestReplayChart({
   // re-registered — same pattern as scissorsArmedRef / placeOrderArmedRef.
   const currentToolRef = useRef(currentTool);
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
+
+  // Ref-mirrors for drawing functions and state so the once-mounted chart
+  // lifecycle closures always call the latest versions without being
+  // re-registered on every render.
+  const startDrawingRef = useRef(startDrawing);
+  const updateDrawingRef = useRef(updateDrawing);
+  const finishDrawingRef = useRef(finishDrawing);
+  const cancelDrawingRef = useRef(cancelDrawing);
+  const selectDrawingRef = useRef(selectDrawing);
+  const deleteSelectedRef = useRef(deleteSelected);
+  const deselectAllRef = useRef(deselectAll);
+  const activeDrawingRef = useRef(activeDrawing);
+  const selectedDrawingRef = useRef(selectedDrawing);
+
+  useEffect(() => { startDrawingRef.current = startDrawing; }, [startDrawing]);
+  useEffect(() => { updateDrawingRef.current = updateDrawing; }, [updateDrawing]);
+  useEffect(() => { finishDrawingRef.current = finishDrawing; }, [finishDrawing]);
+  useEffect(() => { cancelDrawingRef.current = cancelDrawing; }, [cancelDrawing]);
+  useEffect(() => { selectDrawingRef.current = selectDrawing; }, [selectDrawing]);
+  useEffect(() => { deleteSelectedRef.current = deleteSelected; }, [deleteSelected]);
+  useEffect(() => { deselectAllRef.current = deselectAll; }, [deselectAll]);
+  useEffect(() => { activeDrawingRef.current = activeDrawing; }, [activeDrawing]);
+  useEffect(() => { selectedDrawingRef.current = selectedDrawing; }, [selectedDrawing]);
+
+  // Single-point draw tools complete in one click (horizontal / vertical only
+  // need 1 point; finishDrawing() validates they pass with points.length === 1).
+  const SINGLE_POINT_TOOLS = new Set(['horizontal', 'vertical']);
+
+  // Delete / Escape key bindings for selected drawings and in-progress drawings.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Never steal keys while the user is typing in an input / textarea / contenteditable.
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedDrawingRef.current) {
+          deleteSelectedRef.current();
+          setOverlayTick((n) => n + 1);
+          e.preventDefault();
+        }
+      } else if (e.key === 'Escape') {
+        cancelDrawingRef.current?.();
+        deselectAllRef.current?.();
+        setOverlayTick((n) => n + 1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -459,9 +520,46 @@ export function BacktestReplayChart({
       // (it fired before subscribeClick). Skip all other click behaviours so we
       // don't also trigger jump/trade on the same click.
       if (placeOrderArmedRef.current) return;
-      // Drawing tool active: the DrawingLayer overlay handles pointer events.
-      // Suppress all trading/jump interactions while any drawing tool is selected.
-      if (currentToolRef.current !== 'cursor' && currentToolRef.current !== 'cross') return;
+
+      // ── Drawing tool active: wire create / select flow ──────────
+      const tool = currentToolRef.current;
+      if (tool !== 'cursor' && tool !== 'cross') {
+        // Need both screen point (for potential future use) and data-space point.
+        if (!param.point) return;
+        const priceRaw = seriesRef.current
+          ? seriesRef.current.coordinateToPrice(param.point.y)
+          : null;
+        if (priceRaw == null) return;
+
+        const dataPoint = { time: param.time as number, price: Number(priceRaw) };
+
+        if (!activeDrawingRef.current) {
+          // First click — start the drawing.
+          startDrawingRef.current(dataPoint);
+          if (SINGLE_POINT_TOOLS.has(tool)) {
+            // Horizontal / vertical only need one point — finish immediately.
+            finishDrawingRef.current();
+          }
+        } else {
+          // Second (or later) click — anchor the second point and finish.
+          updateDrawingRef.current(dataPoint);
+          finishDrawingRef.current();
+        }
+
+        setOverlayTick((n) => n + 1);
+        return; // Do NOT fall through to trade / jump logic.
+      }
+
+      // ── Cursor mode: try to select a drawing first ───────────────
+      if (tool === 'cursor' && param.point) {
+        const hit = selectDrawingRef.current({ x: param.point.x, y: param.point.y });
+        if (hit) {
+          setOverlayTick((n) => n + 1);
+          return; // Selected a drawing — don't trigger trade/jump.
+        }
+        // No drawing hit — fall through to existing trade/jump logic.
+      }
+
       const clickedTime = param.time as number;
       // Scissors armed → this click is a time-rewind (jump). Disarm right after
       // so the next click trades normally and the scissors cursor disappears.
@@ -510,6 +608,31 @@ export function BacktestReplayChart({
     // when the crosshair leaves the plot area.
     // handleCrosshairMove — param type inferred from chart.subscribeCrosshairMove signature.
     const handleCrosshairMove: Parameters<typeof chart.subscribeCrosshairMove>[0] = (param) => {
+      // ── Live drawing rubber-band preview ──────────────────────────
+      // While a multi-point draw tool is active and the first point has been
+      // placed (activeDrawing exists), stream cursor position as a preview
+      // second point so the in-progress drawing rubber-bands with the mouse.
+      const moveTool = currentToolRef.current;
+      if (
+        moveTool !== 'cursor' &&
+        moveTool !== 'cross' &&
+        activeDrawingRef.current &&
+        param.point &&
+        param.time
+      ) {
+        const previewPriceRaw = seriesRef.current
+          ? seriesRef.current.coordinateToPrice(param.point.y)
+          : null;
+        if (previewPriceRaw != null) {
+          updateDrawingRef.current({
+            time: param.time as number,
+            price: Number(previewPriceRaw),
+          });
+          setOverlayTick((n) => n + 1);
+        }
+        // Do NOT return here — still allow scissors hover logic below.
+      }
+
       // Only follow the mouse while the scissors tool is armed. Once disarmed
       // (after a rewind), clear the preview so a normal crosshair takes over.
       if (!showReplayCursorRef.current || !scissorsArmedRef.current) {
