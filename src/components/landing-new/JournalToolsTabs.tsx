@@ -216,23 +216,20 @@ const JournalDashboardMock = () => {
 const MeetFinoIntro = () => {
   return (
     <div className="relative flex flex-col items-center justify-center px-3 py-4 overflow-hidden">
-      {/* radial gold glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(circle at center, var(--gold-border) 0%, transparent 65%)",
-        }}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 flex flex-col items-center w-full">
-        <img
-          className="w-full max-w-[440px] sm:max-w-[620px] h-auto mx-auto"
-          src="/fino/fino-meet-anim-v3.webp"
-          alt="FINO — the FINOTAUR AI assistant, waving hello"
-          loading="lazy"
-          decoding="async"
-          draggable={false}
+      <div className="flex flex-col items-center w-full">
+        {/* Real 60s animated FINO (4 stitched clips, neutral-bracketed). Its
+            pure-black background blends out via mix-blend-screen over the dark
+            card — true transparent look, no box. */}
+        <video
+          className="w-full max-w-[440px] sm:max-w-[620px] h-auto mx-auto mix-blend-screen"
+          src="/fino/fino-meet-60s.mp4"
+          poster="/fino/fino-meet-60s-poster.png"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          aria-label="FINO — the FINOTAUR AI assistant"
         />
       </div>
     </div>
