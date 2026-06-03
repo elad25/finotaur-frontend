@@ -187,7 +187,6 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview' },
-      { label: 'FINOTAUR AI', path: '/app/journal/finotaur-ai' },
       { label: 'Mentor Mode', path: '/app/journal/mentor' },
     ],
     sidebar: [
