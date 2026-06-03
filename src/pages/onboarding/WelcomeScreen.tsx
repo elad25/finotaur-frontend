@@ -15,7 +15,7 @@ import WelcomeIntro from '@/components/onboarding/WelcomeIntro';
 
 export default function WelcomeScreen() {
   if (localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true') {
-    return <Navigate to="/app/top-secret" replace />;
+    return <Navigate to="/app/home" replace />;
   }
 
   return <WelcomeIntro />;

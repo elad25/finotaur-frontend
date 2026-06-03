@@ -47,10 +47,10 @@ const saveTermsAcceptance = async (userId: string) => {
 // Only allow redirects to internal /app/ paths (prevent open-redirect)
 function getSafeFrom(from: string | undefined): string {
   if (from && from.startsWith('/app/')) return from;
-  return '/app/top-secret';
+  return '/app/home';
 }
 
-// New users land on /welcome. Returning users (welcome seen) go to /app/top-secret.
+// New users land on /welcome. Returning users (welcome seen) go to /app/home.
 const POST_REGISTER_NEW_USER_DEST = '/welcome';
 
 export default function Register() {
