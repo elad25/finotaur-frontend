@@ -199,6 +199,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
       await aiCopilotApi.chatStream({
         message,
         context,
+        tier: usage?.user_tier,
         conversationId,
         onConversation: (id) => {
           conversationId = id;

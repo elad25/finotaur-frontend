@@ -8,12 +8,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Sparkles } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
-import { usePlatformAccess } from '@/hooks/usePlatformAccess';
-import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
@@ -96,8 +93,6 @@ function FinoChatPanel({
   onClose: () => void;
   initialQuery?: string | null;
 }) {
-  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
-  const access = canAccessPage('ai_assistant');
   const {
     messages,
     isLoading,
@@ -115,11 +110,10 @@ function FinoChatPanel({
   const lastSentRef = useRef<string | null>(null);
   useEffect(() => {
     if (!initialQuery) return;
-    if (accessLoading || !access.hasAccess) return;
     if (lastSentRef.current === initialQuery) return;
     lastSentRef.current = initialQuery;
     void sendMessage(initialQuery, buildFinoContext(getPageData));
-  }, [initialQuery, accessLoading, access.hasAccess, sendMessage, getPageData]);
+  }, [initialQuery, sendMessage, getPageData]);
 
   const iconBtn =
     'flex h-8 w-8 items-center justify-center rounded-lg border border-border-ds-subtle text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary';
@@ -148,66 +142,38 @@ function FinoChatPanel({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {access.hasAccess && !accessLoading && (
-              <button onClick={startNewConversation} title="New chat" className={iconBtn}>
-                <Plus className="h-4 w-4" />
-              </button>
-            )}
+            <button onClick={startNewConversation} title="New chat" className={iconBtn}>
+              <Plus className="h-4 w-4" />
+            </button>
             <button onClick={onClose} aria-label="Close" title="Close" className={iconBtn}>
               <X className="h-4 w-4" />
             </button>
           </div>
         </header>
 
-        {/* Body */}
-        {accessLoading ? (
-          <div className="flex flex-1 items-center justify-center">
-            <Spinner size="md" />
-          </div>
-        ) : !access.hasAccess ? (
-          <div className="flex-1 overflow-y-auto">
-            <UpgradeGate
-              feature="FINO AI"
-              reason={access.reason}
-              message={access.message}
-              upgradeTarget={access.upgradeTarget}
-              upgradeDisplayName={access.upgradeDisplayName}
-              upgradePrice={access.upgradePrice}
-              currentPlan={
-                plan === 'platform_core'
-                  ? 'core'
-                  : plan === 'platform_finotaur'
-                  ? 'finotaur'
-                  : plan === 'platform_enterprise'
-                  ? 'enterprise'
-                  : 'free'
-              }
+        {/* Body — open to all users; soft cap enforced server-side + UsageBanner */}
+        <>
+          {usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC') && (
+            <UsageBanner usage={usage} />
+          )}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ChatInterface
+              messages={messages}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              error={error}
+              onSendMessage={async (message: string) => {
+                await sendMessage(message, buildFinoContext(getPageData));
+              }}
+              onClearError={clearError}
+              limitReached={usage?.limit_reached || false}
+              questionsRemaining={usage?.questions_remaining ?? 999}
+              userTier={(usage?.user_tier as 'FREE' | 'BASIC' | 'PREMIUM') ?? 'FREE'}
+              questionsUsed={usage?.questions_today}
+              dailyLimit={usage?.daily_limit}
             />
           </div>
-        ) : (
-          <>
-            {usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC') && (
-              <UsageBanner usage={usage} />
-            )}
-            <div className="flex min-h-0 flex-1 flex-col">
-              <ChatInterface
-                messages={messages}
-                isLoading={isLoading}
-                isStreaming={isStreaming}
-                error={error}
-                onSendMessage={async (message: string) => {
-                  await sendMessage(message, buildFinoContext(getPageData));
-                }}
-                onClearError={clearError}
-                limitReached={usage?.limit_reached || false}
-                questionsRemaining={usage?.questions_remaining ?? 999}
-                userTier={(usage?.user_tier as 'FREE' | 'BASIC' | 'PREMIUM') ?? 'FREE'}
-                questionsUsed={usage?.questions_today}
-                dailyLimit={usage?.daily_limit}
-              />
-            </div>
-          </>
-        )}
+        </>
       </div>
     </ErrorBoundary>
   );
