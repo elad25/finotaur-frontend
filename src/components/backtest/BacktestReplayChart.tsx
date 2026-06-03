@@ -36,6 +36,7 @@ import {
   type Time,
 } from 'lightweight-charts';
 import { Scissors, X } from 'lucide-react';
+import { OrderLinesOverlay } from './OrderLinesOverlay';
 import dayjs from 'dayjs';
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
@@ -188,6 +189,13 @@ export interface BacktestReplayChartProps {
   enableDrawings?: boolean;
   /** Called when the user clicks the X button next to a pending order price line. */
   onCancelPending?: (orderId: string) => void;
+  /**
+   * Drag-to-adjust callbacks for the draggable order lines overlay.
+   * When provided, SL/TP/pending trigger lines become draggable in cursor mode.
+   */
+  onUpdateSL?: (price: number) => void;
+  onUpdateTP?: (price: number) => void;
+  onUpdatePendingPrice?: (orderId: string, price: number) => void;
 }
 
 type LoadState =
@@ -215,6 +223,9 @@ export function BacktestReplayChart({
   onPlaceLimitAtPrice,
   enableDrawings = true,
   onCancelPending,
+  onUpdateSL,
+  onUpdateTP,
+  onUpdatePendingPrice,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1105,6 +1116,26 @@ export function BacktestReplayChart({
             candlestickSeries={seriesRef.current}
             containerRef={containerRef}
             theme="dark"
+          />
+        )}
+
+        {/* ── Draggable order-lines overlay — SL/TP/pending trigger lines.
+            Active only in cursor mode (draggingEnabled=false when a draw tool
+            is selected) so drawing creation is never intercepted.
+            Only mounted when at least one callback is wired so legacy callers
+            that don't pass onUpdateSL/TP are unaffected. ── */}
+        {(onUpdateSL || onUpdateTP || onUpdatePendingPrice) && seriesRef.current && containerRef.current && (
+          <OrderLinesOverlay
+            key={overlayTick}
+            series={seriesRef.current}
+            container={containerRef.current}
+            activePosition={activePosition}
+            pendingOrders={pendingOrders}
+            viewVersion={overlayTick}
+            draggingEnabled={currentTool === 'cursor' || currentTool === 'cross'}
+            onUpdateSL={onUpdateSL ?? (() => {})}
+            onUpdateTP={onUpdateTP ?? (() => {})}
+            onUpdatePendingPrice={onUpdatePendingPrice ?? (() => {})}
           />
         )}
 
