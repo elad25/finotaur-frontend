@@ -228,8 +228,8 @@ const MeetFinoIntro = () => {
       <div className="relative z-10 flex flex-col items-center">
         <video
           className="w-full max-w-[320px] sm:max-w-[480px] h-auto"
-          src="/fino/fino-meet-loop.mp4"
-          poster="/fino/fino-idle-long-poster.png"
+          src="/fino/fino-meet-fullbody.mp4"
+          poster="/fino/fino-meet-fullbody-poster.jpg"
           autoPlay
           muted
           loop
