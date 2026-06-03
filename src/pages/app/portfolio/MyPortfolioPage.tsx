@@ -11,6 +11,7 @@ import { useMyPortfolio } from '@/hooks/useMyPortfolio';
 import { usePortfolioQuotes } from '@/hooks/usePortfolioQuotes';
 import { CreatePortfolioModal } from '@/components/portfolio/CreatePortfolioModal';
 import { ClosePositionDialog } from '@/components/portfolio/ClosePositionDialog';
+import { AddPositionRow } from '@/components/portfolio/AddPositionRow';
 import type { MyPortfolio, PortfolioAccount, Lot } from '@/lib/portfolio/types';
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
@@ -295,7 +296,7 @@ interface AccountCardProps {
   currency: string;
   priceMap: Map<string, { price: number | null; changePercent: number | null }>;
   quotesLoading: boolean;
-  onAddPosition: () => void;
+  onAddLot: (lot: Lot) => Promise<void>;
   openMenuId: string | null;
   onMenuToggle: (id: string) => void;
   onMenuClose: () => void;
@@ -308,13 +309,14 @@ function AccountCard({
   currency,
   priceMap,
   quotesLoading,
-  onAddPosition,
+  onAddLot,
   openMenuId,
   onMenuToggle,
   onMenuClose,
   onRemoveLot,
   onClosePositionLot,
 }: AccountCardProps) {
+  const [adding, setAdding] = useState(false);
   const activeLots = account.positions.filter(
     (l) => l.ticker.trim() !== '' && l.quantity > 0,
   );
@@ -380,56 +382,71 @@ function AccountCard({
       </div>
 
       {/* Positions table */}
-      {holdingsCount > 0 ? (
-        <div className="px-5 py-3 overflow-x-auto">
-          <table className="w-full min-w-[740px]">
-            <thead>
-              <tr className="border-b border-border-ds-subtle">
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-left pr-3">Ticker</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Quantity</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Cost / Share</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Current Price</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Mkt Value</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Return %</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Unr. P&amp;L</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right w-8" />
+      <div className="px-5 py-3 overflow-x-auto">
+        <table className="w-full min-w-[740px]">
+          <thead>
+            <tr className="border-b border-border-ds-subtle">
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-left pr-3">Ticker</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Quantity</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Cost / Share</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Current Price</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Mkt Value</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Return %</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Unr. P&amp;L</th>
+              <th className="pb-2 text-xs font-medium text-ink-secondary text-right w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {holdingsCount === 0 && !adding && (
+              <tr>
+                <td colSpan={8} className="py-4 text-sm text-ink-tertiary italic">
+                  No positions in this account.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {activeLots.map((lot, i) => {
-                const q = priceMap.get(lot.ticker.toUpperCase()) ?? null;
-                return (
-                  <PositionRow
-                    key={lot.id ?? i}
-                    lot={lot}
-                    currency={currency}
-                    currentPrice={q?.price ?? null}
-                    quotesLoading={quotesLoading}
-                    openMenuId={openMenuId}
-                    onMenuToggle={onMenuToggle}
-                    onMenuClose={onMenuClose}
-                    onRemove={() => onRemoveLot(lot.id)}
-                    onClosePosition={() => onClosePositionLot(lot)}
-                  />
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="px-5 py-4 text-sm text-ink-tertiary italic">No positions in this account.</p>
-      )}
-
-      {/* + Add Position — below the positions table, always visible */}
-      <div className="px-5 pb-3 pt-1">
-        <button
-          type="button"
-          onClick={onAddPosition}
-          className="text-gold-primary hover:text-gold-bright text-xs font-medium transition-colors"
-        >
-          + Add Position
-        </button>
+            )}
+            {activeLots.map((lot, i) => {
+              const q = priceMap.get(lot.ticker.toUpperCase()) ?? null;
+              return (
+                <PositionRow
+                  key={lot.id ?? i}
+                  lot={lot}
+                  currency={currency}
+                  currentPrice={q?.price ?? null}
+                  quotesLoading={quotesLoading}
+                  openMenuId={openMenuId}
+                  onMenuToggle={onMenuToggle}
+                  onMenuClose={onMenuClose}
+                  onRemove={() => onRemoveLot(lot.id)}
+                  onClosePosition={() => onClosePositionLot(lot)}
+                />
+              );
+            })}
+            {adding && (
+              <AddPositionRow
+                currency={currency}
+                onAdd={async (lot) => {
+                  await onAddLot(lot);
+                  setAdding(false);
+                }}
+                onCancel={() => setAdding(false)}
+              />
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {/* + Add Position — hidden while the inline row is open */}
+      {!adding && (
+        <div className="px-5 pb-3 pt-1">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="text-gold-primary hover:text-gold-bright text-xs font-medium transition-colors"
+          >
+            + Add Position
+          </button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -519,6 +536,32 @@ export default function MyPortfolioPage() {
     }
   }
 
+  // ── Add lot (inline row) ─────────────────────────────────────
+  async function handleAddLot(accountIndex: number, lot: Lot) {
+    if (!portfolio) return;
+    const updated: MyPortfolio = {
+      ...portfolio,
+      accounts: portfolio.accounts.map((acc, idx) => {
+        if (idx !== accountIndex) return acc;
+        // Strip fully-empty seed lots (empty ticker AND quantity 0) then append the new one.
+        const cleaned = acc.positions.filter(
+          (l) => !(l.ticker.trim() === '' && l.quantity === 0),
+        );
+        return { ...acc, positions: [...cleaned, lot] };
+      }),
+    };
+    try {
+      await save(updated);
+      await reload();
+      toast({
+        title: 'Position added',
+        description: `${lot.ticker} added to your portfolio.`,
+      });
+    } catch {
+      toast({ title: 'Error adding position', description: 'Please try again.' });
+    }
+  }
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -601,7 +644,7 @@ export default function MyPortfolioPage() {
                 currency={portfolio!.currency}
                 priceMap={priceMap}
                 quotesLoading={quotesLoading}
-                onAddPosition={() => setModalOpen(true)}
+                onAddLot={(lot) => handleAddLot(i, lot)}
                 openMenuId={openMenuId}
                 onMenuToggle={(id) => setOpenMenuId((prev) => (prev === id ? null : id))}
                 onMenuClose={() => setOpenMenuId(null)}
