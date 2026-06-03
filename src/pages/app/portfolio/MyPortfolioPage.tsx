@@ -497,7 +497,6 @@ export default function MyPortfolioPage() {
     };
     try {
       await save(updated);
-      await reload();
     } catch {
       toast({ title: 'Error removing position', description: 'Please try again.' });
     }
@@ -525,7 +524,6 @@ export default function MyPortfolioPage() {
 
     try {
       await save(updated);
-      await reload();
       const shares = soldQty === 1 ? 'share' : 'shares';
       toast({
         title: `Closed ${soldQty} ${shares} of ${closeDialogLot.ticker}.`,
@@ -552,7 +550,6 @@ export default function MyPortfolioPage() {
     };
     try {
       await save(updated);
-      await reload();
       toast({
         title: 'Position added',
         description: `${lot.ticker} added to your portfolio.`,
@@ -562,7 +559,9 @@ export default function MyPortfolioPage() {
     }
   }
 
-  if (loading) {
+  // Only show full-page spinner on the INITIAL load (no data yet).
+  // Once portfolio exists, keep the page rendered during background refetches.
+  if (loading && !portfolio) {
     return <LoadingSpinner />;
   }
 
