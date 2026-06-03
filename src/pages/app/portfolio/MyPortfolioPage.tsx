@@ -5,16 +5,18 @@
 // with current prices, market value, return %, and unrealized P&L.
 // ═══════════════════════════════════════════════════════════════
 
-import { useMemo, useState } from 'react';
-import { Briefcase, PencilLine, Upload } from 'lucide-react';
+import { useMemo, useState, useRef, useEffect } from 'react';
+import { Briefcase, MoreVertical, PencilLine, Upload } from 'lucide-react';
 import { useMyPortfolio } from '@/hooks/useMyPortfolio';
+import { usePortfolioQuotes } from '@/hooks/usePortfolioQuotes';
 import { CreatePortfolioModal } from '@/components/portfolio/CreatePortfolioModal';
+import { ClosePositionDialog } from '@/components/portfolio/ClosePositionDialog';
 import type { MyPortfolio, PortfolioAccount, Lot } from '@/lib/portfolio/types';
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
 import { Price, Change } from '@/components/ds/NumberDisplay';
-import { useBulkQuotes } from '@/hooks/useMarketData';
 import { useMarketStatus } from '@/lib/marketStatus';
+import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -26,12 +28,6 @@ function formatCurrency(amount: number, currency: string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 // ── Sub-components ────────────────────────────────────────────
@@ -108,6 +104,74 @@ function PortfolioMarketStatus() {
   );
 }
 
+// ── Actions menu (⋮) ─────────────────────────────────────────
+
+interface LotActionsMenuProps {
+  lotId: string | undefined;
+  openMenuId: string | null;
+  onToggle: (id: string) => void;
+  onClose: () => void;
+  onRemove: () => void;
+  onClosePosition: () => void;
+}
+
+function LotActionsMenu({
+  lotId,
+  openMenuId,
+  onToggle,
+  onClose,
+  onRemove,
+  onClosePosition,
+}: LotActionsMenuProps) {
+  const menuId = lotId ?? '__no_id__';
+  const isOpen = openMenuId === menuId;
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen, onClose]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        className="rounded p-0.5 text-ink-tertiary hover:text-ink-secondary hover:bg-surface-1 transition-colors"
+        onClick={() => onToggle(menuId)}
+        aria-label="Position actions"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[140px] rounded-md border border-border-ds-subtle bg-surface-base shadow-xl">
+          <button
+            type="button"
+            className="w-full px-3 py-2 text-left text-sm text-ink-secondary hover:text-ink-primary hover:bg-surface-1 transition-colors"
+            onClick={() => { onClosePosition(); onClose(); }}
+          >
+            Close position
+          </button>
+          <button
+            type="button"
+            className="w-full px-3 py-2 text-left text-sm text-red-400 hover:text-red-300 hover:bg-surface-1 transition-colors"
+            onClick={() => { onRemove(); onClose(); }}
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Position row ──────────────────────────────────────────────
 
 interface PositionRowProps {
@@ -115,9 +179,24 @@ interface PositionRowProps {
   currency: string;
   currentPrice: number | null;
   quotesLoading: boolean;
+  openMenuId: string | null;
+  onMenuToggle: (id: string) => void;
+  onMenuClose: () => void;
+  onRemove: () => void;
+  onClosePosition: () => void;
 }
 
-function PositionRow({ lot, currency, currentPrice, quotesLoading }: PositionRowProps) {
+function PositionRow({
+  lot,
+  currency,
+  currentPrice,
+  quotesLoading,
+  openMenuId,
+  onMenuToggle,
+  onMenuClose,
+  onRemove,
+  onClosePosition,
+}: PositionRowProps) {
   const dash = <span className="text-ink-tertiary">—</span>;
 
   // Market value: qty × current price
@@ -186,12 +265,24 @@ function PositionRow({ lot, currency, currentPrice, quotesLoading }: PositionRow
       </td>
 
       {/* Unrealized P&L */}
-      <td className="py-2 text-sm text-right">
+      <td className="py-2 pr-3 text-sm text-right">
         {quotesLoading
           ? loadingCell
           : unrealizedPnl !== null
             ? <Change value={unrealizedPnl} format="currency" decimals={2} />
             : dash}
+      </td>
+
+      {/* Actions ⋮ */}
+      <td className="py-2 text-right">
+        <LotActionsMenu
+          lotId={lot.id}
+          openMenuId={openMenuId}
+          onToggle={onMenuToggle}
+          onClose={onMenuClose}
+          onRemove={onRemove}
+          onClosePosition={onClosePosition}
+        />
       </td>
     </tr>
   );
@@ -202,11 +293,28 @@ function PositionRow({ lot, currency, currentPrice, quotesLoading }: PositionRow
 interface AccountCardProps {
   account: PortfolioAccount;
   currency: string;
-  priceMap: Map<string, number>;
+  priceMap: Map<string, { price: number | null; changePercent: number | null }>;
   quotesLoading: boolean;
+  onAddPosition: () => void;
+  openMenuId: string | null;
+  onMenuToggle: (id: string) => void;
+  onMenuClose: () => void;
+  onRemoveLot: (lotId: string | undefined) => void;
+  onClosePositionLot: (lot: Lot) => void;
 }
 
-function AccountCard({ account, currency, priceMap, quotesLoading }: AccountCardProps) {
+function AccountCard({
+  account,
+  currency,
+  priceMap,
+  quotesLoading,
+  onAddPosition,
+  openMenuId,
+  onMenuToggle,
+  onMenuClose,
+  onRemoveLot,
+  onClosePositionLot,
+}: AccountCardProps) {
   const activeLots = account.positions.filter(
     (l) => l.ticker.trim() !== '' && l.quantity > 0,
   );
@@ -219,7 +327,8 @@ function AccountCard({ account, currency, priceMap, quotesLoading }: AccountCard
     let complete = true;
 
     for (const lot of activeLots) {
-      const price = priceMap.get(lot.ticker.toUpperCase()) ?? null;
+      const q = priceMap.get(lot.ticker.toUpperCase()) ?? null;
+      const price = q?.price ?? null;
       if (price !== null) {
         marketVal += lot.quantity * price;
       } else {
@@ -267,13 +376,21 @@ function AccountCard({ account, currency, priceMap, quotesLoading }: AccountCard
           {holdingsCount > 0 && quotesLoading && (
             <span className="text-ink-tertiary animate-pulse">Loading prices…</span>
           )}
+          {/* + Add Position — ghost gold-text button */}
+          <button
+            type="button"
+            onClick={onAddPosition}
+            className="text-gold-primary hover:text-gold-bright text-xs font-medium transition-colors"
+          >
+            + Add Position
+          </button>
         </div>
       </div>
 
       {/* Positions table */}
       {holdingsCount > 0 ? (
         <div className="px-5 py-3 overflow-x-auto">
-          <table className="w-full min-w-[700px]">
+          <table className="w-full min-w-[740px]">
             <thead>
               <tr className="border-b border-border-ds-subtle">
                 <th className="pb-2 text-xs font-medium text-ink-secondary text-left pr-3">Ticker</th>
@@ -282,19 +399,28 @@ function AccountCard({ account, currency, priceMap, quotesLoading }: AccountCard
                 <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Current Price</th>
                 <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Mkt Value</th>
                 <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Return %</th>
-                <th className="pb-2 text-xs font-medium text-ink-secondary text-right">Unr. P&amp;L</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right pr-3">Unr. P&amp;L</th>
+                <th className="pb-2 text-xs font-medium text-ink-secondary text-right w-8" />
               </tr>
             </thead>
             <tbody>
-              {activeLots.map((lot, i) => (
-                <PositionRow
-                  key={lot.id ?? i}
-                  lot={lot}
-                  currency={currency}
-                  currentPrice={priceMap.get(lot.ticker.toUpperCase()) ?? null}
-                  quotesLoading={quotesLoading}
-                />
-              ))}
+              {activeLots.map((lot, i) => {
+                const q = priceMap.get(lot.ticker.toUpperCase()) ?? null;
+                return (
+                  <PositionRow
+                    key={lot.id ?? i}
+                    lot={lot}
+                    currency={currency}
+                    currentPrice={q?.price ?? null}
+                    quotesLoading={quotesLoading}
+                    openMenuId={openMenuId}
+                    onMenuToggle={onMenuToggle}
+                    onMenuClose={onMenuClose}
+                    onRemove={() => onRemoveLot(lot.id)}
+                    onClosePosition={() => onClosePositionLot(lot)}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -314,12 +440,18 @@ function hasPositions(portfolio: MyPortfolio): boolean {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function MyPortfolioPage() {
-  const { portfolio, loading, reload } = useMyPortfolio();
+  const { portfolio, loading, reload, save } = useMyPortfolio();
   const [modalOpen, setModalOpen] = useState(false);
 
+  // ⋮ menu state — which lot's menu is open (keyed by lot.id or positional key)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Close position dialog state
+  const [closeDialogLot, setCloseDialogLot] = useState<Lot | null>(null);
+
   // Collect unique tickers unconditionally (empty array when no portfolio).
-  // Hook rules: useBulkQuotes must be called at the top level every render.
-  const tickers = useMemo<string[]>(() => {
+  // Hook rules: usePortfolioQuotes must be called at the top level every render.
+  const allTickers = useMemo<string[]>(() => {
     if (!portfolio) return [];
     const seen = new Set<string>();
     for (const acc of portfolio.accounts) {
@@ -331,16 +463,58 @@ export default function MyPortfolioPage() {
     return Array.from(seen);
   }, [portfolio]);
 
-  const { quotes, loading: quotesLoading } = useBulkQuotes(tickers);
+  const { priceMap, loading: quotesLoading } = usePortfolioQuotes(allTickers);
 
-  // Build a fast lookup: TICKER → current price
-  const priceMap = useMemo<Map<string, number>>(() => {
-    const map = new Map<string, number>();
-    for (const q of quotes) {
-      map.set(q.symbol.toUpperCase(), q.price);
+  // ── Remove lot ───────────────────────────────────────────────
+  async function handleRemoveLot(lotId: string | undefined) {
+    if (!portfolio || !lotId) return;
+    const updated: MyPortfolio = {
+      ...portfolio,
+      accounts: portfolio.accounts.map((acc) => ({
+        ...acc,
+        positions: acc.positions.filter((l) => l.id !== lotId),
+      })),
+    };
+    try {
+      await save(updated);
+      await reload();
+    } catch {
+      toast({ title: 'Error removing position', description: 'Please try again.' });
     }
-    return map;
-  }, [quotes]);
+  }
+
+  // ── Close position (full or partial sell) ────────────────────
+  async function handleClosePosition(soldQty: number) {
+    if (!portfolio || !closeDialogLot) return;
+    const targetId = closeDialogLot.id;
+    const fullClose = soldQty >= closeDialogLot.quantity;
+
+    const updated: MyPortfolio = {
+      ...portfolio,
+      accounts: portfolio.accounts.map((acc) => ({
+        ...acc,
+        positions: fullClose
+          ? acc.positions.filter((l) => l.id !== targetId)
+          : acc.positions.map((l) =>
+              l.id === targetId
+                ? { ...l, quantity: l.quantity - soldQty }
+                : l,
+            ),
+      })),
+    };
+
+    try {
+      await save(updated);
+      await reload();
+      const shares = soldQty === 1 ? 'share' : 'shares';
+      toast({
+        title: `Closed ${soldQty} ${shares} of ${closeDialogLot.ticker}.`,
+      });
+      setCloseDialogLot(null);
+    } catch {
+      toast({ title: 'Error closing position', description: 'Please try again.' });
+    }
+  }
 
   if (loading) {
     return <LoadingSpinner />;
@@ -359,7 +533,8 @@ export default function MyPortfolioPage() {
       portfolioCash += acc.cashPosition;
       for (const lot of acc.positions) {
         if (!lot.ticker.trim() || lot.quantity <= 0) continue;
-        const price = priceMap.get(lot.ticker.trim().toUpperCase()) ?? null;
+        const q = priceMap.get(lot.ticker.trim().toUpperCase()) ?? null;
+        const price = q?.price ?? null;
         if (price !== null) {
           portfolioTotalMarketValue += lot.quantity * price;
         } else {
@@ -423,6 +598,15 @@ export default function MyPortfolioPage() {
                 currency={portfolio!.currency}
                 priceMap={priceMap}
                 quotesLoading={quotesLoading}
+                onAddPosition={() => setModalOpen(true)}
+                openMenuId={openMenuId}
+                onMenuToggle={(id) => setOpenMenuId((prev) => (prev === id ? null : id))}
+                onMenuClose={() => setOpenMenuId(null)}
+                onRemoveLot={handleRemoveLot}
+                onClosePositionLot={(lot) => {
+                  setOpenMenuId(null);
+                  setCloseDialogLot(lot);
+                }}
               />
             ))}
           </div>
@@ -487,6 +671,7 @@ export default function MyPortfolioPage() {
         </>
       )}
 
+      {/* Edit / Create portfolio modal */}
       <CreatePortfolioModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -495,6 +680,14 @@ export default function MyPortfolioPage() {
           setModalOpen(false);
           await reload();
         }}
+      />
+
+      {/* Close position dialog */}
+      <ClosePositionDialog
+        lot={closeDialogLot}
+        open={closeDialogLot !== null}
+        onClose={() => setCloseDialogLot(null)}
+        onConfirm={handleClosePosition}
       />
     </div>
   );

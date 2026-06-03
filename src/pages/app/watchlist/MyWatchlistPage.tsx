@@ -1,7 +1,7 @@
 // src/pages/app/watchlist/MyWatchlistPage.tsx
 // ═══════════════════════════════════════════════════════════════
 // My Watch List — two-group view: "From Your Portfolio" and "My Watch List".
-// Uses useWatchlist() for CRUD and useBulkQuotes() for live prices.
+// Uses useWatchlist() for CRUD and usePortfolioQuotes() for live prices.
 // FREE plan is capped at 20 tickers; shows upgrade prompt when at limit.
 // ═══════════════════════════════════════════════════════════════
 
@@ -9,7 +9,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, Plus, Loader2 } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
-import { useBulkQuotes } from '@/hooks/useMarketData';
+import { usePortfolioQuotes, type QuoteLite } from '@/hooks/usePortfolioQuotes';
 import { Price, Change } from '@/components/ds/NumberDisplay';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -113,25 +113,18 @@ function AddTickerRow({
 
 // ── Ticker table row ───────────────────────────────────────────
 
-interface QuoteMap {
-  [symbol: string]: {
-    price: number;
-    changePercent: number;
-  };
-}
-
 function TickerRow({
   item,
-  quoteMap,
+  priceMap,
   onRemove,
   saving,
 }: {
   item: WatchlistItem;
-  quoteMap: QuoteMap;
+  priceMap: Map<string, QuoteLite>;
   onRemove: (ticker: string) => void;
   saving: boolean;
 }) {
-  const q = quoteMap[item.ticker];
+  const q = priceMap.get(item.ticker.toUpperCase());
 
   return (
     <tr className="border-b border-border-ds-subtle last:border-0 group hover:bg-surface-2/50 transition-colors">
@@ -139,14 +132,14 @@ function TickerRow({
         {item.ticker}
       </td>
       <td className="py-2.5 px-3 text-sm text-right">
-        {q ? (
+        {q && q.price !== null ? (
           <Price value={q.price} size="small" />
         ) : (
           <span className="text-ink-tertiary">—</span>
         )}
       </td>
       <td className="py-2.5 px-3 text-sm text-right">
-        {q ? (
+        {q && q.changePercent !== null ? (
           <Change value={q.changePercent} format="percent" />
         ) : (
           <span className="text-ink-tertiary">—</span>
@@ -174,13 +167,13 @@ function TickerRow({
 function WatchlistGroup({
   title,
   items,
-  quoteMap,
+  priceMap,
   onRemove,
   saving,
 }: {
   title: string;
   items: WatchlistItem[];
-  quoteMap: QuoteMap;
+  priceMap: Map<string, QuoteLite>;
   onRemove: (ticker: string) => void;
   saving: boolean;
 }) {
@@ -206,7 +199,7 @@ function WatchlistGroup({
               <TickerRow
                 key={item.id}
                 item={item}
-                quoteMap={quoteMap}
+                priceMap={priceMap}
                 onRemove={onRemove}
                 saving={saving}
               />
@@ -263,15 +256,9 @@ export default function MyWatchlistPage() {
     remove,
   } = useWatchlist();
 
-  // All tickers for bulk price fetch
+  // All tickers for per-symbol price fetch
   const allTickers = items.map((i) => i.ticker);
-  const { quotes } = useBulkQuotes(allTickers);
-
-  // Build a quick-access quote map by symbol
-  const quoteMap: QuoteMap = {};
-  for (const q of quotes) {
-    quoteMap[q.symbol] = { price: q.price, changePercent: q.changePercent };
-  }
+  const { priceMap } = usePortfolioQuotes(allTickers);
 
   const handleAddManual = async (ticker: string) => {
     const result = await addManual(ticker);
@@ -322,14 +309,14 @@ export default function MyWatchlistPage() {
           <WatchlistGroup
             title="From Your Portfolio"
             items={portfolioItems}
-            quoteMap={quoteMap}
+            priceMap={priceMap}
             onRemove={handleRemove}
             saving={saving}
           />
           <WatchlistGroup
             title="My Watch List"
             items={manualItems}
-            quoteMap={quoteMap}
+            priceMap={priceMap}
             onRemove={handleRemove}
             saving={saving}
           />
