@@ -34,6 +34,10 @@ export const useDomain = () => {
     productId = 'war-zone';
   } else if (TOP_SECRET_PATHS.some((p) => pathname.startsWith(p))) {
     productId = 'top-secret';
+  } else if (pathname.startsWith('/app/etfs')) {
+    // ETFs have their own product domain + ticker-aware sidebar — must come
+    // before isMarketsPath because /app/etfs startsWith /app/etf.
+    productId = 'etfs';
   } else if (isMarketsPath(pathname)) {
     productId = 'markets';
   } else {

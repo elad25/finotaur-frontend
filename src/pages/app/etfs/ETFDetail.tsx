@@ -2,17 +2,19 @@
 // =====================================================
 // ETF ANALYZER — Detail Page
 // =====================================================
-// Route: /app/etfs/:symbol
-// Mirrors StockAnalyzer.tsx: useParams, loadETF on
-// mount/change, hero, TabNav, tab components.
+// Route: /app/etfs/:symbol/:section
+// Section is driven by the LEFT SIDEBAR (no internal tab nav).
+// The hero + a compact "Switch ticker" bar are shown above the
+// active section component. VerdictTab's lazy fetch fires only
+// when section === 'verdict'.
 // =====================================================
 
-import { useEffect, memo, type ElementType } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useState, type ElementType } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard, BarChart3, TrendingUp, ShieldAlert,
-  DollarSign, Layers, Sparkles, Lock, Clock,
+  DollarSign, Layers, Sparkles, Lock, Clock, Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useETFAnalyzer } from '@/hooks/useETFAnalyzer';
@@ -27,70 +29,18 @@ import { DividendsTab }   from './tabs/DividendsTab';
 import { CostTab }        from './tabs/CostTab';
 import { VerdictTab }     from './tabs/VerdictTab';
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
+// ─── Valid section ids ─────────────────────────────────────────────────────────
 
-const TAB_CONFIG: { id: EtfTabId; label: string; icon: ElementType }[] = [
-  { id: 'overview',     label: 'Overview',          icon: LayoutDashboard },
-  { id: 'holdings',     label: 'Holdings',           icon: Layers },
-  { id: 'performance',  label: 'Performance',        icon: TrendingUp },
-  { id: 'risk',         label: 'Risk',               icon: ShieldAlert },
-  { id: 'dividends',    label: 'Dividends',          icon: DollarSign },
-  { id: 'cost',         label: 'Cost & Efficiency',  icon: BarChart3 },
-  { id: 'verdict',      label: 'Fino AI Verdict',    icon: Sparkles },
+const VALID_SECTIONS: EtfTabId[] = [
+  'overview', 'holdings', 'performance', 'risk', 'dividends', 'cost', 'verdict',
 ];
 
-// ─── ETFTabNav ─────────────────────────────────────────────────────────────────
-
-const ETFTabNav = memo(function ETFTabNav({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: EtfTabId;
-  onTabChange: (t: EtfTabId) => void;
-}) {
-  return (
-    <div className="flex w-full items-center gap-6 overflow-x-auto border-b border-white/[0.075] px-4 scrollbar-none">
-      {TAB_CONFIG.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeTab === tab.id;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => onTabChange(tab.id)}
-            className={cn(
-              'relative flex items-center gap-2 whitespace-nowrap px-2 py-4 text-sm font-medium transition-colors duration-200',
-              isActive
-                ? 'text-ink-primary'
-                : 'text-ink-tertiary hover:text-ink-secondary',
-            )}
-          >
-            <Icon
-              className={cn(
-                'h-4 w-4',
-                isActive ? 'text-ink-primary' : 'text-ink-tertiary',
-              )}
-            />
-            <span className="hidden sm:inline">{tab.label}</span>
-            {isActive && (
-              <span
-                className="absolute inset-x-0 bottom-[-1px] h-px rounded-full"
-                style={{
-                  background:
-                    'linear-gradient(90deg, transparent, rgba(232,199,102,0.92), transparent)',
-                }}
-                aria-hidden="true"
-              />
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-});
+function toSection(raw: string | undefined): EtfTabId {
+  if (raw && (VALID_SECTIONS as string[]).includes(raw)) return raw as EtfTabId;
+  return 'overview';
+}
 
 // ─── ETFMarketStatusBadge — inline (non-fixed) hero badge ────────────────────
-// Mirrors MarketStatusBadge.tsx logic but renders inline inside the hero row.
-// Hidden when market is open (data is live/same-day). Only ETF/equity pages.
 
 function ETFMarketStatusBadge() {
   const ms = useMarketStatus();
@@ -100,8 +50,8 @@ function ETFMarketStatusBadge() {
     ms.status === 'closed-weekend' || ms.status === 'closed-holiday' ? Lock : Clock;
 
   const headline =
-    ms.status === 'closed-weekend'   ? 'Market Closed' :
-    ms.status === 'closed-holiday'   ? `Closed — ${ms.holidayName ?? 'Holiday'}` :
+    ms.status === 'closed-weekend'     ? 'Market Closed' :
+    ms.status === 'closed-holiday'     ? `Closed — ${ms.holidayName ?? 'Holiday'}` :
     ms.status === 'closed-after-hours' ? 'After Hours' :
     'Pre-Market';
 
@@ -188,6 +138,56 @@ function ETFHero({ data }: { data: EtfData }) {
   );
 }
 
+// ─── SwitchTickerBar ──────────────────────────────────────────────────────────
+// Compact search input that navigates to /app/etfs/<NEWTICKER>/overview.
+
+function SwitchTickerBar({ currentSymbol, currentSection }: { currentSymbol: string; currentSection: EtfTabId }) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+
+  function handleSwitch(e: React.FormEvent) {
+    e.preventDefault();
+    const ticker = query.trim().toUpperCase();
+    if (!ticker || ticker === currentSymbol) return;
+    navigate(`/app/etfs/${ticker}/overview`);
+    setQuery('');
+  }
+
+  return (
+    <form
+      onSubmit={handleSwitch}
+      className="flex items-center gap-ds-2"
+      aria-label="Switch ETF ticker"
+    >
+      <div className="relative">
+        <Search
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-muted pointer-events-none"
+          aria-hidden="true"
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Switch ticker…"
+          className="w-40 rounded-[6px] border border-border-ds-subtle bg-surface-1 py-1.5 pl-8 pr-ds-3 text-xs text-ink-primary placeholder:text-ink-muted transition-colors focus:border-border-ds-default focus:outline-none"
+          autoCapitalize="characters"
+          spellCheck={false}
+        />
+      </div>
+      <button
+        type="submit"
+        className="rounded-[6px] px-ds-3 py-1.5 text-xs font-semibold text-ink-on-gold"
+        style={{
+          background: 'var(--gradient-gold)',
+          boxShadow: 'var(--glow-gold-resting)',
+        }}
+      >
+        Go
+      </button>
+    </form>
+  );
+}
+
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 
 function ETFLoadingSkeleton() {
@@ -195,8 +195,6 @@ function ETFLoadingSkeleton() {
     <div className="mx-auto max-w-[1240px] space-y-ds-5 animate-pulse px-ds-4">
       {/* Hero skeleton */}
       <div className="h-20 rounded-[12px] bg-surface-1" />
-      {/* Tab bar skeleton */}
-      <div className="h-12 rounded-[12px] bg-surface-1" />
       {/* Content skeleton */}
       <div className="space-y-ds-4">
         <div className="h-36 rounded-[12px] bg-surface-1" />
@@ -220,8 +218,9 @@ function ETFErrorState({ message }: { message: string }) {
 // ─── ETFDetail page ───────────────────────────────────────────────────────────
 
 export default function ETFDetail() {
-  const { symbol } = useParams<{ symbol: string }>();
-  const { activeTab, setActiveTab, data, loading, error, loadETF } = useETFAnalyzer();
+  const { symbol, section: rawSection } = useParams<{ symbol: string; section?: string }>();
+  const activeSection = toSection(rawSection);
+  const { data, loading, error, loadETF } = useETFAnalyzer();
 
   useEffect(() => {
     if (symbol) {
@@ -248,38 +247,25 @@ export default function ETFDetail() {
           animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
           transition={{ duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
         >
-          {/* Hero */}
-          <ETFHero data={data} />
-
-          {/* Tab nav */}
-          <div className="overflow-x-auto pb-1">
-            <ETFTabNav activeTab={activeTab} onTabChange={setActiveTab} />
+          {/* Hero + switch-ticker bar */}
+          <div className="flex flex-col gap-ds-3 sm:flex-row sm:items-start sm:justify-between">
+            <ETFHero data={data} />
+            <div className="flex flex-col items-end gap-ds-1">
+              <SwitchTickerBar currentSymbol={data.ticker} currentSection={activeSection} />
+            </div>
           </div>
 
-          {/* Tab panels — all mount together (like StockAnalyzer) so fetches
-              can fire in parallel; CSS hidden keeps inactive ones invisible. */}
+          {/* Section content — only the active section mounts */}
           <div className="min-h-[400px]">
-            <div hidden={activeTab !== 'overview'}>
-              <OverviewTab data={data} />
-            </div>
-            <div hidden={activeTab !== 'holdings'}>
-              <HoldingsTab data={data} />
-            </div>
-            <div hidden={activeTab !== 'performance'}>
-              <PerformanceTab data={data} />
-            </div>
-            <div hidden={activeTab !== 'risk'}>
-              <RiskTab data={data} />
-            </div>
-            <div hidden={activeTab !== 'dividends'}>
-              <DividendsTab data={data} />
-            </div>
-            <div hidden={activeTab !== 'cost'}>
-              <CostTab data={data} />
-            </div>
-            <div hidden={activeTab !== 'verdict'}>
-              <VerdictTab data={data} active={activeTab === 'verdict'} />
-            </div>
+            {activeSection === 'overview'    && <OverviewTab    data={data} />}
+            {activeSection === 'holdings'    && <HoldingsTab    data={data} />}
+            {activeSection === 'performance' && <PerformanceTab data={data} />}
+            {activeSection === 'risk'        && <RiskTab        data={data} />}
+            {activeSection === 'dividends'   && <DividendsTab   data={data} />}
+            {activeSection === 'cost'        && <CostTab        data={data} />}
+            {activeSection === 'verdict'     && (
+              <VerdictTab data={data} active={true} />
+            )}
           </div>
         </motion.div>
       )}

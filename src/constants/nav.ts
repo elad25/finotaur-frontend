@@ -26,7 +26,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
-  Link, Gift, Swords, Crown, Shield, Sparkles, Copy, Droplet,
+  Link, Gift, Swords, Crown, Shield, ShieldAlert, Sparkles, Copy, Droplet,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -466,6 +466,9 @@ export const domains: Record<string, Domain> = {
 
   // ===========================================================================
   // ETFs — ETF Analyzer section (mirroring stocks domain gating: locked:false)
+  // The sidebar is rendered dynamically by Sidebar.tsx ('etfs' environment)
+  // using the :symbol segment from the URL, so it is ticker-aware. The items
+  // below are the canonical 7 sections — kept here for reference / future use.
   // ===========================================================================
   etfs: {
     id: 'etfs',
@@ -477,8 +480,13 @@ export const domains: Record<string, Domain> = {
       { label: 'Overview', path: '/app/etfs/overview' },
     ],
     sidebar: [
-      { label: 'Overview',     path: '/app/etfs/overview', icon: LayoutDashboard },
-      { label: 'ETF Analyzer', path: '/app/etfs/overview', icon: Search },
+      { label: 'Overview',         path: '/app/etfs/overview', icon: LayoutDashboard },
+      { label: 'Holdings',         path: '/app/etfs/overview', icon: Layers },
+      { label: 'Performance',      path: '/app/etfs/overview', icon: TrendingUp },
+      { label: 'Risk',             path: '/app/etfs/overview', icon: ShieldAlert },
+      { label: 'Dividends',        path: '/app/etfs/overview', icon: DollarSign },
+      { label: 'Cost & Efficiency', path: '/app/etfs/overview', icon: BarChart3 },
+      { label: 'Fino AI Verdict',  path: '/app/etfs/overview', icon: Sparkles },
     ],
   },
 

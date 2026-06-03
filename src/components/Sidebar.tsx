@@ -62,6 +62,7 @@ import {
   FileBarChart,
   Sparkles, // נ”¥ For beta items
   Link2,
+  ShieldAlert,
 } from 'lucide-react';
 import { 
   prefetchSettingsData,
@@ -105,7 +106,8 @@ type EnvironmentType =
   | 'connections'
   | 'markets'
   | 'war-zone'
-  | 'top-secret';
+  | 'top-secret'
+  | 'etfs';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -248,6 +250,11 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // Markets — handled by MarketsSidebar; empty array is a fallback only
   'markets': [],
 
+  // ETFs — ticker-aware sidebar rendered dynamically in Sidebar JSX.
+  // The 7 section items are built at render time using the :symbol from the URL.
+  // This empty array is a fallback only.
+  'etfs': [],
+
   // War Zone — light sidebar (Phase 1 nav redesign)
   'war-zone': [
     { label: 'Latest', path: '/app/all-markets/warzone', icon: Flame },
@@ -363,6 +370,90 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
 
 };
 
+// ─── ETF Ticker-Aware Sidebar ─────────────────────────────────────────────────
+// Rendered when currentEnvironment === 'etfs'. Reads :symbol from the URL
+// pathname so sidebar links stay in the current ticker's context.
+// When no ticker is present (landing at /app/etfs/overview), each section
+// link falls back to /app/etfs/overview so the user picks a ticker first.
+
+const ETF_SIDEBAR_SECTIONS: { id: string; label: string; icon: any }[] = [
+  { id: 'overview',     label: 'Overview',         icon: LayoutDashboard },
+  { id: 'holdings',    label: 'Holdings',          icon: Layers },
+  { id: 'performance', label: 'Performance',       icon: TrendingUp },
+  { id: 'risk',        label: 'Risk',              icon: ShieldAlert },
+  { id: 'dividends',   label: 'Dividends',         icon: DollarSign },
+  { id: 'cost',        label: 'Cost & Efficiency', icon: BarChart3 },
+  { id: 'verdict',     label: 'Fino AI Verdict',   icon: Sparkles },
+];
+
+// Extracts symbol + section from /app/etfs/:symbol or /app/etfs/:symbol/:section.
+// Returns null symbol when the user is on the landing page (/app/etfs/overview).
+function parseEtfPath(pathname: string): { symbol: string | null; section: string } {
+  // Skip the landing page — treat "overview" at position 3 as no-ticker
+  const m = pathname.match(/^\/app\/etfs\/(?!overview$)([^/]+)(?:\/([^/]+))?/);
+  if (!m) return { symbol: null, section: 'overview' };
+  return { symbol: m[1].toUpperCase(), section: m[2] ?? 'overview' };
+}
+
+function ETFSidebarItems({
+  location,
+  navigate,
+  isExpanded,
+}: {
+  location: { pathname: string };
+  navigate: (path: string) => void;
+  isExpanded: boolean;
+}) {
+  const { symbol, section: activeSection } = parseEtfPath(location.pathname);
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Ticker context label — only when a ticker is active and sidebar is expanded */}
+      {symbol && isExpanded && (
+        <div className="px-3 pt-2 pb-1">
+          <p className="text-[9px] font-semibold tracking-[1.4px] uppercase text-gold-muted/70">
+            Analyzing
+          </p>
+          <p className="text-[11px] font-data font-semibold text-gold-bright truncate">{symbol}</p>
+        </div>
+      )}
+      {ETF_SIDEBAR_SECTIONS.map((sec) => {
+        const href = symbol ? `/app/etfs/${symbol}/${sec.id}` : '/app/etfs/overview';
+        const isActive = !!symbol && activeSection === sec.id;
+        const Icon = sec.icon;
+
+        return (
+          <button
+            key={sec.id}
+            onClick={() => navigate(href)}
+            title={!isExpanded ? sec.label : undefined}
+            className={cn(
+              'relative group flex w-full min-h-[46px] items-center rounded-lg border-l-2 border-transparent py-2.5 text-[13px] font-medium leading-snug transition-all duration-200',
+              isExpanded ? 'gap-3 px-3' : 'justify-center px-2',
+              isActive
+                ? 'border-gold-bright bg-gold-primary/20 text-gold-bright shadow-[0_0_22px_rgba(201,166,70,0.22)]'
+                : 'text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-bright',
+            )}
+          >
+            <Icon className="h-5 w-5 flex-shrink-0" />
+            {isExpanded && (
+              <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis leading-snug">
+                {sec.label}
+              </span>
+            )}
+            {/* Collapsed tooltip pill */}
+            {!isExpanded && (
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
+                {sec.label}
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const sidebarItemBaseClass =
   'relative group flex w-full min-h-[46px] items-center rounded-lg border-l-2 border-transparent py-2.5 text-[13px] font-medium leading-snug transition-all duration-200';
 const sidebarItemExpandedClass = 'gap-3 px-3';
@@ -435,6 +526,8 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     // Phase 1 products — must come before generic all-markets check
     if (path.startsWith('/app/all-markets/warzone') || path.startsWith('/app/warzone')) return 'war-zone';
     if (path.startsWith('/app/top-secret')) return 'top-secret';
+    // ETFs — must be checked before the generic /app/etf* markets catch-all
+    if (path.startsWith('/app/etfs')) return 'etfs';
     // Markets product: any per-asset URL resolves to Markets environment
     if (
       path.startsWith('/app/stocks') ||
@@ -596,6 +689,8 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
         {/* Phase 1: Markets product uses its own asset-aware sidebar */}
         {currentEnvironment === 'markets' ? (
           <MarketsSidebar isExpanded={isExpanded} />
+        ) : currentEnvironment === 'etfs' ? (
+          <ETFSidebarItems location={location} navigate={navigate} isExpanded={isExpanded} />
         ) : sidebarItems.map((item, index) => {
           if (item.divider) {
             return <div key={`divider-${index}`} className="my-2 border-t border-gray-700" />;
