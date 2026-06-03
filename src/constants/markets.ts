@@ -77,10 +77,12 @@ export type MarketFunction =
   | 'pairs'
   | 'rates'
   // Commodities-specific
-  | 'energy'
-  | 'metals'
-  | 'agriculture'
+  | 'commodities-markets'
+  | 'commodities-macro'
   | 'seasonality'
+  | 'commodities-positioning'
+  | 'commodities-calendar'
+  | 'commodities-desk'
   // Macro-specific
   | 'liquidity'
   | 'real-yields'
@@ -205,7 +207,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       stocks:      '/app/stocks/reports',
       forex:       '/app/forex/deep-analysis',
-      commodities: '/app/commodities/reports',
       macro:       '/app/macro/reports',
     },
   },
@@ -233,7 +234,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: Zap,
     routes: {
       stocks:      '/app/stocks/catalysts',
-      commodities: '/app/commodities/catalysts',
     },
   },
   {
@@ -344,27 +344,19 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
 
   // ── Commodities-specific ─────────────────────────────────────────────────
   {
-    id: 'energy',
-    label: 'Energy',
-    icon: Flame,
+    id: 'commodities-markets',
+    label: 'Markets',
+    icon: BarChart3,
     routes: {
-      commodities: '/app/commodities/energy',
+      commodities: '/app/commodities/markets',
     },
   },
   {
-    id: 'metals',
-    label: 'Metals',
-    icon: Coins,
+    id: 'commodities-macro',
+    label: 'Macro Drivers',
+    icon: Activity,
     routes: {
-      commodities: '/app/commodities/metals',
-    },
-  },
-  {
-    id: 'agriculture',
-    label: 'Agriculture',
-    icon: Target,
-    routes: {
-      commodities: '/app/commodities/agriculture',
+      commodities: '/app/commodities/macro',
     },
   },
   {
@@ -373,6 +365,30 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: Calendar,
     routes: {
       commodities: '/app/commodities/seasonality',
+    },
+  },
+  {
+    id: 'commodities-positioning',
+    label: 'Positioning & Supply',
+    icon: Layers,
+    routes: {
+      commodities: '/app/commodities/positioning',
+    },
+  },
+  {
+    id: 'commodities-calendar',
+    label: 'Calendar & News',
+    icon: Newspaper,
+    routes: {
+      commodities: '/app/commodities/calendar',
+    },
+  },
+  {
+    id: 'commodities-desk',
+    label: 'My Desk',
+    icon: Bell,
+    routes: {
+      commodities: '/app/commodities/watchlist',
     },
   },
 
