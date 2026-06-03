@@ -3,20 +3,29 @@
 // ETF ANALYZER — shared formatter helpers
 // =====================================================
 // Unit conventions (MUST remain consistent across all tabs):
-//   fmtPct(v)          — v is ALREADY in percent units (e.g. 12.34 → "+12.34%")
-//   fmtReturn(v)       — v is ALREADY in percent units (same as fmtPct but no `decimals` param)
-//   fmtExpenseRatio(v) — v is a DECIMAL (e.g. 0.0003 → "0.03%"); multiplies by 100 internally
-//   dividendYield from API is a DECIMAL → pass as (dividendYield * 100) to fmtPct
+//
+//   fmtReturn(v)       — v is a DECIMAL fraction from the API (e.g. 0.28 → "+28.00%")
+//   fmtPct(v)          — v is a DECIMAL fraction from the API (e.g. 0.0097 → "+0.97%")
+//   fmtExpenseRatio(v) — v is a DECIMAL fraction (e.g. 0.0009 → "0.09%")
+//
+//   All three helpers multiply by 100 internally. Do NOT pre-multiply at the
+//   call site; passing (v * 100) would double-scale and produce wrong output.
+//
+//   Plain ratios (beta, sharpe, sortino, rSquared) and prices (week52High/Low,
+//   NAV, closePrice) are NOT percents — use toFixed(2) or fmtPrice directly,
+//   NOT these helpers.
 // =====================================================
 
 export function fmtPct(v: number | null | undefined, decimals = 2): string {
   if (v === null || v === undefined) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
+  const pct = v * 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(decimals)}%`;
 }
 
 export function fmtReturn(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+  const pct = v * 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
 }
 
 export function fmtMoney(v: number | null | undefined): string {

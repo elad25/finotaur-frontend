@@ -5,7 +5,7 @@
 // Shows: header KPIs (yield, frequency, latest dates),
 // dividend history table (ex-date, pay-date, cash amt),
 // sorted desc by exDate, top 20.
-// dividendYield from API is a DECIMAL → ×100 before fmtPct.
+// dividendYield from API is a DECIMAL → pass directly to fmtPct (helper multiplies ×100 internally).
 // =====================================================
 
 import { Card } from '@/components/ds/Card';
@@ -73,7 +73,7 @@ export function DividendsTab({ data }: Props) {
             label="Dividend Yield (TTM)"
             value={
               dividendYield !== null && dividendYield !== undefined
-                ? fmtPct(dividendYield * 100, 2)
+                ? fmtPct(dividendYield, 2)
                 : '—'
             }
           />

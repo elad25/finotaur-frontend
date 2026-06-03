@@ -10,53 +10,9 @@ import { Card } from '@/components/ds/Card';
 import { FinoScoreBadge } from '@/components/etf/FinoScoreBadge';
 import type { EtfData } from '@/types/etf.types';
 import { cn } from '@/lib/utils';
-
-// ─── Formatting helpers ───────────────────────────────────────────────────────
-
-function fmtPct(v: number | null | undefined, decimals = 2): string {
-  if (v === null || v === undefined) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(decimals)}%`;
-}
-
-function fmtMoney(v: number | null | undefined): string {
-  if (v === null || v === undefined) return '—';
-  if (Math.abs(v) >= 1_000_000_000) {
-    return `$${(v / 1_000_000_000).toFixed(2)}B`;
-  }
-  if (Math.abs(v) >= 1_000_000) {
-    return `$${(v / 1_000_000).toFixed(1)}M`;
-  }
-  return `$${v.toLocaleString()}`;
-}
-
-function fmtPrice(v: number | null | undefined, decimals = 2): string {
-  if (v === null || v === undefined) return '—';
-  return `$${v.toFixed(decimals)}`;
-}
-
-function fmtExpenseRatio(v: number | null | undefined): string {
-  if (v === null || v === undefined) return '—';
-  // Express as percentage: e.g. 0.0003 → 0.03%
-  return `${(v * 100).toFixed(2)}%`;
-}
-
-function fmtDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '—';
-  try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-function fmtReturn(v: number | null | undefined): string {
-  if (v === null || v === undefined) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
-}
+// Convention: fmtReturn/fmtPct take DECIMAL fractions (0.28 → "+28.00%").
+// Plain ratios and prices use toFixed/fmtPrice directly, NOT these helpers.
+import { fmtReturn, fmtPct, fmtPrice, fmtMoney, fmtExpenseRatio, fmtDate } from '../format';
 
 // ─── KpiCell — DS-native stat box ────────────────────────────────────────────
 
@@ -168,7 +124,7 @@ export function OverviewTab({ data }: OverviewTabProps) {
             label="Dividend Yield"
             value={
               dividendYield !== null && dividendYield !== undefined
-                ? fmtPct(dividendYield * 100, 2)
+                ? fmtPct(dividendYield, 2)
                 : '—'
             }
           />

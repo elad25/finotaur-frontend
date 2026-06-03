@@ -86,13 +86,15 @@ interface CalBarTooltipProps {
 
 function CalBarTooltip({ active, payload, label }: CalBarTooltipProps) {
   if (!active || !payload?.length) return null;
+  // chartData stores returnPct * 100 (already a percent), so format directly.
   const val = payload[0].value;
   const isNeg = val < 0;
+  const formatted = `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
   return (
     <div className="rounded-[8px] border border-border-ds-subtle bg-surface-1 px-3 py-2 text-[12px] shadow-lg">
       <p className="text-ink-tertiary mb-0.5">{label}</p>
       <p className={`font-data font-semibold ${isNeg ? 'text-[#E24B4A]' : 'text-[#4AD295]'}`}>
-        {fmtReturn(val)}
+        {formatted}
       </p>
     </div>
   );
@@ -106,7 +108,9 @@ function CalendarReturnsChart({ calendarReturns }: { calendarReturns: EtfData['c
   }
 
   const sorted = [...calendarReturns].sort((a, b) => a.year - b.year);
-  const chartData = sorted.map((r) => ({ year: String(r.year), returnPct: r.returnPct }));
+  // returnPct from API is a decimal fraction; multiply ×100 so chart axis and
+  // tooltip values read as true percents (e.g. 0.28 → 28).
+  const chartData = sorted.map((r) => ({ year: String(r.year), returnPct: r.returnPct * 100 }));
 
   return (
     <div style={{ width: '100%', height: 220 }}>
