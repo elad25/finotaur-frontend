@@ -315,6 +315,10 @@ const CommoditiesSeasonality = lazy(() => import("@/pages/app/commodities/Season
 const CommoditiesReports = lazy(() => import("@/pages/app/commodities/Reports"));
 const CommoditiesCalendar = lazy(() => import("@/pages/app/commodities/Calendar"));
 const CommoditiesNews = lazy(() => import("@/pages/app/commodities/News"));
+const CommoditiesMarkets = lazy(() => import("@/pages/app/commodities/Markets"));
+const CommoditiesMacro = lazy(() => import("@/pages/app/commodities/Macro"));
+const CommoditiesPositioning = lazy(() => import("@/pages/app/commodities/Positioning"));
+const CommoditiesWatchlist = lazy(() => import("@/pages/app/commodities/Watchlist"));
 
 // Macro
 const MacroOverview = lazy(() => import("@/pages/app/macro/Overview"));
@@ -592,6 +596,10 @@ function AppContent() {
           <Route path="commodities/reports" element={<LockedRoute domainId="commodities"><CommoditiesReports /></LockedRoute>} />
           <Route path="commodities/calendar" element={<LockedRoute domainId="commodities"><CommoditiesCalendar /></LockedRoute>} />
           <Route path="commodities/news" element={<LockedRoute domainId="commodities"><CommoditiesNews /></LockedRoute>} />
+          <Route path="commodities/markets" element={<LockedRoute domainId="commodities"><CommoditiesMarkets /></LockedRoute>} />
+          <Route path="commodities/macro" element={<LockedRoute domainId="commodities"><CommoditiesMacro /></LockedRoute>} />
+          <Route path="commodities/positioning" element={<LockedRoute domainId="commodities"><CommoditiesPositioning /></LockedRoute>} />
+          <Route path="commodities/watchlist" element={<LockedRoute domainId="commodities"><CommoditiesWatchlist /></LockedRoute>} />
           
           {/* MACRO */}
           <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
