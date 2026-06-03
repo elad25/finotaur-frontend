@@ -214,7 +214,6 @@ const JournalDashboardMock = () => {
 };
 
 const MeetFinoIntro = () => {
-  const [phase, setPhase] = useState<"greeting" | "idle">("greeting");
   return (
     <div className="relative flex flex-col items-center justify-center text-center px-6 py-10 overflow-hidden">
       {/* center radial gold glow */}
@@ -228,16 +227,14 @@ const MeetFinoIntro = () => {
       />
       <div className="relative z-10 flex flex-col items-center">
         <video
-          key={phase}
           className="w-52 h-52 sm:w-72 sm:h-72 rounded-2xl object-cover shadow-card-featured bg-section-card-deep"
-          src={phase === "greeting" ? "/fino/fino-greeting.mp4" : "/fino/fino-idle-long.mp4"}
+          src="/fino/fino-meet-loop.mp4"
           poster="/fino/fino-idle-long-poster.png"
           autoPlay
           muted
+          loop
           playsInline
           preload="metadata"
-          loop={phase === "idle"}
-          onEnded={() => setPhase("idle")}
           aria-label="FINO — the FINOTAUR AI assistant"
         />
         <div className="mt-5 text-[10px] font-medium uppercase tracking-[0.3em] text-gold-primary/80">
