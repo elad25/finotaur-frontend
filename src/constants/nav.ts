@@ -346,7 +346,7 @@ export const domains: Record<string, Domain> = {
   commodities: {
     id: 'commodities',
     label: 'Commodities',
-    locked: false,
+    locked: true,
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/commodities/overview' },
