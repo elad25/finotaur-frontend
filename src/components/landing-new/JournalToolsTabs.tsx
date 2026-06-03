@@ -227,9 +227,9 @@ const MeetFinoIntro = () => {
       />
       <div className="relative z-10 flex flex-col items-center w-full">
         <img
-          className="w-full max-w-[440px] sm:max-w-[620px] h-auto mx-auto animate-fino-idle [transform-origin:50%_92%] motion-reduce:animate-none"
-          src="/assets/fino-mascot-transparent.png"
-          alt="FINO — the FINOTAUR AI assistant"
+          className="w-full max-w-[440px] sm:max-w-[620px] h-auto mx-auto"
+          src="/fino/fino-meet-anim.webp"
+          alt="FINO — the FINOTAUR AI assistant, waving hello"
           loading="lazy"
           decoding="async"
           draggable={false}
