@@ -1460,90 +1460,6 @@ export function BacktestChart({
             placeOrderArmed={placeArmed}
             onPlaceLimitAtPrice={handlePlaceLimitAtPrice}
           />
-          {/* Floating Session Stats popup — shifted left to avoid the right-rail PlaceOrderPanel (w-80 = 20rem + gap) */}
-          <div className="absolute right-[21rem] top-3 z-20 w-72 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/95 shadow-2xl backdrop-blur-sm">
-            <button type="button" onClick={() => setStatsPanelOpen((v) => !v)}
-              className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646] hover:bg-zinc-900/60">
-              <span>Session Stats</span>
-              <ChevronDown size={14} className={`transition-transform ${statsPanelOpen ? '' : '-rotate-90'}`} />
-            </button>
-            {statsPanelOpen && (
-              <div className="max-h-[70vh] overflow-y-auto border-t border-zinc-800">
-                <div className="p-3">
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                    <StatRow label="Trades" value={state.stats.totalTrades.toString()} />
-                    <StatRow
-                      label="Win rate"
-                      value={`${state.stats.winRate.toFixed(1)}%`}
-                      tone={state.stats.winRate >= 50 ? 'positive' : 'neutral'}
-                    />
-                    <StatRow label="Winners" value={state.stats.winners.toString()} tone="positive" />
-                    <StatRow label="Losers" value={state.stats.losers.toString()} tone="negative" />
-                    <StatRow
-                      label="Profit factor"
-                      value={state.stats.profitFactor === Infinity ? '∞' : state.stats.profitFactor.toFixed(2)}
-                      tone="brand"
-                    />
-                    <StatRow
-                      label="Avg R:R"
-                      value={state.stats.avgRR > 0 ? `1:${state.stats.avgRR.toFixed(2)}` : '—'}
-                      tone="brand"
-                    />
-                    <StatRow
-                      label="Avg win"
-                      value={`$${state.stats.avgWin.toFixed(2)}`}
-                      tone="positive"
-                    />
-                    <StatRow
-                      label="Avg loss"
-                      value={`$${state.stats.avgLoss.toFixed(2)}`}
-                      tone="negative"
-                    />
-                    <StatRow
-                      label="Largest win"
-                      value={`$${state.stats.largestWin.toFixed(2)}`}
-                      tone="positive"
-                    />
-                    <StatRow
-                      label="Largest loss"
-                      value={`$${state.stats.largestLoss.toFixed(2)}`}
-                      tone="negative"
-                    />
-                    <StatRow label="Win streak" value={state.stats.longestWinStreak.toString()} />
-                    <StatRow label="Loss streak" value={state.stats.longestLossStreak.toString()} />
-                  </div>
-                </div>
-                {strategyBreakdown.length > 0 && (
-                  <div className="border-t border-zinc-800 p-3">
-                    <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#C9A646]">By Strategy</h3>
-                    <div className="space-y-1.5 text-xs">
-                      {strategyBreakdown.map((row) => (
-                        <div
-                          key={row.key}
-                          className="flex items-center justify-between rounded-md border border-zinc-900 bg-zinc-900/40 px-2 py-1.5"
-                        >
-                          <div className="flex min-w-0 flex-col">
-                            <span className="truncate font-medium text-zinc-300">{row.label}</span>
-                            <span className="text-[10px] text-zinc-600">
-                              {row.trades} trade{row.trades !== 1 && 's'} · {row.winRate.toFixed(0)}% win
-                            </span>
-                          </div>
-                          <span className={`font-bold tabular-nums ${row.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {row.netPnl >= 0 ? '+' : ''}${row.netPnl.toFixed(2)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="border-t border-zinc-800 p-3">
-                  <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#C9A646]">Trade History</h3>
-                  {/* History panel removed per Elad — closed trades land in My Trades */}
-                  <div className="flex-1" />
-                </div>
-              </div>
-            )}
-          </div>
           {/* Right rail — PlaceOrderPanel + open-position card + Save to journal */}
           <div className="absolute right-0 top-0 bottom-0 z-30 w-80 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]/95 p-3 flex flex-col gap-3">
             <PlaceOrderPanel
@@ -1595,6 +1511,87 @@ export function BacktestChart({
                 </button>
               </div>
             )}
+
+            {/* Session Stats — compact in-rail panel */}
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setStatsPanelOpen((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#C9A646] hover:bg-zinc-900/60"
+              >
+                <span>Session Stats</span>
+                <ChevronDown size={13} className={`transition-transform ${statsPanelOpen ? '' : '-rotate-90'}`} />
+              </button>
+              {statsPanelOpen && (
+                <div className="border-t border-zinc-800 p-2.5">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                    <StatRow label="Trades" value={state.stats.totalTrades.toString()} />
+                    <StatRow
+                      label="Win rate"
+                      value={`${state.stats.winRate.toFixed(1)}%`}
+                      tone={state.stats.winRate >= 50 ? 'positive' : 'neutral'}
+                    />
+                    <StatRow label="Winners" value={state.stats.winners.toString()} tone="positive" />
+                    <StatRow label="Losers" value={state.stats.losers.toString()} tone="negative" />
+                    <StatRow
+                      label="Profit factor"
+                      value={state.stats.profitFactor === Infinity ? '∞' : state.stats.profitFactor.toFixed(2)}
+                      tone="brand"
+                    />
+                    <StatRow
+                      label="Avg R:R"
+                      value={state.stats.avgRR > 0 ? `1:${state.stats.avgRR.toFixed(2)}` : '—'}
+                      tone="brand"
+                    />
+                    <StatRow
+                      label="Avg win"
+                      value={`$${state.stats.avgWin.toFixed(2)}`}
+                      tone="positive"
+                    />
+                    <StatRow
+                      label="Avg loss"
+                      value={`$${state.stats.avgLoss.toFixed(2)}`}
+                      tone="negative"
+                    />
+                    <StatRow
+                      label="Largest win"
+                      value={`$${state.stats.largestWin.toFixed(2)}`}
+                      tone="positive"
+                    />
+                    <StatRow
+                      label="Largest loss"
+                      value={`$${state.stats.largestLoss.toFixed(2)}`}
+                      tone="negative"
+                    />
+                    <StatRow label="Win streak" value={state.stats.longestWinStreak.toString()} />
+                    <StatRow label="Loss streak" value={state.stats.longestLossStreak.toString()} />
+                  </div>
+                  {strategyBreakdown.length > 0 && (
+                    <div className="mt-2 border-t border-zinc-800 pt-2.5">
+                      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#C9A646]">By Strategy</h3>
+                      <div className="space-y-1 text-[11px]">
+                        {strategyBreakdown.map((row) => (
+                          <div
+                            key={row.key}
+                            className="flex items-center justify-between rounded-md border border-zinc-900 bg-zinc-900/40 px-2 py-1"
+                          >
+                            <div className="flex min-w-0 flex-col">
+                              <span className="truncate font-medium text-zinc-300">{row.label}</span>
+                              <span className="text-[10px] text-zinc-600">
+                                {row.trades} trade{row.trades !== 1 && 's'} · {row.winRate.toFixed(0)}% win
+                              </span>
+                            </div>
+                            <span className={`font-bold tabular-nums ${row.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {row.netPnl >= 0 ? '+' : ''}${row.netPnl.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Trade error display */}
             {tradeError && (
