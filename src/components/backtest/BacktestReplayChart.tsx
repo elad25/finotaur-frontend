@@ -20,17 +20,26 @@
  *   - At cursor = -1, only the 200 historical bars are visible. Each advance
  *     reveals one of the 500 "future" bars.
  *   - When cursor reaches 500, we're at the end and pause.
+ *
+ * Drawing integration (additive — does not change existing behaviour):
+ *   - Exposes chart + series + container via forwardRef / useImperativeHandle
+ *     so BacktestChart can mount DrawingLayer as an overlay.
+ *   - Fires onViewChange whenever the user pans or zooms so the parent can
+ *     force DrawingLayer to repaint (DrawingLayer repaints via useEffect deps;
+ *     a stable chart ref won't retrigger it on scroll — we need a fresh signal).
+ *   - Fires onChartReady(chart, series, container) once after createChart()
+ *     so the parent knows the chart is available and can mount the overlay.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   createChart,
   ColorType,
   CrosshairMode,
-  LineStyle,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type MouseEventParams,
   type UTCTimestamp,
   type SeriesMarker,
   type Time,
@@ -87,6 +96,16 @@ export interface ContextMenuPriceInfo {
   y: number;
 }
 
+/**
+ * Ref handle exposed to BacktestChart so it can wire DrawingLayer without
+ * accessing internal refs directly.
+ */
+export interface BacktestReplayChartHandle {
+  chart: IChartApi | null;
+  series: ISeriesApi<'Candlestick'> | null;
+  container: HTMLDivElement | null;
+}
+
 export interface BacktestReplayChartProps {
   symbol: string;
   interval: Interval;
@@ -105,6 +124,42 @@ export interface BacktestReplayChartProps {
   onBarClick?: (bar: Bar) => void;
   /** Phase 6: right-click — parent renders the order-type context menu at given screen coords. */
   onContextMenu?: (info: ContextMenuPriceInfo) => void;
+  /**
+   * Fired on every bar reveal (cursor advance) with that bar's close price.
+   * Parent uses this to keep the "current price" input in sync with the replay
+   * cursor so market-order entry defaults to the live last price.
+   */
+  onPriceUpdate?: (price: number) => void;
+  /**
+   * Drawing integration: fired once after createChart() with the live
+   * chart + series + container refs. Parent mounts DrawingLayer at this point.
+   */
+  onChartReady?: (
+    chart: IChartApi,
+    series: ISeriesApi<'Candlestick'>,
+    container: HTMLDivElement,
+  ) => void;
+  /**
+   * Drawing integration: fired on every pan / zoom so the parent can force
+   * DrawingLayer to repaint (DrawingLayer's useEffect only triggers on prop
+   * changes — stable chart ref won't retrigger on scroll alone).
+   */
+  onViewChange?: () => void;
+  /**
+   * Drawing integration: fired on every chart left-click with the converted
+   * { time, price } coordinate. Parent uses this to drive the drawing state
+   * machine (startDrawing / updateDrawing / finishDrawing). Fired on EVERY
+   * click; parent is responsible for gating on current tool. The existing
+   * onBarClick (trade entry) continues to fire independently — BacktestChart
+   * gates it to cursor mode only.
+   */
+  onChartClick?: (point: { time: number; price: number }) => void;
+  /**
+   * Drawing integration: fired on every crosshair move with the converted
+   * { time, price } coordinate. Parent uses this to feed the live preview
+   * point into updateDrawing() while a drawing is in progress.
+   */
+  onCrosshairMove?: (point: { time: number; price: number } | null) => void;
   /** Height in px (or any CSS height string). */
   height?: string | number;
 }
@@ -114,7 +169,7 @@ type LoadState =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; bars: Bar[]; startIndex: number };
 
-export function BacktestReplayChart({
+export const BacktestReplayChart = forwardRef<BacktestReplayChartHandle, BacktestReplayChartProps>(function BacktestReplayChart({
   symbol,
   interval,
   dataSource,
@@ -125,19 +180,47 @@ export function BacktestReplayChart({
   onBarReveal,
   onBarClick,
   onContextMenu,
+  onPriceUpdate,
+  onChartReady,
+  onViewChange,
+  onChartClick,
+  onCrosshairMove,
   height = '100%',
-}: BacktestReplayChartProps) {
+}: BacktestReplayChartProps, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const onBarClickRef = useRef(onBarClick);
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
+  const onViewChangeRef = useRef(onViewChange);
+  const onPriceUpdateRef = useRef(onPriceUpdate);
+  const onChartClickRef = useRef(onChartClick);
+  const onCrosshairMoveRef = useRef(onCrosshairMove);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+
+  // Keep callback refs up-to-date without triggering chart remount.
+  useEffect(() => { onViewChangeRef.current = onViewChange; }, [onViewChange]);
+  useEffect(() => { onPriceUpdateRef.current = onPriceUpdate; }, [onPriceUpdate]);
+  useEffect(() => { onChartClickRef.current = onChartClick; }, [onChartClick]);
+  useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
+
+  // Expose chart/series/container to BacktestChart via forwardRef so
+  // DrawingLayer can be mounted as a sibling overlay.
+  useImperativeHandle(ref, () => ({
+    get chart() { return chartRef.current; },
+    get series() { return seriesRef.current; },
+    get container() { return containerRef.current; },
+  }));
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
+
+  // Keep onChartReady stable — called once per chart mount, no need for a ref
+  // because the chart lifecycle effect captures it at mount time only.
+  const onChartReadyRef = useRef(onChartReady);
+  useEffect(() => { onChartReadyRef.current = onChartReady; }, [onChartReady]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -198,6 +281,7 @@ export function BacktestReplayChart({
     // Skip if this bar was already drawn during seeding or a prior advance.
     if (newCursor <= lastUpdatedIdxRef.current) {
       onBarRevealRef.current?.(bar);
+      onPriceUpdateRef.current?.(bar.close);
       return;
     }
     lastUpdatedIdxRef.current = newCursor;
@@ -209,6 +293,7 @@ export function BacktestReplayChart({
       close: bar.close,
     });
     onBarRevealRef.current?.(bar);
+    onPriceUpdateRef.current?.(bar.close);
   }, [bars, startIndex]);
 
   const playback = useReplayPlayback({
@@ -277,14 +362,45 @@ export function BacktestReplayChart({
     series.setData(visible);
     chart.timeScale().fitContent();
 
-    // Click-to-trade: map the clicked Time back to the underlying bar.
+    // Click handler: fires onChartClick (drawing engine) and onBarClick (trade entry).
+    // onBarClick is gated to cursor mode in BacktestChart via handleReplayBarClick;
+    // onChartClick fires on every click so the drawing state machine can decide.
     chart.subscribeClick((param) => {
+      // Drawing: convert param → {time, price} and fire onChartClick on every click.
+      // Guard: param.point must exist and series must be available for coordinate conversion.
+      if (param.time && param.point && seriesRef.current) {
+        const price = seriesRef.current.coordinateToPrice(param.point.y);
+        if (price !== null) {
+          onChartClickRef.current?.({ time: param.time as number, price: Number(price) });
+        }
+      }
+
+      // Trade entry: map the clicked Time back to the underlying bar.
       if (!param.time || !onBarClickRef.current) return;
       const clickedTime = param.time as number;
       // The clicked time may correspond to any visible bar — find it.
       const found = bars.find((b) => (b.time as number) === clickedTime);
       if (found) onBarClickRef.current(found);
     });
+
+    // Crosshair-move handler: converts param → {time, price} and fires
+    // onCrosshairMove so BacktestChart can feed the live-preview point into
+    // updateDrawing() while a drawing is in progress. Fires null when the
+    // crosshair leaves the chart area (param.point is undefined).
+    const handleCrosshairMove = (param: MouseEventParams) => {
+      if (!onCrosshairMoveRef.current) return;
+      if (!param.point || !param.time || !seriesRef.current) {
+        onCrosshairMoveRef.current(null);
+        return;
+      }
+      const price = seriesRef.current.coordinateToPrice(param.point.y);
+      if (price === null) {
+        onCrosshairMoveRef.current(null);
+        return;
+      }
+      onCrosshairMoveRef.current({ time: param.time as number, price: Number(price) });
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
 
     // Phase 6: right-click → order context menu. Compute the clicked price
     // by converting the local Y coordinate via the candlestick series.
@@ -314,6 +430,18 @@ export function BacktestReplayChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
+    // Notify parent that chart + series are ready so it can mount DrawingLayer.
+    onChartReadyRef.current?.(chart, series, container);
+
+    // Subscribe to pan/zoom so parent can force DrawingLayer to repaint.
+    // DrawingLayer uses a useEffect with [drawings, chart, series, ...] deps;
+    // since chart/series are stable object refs, scroll alone won't retrigger
+    // it. We fire onViewChange on every visible-range change so the parent can
+    // spread drawings into a new array ref, which WILL retrigger the effect.
+    chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+      onViewChangeRef.current?.();
+    });
+
     // Responsive resize.
     const ro = new ResizeObserver(() => {
       if (!container || !chartRef.current) return;
@@ -327,6 +455,7 @@ export function BacktestReplayChart({
     return () => {
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
       priceLinesRef.current.clear();
       chart.remove();
       chartRef.current = null;
@@ -380,42 +509,20 @@ export function BacktestReplayChart({
     seriesRef.current.setMarkers(markers);
   }, [activePosition, closedPositions, playback.cursor, bars, load.kind]);
 
-  // Phase 6: sync price lines for pending orders. Each order gets a single
-  // horizontal line at its trigger price, colored by side (BUY=green,
-  // SELL=red) and dashed to distinguish from any future SL/TP overlay.
+  // Phase 7: pending order price lines are now rendered by OrderLinesOverlay
+  // (draggable HTML overlay) in BacktestChart.tsx. The static createPriceLine
+  // approach here has been removed to avoid double-drawing.
+  // priceLinesRef is kept for the cleanup path in the chart lifecycle effect.
+  // Clean up any lingering price lines if they somehow exist.
   useEffect(() => {
     if (!seriesRef.current) return;
-    const series = seriesRef.current;
     const existing = priceLinesRef.current;
-
-    // Remove lines whose order is no longer in the active set.
-    const liveIds = new Set(pendingOrders.map((o) => o.id));
-    for (const [id, line] of existing) {
-      if (!liveIds.has(id)) {
-        series.removePriceLine(line);
-        existing.delete(id);
-      }
+    if (existing.size === 0) return;
+    const series = seriesRef.current;
+    for (const line of existing.values()) {
+      series.removePriceLine(line);
     }
-
-    // Add or update lines for current pending orders.
-    for (const o of pendingOrders) {
-      const color = o.side === 'LONG' ? THEME.candleUp : THEME.candleDown;
-      const title = `${o.side === 'LONG' ? 'BUY' : 'SELL'} ${o.type} ${o.size}× @ ${o.triggerPrice.toFixed(2)}`;
-      const cached = existing.get(o.id);
-      if (cached) {
-        cached.applyOptions({ price: o.triggerPrice, color, title });
-      } else {
-        const line = series.createPriceLine({
-          price: o.triggerPrice,
-          color,
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title,
-        });
-        existing.set(o.id, line);
-      }
-    }
+    existing.clear();
   }, [pendingOrders]);
 
   // ─── Render ─────────────────────────────────────────────────
@@ -448,7 +555,9 @@ export function BacktestReplayChart({
       </div>
     </div>
   );
-}
+});
+
+BacktestReplayChart.displayName = 'BacktestReplayChart';
 
 /** Compute the current cursor bar's time (UTC seconds) for the given playback + bars. */
 export function cursorBarTime(bars: Bar[], cursor: number): number | null {

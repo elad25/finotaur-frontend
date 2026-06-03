@@ -115,6 +115,7 @@ interface AddPendingPayload {
 }
 interface CancelPendingPayload { orderId: string; }
 interface FillPendingPayload { orderId: string; fillPrice: number; fillTime: number; }
+interface UpdatePendingPricePayload { orderId: string; triggerPrice: number; }
 
 interface ClosePayload {
   price: number;
@@ -134,7 +135,9 @@ type Action =
   // Phase 6
   | { type: 'ADD_PENDING'; payload: AddPendingPayload }
   | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
-  | { type: 'FILL_PENDING'; payload: FillPendingPayload };
+  | { type: 'FILL_PENDING'; payload: FillPendingPayload }
+  // Phase 7: drag-to-reposition
+  | { type: 'UPDATE_PENDING_PRICE'; payload: UpdatePendingPricePayload };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -318,6 +321,15 @@ function reducer(state: SessionState, action: Action): SessionState {
         pendingOrders: state.pendingOrders.filter((o) => o.id !== action.payload.orderId),
       };
     }
+    case 'UPDATE_PENDING_PRICE': {
+      const { orderId, triggerPrice } = action.payload;
+      return {
+        ...state,
+        pendingOrders: state.pendingOrders.map((o) =>
+          o.id === orderId ? { ...o, triggerPrice } : o,
+        ),
+      };
+    }
     case 'FILL_PENDING': {
       // Single-position invariant: if a position is already open, drop the
       // order without filling (it would be safer to keep it, but for
@@ -366,6 +378,8 @@ export interface UseBacktestSessionReturn {
   addPendingOrder: (payload: AddPendingPayload) => void;
   cancelPendingOrder: (orderId: string) => void;
   fillPendingOrder: (orderId: string, fillPrice: number, fillTime: number) => void;
+  // Phase 7: drag-to-reposition
+  updatePendingOrderPrice: (orderId: string, triggerPrice: number) => void;
 }
 
 /**
@@ -436,6 +450,10 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     dispatch({ type: 'FILL_PENDING', payload: { orderId, fillPrice, fillTime } });
   }, []);
 
+  const updatePendingOrderPrice = useCallback((orderId: string, triggerPrice: number) => {
+    dispatch({ type: 'UPDATE_PENDING_PRICE', payload: { orderId, triggerPrice } });
+  }, []);
+
   return {
     state,
     openPosition,
@@ -447,5 +465,6 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    updatePendingOrderPrice,
   };
 }

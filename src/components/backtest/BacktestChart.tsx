@@ -21,9 +21,9 @@
  *   - Rule-based strategy executor (Phase 3)
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { UTCTimestamp } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
@@ -40,8 +40,12 @@ import {
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { runStrategy } from '@/core/backtest/runStrategy';
-import { BacktestReplayChart, type ContextMenuPriceInfo } from './BacktestReplayChart';
+import { BacktestReplayChart, type BacktestReplayChartHandle, type ContextMenuPriceInfo } from './BacktestReplayChart';
+import { OrderLinesOverlay } from './OrderLinesOverlay';
 import { DateTimePicker } from './DateTimePicker';
+import { useDrawings } from '@/components/ReplayChart/hooks';
+import { DrawingLayer } from '@/components/ReplayChart/drawings';
+import { DrawingToolbar } from '@/components/ReplayChart/ui';
 
 // ─── Asset class presets ────────────────────────────────────────
 // Each preset resolves to a source-native symbol. Yahoo handles futures
@@ -160,6 +164,7 @@ export function BacktestChart({
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    updatePendingOrderPrice,
   } = session;
 
   // Phase 2: Supabase persistence for "Save Session" button.
@@ -177,6 +182,52 @@ export function BacktestChart({
   const [strategyPickerOpen, setStrategyPickerOpen] = useState(false);
 
   const navigate = useNavigate();
+
+  // ─── Drawing tools (replay mode only) ────────────────────────
+  // Ref to BacktestReplayChart so we can read chart/series/container once ready.
+  const replayChartRef = useRef<BacktestReplayChartHandle>(null);
+
+  // Snapshot of the chart API objects captured via onChartReady. We store them
+  // in state (not just a ref) so that updating them triggers a React re-render
+  // which mounts DrawingLayer for the first time.
+  const [chartApis, setChartApis] = useState<{
+    chart: IChartApi;
+    series: ISeriesApi<'Candlestick'>;
+    container: HTMLDivElement;
+  } | null>(null);
+
+  // Bumped on every pan/zoom. DrawingLayer's useEffect depends on `drawings`
+  // (a prop). Since chart/series are stable object refs, pan alone won't
+  // retrigger it. We spread drawings into a new array when this increments so
+  // the identity changes and DrawingLayer repaints.
+  const [viewVersion, setViewVersion] = useState(0);
+
+  const drawingTools = useDrawings({ symbol, theme });
+  const {
+    drawings: rawDrawings,
+    activeDrawing,
+    selectedDrawing,
+    currentTool,
+    canUndo,
+    canRedo,
+    setCurrentTool,
+    startDrawing,
+    updateDrawing,
+    finishDrawing,
+    deleteSelected,
+    lockSelected,
+    toggleVisibility,
+    undo,
+    redo,
+  } = drawingTools;
+
+  // Spread drawings into a new array reference whenever the chart view changes
+  // so DrawingLayer's useEffect re-fires and repaints the canvas on scroll/zoom.
+  const drawings = useMemo(
+    () => [...rawDrawings],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawDrawings, viewVersion],
+  );
 
   // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
   // BacktestReplayChart (cursor-controlled). In Live mode it's the
@@ -247,23 +298,98 @@ export function BacktestChart({
       flashTradeError('Enter a valid current price before opening a position.');
       return;
     }
+    const sl = slInput ? parseFloat(slInput) : undefined;
+    const tp = tpInput ? parseFloat(tpInput) : undefined;
+    // Validate SL/TP are on the correct side of entry price.
+    if (side === 'LONG') {
+      if (sl != null && sl >= price) {
+        flashTradeError('Stop loss must be below entry price for a LONG position.');
+        return;
+      }
+      if (tp != null && tp <= price) {
+        flashTradeError('Take profit must be above entry price for a LONG position.');
+        return;
+      }
+    } else {
+      if (sl != null && sl <= price) {
+        flashTradeError('Stop loss must be above entry price for a SHORT position.');
+        return;
+      }
+      if (tp != null && tp >= price) {
+        flashTradeError('Take profit must be below entry price for a SHORT position.');
+        return;
+      }
+    }
     openPosition({
       side,
       price,
       time: Math.floor(Date.now() / 1000),
       size,
-      stopLoss: slInput ? parseFloat(slInput) : undefined,
-      takeProfit: tpInput ? parseFloat(tpInput) : undefined,
+      stopLoss: sl,
+      takeProfit: tp,
       strategyId: activeStrategyId,
     });
     setSlInput('');
     setTpInput('');
   };
 
+  // ─── Price update from replay cursor ─────────────────────────
+  // Fired by BacktestReplayChart on every bar reveal so the order panel
+  // always reflects the latest revealed bar's close — no manual typing needed.
+  const handlePriceUpdate = useCallback((price: number) => {
+    setLivePrice(price.toString());
+  }, []);
+
+  // ─── Drawing handlers ────────────────────────────────────────
+  const handleChartReady = useCallback((
+    chart: IChartApi,
+    series: ISeriesApi<'Candlestick'>,
+    container: HTMLDivElement,
+  ) => {
+    setChartApis({ chart, series, container });
+  }, []);
+
+  const handleViewChange = useCallback(() => {
+    setViewVersion((v) => v + 1);
+  }, []);
+
+  // ─── Drawing creation handlers (mirrors ReplayChart.handleChartClick) ────
+  // Replicates ReplayChart.tsx handleChartClick (lines 418-442):
+  //   if tool is not cursor/cross AND no activeDrawing → startDrawing(point)
+  //   if tool is not cursor/cross AND activeDrawing exists → updateDrawing(point) + finishDrawing()
+  // The finishDrawing() on second click commits a 2-point drawing to drawings[].
+  // Crosshair-move preview: when activeDrawing exists, updateDrawing(point) feeds
+  // the live rubber-band preview point into DrawingLayer's activeDrawing render.
+  const handleDrawingClick = useCallback((point: { time: number; price: number }) => {
+    if (currentTool === 'cursor' || currentTool === 'cross') return;
+    if (!activeDrawing) {
+      startDrawing(point);
+    } else {
+      updateDrawing(point);
+      finishDrawing();
+    }
+  }, [currentTool, activeDrawing, startDrawing, updateDrawing, finishDrawing]);
+
+  const handleDrawingCrosshairMove = useCallback((point: { time: number; price: number } | null) => {
+    if (!activeDrawing || !point) return;
+    // Only update preview when a drawing is in progress and tool is active.
+    if (currentTool === 'cursor' || currentTool === 'cross') return;
+    updateDrawing(point);
+  }, [activeDrawing, currentTool, updateDrawing]);
+
+  // Clear chart-api snapshot when switching away from replay so DrawingLayer
+  // unmounts cleanly and doesn't hold stale references.
+  // (chartMode is read by the effect below — no dep-array omission)
+
   // ─── Phase 4 handlers ──────────────────────────────────────
   // Replay: open a position at the clicked bar's close. SL/TP come from the
   // side-panel inputs, size from the size input. Strategy tag from active.
+  // Gated to cursor mode: when a drawing tool is active, bar clicks feed the
+  // drawing engine (handleDrawingClick) and must NOT open paper trades.
   const handleReplayBarClick = useCallback((bar: Bar) => {
+    // Suppress trade entry while any drawing tool is active.
+    if (currentTool !== 'cursor') return;
+
     if (state.activePosition) {
       // Single-position-at-a-time invariant — don't auto-stack. UI just
       // ignores the click; trader closes or waits for SL/TP first.
@@ -280,7 +406,7 @@ export function BacktestChart({
       strategyId: activeStrategyId,
     });
     setLivePrice(bar.close.toString());
-  }, [state.activePosition, openPosition, size, slInput, tpInput, activeStrategyId]);
+  }, [currentTool, state.activePosition, openPosition, size, slInput, tpInput, activeStrategyId]);
 
   // Replay: each bar revealed by the playback cursor.
   //   Phase 4: check SL/TP for any active position; auto-close on hit.
@@ -668,7 +794,7 @@ export function BacktestChart({
       {/* Main split: chart + side panel */}
       <div className="flex flex-1 overflow-hidden">
         {/* Chart — Live (FinotaurChart) or Replay (BacktestReplayChart) */}
-        <div className="flex-1 min-w-0 bg-[#08080a]">
+        <div className="relative flex-1 min-w-0 bg-[#08080a]">
           {chartMode === 'live' ? (
             <FinotaurChart
               symbol={symbol}
@@ -682,19 +808,79 @@ export function BacktestChart({
               onError={(err) => console.warn('[BacktestChart] data fetch failed', err)}
             />
           ) : (
-            <BacktestReplayChart
-              symbol={symbol}
-              interval={barInterval}
-              dataSource={dataSource}
-              replayStartTime={Math.floor(replayStart.getTime() / 1000)}
-              activePosition={state.activePosition}
-              closedPositions={state.closedPositions}
-              pendingOrders={state.pendingOrders}
-              onBarReveal={handleReplayBarReveal}
-              onBarClick={handleReplayBarClick}
-              onContextMenu={(info) => setContextMenu(info)}
-              height="100%"
-            />
+            <>
+              <BacktestReplayChart
+                ref={replayChartRef}
+                symbol={symbol}
+                interval={barInterval}
+                dataSource={dataSource}
+                replayStartTime={Math.floor(replayStart.getTime() / 1000)}
+                activePosition={state.activePosition}
+                closedPositions={state.closedPositions}
+                pendingOrders={state.pendingOrders}
+                onBarReveal={handleReplayBarReveal}
+                onBarClick={handleReplayBarClick}
+                onPriceUpdate={handlePriceUpdate}
+                onContextMenu={(info) => setContextMenu(info)}
+                onChartReady={handleChartReady}
+                onViewChange={handleViewChange}
+                onChartClick={handleDrawingClick}
+                onCrosshairMove={handleDrawingCrosshairMove}
+                height="100%"
+              />
+
+              {/* Drawing overlay — mounted only once chart is ready */}
+              {chartApis && (
+                <>
+                  {/* Toolbar: absolute-positioned on the left edge of the chart
+                      area, z-index above the chart canvas (z-20) but below the
+                      replay controls bar which sits outside this div. */}
+                  <DrawingToolbar
+                    currentTool={currentTool}
+                    hasSelection={!!selectedDrawing}
+                    isSelectionLocked={selectedDrawing?.locked ?? false}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
+                    theme={theme}
+                    onToolSelect={setCurrentTool}
+                    onDeleteSelected={deleteSelected}
+                    onUndo={undo}
+                    onRedo={redo}
+                    onLockToggle={lockSelected}
+                    onVisibilityToggle={toggleVisibility}
+                    className="top-12"
+                  />
+
+                  {/* Canvas overlay: covers the entire chart div so coordinates
+                      match exactly. pointer-events handled by DrawingLayer itself
+                      (always none — drawings are view-only; interaction happens
+                      via chart click events which DrawingLayer does not intercept). */}
+                  <DrawingLayer
+                    drawings={drawings}
+                    activeDrawing={activeDrawing}
+                    chart={chartApis.chart}
+                    candlestickSeries={chartApis.series}
+                    containerRef={{ current: chartApis.container }}
+                    theme={theme}
+                  />
+
+                  {/* Order lines overlay — draggable SL/TP/pending lines.
+                      Stacked above DrawingLayer (z-15) so lines are grabbable.
+                      Passes through pointer events to chart when no line is
+                      being dragged (pointer-events:none on container). */}
+                  <OrderLinesOverlay
+                    series={chartApis.series}
+                    container={chartApis.container}
+                    activePosition={state.activePosition}
+                    pendingOrders={state.pendingOrders}
+                    viewVersion={viewVersion}
+                    onUpdateSL={updateStopLoss}
+                    onUpdateTP={updateTakeProfit}
+                    onUpdatePendingPrice={updatePendingOrderPrice}
+                  />
+                </>
+              )}
+            </>
           )}
         </div>
 
@@ -702,12 +888,19 @@ export function BacktestChart({
         <aside className="flex w-80 flex-col overflow-y-auto border-l border-zinc-800 bg-zinc-950">
           {/* Paper trading panel */}
           <div className="border-b border-zinc-800 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-              Paper Trading
-            </h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
+                Paper Trading
+              </h3>
+              {chartMode === 'replay' && livePrice && (
+                <span className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-300">
+                  Last: {parseFloat(livePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                </span>
+              )}
+            </div>
 
             <label className="mb-3 block">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price</span>
+              <span className="text-[10px] uppercase tracking-wider text-zinc-500">Entry price</span>
               <input
                 type="number"
                 value={livePrice}
