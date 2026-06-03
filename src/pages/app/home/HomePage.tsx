@@ -121,7 +121,9 @@ export default function HomePage() {
       <div className="relative z-10 mx-auto w-full max-w-5xl px-ds-5 py-ds-6 space-y-ds-6">
 
       {/* ── 1. GREETING ─────────────────────────────────────────────── */}
-      <div className="text-center">
+      {/* mb-ds-6 (32px) on top of the container's space-y-ds-6 → a larger,
+          more deliberate gap between the greeting and the Ask Fino card. */}
+      <div className="text-center mb-ds-6">
         <h1 className="text-3xl font-semibold text-ink-primary">
           {greeting}, {firstName}
         </h1>
@@ -130,19 +132,15 @@ export default function HomePage() {
       {/* ── 2. ASK FINO CARD ────────────────────────────────────────── */}
       <Card variant="featured" padding="default">
         <div className="flex items-center gap-ds-4">
-          {/* Big FINO — animated clip on a pure-black background; the inline
-              screen blend drops the black so he is animated AND truly
-              transparent (no box). Asset added in #471. */}
-          <video
-            src="/fino/fino-meet-fullbody-noblack.mp4"
-            poster="/fino/fino-meet-fullbody-noblack-poster.png"
-            autoPlay
-            loop
-            muted
-            playsInline
+          {/* Big FINO — real animated asset with a native alpha (transparent)
+              background. Uses the same transparent WebP as the landing page
+              (#482), so there is no black box and no screen-blend hack. */}
+          <img
+            src="/fino/fino-meet-anim.webp"
+            alt=""
             aria-hidden="true"
+            draggable={false}
             className="h-40 w-40 flex-shrink-0 self-center object-contain"
-            style={{ mixBlendMode: 'screen' }}
           />
 
           {/* Right column — title, compact input, chips */}
