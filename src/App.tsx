@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppQueryProvider } from "@/providers/QueryProvider";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { TimezoneProvider } from "@/contexts/TimezoneContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -383,6 +383,14 @@ const LockedRoute = memo(({ domainId, children }: { domainId: string; children: 
 ));
 LockedRoute.displayName = 'LockedRoute';
 
+// Redirects /app/etfs/:symbol → /app/etfs/:symbol/overview
+// so the old bare-symbol URL keeps working after the section-based routing change.
+function ETFSymbolRedirect() {
+  const { symbol } = useParams<{ symbol: string }>();
+  return <Navigate to={`/app/etfs/${symbol}/overview`} replace />;
+}
+
+
 // APP CONTENT
 function AppContent() {
   // Consent-gated analytics: boots GA4 + PostHog only after user accepts cookies.
@@ -493,7 +501,10 @@ function AppContent() {
           {/* ETFs — live section (ETF Analyzer) */}
           <Route path="etfs" element={<Navigate to="/app/etfs/overview" replace />} />
           <Route path="etfs/overview" element={<LockedRoute domainId="etfs"><ETFOverview /></LockedRoute>} />
-          <Route path="etfs/:symbol"  element={<LockedRoute domainId="etfs"><ETFDetail  /></LockedRoute>} />
+          {/* /app/etfs/:symbol → redirect to /app/etfs/:symbol/overview */}
+          <Route path="etfs/:symbol" element={<LockedRoute domainId="etfs"><ETFSymbolRedirect /></LockedRoute>} />
+          {/* /app/etfs/:symbol/:section → ETF detail with section routing */}
+          <Route path="etfs/:symbol/:section" element={<LockedRoute domainId="etfs"><ETFDetail /></LockedRoute>} />
           {/* Legacy /app/etf/* → redirect to new /app/etfs/* */}
           <Route path="etf" element={<Navigate to="/app/etfs/overview" replace />} />
           <Route path="etf/overview"    element={<Navigate to="/app/etfs/overview" replace />} />

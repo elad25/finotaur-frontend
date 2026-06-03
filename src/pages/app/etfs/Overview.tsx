@@ -27,11 +27,11 @@ export default function ETFOverview() {
     e.preventDefault();
     const ticker = query.trim().toUpperCase();
     if (!ticker) return;
-    navigate(`/app/etfs/${ticker}`);
+    navigate(`/app/etfs/${ticker}/overview`);
   }
 
   function handleChip(ticker: string) {
-    navigate(`/app/etfs/${ticker}`);
+    navigate(`/app/etfs/${ticker}/overview`);
   }
 
   return (

@@ -605,6 +605,8 @@ export const MARKETS_PATH_PREFIXES = [
 const MARKETS_EXCLUSIONS = [
   '/app/all-markets/warzone',
   '/app/all-markets/admin',
+  // ETFs have their own product domain and ticker-aware sidebar; exclude from Markets.
+  '/app/etfs',
 ] as const;
 
 /** True when the current pathname belongs to the Markets product. */
