@@ -465,6 +465,24 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
+  // ETFs — ETF Analyzer section (mirroring stocks domain gating: locked:false)
+  // ===========================================================================
+  etfs: {
+    id: 'etfs',
+    label: 'ETFs',
+    locked: false,
+    beta: false,
+    defaultPath: '/app/etfs/overview',
+    subNav: [
+      { label: 'Overview', path: '/app/etfs/overview' },
+    ],
+    sidebar: [
+      { label: 'Overview',     path: '/app/etfs/overview', icon: LayoutDashboard },
+      { label: 'ETF Analyzer', path: '/app/etfs/overview', icon: Search },
+    ],
+  },
+
+  // ===========================================================================
   // OPTIONS — sealed (Track B). Kept exactly as before.
   // ===========================================================================
   options: {
