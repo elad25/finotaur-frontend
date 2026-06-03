@@ -7,16 +7,20 @@
 
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { Briefcase, MoreVertical, PencilLine, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useMyPortfolio } from '@/hooks/useMyPortfolio';
+import { useUserPortfolios } from '@/hooks/useUserPortfolios';
 import { usePortfolioQuotes } from '@/hooks/usePortfolioQuotes';
 import { CreatePortfolioModal } from '@/components/portfolio/CreatePortfolioModal';
 import { ClosePositionDialog } from '@/components/portfolio/ClosePositionDialog';
 import { AddPositionRow } from '@/components/portfolio/AddPositionRow';
+import { PortfolioSwitcher } from '@/components/portfolio/PortfolioSwitcher';
 import type { MyPortfolio, PortfolioAccount, Lot } from '@/lib/portfolio/types';
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
 import { Price, Change } from '@/components/ds/NumberDisplay';
 import { useMarketStatus } from '@/lib/marketStatus';
+import { countUniqueTickers } from '@/constants/portfolioLimits';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -302,6 +306,7 @@ interface AccountCardProps {
   onMenuClose: () => void;
   onRemoveLot: (lotId: string | undefined) => void;
   onClosePositionLot: (lot: Lot) => void;
+  // Passed through only to wire the cancel button; cap enforcement is in the page handler.
 }
 
 function AccountCard({
@@ -460,7 +465,24 @@ function hasPositions(portfolio: MyPortfolio): boolean {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function MyPortfolioPage() {
-  const { portfolio, loading, reload, save } = useMyPortfolio();
+  // Multi-portfolio list + active selection
+  const portfoliosHook = useUserPortfolios();
+  const {
+    portfolios,
+    activeId,
+    setActiveId,
+    loading: portfoliosLoading,
+    saving: portfoliosSaving,
+    maxPortfolios,
+    maxTickersPerPortfolio,
+    canCreate,
+    createPortfolio,
+    renamePortfolio,
+    deletePortfolio,
+  } = portfoliosHook;
+
+  // Active portfolio data — driven by activeId
+  const { portfolio, loading, reload, save } = useMyPortfolio(activeId);
   const [modalOpen, setModalOpen] = useState(false);
 
   // ⋮ menu state — which lot's menu is open (keyed by lot.id or positional key)
@@ -537,6 +559,25 @@ export default function MyPortfolioPage() {
   // ── Add lot (inline row) ─────────────────────────────────────
   async function handleAddLot(accountIndex: number, lot: Lot) {
     if (!portfolio) return;
+
+    // Ticker cap: only enforce if this ticker isn't already in the portfolio.
+    const normalizedTicker = lot.ticker.trim().toUpperCase();
+    const alreadyInPortfolio = portfolio.accounts.some((acc) =>
+      acc.positions.some(
+        (l) => l.ticker.trim().toUpperCase() === normalizedTicker && l.quantity > 0,
+      ),
+    );
+    if (!alreadyInPortfolio && countUniqueTickers(portfolio) >= maxTickersPerPortfolio) {
+      toast({
+        title: 'Ticker limit reached',
+        description:
+          'This portfolio allows ' +
+          maxTickersPerPortfolio +
+          ' tickers on your plan. Upgrade to add more.',
+      });
+      return;
+    }
+
     const updated: MyPortfolio = {
       ...portfolio,
       accounts: portfolio.accounts.map((acc, idx) => {
@@ -560,12 +601,13 @@ export default function MyPortfolioPage() {
   }
 
   // Only show full-page spinner on the INITIAL load (no data yet).
-  // Once portfolio exists, keep the page rendered during background refetches.
-  if (loading && !portfolio) {
+  // Once portfolio list or portfolio data exists, keep the page rendered during background refetches.
+  if ((portfoliosLoading || loading) && !portfolio && portfolios.length === 0) {
     return <LoadingSpinner />;
   }
 
-  const isEmpty = portfolio === null || !hasPositions(portfolio);
+  // Show empty state when: no portfolios exist OR active portfolio has no positions.
+  const isEmpty = portfolios.length === 0 || portfolio === null || !hasPositions(portfolio);
 
   // Portfolio-wide totals (equity positions across all accounts)
   let portfolioTotalCost = 0;
@@ -607,22 +649,87 @@ export default function MyPortfolioPage() {
     0,
   ) ?? 0;
 
+  // ── New portfolio handler ────────────────────────────────────
+  async function handleNewPortfolio() {
+    if (!canCreate) {
+      toast({
+        title: 'Portfolio limit reached',
+        description:
+          'Your plan allows ' +
+          maxPortfolios +
+          ' portfolio' +
+          (maxPortfolios === 1 ? '' : 's') +
+          '. Upgrade for more.',
+      });
+      return;
+    }
+    const r = await createPortfolio();
+    if (r.id) {
+      // Hook already called setActiveId(newId) after reloadList()
+      setModalOpen(true);
+      toast({ title: 'Portfolio created.' });
+    } else {
+      toast({
+        title: 'Portfolio limit reached',
+        description:
+          'Your plan allows ' +
+          maxPortfolios +
+          ' portfolio' +
+          (maxPortfolios === 1 ? '' : 's') +
+          '. Upgrade for more.',
+      });
+    }
+  }
+
+  // ── Empty-state create (no portfolios at all) ────────────────
+  async function handleEmptyStateCreate() {
+    const r = await createPortfolio();
+    if (r.id) {
+      setModalOpen(true);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 min-h-full">
       {isEmpty ? (
-        <EmptyState onOpen={() => setModalOpen(true)} />
+        <EmptyState onOpen={portfolios.length === 0 ? handleEmptyStateCreate : () => setModalOpen(true)} />
       ) : (
         <>
           {/* Page header */}
           <div className="flex items-center justify-between mb-6">
             <div>
+              {/* Portfolio switcher + market status */}
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold text-ink-primary">{portfolio!.name}</h1>
+                <PortfolioSwitcher
+                  portfolios={portfolios}
+                  activeId={activeId}
+                  maxPortfolios={maxPortfolios}
+                  canCreate={canCreate}
+                  saving={portfoliosSaving}
+                  onSelect={setActiveId}
+                  onNew={handleNewPortfolio}
+                  onRename={renamePortfolio}
+                  onDelete={deletePortfolio}
+                />
                 <PortfolioMarketStatus />
               </div>
-              <p className="text-xs text-ink-secondary mt-0.5">
-                Currency: {portfolio!.currency}
-              </p>
+              {/* Currency + capacity hint */}
+              <div className="flex items-center gap-3 mt-0.5">
+                <p className="text-xs text-ink-secondary">
+                  Currency: {portfolio!.currency}
+                </p>
+                <span className="text-xs text-ink-tertiary">
+                  {portfolios.length} / {maxPortfolios} portfolio{maxPortfolios === 1 ? '' : 's'}
+                </span>
+                {!canCreate && (
+                  <Link
+                    to="/app/plans"
+                    className="text-xs text-gold-primary hover:text-gold-bright transition-colors"
+                  >
+                    Upgrade
+                  </Link>
+                )}
+              </div>
             </div>
             <Button
               variant="goldOutline"
@@ -721,6 +828,8 @@ export default function MyPortfolioPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         initial={portfolio}
+        portfolioId={portfolio?.id ?? activeId}
+        maxTickers={maxTickersPerPortfolio}
         onSaved={async () => {
           setModalOpen(false);
           await reload();

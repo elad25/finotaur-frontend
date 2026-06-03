@@ -1,9 +1,14 @@
 // src/hooks/useMyPortfolio.ts
 // ═══════════════════════════════════════════════════════════════
-// Loads and saves the user's single manual portfolio.
+// Loads and saves a manual portfolio.
 // Source-of-truth: Supabase tables portfolios + portfolio_accounts
 // + portfolio_positions. Delete-and-reinsert on save to keep the
-// data model simple (one manual portfolio per user at app layer).
+// data model simple.
+//
+// Accepts an optional portfolioId:
+//   - non-empty string → load THAT specific owned portfolio
+//   - null / undefined → legacy path: load the user's first manual
+//     portfolio (LIMIT 1), same behaviour as before multi-portfolio.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -92,7 +97,7 @@ export interface UseMyPortfolioReturn {
 
 // ── Hook ──────────────────────────────────────────────────────────
 
-export function useMyPortfolio(): UseMyPortfolioReturn {
+export function useMyPortfolio(portfolioId?: string | null): UseMyPortfolioReturn {
   const [portfolio, setPortfolio] = useState<MyPortfolio | null>(null);
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
@@ -104,6 +109,11 @@ export function useMyPortfolio(): UseMyPortfolioReturn {
   // ── Load ─────────────────────────────────────────────────────
   // Returns the assembled portfolio so callers (e.g. save) can capture
   // the post-reload value without an extra query round-trip.
+  //
+  // When portfolioId is a non-empty string: load that specific portfolio
+  // (verifies ownership via user_id).
+  // When portfolioId is null/undefined: legacy path — load the user's
+  // first manual portfolio (LIMIT 1).
   const reload = useCallback(async (): Promise<MyPortfolio | null> => {
     setLoading(true);
     setError(null);
@@ -115,14 +125,19 @@ export function useMyPortfolio(): UseMyPortfolioReturn {
         return null;
       }
 
-      // 1. Find the manual portfolio row
-      const { data: pfRow, error: pfErr } = await supabase
+      // 1. Find the portfolio row — specific id or first manual.
+      let pfQuery = supabase
         .from('portfolios')
         .select('*')
-        .eq('user_id', user.id)
-        .eq('source', 'manual')
-        .limit(1)
-        .maybeSingle();
+        .eq('user_id', user.id);
+
+      if (portfolioId) {
+        pfQuery = pfQuery.eq('id', portfolioId);
+      } else {
+        pfQuery = pfQuery.eq('source', 'manual').limit(1);
+      }
+
+      const { data: pfRow, error: pfErr } = await pfQuery.maybeSingle();
 
       if (pfErr) throw pfErr;
 
@@ -177,12 +192,14 @@ export function useMyPortfolio(): UseMyPortfolioReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [portfolioId]);
 
-  // Load on mount
+  // Load on mount and whenever portfolioId changes.
   useEffect(() => {
     reload();
   }, [reload]);
+  // Note: portfolioId is already in reload's useCallback deps, so changing
+  // portfolioId produces a new reload reference, which triggers this effect.
 
   // ── Save (atomic RPC) ─────────────────────────────────────────
   const save = useCallback(async (p: MyPortfolio): Promise<MyPortfolio> => {
@@ -206,12 +223,19 @@ export function useMyPortfolio(): UseMyPortfolioReturn {
         })),
       }));
 
+      // Resolve which portfolio to write to:
+      //   1. Hook-level portfolioId (explicit target from caller)
+      //   2. The passed portfolio's own id (already-loaded specific portfolio)
+      //   3. null → RPC falls back to the user's default manual portfolio
+      const targetPortfolioId: string | null = portfolioId ?? p.id ?? null;
+
       const { error: rpcErr } = await supabase.rpc('save_my_portfolio', {
         p_name:              p.name,
         p_currency:          p.currency,
         p_benchmark_enabled: p.benchmarkEnabled,
         p_benchmark_symbol:  p.benchmarkSymbol,
         p_accounts,
+        p_portfolio_id:      targetPortfolioId,
       });
 
       if (rpcErr) throw new Error(rpcErr.message);
