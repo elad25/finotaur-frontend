@@ -54,7 +54,7 @@ export function AddPositionRow({ currency, onAdd, onCancel }: AddPositionRowProp
   );
 
   return (
-    <tr className="border-t border-border-ds-subtle bg-surface-1/40">
+    <tr className="border-t border-border-ds-subtle">
       {/* Ticker — autocomplete */}
       <td className="py-2 pr-3">
         <TickerCell
