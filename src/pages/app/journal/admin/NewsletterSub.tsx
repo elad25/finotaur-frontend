@@ -49,6 +49,7 @@ FileDown,
 import { toast } from 'sonner';
 import { Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
+import { Spinner } from "@/components/ui/Spinner";
 
 const WarZoneLandingSimple = lazy(() => import("@/pages/app/all-markets/WarzoneComponents/Warzonelanding"));
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
@@ -1474,7 +1475,7 @@ const clearPreview = () => {
     return (
       <>
         <AdminViewToggle />
-        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>}>
+        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Spinner size="lg" /></div>}>
           <WarZoneLandingSimple previewMode="landing" />
         </Suspense>
       </>
@@ -1486,7 +1487,7 @@ const clearPreview = () => {
     return (
       <>
         <AdminViewToggle />
-        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>}>
+        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Spinner size="lg" /></div>}>
           <WarZoneLandingSimple previewMode="subscriber" />
         </Suspense>
       </>

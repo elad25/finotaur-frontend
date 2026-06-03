@@ -95,7 +95,7 @@ export function SubscriptionGuard({ children, requiredPlan, feature }: Subscript
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
           <Spinner size="lg" />
-          <p className="text-sm text-zinc-400">Checking access...</p>
+          <p className="text-sm text-zinc-400">Loading...</p>
         </div>
       </div>
     );

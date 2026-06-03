@@ -18,6 +18,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { Spinner } from "@/components/ui/Spinner";
 import {
   FileText,
   Users,
@@ -3865,7 +3866,7 @@ const getDownloadHandler = (reportId: string) => {
         <AdminViewToggle />
         <Suspense fallback={
           <div className="min-h-screen bg-[#080812] flex items-center justify-center">
-            <Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" />
+            <Spinner size="lg" />
           </div>
         }>
           <TopSecretLanding />
@@ -3881,7 +3882,7 @@ const getDownloadHandler = (reportId: string) => {
         <AdminViewToggle />
         <Suspense fallback={
           <div className="min-h-screen bg-[#080812] flex items-center justify-center">
-            <Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" />
+            <Spinner size="lg" />
           </div>
         }>
           <TopSecretDashboard />

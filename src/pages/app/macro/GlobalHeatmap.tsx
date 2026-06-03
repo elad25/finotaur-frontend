@@ -23,6 +23,7 @@ import {
   WifiOff,
   Loader2
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import useMacroData, { 
   MacroAsset, 
@@ -1401,7 +1402,7 @@ export default function GlobalHeatmap() {
             <CardContent className="p-4">
               {isLoading && !macroData ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                  <Spinner size="md" />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

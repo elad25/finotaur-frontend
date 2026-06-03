@@ -57,6 +57,7 @@ import { supabase } from '@/lib/supabase';
   ChevronUp,
   FlaskConical,
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth, isSameMonth, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -2282,7 +2283,7 @@ function processReports(publishedReports: any[]) {
 
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                  <Spinner size="md" />
                 </div>
               ) : latestByType.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
