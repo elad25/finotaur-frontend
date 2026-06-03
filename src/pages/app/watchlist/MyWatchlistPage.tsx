@@ -319,7 +319,10 @@ export default function MyWatchlistPage() {
       <AddTickerRow atLimit={atLimit} onAdd={handleAddManual} saving={saving} />
 
       {/* Body */}
-      {loading ? (
+      {/* Only show full-page skeleton on the initial load (no data yet).
+          Once items exist, keep the page rendered during background refetches
+          so adding a ticker doesn't blank the whole page. */}
+      {loading && items.length === 0 ? (
         <LoadingSkeleton />
       ) : !hasItems ? (
         <EmptyState />
