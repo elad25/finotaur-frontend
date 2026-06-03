@@ -233,15 +233,10 @@ export default {
           "50%": { transform: "translateY(-10px)" }
         },
         "fino-idle": {
-          "0%": { transform: "translateY(0) translateX(0) rotate(0deg) scale(1)" },
-          "12%": { transform: "translateY(-10px) translateX(-5px) rotate(-1deg) scale(1.012)" },
-          "25%": { transform: "translateY(-4px) translateX(0) rotate(0deg) scale(1.022)" },
-          "37%": { transform: "translateY(-12px) translateX(5px) rotate(1deg) scale(1.012)" },
-          "50%": { transform: "translateY(-2px) translateX(0) rotate(0deg) scale(1)" },
-          "62%": { transform: "translateY(-11px) translateX(5px) rotate(1deg) scale(1.012)" },
-          "75%": { transform: "translateY(-4px) translateX(0) rotate(0deg) scale(1.022)" },
-          "87%": { transform: "translateY(-10px) translateX(-5px) rotate(-1deg) scale(1.012)" },
-          "100%": { transform: "translateY(0) translateX(0) rotate(0deg) scale(1)" }
+          "0%, 100%": { transform: "translateY(0) rotate(0deg) scale(1)" },
+          "25%": { transform: "translateY(-16px) rotate(-2deg) scale(1.015)" },
+          "50%": { transform: "translateY(-7px) rotate(0deg) scale(1.03)" },
+          "75%": { transform: "translateY(-16px) rotate(2deg) scale(1.015)" }
         },
         "shimmer": {
           "0%": { backgroundPosition: "-200% center" },
@@ -274,7 +269,7 @@ export default {
         "slide-up": "slide-up 0.5s ease-out",
         "glow-pulse": "glow-pulse 2s ease-in-out infinite",
         "float": "float 3s ease-in-out infinite",
-        "fino-idle": "fino-idle 60s ease-in-out infinite",
+        "fino-idle": "fino-idle 5s ease-in-out infinite",
         "shimmer": "shimmer 3s linear infinite",
         "gold-pulse": "goldPulse 6s ease-in-out infinite",
         "gradient-x": "gradient-x 3s ease infinite",
