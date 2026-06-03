@@ -60,6 +60,28 @@ function ReturnCell({ label, value }: ReturnCellProps) {
   );
 }
 
+// ─── Issuer inference ─────────────────────────────────────────────────────────
+
+/** Derives issuer from profile.issuer (when present) or infers from fund name. */
+function deriveIssuer(name?: string | null, fallback?: string | null): string {
+  if (fallback) return fallback;
+  if (!name) return '—';
+  const n = name.toLowerCase();
+  if (n.includes('spdr'))       return 'State Street';
+  if (n.includes('ishares'))    return 'BlackRock';
+  if (n.includes('vanguard'))   return 'Vanguard';
+  if (n.includes('invesco') || n.includes('qqq')) return 'Invesco';
+  if (n.includes('schwab'))     return 'Charles Schwab';
+  if (n.includes('proshares'))  return 'ProShares';
+  if (n.includes('vaneck'))     return 'VanEck';
+  if (n.includes('first trust')) return 'First Trust';
+  if (n.includes('wisdomtree')) return 'WisdomTree';
+  if (n.includes('direxion'))   return 'Direxion';
+  if (n.includes('jpmorgan'))   return 'J.P. Morgan';
+  if (n.includes('fidelity'))   return 'Fidelity';
+  return '—';
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface OverviewTabProps {
@@ -110,11 +132,11 @@ export function OverviewTab({ data }: OverviewTabProps) {
           />
           <KpiCell
             label="Inception"
-            value={fmtDate(fundamentals?.inceptionDate)}
+            value={fmtDate(fundamentals?.inceptionDate ?? profile?.listDate)}
           />
           <KpiCell
             label="Issuer"
-            value={profile?.issuer ?? '—'}
+            value={deriveIssuer(profile?.name, profile?.issuer ?? null)}
           />
           <KpiCell
             label="Category"

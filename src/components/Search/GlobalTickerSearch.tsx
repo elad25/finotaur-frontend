@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, createSearchParams, useLocation } from 'react-router-dom';
 import { useTickerSuggest } from '@/hooks/useTickerSuggest';
+import { fetchETFList } from '@/services/etf-analyzer.api';
 
 type Props = {
   placeholder?: string;
@@ -37,11 +38,22 @@ export default function GlobalTickerSearch({ placeholder = 'Search tickers... (C
     return () => window.removeEventListener('keydown', onKey);
   }, [open, suggestions, hoverIdx]);
 
-  function goSummary(sym: string) {
-    const search = createSearchParams({ symbol: sym.toUpperCase(), tab: 'overview' }).toString();
-    navigate({ pathname: '/app/all-markets/summary', search });
+  async function goSummary(sym: string) {
+    const upper = sym.toUpperCase();
     setOpen(false);
     setQ('');
+    try {
+      const result = await fetchETFList({ search: upper, limit: 5 });
+      const isEtf = result.etfs.some((e) => e.ticker.toUpperCase() === upper);
+      if (isEtf) {
+        navigate(`/app/etfs/${upper}/overview`);
+        return;
+      }
+    } catch {
+      // fall through to all-markets on error
+    }
+    const search = createSearchParams({ symbol: upper, tab: 'overview' }).toString();
+    navigate({ pathname: '/app/all-markets/summary', search });
   }
 
   function goChart(sym: string) {

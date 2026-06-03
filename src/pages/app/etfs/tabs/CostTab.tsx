@@ -50,7 +50,7 @@ export function CostTab({ data }: Props) {
           Cost &amp; efficiency data unavailable
         </p>
         <p className="text-small text-ink-tertiary">
-          Expense ratio, AUM and fund-flow data require an upgraded data provider entitlement.
+          Cost &amp; efficiency data is not available for this fund.
         </p>
       </Card>
     );

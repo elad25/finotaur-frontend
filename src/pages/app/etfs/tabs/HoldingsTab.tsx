@@ -4,26 +4,26 @@
 // =====================================================
 // Shows: top holdings table (rank/ticker/name/weight + bar),
 // concentration summary, sector weights, geo weights.
-// Gated: requires data.entitlements.etfGlobal.
+// Renders based on data presence — no entitlement gate.
 // =====================================================
 
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ds/Card';
 import type { EtfData } from '@/types/etf.types';
 
-// ─── Empty-state card ─────────────────────────────────────────────────────────
+// ─── Empty-state card (shown only when no holdings/sector/geo data present) ────
 
-function EntitlementEmptyState() {
+function HoldingsEmptyState() {
   return (
     <Card padding="spacious">
       <p className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted mb-ds-2">
         Holdings
       </p>
       <p className="text-sm font-medium text-ink-secondary mb-ds-1">
-        Holdings data unavailable
+        Holdings
       </p>
       <p className="text-small text-ink-tertiary">
-        Holdings &amp; exposure require an upgraded data provider entitlement.
+        Holdings data is not available for this fund.
       </p>
     </Card>
   );
@@ -60,11 +60,19 @@ interface Props {
 }
 
 export function HoldingsTab({ data }: Props) {
-  const { holdings, concentration, fundamentals, entitlements } = data;
+  const { holdings, concentration, fundamentals } = data;
 
-  // Gate: no entitlement → clean empty-state
-  if (!entitlements.etfGlobal) {
-    return <EntitlementEmptyState />;
+  const sectorWeights = fundamentals?.sectorWeights ?? null;
+  const geoWeights = fundamentals?.geoWeights ?? null;
+
+  // Show empty-state only when ALL data sections are absent
+  const hasHoldings = (holdings?.length ?? 0) > 0;
+  const hasSectors = (sectorWeights?.length ?? 0) > 0;
+  const hasGeo = (geoWeights?.length ?? 0) > 0;
+  const hasConcentration = concentration != null;
+
+  if (!hasHoldings && !hasSectors && !hasGeo && !hasConcentration) {
+    return <HoldingsEmptyState />;
   }
 
   // Top 25, sorted desc by weight
@@ -75,8 +83,6 @@ export function HoldingsTab({ data }: Props) {
 
   const maxWeight = topHoldings.length > 0 ? topHoldings[0].weight : 1;
 
-  const sectorWeights = fundamentals?.sectorWeights ?? null;
-  const geoWeights = fundamentals?.geoWeights ?? null;
   const maxSector = sectorWeights ? Math.max(...sectorWeights.map((s) => s.weight)) : 1;
   const maxGeo = geoWeights ? Math.max(...geoWeights.map((g) => g.weight)) : 1;
 
