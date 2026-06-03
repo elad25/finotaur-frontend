@@ -1853,6 +1853,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
                             {guidedMessages.length > 0 &&
                               guidedMessages[guidedMessages.length - 1].type === 'admin' &&
+                              guidedMessages.filter((m) => m.type === 'customer').length >= 2 &&
                               !aiThinking && !messageSent && !showTicketForm && !helpfulnessResolved && (
                               <div className="flex flex-col items-start gap-2 animate-in fade-in duration-200">
                                 <p className="text-xs font-medium text-[#64748B] font-['Inter',sans-serif]">Did this solve your issue?</p>
