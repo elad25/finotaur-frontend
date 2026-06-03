@@ -143,7 +143,7 @@ export async function fetchETFNews(limit = 20): Promise<EtfNewsItem[]> {
 
 // ─── fetchETFBars ─────────────────────────────────────────────────────────────
 
-export type EtfBarsRange = '1Y' | '5Y';
+export type EtfBarsRange = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y';
 
 export async function fetchETFBars(
   ticker: string,
