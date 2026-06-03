@@ -252,8 +252,12 @@ const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsA
 // before merging Wave 5 to main (the admin route at /app/admin/seo is the prod surface).
 import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
 // ETFs
-const ETFOverview = lazy(() => import("@/pages/app/etfs/Overview"));
-const ETFLayout  = lazy(() => import("@/pages/app/etfs/ETFLayout"));
+const ETFOverview   = lazy(() => import("@/pages/app/etfs/Overview"));
+const ETFLayout     = lazy(() => import("@/pages/app/etfs/ETFLayout"));
+const ETFDirectory  = lazy(() => import("@/pages/app/etfs/Directory"));
+const ETFScreener   = lazy(() => import("@/pages/app/etfs/Screener"));
+const ETFCompare    = lazy(() => import("@/pages/app/etfs/Compare"));
+const ETFNews       = lazy(() => import("@/pages/app/etfs/News"));
 
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
@@ -500,20 +504,24 @@ function AppContent() {
           <Route path="options/earnings-iv-crush" element={<OptionsComingSoon title="Earnings IV Crush" description="Earnings volatility crush analysis is coming in a future release." />} />
           <Route path="options/shortcuts" element={<OptionsComingSoon title="Options Shortcuts" description="Quick-access options tools are coming in a future release." />} />
 
-          {/* ETFs — live section (ETF Analyzer, now a Markets member) */}
+          {/* ETFs — live section (ETF Analyzer + multi-page section) */}
           <Route path="etfs" element={<Navigate to="/app/etfs/overview" replace />} />
-          <Route path="etfs/overview" element={<LockedRoute domainId="etfs"><ETFOverview /></LockedRoute>} />
+          <Route path="etfs/overview"   element={<LockedRoute domainId="etfs"><ETFOverview /></LockedRoute>} />
+          <Route path="etfs/directory"  element={<LockedRoute domainId="etfs"><ETFDirectory /></LockedRoute>} />
+          <Route path="etfs/screener"   element={<LockedRoute domainId="etfs"><ETFScreener /></LockedRoute>} />
+          <Route path="etfs/compare"    element={<LockedRoute domainId="etfs"><ETFCompare /></LockedRoute>} />
+          <Route path="etfs/news"       element={<LockedRoute domainId="etfs"><ETFNews /></LockedRoute>} />
           {/* /app/etfs/:symbol → redirect to /app/etfs/:symbol/overview */}
           <Route path="etfs/:symbol" element={<LockedRoute domainId="etfs"><ETFSymbolRedirect /></LockedRoute>} />
           {/* /app/etfs/:symbol/:section → ETFLayout with inline header tabs */}
           <Route path="etfs/:symbol/:section" element={<LockedRoute domainId="etfs"><ETFLayout /></LockedRoute>} />
           {/* Legacy /app/etf/* → redirect to new /app/etfs/* */}
           <Route path="etf" element={<Navigate to="/app/etfs/overview" replace />} />
-          <Route path="etf/overview"    element={<Navigate to="/app/etfs/overview" replace />} />
-          <Route path="etf/screener"    element={<Navigate to="/app/etfs/overview" replace />} />
-          <Route path="etf/holdings"    element={<Navigate to="/app/etfs/overview" replace />} />
-          <Route path="etf/flows"       element={<Navigate to="/app/etfs/overview" replace />} />
-          <Route path="etf/performance" element={<Navigate to="/app/etfs/overview" replace />} />
+          <Route path="etf/overview"    element={<Navigate to="/app/etfs/overview"  replace />} />
+          <Route path="etf/screener"    element={<Navigate to="/app/etfs/screener"  replace />} />
+          <Route path="etf/holdings"    element={<Navigate to="/app/etfs/overview"  replace />} />
+          <Route path="etf/flows"       element={<Navigate to="/app/etfs/overview"  replace />} />
+          <Route path="etf/performance" element={<Navigate to="/app/etfs/overview"  replace />} />
 
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />

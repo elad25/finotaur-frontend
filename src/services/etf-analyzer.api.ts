@@ -6,7 +6,7 @@
 //   import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app'
 // =====================================================
 
-import type { EtfData, EtfVerdict, OhlcBar } from '@/types/etf.types';
+import type { EtfData, EtfVerdict, EtfListItem, EtfNewsItem, OhlcBar } from '@/types/etf.types';
 
 const SERVER_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
@@ -23,6 +23,8 @@ interface CacheEntry<T> {
 const etfDataCache    = new Map<string, CacheEntry<EtfData>>();
 const etfBarsCache    = new Map<string, CacheEntry<OhlcBar[]>>();
 const etfVerdictCache = new Map<string, CacheEntry<EtfVerdict>>();
+const etfListCache    = new Map<string, CacheEntry<{ etfs: EtfListItem[]; total: number; nextCursor: number | null }>>();
+const etfNewsCache    = new Map<string, CacheEntry<EtfNewsItem[]>>();
 
 // ─── Typed fetch helper ───────────────────────────────────────────────────────
 
@@ -90,6 +92,53 @@ export async function fetchETFVerdict(ticker: string): Promise<EtfVerdict> {
   const data = (await res.json()) as EtfVerdict;
   etfVerdictCache.set(symbol, { data, fetchedAt: Date.now() });
   return data;
+}
+
+// ─── fetchETFList ─────────────────────────────────────────────────────────────
+
+export interface EtfListParams {
+  search?: string;
+  limit?: number;
+  cursor?: number;
+}
+
+export async function fetchETFList(
+  params?: EtfListParams,
+): Promise<{ etfs: EtfListItem[]; total: number; nextCursor: number | null }> {
+  const { search = '', limit = 50, cursor } = params ?? {};
+  const qs = new URLSearchParams();
+  if (search) qs.set('search', search);
+  if (limit !== undefined) qs.set('limit', String(limit));
+  if (cursor !== undefined) qs.set('cursor', String(cursor));
+
+  const cacheKey = qs.toString();
+  const cached = etfListCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < ETF_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const data = await apiFetch<{ etfs: EtfListItem[]; total: number; nextCursor: number | null }>(
+    `${SERVER_BASE}/api/etf/list?${qs.toString()}`,
+  );
+  etfListCache.set(cacheKey, { data, fetchedAt: Date.now() });
+  return data;
+}
+
+// ─── fetchETFNews ─────────────────────────────────────────────────────────────
+
+export async function fetchETFNews(limit = 20): Promise<EtfNewsItem[]> {
+  const cacheKey = `news:${limit}`;
+  const cached = etfNewsCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < ETF_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const payload = await apiFetch<{ news: EtfNewsItem[] }>(
+    `${SERVER_BASE}/api/etf/news?limit=${limit}`,
+  );
+  const news = payload.news ?? [];
+  etfNewsCache.set(cacheKey, { data: news, fetchedAt: Date.now() });
+  return news;
 }
 
 // ─── fetchETFBars ─────────────────────────────────────────────────────────────

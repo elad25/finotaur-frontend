@@ -55,11 +55,19 @@ export interface EtfConcentration {
   count: number | null;
 }
 
+export interface EtfListItem {
+  ticker: string;
+  name: string;
+  primaryExchange: string | null;
+  listDate: string | null;
+}
+
 export interface EtfNewsItem {
   title: string;
   url: string;
   publisher: string;
   publishedUtc: string;
+  tickers?: string[];
   sentiment: 'positive' | 'negative' | 'neutral' | null;
 }
 

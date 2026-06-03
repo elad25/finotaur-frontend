@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Search, Map, TrendingUp, Calendar, Newspaper,
   Activity, Bell, FileText, BarChart3, DollarSign, Target, Zap, Award,
   Users, LineChart, Globe, Coins, Flame, Brain, Droplet, Layers, PieChart,
-  Home, Wallet,
+  Home, Wallet, Sparkles, Filter, GitCompare,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -102,7 +102,10 @@ export type MarketFunction =
   | 'options-earnings-iv'
   // ETF-specific
   | 'etf-overview'
+  | 'etf-directory'
   | 'etf-screener'
+  | 'etf-compare'
+  | 'etf-news'
   | 'etf-holdings'
   | 'etf-flows'
   | 'etf-performance';
@@ -521,10 +524,42 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
   // is accessed via inline tabs in ETFLayout — not as sidebar items.
   {
     id: 'etf-overview',
-    label: 'Overview',
-    icon: LayoutDashboard,
+    label: 'ETF Analyzer',
+    icon: Sparkles,
     routes: {
       etf: '/app/etfs/overview',
+    },
+  },
+  {
+    id: 'etf-directory',
+    label: 'Directory',
+    icon: LayoutDashboard,
+    routes: {
+      etf: '/app/etfs/directory',
+    },
+  },
+  {
+    id: 'etf-screener',
+    label: 'Screener',
+    icon: Filter,
+    routes: {
+      etf: '/app/etfs/screener',
+    },
+  },
+  {
+    id: 'etf-compare',
+    label: 'Compare',
+    icon: GitCompare,
+    routes: {
+      etf: '/app/etfs/compare',
+    },
+  },
+  {
+    id: 'etf-news',
+    label: 'News',
+    icon: Newspaper,
+    routes: {
+      etf: '/app/etfs/news',
     },
   },
 
