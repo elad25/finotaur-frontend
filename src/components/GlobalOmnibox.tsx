@@ -40,40 +40,40 @@ import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbo
 type AssetTab =
   | 'All'
   | 'Stocks'
-  | 'ETFs'
+  | 'Funds'
   | 'Futures'
   | 'Forex'
   | 'Crypto'
   | 'Indices'
-  | 'Commodities'
-  | 'Options'
-  | 'Macro';
+  | 'Bonds'
+  | 'Economy'
+  | 'Options';
 
 const ASSET_TABS: AssetTab[] = [
   'All',
   'Stocks',
-  'ETFs',
+  'Funds',
   'Futures',
   'Forex',
   'Crypto',
   'Indices',
-  'Commodities',
+  'Bonds',
+  'Economy',
   'Options',
-  'Macro',
 ];
 
 // Map tab → assetType values that match it
 const TAB_FILTER: Record<AssetTab, SuggestItem['assetType'][]> = {
-  All:         [],
-  Stocks:      ['stock'],
-  ETFs:        ['etf'],
-  Futures:     ['futures'],
-  Forex:       ['fx'],
-  Crypto:      ['crypto'],
-  Indices:     ['index'],
-  Commodities: ['unknown'], // no dedicated assetType yet; renders empty gracefully
-  Options:     ['unknown'], // no dedicated assetType yet; renders empty gracefully
-  Macro:       ['unknown'], // no dedicated assetType yet; renders empty gracefully
+  All:     [],
+  Stocks:  ['stock'],
+  Funds:   ['etf'],          // Funds = ETFs (+ mutual funds when available)
+  Futures: ['futures'],
+  Forex:   ['fx'],
+  Crypto:  ['crypto'],
+  Indices: ['index'],
+  Bonds:   ['unknown'],      // no dedicated assetType yet; renders empty gracefully
+  Economy: ['unknown'],      // no dedicated assetType yet; renders empty gracefully
+  Options: ['unknown'],      // no dedicated assetType yet; renders empty gracefully
 };
 
 interface OmniboxResult {
