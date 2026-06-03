@@ -168,8 +168,6 @@ function VerdictSuccess({ verdict }: { verdict: EtfVerdict }) {
             </p>
             <ul className="space-y-ds-2">
               {verdict.pros.map((pro, i) => (
-                // Items are AI-generated strings with no stable key; index is acceptable.
-                // eslint-disable-next-line react/no-array-index-key
                 <ProItem key={i} text={pro} />
               ))}
             </ul>
@@ -184,7 +182,6 @@ function VerdictSuccess({ verdict }: { verdict: EtfVerdict }) {
             </p>
             <ul className="space-y-ds-2">
               {verdict.cons.map((con, i) => (
-                // eslint-disable-next-line react/no-array-index-key
                 <ConItem key={i} text={con} />
               ))}
             </ul>
