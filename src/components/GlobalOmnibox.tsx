@@ -28,7 +28,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, X, TrendingUp, ArrowRight, Command } from 'lucide-react';
+import { Search, X, TrendingUp, ArrowRight, Command, Globe } from 'lucide-react';
 import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxIntent';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
@@ -39,35 +39,41 @@ import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbo
 
 type AssetTab =
   | 'All'
-  | 'Equities'
+  | 'Stocks'
   | 'ETFs'
-  | 'Mutual Funds'
-  | 'Indices'
+  | 'Futures'
   | 'Forex'
   | 'Crypto'
-  | 'Futures';
+  | 'Indices'
+  | 'Commodities'
+  | 'Options'
+  | 'Macro';
 
 const ASSET_TABS: AssetTab[] = [
   'All',
-  'Equities',
+  'Stocks',
   'ETFs',
-  'Mutual Funds',
-  'Indices',
+  'Futures',
   'Forex',
   'Crypto',
-  'Futures',
+  'Indices',
+  'Commodities',
+  'Options',
+  'Macro',
 ];
 
 // Map tab → assetType values that match it
 const TAB_FILTER: Record<AssetTab, SuggestItem['assetType'][]> = {
-  All:           [],
-  Equities:      ['stock'],
-  ETFs:          ['etf'],
-  'Mutual Funds':['unknown'], // no dedicated assetType yet; show nothing gracefully
-  Indices:       ['index'],
-  Forex:         ['fx'],
-  Crypto:        ['crypto'],
-  Futures:       ['futures'],
+  All:         [],
+  Stocks:      ['stock'],
+  ETFs:        ['etf'],
+  Futures:     ['futures'],
+  Forex:       ['fx'],
+  Crypto:      ['crypto'],
+  Indices:     ['index'],
+  Commodities: ['unknown'], // no dedicated assetType yet; renders empty gracefully
+  Options:     ['unknown'], // no dedicated assetType yet; renders empty gracefully
+  Macro:       ['unknown'], // no dedicated assetType yet; renders empty gracefully
 };
 
 interface OmniboxResult {
@@ -123,47 +129,42 @@ function routeForSuggest(
 }
 
 // ---------------------------------------------------------------------------
-// Asset-type badge chip
+// Asset-type styles — used by both the monogram icon and the right-side label
 // ---------------------------------------------------------------------------
 
-const BADGE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  etf:     { bg: 'rgba(56,189,248,0.12)', text: '#38BDF8', label: 'ETF' },
-  stock:   { bg: 'rgba(201,166,70,0.10)', text: '#C9A646', label: 'Equity' },
-  crypto:  { bg: 'rgba(168,85,247,0.12)', text: '#A855F7', label: 'Crypto' },
-  fx:      { bg: 'rgba(52,211,153,0.12)', text: '#34D399', label: 'FX' },
-  futures: { bg: 'rgba(251,146,60,0.12)', text: '#FB923C', label: 'Futures' },
-  index:   { bg: 'rgba(148,163,184,0.12)', text: '#94A3B8', label: 'Index' },
-  unknown: { bg: 'rgba(100,100,100,0.10)', text: '#666', label: 'Asset' },
+const ASSET_STYLES: Record<string, { circle: string; text: string; label: string }> = {
+  etf:     { circle: '#1E6A9E', text: '#38BDF8', label: 'ETF' },
+  stock:   { circle: '#7A5C1A', text: '#C9A646', label: 'Stock' },
+  crypto:  { circle: '#5B2A8A', text: '#A855F7', label: 'Crypto' },
+  fx:      { circle: '#1A6B50', text: '#34D399', label: 'FX' },
+  futures: { circle: '#7A3D0E', text: '#FB923C', label: 'Futures' },
+  index:   { circle: '#2E3A4A', text: '#94A3B8', label: 'Index' },
+  unknown: { circle: '#2A2A2A', text: '#666',    label: 'Asset' },
 };
 
-function TypeBadge({ assetType }: { assetType?: SuggestItem['assetType'] }) {
+// ---------------------------------------------------------------------------
+// Monogram avatar — round colored circle with 1-2 letter ticker initials
+// ---------------------------------------------------------------------------
+
+function MonogramIcon({ symbol, assetType }: { symbol: string; assetType?: SuggestItem['assetType'] }) {
   const key = assetType ?? 'unknown';
-  const style = BADGE_STYLES[key] ?? BADGE_STYLES.unknown;
+  const style = ASSET_STYLES[key] ?? ASSET_STYLES.unknown;
+  // Show first 2 chars of symbol, uppercase
+  const initials = symbol.slice(0, 2).toUpperCase();
   return (
     <span
-      className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded"
-      style={{ background: style.bg, color: style.text, letterSpacing: '0.04em' }}
+      className="flex-shrink-0 flex items-center justify-center rounded-full text-[10px] font-bold text-white leading-none"
+      style={{ width: 28, height: 28, background: style.circle, letterSpacing: '0.02em' }}
+      aria-hidden="true"
     >
-      {style.label}
+      {initials}
     </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Exchange flag
-// ---------------------------------------------------------------------------
-
-function ExchangeFlag({ exchange }: { exchange?: string }) {
-  if (!exchange) return null;
-  const upper = exchange.toUpperCase();
-  if (upper === 'US' || upper === 'NYSE' || upper === 'NASDAQ' || upper === 'AMEX') {
-    return <span className="flex-shrink-0 text-base leading-none" aria-label="US market">🇺🇸</span>;
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Rich suggest row
+// Rich suggest row — TradingView style:
+//   [monogram] | [bold SYMBOL / muted name] | [type label · exchange · globe]
 // ---------------------------------------------------------------------------
 
 interface SuggestRowProps {
@@ -174,31 +175,48 @@ interface SuggestRowProps {
 }
 
 function SuggestRow({ item, highlighted, onMouseEnter, onClick }: SuggestRowProps) {
+  const key = item.assetType ?? 'unknown';
+  const assetStyle = ASSET_STYLES[key] ?? ASSET_STYLES.unknown;
+
   return (
     <button
       type="button"
       onMouseEnter={onMouseEnter}
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-md transition-colors ${
+      className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded-md transition-colors ${
         highlighted
           ? 'bg-[#C9A646]/10 text-[#F4F4F4]'
           : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
       }`}
     >
-      <ExchangeFlag exchange={item.exchange} />
+      {/* Leading round monogram */}
+      <MonogramIcon symbol={item.symbol} assetType={item.assetType} />
+
+      {/* Middle: bold symbol + muted name */}
       <span className="flex-1 min-w-0">
-        <span className="flex items-baseline gap-1.5">
-          <span className="text-sm font-bold text-[#F0F0F0] tracking-wide">{item.symbol}</span>
-          {item.exchange && (
-            <span className="text-[10px] text-[#555] font-normal uppercase">{item.exchange}</span>
-          )}
+        <span className="block text-sm font-bold text-[#F0F0F0] tracking-wide leading-snug">
+          {item.symbol}
         </span>
         {item.name && (
           <span className="block text-xs text-[#666] truncate leading-tight">{item.name}</span>
         )}
       </span>
-      <TypeBadge assetType={item.assetType} />
-      {highlighted && <ArrowRight className="flex-shrink-0 h-3.5 w-3.5 text-[#C9A646]/60 ml-1" />}
+
+      {/* Right: muted type label + exchange code + small globe icon */}
+      <span className="flex-shrink-0 flex flex-col items-end gap-0.5">
+        <span
+          className="text-[10px] font-semibold uppercase"
+          style={{ color: assetStyle.text, letterSpacing: '0.04em' }}
+        >
+          {assetStyle.label}
+        </span>
+        {item.exchange && (
+          <span className="flex items-center gap-1">
+            <span className="text-[10px] text-[#4A4A4A] uppercase">{item.exchange}</span>
+            <Globe className="h-2.5 w-2.5 text-[#3A3A3A]" />
+          </span>
+        )}
+      </span>
     </button>
   );
 }
@@ -264,42 +282,48 @@ interface TabBarProps {
 function TabBar({ activeTab, onChange }: TabBarProps) {
   return (
     <div
-      className="flex items-center gap-0.5 px-2 pt-2 pb-1 overflow-x-auto scrollbar-hide border-b"
+      className="flex items-center gap-1 px-3 pt-2 pb-2 overflow-x-auto scrollbar-hide border-b"
       style={{ borderColor: 'rgba(201,166,70,0.10)' }}
     >
-      {ASSET_TABS.map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          onClick={() => onChange(tab)}
-          className="flex-shrink-0 px-2.5 py-1 rounded text-xs font-medium transition-all"
-          style={
-            activeTab === tab
-              ? {
-                  background: 'rgba(201,166,70,0.15)',
-                  color: '#C9A646',
-                  border: '1px solid rgba(201,166,70,0.30)',
-                }
-              : {
-                  background: 'transparent',
-                  color: '#666',
-                  border: '1px solid transparent',
-                }
-          }
-          onMouseEnter={(e) => {
-            if (activeTab !== tab) {
-              (e.currentTarget as HTMLButtonElement).style.color = '#A0A0A0';
+      {ASSET_TABS.map((tab) => {
+        const isActive = activeTab === tab;
+        return (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => onChange(tab)}
+            className="flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap"
+            style={
+              isActive
+                ? {
+                    background: '#C9A646',
+                    color: '#0D0D0D',
+                    border: '1px solid #C9A646',
+                    boxShadow: '0 0 8px rgba(201,166,70,0.25)',
+                  }
+                : {
+                    background: 'transparent',
+                    color: '#555',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }
             }
-          }}
-          onMouseLeave={(e) => {
-            if (activeTab !== tab) {
-              (e.currentTarget as HTMLButtonElement).style.color = '#666';
-            }
-          }}
-        >
-          {tab}
-        </button>
-      ))}
+            onMouseEnter={(e) => {
+              if (!isActive) {
+                (e.currentTarget as HTMLButtonElement).style.color = '#A0A0A0';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(201,166,70,0.25)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                (e.currentTarget as HTMLButtonElement).style.color = '#555';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+              }
+            }}
+          >
+            {tab}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -779,7 +803,7 @@ export function GlobalOmnibox() {
           style={{ background: 'rgba(0,0,0,0.60)', paddingTop: '13vh' }}
           aria-modal="true"
           role="dialog"
-          aria-label="Search"
+          aria-label="Symbol search"
         >
           {/* Modal panel */}
           <div
@@ -794,57 +818,66 @@ export function GlobalOmnibox() {
                 '0 32px 80px rgba(0,0,0,0.80), 0 0 0 1px rgba(201,166,70,0.06), inset 0 1px 0 rgba(201,166,70,0.04)',
             }}
           >
-            {/* ── Modal header: big input + close button ── */}
+            {/* ── Modal header: title + big input + clear + close ── */}
             <div
-              className="flex items-center gap-3 px-4 py-3 border-b"
+              className="flex flex-col border-b"
               style={{ borderColor: 'rgba(201,166,70,0.12)' }}
             >
-              <Search
-                className="flex-shrink-0"
-                style={{ width: 20, height: 20, color: 'rgba(201,166,70,0.65)' }}
-              />
-              <input
-                ref={modalInputRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Search ticker, company, or ask Fino…"
-                className="flex-1 bg-transparent text-[16px] text-[#E8E8E8] placeholder:text-[#444] outline-none"
-                style={{ caretColor: '#C9A646' }}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {query && (
+              {/* Title row */}
+              <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                <span className="text-xs font-semibold tracking-widest uppercase" style={{ color: 'rgba(201,166,70,0.55)', letterSpacing: '0.1em' }}>
+                  Symbol search
+                </span>
                 <button
                   type="button"
-                  onClick={() => { setQuery(''); modalInputRef.current?.focus(); }}
-                  className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded transition-colors"
-                  style={{ color: 'rgba(160,160,160,0.5)' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.5)'; }}
-                  aria-label="Clear search"
+                  onClick={close_}
+                  className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-md transition-colors"
+                  style={{ color: 'rgba(160,160,160,0.45)', background: 'rgba(255,255,255,0.04)' }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4';
+                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.10)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.45)';
+                    (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+                  }}
+                  aria-label="Close search"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={close_}
-                className="flex-shrink-0 flex items-center justify-center h-7 w-7 rounded-md transition-colors ml-1"
-                style={{ color: 'rgba(160,160,160,0.5)', background: 'rgba(255,255,255,0.04)' }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4';
-                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.5)';
-                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
-                }}
-                aria-label="Close search"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              </div>
+              {/* Input row */}
+              <div className="flex items-center gap-3 px-4 pb-3">
+                <Search
+                  className="flex-shrink-0"
+                  style={{ width: 20, height: 20, color: 'rgba(201,166,70,0.65)' }}
+                />
+                <input
+                  ref={modalInputRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Search ticker, company, or ask Fino…"
+                  className="flex-1 bg-transparent text-[16px] text-[#E8E8E8] placeholder:text-[#444] outline-none"
+                  style={{ caretColor: '#C9A646' }}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => { setQuery(''); modalInputRef.current?.focus(); }}
+                    className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded transition-colors"
+                    style={{ color: 'rgba(160,160,160,0.5)' }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.5)'; }}
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* ── Modal results (scrollable) ── */}
