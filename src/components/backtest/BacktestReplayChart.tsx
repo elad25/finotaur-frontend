@@ -369,6 +369,14 @@ export function BacktestReplayChart({
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
+  // Tracks the wall-clock timestamp of the most recently visible bar so we
+  // can restore the cursor position when only the interval changes.
+  const cursorTimestampRef = useRef<number | null>(null);
+
+  // Tracks the {symbol, replayStartTime} combo from the previous fetch so we
+  // can distinguish "interval-only change" from "symbol or date change".
+  const prevFetchIdentityRef = useRef<{ symbol: string; replayStartTime: number } | null>(null);
+
   // ─── Fetch the replay window ─────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -380,6 +388,18 @@ export function BacktestReplayChart({
     const nowSec = Math.floor(Date.now() / 1000);
     const to = Math.min(replayStartTime + BARS_AFTER_START * secPerBar, nowSec) as UTCTimestamp;
 
+    // Determine whether this is an interval-only change (symbol + date same)
+    // so we can restore the cursor to the previously visible timestamp.
+    const prevIdentity = prevFetchIdentityRef.current;
+    const isIntervalOnlyChange =
+      prevIdentity !== null &&
+      prevIdentity.symbol === symbol &&
+      prevIdentity.replayStartTime === replayStartTime;
+    const preservedTimestamp = isIntervalOnlyChange ? cursorTimestampRef.current : null;
+
+    // Record the new identity for the next fetch comparison.
+    prevFetchIdentityRef.current = { symbol, replayStartTime };
+
     dataSource
       .getBars(symbol, interval, from, to)
       .then((bars) => {
@@ -388,11 +408,14 @@ export function BacktestReplayChart({
           setLoad({ kind: 'error', message: `No bars returned for ${symbol} ${interval}. Pick a different date or interval.` });
           return;
         }
-        // Find the index closest to the replayStartTime — that's where the
-        // cursor starts (last visible bar at "now").
+        // Find the index closest to the target timestamp:
+        //   - On interval-only change: use the preserved cursor timestamp so
+        //     playback position is kept across timeframe switches.
+        //   - On first load / symbol / date change: fall back to replayStartTime.
+        const targetTime = preservedTimestamp ?? replayStartTime;
         let startIndex = 0;
         for (let i = 0; i < bars.length; i++) {
-          if ((bars[i].time as number) <= replayStartTime) startIndex = i;
+          if ((bars[i].time as number) <= targetTime) startIndex = i;
           else break;
         }
         setLoad({ kind: 'ready', bars, startIndex });
@@ -446,6 +469,15 @@ export function BacktestReplayChart({
     initialCursor: startIndex,
     onAdvance: handleAdvance,
   });
+
+  // Keep cursorTimestampRef up to date so interval changes can restore
+  // the playback position to the same wall-clock moment.
+  useEffect(() => {
+    const ts = bars[playback.cursor]?.time;
+    if (ts != null) {
+      cursorTimestampRef.current = ts as number;
+    }
+  }, [playback.cursor, bars]);
 
   // Keep setCursorRef in sync so the chart lifecycle closure can always call
   // the latest setCursor without needing playback in its deps array.
@@ -841,12 +873,16 @@ export function BacktestReplayChart({
 
     const pushPosition = (p: PaperPosition) => {
       if (p.entryTime <= visibleTime) {
+        // Use 'circle' instead of arrow shapes — the user wants units+price as
+        // the label without a directional arrow dominating the marker.
+        // lightweight-charts always requires a shape; 'circle' is the least
+        // obtrusive option available in the library.
         markers.push({
           time: p.entryTime as UTCTimestamp,
           position: p.side === 'LONG' ? 'belowBar' : 'aboveBar',
-          shape: p.side === 'LONG' ? 'arrowUp' : 'arrowDown',
+          shape: 'circle',
           color: p.side === 'LONG' ? THEME.candleUp : THEME.candleDown,
-          text: `${p.side} ${p.entryPrice.toFixed(2)}`,
+          text: `${p.size}× @ ${p.entryPrice.toFixed(2)}`,
         });
       }
       if (p.exitTime != null && p.exitPrice != null && p.exitTime <= visibleTime) {
