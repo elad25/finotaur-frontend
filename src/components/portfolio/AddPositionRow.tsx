@@ -47,6 +47,7 @@ export function AddPositionRow({ currency, onAdd, onCancel }: AddPositionRowProp
   }
 
   const inputBase = cn(
+    'no-spinner',
     'bg-surface-1 border border-border-ds-subtle text-ink-primary rounded-md',
     'focus:outline-none focus:border-gold-primary focus:ring-1 focus:ring-gold-primary',
     'placeholder:text-ink-tertiary transition-colors text-sm',

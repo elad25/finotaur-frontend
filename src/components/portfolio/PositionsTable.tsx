@@ -33,6 +33,7 @@ export interface PositionsTableProps {
 
 // ── Shared cell/input style ──────────────────────────────────────
 const cellInput = cn(
+  'no-spinner',
   'w-full bg-surface-1 border border-border-ds-subtle rounded-md px-2 py-1.5',
   'text-sm text-ink-primary placeholder:text-ink-tertiary font-mono tabular-nums',
   'focus:outline-none focus:border-gold-primary focus:ring-1 focus:ring-gold-primary',
