@@ -800,7 +800,12 @@ export function GlobalOmnibox() {
       {isOpen && (
         <div
           className="hidden md:flex fixed inset-0 z-[300] items-start justify-center"
-          style={{ background: 'rgba(0,0,0,0.60)', paddingTop: '13vh' }}
+          style={{
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            paddingTop: '13vh',
+          }}
           aria-modal="true"
           role="dialog"
           aria-label="Symbol search"
@@ -948,7 +953,7 @@ export function GlobalOmnibox() {
       {isOpen && (
         <div
           className="md:hidden fixed inset-0 z-[300] flex flex-col"
-          style={{ background: 'rgba(0,0,0,0.85)' }}
+          style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
         >
           <div
             className="flex flex-col flex-1 overflow-hidden"
