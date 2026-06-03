@@ -57,6 +57,7 @@ export function CashPositionInput({
           onChange={handleAmountChange}
           placeholder="0"
           className={cn(
+            'no-spinner',
             'flex-1 min-w-0 bg-surface-1 border border-border-ds-subtle border-l-0 border-r-0 px-2.5 py-1.5',
             'text-sm text-ink-primary placeholder:text-ink-tertiary font-mono tabular-nums',
             'focus:outline-none focus:border-gold-primary focus:ring-1 focus:ring-gold-primary',

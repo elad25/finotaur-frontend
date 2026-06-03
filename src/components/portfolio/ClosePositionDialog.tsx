@@ -79,7 +79,7 @@ export function ClosePositionDialog({
             step={1}
             value={qty}
             onChange={(e) => setQty(e.target.value)}
-            className="w-full rounded-md border border-border-ds-subtle bg-surface-1 px-3 py-2 text-sm text-ink-primary font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-gold-primary"
+            className="no-spinner w-full rounded-md border border-border-ds-subtle bg-surface-1 px-3 py-2 text-sm text-ink-primary font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-gold-primary"
             autoFocus
             disabled={busy}
           />

@@ -4,6 +4,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide native number-input spinner arrows on opt-in inputs (.no-spinner).
+   Financial inputs use mono fields, not steppers. */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
