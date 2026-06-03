@@ -27,6 +27,8 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
   const containerRef = useRef<HTMLDivElement>(null);
   // Stale-guard: track which query we last fired so out-of-order responses are discarded
   const latestQueryRef = useRef<string>('');
+  // Suppress-guard: set to true after a suggestion is selected; one-shot skip of the next search
+  const suppressSearchRef = useRef(false);
 
   // Sync external value changes (e.g. after CSV import)
   useEffect(() => {
@@ -35,6 +37,12 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
 
   // Debounced fetch via Supabase RPC — 200 ms
   useEffect(() => {
+    // One-shot suppression: skip the search triggered by programmatic value set after selection
+    if (suppressSearchRef.current) {
+      suppressSearchRef.current = false;
+      return;
+    }
+
     const q = query.trim();
     if (!q || q.length < 1) {
       setItems([]);
@@ -77,10 +85,12 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
 
   function select(symbol: string) {
     const upper = symbol.toUpperCase();
+    // Suppress the search that would fire from the query state update
+    suppressSearchRef.current = true;
     setQuery(upper);
     onChange(upper);
-    setOpen(false);
     setItems([]);
+    setOpen(false);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -115,7 +125,7 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
       />
 
       {open && items.length > 0 && (
-        <div className="absolute z-50 mt-0.5 left-0 w-56 rounded-md border border-border-ds-subtle bg-surface-1 shadow-lg overflow-hidden">
+        <div className="absolute z-[70] mt-0.5 left-0 w-56 rounded-md border border-border-ds-subtle bg-surface-base shadow-xl overflow-hidden">
           {items.map((item) => (
             <button
               key={item.symbol}
@@ -124,9 +134,9 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
                 e.preventDefault(); // prevent input blur before click fires
                 select(item.symbol);
               }}
-              className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-white/5 transition-colors"
+              className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-white/10 transition-colors"
             >
-              <span className="text-ink-primary font-medium shrink-0">{item.symbol}</span>
+              <span className="text-ink-primary font-bold shrink-0">{item.symbol}</span>
               <span className="text-ink-secondary truncate">{item.name}</span>
             </button>
           ))}

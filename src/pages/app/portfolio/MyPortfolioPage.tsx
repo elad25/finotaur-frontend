@@ -376,14 +376,6 @@ function AccountCard({
           {holdingsCount > 0 && quotesLoading && (
             <span className="text-ink-tertiary animate-pulse">Loading prices…</span>
           )}
-          {/* + Add Position — ghost gold-text button */}
-          <button
-            type="button"
-            onClick={onAddPosition}
-            className="text-gold-primary hover:text-gold-bright text-xs font-medium transition-colors"
-          >
-            + Add Position
-          </button>
         </div>
       </div>
 
@@ -427,6 +419,17 @@ function AccountCard({
       ) : (
         <p className="px-5 py-4 text-sm text-ink-tertiary italic">No positions in this account.</p>
       )}
+
+      {/* + Add Position — below the positions table, always visible */}
+      <div className="px-5 pb-3 pt-1">
+        <button
+          type="button"
+          onClick={onAddPosition}
+          className="text-gold-primary hover:text-gold-bright text-xs font-medium transition-colors"
+        >
+          + Add Position
+        </button>
+      </div>
     </Card>
   );
 }
