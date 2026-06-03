@@ -12,12 +12,13 @@
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
-import { 
-  X, Send, MessageCircle, Shield, ArrowLeft, Plus, 
-  Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, 
+import {
+  X, Send, MessageCircle, Shield, ArrowLeft, Plus,
+  Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell,
   CheckCircle2, AlertCircle, Info, Megaphone, Download,
   TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -1523,7 +1524,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                     {loadingUpdates ? (
                       <div className="flex items-center justify-center h-full">
-                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#D4AF37] border-t-transparent"></div>
+                        <Spinner size="md" />
                       </div>
                     ) : systemUpdates.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full p-8">

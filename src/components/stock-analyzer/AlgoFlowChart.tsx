@@ -16,7 +16,8 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Loader2, Activity } from 'lucide-react';
+import { Activity } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { stockCache, getNextEarningsDate } from '@/services/stock-analyzer.cache';
 
 // ── Types ──
@@ -487,7 +488,7 @@ export const AlgoFlowChart = memo(({ chain, ticker, currentPrice }: AlgoFlowChar
   if (loading) {
     return (
       <div className="h-[480px] flex items-center justify-center">
-        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+        <Spinner size="sm" />
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
-import { X, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
+import { X, Upload, Image as ImageIcon } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { compressImage, validateImage, createImagePreview, revokeImagePreview } from "@/utils/imageCompression";
 import { toast } from "sonner";
 
@@ -151,7 +152,7 @@ export default function MultiUploadZone({
           <div className="flex flex-col items-center gap-3">
             {compressing ? (
               <>
-                <Loader2 className="w-10 h-10 text-yellow-500 animate-spin" />
+                <Spinner size="lg" />
                 <div className="text-sm text-zinc-300">Compressing images...</div>
                 <div className="text-xs text-zinc-500">This won't take long</div>
               </>
@@ -200,7 +201,7 @@ export default function MultiUploadZone({
                 {screenshot.compressing && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <div className="text-center">
-                      <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mx-auto mb-2" />
+                      <Spinner size="md" className="mx-auto mb-2" />
                       <div className="text-xs text-zinc-300">Compressing...</div>
                     </div>
                   </div>

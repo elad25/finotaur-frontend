@@ -9,7 +9,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Zap, Brain, Flame, ChevronRight, Clock } from 'lucide-react';
+import { Zap, Brain, Flame, ChevronRight, Clock } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 
 // ============================================
 // CONSTANTS
@@ -101,7 +102,7 @@ export function CreditSection() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-6 h-6 animate-spin text-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

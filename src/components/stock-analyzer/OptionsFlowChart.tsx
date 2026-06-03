@@ -13,6 +13,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
+import { Spinner } from "@/components/ui/Spinner";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -332,7 +333,7 @@ const OptionsFlowChart = memo(({ ticker }: OptionsFlowChartProps) => {
         style={{ background: 'linear-gradient(135deg, rgba(15,15,15,0.8), rgba(10,10,10,0.95))' }}>
         <div className="p-6">
           <div className="flex items-center gap-3">
-            <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+            <Spinner size="sm" />
             <span className="text-sm text-[#8B8B8B]">Loading options flow for {ticker}...</span>
           </div>
         </div>

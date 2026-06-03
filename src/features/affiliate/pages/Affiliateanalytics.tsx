@@ -395,7 +395,7 @@ export default function AffiliateAnalytics() {
 
           {analyticsLoading ? (
             <div className="h-48 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
+              <Spinner size="md" />
             </div>
           ) : clicksData.daily?.length > 0 ? (
             <div className="h-48 flex items-end gap-1">
@@ -457,7 +457,7 @@ export default function AffiliateAnalytics() {
 
         {analyticsLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
+            <Spinner size="md" />
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2 overflow-x-auto">

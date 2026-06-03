@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   Select,
   SelectContent,
@@ -253,7 +254,7 @@ export default function AffiliateApplicationForm({
   if (checkingApplication) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-yellow-500" />
+        <Spinner size="md" />
       </div>
     );
   }

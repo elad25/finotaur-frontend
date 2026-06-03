@@ -8,10 +8,11 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle,
-  ArrowRight, ArrowLeft, Loader2, HelpCircle, Check, Eye, RefreshCw,
+  ArrowRight, ArrowLeft, HelpCircle, Check, Eye, RefreshCw,
   BarChart3, LineChart, TrendingUp, Briefcase, Activity,
   Layers, Zap, Database, FileText
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 
 import {
   parseCSV,
@@ -422,7 +423,7 @@ export default function ImportTradesPopup({
         
         {isProcessing ? (
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="w-10 h-10 text-[#C9A646] animate-spin" />
+            <Spinner size="lg" />
             <p className="text-zinc-400">Processing file...</p>
           </div>
         ) : (
@@ -643,7 +644,7 @@ export default function ImportTradesPopup({
       <div className="relative mb-8">
         <div className="absolute inset-0 bg-[#C9A646] blur-2xl opacity-20 animate-pulse"></div>
         <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 border border-[#C9A646]/30 flex items-center justify-center">
-          <Loader2 className="w-10 h-10 text-[#C9A646] animate-spin" />
+          <Spinner size="lg" />
         </div>
       </div>
       

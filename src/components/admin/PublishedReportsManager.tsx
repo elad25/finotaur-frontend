@@ -67,6 +67,7 @@ import {
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Spinner } from "@/components/ui/Spinner";
 
 // ============================================
 // TYPES
@@ -393,7 +394,7 @@ const AdminStatsSection = React.memo<AdminStatsSectionProps>(({ stats, isLoading
             </div>
             {isLoading ? (
               <div className="h-8 flex items-center">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+                <Spinner size="sm" />
               </div>
             ) : (
               <p className={`text-2xl font-bold ${card.valueColor}`}>{card.value}</p>
@@ -440,7 +441,7 @@ const TopSecretStatsSection = React.memo<TopSecretStatsSectionProps>(({ stats, i
 
       {isLoading ? (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+          <Spinner size="md" />
         </div>
       ) : (
         <div className="space-y-6">
@@ -1780,7 +1781,7 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
 
         {reportsLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : sortedMonthKeys.length === 0 ? (
           <div className="text-center py-12 text-gray-500 border border-white/10 rounded-xl">

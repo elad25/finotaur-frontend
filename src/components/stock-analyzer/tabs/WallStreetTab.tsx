@@ -5,6 +5,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { Spinner } from "@/components/ui/Spinner";
 import {
   Award, Target, TrendingUp, TrendingDown, Users,
   Loader2, RefreshCw, Sparkles, BarChart3,
@@ -979,7 +980,7 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
       {isLoading && !aiData && (
         <div className="space-y-4">
           <div className="flex items-center justify-center gap-3 py-3">
-            <div className="w-5 h-5 rounded-full border-2 border-[#C9A646]/30 border-t-[#C9A646] animate-spin" />
+            <Spinner size="sm" />
             <span className="text-sm text-[#8B8B8B]">Analyzing {data.ticker} Wall Street coverage...</span>
           </div>
           <WallStreetLoadingSkeleton />

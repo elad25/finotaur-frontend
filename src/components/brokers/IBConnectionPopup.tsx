@@ -5,7 +5,6 @@
 import { useState } from 'react';
 import {
   X,
-  Loader2,
   CheckCircle,
   AlertCircle,
   ExternalLink,
@@ -15,6 +14,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 
@@ -376,7 +376,7 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
 
   const renderConnecting = () => (
     <div className="py-12 flex flex-col items-center justify-center gap-6">
-      <Loader2 className="w-12 h-12 text-[#C9A646] animate-spin" />
+      <Spinner size="lg" />
       <div className="text-center">
         <p className="text-white font-semibold text-lg mb-2">Connecting to Interactive Brokers...</p>
         <p className="text-zinc-400 text-sm">Validating your credentials</p>

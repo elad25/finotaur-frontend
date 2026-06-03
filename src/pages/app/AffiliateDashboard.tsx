@@ -14,7 +14,6 @@ import {
   ExternalLink,
   MousePointer,
   UserCheck,
-  Loader2,
   Award,
   Clock,
   CheckCircle,
@@ -424,7 +423,7 @@ export default function AffiliateDashboard() {
             <h3 className="text-lg font-semibold text-white mb-4">Your Referrals</h3>
             {referralsLoading ? (
               <div className="text-center py-8">
-                <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto" />
+                <Spinner size="md" className="mx-auto" />
               </div>
             ) : referrals?.length === 0 ? (
               <div className="text-center py-12">
@@ -467,7 +466,7 @@ export default function AffiliateDashboard() {
             <h3 className="text-lg font-semibold text-white mb-4">Commission History</h3>
             {commissionsLoading ? (
               <div className="text-center py-8">
-                <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto" />
+                <Spinner size="md" className="mx-auto" />
               </div>
             ) : commissions?.length === 0 ? (
               <div className="text-center py-12">
@@ -528,7 +527,7 @@ export default function AffiliateDashboard() {
             <h3 className="text-lg font-semibold text-white mb-4">Payout History</h3>
             {payoutsLoading ? (
               <div className="text-center py-8">
-                <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto" />
+                <Spinner size="md" className="mx-auto" />
               </div>
             ) : payouts?.length === 0 ? (
               <div className="text-center py-12">

@@ -22,6 +22,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { Spinner } from "@/components/ui/Spinner";
 import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
 import {
   Building2, Activity, FileText, Sparkles, BarChart3, Globe,
@@ -862,7 +863,7 @@ const AISectionCard = memo(({ section, isExpanded, onToggle }: { section: AISect
         <div className="px-ds-5 pb-ds-5">
           {section.isLoading && (
             <div className="flex items-center gap-ds-3 rounded-[12px] border border-gold-border/35 bg-gold-primary/[0.035] p-ds-4">
-              <div className="h-5 w-5 rounded-full border-2 border-gold-primary/25 border-t-gold-primary animate-spin" />
+              <Spinner size="sm" />
               <span className="text-[13px] text-gold-primary/75">Analyzing with AI + real-time data...</span>
             </div>
           )}
@@ -1176,7 +1177,7 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
           {storyLoading && (
             <div className="mb-ds-5 space-y-ds-3">
               <div className="mb-ds-2 flex items-center gap-ds-2">
-                <Loader2 className="w-4 h-4 text-[#C9A646] animate-spin" />
+                <Spinner size="sm" />
                 <span className="text-[13px] text-gold-primary/80">Analyzing fundamentals, financials & options flow...</span>
               </div>
               {[...Array(4)].map((_, i) => (
