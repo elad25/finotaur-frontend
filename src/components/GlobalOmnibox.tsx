@@ -1,14 +1,20 @@
 // src/components/GlobalOmnibox.tsx
 // =====================================================
-// GLOBAL COMMAND OMNIBOX — Phase 3
-// A smart search/command bar for the TopNav.
+// GLOBAL COMMAND OMNIBOX — Phase 4 (Koyfin-style)
+// A prominent search bar with live suggestions,
+// asset-class tabs, and rich result rows.
 // =====================================================
 // Features:
 //  - ⌘K / Ctrl+K to focus/open
 //  - Esc closes and blurs
 //  - ↑/↓ to navigate, Enter to run
-//  - Intent routing: ticker → Stock Analyzer, question → Fino, topic → nav
-//  - Empty state: hint + example chips + optional recently viewed
+//  - Live suggestions via useSymbolSuggest (debounced 150ms)
+//  - Asset-class tabs: All / Equities / ETFs / Mutual Funds /
+//    Indices / Forex / Crypto / Futures
+//  - Rich rows: flag + ticker + exchange/name + type badge
+//  - ETF → /app/etfs/:sym/overview, else → Stock Analyzer
+//  - Question intent → Ask Fino (top + bottom fallback)
+//  - Empty state: example chips + recently-viewed
 //  - Mobile: collapses to icon that opens full-width overlay
 //  - SSR-safe: all window/document/localStorage access gated
 // =====================================================
@@ -19,19 +25,54 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, X, TrendingUp, ArrowRight, Command } from 'lucide-react';
 import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxIntent';
 import { useFinoChat } from '@/contexts/FinoChatContext';
+import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+type AssetTab =
+  | 'All'
+  | 'Equities'
+  | 'ETFs'
+  | 'Mutual Funds'
+  | 'Indices'
+  | 'Forex'
+  | 'Crypto'
+  | 'Futures';
+
+const ASSET_TABS: AssetTab[] = [
+  'All',
+  'Equities',
+  'ETFs',
+  'Mutual Funds',
+  'Indices',
+  'Forex',
+  'Crypto',
+  'Futures',
+];
+
+// Map tab → assetType values that match it
+const TAB_FILTER: Record<AssetTab, SuggestItem['assetType'][]> = {
+  All:           [],
+  Equities:      ['stock'],
+  ETFs:          ['etf'],
+  'Mutual Funds':['unknown'], // no dedicated assetType yet; show nothing gracefully
+  Indices:       ['index'],
+  Forex:         ['fx'],
+  Crypto:        ['crypto'],
+  Futures:       ['futures'],
+};
+
 interface OmniboxResult {
   id: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   primary: string;
   secondary?: string;
   action: () => void;
@@ -66,7 +107,104 @@ function saveRecentTicker(symbol: string) {
 }
 
 // ---------------------------------------------------------------------------
-// ResultItem
+// Routing helper — returns the correct path for a suggest result
+// ---------------------------------------------------------------------------
+
+function routeForSuggest(
+  sym: string,
+  assetType: SuggestItem['assetType'],
+): string {
+  if (assetType === 'etf') return `/app/etfs/${sym}/overview`;
+  if (assetType === 'crypto') return '/app/crypto/overview';
+  if (assetType === 'fx') return '/app/forex/overview';
+  if (assetType === 'futures') return '/app/futures/overview';
+  // stock / index / unknown / undefined → Stock Analyzer
+  return `/app/ai/stock-analyzer?symbol=${sym}`;
+}
+
+// ---------------------------------------------------------------------------
+// Asset-type badge chip
+// ---------------------------------------------------------------------------
+
+const BADGE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  etf:     { bg: 'rgba(56,189,248,0.12)', text: '#38BDF8', label: 'ETF' },
+  stock:   { bg: 'rgba(201,166,70,0.10)', text: '#C9A646', label: 'Equity' },
+  crypto:  { bg: 'rgba(168,85,247,0.12)', text: '#A855F7', label: 'Crypto' },
+  fx:      { bg: 'rgba(52,211,153,0.12)', text: '#34D399', label: 'FX' },
+  futures: { bg: 'rgba(251,146,60,0.12)', text: '#FB923C', label: 'Futures' },
+  index:   { bg: 'rgba(148,163,184,0.12)', text: '#94A3B8', label: 'Index' },
+  unknown: { bg: 'rgba(100,100,100,0.10)', text: '#666', label: 'Asset' },
+};
+
+function TypeBadge({ assetType }: { assetType?: SuggestItem['assetType'] }) {
+  const key = assetType ?? 'unknown';
+  const style = BADGE_STYLES[key] ?? BADGE_STYLES.unknown;
+  return (
+    <span
+      className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded"
+      style={{ background: style.bg, color: style.text, letterSpacing: '0.04em' }}
+    >
+      {style.label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exchange flag
+// ---------------------------------------------------------------------------
+
+function ExchangeFlag({ exchange }: { exchange?: string }) {
+  if (!exchange) return null;
+  const upper = exchange.toUpperCase();
+  if (upper === 'US' || upper === 'NYSE' || upper === 'NASDAQ' || upper === 'AMEX') {
+    return <span className="flex-shrink-0 text-base leading-none" aria-label="US market">🇺🇸</span>;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Rich suggest row
+// ---------------------------------------------------------------------------
+
+interface SuggestRowProps {
+  item: SuggestItem;
+  highlighted: boolean;
+  onMouseEnter: () => void;
+  onClick: () => void;
+}
+
+function SuggestRow({ item, highlighted, onMouseEnter, onClick }: SuggestRowProps) {
+  return (
+    <button
+      type="button"
+      onMouseEnter={onMouseEnter}
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-md transition-colors ${
+        highlighted
+          ? 'bg-[#C9A646]/10 text-[#F4F4F4]'
+          : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
+      }`}
+    >
+      <ExchangeFlag exchange={item.exchange} />
+      <span className="flex-1 min-w-0">
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-sm font-bold text-[#F0F0F0] tracking-wide">{item.symbol}</span>
+          {item.exchange && (
+            <span className="text-[10px] text-[#555] font-normal uppercase">{item.exchange}</span>
+          )}
+        </span>
+        {item.name && (
+          <span className="block text-xs text-[#666] truncate leading-tight">{item.name}</span>
+        )}
+      </span>
+      <TypeBadge assetType={item.assetType} />
+      {highlighted && <ArrowRight className="flex-shrink-0 h-3.5 w-3.5 text-[#C9A646]/60 ml-1" />}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Generic ResultItem (for Ask-Fino + route results + recently-viewed)
 // ---------------------------------------------------------------------------
 
 interface ResultItemProps {
@@ -115,12 +253,55 @@ function GroupHeader({ label }: { label: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// ResultGroup — renders a named group only when it has items
+// Asset-class tab bar
 // ---------------------------------------------------------------------------
 
-interface GroupEntry {
-  groupLabel: string;
-  results: OmniboxResult[];
+interface TabBarProps {
+  activeTab: AssetTab;
+  onChange: (tab: AssetTab) => void;
+}
+
+function TabBar({ activeTab, onChange }: TabBarProps) {
+  return (
+    <div
+      className="flex items-center gap-0.5 px-2 pt-2 pb-1 overflow-x-auto scrollbar-hide border-b"
+      style={{ borderColor: 'rgba(201,166,70,0.10)' }}
+    >
+      {ASSET_TABS.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          onClick={() => onChange(tab)}
+          className="flex-shrink-0 px-2.5 py-1 rounded text-xs font-medium transition-all"
+          style={
+            activeTab === tab
+              ? {
+                  background: 'rgba(201,166,70,0.15)',
+                  color: '#C9A646',
+                  border: '1px solid rgba(201,166,70,0.30)',
+                }
+              : {
+                  background: 'transparent',
+                  color: '#666',
+                  border: '1px solid transparent',
+                }
+          }
+          onMouseEnter={(e) => {
+            if (activeTab !== tab) {
+              (e.currentTarget as HTMLButtonElement).style.color = '#A0A0A0';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activeTab !== tab) {
+              (e.currentTarget as HTMLButtonElement).style.color = '#666';
+            }
+          }}
+        >
+          {tab}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,70 +314,62 @@ export function GlobalOmnibox() {
   const { open: openFino } = useFinoChat();
 
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState<AssetTab>('All');
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // -------------------------------------------------------------------------
-  // Build result list from current query
+  // Debounce query → debouncedQuery (150ms)
   // -------------------------------------------------------------------------
 
-  const buildResults = useCallback(
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // -------------------------------------------------------------------------
+  // Live suggestions from API
+  // -------------------------------------------------------------------------
+
+  const suggestState = useSymbolSuggest(debouncedQuery);
+
+  // -------------------------------------------------------------------------
+  // Filter suggestions by active tab
+  // -------------------------------------------------------------------------
+
+  const filteredSuggestions: SuggestItem[] = (() => {
+    if (!debouncedQuery.trim()) return [];
+    const filters = TAB_FILTER[activeTab];
+    if (filters.length === 0) return suggestState.data; // All tab
+    return suggestState.data.filter((item) =>
+      filters.includes(item.assetType ?? 'unknown'),
+    );
+  })();
+
+  // -------------------------------------------------------------------------
+  // Intent classification (for question handling + fallback results)
+  // -------------------------------------------------------------------------
+
+  const intent = classifyIntent(query.trim());
+  const isQuestion = intent === 'question';
+
+  // -------------------------------------------------------------------------
+  // Build non-suggest results (Ask-Fino + route matches)
+  // -------------------------------------------------------------------------
+
+  const buildAuxResults = useCallback(
     (input: string): OmniboxResult[] => {
       const trimmed = input.trim();
-      const intent = classifyIntent(trimmed);
+      if (!trimmed) return [];
 
       const results: OmniboxResult[] = [];
+      const currentIntent = classifyIntent(trimmed);
 
-      if (!trimmed) {
-        // Empty state: recently viewed tickers
-        const recent = getRecentlyViewed();
-        recent.forEach((r) => {
-          results.push({
-            id: `recent-${r.symbol}`,
-            icon: <TrendingUp className="h-4 w-4" />,
-            primary: `Analyze ${r.symbol}`,
-            secondary: 'Recently viewed',
-            action: () => {
-              saveRecentTicker(r.symbol);
-              navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
-              close_();
-            },
-          });
-        });
-        return results;
-      }
-
-      if (intent === 'ticker') {
-        const sym = trimmed.toUpperCase();
-
-        // Primary: analyze
-        results.push({
-          id: 'ticker-analyze',
-          icon: <TrendingUp className="h-4 w-4" />,
-          primary: `Analyze ${sym}`,
-          secondary: 'Open in AI Stock Analyzer',
-          action: () => {
-            saveRecentTicker(sym);
-            navigate(`/app/ai/stock-analyzer?symbol=${sym}`);
-            close_();
-          },
-        });
-
-        // Secondary: Ask Fino about it
-        results.push({
-          id: 'ticker-fino',
-          icon: <img src="/fino-avatar.png" alt="" className="h-4 w-4 rounded-full object-cover" />,
-          primary: `Ask Fino about ${sym}`,
-          secondary: 'Open AI chat',
-          action: () => {
-            openFino({ path: location.pathname, ticker: sym, label: 'Ask Fino', query: `Tell me about ${sym}` });
-            close_();
-          },
-        });
-      } else if (intent === 'question') {
+      if (currentIntent === 'question') {
         // Ask Fino top result
         results.push({
           id: 'question-fino',
@@ -208,68 +381,23 @@ export function GlobalOmnibox() {
             close_();
           },
         });
+        return results;
+      }
 
-        // Also offer alphabetic ticker analysis if looks like a symbol embedded
-        const words = trimmed.split(/\s+/);
-        const possibleTicker = words.find((w) => /^[A-Z]{1,5}$/.test(w));
-        if (possibleTicker) {
-          results.push({
-            id: 'question-ticker',
-            icon: <TrendingUp className="h-4 w-4" />,
-            primary: `Analyze ${possibleTicker}`,
-            secondary: 'Open in AI Stock Analyzer',
-            action: () => {
-              saveRecentTicker(possibleTicker);
-              navigate(`/app/ai/stock-analyzer?symbol=${possibleTicker}`);
-              close_();
-            },
-          });
-        }
-      } else {
-        // Topic: navigate to matched routes, grouped
+      if (currentIntent === 'topic') {
         const matched = matchRoutes(trimmed);
-        if (matched.length > 0) {
-          matched.forEach((r: RouteTarget) => {
-            results.push({
-              id: `route-${r.path}`,
-              icon: <ArrowRight className="h-4 w-4" />,
-              primary: r.label,
-              secondary: r.group,
-              action: () => {
-                navigate(r.path);
-                close_();
-              },
-            });
-          });
-        }
-
-        // Always offer Ask Fino as a fallback for topics
-        results.push({
-          id: 'topic-fino',
-          icon: <img src="/fino-avatar.png" alt="" className="h-4 w-4 rounded-full object-cover" />,
-          primary: `Ask Fino about "${trimmed.length > 40 ? trimmed.slice(0, 40) + '…' : trimmed}"`,
-          secondary: 'Open AI chat',
-          action: () => {
-            openFino({ path: location.pathname, label: 'Ask Fino', query: trimmed });
-            close_();
-          },
-        });
-
-        // If the input is purely alphabetic, also offer direct ticker analysis
-        if (/^[A-Za-z]+$/.test(trimmed)) {
-          const sym = trimmed.toUpperCase();
+        matched.forEach((r: RouteTarget) => {
           results.push({
-            id: 'topic-ticker',
-            icon: <TrendingUp className="h-4 w-4" />,
-            primary: `Analyze ${sym} as a ticker`,
-            secondary: 'Open in AI Stock Analyzer',
+            id: `route-${r.path}`,
+            icon: <ArrowRight className="h-4 w-4" />,
+            primary: r.label,
+            secondary: r.group,
             action: () => {
-              saveRecentTicker(sym);
-              navigate(`/app/ai/stock-analyzer?symbol=${sym}`);
+              navigate(r.path);
               close_();
             },
           });
-        }
+        });
       }
 
       return results;
@@ -277,31 +405,57 @@ export function GlobalOmnibox() {
     [navigate, location.pathname, openFino],
   );
 
+  // Ask-Fino fallback row (always at the bottom when there is a query)
+  const finoFallbackRow: OmniboxResult | null = query.trim()
+    ? {
+        id: 'fino-fallback',
+        icon: (
+          <img src="/fino-avatar.png" alt="" className="h-4 w-4 rounded-full object-cover" />
+        ),
+        primary: `Ask Fino about "${query.trim().length > 40 ? query.trim().slice(0, 40) + '…' : query.trim()}"`,
+        secondary: 'Open AI chat',
+        action: () => {
+          openFino({ path: location.pathname, label: 'Ask Fino', query: query.trim() });
+          close_();
+        },
+      }
+    : null;
+
+  const auxResults = buildAuxResults(query);
+
   // -------------------------------------------------------------------------
-  // Derived state
+  // Flat list of all items in render order (for keyboard nav)
+  //   - If question: [fino-top, ...filteredSuggestions, fino-fallback]
+  //   - Else: [...auxResults, ...filteredSuggestions, fino-fallback]
   // -------------------------------------------------------------------------
 
-  const results = buildResults(query);
+  type FlatItem =
+    | { kind: 'result'; data: OmniboxResult }
+    | { kind: 'suggest'; data: SuggestItem };
 
-  // Group results for rendering (secondary acts as group name for route results)
-  const groupedSections = (() => {
-    // For non-topic intents there's only one logical group; we skip headers.
-    const intent = classifyIntent(query.trim());
-    if (intent !== 'topic' || !query.trim()) return null;
+  const flatItems: FlatItem[] = (() => {
+    if (!query.trim()) return [];
 
-    const groups: Record<string, OmniboxResult[]> = {};
-    results.forEach((r) => {
-      const g = r.secondary || 'Other';
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(r);
-    });
-    return Object.entries(groups).map(([groupLabel, items]): GroupEntry => ({ groupLabel, results: items }));
+    const items: FlatItem[] = [];
+
+    if (isQuestion) {
+      // Ask-Fino top
+      if (auxResults[0]) items.push({ kind: 'result', data: auxResults[0] });
+    } else {
+      // Route matches at top
+      auxResults.forEach((r) => items.push({ kind: 'result', data: r }));
+    }
+
+    // Live suggestions (filtered by tab)
+    filteredSuggestions.forEach((s) => items.push({ kind: 'suggest', data: s }));
+
+    // Ask-Fino fallback at bottom
+    if (finoFallbackRow && !isQuestion) {
+      items.push({ kind: 'result', data: finoFallbackRow });
+    }
+
+    return items;
   })();
-
-  // Flat list of all results in render order (for keyboard nav)
-  const flatResults = groupedSections
-    ? groupedSections.flatMap((g) => g.results)
-    : results;
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -310,14 +464,26 @@ export function GlobalOmnibox() {
   function close_() {
     setIsOpen(false);
     setQuery('');
+    setDebouncedQuery('');
     setHighlightIndex(0);
+    setActiveTab('All');
     inputRef.current?.blur();
   }
 
   function openOmnibox() {
     setIsOpen(true);
-    // Defer focus so the input is rendered/visible first
     setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function runItem(item: FlatItem) {
+    if (item.kind === 'result') {
+      item.data.action();
+    } else {
+      const sym = item.data.symbol;
+      saveRecentTicker(sym);
+      navigate(routeForSuggest(sym, item.data.assetType));
+      close_();
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -367,24 +533,29 @@ export function GlobalOmnibox() {
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightIndex((i) => Math.min(i + 1, flatResults.length - 1));
+      setHighlightIndex((i) => Math.min(i + 1, flatItems.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const target = flatResults[highlightIndex] ?? flatResults[0];
-      target?.action();
+      const target = flatItems[highlightIndex] ?? flatItems[0];
+      if (target) runItem(target);
     }
   };
 
-  // Reset highlight when results change
+  // Reset highlight when query / tab changes
   useEffect(() => {
     setHighlightIndex(0);
+  }, [query, activeTab]);
+
+  // Reset tab when query clears
+  useEffect(() => {
+    if (!query.trim()) setActiveTab('All');
   }, [query]);
 
   // -------------------------------------------------------------------------
-  // Empty-state example chips
+  // Example chips
   // -------------------------------------------------------------------------
 
   const EXAMPLE_CHIPS = ['NVDA', 'TSLA', 'AAPL', 'SPY'];
@@ -393,17 +564,38 @@ export function GlobalOmnibox() {
   // Render helpers
   // -------------------------------------------------------------------------
 
-  // Running index for keyboard highlight tracking across groups
-  let runningIdx = 0;
+  function renderItemAt(item: FlatItem, idx: number) {
+    if (item.kind === 'result') {
+      return (
+        <ResultItem
+          key={item.data.id}
+          result={item.data}
+          highlighted={highlightIndex === idx}
+          onMouseEnter={() => setHighlightIndex(idx)}
+          onClick={item.data.action}
+        />
+      );
+    }
+    // suggest
+    return (
+      <SuggestRow
+        key={item.data.symbol}
+        item={item.data}
+        highlighted={highlightIndex === idx}
+        onMouseEnter={() => setHighlightIndex(idx)}
+        onClick={() => runItem(item)}
+      />
+    );
+  }
 
-  function renderResults() {
+  function renderDropdownBody() {
     if (!query.trim()) {
       // Empty state
       const recent = getRecentlyViewed();
       return (
         <div className="p-3 space-y-3">
           <p className="text-xs text-[#555] leading-relaxed px-1">
-            Type a ticker (e.g. NVDA) to analyze with AI, or ask Fino a question
+            Type a ticker (e.g. NVDA) to search, or ask Fino a question
           </p>
           <div className="flex flex-wrap gap-2">
             {EXAMPLE_CHIPS.map((sym) => (
@@ -412,7 +604,6 @@ export function GlobalOmnibox() {
                 type="button"
                 onClick={() => {
                   setQuery(sym);
-                  // immediately run
                   saveRecentTicker(sym);
                   navigate(`/app/ai/stock-analyzer?symbol=${sym}`);
                   close_();
@@ -432,83 +623,58 @@ export function GlobalOmnibox() {
           {recent.length > 0 && (
             <div>
               <GroupHeader label="Recently viewed" />
-              {recent.map((r, i) => {
-                const idx = i;
-                return (
-                  <ResultItem
-                    key={r.symbol}
-                    result={{
-                      id: `recent-${r.symbol}`,
-                      icon: <TrendingUp className="h-4 w-4" />,
-                      primary: `Analyze ${r.symbol}`,
-                      action: () => {
-                        saveRecentTicker(r.symbol);
-                        navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
-                        close_();
-                      },
-                    }}
-                    highlighted={highlightIndex === idx}
-                    onMouseEnter={() => setHighlightIndex(idx)}
-                    onClick={() => {
+              {recent.map((r, i) => (
+                <ResultItem
+                  key={r.symbol}
+                  result={{
+                    id: `recent-${r.symbol}`,
+                    icon: <TrendingUp className="h-4 w-4" />,
+                    primary: `Analyze ${r.symbol}`,
+                    action: () => {
                       saveRecentTicker(r.symbol);
                       navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
                       close_();
-                    }}
-                  />
-                );
-              })}
+                    },
+                  }}
+                  highlighted={highlightIndex === i}
+                  onMouseEnter={() => setHighlightIndex(i)}
+                  onClick={() => {
+                    saveRecentTicker(r.symbol);
+                    navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
+                    close_();
+                  }}
+                />
+              ))}
             </div>
           )}
         </div>
       );
     }
 
-    if (flatResults.length === 0) {
-      return (
-        <div className="p-4 text-center text-xs text-[#555]">
-          No results for "{query}"
-        </div>
-      );
-    }
+    // Has query — show tabs + results
+    const showLoadingDots =
+      suggestState.status === 'loading' && filteredSuggestions.length === 0;
 
-    if (groupedSections) {
-      // Grouped rendering (topic intent)
-      return (
-        <div className="p-2">
-          {groupedSections.map((group) => (
-            <div key={group.groupLabel}>
-              <GroupHeader label={group.groupLabel} />
-              {group.results.map((r) => {
-                const idx = runningIdx++;
-                return (
-                  <ResultItem
-                    key={r.id}
-                    result={r}
-                    highlighted={highlightIndex === idx}
-                    onMouseEnter={() => setHighlightIndex(idx)}
-                    onClick={r.action}
-                  />
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    // Flat rendering (ticker / question intent)
     return (
-      <div className="p-2">
-        {flatResults.map((r, idx) => (
-          <ResultItem
-            key={r.id}
-            result={r}
-            highlighted={highlightIndex === idx}
-            onMouseEnter={() => setHighlightIndex(idx)}
-            onClick={r.action}
-          />
-        ))}
-      </div>
+      <>
+        <TabBar activeTab={activeTab} onChange={setActiveTab} />
+
+        <div className="p-2">
+          {flatItems.length === 0 && !showLoadingDots && (
+            <div className="py-6 text-center text-xs text-[#555]">
+              {activeTab === 'All'
+                ? `No results for "${query}"`
+                : `No matches in ${activeTab}`}
+            </div>
+          )}
+
+          {showLoadingDots && (
+            <div className="py-4 text-center text-xs text-[#444]">Searching…</div>
+          )}
+
+          {flatItems.map((item, idx) => renderItemAt(item, idx))}
+        </div>
+      </>
     );
   }
 
@@ -519,10 +685,8 @@ export function GlobalOmnibox() {
   return (
     <>
       {/*
-        ── Desktop: luxurious centered command bar ─────────────────────────
-        Width is fixed via the parent wrapper in TopNav (max-w-xl/2xl).
-        We fill that wrapper 100% so the bar spans it edge-to-edge.
-        The JS-animated width has been removed; CSS handles all transitions.
+        ── Desktop: prominent command bar ──────────────────────────────────
+        Height bumped to 48px, stronger gold border/glow.
       */}
       <div
         ref={containerRef}
@@ -532,25 +696,25 @@ export function GlobalOmnibox() {
         <div
           className="omnibox-trigger relative flex items-center w-full rounded-xl transition-all duration-200"
           style={{
-            height: 42,
+            height: 48,
             background: '#111111',
             border: isOpen
-              ? '1px solid rgba(201,166,70,0.40)'
-              : '1px solid rgba(201,166,70,0.18)',
+              ? '1px solid rgba(201,166,70,0.55)'
+              : '1px solid rgba(201,166,70,0.24)',
             boxShadow: isOpen
-              ? '0 0 0 3px rgba(201,166,70,0.08), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(201,166,70,0.04)'
+              ? '0 0 0 3px rgba(201,166,70,0.10), 0 2px 16px rgba(0,0,0,0.6), inset 0 1px 0 rgba(201,166,70,0.06)'
               : '0 0 0 1px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)',
           }}
           onMouseEnter={(e) => {
             if (!isOpen) {
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.30)';
+              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.38)';
               (e.currentTarget as HTMLDivElement).style.boxShadow =
-                '0 0 0 1px rgba(0,0,0,0.3), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.02)';
+                '0 0 0 1px rgba(0,0,0,0.3), 0 2px 14px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.02)';
             }
           }}
           onMouseLeave={(e) => {
             if (!isOpen) {
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.18)';
+              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.24)';
               (e.currentTarget as HTMLDivElement).style.boxShadow =
                 '0 0 0 1px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)';
             }
@@ -558,8 +722,12 @@ export function GlobalOmnibox() {
         >
           {/* Search icon — muted gold */}
           <Search
-            className="absolute left-3.5 h-4 w-4 flex-shrink-0 pointer-events-none"
-            style={{ color: isOpen ? 'rgba(201,166,70,0.7)' : 'rgba(201,166,70,0.40)' }}
+            className="absolute left-3.5 h-4.5 w-4.5 flex-shrink-0 pointer-events-none"
+            style={{
+              width: 18,
+              height: 18,
+              color: isOpen ? 'rgba(201,166,70,0.80)' : 'rgba(201,166,70,0.45)',
+            }}
           />
 
           <input
@@ -573,12 +741,8 @@ export function GlobalOmnibox() {
             onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder="Search ticker, company, or ask Fino…"
-            className="w-full bg-transparent pl-10 pr-20 text-sm text-[#E8E8E8] outline-none"
-            style={{
-              caretColor: '#C9A646',
-            }}
-            // placeholder color applied via global CSS in index.css / globals.css;
-            // inline fallback via the class below
+            className="w-full bg-transparent pl-11 pr-20 text-[15px] text-[#E8E8E8] outline-none"
+            style={{ caretColor: '#C9A646' }}
             autoComplete="off"
             spellCheck={false}
           />
@@ -598,14 +762,13 @@ export function GlobalOmnibox() {
                 <X className="h-3.5 w-3.5" />
               </button>
             ) : (
-              /* ⌘K pill — tasteful bordered kbd chip */
               <span
                 className="flex items-center gap-0.5 select-none"
                 style={{
                   padding: '2px 6px',
                   borderRadius: 5,
-                  border: '1px solid rgba(201,166,70,0.20)',
-                  background: 'rgba(201,166,70,0.05)',
+                  border: '1px solid rgba(201,166,70,0.22)',
+                  background: 'rgba(201,166,70,0.06)',
                   color: 'rgba(201,166,70,0.50)',
                   fontSize: 10,
                   fontFamily: 'ui-monospace, monospace',
@@ -623,17 +786,17 @@ export function GlobalOmnibox() {
         {/* ── Dropdown / results panel ── */}
         {isOpen && (
           <div
-            className="absolute left-0 right-0 top-full mt-2 rounded-xl z-[200]"
+            className="absolute left-0 right-0 top-full mt-2 rounded-xl z-[200] overflow-hidden"
             style={{
               background: '#0D0D0D',
               border: '1px solid rgba(201,166,70,0.18)',
               boxShadow:
                 '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,166,70,0.04), inset 0 1px 0 rgba(201,166,70,0.03)',
-              maxHeight: 420,
+              maxHeight: 460,
               overflowY: 'auto',
             }}
           >
-            {renderResults()}
+            {renderDropdownBody()}
           </div>
         )}
       </div>
@@ -656,7 +819,7 @@ export function GlobalOmnibox() {
         >
           <div
             className="flex flex-col flex-1 overflow-hidden"
-            style={{ background: '#0A0A0A', maxHeight: '85vh', marginTop: 0 }}
+            style={{ background: '#0A0A0A', maxHeight: '90vh', marginTop: 0 }}
           >
             {/* Mobile input bar */}
             <div
@@ -686,7 +849,7 @@ export function GlobalOmnibox() {
 
             {/* Mobile results */}
             <div className="overflow-y-auto flex-1">
-              {renderResults()}
+              {renderDropdownBody()}
             </div>
           </div>
         </div>
