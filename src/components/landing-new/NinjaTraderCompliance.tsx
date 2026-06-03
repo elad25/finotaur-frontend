@@ -23,7 +23,7 @@ const NinjaTraderCompliance = () => {
       aria-labelledby="compliance-disclosures-heading"
     >
       <div className="max-w-5xl mx-auto px-6 lg:px-8 py-4">
-        <details open className="group">
+        <details className="group">
           <summary
             id="compliance-disclosures-heading"
             className="flex items-center justify-between cursor-pointer list-none text-[10px] uppercase tracking-[0.2em] text-gold-primary/60 font-medium py-2 hover:text-gold-primary/80 transition-colors"

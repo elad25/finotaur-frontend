@@ -70,17 +70,17 @@ const tabs: Tab[] = [
   {
     key: "ai",
     icon: Brain,
-    label: "AI Insights",
-    status: "soon",
-    eyebrow: "AI Insights",
-    title: "The mistakes you'd never spot yourself.",
+    label: "Meet FINO",
+    status: "live",
+    eyebrow: "Meet FINO",
+    title: "Your AI assistant, everywhere you trade.",
     description:
-      "FINOTAUR reads every trade you've logged, finds the costly patterns hidden in your history, and surfaces them in plain English.",
+      "Ask FINO anything — break down a trade in your journal, decode an options chain, or get context on any ticker. It's one tap away on every page of FINOTAUR.",
     bullets: [
-      "Pattern detection across thousands of trades",
-      "Tilt windows, revenge trades, sizing drift",
-      "Personalized weekly review",
-      "Plain-English plan to fix the leak",
+      "Lives in your journal and across the whole site",
+      "Ask about any trade, ticker, or setup",
+      "Plain-English answers in seconds",
+      "Always one tap away",
     ],
   },
   {
@@ -208,6 +208,47 @@ const JournalDashboardMock = () => {
           <span>Apr 22</span>
           <span>May 21</span>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const MeetFinoIntro = () => {
+  const [phase, setPhase] = useState<"greeting" | "idle">("greeting");
+  return (
+    <div className="relative aspect-[16/10] flex flex-col items-center justify-center text-center px-6 py-8 overflow-hidden">
+      {/* center radial gold glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(circle at center, var(--gold-border) 0%, transparent 60%)",
+        }}
+        aria-hidden="true"
+      />
+      <div className="relative z-10 flex flex-col items-center">
+        <video
+          key={phase}
+          className="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover border border-gold-primary/40 shadow-card-featured bg-section-card-deep"
+          src={phase === "greeting" ? "/fino/fino-greeting.mp4" : "/fino/fino-idle-long.mp4"}
+          poster="/fino/fino-idle-long-poster.png"
+          autoPlay
+          muted
+          playsInline
+          preload="metadata"
+          loop={phase === "idle"}
+          onEnded={() => setPhase("idle")}
+          aria-label="FINO — the FINOTAUR AI assistant"
+        />
+        <div className="mt-5 text-[10px] font-medium uppercase tracking-[0.3em] text-gold-primary/80">
+          Meet FINO
+        </div>
+        <h4 className="font-wordmark font-medium text-2xl text-ink-primary mt-1.5">
+          Your AI assistant
+        </h4>
+        <p className="text-sm text-ink-secondary mt-2 max-w-xs">
+          Ask anything — in your journal or anywhere on FINOTAUR. One tap away, on every page.
+        </p>
       </div>
     </div>
   );
@@ -458,26 +499,28 @@ const JournalToolsTabs = () => {
               />
 
               {/* Browser chrome */}
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900">
-                <div className="flex gap-1.5">
+              <div className="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900">
+                <div className="flex gap-1.5 shrink-0">
                   <div className="w-3 h-3 rounded-full bg-status-error/60" />
                   <div className="w-3 h-3 rounded-full bg-status-warning/60" />
                   <div className="w-3 h-3 rounded-full bg-status-success/60" />
                 </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06]">
-                    <span className="text-[11px] text-ink-tertiary font-mono">
+                <div className="flex-1 min-w-0 flex justify-center">
+                  <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06] min-w-0 max-w-full overflow-hidden">
+                    <span className="block truncate text-[11px] text-ink-tertiary font-mono">
                       {activeTab.screenshot?.url ??
                         `finotaur.com/app/journal/${activeTab.key}`}
                     </span>
                   </div>
                 </div>
-                <div className="w-12" />
+                <div className="w-6 sm:w-12 shrink-0" />
               </div>
 
               {/* Body */}
               {activeTab.key === "journal" ? (
                 <JournalDashboardMock />
+              ) : activeTab.key === "ai" ? (
+                <MeetFinoIntro />
               ) : activeTab.screenshot ? (
                 <img
                   src={activeTab.screenshot.src}
