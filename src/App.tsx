@@ -253,7 +253,7 @@ const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsA
 import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
 // ETFs
 const ETFOverview = lazy(() => import("@/pages/app/etfs/Overview"));
-const ETFDetail  = lazy(() => import("@/pages/app/etfs/ETFDetail"));
+const ETFLayout  = lazy(() => import("@/pages/app/etfs/ETFLayout"));
 
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
@@ -500,13 +500,13 @@ function AppContent() {
           <Route path="options/earnings-iv-crush" element={<OptionsComingSoon title="Earnings IV Crush" description="Earnings volatility crush analysis is coming in a future release." />} />
           <Route path="options/shortcuts" element={<OptionsComingSoon title="Options Shortcuts" description="Quick-access options tools are coming in a future release." />} />
 
-          {/* ETFs — live section (ETF Analyzer) */}
+          {/* ETFs — live section (ETF Analyzer, now a Markets member) */}
           <Route path="etfs" element={<Navigate to="/app/etfs/overview" replace />} />
           <Route path="etfs/overview" element={<LockedRoute domainId="etfs"><ETFOverview /></LockedRoute>} />
           {/* /app/etfs/:symbol → redirect to /app/etfs/:symbol/overview */}
           <Route path="etfs/:symbol" element={<LockedRoute domainId="etfs"><ETFSymbolRedirect /></LockedRoute>} />
-          {/* /app/etfs/:symbol/:section → ETF detail with section routing */}
-          <Route path="etfs/:symbol/:section" element={<LockedRoute domainId="etfs"><ETFDetail /></LockedRoute>} />
+          {/* /app/etfs/:symbol/:section → ETFLayout with inline header tabs */}
+          <Route path="etfs/:symbol/:section" element={<LockedRoute domainId="etfs"><ETFLayout /></LockedRoute>} />
           {/* Legacy /app/etf/* → redirect to new /app/etfs/* */}
           <Route path="etf" element={<Navigate to="/app/etfs/overview" replace />} />
           <Route path="etf/overview"    element={<Navigate to="/app/etfs/overview" replace />} />
