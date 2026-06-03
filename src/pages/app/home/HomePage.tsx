@@ -132,11 +132,12 @@ export default function HomePage() {
       {/* ── 2. ASK FINO CARD ────────────────────────────────────────── */}
       <Card variant="featured" padding="default">
         <div className="flex items-center gap-ds-4">
-          {/* Big FINO — real animated asset with a native alpha (transparent)
-              background. Uses the same bipedal WebP as the landing page
-              (v3, #488): 2 legs + 2 arms, no black box, no screen-blend hack. */}
+          {/* Big FINO — real animated asset (native alpha, transparent).
+              ~60s home-hub loop with four expression beats (wave hello,
+              curious, hop, celebrate) so it never reads as a short loop.
+              Bipedal (2 legs + 2 arms), seeded from the FINO reference. */}
           <img
-            src="/fino/fino-meet-anim-v3.webp"
+            src="/fino/fino-home-loop.webp"
             alt=""
             aria-hidden="true"
             draggable={false}
