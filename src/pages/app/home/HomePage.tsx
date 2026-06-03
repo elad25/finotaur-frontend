@@ -6,7 +6,7 @@
  */
 
 import { useState, type KeyboardEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
   Brain,
@@ -129,10 +129,9 @@ export default function HomePage() {
 
       {/* ── 2. ASK FINO CARD ────────────────────────────────────────── */}
       <Card variant="featured" padding="default">
-        {/* Header row */}
-        <div className="mb-ds-4 flex items-center gap-ds-3">
-          {/* Animated FINO — full-body clip; mix-blend drops the near-black
-              video background so he floats frameless on the card (no box). */}
+        <div className="flex items-center gap-ds-4">
+          {/* Big animated FINO on the left — mix-blend drops the near-black
+              video background so he floats frameless (no box). */}
           <video
             src="/fino/fino-meet-fullbody.mp4"
             poster="/fino/fino-meet-fullbody-poster.jpg"
@@ -141,67 +140,69 @@ export default function HomePage() {
             muted
             playsInline
             aria-hidden="true"
-            className="h-24 w-24 flex-shrink-0 object-contain"
+            className="h-40 w-40 flex-shrink-0 self-center object-contain"
             style={{ mixBlendMode: 'screen' }}
           />
-          <div>
+
+          {/* Right column — title, compact input, chips */}
+          <div className="flex-1 min-w-0">
             <p className="text-base font-semibold text-gold-primary">Ask Fino</p>
             <p className="text-sm text-ink-secondary mt-1">
               Ask anything about your trading, setups, or the markets.
             </p>
+
+            {/* Input + send button (compact) */}
+            <div className="flex items-center gap-ds-2 mt-ds-3">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask Fino anything..."
+                aria-label="Ask Fino a question"
+                className="
+                  flex-1 min-w-0 rounded-md bg-surface-base border border-border-ds-subtle
+                  px-ds-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-secondary
+                  focus:outline-none focus:border-gold-border transition-colors
+                "
+              />
+              <Button
+                variant="gold"
+                size="compact"
+                showArrow={false}
+                onClick={() => askFino(inputValue)}
+                aria-label="Send question to Fino"
+              >
+                <Send className="h-4 w-4" aria-hidden="true" />
+                Send
+              </Button>
+            </div>
+
+            {/* Prompt chips */}
+            <div className="flex flex-wrap gap-2 mt-ds-3">
+              {PROMPT_CHIPS.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => {
+                    if (chip.query) {
+                      open({ path: '/app/home', label: 'Ask Fino', query: chip.query });
+                    } else {
+                      open({ path: '/app/home', label: 'Ask Fino' });
+                    }
+                  }}
+                  className="
+                    rounded-sm border border-border-ds-subtle px-3 py-1.5
+                    text-xs text-ink-secondary
+                    hover:text-gold-primary hover:border-gold-border
+                    transition-colors cursor-pointer
+                  "
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Input + send button */}
-        <div className="flex items-center gap-ds-3">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask Fino anything..."
-            aria-label="Ask Fino a question"
-            className="
-              flex-1 rounded-md bg-surface-base border border-border-ds-subtle
-              px-ds-4 py-2 text-sm text-ink-primary placeholder:text-ink-secondary
-              focus:outline-none focus:border-gold-border transition-colors
-            "
-          />
-          <Button
-            variant="gold"
-            size="compact"
-            showArrow={false}
-            onClick={() => askFino(inputValue)}
-            aria-label="Send question to Fino"
-          >
-            <Send className="h-4 w-4" aria-hidden="true" />
-            Send
-          </Button>
-        </div>
-
-        {/* Prompt chips */}
-        <div className="flex flex-wrap gap-2 mt-ds-4">
-          {PROMPT_CHIPS.map((chip) => (
-            <button
-              key={chip.label}
-              type="button"
-              onClick={() => {
-                if (chip.query) {
-                  open({ path: '/app/home', label: 'Ask Fino', query: chip.query });
-                } else {
-                  open({ path: '/app/home', label: 'Ask Fino' });
-                }
-              }}
-              className="
-                rounded-sm border border-border-ds-subtle px-3 py-1.5
-                text-xs text-ink-secondary
-                hover:text-gold-primary hover:border-gold-border
-                transition-colors cursor-pointer
-              "
-            >
-              {chip.label}
-            </button>
-          ))}
         </div>
       </Card>
 
@@ -276,7 +277,7 @@ export default function HomePage() {
                 aria-label={`Go to ${domain.label}`}
                 className="
                   cursor-pointer
-                  hover:border-gold-border
+                  hover:border-gold-border hover:bg-[#C9A646]/10
                   transition-colors
                 "
               >
@@ -313,7 +314,7 @@ export default function HomePage() {
               }
             }}
             aria-label="Log today's trades"
-            className="cursor-pointer hover:border-gold-border transition-colors"
+            className="cursor-pointer hover:border-gold-border hover:bg-[#C9A646]/10 transition-colors"
           >
             <p className="text-sm font-semibold text-ink-primary">Log today&apos;s trades</p>
             <p className="text-xs text-ink-secondary mt-1">Keep your journal up to date.</p>
@@ -331,37 +332,12 @@ export default function HomePage() {
               }
             }}
             aria-label="Run an AI analysis"
-            className="cursor-pointer hover:border-gold-border transition-colors"
+            className="cursor-pointer hover:border-gold-border hover:bg-[#C9A646]/10 transition-colors"
           >
             <p className="text-sm font-semibold text-ink-primary">Run an AI analysis</p>
             <p className="text-xs text-ink-secondary mt-1">Get AI-powered insights on any stock.</p>
           </Card>
         </div>
-      </section>
-
-      {/* ── 5. RESOURCES ────────────────────────────────────────────── */}
-      <section aria-labelledby="resources-heading">
-        <div className="mb-ds-4">
-          <Eyebrow id="resources-heading">Resources</Eyebrow>
-        </div>
-        <ul className="space-y-2">
-          <li>
-            <Link
-              to="/app/all-markets/pricing"
-              className="text-sm text-ink-secondary hover:text-gold-primary transition-colors"
-            >
-              Pricing
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/app/journal/academy"
-              className="text-sm text-ink-secondary hover:text-gold-primary transition-colors"
-            >
-              Academy
-            </Link>
-          </li>
-        </ul>
       </section>
 
       </div>
