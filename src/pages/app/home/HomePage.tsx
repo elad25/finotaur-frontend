@@ -133,10 +133,10 @@ export default function HomePage() {
       <Card variant="featured" padding="default">
         <div className="flex items-center gap-ds-4">
           {/* Big FINO — real animated asset with a native alpha (transparent)
-              background. Uses the same transparent WebP as the landing page
-              (#482), so there is no black box and no screen-blend hack. */}
+              background. Uses the same bipedal WebP as the landing page
+              (v3, #488): 2 legs + 2 arms, no black box, no screen-blend hack. */}
           <img
-            src="/fino/fino-meet-anim.webp"
+            src="/fino/fino-meet-anim-v3.webp"
             alt=""
             aria-hidden="true"
             draggable={false}
