@@ -24,7 +24,6 @@ import { Button } from '@/components/ds/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import FinoAvatar from '@/components/fino/FinoAvatar';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { computeGreeting } from '@/pages/app/ai/copilot/hooks/useDailyBrief';
 import { domains, domainOrder, isDomainVisible } from '@/constants/nav';
@@ -105,7 +104,11 @@ export default function HomePage() {
       <Card variant="featured" padding="default">
         {/* Header row */}
         <div className="mb-ds-4 flex items-center gap-ds-3">
-          <FinoAvatar thinking={false} assistantCount={0} size={44} className="rounded-full border border-gold-border flex-shrink-0" />
+          <img
+            src="/fino/fino-meet-fullbody-poster.jpg"
+            alt="FINO"
+            className="h-20 w-20 flex-shrink-0 object-contain"
+          />
           <div>
             <p className="text-base font-semibold text-gold-primary">Ask Fino</p>
             <p className="text-sm text-ink-secondary mt-1">
