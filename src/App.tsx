@@ -142,6 +142,7 @@ const DesignLab = lazy(() => import("@/pages/DesignLab"));
 const PlansPage = lazy(() => import("@/pages/app/Plans"));
 const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
+const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
 const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
 const WelcomePopup = lazy(() => import("@/components/WelcomePopup"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
@@ -452,8 +453,9 @@ function AppContent() {
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><MentorViewProvider><SuspenseRoute><ProtectedAppLayout /></SuspenseRoute></MentorViewProvider></ProtectedRoute>}>
-          <Route index element={<Navigate to="/app/top-secret" replace />} />
-          
+          <Route index element={<Navigate to="/app/home" replace />} />
+          <Route path="home" element={<SuspenseRoute><HomePage /></SuspenseRoute>} />
+
           {/* ALL MARKETS */}
           <Route path="all-markets/overview" element={<SuspenseRoute><AllMarketsOverview /></SuspenseRoute>} />
           <Route path="all-markets/chart" element={<SuspenseRoute><AllMarketsChart /></SuspenseRoute>} />

@@ -20,6 +20,7 @@ const NO_SIDEBAR_ROUTES = [
   // Phase 1: War Zone and Top Secret now have their own sidebars — removed from this list.
   // '/app/all-markets/warzone',  // War Zone has sidebar now
   // '/app/top-secret',           // Top Secret has sidebar now
+  '/app/home',              // Home hub renders full-width (no product sidebar needed)
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
   '/app/settings',
