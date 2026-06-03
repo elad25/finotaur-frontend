@@ -97,18 +97,18 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
       const raw = (data ?? []) as TickerSearchItem[];
       const qUp = q.toUpperCase();
 
-      // Client-side relevance filter + sort so only actually matching items are shown.
+      // Client-side relevance filter + sort. This is a TICKER field, so match
+      // ONLY on the symbol (users type the symbol, not the company name).
+      // Matching the company name caused junk (e.g. "E-mini" matched short
+      // queries via the 'i' in the name). Items whose symbol doesn't match are
+      // dropped entirely.
       // Category 0: symbol starts with query (strongest match)
       // Category 1: symbol contains query but doesn't start with it
-      // Category 2: company name contains query
-      // Items that match none are dropped entirely.
       const scored = raw
         .map((item) => {
           const sym = item.symbol.toUpperCase();
-          const name = item.name.toUpperCase();
           if (sym.startsWith(qUp)) return { item, rank: 0 };
           if (sym.includes(qUp)) return { item, rank: 1 };
-          if (name.includes(qUp)) return { item, rank: 2 };
           return null;
         })
         .filter((x): x is { item: TickerSearchItem; rank: number } => x !== null)
