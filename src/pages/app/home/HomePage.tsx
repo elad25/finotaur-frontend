@@ -91,7 +91,34 @@ export default function HomePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-ds-5 py-ds-6 space-y-ds-6">
+    <div className="relative min-h-full overflow-hidden">
+      {/* ── GOLD ATMOSPHERE — subtle institutional glow behind the hub ── */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          backgroundImage: `
+            linear-gradient(rgba(201,166,70,0.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(201,166,70,0.04) 1px, transparent 1px)
+          `,
+          backgroundSize: '48px 48px',
+          maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 88%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 88%)',
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(circle at 50% 0%, rgba(244,217,123,0.17), transparent 34%),
+            radial-gradient(circle at 86% 4%, rgba(201,166,70,0.11), transparent 26%),
+            radial-gradient(circle at 12% 10%, rgba(201,166,70,0.07), transparent 28%)
+          `,
+        }}
+      />
+
+      <div className="relative z-10 mx-auto w-full max-w-5xl px-ds-5 py-ds-6 space-y-ds-6">
 
       {/* ── 1. GREETING ─────────────────────────────────────────────── */}
       <div className="text-center">
@@ -329,6 +356,7 @@ export default function HomePage() {
         </ul>
       </section>
 
+      </div>
     </div>
   );
 }
