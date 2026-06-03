@@ -227,7 +227,7 @@ const MeetFinoIntro = () => {
       />
       <div className="relative z-10 flex flex-col items-start">
         <video
-          className="w-full max-w-[320px] sm:max-w-[480px] h-auto"
+          className="w-full max-w-[320px] sm:max-w-[480px] h-auto mix-blend-screen"
           src="/fino/fino-meet-fullbody.mp4"
           poster="/fino/fino-meet-fullbody-poster.jpg"
           autoPlay
@@ -237,15 +237,6 @@ const MeetFinoIntro = () => {
           preload="metadata"
           aria-label="FINO — the FINOTAUR AI assistant"
         />
-        <div className="mt-5 text-[10px] font-medium uppercase tracking-[0.3em] text-gold-primary/80">
-          Meet FINO
-        </div>
-        <h4 className="font-wordmark font-medium text-2xl text-ink-primary mt-1.5 max-w-md">
-          Your AI assistant, everywhere you trade.
-        </h4>
-        <p className="text-sm text-ink-secondary mt-2 max-w-md">
-          Break down a trade in your journal, decode an options chain, or get context on any ticker — just ask in plain English. FINO answers in seconds and is one tap away on every page.
-        </p>
       </div>
     </div>
   );
