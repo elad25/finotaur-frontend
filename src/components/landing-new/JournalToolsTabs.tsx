@@ -30,6 +30,22 @@ interface Tab {
 
 const tabs: Tab[] = [
   {
+    key: "ai",
+    icon: Brain,
+    label: "Meet FINO",
+    status: "live",
+    eyebrow: "Meet FINO",
+    title: "Your AI assistant, everywhere you trade.",
+    description:
+      "Ask FINO anything — break down a trade in your journal, decode an options chain, or get context on any ticker. It's one tap away on every page of FINOTAUR.",
+    bullets: [
+      "Lives in your journal and across the whole site",
+      "Ask about any trade, ticker, or setup",
+      "Plain-English answers in seconds",
+      "Always one tap away",
+    ],
+  },
+  {
     key: "journal",
     icon: BookOpen,
     label: "Automated Journal",
@@ -65,22 +81,6 @@ const tabs: Tab[] = [
       "Equity curve & drawdown",
       "Trade-by-trade audit log",
       "Strategy parameter sweeps",
-    ],
-  },
-  {
-    key: "ai",
-    icon: Brain,
-    label: "Meet FINO",
-    status: "live",
-    eyebrow: "Meet FINO",
-    title: "Your AI assistant, everywhere you trade.",
-    description:
-      "Ask FINO anything — break down a trade in your journal, decode an options chain, or get context on any ticker. It's one tap away on every page of FINOTAUR.",
-    bullets: [
-      "Lives in your journal and across the whole site",
-      "Ask about any trade, ticker, or setup",
-      "Plain-English answers in seconds",
-      "Always one tap away",
     ],
   },
   {
@@ -216,7 +216,7 @@ const JournalDashboardMock = () => {
 const MeetFinoIntro = () => {
   const [phase, setPhase] = useState<"greeting" | "idle">("greeting");
   return (
-    <div className="relative aspect-[16/10] flex flex-col items-center justify-center text-center px-6 py-8 overflow-hidden">
+    <div className="relative flex flex-col items-center justify-center text-center px-6 py-10 overflow-hidden">
       {/* center radial gold glow */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -229,7 +229,7 @@ const MeetFinoIntro = () => {
       <div className="relative z-10 flex flex-col items-center">
         <video
           key={phase}
-          className="w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover border border-gold-primary/40 shadow-card-featured bg-section-card-deep"
+          className="w-52 h-52 sm:w-72 sm:h-72 rounded-2xl object-cover shadow-card-featured bg-section-card-deep"
           src={phase === "greeting" ? "/fino/fino-greeting.mp4" : "/fino/fino-idle-long.mp4"}
           poster="/fino/fino-idle-long-poster.png"
           autoPlay
@@ -362,7 +362,7 @@ const EquityCurveSVG = () => (
 );
 
 const JournalToolsTabs = () => {
-  const [active, setActive] = useState<TabKey>("journal");
+  const [active, setActive] = useState<TabKey>("ai");
   const activeTab = tabs.find((t) => t.key === active)!;
 
   return (
