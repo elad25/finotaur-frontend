@@ -18,6 +18,7 @@ import { Button } from '@/components/ds/Button';
 import { usePortfolioBuilder } from '@/hooks/usePortfolioBuilder';
 import { useMyPortfolio } from '@/hooks/useMyPortfolio';
 import { useWatchlist } from '@/hooks/useWatchlist';
+import { countUniqueTickers } from '@/constants/portfolioLimits';
 import { toast } from '@/hooks/use-toast';
 import { MyPortfolio, Lot } from '@/lib/portfolio/types';
 import { PortfolioSettingsPanel } from './PortfolioSettingsPanel';
@@ -32,6 +33,14 @@ export interface CreatePortfolioModalProps {
   onClose: () => void;
   /** When provided, pre-seeds the form (edit mode). */
   initial?: MyPortfolio | null;
+  /**
+   * The portfolio id to save into. Takes precedence over initial?.id.
+   * Pass the active portfolio id from the page so saves always target
+   * the correct portfolio in multi-portfolio mode.
+   */
+  portfolioId?: string | null;
+  /** Plan-tier ticker cap. Save is blocked when the portfolio exceeds this. */
+  maxTickers?: number;
   /** Called with the saved portfolio after a successful save. */
   onSaved?: (p: MyPortfolio) => void;
 }
@@ -40,6 +49,8 @@ export function CreatePortfolioModal({
   open,
   onClose,
   initial,
+  portfolioId,
+  maxTickers,
   onSaved,
 }: CreatePortfolioModalProps) {
   const isEditMode = Boolean(initial?.id);
@@ -47,8 +58,10 @@ export function CreatePortfolioModal({
   // Form state — pure local, no I/O
   const builder = usePortfolioBuilder(initial);
 
-  // I/O — we only consume save / saving / error from this hook
-  const { save, saving, error } = useMyPortfolio();
+  // I/O — target the specific portfolio id supplied by the page (multi-portfolio aware).
+  // Falls back to initial?.id, then to the legacy first-portfolio path (null).
+  const resolvedPortfolioId = portfolioId ?? initial?.id ?? null;
+  const { save, saving, error } = useMyPortfolio(resolvedPortfolioId);
 
   // Watchlist sync — called after a successful portfolio save
   const { syncPortfolioTickers } = useWatchlist();
@@ -116,6 +129,19 @@ export function CreatePortfolioModal({
       return;
     }
 
+    // Ticker cap guard: block save if the portfolio exceeds the plan limit.
+    if (maxTickers !== undefined) {
+      const uniqueCount = countUniqueTickers(builder.portfolio);
+      if (uniqueCount > maxTickers) {
+        setFooterError(
+          'This portfolio is limited to ' +
+            maxTickers +
+            ' tickers on your plan. Remove some or upgrade.',
+        );
+        return;
+      }
+    }
+
     try {
       const saved = await save(portfolio);
 
@@ -158,7 +184,7 @@ export function CreatePortfolioModal({
       const msg = err instanceof Error ? err.message : 'Failed to save portfolio. Please try again.';
       setFooterError(msg);
     }
-  }, [save, portfolio, onSaved, onClose, syncPortfolioTickers]);
+  }, [save, portfolio, onSaved, onClose, syncPortfolioTickers, maxTickers]);
 
   function handleCsvRowsParsed(lots: Lot[]) {
     addLotsToActive(lots);
