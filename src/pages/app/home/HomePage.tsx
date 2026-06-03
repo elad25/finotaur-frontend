@@ -23,6 +23,8 @@ import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import FinoAvatar from '@/components/fino/FinoAvatar';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { computeGreeting } from '@/pages/app/ai/copilot/hooks/useDailyBrief';
 import { domains, domainOrder, isDomainVisible } from '@/constants/nav';
@@ -64,8 +66,14 @@ export default function HomePage() {
   const { user } = useAuth();
   const { hasBetaAccess } = useAdminAuth();
   const { open } = useFinoChat();
+  const { profile } = useUserProfile();
 
-  const firstName = user?.name?.split(' ')[0] || 'trader';
+  const firstName = (
+    profile?.display_name ||
+    user?.email?.split(' ')[0] ||
+    user?.email?.split('@')[0] ||
+    'trader'
+  ).trim().split(' ')[0];
   const greeting = computeGreeting();
 
   const [inputValue, setInputValue] = useState('');
@@ -96,11 +104,14 @@ export default function HomePage() {
       {/* ── 2. ASK FINO CARD ────────────────────────────────────────── */}
       <Card variant="featured" padding="default">
         {/* Header row */}
-        <div className="mb-ds-4">
-          <p className="text-base font-semibold text-gold-primary">Ask Fino</p>
-          <p className="text-sm text-ink-secondary mt-1">
-            Ask anything about your trading, setups, or the markets.
-          </p>
+        <div className="mb-ds-4 flex items-center gap-ds-3">
+          <FinoAvatar thinking={false} assistantCount={0} size={44} className="rounded-full border border-gold-border flex-shrink-0" />
+          <div>
+            <p className="text-base font-semibold text-gold-primary">Ask Fino</p>
+            <p className="text-sm text-ink-secondary mt-1">
+              Ask anything about your trading, setups, or the markets.
+            </p>
+          </div>
         </div>
 
         {/* Input + send button */}
@@ -167,6 +178,7 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-ds-4">
           {domainOrder.map((id) => {
+            if (id === 'copy-trade') return null;
             const domain = domains[id];
             if (!domain) return null;
             if (!isDomainVisible(domain, hasBetaAccess)) return null;

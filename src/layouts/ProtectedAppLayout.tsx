@@ -29,6 +29,11 @@ const NO_SIDEBAR_ROUTES = [
   '/app/admin',
 ];
 
+// Home hub is standalone — no product SubNav (it is its own surface).
+const NO_SUBNAV_ROUTES = [
+  '/app/home',
+];
+
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
 // Admin CRM is its own admin app; the marketing/trading chrome is noise
 // inside it and the user is reaching it via a new-tab open from SubNav.
@@ -46,6 +51,10 @@ export const ProtectedAppLayout = () => {
   );
 
   const hideChrome = HIDE_CHROME_ROUTES.some(route =>
+    location.pathname.startsWith(route)
+  );
+
+  const hideSubNav = NO_SUBNAV_ROUTES.some(route =>
     location.pathname.startsWith(route)
   );
 
@@ -79,7 +88,7 @@ export const ProtectedAppLayout = () => {
         <MentorViewBanner />
         {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
-        <SubNav />
+        {!hideSubNav && <SubNav />}
         {/* Product Drawer — rendered at layout level so it overlays everything */}
         <ProductDrawer />
         <div className="flex flex-1">

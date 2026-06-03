@@ -190,7 +190,7 @@ export function ProductDrawer() {
               // This guard covers any future adminOnly domains.
 
               const locked = (isLocked || isBeta) && !hasBetaAccess;
-              const isActiveProduct = domainId === id;
+              const isActiveProduct = domainId === id && !homeActive;
 
               const meta = PRODUCT_META[id];
               const Icon = meta?.icon ?? TrendingUp;
