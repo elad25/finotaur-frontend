@@ -802,8 +802,8 @@ export function GlobalOmnibox() {
           className="hidden md:flex fixed inset-0 z-[300] items-start justify-center"
           style={{
             background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             paddingTop: '13vh',
           }}
           aria-modal="true"
@@ -815,8 +815,8 @@ export function GlobalOmnibox() {
             ref={modalPanelRef}
             className="flex flex-col rounded-xl overflow-hidden"
             style={{
-              width: 'min(720px, 92vw)',
-              maxHeight: '72vh',
+              width: 'min(860px, 94vw)',
+              maxHeight: '78vh',
               background: '#0D0D0D',
               border: '1px solid rgba(201,166,70,0.22)',
               boxShadow:
@@ -886,7 +886,7 @@ export function GlobalOmnibox() {
             </div>
 
             {/* ── Modal results (scrollable) ── */}
-            <div className="overflow-y-auto flex-1" style={{ maxHeight: 'calc(72vh - 56px - 36px)' }}>
+            <div className="overflow-y-auto flex-1" style={{ maxHeight: 'calc(78vh - 56px - 36px)' }}>
               {renderModalBody()}
             </div>
 
@@ -953,7 +953,7 @@ export function GlobalOmnibox() {
       {isOpen && (
         <div
           className="md:hidden fixed inset-0 z-[300] flex flex-col"
-          style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
+          style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
         >
           <div
             className="flex flex-col flex-1 overflow-hidden"
