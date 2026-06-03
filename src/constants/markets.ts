@@ -516,44 +516,15 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
   },
 
   // ── ETF-specific ──────────────────────────────────────────────────────────
+  // Fixed sidebar items for the ETF asset under Markets.
+  // Ticker-aware analysis (Holdings, Performance, Risk, Dividends, Cost, Verdict)
+  // is accessed via inline tabs in ETFLayout — not as sidebar items.
   {
     id: 'etf-overview',
     label: 'Overview',
     icon: LayoutDashboard,
     routes: {
-      etf: '/app/etf/overview',
-    },
-  },
-  {
-    id: 'etf-screener',
-    label: 'Screener',
-    icon: Search,
-    routes: {
-      etf: '/app/etf/screener',
-    },
-  },
-  {
-    id: 'etf-holdings',
-    label: 'Holdings',
-    icon: FileText,
-    routes: {
-      etf: '/app/etf/holdings',
-    },
-  },
-  {
-    id: 'etf-flows',
-    label: 'Fund Flows',
-    icon: TrendingUp,
-    routes: {
-      etf: '/app/etf/flows',
-    },
-  },
-  {
-    id: 'etf-performance',
-    label: 'Performance',
-    icon: LineChart,
-    routes: {
-      etf: '/app/etf/performance',
+      etf: '/app/etfs/overview',
     },
   },
 
@@ -598,6 +569,7 @@ export const MARKETS_PATH_PREFIXES = [
   '/app/forex',
   '/app/commodities',
   '/app/macro',
+  '/app/etfs',
   '/app/etf',
 ] as const;
 
@@ -605,8 +577,6 @@ export const MARKETS_PATH_PREFIXES = [
 const MARKETS_EXCLUSIONS = [
   '/app/all-markets/warzone',
   '/app/all-markets/admin',
-  // ETFs have their own product domain and ticker-aware sidebar; exclude from Markets.
-  '/app/etfs',
 ] as const;
 
 /** True when the current pathname belongs to the Markets product. */
@@ -631,6 +601,8 @@ export function assetFromPathname(pathname: string): AssetClass {
     ['/app/forex',       'forex'],
     ['/app/commodities', 'commodities'],
     ['/app/macro',       'macro'],
+    // /app/etfs must come before /app/etf (more specific prefix first)
+    ['/app/etfs',        'etf'],
     ['/app/etf',         'etf'],
   ];
   for (const [prefix, asset] of map) {
