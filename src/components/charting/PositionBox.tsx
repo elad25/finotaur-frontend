@@ -53,6 +53,12 @@ export interface PositionBoxProps {
   onStopLossChange: (price: number) => void;
   /** Commit a dragged take-profit price. */
   onTakeProfitChange: (price: number) => void;
+  /**
+   * Commit a dragged entry/trigger price. When provided the entry handle
+   * becomes draggable (used for pending orders so the user can reposition a
+   * placed order). When absent the entry handle stays non-interactive.
+   */
+  onEntryChange?: (price: number) => void;
 }
 
 // Visual constants — Finotaur palette, TradingView semantics.
@@ -64,10 +70,8 @@ const ENTRY_LINE = '#d4d4d8'; // zinc-300 — neutral entry line
 const HANDLE_BLUE = '#2962FF'; // TradingView-style handle accent
 const HANDLE = 11; // px — resize-handle box size
 
-// Default zone offsets (fraction of entry) used only until the user sets a
-// real SL/TP. Keeps the band visible like TradingView's tool out of the box.
-const DEFAULT_TP_FRAC = 0.01; // 1%
-const DEFAULT_SL_FRAC = 0.005; // 0.5%
+// (No default zone offsets — zones only render when the user has explicitly
+// set stopLoss / takeProfit. See Change 1.)
 
 function fmtPrice(v: number): string {
   return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -87,14 +91,15 @@ export function PositionBox({
   redrawKey,
   onStopLossChange,
   onTakeProfitChange,
+  onEntryChange,
 }: PositionBoxProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Drag state: which handle is active ('tp'/'sl' = price, 'time' = right-edge
-  // width). Re-renders are driven by the commits + redrawKey, so we keep the
-  // live drag price in a ref and only setState to reflect the in-flight value.
-  const dragRef = useRef<null | 'tp' | 'sl' | 'time'>(null);
-  const [livePrice, setLivePrice] = useState<{ kind: 'tp' | 'sl'; price: number } | null>(null);
+  // Drag state: which handle is active ('tp'/'sl'/'entry' = price, 'time' =
+  // right-edge width). Re-renders are driven by the commits + redrawKey, so we
+  // keep the live drag price in a ref and only setState for in-flight value.
+  const dragRef = useRef<null | 'tp' | 'sl' | 'entry' | 'time'>(null);
+  const [livePrice, setLivePrice] = useState<{ kind: 'tp' | 'sl' | 'entry'; price: number } | null>(null);
   // Box width in BARS (logical units) so it scales with zoom and can extend
   // past the last bar. Persists across re-renders; resized via the right handle.
   const [widthBars, setWidthBars] = useState(50);
@@ -106,23 +111,22 @@ export function PositionBox({
   const tickSize = model.tickSize && model.tickSize > 0 ? model.tickSize : 0.25;
   const dir = side === 'LONG' ? 1 : -1;
 
-  // Effective SL/TP — real value if set, else a default offset so the band is
-  // visible. Drag commits a real value on first interaction.
-  const effTP =
-    model.takeProfit ?? entryPrice * (1 + dir * DEFAULT_TP_FRAC);
-  const effSL =
-    model.stopLoss ?? entryPrice * (1 - dir * DEFAULT_SL_FRAC);
-
   // While dragging, override the relevant level with the in-flight price.
-  const shownTP = livePrice?.kind === 'tp' ? livePrice.price : effTP;
-  const shownSL = livePrice?.kind === 'sl' ? livePrice.price : effSL;
+  // 'entry' drag moves the entry line preview; 'tp'/'sl' move their zones.
+  const shownEntry = livePrice?.kind === 'entry' ? livePrice.price : entryPrice;
+  const shownTP = livePrice?.kind === 'tp' ? livePrice.price : model.takeProfit ?? null;
+  const shownSL = livePrice?.kind === 'sl' ? livePrice.price : model.stopLoss ?? null;
+
+  // Whether each zone should be rendered at all.
+  const hasTP = shownTP != null;
+  const hasSL = shownSL != null;
 
   // ─── Pixel coordinates (recomputed every render; redrawKey forces it) ──
   // redrawKey is referenced so React re-runs this body on pan/zoom/resize.
   void redrawKey;
-  const yEntry = series.priceToCoordinate(entryPrice);
-  const yTP = series.priceToCoordinate(shownTP);
-  const ySL = series.priceToCoordinate(shownSL);
+  const yEntry = series.priceToCoordinate(shownEntry);
+  const yTP = hasTP ? series.priceToCoordinate(shownTP!) : null;
+  const ySL = hasSL ? series.priceToCoordinate(shownSL!) : null;
 
   // ─── Drag handling ──────────────────────────────────────────
   const onPointerMove = useCallback(
@@ -151,6 +155,12 @@ export function PositionBox({
       if (price == null || !Number.isFinite(price)) return;
       let p = Number(price);
 
+      if (kind === 'entry') {
+        // Entry drag — no clamping; user is repositioning the trigger price freely.
+        setLivePrice({ kind: 'entry', price: p });
+        return;
+      }
+
       // Clamp so target stays on the profit side and stop on the loss side,
       // never crossing the entry (keep a small gap).
       const gap = tickSize;
@@ -173,12 +183,13 @@ export function PositionBox({
     setLivePrice((cur) => {
       if (cur && kind === 'tp') onTakeProfitChange(cur.price);
       else if (cur && kind === 'sl') onStopLossChange(cur.price);
+      else if (cur && kind === 'entry') onEntryChange?.(cur.price);
       return null;
     });
-  }, [onPointerMove, onTakeProfitChange, onStopLossChange]);
+  }, [onPointerMove, onTakeProfitChange, onStopLossChange, onEntryChange]);
 
   const startDrag = useCallback(
-    (kind: 'tp' | 'sl' | 'time') => (e: React.PointerEvent) => {
+    (kind: 'tp' | 'sl' | 'entry' | 'time') => (e: React.PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
       dragRef.current = kind;
@@ -221,7 +232,8 @@ export function PositionBox({
   }, [series, chart, entryPrice, entryTime]);
 
   // Bail out cleanly if the chart can't place the entry (off-screen / pre-paint).
-  if (yEntry == null || yTP == null || ySL == null) {
+  // TP/SL coords may be null when zones are not set — that's fine; zones skip render.
+  if (yEntry == null) {
     return <div ref={rootRef} className="pointer-events-none absolute inset-0" />;
   }
 
@@ -248,76 +260,85 @@ export function PositionBox({
   const bandWidth = bandRight - bandLeft;
 
   // ─── Metrics (real data) ────────────────────────────────────
-  const tpDelta = Math.abs(shownTP - entryPrice);
-  const slDelta = Math.abs(shownSL - entryPrice);
+  const tpDelta = hasTP ? Math.abs(shownTP! - shownEntry) : 0;
+  const slDelta = hasSL ? Math.abs(shownSL! - shownEntry) : 0;
   const tpAmount = tpDelta * size;
   const slAmount = slDelta * size;
-  const tpPct = (tpDelta / entryPrice) * 100;
-  const slPct = (slDelta / entryPrice) * 100;
-  const tpTicks = Math.round(tpDelta / tickSize);
-  const slTicks = Math.round(slDelta / tickSize);
-  const rr = slAmount > 0 ? tpAmount / slAmount : 0;
+  const tpPct = hasTP ? (tpDelta / shownEntry) * 100 : 0;
+  const slPct = hasSL ? (slDelta / shownEntry) * 100 : 0;
+  const tpTicks = hasTP ? Math.round(tpDelta / tickSize) : 0;
+  const slTicks = hasSL ? Math.round(slDelta / tickSize) : 0;
+  // R:R ratio — only meaningful when both SL and TP are set.
+  const rr = hasTP && hasSL && slAmount > 0 ? tpAmount / slAmount : null;
   const openPnl =
     currentPrice != null && Number.isFinite(currentPrice)
-      ? (currentPrice - entryPrice) * dir * size
+      ? (currentPrice - shownEntry) * dir * size
       : null;
 
   const yEntryN = yEntry as number;
-  const yTPN = yTP as number;
-  const ySLN = ySL as number;
+  const yTPN = yTP as number | null;
+  const ySLN = ySL as number | null;
 
   // Zone rectangles (top y / height) between entry and the respective level.
-  const tpTop = Math.min(yEntryN, yTPN);
-  const tpHeight = Math.abs(yEntryN - yTPN);
-  const slTop = Math.min(yEntryN, ySLN);
-  const slHeight = Math.abs(yEntryN - ySLN);
+  const tpTop = yTPN != null ? Math.min(yEntryN, yTPN) : 0;
+  const tpHeight = yTPN != null ? Math.abs(yEntryN - yTPN) : 0;
+  const slTop = ySLN != null ? Math.min(yEntryN, ySLN) : 0;
+  const slHeight = ySLN != null ? Math.abs(yEntryN - ySLN) : 0;
 
   const labelBase =
     'pointer-events-none absolute -translate-x-1/2 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-white shadow';
   const center = bandLeft + bandWidth / 2;
 
-  // Box bounding box (for the hover region). Handles live inside it so moving
-  // the pointer onto a handle doesn't fire the container's mouseleave.
-  const boxTop = Math.min(yTPN, ySLN);
-  const boxHeight = Math.abs(yTPN - ySLN);
+  // Box bounding box (for the hover region). When neither zone is set, the
+  // hover region collapses to just around the entry line (±12 px).
+  const allYs: number[] = [yEntryN];
+  if (yTPN != null) allYs.push(yTPN);
+  if (ySLN != null) allYs.push(ySLN);
+  const boxTop = Math.min(...allYs) - (allYs.length === 1 ? 12 : 0);
+  const boxBottom = Math.max(...allYs) + (allYs.length === 1 ? 12 : 0);
+  const boxHeight = Math.max(boxBottom - boxTop, 24);
   // Show handles + middle label on hover, or while a drag is in progress.
   const showControls = hovered || dragRef.current != null;
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
-      {/* Target zone (green) */}
-      <div
-        className="absolute"
-        style={{ left: bandLeft, width: bandWidth, top: tpTop, height: tpHeight, background: GREEN_FILL, borderTop: `1px solid ${GREEN}`, borderBottom: `1px solid ${GREEN}` }}
-      />
-      {/* Stop zone (red) */}
-      <div
-        className="absolute"
-        style={{ left: bandLeft, width: bandWidth, top: slTop, height: slHeight, background: RED_FILL, borderTop: `1px solid ${RED}`, borderBottom: `1px solid ${RED}` }}
-      />
+      {/* Target zone (green) — only when takeProfit is set */}
+      {hasTP && (
+        <div
+          className="absolute"
+          style={{ left: bandLeft, width: bandWidth, top: tpTop, height: tpHeight, background: GREEN_FILL, borderTop: `1px solid ${GREEN}`, borderBottom: `1px solid ${GREEN}` }}
+        />
+      )}
+      {/* Stop zone (red) — only when stopLoss is set */}
+      {hasSL && (
+        <div
+          className="absolute"
+          style={{ left: bandLeft, width: bandWidth, top: slTop, height: slHeight, background: RED_FILL, borderTop: `1px solid ${RED}`, borderBottom: `1px solid ${RED}` }}
+        />
+      )}
 
-      {/* Entry line */}
+      {/* Entry line — always rendered */}
       <div
         className="absolute"
         style={{ left: bandLeft, width: bandWidth, top: yEntryN, height: 0, borderTop: `1px solid ${ENTRY_LINE}` }}
       />
 
-      {/* Target + Stop labels — shown only on hover (with the handles + P&L),
-          so the resting box is just the green/red zones + entry line. */}
-      {showControls && (
-        <>
-          <div className={labelBase} style={{ left: center, top: yTPN - 18, background: GREEN }}>
-            Target: {fmtPrice(tpDelta)} ({tpPct.toFixed(3)}%) {tpTicks}, Amount: {fmtAmount(tpAmount)}
-          </div>
-          <div className={labelBase} style={{ left: center, top: ySLN + 6, background: RED }}>
-            Stop: {fmtPrice(slDelta)} ({slPct.toFixed(3)}%) {slTicks}, Amount: {fmtAmount(slAmount)}
-          </div>
-        </>
+      {/* Target label — shown on hover, only when TP is set */}
+      {showControls && hasTP && yTPN != null && (
+        <div className={labelBase} style={{ left: center, top: yTPN - 18, background: GREEN }}>
+          Target: {fmtPrice(tpDelta)} ({tpPct.toFixed(3)}%) {tpTicks}, Amount: {fmtAmount(tpAmount)}
+        </div>
       )}
-      {/* Hover region over the box — reveals the handles + middle Open P&L label
-          only while the pointer is over the box. Handles + label live INSIDE
-          this container (positioned relative to it) so moving the pointer from
-          the box onto a handle does NOT fire the container's mouseleave. */}
+      {/* Stop label — shown on hover, only when SL is set */}
+      {showControls && hasSL && ySLN != null && (
+        <div className={labelBase} style={{ left: center, top: ySLN + 6, background: RED }}>
+          Stop: {fmtPrice(slDelta)} ({slPct.toFixed(3)}%) {slTicks}, Amount: {fmtAmount(slAmount)}
+        </div>
+      )}
+
+      {/* Hover region over the box — reveals handles + middle label only while
+          pointer is over the box. Handles live INSIDE so moving to a handle
+          does NOT fire the container's mouseleave. */}
       <div
         className="absolute"
         onMouseEnter={() => setHovered(true)}
@@ -332,30 +353,53 @@ export function PositionBox({
               style={{ left: bandWidth / 2, top: yEntryN - boxTop - 26, background: 'rgba(24,24,27,0.92)', border: `1px solid ${ENTRY_LINE}` }}
             >
               {isPending ? 'TRIGGER' : `Open P&L: ${openPnl != null ? fmtSigned(openPnl) : '—'}`}, Qty: {size}
-              <br />
-              Risk/reward ratio: {rr.toFixed(2)}
+              {/* R:R ratio only when both SL and TP are set */}
+              {rr != null && (
+                <>
+                  <br />
+                  Risk/reward ratio: {rr.toFixed(2)}
+                </>
+              )}
             </div>
 
-            {/* Resize handles — TradingView layout: 3 on the LEFT (TP / entry /
-                SL), 1 on the RIGHT (time width). Blue, matching the reference. */}
-            {/* Target — top-left: drag vertically → take-profit */}
-            <div
-              onPointerDown={startDrag('tp')}
-              className="absolute cursor-ns-resize"
-              style={{ left: -HANDLE / 2, top: yTPN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
-            />
-            {/* Entry — middle-left: anchor (entry is the real fill, not draggable) */}
-            <div
-              className="absolute"
-              style={{ left: -HANDLE / 2, top: yEntryN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: '50%', pointerEvents: 'none' }}
-            />
-            {/* Stop — bottom-left: drag vertically → stop-loss */}
-            <div
-              onPointerDown={startDrag('sl')}
-              className="absolute cursor-ns-resize"
-              style={{ left: -HANDLE / 2, top: ySLN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
-            />
-            {/* Time — middle-right: drag horizontally → extend / shorten in time */}
+            {/* Resize handles — TradingView layout: left-column handles for
+                TP / entry / SL; right handle for time width. */}
+
+            {/* Target handle — drag vertically → take-profit. Only when TP set. */}
+            {hasTP && yTPN != null && (
+              <div
+                onPointerDown={startDrag('tp')}
+                className="absolute cursor-ns-resize"
+                style={{ left: -HANDLE / 2, top: yTPN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
+              />
+            )}
+
+            {/* Entry handle — draggable when onEntryChange is provided (pending
+                orders), static (non-interactive) otherwise. Square when
+                draggable, circle when static — mirrors TradingView styling. */}
+            {onEntryChange ? (
+              <div
+                onPointerDown={startDrag('entry')}
+                className="absolute cursor-ns-resize"
+                style={{ left: -HANDLE / 2, top: yEntryN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
+              />
+            ) : (
+              <div
+                className="absolute"
+                style={{ left: -HANDLE / 2, top: yEntryN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: '50%', pointerEvents: 'none' }}
+              />
+            )}
+
+            {/* Stop handle — drag vertically → stop-loss. Only when SL set. */}
+            {hasSL && ySLN != null && (
+              <div
+                onPointerDown={startDrag('sl')}
+                className="absolute cursor-ns-resize"
+                style={{ left: -HANDLE / 2, top: ySLN - boxTop - HANDLE / 2, width: HANDLE, height: HANDLE, background: '#fff', border: `1.5px solid ${HANDLE_BLUE}`, borderRadius: 2, pointerEvents: 'auto' }}
+              />
+            )}
+
+            {/* Time handle — drag horizontally → extend / shorten in time */}
             <div
               onPointerDown={startDrag('time')}
               className="absolute cursor-ew-resize"

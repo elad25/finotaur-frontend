@@ -171,6 +171,7 @@ export interface BacktestReplayChartProps {
     model: PositionBoxModel;
     onStopLossChange: (price: number) => void;
     onTakeProfitChange: (price: number) => void;
+    onEntryChange?: (price: number) => void;
   };
   /**
    * When true, the next left-click on the chart places a LIMIT order via
@@ -907,6 +908,7 @@ export function BacktestReplayChart({
             redrawKey={overlayTick}
             onStopLossChange={positionOverlay.onStopLossChange}
             onTakeProfitChange={positionOverlay.onTakeProfitChange}
+            onEntryChange={positionOverlay.onEntryChange}
           />
         )}
 

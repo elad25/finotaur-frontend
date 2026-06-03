@@ -1229,6 +1229,7 @@ export function BacktestChart({
         model: PositionBoxModel;
         onStopLossChange: (price: number) => void;
         onTakeProfitChange: (price: number) => void;
+        onEntryChange?: (price: number) => void;
       }
     | undefined
   >(() => {
@@ -1248,6 +1249,7 @@ export function BacktestChart({
         },
         onStopLossChange: (price: number) => updateStopLoss(price),
         onTakeProfitChange: (price: number) => updateTakeProfit(price),
+        // No onEntryChange — entry price is fixed after fill.
       };
     }
     const pending = state.pendingOrders[0];
@@ -1265,6 +1267,7 @@ export function BacktestChart({
         },
         onStopLossChange: (price: number) => updatePendingRisk(pending.id, { stopLoss: price }),
         onTakeProfitChange: (price: number) => updatePendingRisk(pending.id, { takeProfit: price }),
+        onEntryChange: (price: number) => updatePendingRisk(pending.id, { triggerPrice: price }),
       };
     }
     return undefined;
