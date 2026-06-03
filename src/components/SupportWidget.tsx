@@ -16,7 +16,7 @@ import {
   X, Send, MessageCircle, Shield, ArrowLeft, Plus,
   Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell,
   CheckCircle2, AlertCircle, Info, Megaphone, Download,
-  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound
+  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound, ThumbsUp
 } from 'lucide-react';
 import { Spinner } from "@/components/ui/Spinner";
 import { supabase } from '@/lib/supabase';
@@ -181,7 +181,11 @@ export default function SupportWidget() {
   const [lastAiReason, setLastAiReason] = useState<string | null>(null);
   const [lastAiCategory, setLastAiCategory] = useState<string | null>(null);
   const [autoEscalatedTicketId, setAutoEscalatedTicketId] = useState<string | null>(null);
-  
+  const [helpfulnessResolved, setHelpfulnessResolved] = useState(false);
+  const [showTicketForm, setShowTicketForm] = useState(false);
+  const [ticketEmail, setTicketEmail] = useState('');
+  const [ticketProblem, setTicketProblem] = useState('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -732,6 +736,8 @@ async function loadTicketById(ticketId: string) {
     const baseHistory = [...guidedMessages, userMsg];
     setGuidedMessages(baseHistory);
     setCurrentMessage('');
+    setHelpfulnessResolved(false);
+    setShowTicketForm(false);
     setAiThinking(true);
 
     try {
@@ -786,12 +792,14 @@ async function loadTicketById(ticketId: string) {
     } catch (err) {
       console.error('Support AI error:', err);
       setAiUnavailable(true);
+      setShowTicketForm(true);
+      setTicketEmail((prev) => prev || userEmail || '');
       setGuidedMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           type: 'admin',
-          content: "I'm having trouble answering right now. Tap \"Talk to a person\" below and our support team will help you directly.",
+          content: "I'm having trouble answering right now. Please leave your details below and our team will get back to you by email.",
           timestamp: new Date().toISOString(),
         },
       ]);
@@ -800,10 +808,11 @@ async function loadTicketById(ticketId: string) {
     }
   }
 
-  async function persistEscalationTicket(): Promise<string | null> {
-    if (isGuest && (!userName || !userEmail)) return null;
+  async function persistEscalationTicket(opts?: { emailOverride?: string; problemOverride?: string; suppressNavigate?: boolean }): Promise<string | null> {
+    const effectiveEmail = (opts?.emailOverride || userEmail || '').trim();
+    if (!effectiveEmail) return null;
 
-    const transcript = guidedMessages.length > 0
+    const baseTranscript = guidedMessages.length > 0
       ? guidedMessages
       : [{
           id: crypto.randomUUID(),
@@ -812,8 +821,18 @@ async function loadTicketById(ticketId: string) {
           timestamp: new Date().toISOString(),
         }];
 
+    const transcript = opts?.problemOverride?.trim()
+      ? [...baseTranscript, {
+          id: crypto.randomUUID(),
+          type: 'customer' as const,
+          content: opts.problemOverride.trim(),
+          timestamp: new Date().toISOString(),
+        }]
+      : baseTranscript;
+
     const firstCustomer = transcript.find((m) => m.type === 'customer');
-    const subjectLine = firstCustomer ? firstCustomer.content.slice(0, 80) : 'Support Request';
+    const primaryText = opts?.problemOverride?.trim() || firstCustomer?.content || 'Support Request';
+    const subjectLine = primaryText.slice(0, 80);
 
     const escalationReason = lastAiReason;
     const ticketCategory = lastAiCategory || (escalationReason === 'billing' ? 'payment' : escalationReason === 'bug' ? 'technical' : escalationReason === 'feature_request' ? 'feedback' : null);
@@ -822,14 +841,14 @@ async function loadTicketById(ticketId: string) {
 
     const ticketPayload = {
       user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
-      user_email: userEmail,
-      user_name: userName,
+      user_email: effectiveEmail,
+      user_name: userName || effectiveEmail,
       subject: subjectLine,
       category: ticketCategory,
       priority: ticketPriority,
       tags: ticketTags,
       metadata: { escalation_reason: escalationReason, source: 'ai_chat', summary: subjectLine },
-      message: firstCustomer?.content || 'Support Request',
+      message: primaryText,
       messages: transcript,
       status: 'open',
     };
@@ -856,35 +875,25 @@ async function loadTicketById(ticketId: string) {
       });
     } catch (e) { console.error('Escalation email fallback failed:', e); }
 
-    if (dbSuccess && !isGuest) { setSelectedTicket(data); setIsNewConversation(false); loadUserTickets(); }
+    if (dbSuccess && !isGuest && !opts?.suppressNavigate) { setSelectedTicket(data); setIsNewConversation(false); loadUserTickets(); }
 
     return data?.id ?? null;
   }
 
-  async function escalateToHuman() {
-    if (isGuest && (!userName || !userEmail)) {
-      setShowGuestForm(true);
-      toast.error('Please add your contact info so we can reach you');
-      return;
-    }
+  async function submitSupportRequest() {
+    const email = ticketEmail.trim();
+    const problem = ticketProblem.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { toast.error('Please enter a valid email address'); return; }
+    if (!problem) { toast.error('Please describe your issue'); return; }
     if (sending) return;
-    // If a ticket was already auto-created this conversation, don't create a duplicate.
-    if (autoEscalatedTicketId) {
-      setMessageSent(true);
-      toast.success("Connected — our team has your conversation and will follow up shortly.");
-      if (isGuest) setTimeout(() => handleClose(), 3000);
-      return;
-    }
     setSending(true);
     try {
-      await persistEscalationTicket();
-      // Email fallback may have run even if the ticket id is null — treat as connected either way.
+      await persistEscalationTicket({ emailOverride: email, problemOverride: problem, suppressNavigate: true });
+      setShowTicketForm(false);
       setMessageSent(true);
-      toast.success("Connected — our team has your conversation and will follow up shortly.");
-      if (isGuest) setTimeout(() => handleClose(), 3000);
     } catch (e) {
-      console.error('Escalation error:', e);
-      toast.error('Could not reach support. Please try again.');
+      console.error('Support request error:', e);
+      toast.error('Could not submit your request. Please try again.');
     } finally {
       setSending(false);
     }
@@ -1842,17 +1851,75 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                               </>
                             )}
 
-                            {guidedMessages.some((m) => m.type === 'customer') && !messageSent && (
-                              <div className="flex justify-start animate-in fade-in duration-200">
-                                <button
-                                  type="button"
-                                  onClick={escalateToHuman}
-                                  disabled={sending}
-                                  className="inline-flex items-center gap-2 rounded-full border border-[#C8CDD6] bg-white/80 px-4 py-2 text-xs font-medium text-[#334155] transition-all duration-200 hover:border-[#1D4ED8]/45 hover:bg-[#EFF6FF] hover:text-[#1D4ED8] disabled:opacity-50"
-                                >
-                                  <UserRound className="h-3.5 w-3.5" />
-                                  Talk to a person
-                                </button>
+                            {guidedMessages.length > 0 &&
+                              guidedMessages[guidedMessages.length - 1].type === 'admin' &&
+                              !aiThinking && !messageSent && !showTicketForm && !helpfulnessResolved && (
+                              <div className="flex flex-col items-start gap-2 animate-in fade-in duration-200">
+                                <p className="text-xs font-medium text-[#64748B] font-['Inter',sans-serif]">Did this solve your issue?</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setHelpfulnessResolved(true);
+                                      setGuidedMessages((prev) => [...prev, {
+                                        id: crypto.randomUUID(),
+                                        type: 'system' as const,
+                                        content: 'Glad I could help! Feel free to ask anything else.',
+                                        timestamp: new Date().toISOString(),
+                                      }]);
+                                    }}
+                                    className="inline-flex items-center gap-2 rounded-full border border-[#C8CDD6] bg-white/80 px-4 py-2 text-xs font-medium text-[#334155] transition-all duration-200 hover:border-[#16A34A]/45 hover:bg-[#F0FDF4] hover:text-[#16A34A]"
+                                  >
+                                    <ThumbsUp className="h-3.5 w-3.5" />
+                                    Yes, thanks
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setShowTicketForm(true); setTicketEmail((prev) => prev || userEmail || ''); }}
+                                    className="inline-flex items-center gap-2 rounded-full border border-[#C8CDD6] bg-white/80 px-4 py-2 text-xs font-medium text-[#334155] transition-all duration-200 hover:border-[#1D4ED8]/45 hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
+                                  >
+                                    <UserRound className="h-3.5 w-3.5" />
+                                    No, I still need help
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {showTicketForm && !messageSent && (
+                              <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                <div className="max-w-[88%] rounded-[14px] border border-[#C8CDD6] bg-white/90 px-4 py-3 space-y-3">
+                                  <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
+                                    No problem. Leave your details below and our team will get back to you by email — please describe your issue clearly so we can help fast. We reply by email, not live chat.
+                                  </p>
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium text-[#334155] font-['Inter',sans-serif]">Your email</label>
+                                    <input
+                                      type="email"
+                                      value={ticketEmail}
+                                      onChange={(e) => setTicketEmail(e.target.value)}
+                                      placeholder="you@example.com"
+                                      className="w-full rounded-lg border border-[#C8CDD6] bg-white px-3 py-2 text-sm text-[#1F2937] outline-none focus:border-[#1D4ED8] font-['Inter',sans-serif]"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="block text-xs font-medium text-[#334155] font-['Inter',sans-serif]">What's the issue?</label>
+                                    <textarea
+                                      value={ticketProblem}
+                                      onChange={(e) => setTicketProblem(e.target.value)}
+                                      rows={3}
+                                      placeholder="Describe your problem in detail…"
+                                      className="w-full rounded-lg border border-[#C8CDD6] bg-white px-3 py-2 text-sm text-[#1F2937] outline-none focus:border-[#1D4ED8] resize-none font-['Inter',sans-serif]"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={submitSupportRequest}
+                                    disabled={sending}
+                                    className="inline-flex items-center gap-2 rounded-full bg-[#1D4ED8] px-4 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-[#1E40AF] disabled:opacity-50"
+                                  >
+                                    {sending ? 'Submitting…' : 'Submit request'}
+                                  </button>
+                                </div>
                               </div>
                             )}
 
@@ -1878,14 +1945,14 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                       <div className="flex items-center gap-2 mb-2">
                                         <CheckCircle2 className="h-4 w-4 text-green-400" />
                                         <span className="text-sm font-medium text-green-400">
-                                          Message Received!
+                                          Request received!
                                         </span>
                                       </div>
                                       <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
-                                        Thank you for reaching out! Our support team has received your message and will get back to you as soon as possible.
+                                        Thanks for reaching out. Our team will reply to you by email — usually within 24 hours.
                                       </p>
                                       <p className="text-xs text-[#64748B] mt-2 font-['Inter',sans-serif]">
-                                        📧 We typically respond within 24 hours.
+                                        📧 We reply by email, not live chat. Make sure your email is correct.
                                       </p>
                                       <span className="text-[10px] text-green-400/50 mt-2 block">
                                         {formatTime(new Date().toISOString())}
