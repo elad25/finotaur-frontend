@@ -14,6 +14,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
 import { supabase } from '@/lib/supabase';
 import { 
   BarChart3, Users, Crown, Shield, TrendingUp, 
@@ -2722,7 +2723,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin text-[#C9A646]" />
+              <Spinner size="sm" />
             </div>
           </CardContent>
         </Card>
@@ -3718,7 +3719,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <CardContent>
               {allUsersLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#C9A646]" />
+                  <Spinner size="md" />
                 </div>
               ) : allUsers.length === 0 ? (
                 <div className="text-center py-12 text-[#606060]">
@@ -4210,7 +4211,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
 
           {kpiLoading ? (
             <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-10 w-10 animate-spin text-[#C9A646]" />
+              <Spinner size="lg" />
             </div>
           ) : kpiMetrics ? (
             <>
@@ -4801,7 +4802,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <div className="text-center py-20">
               <div className="relative">
                 <BarChart3 className="h-16 w-16 mx-auto mb-4 text-[#C9A646] opacity-30" />
-                <Loader2 className="h-8 w-8 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-[#C9A646]" />
+                <Spinner size="md" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
               </div>
               <p className="text-[#808080]">Loading KPIs automatically...</p>
             </div>
@@ -5294,7 +5295,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               <CardContent>
                 {deepDiveLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-[#C9A646]" />
+                    <Spinner size="sm" />
                   </div>
                 ) : cancellationAnalysis ? (
                   <div className="space-y-4">
@@ -5353,7 +5354,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               <CardContent>
                 {deepDiveLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-[#C9A646]" />
+                    <Spinner size="sm" />
                   </div>
                 ) : trialAnalysis ? (
                   <div className="space-y-4">
@@ -5444,7 +5445,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <CardContent>
               {subscriptionEventsLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#C9A646]" />
+                  <Spinner size="md" />
                 </div>
               ) : subscriptionEvents.length === 0 ? (
                 <div className="text-center py-12 text-[#606060]">

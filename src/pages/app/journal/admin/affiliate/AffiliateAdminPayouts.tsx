@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Spinner } from '@/components/ui/Spinner';
 
 // ============================================
 // TYPES
@@ -548,7 +549,7 @@ export default function AffiliateAdminPayouts() {
       >
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
+            <Spinner size="md" />
           </div>
         ) : payouts.length === 0 ? (
           <div className="text-center py-16">
@@ -977,7 +978,7 @@ function PayoutDetailModal({
             
             {loadingCommissions ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-[#C9A646]" />
+                <Spinner size="md" />
               </div>
             ) : commissions.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No commissions linked to this payout</p>

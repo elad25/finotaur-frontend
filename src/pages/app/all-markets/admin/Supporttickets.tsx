@@ -7,6 +7,7 @@
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
 import {
   MessageCircle,
   Clock,
@@ -1198,7 +1199,7 @@ toast.success('Update deleted');
               <div className="flex-1 overflow-y-auto">
                 {loadingTickets ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
+                    <Spinner size="md" />
                   </div>
                 ) : tickets.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-10 text-gray-400 px-4">
@@ -1618,7 +1619,7 @@ toast.success('Update deleted');
           <div className="bg-[#111111] border border-gray-800 rounded-xl overflow-hidden">
             {loadingUpdates ? (
               <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
+                <Spinner size="md" />
               </div>
             ) : updates.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -1989,7 +1990,7 @@ toast.success('Update deleted');
 
             {loadingChurned ? (
               <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
+                <Spinner size="md" />
               </div>
             ) : churnedUsers.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-400">

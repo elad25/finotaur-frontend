@@ -319,7 +319,7 @@ function equitySymbols(positions: IBRITPosition[]): string[] {
   for (const p of positions) {
     const cls = (p.AssetClass ?? '').toUpperCase();
     if (cls === 'CASH') continue; // skip cash entries
-    const qty = Number(p.Quantity) ?? 0;
+    const qty = Number(p.Quantity) || 0;
     if (qty === 0) continue; // skip closed positions
     const sym = (p.Symbol || p.UnderlyingSymbol || '').toUpperCase();
     if (sym && !seen.has(sym)) {

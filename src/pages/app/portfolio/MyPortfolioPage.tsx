@@ -16,6 +16,7 @@ import { ClosePositionDialog } from '@/components/portfolio/ClosePositionDialog'
 import { AddPositionRow } from '@/components/portfolio/AddPositionRow';
 import { PortfolioSwitcher } from '@/components/portfolio/PortfolioSwitcher';
 import type { MyPortfolio, PortfolioAccount, Lot } from '@/lib/portfolio/types';
+import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
 import { Price, Change } from '@/components/ds/NumberDisplay';
@@ -41,7 +42,7 @@ function LoadingSpinner() {
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gold-primary" />
+        <Spinner size="lg" />
         <p className="text-sm text-ink-secondary">Loading portfolio…</p>
       </div>
     </div>

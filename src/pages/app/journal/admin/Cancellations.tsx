@@ -22,6 +22,7 @@ import {
   Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Spinner } from '@/components/ui/Spinner';
 
 // ============================================
 // TYPES
@@ -888,7 +889,7 @@ export default function AdminChurnPage() {
               {loading && feedbacks.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-12 text-center">
-                    <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin mx-auto mb-3" />
+                    <Spinner size="md" className="mx-auto mb-3" />
                     <p className="text-zinc-500">Loading...</p>
                   </td>
                 </tr>

@@ -4,6 +4,7 @@ import { memo, Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { motion, AnimatePresence } from 'framer-motion';
 import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Brain } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -17,7 +18,7 @@ const DarkPoolTab        = lazy(() => import('@/features/options-ai/components/t
 function TabFallback() {
   return (
     <div className="flex items-center justify-center py-24">
-      <Loader2 className="h-8 w-8 text-[#C9A646] animate-spin" />
+      <Spinner size="md" />
     </div>
   );
 }
@@ -151,7 +152,7 @@ function OptionsIntelligenceAI() {
   if (accessLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

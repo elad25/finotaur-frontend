@@ -877,12 +877,11 @@ async function loadTicketById(ticketId: string) {
     }
     setSending(true);
     try {
-      const id = await persistEscalationTicket();
-      if (id || true) { // email fallback may have run even if id is null
-        setMessageSent(true);
-        toast.success("Connected — our team has your conversation and will follow up shortly.");
-        if (isGuest) setTimeout(() => handleClose(), 3000);
-      }
+      await persistEscalationTicket();
+      // Email fallback may have run even if the ticket id is null — treat as connected either way.
+      setMessageSent(true);
+      toast.success("Connected — our team has your conversation and will follow up shortly.");
+      if (isGuest) setTimeout(() => handleClose(), 3000);
     } catch (e) {
       console.error('Escalation error:', e);
       toast.error('Could not reach support. Please try again.');

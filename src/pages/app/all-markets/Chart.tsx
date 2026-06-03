@@ -1,5 +1,6 @@
 // src/pages/app/all-markets/Chart.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
 import { useMarketGate } from '@/hooks/useMarketGate';
@@ -2944,7 +2945,7 @@ export default function ChartPage() {
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/80 z-10">
               <div className="flex flex-col items-center gap-2">
-                <div className="w-8 h-8 border-2 border-[#2962ff] border-t-transparent rounded-full animate-spin"></div>
+                <Spinner size="md" />
                 <span className="text-[#787b86] text-sm">Loading {symbol}...</span>
               </div>
             </div>

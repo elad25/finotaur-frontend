@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { Spinner } from '@/components/ui/Spinner';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -225,7 +226,7 @@ export function CopilotMacroPage() {
     return (
       <CopilotPageShell title="Macro" eyebrow="Portfolio-aware macro lens" icon={Globe}>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+          <Spinner size="md" />
         </div>
       </CopilotPageShell>
     );
@@ -351,7 +352,7 @@ export function CopilotHoldingsPage() {
     return (
       <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+          <Spinner size="md" />
         </div>
       </CopilotPageShell>
     );
@@ -412,7 +413,7 @@ export function CopilotRisksPage() {
     return (
       <CopilotPageShell title="Risks" eyebrow="AI risk map for the portfolio" icon={Shield}>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+          <Spinner size="md" />
         </div>
       </CopilotPageShell>
     );
@@ -660,7 +661,7 @@ function CopilotPageShell({
   if (adminLoading || accessLoading) {
     return (
       <div className="flex items-center justify-center py-20 text-ink-primary">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

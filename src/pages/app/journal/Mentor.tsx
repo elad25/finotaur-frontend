@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import { Users, ChevronRight, Clock, GraduationCap, UserPlus, X, Check } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -135,7 +136,7 @@ function MyMentorSection() {
 
         {isLoading ? (
           <div className="flex items-center justify-center py-10">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: GOLD }} />
+            <Spinner size="md" />
           </div>
         ) : mentors.length === 0 ? (
           <p className="text-sm text-zinc-500 py-2">You haven't added a mentor yet.</p>
@@ -293,7 +294,7 @@ function MyStudentsSection() {
       <CardContent className="space-y-4">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: GOLD }} />
+            <Spinner size="md" />
           </div>
         ) : (
           <>
