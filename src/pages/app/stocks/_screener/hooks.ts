@@ -165,7 +165,7 @@ export function useStockScreener(
     }, delay);
 
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [qs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [qs]);
 
   return { data, loading, error };
 }
