@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Loader2, CheckCircle } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { motion } from 'framer-motion';
 import TopSecretErrorBoundary from './TopSecretErrorBoundary';
 
@@ -48,7 +49,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 const PageLoader = memo(function PageLoader() {
   return (
     <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
-      <Loader2 className="w-10 h-10 text-amber-400 animate-spin" />
+      <Spinner size="lg" />
     </div>
   );
 });

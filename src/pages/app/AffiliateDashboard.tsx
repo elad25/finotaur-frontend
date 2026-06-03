@@ -5,12 +5,12 @@
 // ============================================
 
 import { useState } from 'react';
-import { 
-  Gift, 
-  Users, 
-  DollarSign, 
-  TrendingUp, 
-  Copy, 
+import {
+  Gift,
+  Users,
+  DollarSign,
+  TrendingUp,
+  Copy,
   ExternalLink,
   MousePointer,
   UserCheck,
@@ -27,6 +27,7 @@ import {
   Info,
   AlertCircle
 } from 'lucide-react';
+import { Spinner } from "@/components/ui/Spinner";
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { 
@@ -84,7 +85,7 @@ export default function AffiliateDashboard() {
     return (
       <div className="min-h-[80vh] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 text-[#D4AF37] animate-spin mx-auto mb-4" />
+          <Spinner size="lg" className="mx-auto mb-4" />
           <p className="text-gray-400">Loading affiliate dashboard...</p>
         </div>
       </div>

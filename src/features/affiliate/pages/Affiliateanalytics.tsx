@@ -13,6 +13,7 @@ import {
   TrendingUp, Clock, Calendar, ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Spinner } from "@/components/ui/Spinner";
 
 // =====================================================
 // CONSTANTS
@@ -305,7 +306,7 @@ export default function AffiliateAnalytics() {
   if (profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
+        <Spinner size="lg" />
       </div>
     );
   }
