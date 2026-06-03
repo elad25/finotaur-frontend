@@ -35,7 +35,7 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
-import { Scissors } from 'lucide-react';
+import { Scissors, X } from 'lucide-react';
 import dayjs from 'dayjs';
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
@@ -186,6 +186,8 @@ export interface BacktestReplayChartProps {
    * Defaults to true. Set to false to suppress drawing tools entirely.
    */
   enableDrawings?: boolean;
+  /** Called when the user clicks the X button next to a pending order price line. */
+  onCancelPending?: (orderId: string) => void;
 }
 
 type LoadState =
@@ -212,6 +214,7 @@ export function BacktestReplayChart({
   placeOrderArmed = false,
   onPlaceLimitAtPrice,
   enableDrawings = true,
+  onCancelPending,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -910,6 +913,41 @@ export function BacktestReplayChart({
             onTakeProfitChange={positionOverlay.onTakeProfitChange}
             onEntryChange={positionOverlay.onEntryChange}
           />
+        )}
+
+        {/* ── Cancel buttons for pending orders — one X button per order, pinned
+            to the order's price level just left of the right price axis.
+            pointer-events-none on the container (never blocks chart interaction);
+            each button gets pointer-events-auto. Re-evaluates on overlayTick so
+            buttons stay glued after pan / zoom / resize. ── */}
+        {onCancelPending && seriesRef.current && chartRef.current && pendingOrders.length > 0 && (
+          // key={overlayTick} forces React to re-evaluate coordinate math on
+          // every pan / zoom / resize — same pattern used by DrawingLayer above.
+          <div key={overlayTick} className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+            {pendingOrders.map((o) => {
+              const y = seriesRef.current!.priceToCoordinate(o.triggerPrice);
+              const containerHeight = containerRef.current?.clientHeight ?? 0;
+              if (y == null || y < 0 || y > containerHeight) return null;
+              const priceScaleWidth = chartRef.current!.priceScale('right').width() ?? 60;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  className="pointer-events-auto absolute flex h-[18px] w-[18px] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white/70 transition-colors hover:border-rose-500/60 hover:bg-rose-600 hover:text-white"
+                  style={{ top: y - 9, right: priceScaleWidth + 6 }}
+                  title="Cancel order"
+                  aria-label="Cancel order"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onCancelPending(o.id);
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              );
+            })}
+          </div>
         )}
 
         {/* ── Drawing canvas overlay — sits above chart canvas, below UI chrome.

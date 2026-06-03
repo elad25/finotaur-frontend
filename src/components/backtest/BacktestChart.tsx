@@ -1462,6 +1462,7 @@ export function BacktestChart({
             positionOverlay={positionOverlay}
             placeOrderArmed={placeArmed}
             onPlaceLimitAtPrice={handlePlaceLimitAtPrice}
+            onCancelPending={cancelPendingOrder}
           />
           {/* Right rail — PlaceOrderPanel + open-position card + Save to journal */}
           <div className="absolute right-0 top-0 bottom-0 z-30 w-80 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]/95 p-3 flex flex-col gap-3">
