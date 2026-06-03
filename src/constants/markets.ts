@@ -142,7 +142,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     label: 'Screener',
     icon: Search,
     routes: {
-      home: '/app/stocks/screener',
+      home: '/app/all-markets/screener',
     },
   },
   {

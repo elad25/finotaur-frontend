@@ -451,6 +451,8 @@ function AppContent() {
           <Route path="all-markets/calendar" element={<SuspenseRoute><AllMarketsCalendar /></SuspenseRoute>} />
           <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
           <Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
+          {/* Canonical Screener — cross-asset (Stocks/Crypto toggle), lives at the home/all-markets level */}
+          <Route path="all-markets/screener" element={<SuspenseRoute><StocksScreener /></SuspenseRoute>} />
 <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
           <Route path="all-markets/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliateSmartPage /></SuspenseRoute> : <Navigate to="/app" replace />} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -497,7 +499,9 @@ function AppContent() {
 
           {/* STOCKS */}
           <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
-          <Route path="stocks/screener" element={<LockedRoute domainId="stocks"><StocksScreener /></LockedRoute>} />
+          {/* Screener now lives at the all-markets (home) level — see all-markets/screener below.
+              Redirect keeps old bookmarks/links working. */}
+          <Route path="stocks/screener" element={<Navigate to="/app/all-markets/screener" replace />} />
           {/* Stocks Earnings — sealed: earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
               To re-enable: restore <LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute> and remove locked:true from nav.ts. */}
           <Route path="stocks/earnings" element={<OptionsComingSoon title="Earnings" description="Earnings calendar data is coming soon — we're securing a commercially licensed data feed." />} />

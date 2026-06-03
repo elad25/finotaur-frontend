@@ -265,11 +265,11 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Overview', path: '/app/stocks/overview' },
       { label: 'News',     path: '/app/stocks/news' },
-      { label: 'Screener', path: '/app/stocks/screener' },
+      // Screener moved to the all-markets (home) level — see constants/markets.ts.
     ],
     sidebar: [
       { label: 'Dashboard',          path: '/app/stocks/overview',     icon: LayoutDashboard },
-      { label: 'Screener',           path: '/app/stocks/screener',     icon: Search },
+      // Screener moved to the all-markets (home) level — see constants/markets.ts.
       // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
       { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
       { label: 'Fundamentals',       path: '/app/stocks/fundamentals', icon: BarChart3 },
