@@ -215,17 +215,17 @@ const JournalDashboardMock = () => {
 
 const MeetFinoIntro = () => {
   return (
-    <div className="relative flex flex-col items-center justify-center text-center px-4 py-6 overflow-hidden">
-      {/* center radial gold glow */}
+    <div className="relative flex flex-col items-start text-left px-4 sm:px-8 py-6 overflow-hidden">
+      {/* left radial gold glow */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(circle at center, var(--gold-border) 0%, transparent 60%)",
+            "radial-gradient(circle at left center, var(--gold-border) 0%, transparent 60%)",
         }}
         aria-hidden="true"
       />
-      <div className="relative z-10 flex flex-col items-center">
+      <div className="relative z-10 flex flex-col items-start">
         <video
           className="w-full max-w-[320px] sm:max-w-[480px] h-auto"
           src="/fino/fino-meet-fullbody.mp4"
@@ -240,11 +240,11 @@ const MeetFinoIntro = () => {
         <div className="mt-5 text-[10px] font-medium uppercase tracking-[0.3em] text-gold-primary/80">
           Meet FINO
         </div>
-        <h4 className="font-wordmark font-medium text-2xl text-ink-primary mt-1.5">
-          Your AI assistant
+        <h4 className="font-wordmark font-medium text-2xl text-ink-primary mt-1.5 max-w-md">
+          Your AI assistant, everywhere you trade.
         </h4>
-        <p className="text-sm text-ink-secondary mt-2 max-w-xs">
-          Ask anything — in your journal or anywhere on FINOTAUR. One tap away, on every page.
+        <p className="text-sm text-ink-secondary mt-2 max-w-md">
+          Break down a trade in your journal, decode an options chain, or get context on any ticker — just ask in plain English. FINO answers in seconds and is one tap away on every page.
         </p>
       </div>
     </div>
@@ -495,23 +495,25 @@ const JournalToolsTabs = () => {
                 aria-hidden="true"
               />
 
-              {/* Browser chrome */}
-              <div className="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900">
-                <div className="flex gap-1.5 shrink-0">
-                  <div className="w-3 h-3 rounded-full bg-status-error/60" />
-                  <div className="w-3 h-3 rounded-full bg-status-warning/60" />
-                  <div className="w-3 h-3 rounded-full bg-status-success/60" />
-                </div>
-                <div className="flex-1 min-w-0 flex justify-center">
-                  <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06] min-w-0 max-w-full overflow-hidden">
-                    <span className="block truncate text-[11px] text-ink-tertiary font-mono">
-                      {activeTab.screenshot?.url ??
-                        `finotaur.com/app/journal/${activeTab.key}`}
-                    </span>
+              {/* Browser chrome — hidden for the AI/Fino tab (no mock frame) */}
+              {activeTab.key !== "ai" && (
+                <div className="flex items-center gap-2 px-3 sm:px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900">
+                  <div className="flex gap-1.5 shrink-0">
+                    <div className="w-3 h-3 rounded-full bg-status-error/60" />
+                    <div className="w-3 h-3 rounded-full bg-status-warning/60" />
+                    <div className="w-3 h-3 rounded-full bg-status-success/60" />
                   </div>
+                  <div className="flex-1 min-w-0 flex justify-center">
+                    <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06] min-w-0 max-w-full overflow-hidden">
+                      <span className="block truncate text-[11px] text-ink-tertiary font-mono">
+                        {activeTab.screenshot?.url ??
+                          `finotaur.com/app/journal/${activeTab.key}`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-6 sm:w-12 shrink-0" />
                 </div>
-                <div className="w-6 sm:w-12 shrink-0" />
-              </div>
+              )}
 
               {/* Body */}
               {activeTab.key === "journal" ? (
