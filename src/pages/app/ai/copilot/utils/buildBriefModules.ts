@@ -500,6 +500,9 @@ export function buildBriefModulesFromDaily(
 
   // ── PORTFOLIO TODAY ───────────────────────────────────────────────────────
   const holdingCount = snapshot?.holdings.length ?? 0;
+  // Prefer the personalized glance (which references real tickers and P&L)
+  // over the generic position-count fallback. The personalized glance is
+  // supplied by the server when livePortfolio is present in the request.
   const portfolioToday: BriefData['portfolioToday'] = {
     glance: personal?.modules?.portfolioToday?.glance ?? {
       headline: snapshot
@@ -552,6 +555,8 @@ export function buildBriefModulesFromDaily(
   };
 
   // ── PM NOTE ───────────────────────────────────────────────────────────────
+  // personalCommentary is now enriched with live ticker/P&L references when
+  // livePortfolio was sent to the server — prefer it over the generic narrative.
   const commentary = personal?.personalCommentary ?? m.pmNote?.deep?.narrative ?? null;
   const pmNote: BriefData['pmNote'] = {
     glance: m.pmNote?.glance ?? {

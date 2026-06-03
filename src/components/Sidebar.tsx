@@ -269,6 +269,9 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Upcoming Events', path: '/app/ai/upcoming-events', icon: Calendar },
   ],
 
+  // beta:true is preserved to keep COPILOT gated to hasBetaAccess users
+  // (see `if (isBetaItem && !hasBetaAccess) return null`). The visible BETA
+  // badge is suppressed for all /copilot items via showBetaBadge below.
   'ai-copilot': [
     { label: 'FINOTAUR Copilot', path: '/copilot', icon: LayoutDashboard, beta: true },
     { label: 'Top Opportunities', path: '/copilot/top-opportunities', icon: Zap, beta: true },
@@ -604,7 +607,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           const isBetaItem = item.beta === true;
           const isAdminOnlyItem = item.adminOnly === true;
           const isCopilotItem = item.path === '/copilot';
-          const showBetaBadge = isBetaItem && !isCopilotItem;
+          // Suppress the visible BETA badge for ALL /copilot items (graduated
+          // out of beta visually) while keeping beta access-gating intact.
+          const showBetaBadge = isBetaItem && !item.path.startsWith('/copilot');
           // Show a subtle lock indicator to beta/admin viewers for items gated from regular users
           const showAdminLockIndicator = hasBetaAccess && (item.locked === true || isBetaItem || isAdminOnlyItem);
           const hasChildren = Boolean(item.children?.length);
@@ -683,12 +688,12 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 <>
                   <span className={item.label === 'FINOTAUR Copilot' ? sidebarBrandLabelClass : sidebarLabelClass}>
                     {item.label === 'FINOTAUR Copilot' ? (
-                      <>
+                      <span className="text-[11px]">
                         <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text font-bold tracking-[0.04em] text-transparent">
                           FINOTAUR
                         </span>{' '}
                         <span className="font-semibold text-ink-primary">Copilot</span>
-                      </>
+                      </span>
                     ) : item.label}
                   </span>
                   {isLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}

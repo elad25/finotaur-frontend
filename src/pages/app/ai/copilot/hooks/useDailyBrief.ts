@@ -18,6 +18,7 @@ import { usePortfolioData } from './usePortfolioData';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { buildBriefModulesFromDaily, type BriefData } from '../utils/buildBriefModules';
 import type { MarketStatusResult } from '@/lib/marketStatus';
+import type { PortfolioContext } from '@/services/copilotDailyBriefApi';
 
 // ---------------------------------------------------------------------------
 // Session phase
@@ -71,25 +72,11 @@ export interface UseDailyBriefResult {
 // ---------------------------------------------------------------------------
 
 export function useDailyBrief(): UseDailyBriefResult {
-  const {
-    global,
-    personal,
-    loading: briefLoading,
-    error: briefError,
-  } = useDailyBriefData();
-
   // Use 1M range for the portfolio snapshot. Day-change (changeAbs / changePercent)
   // reflects the full range — for a true intraday day-change we'd need a live feed.
   // Until that lands, the 1M changeAbs/changePercent serve as the portfolio context.
   const portfolioResult = usePortfolioData('1M');
   const marketStatus = useMarketStatus();
-
-  // Derive loading: block until the brief resolves. Portfolio is supplementary
-  // — the page can render without it (snapshot passed as null is handled defensively).
-  const loading = briefLoading;
-
-  // First error: brief error takes priority; portfolio errors are non-fatal for now.
-  const error: Error | null = briefError;
 
   const sessionPhase = useMemo(() => deriveSessionPhase(marketStatus), [marketStatus]);
   const greeting = useMemo(() => computeGreeting(), []);
@@ -104,6 +91,42 @@ export function useDailyBrief(): UseDailyBriefResult {
     // portfolioResult reference is stable across re-renders for the same input
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioResult]);
+
+  // Build a compact portfolio context to send with the personalization request.
+  // Only built when live data is available; capped to top 10 by market value
+  // to keep the server prompt token-efficient.
+  const portfolioContext = useMemo((): PortfolioContext | undefined => {
+    if (!snapshot || snapshot.holdings.length === 0) return undefined;
+    const totalValue = snapshot.totalValue || 1;
+    const sorted = [...snapshot.holdings].sort((a, b) => b.marketValue - a.marketValue);
+    const topHoldings = sorted.slice(0, 10).map((h) => ({
+      symbol: h.symbol,
+      marketValue: h.marketValue,
+      weightPct: (h.marketValue / totalValue) * 100,
+      unrealizedPnlPercent: h.unrealizedPnlPercent,
+      assetClass: h.assetClass,
+    }));
+    return {
+      totalValue: snapshot.totalValue,
+      changeAbs: snapshot.changeAbs,
+      changePercent: snapshot.changePercent,
+      topHoldings,
+    };
+  }, [snapshot]);
+
+  const {
+    global,
+    personal,
+    loading: briefLoading,
+    error: briefError,
+  } = useDailyBriefData(portfolioContext);
+
+  // Derive loading: block until the brief resolves. Portfolio is supplementary
+  // — the page can render without it (snapshot passed as null is handled defensively).
+  const loading = briefLoading;
+
+  // First error: brief error takes priority; portfolio errors are non-fatal for now.
+  const error: Error | null = briefError;
 
   const data = useMemo<BriefData | null>(() => {
     // Don't produce data while loading to avoid flicker with empty BriefData

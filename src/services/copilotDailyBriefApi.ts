@@ -86,15 +86,40 @@ export interface PersonalizedDailyResponse {
 export type { EventRadarItem, RankedTradeIdea, PlanAction, ModuleGlance, RotationRow };
 
 // ---------------------------------------------------------------------------
+// Portfolio context sent with the personalization request
+// ---------------------------------------------------------------------------
+
+export interface PortfolioHoldingContext {
+  symbol: string;
+  marketValue: number;
+  weightPct: number;
+  unrealizedPnlPercent: number;
+  assetClass?: string;
+}
+
+export interface PortfolioContext {
+  totalValue: number;
+  changeAbs: number;
+  changePercent: number;
+  topHoldings: PortfolioHoldingContext[];
+}
+
+// ---------------------------------------------------------------------------
 // Fetch
 // ---------------------------------------------------------------------------
 
-// GET /api/ai/copilot/daily-brief/personalized
-export async function fetchPersonalizedDailyBrief(): Promise<PersonalizedDailyResponse> {
+// POST /api/ai/copilot/daily-brief/personalized
+export async function fetchPersonalizedDailyBrief(
+  portfolio?: PortfolioContext,
+): Promise<PersonalizedDailyResponse> {
   const headers = await getAuthHeaders();
   const response = await fetch(
     `${API_BASE}/api/ai/copilot/daily-brief/personalized`,
-    { headers },
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ portfolio: portfolio ?? null }),
+    },
   );
 
   if (!response.ok) {

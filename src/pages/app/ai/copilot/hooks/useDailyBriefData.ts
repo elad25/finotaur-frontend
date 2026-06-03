@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   fetchPersonalizedDailyBrief,
   type PersonalizedDailyResponse,
+  type PortfolioContext,
 } from '@/services/copilotDailyBriefApi';
 
 const CACHE_KEY = 'finotaur:copilot-daily-brief:v1';
@@ -58,12 +59,14 @@ export interface UseDailyBriefDataResult {
   error: Error | null;
 }
 
-export function useDailyBriefData(): UseDailyBriefDataResult {
+export function useDailyBriefData(portfolio?: PortfolioContext): UseDailyBriefDataResult {
   const cached = readBriefCache();
 
   const query = useQuery<PersonalizedDailyResponse, Error>({
-    queryKey: ['copilot-daily-brief-personalized'],
-    queryFn: fetchPersonalizedDailyBrief,
+    // Include a stable key segment when portfolio is present so different
+    // portfolio states do not share a stale cached result.
+    queryKey: ['copilot-daily-brief-personalized', portfolio ? 'with-portfolio' : 'no-portfolio'],
+    queryFn: () => fetchPersonalizedDailyBrief(portfolio ?? undefined),
     // Brief content only changes once/day (pre-open cron). Within this window we
     // serve from React Query memory with no network call at all.
     staleTime: 4 * 60 * 60 * 1000, // 4h
