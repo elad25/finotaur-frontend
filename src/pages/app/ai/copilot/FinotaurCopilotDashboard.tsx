@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Link } from 'react-router-dom';
 import {
@@ -33,7 +34,7 @@ export function FinotaurCopilotDashboard() {
     return (
       <ErrorBoundary boundary="ai-copilot">
         <div className="mt-5 flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+          <Spinner size="md" />
         </div>
       </ErrorBoundary>
     );

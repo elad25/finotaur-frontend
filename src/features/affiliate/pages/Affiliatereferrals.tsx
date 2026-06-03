@@ -12,6 +12,7 @@ import {
   Clock, CheckCircle, XCircle, AlertTriangle, UserMinus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Spinner } from "@/components/ui/Spinner";
 
 // =====================================================
 // CONSTANTS
@@ -269,7 +270,7 @@ export default function AffiliateReferrals() {
   if (profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -383,7 +384,7 @@ export default function AffiliateReferrals() {
 
         {referralsLoading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
+            <Spinner size="md" />
           </div>
         ) : referrals.length === 0 ? (
           <div className="text-center py-16">

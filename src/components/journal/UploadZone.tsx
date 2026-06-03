@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { compressImage, validateImage } from "@/utils/imageCompression";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 
 export default function UploadZone({ file, onFile }:{ file?: File|null; onFile:(f:File|null)=>void; }){
   const ref = useRef<HTMLInputElement>(null);
@@ -59,7 +59,7 @@ export default function UploadZone({ file, onFile }:{ file?: File|null; onFile:(
       />
       {compressing ? (
         <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 text-yellow-500 animate-spin" />
+          <Spinner size="md" />
           <div className="text-sm text-zinc-300">Compressing image...</div>
           <div className="text-xs text-zinc-500">This won't take long</div>
         </div>

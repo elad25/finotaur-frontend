@@ -27,6 +27,7 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { FinotaurCopilotDashboard } from './copilot/FinotaurCopilotDashboard';
+import { Spinner } from '@/components/ui/Spinner';
 
 type CopilotPreviewMode = 'landing' | 'subscriber' | 'admin';
 
@@ -57,7 +58,7 @@ export default function MyPortfolio() {
   if ((adminLoading || accessLoading) && !canPreview) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

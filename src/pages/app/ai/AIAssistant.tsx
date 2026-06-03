@@ -10,6 +10,7 @@ import { useSearchParams } from 'react-router-dom';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Plus, Sparkles } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
@@ -46,7 +47,7 @@ export default function AIAssistant() {
   if (accessLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

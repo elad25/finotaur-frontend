@@ -1,6 +1,7 @@
 // src/pages/app/all-markets/Overview.tsx
 import { api } from '@/lib/apiBase';
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Spinner } from '@/components/ui/Spinner';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
@@ -704,7 +705,7 @@ function MarketTickerStrip({ newsItems = [] }: { newsItems?: { headline: string;
           
           {chartLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/50 z-20">
-              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <Spinner size="sm" />
             </div>
           )}
           

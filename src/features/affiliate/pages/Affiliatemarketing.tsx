@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import html2canvas from 'html2canvas';
+import { Spinner } from "@/components/ui/Spinner";
 
 // Logo paths - Update these to match your actual asset paths
 const LOGO_WITH_BULL = '/logo.png'; // The bull head logo
@@ -278,7 +279,7 @@ export default function AffiliateMarketing() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
+        <Spinner size="lg" />
       </div>
     );
   }

@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Sparkles } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
@@ -161,7 +162,7 @@ function FinoChatPanel({
         {/* Body */}
         {accessLoading ? (
           <div className="flex flex-1 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#C9A646]" />
+            <Spinner size="md" />
           </div>
         ) : !access.hasAccess ? (
           <div className="flex-1 overflow-y-auto">

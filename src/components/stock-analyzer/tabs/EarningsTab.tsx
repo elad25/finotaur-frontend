@@ -17,9 +17,10 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { Spinner } from "@/components/ui/Spinner";
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle,
-  Loader2, RefreshCw, ChevronDown, ChevronUp,
+  RefreshCw, ChevronDown, ChevronUp,
   Sparkles, Target, MessageSquareQuote, Activity,
   ArrowUpRight, ArrowDownRight, Minus, ExternalLink,
 } from 'lucide-react';
@@ -1092,7 +1093,7 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
       <div className="space-y-4">
         {/* Loading header */}
         <div className="flex items-center justify-center gap-3 py-3">
-          <div className="w-5 h-5 rounded-full border-2 border-[#C9A646]/30 border-t-[#C9A646] animate-spin" />
+          <Spinner size="sm" />
           <span className="text-sm text-[#8B8B8B]">
             Analyzing {data.ticker} latest earnings...
           </span>

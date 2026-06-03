@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
+import { Spinner } from '@/components/ui/Spinner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -1691,7 +1692,7 @@ function Top5Content() {
           <Suspense fallback={
             <div className="flex items-center justify-center py-32">
               <div className="p-10 text-center rounded-2xl" style={{ background: 'rgba(14,13,11,0.95)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                <ScanLine className="h-10 w-10 mx-auto mb-4 animate-spin" style={{ color: `${GOLD.dim}0.4)` }} />
+                <Spinner size="md" className="mx-auto mb-4" />
                 <p className="text-[13px]" style={{ color: '#8A8A8A' }}>Loading admin dashboard...</p>
               </div>
             </div>
@@ -1866,7 +1867,7 @@ export default function Top5() {
   if (accessLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

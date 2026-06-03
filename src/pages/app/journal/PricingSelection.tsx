@@ -8,10 +8,11 @@ import { useState, useEffect, Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { 
+import {
   Crown, Shield, LogOut, Check, Clock, ArrowRight, ChevronRight,
   FileText, Calendar, Headphones, Zap, X, Loader2, Rocket, Sparkles, Gift
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -256,7 +257,7 @@ export default function WarZonePricingSelection() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0A0A0A]">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
+          <Spinner size="lg" />
           <p className="text-sm text-zinc-400">Loading...</p>
         </div>
       </div>

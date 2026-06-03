@@ -7,6 +7,7 @@
 
 import { useState, Suspense, memo, useCallback } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
+import { Spinner } from '@/components/ui/Spinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, GitMerge, PieChart, Users, Zap } from 'lucide-react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -223,7 +224,7 @@ export default function FlowScanner() {
   if (accessLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

@@ -9,9 +9,10 @@
 
 import React, { memo, useMemo, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Target, BarChart3, Award, ArrowDownRight, AlertTriangle, ShieldCheck, Crosshair, Zap
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/Spinner';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 
@@ -220,7 +221,7 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
     {/* Sector Grid */}
     {isLoading ? (
       <div className="flex w-full max-w-[1224px] items-center justify-center py-24">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     ) : isError ? (
       <div className="w-full max-w-[1224px] py-16 text-center">
@@ -600,7 +601,7 @@ export default function SectorAnalyzer() {
   if (accessLoading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        <Spinner size="md" />
       </div>
     );
   }

@@ -31,6 +31,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { Suspense, useEffect, useState } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useSubscription } from '@/hooks/useSubscription';
+import { Spinner } from "@/components/ui/Spinner";
 
 // 🔥 Lazy load the JournalLandingPage to avoid circular imports
 const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLandingPage'));
@@ -89,7 +90,7 @@ const LoadingSpinner = ({ showFallback }: { showFallback?: boolean }) => (
         </>
       ) : (
         <>
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#D4AF37] border-t-transparent" />
+          <Spinner size="lg" />
           <p className="text-zinc-400 text-sm">Loading...</p>
         </>
       )}
