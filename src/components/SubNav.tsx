@@ -19,7 +19,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { domains } from '@/constants/nav';
-import { useFinoChat } from '@/contexts/FinoChatContext';
 import { MarketsAssetTabs } from '@/components/MarketsAssetTabs';
 import {
   Tooltip,
@@ -59,7 +58,6 @@ export const SubNav = () => {
   const { isImpersonating } = useImpersonation();
   const { hasAccess: hasBacktestAccess } = useBacktestAccess();
   const { hasBetaAccess, isAdmin: isAdminFromHook } = useAdminAuth();
-  const { open: openFino } = useFinoChat();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAffiliate, setIsAffiliate] = useState(false);
 
@@ -340,24 +338,7 @@ export const SubNav = () => {
 
         {/* Markets product: show asset-class tab row instead of domain subNav */}
         {activeDomain.id === 'markets' ? (
-          <>
-            <MarketsAssetTabs />
-            {/* FINO AI stays on the right even in Markets mode */}
-            <button
-              type="button"
-              onClick={() => openFino({ path: location.pathname })}
-              className="relative ml-auto flex-shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10"
-              aria-label="Ask FINO AI"
-            >
-              <img
-                src="/fino-avatar.png"
-                alt=""
-                aria-hidden="true"
-                className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
-              />
-              <span>FINO AI</span>
-            </button>
-          </>
+          <MarketsAssetTabs />
         ) : (
         <>
         {activeDomain.subNav
@@ -506,22 +487,6 @@ export const SubNav = () => {
             
             return buttonContent;
           })}
-
-        {/* FINO AI — opens the side chat with current-page context. Always present, every domain. */}
-        <button
-          type="button"
-          onClick={() => openFino({ path: location.pathname })}
-          className="relative ml-auto flex-shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10"
-          aria-label="Ask FINO AI"
-        >
-          <img
-            src="/fino-avatar.png"
-            alt=""
-            aria-hidden="true"
-            className="h-6 w-6 rounded-full object-cover border border-[#C9A646]/40"
-          />
-          <span>FINO AI</span>
-        </button>
         </>
         )}
       </div>
