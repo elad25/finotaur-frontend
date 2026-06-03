@@ -133,11 +133,12 @@ export default function HomePage() {
       <Card variant="featured" padding="default">
         <div className="flex items-center gap-ds-4">
           {/* Big FINO — real animated asset (native alpha, transparent).
-              ~60s home-hub loop with four expression beats (wave hello,
-              curious, hop, celebrate) so it never reads as a short loop.
-              Bipedal (2 legs + 2 arms), seeded from the FINO reference. */}
+              ~60s home-hub loop, locked-camera so every beat holds the SAME
+              framing/zoom, with four expression beats (wave hello, curious,
+              hop, celebrate). Bipedal (2 legs + 2 arms), anchored to the
+              canonical bipedal FINO still via image-to-video. */}
           <img
-            src="/fino/fino-home-loop.webp"
+            src="/fino/fino-home-loop-v2.webp"
             alt=""
             aria-hidden="true"
             draggable={false}
