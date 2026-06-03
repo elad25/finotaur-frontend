@@ -226,16 +226,13 @@ const MeetFinoIntro = () => {
         aria-hidden="true"
       />
       <div className="relative z-10 flex flex-col items-start">
-        <video
-          className="w-full max-w-[320px] sm:max-w-[480px] h-auto mix-blend-screen"
-          src="/fino/fino-meet-fullbody.mp4"
-          poster="/fino/fino-meet-fullbody-poster.jpg"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          aria-label="FINO — the FINOTAUR AI assistant"
+        <img
+          className="w-full max-w-[320px] sm:max-w-[480px] h-auto"
+          src="/assets/fino-mascot-transparent.png"
+          alt="FINO — the FINOTAUR AI assistant"
+          loading="lazy"
+          decoding="async"
+          draggable={false}
         />
       </div>
     </div>
