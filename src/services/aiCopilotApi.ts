@@ -142,7 +142,6 @@ export const aiCopilotApi = {
       message,
       context,
       conversationId,
-      tier,
       onConversation,
       onChunk,
       onSources,
@@ -153,14 +152,8 @@ export const aiCopilotApi = {
 
     const headers = await getAuthHeaders();
 
-    // Phase 5 N3 — flag-gated Anthropic chat path (no tools, prompt caching on system block).
-    // Cost-safe per-user routing: free/anon users → cheap tool-free Anthropic endpoint;
-    // explicitly paid platform plans → full tool-enabled endpoint.
-    const forceAnthropic = import.meta.env.VITE_ENABLE_ANTHROPIC_AIASSISTANT === 'true';
-    const t = (tier ?? 'free').toLowerCase();
-    const isPaid = ['platform_core', 'platform_finotaur', 'platform_enterprise', 'core', 'finotaur', 'enterprise', 'premium'].includes(t);
-    const useAnthropic = forceAnthropic || !isPaid;
-    const chatPath = useAnthropic ? '/api/ai/chat/stream-anthropic' : '/api/ai/chat/stream';
+    // All users use the enhanced Anthropic chat (page + journal aware); model tier is chosen server-side.
+    const chatPath = '/api/ai/chat/stream-anthropic';
 
     const response = await fetch(`${API_BASE}${chatPath}`, {
       method: 'POST',
