@@ -730,3 +730,10 @@ The following sections were removed from the landing page during the Phase F des
 - **Scarcity** (was: "153 of 1,000 seats remaining") — removed by product decision.
 
 **If reintroducing similar concepts later:** check the UNLOCK pattern (see `BeforeAfter.tsx`) — it covers the "what you get" framing in a more luxurious way.
+
+## Loaders
+
+Canonical loader: `src/components/ds/Spinner.tsx`.
+- `<Spinner size="sm|md|lg" color="gold|inherit" />` — gold ring (bright gold arc over a faint track). Use `color="inherit"` inside gold-filled buttons.
+- `<PageLoader text="Loading..." timedOut={false} />` — full-screen route/auth loader.
+Spin speed is globally 1.2s per rotation (tailwind.config.ts `animation.spin`). Do NOT create new bespoke spinners — use these. (Globe loaders in Copilot/Warzone are intentional exceptions.)

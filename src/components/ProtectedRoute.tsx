@@ -31,7 +31,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { Suspense, useEffect, useState } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useSubscription } from '@/hooks/useSubscription';
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoader } from '@/components/ds/Spinner';
 
 // 🔥 Lazy load the JournalLandingPage to avoid circular imports
 const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLandingPage'));
@@ -75,28 +75,6 @@ const JOURNAL_PATHS = [
 
 const LOAD_TIMEOUT_MS = 20_000;
 
-const LoadingSpinner = ({ showFallback }: { showFallback?: boolean }) => (
-  <div className="flex min-h-screen items-center justify-center bg-black">
-    <div className="flex flex-col items-center gap-4">
-      {showFallback ? (
-        <>
-          <p className="text-zinc-400 text-sm">Taking longer than expected...</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="rounded border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-400 hover:text-white transition-colors"
-          >
-            Refresh
-          </button>
-        </>
-      ) : (
-        <>
-          <Spinner size="lg" />
-          <p className="text-zinc-400 text-sm">Loading...</p>
-        </>
-      )}
-    </div>
-  </div>
-);
 
 /** Returns true after LOAD_TIMEOUT_MS elapses. Resets when `active` flips to false. */
 function useLoadTimeout(active: boolean): boolean {
@@ -180,7 +158,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // LOADING STATE - Show spinner briefly
   // ═══════════════════════════════════════════
   if (isLoading) {
-    return <LoadingSpinner showFallback={loadTimedOut} />;
+    return <PageLoader timedOut={loadTimedOut} />;
   }
 
   // ═══════════════════════════════════════════
@@ -233,7 +211,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     // ❌ No journal access - Show JournalLandingPage
     logOnce(`journal-denied-${location.pathname}`, '[ProtectedRoute] ❌ No journal access - showing landing page');
     return (
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense fallback={<PageLoader />}>
         <JournalLandingPage />
       </Suspense>
     );

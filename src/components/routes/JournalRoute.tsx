@@ -39,7 +39,7 @@ import { lazy } from '@/lib/lazyWithRetry';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Spinner } from "@/components/ui/Spinner";
+import { PageLoader } from '@/components/ds/Spinner';
 
 // =====================================================
 // LAZY LOAD LANDING PAGE
@@ -51,15 +51,7 @@ const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLanding
 // LOADING COMPONENT
 // =====================================================
 
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <Spinner size="lg" />
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// PageLoader imported from @/components/ds/Spinner
 
 // =====================================================
 // SUSPENSE WRAPPER
