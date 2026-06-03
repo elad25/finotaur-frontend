@@ -5,7 +5,7 @@
 // FREE plan is capped at 20 tickers; shows upgrade prompt when at limit.
 // ═══════════════════════════════════════════════════════════════
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, Plus, Loader2 } from 'lucide-react';
 import { useWatchlist } from '@/hooks/useWatchlist';
@@ -16,6 +16,7 @@ import { Button } from '@/components/ds/Button';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import type { WatchlistItem } from '@/lib/watchlist/types';
+import { TickerCell } from '@/components/portfolio/TickerCell';
 
 // ── Capacity meter ─────────────────────────────────────────────
 
@@ -57,56 +58,74 @@ function AddTickerRow({
   onAdd: (ticker: string) => Promise<void>;
   saving: boolean;
 }) {
-  const [input, setInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
 
   const handleAdd = async () => {
-    const trimmed = input.trim().toUpperCase();
-    if (!trimmed) return;
-    await onAdd(trimmed);
-    setInput('');
-    inputRef.current?.focus();
+    const ticker = draft.trim().toUpperCase();
+    if (!ticker) return;
+    await onAdd(ticker);
+    // Clear field after each add so the user can immediately type the next ticker.
+    // If the page's handler determined we're now at limit, the row collapses below.
+    setDraft('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAdd();
-    }
-  };
+  // Collapse the inline row if we've hit the limit after an add.
+  const isOpen = open && !atLimit;
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        disabled={atLimit}
+        onClick={() => setOpen(true)}
+        className={cn(
+          'flex items-center gap-1.5 text-sm font-medium transition-colors mt-2',
+          atLimit
+            ? 'text-ink-tertiary cursor-not-allowed'
+            : 'text-gold-primary hover:text-gold-primary/80',
+        )}
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add Ticker
+      </button>
+    );
+  }
 
   return (
+    // Do NOT use overflow-hidden here — TickerCell's dropdown must escape the row.
     <div className="flex items-center gap-2 mt-2">
-      <input
-        ref={inputRef}
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value.toUpperCase())}
-        onKeyDown={handleKeyDown}
-        placeholder="e.g. AAPL"
-        disabled={atLimit || saving}
-        className={cn(
-          'w-32 h-8 px-2 text-sm font-medium uppercase',
-          'bg-surface-1 border border-border-ds-subtle rounded-md',
-          'text-ink-primary placeholder:text-ink-tertiary',
-          'focus:outline-none focus:border-gold-primary transition-colors',
-          'disabled:opacity-40 disabled:cursor-not-allowed',
-        )}
-      />
+      {/* TickerCell grows to fill available space; give it a capped width */}
+      <div className="w-56">
+        <TickerCell
+          value={draft}
+          onChange={setDraft}
+          placeholder="Search ticker…"
+        />
+      </div>
       <Button
         variant="gold"
         size="sm"
         showArrow={false}
-        disabled={atLimit || saving || !input.trim()}
+        disabled={saving || !draft.trim()}
         onClick={handleAdd}
       >
         {saving ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Plus className="w-3.5 h-3.5" />
-        )}
+        ) : null}
         Add
       </Button>
+      <button
+        type="button"
+        aria-label="Cancel add ticker"
+        onClick={() => {
+          setDraft('');
+          setOpen(false);
+        }}
+        className="p-1 rounded text-ink-tertiary hover:text-ink-primary hover:bg-surface-2 transition-colors"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
