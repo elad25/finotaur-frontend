@@ -146,7 +146,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // ===============================================
   'stocks': [
     { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
-    { label: 'Screener', path: '/app/stocks/screener', icon: Search },
+    // Screener moved to the all-markets (home) level — see constants/markets.ts.
     { label: 'Earnings', path: '/app/stocks/earnings', icon: Calendar },
     { label: 'Fundamentals', path: '/app/stocks/fundamentals', icon: BarChart3 },
     { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
