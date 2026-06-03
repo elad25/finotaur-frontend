@@ -141,7 +141,8 @@ export default function HomePage() {
             muted
             playsInline
             aria-hidden="true"
-            className="h-24 w-24 flex-shrink-0 object-contain [mix-blend-mode:screen]"
+            className="h-24 w-24 flex-shrink-0 object-contain"
+            style={{ mixBlendMode: 'screen' }}
           />
           <div>
             <p className="text-base font-semibold text-gold-primary">Ask Fino</p>
