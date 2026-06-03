@@ -131,10 +131,17 @@ export default function HomePage() {
       <Card variant="featured" padding="default">
         {/* Header row */}
         <div className="mb-ds-4 flex items-center gap-ds-3">
-          <img
-            src="/fino/fino-meet-fullbody-poster.jpg"
-            alt="FINO"
-            className="h-20 w-20 flex-shrink-0 object-contain"
+          {/* Animated FINO — full-body clip; mix-blend drops the near-black
+              video background so he floats frameless on the card (no box). */}
+          <video
+            src="/fino/fino-meet-fullbody.mp4"
+            poster="/fino/fino-meet-fullbody-poster.jpg"
+            autoPlay
+            loop
+            muted
+            playsInline
+            aria-hidden="true"
+            className="h-24 w-24 flex-shrink-0 object-contain [mix-blend-mode:screen]"
           />
           <div>
             <p className="text-base font-semibold text-gold-primary">Ask Fino</p>
