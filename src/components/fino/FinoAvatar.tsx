@@ -20,13 +20,16 @@ import { useEffect, useRef, useState } from 'react';
 type Clip = 'idle' | 'thinking' | 'greeting' | 'celebrate';
 
 const SRC: Record<Clip, string> = {
-  idle: '/fino/fino-idle.mp4',
+  // idle is the long single-sweep take (90s) so the resting animation reads as
+  // one long continuous motion at a steady zoom — not a short 4s loop that
+  // visibly repeats. Same square framing as the previous clip.
+  idle: '/fino/fino-idle-long.mp4',
   thinking: '/fino/fino-thinking.mp4',
   greeting: '/fino/fino-greeting.mp4',
   celebrate: '/fino/fino-celebrate.mp4',
 };
 
-const POSTER = '/fino/fino-idle-poster.png';
+const POSTER = '/fino/fino-idle-long-poster.png';
 
 // Only these clips loop; greeting/celebrate are one-shots that resolve to idle.
 const LOOPING: ReadonlyArray<Clip> = ['idle', 'thinking'];
@@ -47,8 +50,9 @@ export default function FinoAvatar({
   size = 36,
   className = '',
 }: FinoAvatarProps) {
-  // Greet on first mount, then the effects below take over.
-  const [clip, setClip] = useState<Clip>('greeting');
+  // Start directly in the long idle sweep so the avatar opens at a steady zoom
+  // (no greeting one-shot that would jump framing). The effects below take over.
+  const [clip, setClip] = useState<Clip>('idle');
 
   // One-shot guard: celebrate fires at most once per conversation.
   const celebratedRef = useRef(false);
