@@ -222,8 +222,8 @@ const MeetFinoIntro = () => {
             card — true transparent look, no box. */}
         <video
           className="w-full max-w-[440px] sm:max-w-[620px] h-auto mx-auto mix-blend-screen"
-          src="/fino/fino-meet-60s.mp4"
-          poster="/fino/fino-meet-60s-poster.png"
+          src="/fino/fino-meet-60s-v2.mp4"
+          poster="/fino/fino-meet-60s-v2-poster.png"
           autoPlay
           muted
           loop
