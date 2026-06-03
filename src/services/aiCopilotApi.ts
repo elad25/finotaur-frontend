@@ -11,13 +11,19 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || '';
-    
+    const accessToken = session?.access_token || '';
+
     console.log('[AI Copilot API] Auth header - userId:', userId ? userId.substring(0, 8) + '...' : 'MISSING');
-    
-    return {
+
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-user-id': userId,
     };
+    // The Anthropic chat endpoint (/api/ai/chat/stream-anthropic) authenticates via
+    // a Supabase Bearer JWT (requireAuthJWT), not the legacy x-user-id header.
+    // Send both so every AI endpoint authenticates correctly.
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    return headers;
   } catch (error) {
     console.error('[AI Copilot API] Failed to get session:', error);
     return {
