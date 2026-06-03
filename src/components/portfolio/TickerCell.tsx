@@ -6,12 +6,12 @@
 // ═══════════════════════════════════════════════════════════════
 
 import React, { useEffect, useRef, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
 interface TickerSearchItem {
   symbol: string;
   name: string;
-  cik: string;
 }
 
 export interface TickerCellProps {
@@ -25,38 +25,38 @@ export function TickerCell({ value, onChange, placeholder = 'Ticker' }: TickerCe
   const [items, setItems] = useState<TickerSearchItem[]>([]);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // Stale-guard: track which query we last fired so out-of-order responses are discarded
+  const latestQueryRef = useRef<string>('');
 
   // Sync external value changes (e.g. after CSV import)
   useEffect(() => {
     setQuery(value);
   }, [value]);
 
-  // Debounced fetch — 200 ms
+  // Debounced fetch via Supabase RPC — 200 ms
   useEffect(() => {
-    if (!query || query.length < 1) {
+    const q = query.trim();
+    if (!q || q.length < 1) {
       setItems([]);
       setOpen(false);
       return;
     }
 
     const timer = setTimeout(async () => {
-      abortRef.current?.abort();
-      const ctl = new AbortController();
-      abortRef.current = ctl;
+      latestQueryRef.current = q;
 
-      try {
-        const res = await fetch(
-          `/api/search/tickers?q=${encodeURIComponent(query)}&limit=12`,
-          { signal: ctl.signal, credentials: 'include' },
-        );
-        if (!res.ok) return;
-        const json = await res.json() as { items?: TickerSearchItem[] };
-        setItems(json.items ?? []);
-        setOpen(true);
-      } catch {
-        // AbortError or network error — ignore
-      }
+      const { data } = await supabase.rpc('search_ticker_symbols', {
+        p_query: q,
+        p_asset_class: null,
+        p_limit: 10,
+      });
+
+      // Discard if a newer query was fired while this one was in flight
+      if (latestQueryRef.current !== q) return;
+
+      const results = (data ?? []) as TickerSearchItem[];
+      setItems(results);
+      if (results.length > 0) setOpen(true);
     }, 200);
 
     return () => {

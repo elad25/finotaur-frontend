@@ -78,7 +78,13 @@ export function CreatePortfolioModal({
   // Enabled when: at least one valid position (ticker + qty > 0) OR
   //               at least one account has cash > 0
   const hasValidPosition = portfolio.accounts.some((acc) =>
-    acc.positions.some((lot) => lot.ticker.trim() !== '' && lot.quantity > 0),
+    acc.positions.some(
+      (lot) =>
+        lot.ticker.trim() !== '' &&
+        lot.quantity > 0 &&
+        lot.costPerShare != null &&
+        lot.costPerShare > 0,
+    ),
   );
   const hasCash = portfolio.accounts.some((acc) => acc.cashPosition > 0);
   const canSave = (hasValidPosition || hasCash) && !saving;
@@ -88,20 +94,24 @@ export function CreatePortfolioModal({
     setFooterError(null);
 
     // Guard: reject incomplete position rows before hitting the network.
-    // A row is incomplete when it has a ticker but no valid quantity, or
-    // a valid quantity but no ticker.  Fully-empty rows (no ticker AND
-    // quantity 0) are silently ignored by the save path and are fine here.
+    // A row is valid when it has ALL three: ticker, quantity > 0, costPerShare > 0.
+    // Fully-empty rows (no ticker, quantity 0, no cost) are silently ignored.
+    // Any row that is partially filled (has at least one of the three fields)
+    // but is missing any of the three is considered incomplete → block save.
     const hasIncompleteRows = portfolio.accounts.some((acc) =>
       acc.positions.some((lot) => {
         const hasTicker = lot.ticker.trim() !== '';
         const hasQty    = lot.quantity > 0;
-        return hasTicker !== hasQty; // XOR: one side present, other missing
+        const hasCost   = lot.costPerShare != null && lot.costPerShare > 0;
+        const isFullyEmpty = !hasTicker && !hasQty && !hasCost;
+        if (isFullyEmpty) return false; // unused row — ignore
+        return !(hasTicker && hasQty && hasCost); // partially filled → incomplete
       }),
     );
 
     if (hasIncompleteRows) {
       setFooterError(
-        'Some positions are incomplete — every holding needs a ticker and a quantity greater than 0.',
+        'Every holding needs a ticker, a quantity greater than 0, and a purchase price (Cost / Share).',
       );
       return;
     }

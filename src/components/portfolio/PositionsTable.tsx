@@ -84,7 +84,9 @@ export function PositionsTable({
         <span className={cn('text-xs text-ink-secondary font-medium', COL_QTY)}>
           Quantity <span className="text-num-negative">*</span>
         </span>
-        <span className={cn('text-xs text-ink-secondary font-medium', COL_COST)}>Cost / Share</span>
+        <span className={cn('text-xs text-ink-secondary font-medium', COL_COST)}>
+          Cost / Share <span className="text-num-negative">*</span>
+        </span>
         <span className={cn('text-xs text-ink-secondary font-medium', COL_DATE)}>Purchase Date</span>
         <div className={COL_ACTIONS}>
           {uploadSlot ?? (
@@ -211,7 +213,7 @@ function PositionRow({ lot, currency, onUpdate, onAddLot, onRemove }: PositionRo
             step="any"
             value={lot.costPerShare ?? ''}
             onChange={handleCostChange}
-            placeholder="Optional"
+            placeholder="0.00"
             className={cn(
               cellInput,
               'rounded-l-none',
