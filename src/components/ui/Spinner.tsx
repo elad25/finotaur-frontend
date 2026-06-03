@@ -8,27 +8,40 @@ const SIZE_CLASSES: Record<SpinnerSize, string> = {
   lg: "w-12 h-12",
 };
 
+// Ring thickness (px) per size — used by the radial mask that carves out the comet ring.
+const RING_THICKNESS: Record<SpinnerSize, number> = {
+  sm: 3,
+  md: 4,
+  lg: 5,
+};
+
 interface SpinnerProps {
   size?: SpinnerSize;
   className?: string;
 }
 
 /**
- * Canonical FINOTAUR loading spinner — dual gold ring with a soft glow.
+ * Canonical FINOTAUR loading spinner — a slow "comet sweep": a bright gold head
+ * trailing into a transparent tail, rotating with a soft glow.
  * Replaces every full-page / in-card rotating-wheel loader across the app.
  * (Button-level action spinners are intentionally NOT covered by this.)
  */
 export function Spinner({ size = "md", className }: SpinnerProps) {
+  const thickness = RING_THICKNESS[size];
   return (
     <div
       role="status"
       aria-label="Loading"
-      className={cn("relative inline-block", SIZE_CLASSES[size], className)}
-      style={{ filter: "drop-shadow(0 0 6px rgba(201,166,70,0.35))" }}
-    >
-      <span className="absolute inset-0 rounded-full border-2 border-[rgba(201,166,70,0.15)]" />
-      <span className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#C9A646] border-r-[#D4AF37] animate-spin" />
-    </div>
+      className={cn("inline-block rounded-full animate-spin", SIZE_CLASSES[size], className)}
+      style={{
+        background:
+          "conic-gradient(from 0deg, rgba(240,199,94,0) 0deg, rgba(201,166,70,0.15) 200deg, #C9A646 330deg, #F0C75E 360deg)",
+        WebkitMask: `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 0)`,
+        mask: `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 0)`,
+        animationDuration: "1.2s",
+        filter: "drop-shadow(0 0 7px rgba(201,166,70,0.45))",
+      }}
+    />
   );
 }
 
