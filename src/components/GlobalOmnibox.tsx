@@ -1,8 +1,8 @@
 // src/components/GlobalOmnibox.tsx
 // =====================================================
 // GLOBAL COMMAND OMNIBOX — Phase 4 (Koyfin-style)
-// A prominent search bar with live suggestions,
-// asset-class tabs, and rich result rows.
+// Desktop: prominent trigger bar → centered modal overlay
+// Mobile:  icon → full-screen overlay
 // =====================================================
 // Features:
 //  - ⌘K / Ctrl+K to focus/open
@@ -319,8 +319,11 @@ export function GlobalOmnibox() {
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<AssetTab>('All');
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Modal input ref (desktop modal) and mobile input ref
+  const modalInputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
+  // Modal panel ref for click-outside detection
+  const modalPanelRef = useRef<HTMLDivElement>(null);
 
   // -------------------------------------------------------------------------
   // Debounce query → debouncedQuery (150ms)
@@ -467,12 +470,15 @@ export function GlobalOmnibox() {
     setDebouncedQuery('');
     setHighlightIndex(0);
     setActiveTab('All');
-    inputRef.current?.blur();
   }
 
   function openOmnibox() {
     setIsOpen(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    // Auto-focus the appropriate input after the overlay renders
+    setTimeout(() => {
+      modalInputRef.current?.focus();
+      mobileInputRef.current?.focus();
+    }, 0);
   }
 
   function runItem(item: FlatItem) {
@@ -508,16 +514,17 @@ export function GlobalOmnibox() {
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen]);
 
-  // Close on outside click
+  // Close modal on click outside the panel (desktop)
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return;
 
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (modalPanelRef.current && !modalPanelRef.current.contains(e.target as Node)) {
         close_();
       }
     };
 
+    // Use capture so we intercept before any inner handlers
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen]);
@@ -561,7 +568,7 @@ export function GlobalOmnibox() {
   const EXAMPLE_CHIPS = ['NVDA', 'TSLA', 'AAPL', 'SPY'];
 
   // -------------------------------------------------------------------------
-  // Render helpers
+  // Render helpers — shared between desktop modal and mobile overlay
   // -------------------------------------------------------------------------
 
   function renderItemAt(item: FlatItem, idx: number) {
@@ -588,7 +595,7 @@ export function GlobalOmnibox() {
     );
   }
 
-  function renderDropdownBody() {
+  function renderModalBody() {
     if (!query.trim()) {
       // Empty state
       const recent = getRecentlyViewed();
@@ -685,16 +692,17 @@ export function GlobalOmnibox() {
   return (
     <>
       {/*
-        ── Desktop: prominent command bar ──────────────────────────────────
-        Height bumped to 48px, stronger gold border/glow.
+        ── Desktop: trigger bar (button) ───────────────────────────────────
+        Clicking/focusing this opens the centered modal overlay.
+        The bar itself is NOT an input — it's a styled button trigger.
       */}
-      <div
-        ref={containerRef}
-        className="relative hidden md:block w-full"
-      >
-        {/* ── Input trigger ── */}
-        <div
-          className="omnibox-trigger relative flex items-center w-full rounded-xl transition-all duration-200"
+      <div className="relative hidden md:block w-full">
+        <button
+          type="button"
+          onClick={openOmnibox}
+          aria-label="Open search"
+          aria-haspopup="dialog"
+          className="omnibox-trigger relative flex items-center w-full rounded-xl transition-all duration-200 text-left"
           style={{
             height: 48,
             background: '#111111',
@@ -707,99 +715,191 @@ export function GlobalOmnibox() {
           }}
           onMouseEnter={(e) => {
             if (!isOpen) {
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.38)';
-              (e.currentTarget as HTMLDivElement).style.boxShadow =
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(201,166,70,0.38)';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow =
                 '0 0 0 1px rgba(0,0,0,0.3), 0 2px 14px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.02)';
             }
           }}
           onMouseLeave={(e) => {
             if (!isOpen) {
-              (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(201,166,70,0.24)';
-              (e.currentTarget as HTMLDivElement).style.boxShadow =
+              (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(201,166,70,0.24)';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow =
                 '0 0 0 1px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.02)';
             }
           }}
         >
           {/* Search icon — muted gold */}
           <Search
-            className="absolute left-3.5 h-4.5 w-4.5 flex-shrink-0 pointer-events-none"
+            className="absolute left-3.5 flex-shrink-0 pointer-events-none"
             style={{
               width: 18,
               height: 18,
-              color: isOpen ? 'rgba(201,166,70,0.80)' : 'rgba(201,166,70,0.45)',
+              color: 'rgba(201,166,70,0.45)',
             }}
           />
 
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              if (!isOpen) setIsOpen(true);
-            }}
-            onFocus={() => setIsOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search ticker, company, or ask Fino…"
-            className="w-full bg-transparent pl-11 pr-20 text-[15px] text-[#E8E8E8] outline-none"
-            style={{ caretColor: '#C9A646' }}
-            autoComplete="off"
-            spellCheck={false}
-          />
+          {/* Placeholder text */}
+          <span
+            className="pl-11 pr-20 text-[15px] select-none"
+            style={{ color: 'rgba(160,160,160,0.55)' }}
+          >
+            Search ticker, company, or ask Fino…
+          </span>
 
-          {/* Right side: clear button OR ⌘K kbd chip */}
+          {/* ⌘K kbd chip */}
           <div className="absolute right-3 flex items-center">
-            {query ? (
-              <button
-                type="button"
-                onClick={() => { setQuery(''); inputRef.current?.focus(); }}
-                className="flex items-center justify-center h-5 w-5 rounded transition-colors"
-                style={{ color: 'rgba(160,160,160,0.6)' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.6)'; }}
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <span
-                className="flex items-center gap-0.5 select-none"
-                style={{
-                  padding: '2px 6px',
-                  borderRadius: 5,
-                  border: '1px solid rgba(201,166,70,0.22)',
-                  background: 'rgba(201,166,70,0.06)',
-                  color: 'rgba(201,166,70,0.50)',
-                  fontSize: 10,
-                  fontFamily: 'ui-monospace, monospace',
-                  letterSpacing: '0.03em',
-                  lineHeight: 1,
-                }}
-              >
-                <Command className="h-2.5 w-2.5" />
-                K
-              </span>
-            )}
+            <span
+              className="flex items-center gap-0.5 select-none"
+              style={{
+                padding: '2px 6px',
+                borderRadius: 5,
+                border: '1px solid rgba(201,166,70,0.22)',
+                background: 'rgba(201,166,70,0.06)',
+                color: 'rgba(201,166,70,0.50)',
+                fontSize: 10,
+                fontFamily: 'ui-monospace, monospace',
+                letterSpacing: '0.03em',
+                lineHeight: 1,
+              }}
+            >
+              <Command className="h-2.5 w-2.5" />
+              K
+            </span>
           </div>
-        </div>
+        </button>
+      </div>
 
-        {/* ── Dropdown / results panel ── */}
-        {isOpen && (
+      {/*
+        ── Desktop: centered modal overlay ─────────────────────────────────
+        Fixed backdrop + centered panel. Command-palette style.
+      */}
+      {isOpen && (
+        <div
+          className="hidden md:flex fixed inset-0 z-[300] items-start justify-center"
+          style={{ background: 'rgba(0,0,0,0.60)', paddingTop: '13vh' }}
+          aria-modal="true"
+          role="dialog"
+          aria-label="Search"
+        >
+          {/* Modal panel */}
           <div
-            className="absolute left-0 right-0 top-full mt-2 rounded-xl z-[200] overflow-hidden"
+            ref={modalPanelRef}
+            className="flex flex-col rounded-xl overflow-hidden"
             style={{
+              width: 'min(720px, 92vw)',
+              maxHeight: '72vh',
               background: '#0D0D0D',
-              border: '1px solid rgba(201,166,70,0.18)',
+              border: '1px solid rgba(201,166,70,0.22)',
               boxShadow:
-                '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,166,70,0.04), inset 0 1px 0 rgba(201,166,70,0.03)',
-              maxHeight: 460,
-              overflowY: 'auto',
+                '0 32px 80px rgba(0,0,0,0.80), 0 0 0 1px rgba(201,166,70,0.06), inset 0 1px 0 rgba(201,166,70,0.04)',
             }}
           >
-            {renderDropdownBody()}
+            {/* ── Modal header: big input + close button ── */}
+            <div
+              className="flex items-center gap-3 px-4 py-3 border-b"
+              style={{ borderColor: 'rgba(201,166,70,0.12)' }}
+            >
+              <Search
+                className="flex-shrink-0"
+                style={{ width: 20, height: 20, color: 'rgba(201,166,70,0.65)' }}
+              />
+              <input
+                ref={modalInputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Search ticker, company, or ask Fino…"
+                className="flex-1 bg-transparent text-[16px] text-[#E8E8E8] placeholder:text-[#444] outline-none"
+                style={{ caretColor: '#C9A646' }}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); modalInputRef.current?.focus(); }}
+                  className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded transition-colors"
+                  style={{ color: 'rgba(160,160,160,0.5)' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.5)'; }}
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={close_}
+                className="flex-shrink-0 flex items-center justify-center h-7 w-7 rounded-md transition-colors ml-1"
+                style={{ color: 'rgba(160,160,160,0.5)', background: 'rgba(255,255,255,0.04)' }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = '#F4F4F4';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.color = 'rgba(160,160,160,0.5)';
+                  (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+                }}
+                aria-label="Close search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* ── Modal results (scrollable) ── */}
+            <div className="overflow-y-auto flex-1" style={{ maxHeight: 'calc(72vh - 56px - 36px)' }}>
+              {renderModalBody()}
+            </div>
+
+            {/* ── Modal footer: keyboard hint ── */}
+            <div
+              className="flex items-center justify-center gap-4 px-4 py-2 border-t"
+              style={{ borderColor: 'rgba(201,166,70,0.08)', background: 'rgba(0,0,0,0.3)' }}
+            >
+              <span className="text-[11px]" style={{ color: 'rgba(100,100,100,0.9)' }}>
+                <kbd
+                  className="font-mono"
+                  style={{
+                    padding: '1px 4px',
+                    borderRadius: 3,
+                    border: '1px solid rgba(100,100,100,0.3)',
+                    background: 'rgba(255,255,255,0.04)',
+                    fontSize: 10,
+                  }}
+                >↑↓</kbd>
+                {' '}navigate
+              </span>
+              <span className="text-[11px]" style={{ color: 'rgba(100,100,100,0.9)' }}>
+                <kbd
+                  className="font-mono"
+                  style={{
+                    padding: '1px 5px',
+                    borderRadius: 3,
+                    border: '1px solid rgba(100,100,100,0.3)',
+                    background: 'rgba(255,255,255,0.04)',
+                    fontSize: 10,
+                  }}
+                >↵</kbd>
+                {' '}open
+              </span>
+              <span className="text-[11px]" style={{ color: 'rgba(100,100,100,0.9)' }}>
+                <kbd
+                  className="font-mono"
+                  style={{
+                    padding: '1px 5px',
+                    borderRadius: 3,
+                    border: '1px solid rgba(100,100,100,0.3)',
+                    background: 'rgba(255,255,255,0.04)',
+                    fontSize: 10,
+                  }}
+                >Esc</kbd>
+                {' '}close
+              </span>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Mobile: icon button that opens full-width overlay ───────────── */}
       <button
@@ -828,6 +928,7 @@ export function GlobalOmnibox() {
             >
               <Search className="h-4 w-4 text-[#555] flex-shrink-0" />
               <input
+                ref={mobileInputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -849,7 +950,7 @@ export function GlobalOmnibox() {
 
             {/* Mobile results */}
             <div className="overflow-y-auto flex-1">
-              {renderDropdownBody()}
+              {renderModalBody()}
             </div>
           </div>
         </div>
