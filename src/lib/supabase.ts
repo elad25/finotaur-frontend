@@ -63,7 +63,10 @@ export const supabase = (() => {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: window.localStorage,
+        // SSR-safe: window is undefined during the prerender build (Node).
+        // supabase-js falls back to in-memory storage when this is undefined;
+        // in the browser it is identical to window.localStorage.
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
         storageKey: 'finotaur-auth-token',
       },
       global: {
