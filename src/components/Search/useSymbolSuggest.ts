@@ -4,7 +4,7 @@ export type SuggestItem = {
   symbol: string;
   name: string;
   exchange?: string;
-  assetType?: "stock" | "etf" | "crypto" | "fx" | "futures" | "index" | "unknown";
+  assetType?: "stock" | "etf" | "crypto" | "fx" | "futures" | "index" | "bond" | "unknown";
 };
 
 type State =
