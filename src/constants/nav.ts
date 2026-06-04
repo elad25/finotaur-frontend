@@ -26,7 +26,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
-  Link, Gift, Swords, Crown, Shield, Copy, Droplet,
+  Link, Gift, Swords, Crown, Shield, Copy, Droplet, Grid3x3, Calculator,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -334,12 +334,14 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard',          path: '/app/forex/overview',      icon: LayoutDashboard },
       { label: 'Currency Strength',  path: '/app/forex/strength',      icon: Activity },
+      { label: 'Heatmap',            path: '/app/forex/heatmap',       icon: Grid3x3 },
       { label: 'Correlation Map',    path: '/app/forex/correlation',   icon: Map },
       { label: 'Economic Calendar',  path: '/app/forex/calendar',      icon: Calendar },
       { label: 'Major/Cross Pairs',  path: '/app/forex/pairs',         icon: Globe },
       { label: 'Interest Rates',     path: '/app/forex/rates',         icon: LineChart },
       { label: 'Macro Reports',      path: '/app/forex/deep-analysis', icon: FileText },
       { label: 'Alerts & Watchlists', path: '/app/forex/alerts',      icon: Bell },
+      { label: 'Calculators',         path: '/app/forex/tools',        icon: Calculator },
     ],
   },
 

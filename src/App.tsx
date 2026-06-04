@@ -303,6 +303,9 @@ const ForexRates = lazy(() => import("@/pages/app/forex/Rates"));
 const ForexDeepAnalysis = lazy(() => import("@/pages/app/forex/DeepAnalysis"));
 const ForexAlerts = lazy(() => import("@/pages/app/forex/Alerts"));
 const ForexNews = lazy(() => import("@/pages/app/forex/News"));
+const ForexHeatmap = lazy(() => import("@/pages/app/forex/Heatmap"));
+const ForexPair = lazy(() => import("@/pages/app/forex/Pair"));
+const ForexTools = lazy(() => import("@/pages/app/forex/Tools"));
 
 // Commodities
 const CommoditiesOverview = lazy(() => import("@/pages/app/commodities/Overview"));
@@ -575,6 +578,9 @@ function AppContent() {
           <Route path="forex/deep-analysis" element={<LockedRoute domainId="forex"><ForexDeepAnalysis /></LockedRoute>} />
           <Route path="forex/alerts" element={<LockedRoute domainId="forex"><ForexAlerts /></LockedRoute>} />
           <Route path="forex/news" element={<LockedRoute domainId="forex"><ForexNews /></LockedRoute>} />
+          <Route path="forex/heatmap" element={<LockedRoute domainId="forex"><ForexHeatmap /></LockedRoute>} />
+          <Route path="forex/tools" element={<LockedRoute domainId="forex"><ForexTools /></LockedRoute>} />
+          <Route path="forex/pair/:symbol" element={<LockedRoute domainId="forex"><ForexPair /></LockedRoute>} />
           
           {/* COMMODITIES */}
           <Route path="commodities/overview" element={<LockedRoute domainId="commodities"><CommoditiesOverview /></LockedRoute>} />
