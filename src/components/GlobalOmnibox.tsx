@@ -35,6 +35,9 @@ import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import { classifyEquity } from '@/lib/symbolCategories';
 import { searchCrypto } from '@/data/cryptoCoins';
+import { searchForex } from '@/data/forexPairs';
+import { searchIndices } from '@/data/indices';
+import { searchBonds } from '@/data/treasuryYields';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,7 +77,7 @@ const TAB_FILTER: Record<AssetTab, SuggestItem['assetType'][]> = {
   Forex:   ['fx'],
   Crypto:  ['crypto'],
   Indices: ['index'],
-  Bonds:   ['unknown'],      // no dedicated assetType yet; renders empty gracefully
+  Bonds:   ['bond'],
   Economy: ['unknown'],      // no dedicated assetType yet; renders empty gracefully
   Options: ['unknown'],      // no dedicated assetType yet; renders empty gracefully
 };
@@ -129,8 +132,9 @@ function routeForSuggest(
 ): string {
   if (assetType === 'etf') return `/app/etfs/${sym}/overview`;
   if (assetType === 'crypto') return coinId ? `/app/crypto/coin/${coinId}` : '/app/crypto/overview';
-  if (assetType === 'fx') return '/app/forex/overview';
+  if (assetType === 'fx') return `/app/forex/pair/${sym}`;
   if (assetType === 'futures') return '/app/futures/overview';
+  if (assetType === 'bond') return '/app/macro/rates';
   // stock / index / unknown / undefined → Stock Analyzer
   return `/app/ai/stock-analyzer?symbol=${sym}`;
 }
@@ -146,6 +150,7 @@ const ASSET_STYLES: Record<string, { circle: string; text: string; label: string
   fx:      { circle: '#1A6B50', text: '#34D399', label: 'FX' },
   futures: { circle: '#7A3D0E', text: '#FB923C', label: 'Futures' },
   index:   { circle: '#2E3A4A', text: '#94A3B8', label: 'Index' },
+  bond:    { circle: '#1A3A2A', text: '#4ADE80', label: 'Bond' },
   unknown: { circle: '#2A2A2A', text: '#666',    label: 'Asset' },
 };
 
@@ -390,12 +395,39 @@ export function GlobalOmnibox() {
           coinId: c.coinId,
         }))
       : [];
+    // Inject forex matches from the bundled static list.
+    const fx: EnrichedItem[] = debouncedQuery.trim()
+      ? searchForex(debouncedQuery, 6).map((p) => ({
+          symbol: p.symbol,
+          name: p.name,
+          assetType: 'fx' as const,
+        }))
+      : [];
+    // Inject indices matches from the bundled static list.
+    const idx: EnrichedItem[] = debouncedQuery.trim()
+      ? searchIndices(debouncedQuery, 6).map((i) => ({
+          symbol: i.symbol,
+          name: i.name,
+          assetType: 'index' as const,
+        }))
+      : [];
+    // Inject bond matches from the bundled static list.
+    const bonds: EnrichedItem[] = debouncedQuery.trim()
+      ? searchBonds(debouncedQuery, 6).map((b) => ({
+          symbol: b.symbol,
+          name: b.name,
+          assetType: 'bond' as const,
+        }))
+      : [];
     // De-dupe: if a symbol already appears among equities, keep the equity entry.
     const equitySymbols = new Set(equities.map((e) => e.symbol.toUpperCase()));
     const dedupedCryptos = cryptos.filter(
       (c) => !equitySymbols.has(c.symbol.toUpperCase()),
     );
-    return [...equities, ...dedupedCryptos];
+    const dedupedFx = fx.filter((f) => !equitySymbols.has(f.symbol.toUpperCase()));
+    const dedupedIdx = idx.filter((i) => !equitySymbols.has(i.symbol.toUpperCase()));
+    const dedupedBonds = bonds.filter((b) => !equitySymbols.has(b.symbol.toUpperCase()));
+    return [...equities, ...dedupedCryptos, ...dedupedFx, ...dedupedIdx, ...dedupedBonds];
   }, [suggestState.data, debouncedQuery]);
 
   // -------------------------------------------------------------------------
