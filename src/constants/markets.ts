@@ -187,6 +187,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: Calendar,
     routes: {
       home: '/app/all-markets/calendar',
+      forex: '/app/forex/calendar',
     },
   },
   {
@@ -220,7 +221,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: FileText,
     routes: {
       stocks:      '/app/stocks/reports',
-      forex:       '/app/forex/deep-analysis',
       macro:       '/app/macro/reports',
     },
   },
@@ -347,11 +347,50 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     },
   },
   {
+    id: 'forex-heatmap',
+    label: 'Heatmap',
+    icon: BarChart3,
+    routes: {
+      forex: '/app/forex/heatmap',
+    },
+  },
+  {
+    id: 'forex-macro-cockpit',
+    label: 'Macro Cockpit',
+    icon: Globe,
+    routes: {
+      forex: '/app/forex/currency/USD',
+    },
+  },
+  {
+    id: 'forex-cb-watch',
+    label: 'Central Bank Watch',
+    icon: DollarSign,
+    routes: {
+      forex: '/app/forex/cb-watch',
+    },
+  },
+  {
+    id: 'forex-cot',
+    label: 'COT Positioning',
+    icon: Activity,
+    routes: {
+      forex: '/app/forex/cot',
+    },
+  },
+  {
+    id: 'forex-tools',
+    label: 'Calculators',
+    icon: Coins,
+    routes: {
+      forex: '/app/forex/tools',
+    },
+  },
+  {
     id: 'rates',
     label: 'Interest Rates',
     icon: LineChart,
     routes: {
-      forex:  '/app/forex/rates',
       macro:  '/app/macro/rates',
     },
   },
