@@ -42,11 +42,12 @@ import {
   Settings, Loader2, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
   Clock, Calendar, CheckCircle2, AlertCircle, Key, Eye, EyeOff, Check,
   TrendingUp, Newspaper, AlertTriangle, Flame,
-  Pencil, X, Globe, User, BookOpen, ExternalLink, Mail
+  Pencil, X, Globe, User, BookOpen, ExternalLink, Mail, Download, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation";
 import { SkeletonCard } from "@/components/ds/Skeleton";
+import { requestAccountDeletion, downloadGdprExport } from "@/services/accountLifecycleService";
 
 // ============================================
 // TYPES - Matches actual DB schema
@@ -2508,6 +2509,75 @@ const SecurityTab = () => {
     </div>
   );
 
+  // ── Data export + account deletion (GDPR / Danger Zone) ──
+  const [exporting, setExporting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteAck, setDeleteAck] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletionResult, setDeletionResult] = useState<{ undo_deadline?: string } | null>(null);
+
+  const emailMatches =
+    !!user?.email &&
+    deleteConfirmEmail.trim().toLowerCase() === user.email.toLowerCase();
+  const canDelete = emailMatches && deleteAck && !deleting;
+
+  const resetDeleteModal = () => {
+    setShowDeleteDialog(false);
+    setDeleteConfirmEmail("");
+    setDeleteReason("");
+    setDeleteAck(false);
+    setDeletionResult(null);
+  };
+
+  const handleExportData = async () => {
+    setExporting(true);
+    try {
+      const result = await downloadGdprExport();
+      if (result.success) {
+        toast.success(`Your data has been exported${result.filename ? ` (${result.filename})` : ''}`);
+      } else {
+        toast.error(result.error || 'Failed to export your data');
+      }
+    } catch (error) {
+      console.error('GDPR export failed:', error);
+      toast.error('Failed to export your data');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!canDelete) return;
+    setDeleting(true);
+    try {
+      const result = await requestAccountDeletion({
+        confirmEmail: deleteConfirmEmail.trim(),
+        reason: deleteReason.trim() || undefined,
+        acknowledgedPermanent: true,
+      });
+      if (result.success) {
+        setDeletionResult({ undo_deadline: result.undo_deadline });
+      } else {
+        toast.error(result.error || 'Failed to delete account');
+      }
+    } catch (error) {
+      console.error('Account deletion failed:', error);
+      toast.error('Failed to delete account');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSignOutAfterDeletion = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      window.location.href = '/';
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2702,6 +2772,136 @@ const SecurityTab = () => {
                   </>
                 )}
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </Card>
+
+      {/* Danger Zone — data export + account deletion */}
+      <Card className="p-5 bg-zinc-900/50 border-red-900/40">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="w-4 h-4 text-red-400" />
+          <h2 className="font-medium text-white">Danger Zone</h2>
+        </div>
+
+        {/* Export my data */}
+        <div className="flex items-center justify-between py-3 border-b border-zinc-800">
+          <div className="pr-4">
+            <p className="text-sm text-zinc-300">Export my data</p>
+            <p className="text-xs text-zinc-500">Download a copy of your personal data (GDPR).</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExportData} disabled={exporting}>
+            {exporting
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <><Download className="w-4 h-4 mr-2" /> Export</>}
+          </Button>
+        </div>
+
+        {/* Delete account */}
+        <div className="flex items-center justify-between pt-3">
+          <div className="pr-4">
+            <p className="text-sm text-zinc-300">Delete account</p>
+            <p className="text-xs text-zinc-500">
+              Permanently delete your account and data. This cannot be undone after the grace period.
+            </p>
+          </div>
+
+          <Dialog
+            open={showDeleteDialog}
+            onOpenChange={(open) => (open ? setShowDeleteDialog(true) : resetDeleteModal())}
+          >
+            <DialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              {!deletionResult ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Delete your account?</DialogTitle>
+                    <DialogDescription>
+                      This schedules your account for permanent deletion and cancels any active
+                      subscriptions. You can undo it from the email we send you, before the grace
+                      period ends.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Type your email to confirm</Label>
+                      <Input
+                        type="email"
+                        value={deleteConfirmEmail}
+                        onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                        placeholder={user?.email || ''}
+                        className="h-9"
+                        autoComplete="off"
+                      />
+                      {deleteConfirmEmail && !emailMatches && (
+                        <p className="text-xs text-red-500 flex items-center gap-1">
+                          <X className="h-3 w-3" /> Email does not match your account
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">Reason (optional)</Label>
+                      <Input
+                        type="text"
+                        value={deleteReason}
+                        onChange={(e) => setDeleteReason(e.target.value)}
+                        placeholder="Tell us why you're leaving"
+                        className="h-9"
+                      />
+                    </div>
+
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={deleteAck}
+                        onChange={(e) => setDeleteAck(e.target.checked)}
+                        className="mt-0.5 accent-red-500"
+                      />
+                      <span className="text-xs text-zinc-400">
+                        I understand this will permanently delete my account and all associated
+                        data after the grace period.
+                      </span>
+                    </label>
+                  </div>
+
+                  <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={resetDeleteModal} disabled={deleting}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={handleDeleteAccount} disabled={!canDelete}>
+                      {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete my account'}
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Account scheduled for deletion</DialogTitle>
+                    <DialogDescription>
+                      Your account has been scheduled for deletion
+                      {deletionResult.undo_deadline
+                        ? ` and will be permanently removed on ${new Date(deletionResult.undo_deadline).toLocaleDateString()}`
+                        : ''}
+                      . We've emailed you a link to undo this if you change your mind.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      size="sm"
+                      onClick={handleSignOutAfterDeletion}
+                      className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+                    >
+                      Sign out
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>
