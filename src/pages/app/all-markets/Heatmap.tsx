@@ -5,9 +5,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { RefreshCw, Maximize2, Share2, Clock, AlertCircle } from 'lucide-react';
-import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
-import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
-import { useMarketGate } from '@/hooks/useMarketGate';
+import { PriceGate } from '@/components/compliance/PriceGate';
 
 // ============ TYPES ============
 interface StockData {
@@ -864,7 +862,6 @@ function SessionBadge({ session }: { session: MarketSession }) {
 
 // ============ MAIN COMPONENT ============
 export default function HeatmapPage() {
-  const { gated, isAdmin } = useMarketGate();
   const [selectedMarket, setSelectedMarket] = useState<MarketKey>('stocks');
   const [stockData, setStockData] = useState<StockData[]>(SP500_STOCKS);
   const [loading, setLoading] = useState(true);
@@ -1147,27 +1144,9 @@ export default function HeatmapPage() {
     return `${hours}h ago`;
   };
 
-  // Gate: entire page is raw Polygon price data — hide until licensed
-  if (gated) {
-    return (
-      <div className="min-h-screen bg-[#0A0A0A] text-white p-4">
-        {/* Header shell preserved so the page title is still visible */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-lg font-semibold text-white">
-              Standard and Poor's 500 index stocks categorized by sectors and industries. Size represents market cap.
-            </h1>
-          </div>
-        </div>
-        <LicensedDataPlaceholder minHeight={700} />
-      </div>
-    );
-  }
-
   return (
     <div className="relative min-h-screen bg-[#0A0A0A] text-white p-4">
-      {isAdmin && <AdminGateBadge />}
-      {/* Header */}
+      {/* Header — always visible */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-semibold text-white">
@@ -1215,6 +1194,12 @@ export default function HeatmapPage() {
           </button>
         </div>
       </div>
+
+      {/* Heatmap content — raw Polygon price data; gated until licensed */}
+      <PriceGate
+        title="Heatmap unavailable"
+        description="The S&P 500 heatmap with live price data will be available soon."
+      >
 
       {/* Error Banner */}
       {error && (
@@ -1460,6 +1445,8 @@ export default function HeatmapPage() {
         <span>Data refreshes every 15 minutes during market hours (including pre-market 4:00 AM - 9:30 AM ET).</span>
         <span>Double-click a ticker to display detailed information in a new window.</span>
       </div>
+
+      </PriceGate>
     </div>
   );
 }

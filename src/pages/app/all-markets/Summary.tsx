@@ -21,6 +21,7 @@
 // =====================================================
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { PriceGate } from "@/components/compliance/PriceGate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import SummaryOverviewEmbed from "@/pages/app/all-markets/SummaryOverviewEmbed";
 import { useFundamentals } from "@/hooks/useFundamentals";
@@ -782,8 +783,12 @@ export default function AllMarketsSummary() {
       `}</style>
 
       {/* ═══════════════════════════════════════════════════════════════
-          HEADER SECTION
+          HEADER SECTION — price/quote data from Polygon; gated until licensed
       ═══════════════════════════════════════════════════════════════ */}
+      <PriceGate
+        title="Quote data unavailable"
+        description="Live price and quote data for this symbol will be available soon."
+      >
       <div className="border-b border-zinc-800/80 bg-gradient-to-b from-zinc-900/50 to-transparent pb-6 mb-6">
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 mb-4">
@@ -927,6 +932,8 @@ export default function AllMarketsSummary() {
           </>
         )}
       </div>
+
+      </PriceGate>
 
       {/* ═══════════════════════════════════════════════════════════════
           TABS

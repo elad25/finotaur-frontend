@@ -1,9 +1,7 @@
 // src/pages/app/all-markets/Chart.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Spinner } from '@/components/ui/Spinner';
-import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
-import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
-import { useMarketGate } from '@/hooks/useMarketGate';
+import { PriceGate } from '@/components/compliance/PriceGate';
 import {
   createChart,
   IChartApi,
@@ -1034,7 +1032,6 @@ const DataTable: React.FC<DataTableProps> = ({ data, activeTab, onTabChange }) =
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export default function ChartPage() {
-  const { gated, isAdmin } = useMarketGate();
   // Symbol state
   const [symbol, setSymbol] = useState<string>(() => {
     try {
@@ -2205,21 +2202,14 @@ export default function ChartPage() {
     }
   }, [selectedDrawingIndex, drawings, canvasSize]);
 
-  // Gate: raw Polygon OHLCV candlestick chart — not licensed for redistribution.
-  // All hooks (useState, useRef, useCallback, useEffect) have already been called above.
-  if (gated) {
-    return (
-      <div className="flex items-center justify-center w-full p-8 min-h-screen">
-        <LicensedDataPlaceholder minHeight={300} />
-      </div>
-    );
-  }
-
   const isPositive = lastPrice ? lastPrice.change >= 0 : true;
 
   return (
+    <PriceGate
+      title="Chart unavailable"
+      description="The candlestick chart and market data for this symbol will be available soon."
+    >
     <div className="relative flex gap-4 w-full p-4 min-h-screen">
-      {isAdmin && <AdminGateBadge />}
       {/* CHART SECTION */}
       <div className="flex-1 flex flex-col bg-[#131722] rounded-lg overflow-hidden border border-[#2a2e39]">
         {/* Header */}
@@ -2986,5 +2976,6 @@ export default function ChartPage() {
         </div>
       </div>
     </div>
+    </PriceGate>
   );
 }

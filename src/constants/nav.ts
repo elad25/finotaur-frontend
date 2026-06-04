@@ -59,6 +59,8 @@ export interface NavItem {
   beta?: boolean;
   hideForAdmin?: boolean;
   affiliateSmartPage?: boolean;
+  /** Marks this item as compliance price-gated (Polygon redistribution license not held). */
+  priceGated?: boolean;
 }
 
 export interface Domain {
@@ -234,9 +236,9 @@ export const domains: Record<string, Domain> = {
     beta: false,
     defaultPath: '/app/top-secret',
     subNav: [
-      { label: 'Overview',    path: '/app/all-markets/overview',          locked: true },
-      { label: 'Summary',     path: '/app/all-markets/summary',           locked: true },
-      { label: 'Chart',       path: '/app/all-markets/chart',             locked: true },
+      { label: 'Overview',    path: '/app/all-markets/overview',          locked: true,  priceGated: true },
+      { label: 'Summary',     path: '/app/all-markets/summary',           locked: true,  priceGated: true },
+      { label: 'Chart',       path: '/app/all-markets/chart',             locked: true,  priceGated: true },
       { label: 'War Zone',    path: '/app/all-markets/warzone',           locked: false },
       { label: 'Top Secret',  path: '/app/top-secret',                    locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin',         adminOnly: true },
@@ -245,9 +247,9 @@ export const domains: Record<string, Domain> = {
       { label: 'Support',     path: '/app/all-markets/admin/support',     adminOnly: true },
     ],
     sidebar: [
-      { label: 'Overview',   path: '/app/all-markets/overview',  icon: LayoutDashboard, locked: true },
-      { label: 'Heatmap',    path: '/app/all-markets/heatmap',   icon: Map,             locked: true },
-      { label: 'Movers',     path: '/app/all-markets/movers',    icon: TrendingUp,      locked: true },
+      { label: 'Overview',   path: '/app/all-markets/overview',  icon: LayoutDashboard, locked: true, priceGated: true },
+      { label: 'Heatmap',    path: '/app/all-markets/heatmap',   icon: Map,             locked: true, priceGated: true },
+      { label: 'Movers',     path: '/app/all-markets/movers',    icon: TrendingUp,      locked: true, priceGated: true },
       { label: 'Sentiment',  path: '/app/all-markets/sentiment', icon: Activity,        locked: true },
       { label: 'Calendar',   path: '/app/all-markets/calendar',  icon: Calendar,        locked: true },
       { label: 'News',       path: '/app/all-markets/news',      icon: Newspaper,       locked: true },
