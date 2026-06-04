@@ -6,65 +6,15 @@
 // ✅ Production ready for 5000+ concurrent users
 // ================================================
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactNode, useMemo } from 'react';
-
-// Create QueryClient outside component to prevent recreation
-function createQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        // ✅ OPTIMIZED: Longer stale time = fewer refetches
-        staleTime: 5 * 60 * 1000,      // 5 minutes - data considered fresh
-        gcTime: 15 * 60 * 1000,         // 15 minutes - keep in memory longer
-        
-        // ✅ CRITICAL FIX: Don't refetch on mount if data is fresh
-        refetchOnMount: false,          // Was true - caused excessive calls
-        refetchOnWindowFocus: false,    // Was true - caused refetch on tab switch
-        refetchOnReconnect: 'always',   // Only refetch on reconnect
-        
-        // ✅ Smarter retry logic
-        retry: (failureCount, error: any) => {
-          // Don't retry on 4xx errors (client errors)
-          if (error?.status >= 400 && error?.status < 500) {
-            return false;
-          }
-          return failureCount < 2;
-        },
-        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-        
-        // ✅ Network mode
-        networkMode: 'offlineFirst',    // Use cache first, then network
-        
-        // ✅ Structural sharing for better performance
-        structuralSharing: true,
-      },
-      mutations: {
-        retry: 1,
-        networkMode: 'online',
-        // ✅ Auto-invalidate related queries on mutation success
-        onSuccess: () => {
-          // Individual mutations can override this
-        },
-      },
-    },
-  });
-}
-
-// Singleton instance for the entire app
-let queryClientInstance: QueryClient | null = null;
-
-function getQueryClient() {
-  if (!queryClientInstance) {
-    queryClientInstance = createQueryClient();
-  }
-  return queryClientInstance;
-}
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode } from 'react';
+// SINGLE SOURCE OF TRUTH: provide the same instance that @/lib/queryClient
+// exports, so prefetch/invalidate helpers and components share ONE cache.
+// (Previously this file created a SECOND QueryClient — every helper in
+// lib/queryClient.ts operated on a dead cache no component ever read.)
+import { queryClient } from '@/lib/queryClient';
 
 export function AppQueryProvider({ children }: { children: ReactNode }) {
-  // ✅ Use singleton pattern to prevent recreation
-  const queryClient = useMemo(() => getQueryClient(), []);
-
   return (
     <QueryClientProvider client={queryClient}>
       {children}
@@ -72,5 +22,8 @@ export function AppQueryProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// ✅ Export for manual cache operations
-export { getQueryClient };
+// Back-compat: manual cache operations should import { queryClient } from
+// '@/lib/queryClient' directly. Kept as a thin accessor for any legacy caller.
+export function getQueryClient() {
+  return queryClient;
+}
