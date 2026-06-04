@@ -5,6 +5,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
+import { PriceGate } from '@/components/compliance/PriceGate';
 import { useMarketGate, useFinnhubGate } from '@/hooks/useMarketGate';
 import { useCreditSpreadsSnapshot } from '@/hooks/macro/useCreditSpreads';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1544,7 +1545,7 @@ function creditRegimeToMarketRegime(cr: string | undefined): MarketRegime {
 }
 
 export default function AllMarketsOverview() {
-  const { gated: marketGated, isAdmin } = useMarketGate();
+  const { isAdmin } = useMarketGate();
   const { gated: finnhubGated } = useFinnhubGate();
   const [marketData, setMarketData] = useState<any>(null);
   const [calendarData, setCalendarData] = useState<any[]>([]);
@@ -1759,13 +1760,12 @@ export default function AllMarketsOverview() {
       <MarketRegimeTimeline regime={regime} confidence={confidence} />
 
       {/* Market Ticker Strip — raw Polygon prices; gated until licensed */}
-      {marketGated
-        ? <LicensedDataPlaceholder minHeight={260} />
-        : <div className="relative">
-            {isAdmin && <AdminGateBadge />}
-            <MarketTickerStrip newsItems={tickerNewsItems} />
-          </div>
-      }
+      <PriceGate
+        title="Market ticker unavailable"
+        description="Live index and sector prices will be available soon."
+      >
+        <MarketTickerStrip newsItems={tickerNewsItems} />
+      </PriceGate>
 
       {/* Main Content Grid: Left stacked content + Right Movers (full height) */}
       <div className="grid gap-4 lg:grid-cols-[1fr,320px]">
@@ -1795,13 +1795,12 @@ export default function AllMarketsOverview() {
 
         {/* Right Column: Market Movers — raw Polygon heatmap data; gated until licensed */}
         <div className="lg:sticky lg:top-4 lg:self-start">
-          {marketGated
-            ? <LicensedDataPlaceholder minHeight={400} />
-            : <div className="relative">
-                {isAdmin && <AdminGateBadge />}
-                <MarketMoversWidget data={moversData} loading={loading} />
-              </div>
-          }
+          <PriceGate
+            title="Market movers unavailable"
+            description="Top gainers and losers will be available soon."
+          >
+            <MarketMoversWidget data={moversData} loading={loading} />
+          </PriceGate>
         </div>
       </div>
     </div>

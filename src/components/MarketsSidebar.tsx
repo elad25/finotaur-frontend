@@ -19,6 +19,7 @@ import { getMarketsItemsForAsset } from '@/constants/markets';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { cn } from '@/lib/utils';
 import { Lock } from 'lucide-react';
+import { GatedLockBadge } from '@/components/compliance/PriceGate';
 
 // ---------------------------------------------------------------------------
 // Style constants (unchanged)
@@ -91,6 +92,9 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
                     title="Closed to the public"
                     aria-label="Closed to the public"
                   />
+                )}
+                {fn.priceGated && (
+                  <GatedLockBadge />
                 )}
               </>
             )}

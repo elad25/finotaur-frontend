@@ -116,6 +116,8 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   beta?: boolean;  // נ”¥ NEW
   adminOnly?: boolean; // items only accessible to admins/beta viewers
   newTab?: boolean; // open in new browser tab instead of in-place navigation
+  /** Marks this item as compliance price-gated (Polygon redistribution license not held). */
+  priceGated?: boolean;
   children?: Array<{
     label: string;
     path: string;
@@ -128,9 +130,9 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // נ ALL MARKETS - נ”’ LOCKED
   // ===============================================
   'all-markets': [
-    { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
-    { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true },
-    { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
+    { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true, priceGated: true },
+    { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true, priceGated: true },
+    { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true, priceGated: true },
     { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
     { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
     { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
@@ -609,6 +611,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           const isBackButton = item.label === 'Back to Journal';
           const isBetaItem = item.beta === true;
           const isAdminOnlyItem = item.adminOnly === true;
+          const isPriceGatedItem = item.priceGated === true;
           const isCopilotItem = item.path === '/copilot';
           // Suppress the visible BETA badge for ALL /copilot items (graduated
           // out of beta visually) while keeping beta access-gating intact.
@@ -714,6 +717,14 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                       title="Locked for regular users"
                     />
                   )}
+                  {/* Price-gate indicator: visible to all users; item is compliance-gated */}
+                  {isPriceGatedItem && (
+                    <Lock
+                      className="h-3.5 w-3.5 flex-shrink-0 text-gray-500"
+                      aria-label="Price gated"
+                      title="Price gated"
+                    />
+                  )}
                   {hasChildren && (
                     <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.12em] text-gold/70">
                       {childrenOpen ? 'Open' : 'Pages'}
@@ -740,6 +751,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                       style={{ color: 'rgba(201,166,70,0.55)' }}
                       title="Locked for regular users"
                     />
+                  )}
+                  {/* Price-gate indicator: visible to all users */}
+                  {isPriceGatedItem && (
+                    <Lock className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500" title="Price gated" />
                   )}
                 </div>
               )}

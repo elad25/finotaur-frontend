@@ -120,6 +120,8 @@ export interface MarketFunctionMeta {
   routes: Partial<Record<AssetClass, string>>;
   /** Closed to the general public (paywall). Free Research Lab items omit this. */
   locked?: boolean;
+  /** Marks this item as compliance price-gated (Polygon redistribution license not held). */
+  priceGated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +159,8 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       home: '/app/all-markets/heatmap',
     },
-    locked: true, // Polygon redistribution license required — closed to public
+    locked: true,      // Polygon redistribution license required — closed to public
+    priceGated: true,  // compliance gate: raw price data not licensed for redistribution
   },
   {
     id: 'movers',
@@ -166,7 +169,8 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       home: '/app/all-markets/movers',
     },
-    locked: true, // Polygon redistribution license required — closed to public
+    locked: true,      // Polygon redistribution license required — closed to public
+    priceGated: true,  // compliance gate: raw price data not licensed for redistribution
   },
   {
     id: 'calendar',
