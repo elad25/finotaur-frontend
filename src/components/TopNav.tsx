@@ -13,7 +13,7 @@
 //   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
+import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu, User } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
@@ -41,10 +41,9 @@ export const TopNav = () => {
   const { hasBetaAccess } = useAdminAuth();
   const { open: openFino } = useFinoChat();
   const { toggle: toggleDrawer } = useProductDrawer();
-  const [userInitials, setUserInitials] = useState('U');
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
-  // Get user initials and platform plan
+  // Get platform plan
   useEffect(() => {
     const fetchUserData = async () => {
       if (!user?.id) return;
@@ -52,31 +51,15 @@ export const TopNav = () => {
       try {
         const { data } = await supabase
           .from('profiles')
-          .select('display_name, platform_plan')
+          .select('platform_plan')
           .eq('id', user.id)
           .maybeSingle();
 
         if (data) {
-          const displayName = data.display_name || '';
-          const nameParts = displayName.trim().split(' ');
-
-          if (nameParts.length >= 2) {
-            setUserInitials((nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase());
-          } else if (nameParts.length === 1 && nameParts[0]) {
-            setUserInitials(nameParts[0][0].toUpperCase());
-          } else if (user.email) {
-            setUserInitials(user.email[0].toUpperCase());
-          }
-
           setPlatformPlan(data.platform_plan);
-        } else if (user.email) {
-          setUserInitials(user.email[0].toUpperCase());
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
-        if (user.email) {
-          setUserInitials(user.email[0].toUpperCase());
-        }
       }
     };
 
@@ -211,15 +194,13 @@ export const TopNav = () => {
                 className="flex items-center gap-2 rounded-full hover:bg-[#1A1A1A] px-2 py-1"
               >
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
                   style={{
-                    background: hasBetaAccess
-                      ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
-                      : 'linear-gradient(135deg, #C9A646 0%, #8B7355 100%)',
-                    color: '#000',
+                    background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
+                    color: '#fff',
                   }}
                 >
-                  {userInitials}
+                  <User className="w-4 h-4" strokeWidth={2.5} />
                 </div>
 
                 {planBadgeClass && (
