@@ -19,7 +19,6 @@ import { generateSummary } from '@/lib/seo/autoSummary';
 import { buildTickerJsonLd } from '@/lib/seo/jsonLdTicker';
 import Navbar from '@/components/landing-new/Navbar';
 import Footer from '@/components/landing-new/Footer';
-import { PriceGate } from '@/components/compliance/PriceGate';
 
 // ---------------------------------------------------------------------------
 // 404 sub-component
@@ -95,13 +94,12 @@ export default function TickerResearchPage() {
         </nav>
 
         <div className="space-y-8">
-          {/* Hero card — price data from Polygon; gated until licensed */}
-          <PriceGate
-            title="Live price data unavailable"
-            description="Real-time price and market data for this ticker will be available soon."
-          >
-            <TickerHero t={t} />
-          </PriceGate>
+          {/* Hero card. Price data is protected server-side (403 for non-admin
+              on raw Polygon endpoints). NOT wrapped in PriceGate here: this is a
+              prerendered/SSR public SEO route, and PriceGate -> useAdminAuth pulls
+              the browser-only supabase client into the SSR bundle (window is not
+              defined at prerender). Server gate is the source of protection. */}
+          <TickerHero t={t} />
 
           {/* Auto-generated summary */}
           <section>
