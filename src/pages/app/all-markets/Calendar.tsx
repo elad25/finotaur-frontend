@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Calendar,
   Clock,
@@ -133,8 +133,6 @@ interface CalendarData {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const CALENDAR_ENDPOINT = '/api/all-markets/calendar';
-const POLLING_INTERVAL = 60000;
-const TODAY_POLLING_INTERVAL = 30000;
 
 // ============================================
 // COUNTRY FLAGS - Unicode Emoji Flags
@@ -166,6 +164,129 @@ const COUNTRIES = [
 // CUSTOM HOOK
 // ============================================
 
+/**
+ * Pure helper: apply country / importance / search filters to raw CalendarData
+ * client-side. Returns a new CalendarData object with filtered event arrays and
+ * updated counts. The raw server response is never mutated.
+ *
+ * - country: filters economic + holidays only (other tabs have no country dim)
+ * - importance: filters economic only; empty array = "no filter" (show all)
+ * - search: case-insensitive substring match across all tabs' text fields
+ */
+function filterCalendarData(
+  raw: CalendarData | null,
+  country: string,
+  importance: Importance[],
+  search: string,
+): CalendarData | null {
+  if (!raw) return null;
+
+  const searchLC = search.trim().toLowerCase();
+  const filterBySearch = searchLC.length > 0;
+  const filterByCountry = country !== 'ALL';
+  // Empty importance array = show all (all toggles de-selected = no filter)
+  const filterByImportance = importance.length > 0 && importance.length < 3;
+
+  // --- economic ---
+  let economicEvents = raw.economic?.events ?? [];
+  if (filterByCountry) {
+    economicEvents = economicEvents.filter(e => e.countryCode === country);
+  }
+  if (filterByImportance) {
+    economicEvents = economicEvents.filter(e => importance.includes(e.importance));
+  }
+  if (filterBySearch) {
+    economicEvents = economicEvents.filter(e =>
+      e.event?.toLowerCase().includes(searchLC) ||
+      e.currency?.toLowerCase().includes(searchLC) ||
+      e.country?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- holidays ---
+  let holidayEvents = raw.holidays?.events ?? [];
+  if (filterByCountry) {
+    holidayEvents = holidayEvents.filter(e => e.countryCode === country);
+  }
+  if (filterBySearch) {
+    holidayEvents = holidayEvents.filter(e =>
+      e.holiday?.toLowerCase().includes(searchLC) ||
+      e.country?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- earnings (no country dimension) ---
+  let earningsEvents = raw.earnings?.events ?? [];
+  if (filterBySearch) {
+    earningsEvents = earningsEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- dividends (no country dimension) ---
+  let dividendEvents = raw.dividends?.events ?? [];
+  if (filterBySearch) {
+    dividendEvents = dividendEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- splits (no country dimension) ---
+  let splitEvents = raw.splits?.events ?? [];
+  if (filterBySearch) {
+    splitEvents = splitEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- ipos (no country dimension) ---
+  let ipoEvents = raw.ipos?.events ?? [];
+  if (filterBySearch) {
+    ipoEvents = ipoEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- expirations (no country dimension) ---
+  let expirationEvents = raw.expirations?.events ?? [];
+  if (filterBySearch) {
+    expirationEvents = expirationEvents.filter(e =>
+      e.name?.toLowerCase().includes(searchLC) ||
+      e.type?.toLowerCase().includes(searchLC) ||
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.description?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  return {
+    economic: raw.economic
+      ? { ...raw.economic, events: economicEvents, count: economicEvents.length }
+      : undefined,
+    holidays: raw.holidays
+      ? { ...raw.holidays, events: holidayEvents, count: holidayEvents.length }
+      : undefined,
+    earnings: raw.earnings
+      ? { ...raw.earnings, events: earningsEvents, count: earningsEvents.length }
+      : undefined,
+    dividends: raw.dividends
+      ? { ...raw.dividends, events: dividendEvents, count: dividendEvents.length }
+      : undefined,
+    splits: raw.splits
+      ? { ...raw.splits, events: splitEvents, count: splitEvents.length }
+      : undefined,
+    ipos: raw.ipos
+      ? { ...raw.ipos, events: ipoEvents, count: ipoEvents.length }
+      : undefined,
+    expirations: raw.expirations
+      ? { ...raw.expirations, events: expirationEvents, count: expirationEvents.length }
+      : undefined,
+  };
+}
+
 function useCalendarData(
   tab: TabType,
   timeFilter: TimeFilter,
@@ -173,28 +294,23 @@ function useCalendarData(
   importance: Importance[],
   search: string
 ) {
-  const [data, setData] = useState<CalendarData | null>(null);
+  const [rawData, setRawData] = useState<CalendarData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Only tab + dateFilter go to the server; country/importance/search are client-side
   const fetchData = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
-        tab,
-        dateFilter: timeFilter,
-        country,
-        importance: importance.join(','),
-        search,
-      });
+      const params = new URLSearchParams({ tab, dateFilter: timeFilter });
 
       const response = await fetch(`${API_BASE_URL}${CALENDAR_ENDPOINT}?${params}`);
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
       const result = await response.json();
-      setData(result.data);
+      setRawData(result.data);
       setError(null);
     } catch (err) {
       console.error('Calendar fetch error:', err);
@@ -202,18 +318,18 @@ function useCalendarData(
     } finally {
       setLoading(false);
     }
-  }, [tab, timeFilter, country, importance, search]);
+  }, [tab, timeFilter]); // country/importance/search intentionally omitted — client-side only
 
   useEffect(() => {
     setLoading(true);
     fetchData();
   }, [fetchData]);
 
-  useEffect(() => {
-    const interval = timeFilter === 'today' ? TODAY_POLLING_INTERVAL : POLLING_INTERVAL;
-    const timer = setInterval(fetchData, interval);
-    return () => clearInterval(timer);
-  }, [fetchData, timeFilter]);
+  // Client-side derived view: filter raw data without a network round-trip
+  const data = useMemo(
+    () => filterCalendarData(rawData, country, importance, search),
+    [rawData, country, importance, search]
+  );
 
   return { data, loading, error, refetch: fetchData };
 }
