@@ -122,25 +122,22 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'enterprise',
-    name: 'Enterprise',
-    monthlyPrice: '$500',
-    yearlyPrice: '$500',
-    yearlyMonthlyEquivalent: '$500',
-    description: 'Ultimate trading solution',
+    name: 'Copilot',
+    monthlyPrice: '$200',
+    yearlyPrice: '$200',
+    yearlyMonthlyEquivalent: '$200',
+    description: 'Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.',
     trialDays: 0,
     features: [
       'Everything in Finotaur, plus:',
-      'Unlimited Stock Analyses',
-      'My Portfolio (exclusive)',
-      'Dedicated account manager',
-      'Custom integrations',
-      'White-label options',
-      'Unlimited API access',
-      'Custom SLA',
-      'Team management',
-      'SSO authentication',
+      'AI Portfolio Manager that invests & trades alongside you',
+      'Stop flying blind — 24/7 AI oversight of every position you hold',
+      'My Portfolio — live tracking & mark-to-market of your real book',
+      'Proactive AI risk detection & alerts on your holdings',
+      'Daily AI portfolio brief with actionable guidance',
+      'Priority support',
     ],
-    cta: 'Get Enterprise',
+    cta: 'Get Copilot',
     featured: false,
   },
 ];
@@ -377,7 +374,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
       return { price: 'Free', period: 'forever', billedAs: undefined };
     }
     if (plan.id === 'enterprise') {
-      return { price: '$499', period: '/month', billedAs: undefined };
+      return { price: '$200', period: '/month', billedAs: undefined };
     }
     
     if (billingInterval === 'monthly') {
@@ -974,7 +971,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                         {currentPlatformPlan === 'enterprise' && (
                           <div className="flex items-center gap-2 text-xs text-zinc-300">
                             <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                            <span>My Portfolio & account manager</span>
+                            <span>My Portfolio & AI portfolio manager</span>
                           </div>
                         )}
                         <div className="flex items-center gap-2 text-xs">
@@ -1002,7 +999,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  Keep My {currentPlatformPlan === 'core' ? 'Core' : currentPlatformPlan === 'finotaur' ? 'Finotaur' : 'Enterprise'} Plan
+                  Keep My {currentPlatformPlan === 'core' ? 'Core' : currentPlatformPlan === 'finotaur' ? 'Finotaur' : 'Copilot'} Plan
                 </button>
                 
                 <button
@@ -1334,7 +1331,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-4">
               You're currently on a <span className="text-white font-medium capitalize">{currentPlatformPlan} Yearly</span> plan.
-              Subscribing to Enterprise will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
+              Subscribing to Copilot will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
             </p>
             <div className="p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 mb-5">
               <p className="text-xs text-zinc-400">
@@ -1361,7 +1358,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
                 style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
               >
-                Continue to Enterprise
+                Continue to Copilot
               </button>
             </div>
           </div>
