@@ -85,7 +85,7 @@ export async function getJSONCached<T = any>(
   // Check cache first
   const cached = getCached<T>(key, cacheDuration);
   if (cached !== null) {
-    console.log(`[API] Cache HIT: ${key}`);
+    if (import.meta.env.DEV) console.log(`[API] Cache HIT: ${key}`);
     return cached;
   }
   
@@ -124,7 +124,7 @@ export async function fetchWithTimeout<T = any>(
   if (cacheKey) {
     const cached = getCached<T>(cacheKey, cacheDuration);
     if (cached !== null) {
-      console.log(`[API] Cache HIT: ${cacheKey}`);
+      if (import.meta.env.DEV) console.log(`[API] Cache HIT: ${cacheKey}`);
       return cached;
     }
   }

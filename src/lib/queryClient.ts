@@ -5,16 +5,28 @@
 
 import { QueryClient } from '@tanstack/react-query';
 
+// ⚠️ SINGLE SOURCE OF TRUTH — this is THE QueryClient the app uses.
+// QueryProvider provides this exact instance, so the helpers below
+// (invalidate/prefetch/clear) operate on the same cache components read via
+// useQueryClient(). Previously the provider created a SECOND instance, so all
+// the prefetch/invalidate helpers here ran against a dead cache no component
+// ever read from. Config below is the optimized "v2.0" set (was in the provider).
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      retry: 3,
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      networkMode: 'online',
+      staleTime: 5 * 60 * 1000,      // 5 minutes - data considered fresh
+      gcTime: 15 * 60 * 1000,         // 15 minutes - keep in memory longer
+      refetchOnMount: false,          // don't refetch on mount if fresh
+      refetchOnWindowFocus: false,    // don't refetch on tab switch
+      refetchOnReconnect: 'always',   // refetch on reconnect
+      retry: (failureCount, error: any) => {
+        // Don't retry on 4xx (client errors)
+        if (error?.status >= 400 && error?.status < 500) return false;
+        return failureCount < 2;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+      networkMode: 'offlineFirst',    // use cache first, then network
+      structuralSharing: true,
     },
     mutations: {
       retry: 1,
