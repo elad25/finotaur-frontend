@@ -685,13 +685,13 @@ const formatValue = (value: number, type: 'percent' | 'number' | 'currency' | 'r
 // ============================================================================
 
 // Sparkline Component
-const Sparkline: React.FC<{ data?: SparklineData; width?: number; height?: number; color?: string }> = ({ 
-  data, width = 50, height = 20, color 
+const Sparkline: React.FC<{ data?: SparklineData; width?: number; height?: number; color?: string }> = ({
+  data, width = 50, height = 20, color
 }) => {
   if (!data) return null;
-  
-  const { values, trend } = data;
-  const lineColor = color || (trend === 'up' ? '#4ADE80' : trend === 'down' ? '#F87171' : '#94A3B8');
+
+  const { values } = data;
+  const lineColor = color || '#C9A646';
   
   const min = Math.min(...values);
   const max = Math.max(...values);
