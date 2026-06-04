@@ -5,7 +5,7 @@
 // - REMOVED: Bundle, cross-product discounts, discount products
 // - Finotaur Platform tier replaces Bundle (includes Newsletter + Top Secret + Journal Premium)
 // - Standalone products: Newsletter ($69.99/mo, $699/yr), Top Secret ($89.99/mo, $899/yr)
-// - Platform tiers: Core ($59/mo), Finotaur ($109/mo), Enterprise ($500/mo)
+// - Platform tiers: Core ($59/mo), Finotaur ($109/mo), Copilot ($200/mo)
 // =====================================================
 
 // ============================================
@@ -97,7 +97,7 @@ export const WHOP_PLAN_IDS = {
   platform_finotaur_monthly: 'plan_ICooR8aqtdXad',
   platform_finotaur_yearly: 'plan_M2zS1EoNXJF10',
   
-  // 🔥 Platform - Enterprise ($500/month, no trial)
+  // 🔥 Platform - Copilot ($200/month, no trial)
   platform_enterprise_monthly: 'plan_nHveClWPmjJNT',
   
 // ═══════════════════════════════════════════
@@ -462,20 +462,20 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // 🔥 PLATFORM - ENTERPRISE (Coming Soon)
+  // 🔥 PLATFORM - COPILOT (AI Portfolio Manager)
   // ═══════════════════════════════════════════
   platform_enterprise_monthly: {
     id: 'platform_enterprise_monthly',
     whopPlanId: WHOP_PLAN_IDS.platform_enterprise_monthly,
     whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_monthly,
     name: 'platform_enterprise',
-    displayName: 'Enterprise',
-    price: 500,
+    displayName: 'Copilot',
+    price: 200,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 0,
-    badge: 'Ultimate',
+    badge: 'AI Portfolio Manager',
     category: 'platform',
     isPlatform: true,
     comingSoon: false,
@@ -483,16 +483,12 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     includesJournal: 'premium',
     features: [
       'Everything in Finotaur, plus:',
-      'Dedicated account manager',
-      'Custom integrations',
-      'White-label options',
-      'Unlimited API access',
-      'Custom SLA',
-      'On-premise deployment option',
-      'Team management',
-      'SSO / SAML authentication',
-      'Custom training & onboarding',
-      'Direct Slack/Discord support',
+      'AI Portfolio Manager that invests & trades alongside you',
+      'Stop flying blind — 24/7 AI oversight of every position you hold',
+      'My Portfolio — live tracking & mark-to-market of your real book',
+      'Proactive AI risk detection & alerts on your holdings',
+      'Daily AI portfolio brief with actionable guidance',
+      'Priority support',
     ],
   },
 
@@ -958,10 +954,10 @@ platform_finotaur: {
     apiAccess: true,
     prioritySupport: true,
     customReports: true,
-    dedicatedSupport: true,
-    customIntegrations: true,
-    sla: true,
-    whiteLabel: true,
+    dedicatedSupport: false,
+    customIntegrations: false,
+    sla: false,
+    whiteLabel: false,
     newsletter: true,
     topSecret: true,
     // Page access - ALL PAGES
