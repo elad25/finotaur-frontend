@@ -3,19 +3,22 @@
 
 /**
  * Format a commodity price with its display unit.
+ * Accepts null — returns "—" for missing data.
  * Examples: formatCommodityPrice(82.5, '$/bbl') → '$82.50/bbl'
  *           formatCommodityPrice(365.25, '¢/bu') → '365.25¢/bu'
+ *           formatCommodityPrice(null, '$/oz') → '—'
  */
-export function formatCommodityPrice(value: number, unit: string): string {
+export function formatCommodityPrice(value: number | null, unit: string): string {
+  if (value == null) return '—';
   const formatted = value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
   if (unit.startsWith('$')) {
-    // e.g. '$/bbl' → '$82.50/bbl'
-    return `$${formatted}${unit.slice(1)}`;
+    // e.g. '$/bbl' → '$82.50 /bbl'
+    return `$${formatted} ${unit.slice(1)}`;
   }
-  return `${formatted}${unit}`;
+  return `${formatted} ${unit}`;
 }
 
 /**

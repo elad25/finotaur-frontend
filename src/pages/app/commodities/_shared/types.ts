@@ -1,23 +1,33 @@
 // ─── Commodities domain type contracts ────────────────────────────────────────
-// Pure interfaces — no runtime logic. All data-fetching is deferred (domain locked).
+// Pure interfaces — no runtime logic.
+
+// ── Live snapshot types (matches GET /api/commodities/snapshot) ───────────────
 
 export interface CommodityQuote {
   symbol: string;
   name: string;
-  sector: 'energy' | 'metals' | 'agriculture' | 'indices';
-  price: number;
-  changePct: number;
+  sector: 'energy' | 'metals' | 'agriculture';
   unit: string;
-  contractMonth?: string;
-  asOf: string;
+  price: number | null;
+  changePct: number | null;
+  asOf: string | null;
 }
 
-export interface MacroDriverSnapshot {
-  dxy: number;
-  realYield10y: number;
-  breakeven10y: number;
-  asOf: string;
+export interface CommodityMacro {
+  dxy: number | null;
+  realYield10y: number | null;
+  breakeven10y: number | null;
+  nominal10y: number | null;
+  asOf: string | null;
 }
+
+export interface CommoditiesSnapshot {
+  commodities: CommodityQuote[];
+  macro: CommodityMacro;
+  ts: number;
+}
+
+// ── Legacy / futures-specific types (kept for Seasonality, Positioning, etc.) ─
 
 export interface SeasonalityProfile {
   symbol: string;
