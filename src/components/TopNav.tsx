@@ -13,7 +13,7 @@
 //   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu, User } from 'lucide-react';
+import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
@@ -200,7 +200,15 @@ export const TopNav = () => {
                     color: '#fff',
                   }}
                 >
-                  <User className="w-4 h-4" strokeWidth={2.5} />
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    className="w-6 h-6"
+                  >
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M12 13.5c-4.142 0-7.5 2.015-7.5 4.5v1.5h15V18c0-2.485-3.358-4.5-7.5-4.5z" />
+                  </svg>
                 </div>
 
                 {planBadgeClass && (
