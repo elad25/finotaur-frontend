@@ -359,10 +359,6 @@ export default function MacroOverview() {
     fetchMarketData();
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(fetchMarketData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="p-6">

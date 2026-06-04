@@ -7,6 +7,7 @@
 // No chart library dependency: sparklines rendered via SVG (Sparkline from GlassUI).
 
 import { memo } from 'react';
+import { DataFreshness } from '@/components/macro/DataFreshness';
 import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -99,8 +100,6 @@ const RealYieldsHero = memo(function RealYieldsHero() {
   const tips10 = snapshot?.tips10;
   const tips5 = snapshot?.tips5;
   const tips30 = snapshot?.tips30;
-  const asOf = snapshot?.ts ?? '';
-
   return (
     <div className="mb-6">
       <p className="text-xs uppercase tracking-widest text-white/40 font-medium mb-1">
@@ -109,9 +108,7 @@ const RealYieldsHero = memo(function RealYieldsHero() {
       <p className="text-3xl sm:text-4xl font-bold tabular-nums text-white/90 font-mono">
         {tips10 != null ? fmtYield(tips10) : '—'}
       </p>
-      {asOf && (
-        <p className="text-xs text-white/30 mt-0.5">as of {asOf}</p>
-      )}
+      <DataFreshness asOf={snapshot?.ts} ttlHours={36} className="mt-0.5" />
       <div className="flex flex-wrap gap-2 mt-3">
         {tips5 != null && (
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/5 border border-white/10 text-white/60">

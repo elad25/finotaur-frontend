@@ -8,6 +8,7 @@
 // SPX overlay deferred — TODO(wave-1): add dual-axis chart when spxOverlay is wired.
 
 import { memo } from 'react';
+import { DataFreshness } from '@/components/macro/DataFreshness';
 import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -74,8 +75,6 @@ const LiquidityHero = memo(function LiquidityHero() {
   const net = snapshot?.latest?.netLiquidity;
   const mom = snapshot?.deltaMoMPct;
   const yoy = snapshot?.deltaYoYPct;
-  const asOf = snapshot?.latest?.date ?? '';
-
   return (
     <div className="mb-6">
       <p className="text-xs uppercase tracking-widest text-white/40 font-medium mb-1">
@@ -84,9 +83,7 @@ const LiquidityHero = memo(function LiquidityHero() {
       <p className="text-3xl sm:text-4xl font-bold tabular-nums text-white/90 font-mono">
         {net != null ? fmtCompactNoSign(net) : '—'}
       </p>
-      {asOf && (
-        <p className="text-xs text-white/30 mt-0.5">as of {asOf}</p>
-      )}
+      <DataFreshness asOf={snapshot?.latest?.date ?? snapshot?.ts} ttlHours={36} className="mt-0.5" />
       <div className="flex flex-wrap gap-2 mt-3">
         {mom != null && (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/5 border border-white/10 ${pctColor(mom)}`}>
