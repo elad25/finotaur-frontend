@@ -320,21 +320,14 @@ const CommoditiesMacro = lazy(() => import("@/pages/app/commodities/Macro"));
 const CommoditiesPositioning = lazy(() => import("@/pages/app/commodities/Positioning"));
 const CommoditiesWatchlist = lazy(() => import("@/pages/app/commodities/Watchlist"));
 
-// Macro
-const MacroOverview = lazy(() => import("@/pages/app/macro/Overview"));
-const MacroCrossAsset = lazy(() => import("@/pages/app/macro/CrossAsset"));
-const MacroGlobalHeatmap = lazy(() => import("@/pages/app/macro/GlobalHeatmap"));
-const MacroModels = lazy(() => import("@/pages/app/macro/Models"));
-const MacroCalendar = lazy(() => import("@/pages/app/macro/Calendar"));
-const MacroRates = lazy(() => import("@/pages/app/macro/Rates"));
-const MacroIndicators = lazy(() => import("@/pages/app/macro/Indicators"));
-const MacroEvents = lazy(() => import("@/pages/app/macro/Events"));
-const MacroReports = lazy(() => import("@/pages/app/macro/Reports"));
-const MacroSentiment = lazy(() => import("@/pages/app/macro/Sentiment"));
-const MacroNews = lazy(() => import("@/pages/app/macro/News"));
-const MacroLiquidity = lazy(() => import("@/pages/app/macro/Liquidity"));
-const MacroRealYields = lazy(() => import("@/pages/app/macro/RealYields"));
-const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"));
+// Macro — 7-tab container pages
+const MacroPulse = lazy(() => import("@/pages/app/macro/tabs/Pulse"));
+const MacroRatesCentralBanks = lazy(() => import("@/pages/app/macro/tabs/RatesCentralBanks"));
+const MacroInflationGrowth = lazy(() => import("@/pages/app/macro/tabs/InflationGrowth"));
+const MacroGlobalMarkets = lazy(() => import("@/pages/app/macro/tabs/GlobalMarkets"));
+const MacroRiskRegime = lazy(() => import("@/pages/app/macro/tabs/RiskRegime"));
+const MacroEconomicCalendar = lazy(() => import("@/pages/app/macro/tabs/EconomicCalendar"));
+const MacroDeskPage = lazy(() => import("@/pages/app/macro/tabs/MacroDesk"));
 
 // Options — sealed pending licensed data feed (Track B). Pages kept on disk; routes serve ComingSoon.
 // To re-enable: restore lazy imports below, swap ComingSoon back in routes, set OPTIONS_ENABLED=true in constants/nav.ts
@@ -592,21 +585,28 @@ function AppContent() {
           <Route path="commodities/positioning" element={<LockedRoute domainId="commodities"><CommoditiesPositioning /></LockedRoute>} />
           <Route path="commodities/watchlist" element={<LockedRoute domainId="commodities"><CommoditiesWatchlist /></LockedRoute>} />
           
-          {/* MACRO */}
-          <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
-          <Route path="macro/liquidity" element={<LockedRoute domainId="macro"><MacroLiquidity /></LockedRoute>} />
-          <Route path="macro/real-yields" element={<LockedRoute domainId="macro"><MacroRealYields /></LockedRoute>} />
-          <Route path="macro/credit-spreads" element={<LockedRoute domainId="macro"><MacroCreditSpreads /></LockedRoute>} />
-          <Route path="macro/cross-asset" element={<LockedRoute domainId="macro"><MacroCrossAsset /></LockedRoute>} />
-          <Route path="macro/global-heatmap" element={<LockedRoute domainId="macro"><MacroGlobalHeatmap /></LockedRoute>} />
-          <Route path="macro/models" element={<LockedRoute domainId="macro"><MacroModels /></LockedRoute>} />
-          <Route path="macro/calendar" element={<LockedRoute domainId="macro"><MacroCalendar /></LockedRoute>} />
-          <Route path="macro/rates" element={<LockedRoute domainId="macro"><MacroRates /></LockedRoute>} />
-          <Route path="macro/indicators" element={<LockedRoute domainId="macro"><MacroIndicators /></LockedRoute>} />
-          <Route path="macro/events" element={<LockedRoute domainId="macro"><MacroEvents /></LockedRoute>} />
-          <Route path="macro/reports" element={<LockedRoute domainId="macro"><MacroReports /></LockedRoute>} />
-          <Route path="macro/sentiment" element={<LockedRoute domainId="macro"><MacroSentiment /></LockedRoute>} />
-          <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
+          {/* MACRO — 7-tab containers */}
+          <Route path="macro" element={<Navigate to="/app/macro/pulse" replace />} />
+          <Route path="macro/pulse" element={<LockedRoute domainId="macro"><MacroPulse /></LockedRoute>} />
+          <Route path="macro/rates" element={<LockedRoute domainId="macro"><MacroRatesCentralBanks /></LockedRoute>} />
+          <Route path="macro/indicators" element={<LockedRoute domainId="macro"><MacroInflationGrowth /></LockedRoute>} />
+          <Route path="macro/global" element={<LockedRoute domainId="macro"><MacroGlobalMarkets /></LockedRoute>} />
+          <Route path="macro/risk" element={<LockedRoute domainId="macro"><MacroRiskRegime /></LockedRoute>} />
+          <Route path="macro/calendar" element={<LockedRoute domainId="macro"><MacroEconomicCalendar /></LockedRoute>} />
+          <Route path="macro/desk" element={<LockedRoute domainId="macro"><MacroDeskPage /></LockedRoute>} />
+
+          {/* MACRO — redirects for old paths */}
+          <Route path="macro/overview" element={<Navigate to="/app/macro/pulse" replace />} />
+          <Route path="macro/cross-asset" element={<Navigate to="/app/macro/global?view=cross-asset" replace />} />
+          <Route path="macro/global-heatmap" element={<Navigate to="/app/macro/global?view=heatmap" replace />} />
+          <Route path="macro/models" element={<Navigate to="/app/macro/risk?view=models" replace />} />
+          <Route path="macro/events" element={<Navigate to="/app/macro/calendar?view=events" replace />} />
+          <Route path="macro/reports" element={<Navigate to="/app/macro/desk?view=reports" replace />} />
+          <Route path="macro/sentiment" element={<Navigate to="/app/macro/desk?view=sentiment" replace />} />
+          <Route path="macro/news" element={<Navigate to="/app/macro/desk?view=news" replace />} />
+          <Route path="macro/liquidity" element={<Navigate to="/app/macro/risk?view=liquidity" replace />} />
+          <Route path="macro/real-yields" element={<Navigate to="/app/macro/rates?view=real-yields" replace />} />
+          <Route path="macro/credit-spreads" element={<Navigate to="/app/macro/rates?view=credit-spreads" replace />} />
           
           {/* AI — legacy /app/ai/copilot/* routes redirect to /copilot/* standalone shell */}
           <Route path="ai/copilot" element={<Navigate to="/copilot" replace />} />
