@@ -145,11 +145,11 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // נ“ˆ STOCKS
   // ===============================================
   'stocks': [
-    { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
+    { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard, priceGated: true },
     // Screener moved to the all-markets (home) level — see constants/markets.ts.
     { label: 'Earnings', path: '/app/stocks/earnings', icon: Calendar },
     { label: 'Fundamentals', path: '/app/stocks/fundamentals', icon: BarChart3 },
-    { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
+    { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp, priceGated: true },
     { label: 'News', path: '/app/stocks/news', icon: Newspaper },
     { label: 'Sector Analysis', path: '/app/stocks/sectors', icon: Target },
     { label: 'Catalysts', path: '/app/stocks/catalysts', icon: Zap },
@@ -262,7 +262,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'ai': [
-    { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
+    { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp, priceGated: true },
     { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
     { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
     { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
