@@ -15,6 +15,7 @@ import {
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexMacro } from './_shared/hooks';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import ForexUpsellGate from './components/ForexUpsellGate';
 import type { MacroIndicator } from './_shared/types';
 
@@ -94,7 +95,8 @@ export default function ForexCurrency() {
   const code = (rawCode ?? '').toUpperCase();
 
   const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
-  const entitled = isPremium || isAdmin || isLifetimeUser;
+  const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
+  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
 
   const fullName = CURRENCY_NAMES[code] ?? code;
 

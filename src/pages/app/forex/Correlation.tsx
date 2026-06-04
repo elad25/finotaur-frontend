@@ -12,6 +12,7 @@ import {
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexCorrelation } from './_shared/hooks';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import ForexUpsellGate from './components/ForexUpsellGate';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -74,7 +75,8 @@ type WindowOption = '30d' | '90d';
 
 export default function ForexCorrelation() {
   const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
-  const entitled = isPremium || isAdmin || isLifetimeUser;
+  const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
+  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
 
   const [window, setWindow] = useState<WindowOption>('30d');
   const { data, loading } = useForexCorrelation(window);

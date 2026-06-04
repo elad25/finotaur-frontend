@@ -11,6 +11,7 @@ import {
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexCOT } from './_shared/hooks';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import ForexUpsellGate from './components/ForexUpsellGate';
 import type { COTPosition } from './_shared/types';
 
@@ -74,7 +75,8 @@ function COTRow({ pos }: { pos: COTPosition }) {
 
 export default function ForexCOT() {
   const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
-  const entitled = isPremium || isAdmin || isLifetimeUser;
+  const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
+  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
 
   const { data, loading } = useForexCOT();
 
