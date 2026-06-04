@@ -108,7 +108,8 @@ const RealYieldsHero = memo(function RealYieldsHero() {
       <p className="text-3xl sm:text-4xl font-bold tabular-nums text-white/90 font-mono">
         {tips10 != null ? fmtYield(tips10) : '—'}
       </p>
-      <DataFreshness asOf={snapshot?.ts} ttlHours={36} className="mt-0.5" />
+      {/* Daily FRED series (DFII/breakevens) — business days only; allow long weekends/holidays before "stale" */}
+      <DataFreshness asOf={snapshot?.ts} ttlHours={96} className="mt-0.5" />
       <div className="flex flex-wrap gap-2 mt-3">
         {tips5 != null && (
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/5 border border-white/10 text-white/60">

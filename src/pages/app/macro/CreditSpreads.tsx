@@ -145,7 +145,8 @@ const RegimeHero = memo(function RegimeHero() {
           )}
         </div>
       </div>
-      <DataFreshness asOf={snapshot?.ts} ttlHours={36} className="mt-2" />
+      {/* Daily FRED series (ICE BofA OAS) — business days only, ~1d publish lag; allow long weekends before "stale" */}
+      <DataFreshness asOf={snapshot?.ts} ttlHours={96} className="mt-2" />
     </div>
   );
 });
