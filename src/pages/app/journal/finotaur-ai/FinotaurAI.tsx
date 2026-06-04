@@ -21,6 +21,7 @@ import { useUsage } from './hooks/useUsage';
 import type { Insight } from './types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
+import { SkeletonCard, SkeletonStatRow } from '@/components/ds/Skeleton';
 
 // ---------------------------------------------------------------------------
 // Page shell — wraps content with page-level padding/header
@@ -41,7 +42,10 @@ function PageShell({ children }: { children: React.ReactNode }) {
 function PageLoader() {
   return (
     <PageShell>
-      <div className="font-sans text-body text-ink-tertiary">Loading…</div>
+      <div className="space-y-ds-5">
+        <SkeletonStatRow count={3} />
+        <SkeletonCard lines={3} />
+      </div>
     </PageShell>
   );
 }

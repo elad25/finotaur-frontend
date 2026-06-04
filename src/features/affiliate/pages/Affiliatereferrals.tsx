@@ -12,7 +12,7 @@ import {
   Clock, CheckCircle, XCircle, AlertTriangle, UserMinus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 
 // =====================================================
 // CONSTANTS
@@ -269,8 +269,11 @@ export default function AffiliateReferrals() {
   // Loading state
   if (profileLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+        <Skeleton className="h-8 w-40 mb-2" />
+        <SkeletonStatRow count={5} />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <SkeletonTable rows={8} cols={6} />
       </div>
     );
   }
@@ -383,9 +386,7 @@ export default function AffiliateReferrals() {
         </div>
 
         {referralsLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={8} cols={6} />
         ) : referrals.length === 0 ? (
           <div className="text-center py-16">
             <Users className="h-12 w-12 text-gray-600 mx-auto mb-3" />

@@ -14,7 +14,7 @@ import {
   UTCTimestamp,
 } from 'lightweight-charts';
 import { WatchlistTable } from "./WatchlistTable";
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from '@/components/ds/Skeleton';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -587,12 +587,7 @@ export const ChartBoard: React.FC<Props> = ({ initialSymbol }) => {
         {/* Chart Container */}
         <div ref={chartContainerRef} className="flex-1 w-full relative">
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/80 z-10">
-              <div className="flex flex-col items-center gap-2">
-                <Spinner size="md" />
-                <span className="text-[#787b86] text-sm">Loading {symbol}...</span>
-              </div>
-            </div>
+            <Skeleton className="absolute inset-0 rounded-none z-10" />
           )}
         </div>
       </div>

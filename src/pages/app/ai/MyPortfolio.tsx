@@ -27,7 +27,7 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { FinotaurCopilotDashboard } from './copilot/FinotaurCopilotDashboard';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 type CopilotPreviewMode = 'landing' | 'subscriber' | 'admin';
 
@@ -56,11 +56,7 @@ export default function MyPortfolio() {
   const effectiveMode: CopilotPreviewMode = canPreview ? previewMode : hasSubscriberAccess ? 'subscriber' : 'landing';
 
   if ((adminLoading || accessLoading) && !canPreview) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (effectiveMode === 'subscriber' || effectiveMode === 'admin') {

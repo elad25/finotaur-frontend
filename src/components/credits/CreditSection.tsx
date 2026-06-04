@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Zap, Brain, Flame, ChevronRight, Clock } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonCard } from '@/components/ds/Skeleton';
 
 // ============================================
 // CONSTANTS
@@ -100,11 +100,7 @@ export function CreditSection() {
 
   // Loading state
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Spinner size="md" />
-      </div>
-    );
+    return <SkeletonCard lines={2} />;
   }
 
   // Calculations

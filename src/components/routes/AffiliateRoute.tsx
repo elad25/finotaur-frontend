@@ -5,13 +5,13 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { FEATURES } from '@/config/features';
-import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // PageLoader imported from @/components/ds/Spinner
 
 // Suspense wrapper
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
-  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
 
@@ -70,7 +70,7 @@ export const AffiliateRoute = memo(({ children }: { children: ReactNode }) => {
   }, [user?.id]);
 
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   if (!hasAccess) {

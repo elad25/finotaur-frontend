@@ -13,7 +13,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useMemo } from 'react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonChart } from '@/components/ds/Skeleton';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -328,17 +328,7 @@ const OptionsFlowChart = memo(({ ticker }: OptionsFlowChartProps) => {
 
   // ============ LOADING STATE ============
   if (isLoading && !data) {
-    return (
-      <div className="rounded-2xl border border-white/5 overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, rgba(15,15,15,0.8), rgba(10,10,10,0.95))' }}>
-        <div className="p-6">
-          <div className="flex items-center gap-3">
-            <Spinner size="sm" />
-            <span className="text-sm text-[#8B8B8B]">Loading options flow for {ticker}...</span>
-          </div>
-        </div>
-      </div>
-    );
+    return <SkeletonChart height="h-48" />;
   }
 
   if (!data) return null;

@@ -27,7 +27,7 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonStatRow, SkeletonChart, SkeletonTable } from '@/components/ds/Skeleton';
 import { StatsCard } from '@/components/admin/StatsCard';
 import {
   getUserGrowthData,
@@ -175,8 +175,10 @@ export function ExecutivePlaceholder() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <LoadingSkeleton lines={12} />
+      <div className="p-8 space-y-6">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-64" />
+        <SkeletonTable rows={6} cols={5} />
       </div>
     );
   }

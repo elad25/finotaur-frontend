@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
 import { useMarketGate } from '@/hooks/useMarketGate';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 
 type Mover = { symbol: string; price: number|null; chp: number|null; name?: string };
 type MoversResp = { gainers: Mover[]; losers: Mover[]; source: string; ts: number };
@@ -70,13 +71,13 @@ export default function AllMarketsMovers() {
         <Card className="rounded-2xl border-border bg-base-800 shadow-premium">
           <CardHeader><CardTitle>Gainers</CardTitle></CardHeader>
           <CardContent>
-            {loading ? <div className="text-muted-foreground">Loading…</div> : err ? <div className="text-red-500">{err}</div> : renderTable(data?.gainers||[])}
+            {loading ? <SkeletonTable rows={6} cols={3} /> : err ? <div className="text-red-500">{err}</div> : renderTable(data?.gainers||[])}
           </CardContent>
         </Card>
         <Card className="rounded-2xl border-border bg-base-800 shadow-premium">
           <CardHeader><CardTitle>Losers</CardTitle></CardHeader>
           <CardContent>
-            {loading ? <div className="text-muted-foreground">Loading…</div> : err ? <div className="text-red-500">{err}</div> : renderTable(data?.losers||[])}
+            {loading ? <SkeletonTable rows={6} cols={3} /> : err ? <div className="text-red-500">{err}</div> : renderTable(data?.losers||[])}
           </CardContent>
         </Card>
       </div>

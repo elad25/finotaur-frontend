@@ -23,6 +23,7 @@ import {
   Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { SkeletonCard } from '@/components/ds/Skeleton';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -174,14 +175,7 @@ const CronStatusSection: React.FC = () => {
   };
   
   if (statusLoading) {
-    return (
-      <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 p-6">
-        <div className="flex items-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
-          <span className="text-gray-500">Loading CRON status...</span>
-        </div>
-      </div>
-    );
+    return <SkeletonCard lines={3} className="mt-2" />;
   }
 
   const isEnabled = cronStatus?.enabled ?? false;

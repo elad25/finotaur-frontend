@@ -8,6 +8,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, ChevronRight, ChevronLeft, Check, AlertCircle, Loader2, FileText, RotateCcw } from 'lucide-react';
+import { Skeleton } from '@/components/ds/Skeleton';
 import { toast } from 'sonner';
 
 import PageTitle from '@/components/PageTitle';
@@ -214,8 +215,8 @@ function Step1Upload({
         <div className="flex flex-col items-center gap-4">
           {loading ? (
             <>
-              <Loader2 className="w-12 h-12 text-yellow-500 animate-spin" />
-              <p className="text-sm text-zinc-300">Reading file…</p>
+              <Skeleton className="w-14 h-14 rounded-full" />
+              <Skeleton className="h-4 w-32 mt-2" />
             </>
           ) : (
             <>

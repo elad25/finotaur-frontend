@@ -12,7 +12,7 @@ import {
   BarChart3, LineChart, TrendingUp, Briefcase, Activity,
   Layers, Zap, Database, FileText
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 
 import {
   parseCSV,
@@ -422,9 +422,8 @@ export default function ImportTradesPopup({
         />
         
         {isProcessing ? (
-          <div className="flex flex-col items-center gap-3">
-            <Spinner size="lg" />
-            <p className="text-zinc-400">Processing file...</p>
+          <div className="py-4 space-y-2">
+            <SkeletonText lines={3} />
           </div>
         ) : (
           <>
@@ -643,9 +642,7 @@ export default function ImportTradesPopup({
     <div className="flex flex-col items-center justify-center py-16">
       <div className="relative mb-8">
         <div className="absolute inset-0 bg-[#C9A646] blur-2xl opacity-20 animate-pulse"></div>
-        <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 border border-[#C9A646]/30 flex items-center justify-center">
-          <Spinner size="lg" />
-        </div>
+        <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 border border-[#C9A646]/30" />
       </div>
       
       <h3 className="text-xl font-semibold text-white mb-2">

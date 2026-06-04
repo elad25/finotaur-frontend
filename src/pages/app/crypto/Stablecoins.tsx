@@ -22,6 +22,7 @@ import {
   GlassTableSkeleton,
   Sparkline,
 } from './_shared/GlassUI';
+import { Skeleton, SkeletonChart } from '@/components/ds/Skeleton';
 import {
   formatCompact,
   formatPercent,
@@ -84,11 +85,11 @@ const TotalCapHeader = memo(function TotalCapHeader() {
 
   if (isLoading) {
     return (
-      <div className="animate-pulse mb-6">
-        <div className="h-4 w-40 bg-white/10 rounded mb-2" />
-        <div className="h-10 w-52 bg-white/10 rounded mb-3" />
-        <div className="flex gap-2">
-          {[1, 2, 3].map((i) => <div key={i} className="h-6 w-20 bg-white/10 rounded-full" />)}
+      <div className="mb-6 space-y-2">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-10 w-52" />
+        <div className="flex gap-2 pt-1">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-6 w-20 rounded-full" />)}
         </div>
       </div>
     );
@@ -162,14 +163,7 @@ const HistorySparkline = memo(function HistorySparkline() {
   const { data: histResp, isLoading, error, refetch } = useStablecoinsHistory(365);
 
   if (isLoading) {
-    return (
-      <GlassCard>
-        <div className="animate-pulse">
-          <div className="h-4 w-32 bg-white/10 rounded mb-4" />
-          <div className="h-16 bg-white/[0.04] rounded" />
-        </div>
-      </GlassCard>
-    );
+    return <SkeletonChart height="h-24" />;
   }
 
   if (error) {

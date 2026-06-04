@@ -32,12 +32,11 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
-  Loader2,
   Target,
   Activity,
   Zap,
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ds/Skeleton";
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
 
@@ -450,10 +449,7 @@ const DrilldownModal: React.FC<{
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {isLoading && (
-            <div className="flex items-center justify-center py-12 text-ink-tertiary gap-3">
-              <Spinner size="md" />
-              <span className="text-small">Loading ticker data...</span>
-            </div>
+            <SkeletonTable rows={4} cols={4} className="mt-2" />
           )}
 
           {isError && (
@@ -1011,10 +1007,7 @@ const WarZoneAdmin: React.FC = () => {
         </div>
 
         {mentionsLoading ? (
-          <div className="h-20 flex items-center justify-center text-ink-tertiary gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-gold-primary" />
-            <span className="text-small">Loading catalyst data...</span>
-          </div>
+          <SkeletonTable rows={3} cols={4} className="mt-2" />
         ) : todayCatalysts.length === 0 ? (
           <p className="text-small text-ink-tertiary py-2">No tracked catalysts yet today.</p>
         ) : (
@@ -1150,10 +1143,7 @@ const WarZoneAdmin: React.FC = () => {
         </div>
 
         {aggregatesLoading ? (
-          <div className="h-40 flex items-center justify-center text-ink-tertiary gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-gold-primary" />
-            <span className="text-small">Loading heatmap...</span>
-          </div>
+          <SkeletonTable rows={5} cols={5} className="mt-2" />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-small border-collapse">

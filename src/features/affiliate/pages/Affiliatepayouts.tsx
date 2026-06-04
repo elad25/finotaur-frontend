@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 
 // ============================================
 // TYPES
@@ -338,8 +338,12 @@ export default function AffiliatePayouts() {
 
   if (loading && !affiliateId) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+        <Skeleton className="h-8 w-36 mb-2" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <SkeletonStatRow count={4} />
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <SkeletonTable rows={6} cols={6} />
       </div>
     );
   }
@@ -546,9 +550,7 @@ export default function AffiliatePayouts() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={6} cols={6} />
         ) : payouts.length === 0 ? (
           <div className="text-center py-16">
             <Wallet className="h-12 w-12 text-gray-600 mx-auto mb-3" />

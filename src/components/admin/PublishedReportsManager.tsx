@@ -67,7 +67,7 @@ import {
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonTable } from '@/components/ds/Skeleton';
 
 // ============================================
 // TYPES
@@ -393,9 +393,7 @@ const AdminStatsSection = React.memo<AdminStatsSectionProps>(({ stats, isLoading
               </div>
             </div>
             {isLoading ? (
-              <div className="h-8 flex items-center">
-                <Spinner size="sm" />
-              </div>
+              <Skeleton className="h-8 w-20" />
             ) : (
               <p className={`text-2xl font-bold ${card.valueColor}`}>{card.value}</p>
             )}
@@ -440,9 +438,7 @@ const TopSecretStatsSection = React.memo<TopSecretStatsSectionProps>(({ stats, i
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Spinner size="md" />
-        </div>
+        <SkeletonTable rows={4} cols={5} />
       ) : (
         <div className="space-y-6">
           {/* Summary Row */}
@@ -1780,9 +1776,7 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
         </div>
 
         {reportsLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={6} cols={5} />
         ) : sortedMonthKeys.length === 0 ? (
           <div className="text-center py-12 text-gray-500 border border-white/10 rounded-xl">
             <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />

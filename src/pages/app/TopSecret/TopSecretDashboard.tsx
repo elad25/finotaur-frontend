@@ -57,7 +57,7 @@ import { supabase } from '@/lib/supabase';
   ChevronUp,
   FlaskConical,
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonGrid } from '@/components/ds/Skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth, isSameMonth, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -2282,9 +2282,7 @@ function processReports(publishedReports: any[]) {
               </div>
 
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spinner size="md" />
-                </div>
+                <SkeletonGrid count={4} cols={2} cardLines={3} />
               ) : latestByType.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />

@@ -5,14 +5,14 @@ import { domains } from '@/constants/nav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { useMentorView } from '@/contexts/MentorViewContext';
-import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // PageLoader imported from @/components/ds/Spinner
 
 // Suspense wrapper
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
   <ErrorBoundary boundary="backtest">
-    <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
   </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
@@ -118,7 +118,7 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
   const isBacktestLocked = domains['journal-backtest']?.locked === true;
 
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // 🔒 If backtest is globally locked, show Coming Soon page
@@ -131,7 +131,7 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
   // to the student; run/save actions are hidden in mentor view).
   if (!hasAccess && !isMentorView) {
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<RouteSkeleton />}>
         <BacktestLanding />
       </Suspense>
     );

@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   ArrowLeft,
 } from 'lucide-react';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   getAllUsers,
@@ -343,10 +344,7 @@ export function BulkActions() {
             <span className="text-sm">{loadError}</span>
           </div>
         ) : loading ? (
-          <div className="p-6 text-gray-500 text-sm flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Loading users…
-          </div>
+          <SkeletonTable rows={6} cols={5} className="m-2" />
         ) : filteredUsers.length === 0 ? (
           <div className="p-6 text-gray-500 text-sm">
             No users match the current filter.

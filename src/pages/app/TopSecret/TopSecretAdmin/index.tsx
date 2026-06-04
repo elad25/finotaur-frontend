@@ -8,7 +8,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Users, Calendar, Crown, Layers, Sparkles, FileText, Activity, CheckCircle } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { SkeletonGrid } from '@/components/ds/Skeleton';
 
 // Local imports
 import { REPORT_TYPES, API_BASE, STORAGE_KEYS, formatMonthDisplay, getCurrentISMMonth, type PreviewData, type ISMStatus, type ReportStats } from './utils/constants';
@@ -245,7 +246,7 @@ export default function TopSecretAdmin() {
     return (
       <>
         <AdminViewToggle mode={adminViewMode} onChange={setAdminViewMode} />
-        <Suspense fallback={<div className="min-h-screen bg-[#080812] flex items-center justify-center"><Spinner size="lg" /></div>}>
+        <Suspense fallback={<RouteSkeleton />}>
           <TopSecretLanding />
         </Suspense>
       </>
@@ -256,7 +257,7 @@ export default function TopSecretAdmin() {
     return (
       <>
         <AdminViewToggle mode={adminViewMode} onChange={setAdminViewMode} />
-        <Suspense fallback={<div className="min-h-screen bg-[#080812] flex items-center justify-center"><Spinner size="lg" /></div>}>
+        <Suspense fallback={<RouteSkeleton />}>
           <TopSecretDashboard />
         </Suspense>
       </>
@@ -339,7 +340,7 @@ export default function TopSecretAdmin() {
 
       {/* Tab Content */}
       {activeTab === 'published' ? (
-        <Suspense fallback={<Spinner size="md" className="mx-auto" />}>
+        <Suspense fallback={<SkeletonGrid count={4} cols={2} />}>
           <PublishedReportsManager />
         </Suspense>
       ) : (

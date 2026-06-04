@@ -7,7 +7,7 @@
 
 import { useState, Suspense, memo, useCallback } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, GitMerge, PieChart, Users, Zap } from 'lucide-react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -222,11 +222,7 @@ export default function FlowScanner() {
   const access = canAccessPage('flow_scanner');
 
   if (accessLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (!access.hasAccess) {

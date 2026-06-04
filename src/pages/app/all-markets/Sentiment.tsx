@@ -14,13 +14,13 @@ import {
   TrendingDown,
   Activity,
   BarChart3,
-  Loader2,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Shield,
 } from 'lucide-react';
 import { Card, Eyebrow } from '@/components/ds/Card';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // ============================================
 // TYPES
@@ -639,11 +639,7 @@ export default function AllMarketsSentiment() {
   );
 
   if (isLoading || !marketData) {
-    return (
-      <div className="min-h-screen bg-surface-base flex items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-ink-muted" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   return (

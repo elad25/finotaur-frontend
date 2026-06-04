@@ -16,7 +16,7 @@ import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { Suspense, memo } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
-import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
@@ -372,7 +372,7 @@ const FundingTransactions = lazy(() => import("@/pages/app/funding/Transactions"
 
 // WRAPPERS
 const SuspenseRoute = memo(({ children }: { children: React.ReactNode }) => (
-  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
 

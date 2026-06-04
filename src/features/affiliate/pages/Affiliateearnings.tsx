@@ -11,7 +11,7 @@ import {
   Filter, Calendar, ArrowUpRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 
 // =====================================================
 // TYPES
@@ -426,8 +426,12 @@ export default function AffiliateEarnings() {
   // Loading state
   if (!affiliateId && loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+        <Skeleton className="h-8 w-32 mb-2" />
+        <SkeletonStatRow count={4} />
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <SkeletonTable rows={8} cols={6} />
       </div>
     );
   }
@@ -566,9 +570,7 @@ export default function AffiliateEarnings() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={8} cols={6} />
         ) : commissions.length === 0 ? (
           <div className="text-center py-16">
             <DollarSign className="h-12 w-12 text-gray-600 mx-auto mb-3" />

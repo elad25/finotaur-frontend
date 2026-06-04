@@ -6,14 +6,14 @@
 
 import { useState, Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
-import { 
+import {
   LayoutDashboard,
   FileText,
   Users,
   UserCheck,
   Wallet,
-  Loader2
 } from 'lucide-react';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
 
 // Lazy load tab components
@@ -46,9 +46,7 @@ export default function AdminAffiliate() {
   ];
 
   const TabLoader = () => (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
-    </div>
+    <SkeletonTable rows={6} cols={5} className="mt-4" />
   );
 
   return (

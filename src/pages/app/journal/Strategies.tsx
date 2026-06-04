@@ -8,7 +8,7 @@ import {
   Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
 } from "lucide-react";
 import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonStatRow, SkeletonChart, SkeletonTable, SkeletonCard } from '@/components/ds/Skeleton';
 import { useTrades } from "@/hooks/useTradesData";
 import EquityCurveChart from '@/components/charts/EquityCurveChart';
 import { 
@@ -292,11 +292,10 @@ const strategyTrades = useMemo(() => {
 
   if (loading) {
     return (
-      <div style={{ background: '#0A0A0A', minHeight: '100vh' }} className="flex items-center justify-center">
-        <div className="text-center">
-          <Spinner size="lg" className="mx-auto mb-4" />
-          <p style={{ color: '#9A9A9A' }}>Loading strategy...</p>
-        </div>
+      <div style={{ background: '#0A0A0A', minHeight: '100vh' }} className="p-6 space-y-5">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-72" />
+        <SkeletonTable rows={6} cols={6} />
       </div>
     );
   }
@@ -2061,16 +2060,8 @@ const strategiesWithStats = useMemo(() => {
           </button>
         </div>
 
-        {!userId ? (
-          <div className="text-center py-12">
-            <Spinner size="lg" className="mx-auto mb-4" />
-            <p style={{ color: '#9A9A9A' }}>Loading user...</p>
-          </div>
-        ) : loading ? (
-          <div className="text-center py-12">
-            <Spinner size="lg" className="mx-auto mb-4" />
-            <p style={{ color: '#9A9A9A' }}>Loading strategies...</p>
-          </div>
+        {!userId || loading ? (
+          <SkeletonCard lines={3} className="mt-4" />
         ) : strategies.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-6">
             {/* KPI Card - Total Strategies */}

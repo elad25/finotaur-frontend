@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 import {
   Select,
   SelectContent,
@@ -253,8 +253,8 @@ export default function AffiliateApplicationForm({
   // Loading state
   if (checkingApplication) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Spinner size="md" />
+      <div className="p-8">
+        <SkeletonText lines={4} />
       </div>
     );
   }

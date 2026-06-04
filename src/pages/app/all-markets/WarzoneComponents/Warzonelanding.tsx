@@ -29,15 +29,15 @@ import {
 import { useWarZoneStatus, useTopSecretStatus, useUserMeta } from '@/hooks/useUserStatus';
 
 // Visual components (same folder)
-import { 
-  ParticleBackground, 
-  SparkleEffect, 
-  GoldenDivider, 
-  DiscordIcon, 
+import {
+  ParticleBackground,
+  SparkleEffect,
+  GoldenDivider,
+  DiscordIcon,
   CompassIcon,
   BellIcon,
-  FullPageLoader,
 } from './VisualComponents';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // Sub-components (same folder)
 import {
@@ -2075,7 +2075,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
 
   // Loading state
   if (isLoading && !previewMode) {
-    return <FullPageLoader text="Loading War Zone..." />;
+    return <RouteSkeleton />;
   }
 
   // Subscriber view

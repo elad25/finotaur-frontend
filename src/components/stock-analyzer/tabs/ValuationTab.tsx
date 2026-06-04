@@ -13,7 +13,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 import { authFetch } from '@/utils/authFetch';
 import {
   Scale, Info, Sparkles, TrendingUp, TrendingDown,
@@ -1119,10 +1119,7 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
 
       {isLoading && !aiData && (
         <div className="space-y-4">
-          <div className="flex items-center justify-center gap-3 py-3">
-            <Spinner size="sm" />
-            <span className="text-sm text-[#8B8B8B]">Running deep valuation models for {data.ticker}...</span>
-          </div>
+          <SkeletonText lines={2} className="py-3" />
           <ValuationSkeleton />
         </div>
       )}

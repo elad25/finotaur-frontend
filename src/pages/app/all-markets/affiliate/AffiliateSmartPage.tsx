@@ -35,6 +35,7 @@ import {
   XCircle, MessageSquare, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { generateApprovalEmail } from '@/features/affiliate/utils/affiliateEmailTemplates';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // ─────────────────────────────────────────────────────
 // TYPES — aligned with affiliate.types.ts + DB schema
@@ -1339,11 +1340,7 @@ export default function AffiliateSmartPage() {
 
   // ─── Render ───
   if (mode === 'loading') {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-10 w-10 text-[#C9A646] animate-spin" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (applySuccess) {

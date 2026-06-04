@@ -18,6 +18,7 @@ import {
   GlassStatSkeleton,
   GlassTableSkeleton,
 } from './_shared/GlassUI';
+import { Skeleton } from '@/components/ds/Skeleton';
 import {
   formatCompact,
   formatPercent,
@@ -266,9 +267,9 @@ const TvlHeader = memo(function TvlHeader() {
 
   if (isLoading) {
     return (
-      <div className="animate-pulse mb-6">
-        <div className="h-4 w-32 bg-white/10 rounded mb-2" />
-        <div className="h-10 w-48 bg-white/10 rounded" />
+      <div className="mb-6 space-y-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-10 w-48" />
       </div>
     );
   }

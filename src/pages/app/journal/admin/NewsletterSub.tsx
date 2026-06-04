@@ -49,7 +49,8 @@ FileDown,
 import { toast } from 'sonner';
 import { Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonCard, Skeleton } from "@/components/ds/Skeleton";
+import { RouteSkeleton } from "@/components/ds/RouteSkeleton";
 
 const WarZoneLandingSimple = lazy(() => import("@/pages/app/all-markets/WarzoneComponents/Warzonelanding"));
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
@@ -727,14 +728,7 @@ const LastSentStatus: React.FC<{ lastSent: LastSentInfo | null; isLoading: boole
   isLoading 
 }) => {
   if (isLoading) {
-    return (
-      <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 p-4">
-        <div className="flex items-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
-          <span className="text-gray-500">Loading...</span>
-        </div>
-      </div>
-    );
+    return <SkeletonCard lines={2} className="mt-2" />;
   }
 
   if (!lastSent) {
@@ -847,9 +841,7 @@ const StatCard: React.FC<{
       <div>
         <p className="text-gray-500 text-sm">{title}</p>
         {loading ? (
-          <div className="h-9 flex items-center">
-            <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
-          </div>
+          <Skeleton className="h-9 w-20 mt-1" />
         ) : (
           <p className={`text-3xl font-bold mt-1 ${valueColor}`}>{value}</p>
         )}
@@ -1475,7 +1467,7 @@ const clearPreview = () => {
     return (
       <>
         <AdminViewToggle />
-        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Spinner size="lg" /></div>}>
+        <Suspense fallback={<RouteSkeleton />}>
           <WarZoneLandingSimple previewMode="landing" />
         </Suspense>
       </>
@@ -1487,7 +1479,7 @@ const clearPreview = () => {
     return (
       <>
         <AdminViewToggle />
-        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Spinner size="lg" /></div>}>
+        <Suspense fallback={<RouteSkeleton />}>
           <WarZoneLandingSimple previewMode="subscriber" />
         </Suspense>
       </>

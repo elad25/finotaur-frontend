@@ -8,7 +8,7 @@
 // =====================================================
 
 import { memo, useMemo } from 'react';
-import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // ============================================
 // ICONS
@@ -238,8 +238,8 @@ export const GlowingBadge = memo(function GlowingBadge({ className }: { classNam
 // FULL PAGE LOADER
 // ============================================
 
-export const FullPageLoader = memo(function FullPageLoader({ text = 'Loading...' }: { text?: string }) {
-  return <PageLoader text={text} />;
+export const FullPageLoader = memo(function FullPageLoader({ text: _text = 'Loading...' }: { text?: string }) {
+  return <RouteSkeleton />;
 });
 
 // ============================================

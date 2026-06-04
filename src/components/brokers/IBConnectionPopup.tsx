@@ -14,7 +14,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 
@@ -375,12 +375,8 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
   // ============================================================================
 
   const renderConnecting = () => (
-    <div className="py-12 flex flex-col items-center justify-center gap-6">
-      <Spinner size="lg" />
-      <div className="text-center">
-        <p className="text-white font-semibold text-lg mb-2">Connecting to Interactive Brokers...</p>
-        <p className="text-zinc-400 text-sm">Validating your credentials</p>
-      </div>
+    <div className="py-8 space-y-4">
+      <SkeletonText lines={3} />
     </div>
   );
 

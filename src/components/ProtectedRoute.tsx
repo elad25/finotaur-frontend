@@ -32,6 +32,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useSubscription } from '@/hooks/useSubscription';
 import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // 🔥 Lazy load the JournalLandingPage to avoid circular imports
 const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLandingPage'));
@@ -211,7 +212,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     // ❌ No journal access - Show JournalLandingPage
     logOnce(`journal-denied-${location.pathname}`, '[ProtectedRoute] ❌ No journal access - showing landing page');
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<RouteSkeleton />}>
         <JournalLandingPage />
       </Suspense>
     );

@@ -17,7 +17,7 @@
 
 import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Activity } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonChart } from '@/components/ds/Skeleton';
 import { stockCache, getNextEarningsDate } from '@/services/stock-analyzer.cache';
 
 // ── Types ──
@@ -486,11 +486,7 @@ export const AlgoFlowChart = memo(({ chain, ticker, currentPrice }: AlgoFlowChar
 
   // ── Render ──
   if (loading) {
-    return (
-      <div className="h-[480px] flex items-center justify-center">
-        <Spinner size="sm" />
-      </div>
-    );
+    return <SkeletonChart height="h-[480px]" />;
   }
 
   if (!n) {

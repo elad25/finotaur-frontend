@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Lock, Crown } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonCard } from '@/components/ds/Skeleton';
 
 interface SubscriptionGuardProps {
   children: React.ReactNode;
@@ -92,11 +92,8 @@ export function SubscriptionGuard({ children, requiredPlan, feature }: Subscript
 
   if (checking) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-zinc-400">Loading...</p>
-        </div>
+      <div className="min-h-[400px] p-6">
+        <SkeletonCard lines={3} />
       </div>
     );
   }

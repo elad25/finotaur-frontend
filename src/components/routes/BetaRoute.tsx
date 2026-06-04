@@ -14,7 +14,7 @@
 import { ReactNode, Suspense, memo } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 interface BetaRouteProps {
   children: ReactNode;
@@ -36,7 +36,7 @@ export const BetaRoute = memo(({
 
   // Show loading while checking access
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // No beta access - redirect
@@ -48,7 +48,7 @@ export const BetaRoute = memo(({
   // Has beta access - render children
   console.log(`🧪 [BetaRoute] Beta access granted for ${location.pathname}`);
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteSkeleton />}>
       {children}
     </Suspense>
   );

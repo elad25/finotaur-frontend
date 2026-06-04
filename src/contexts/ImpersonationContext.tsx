@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Spinner } from "@/components/ui/Spinner";
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 interface ImpersonationContextType {
   isImpersonating: boolean;
@@ -314,14 +314,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [validateSession]);
 
   if (state.isValidating) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
-        <div className="text-center">
-          <Spinner size="md" className="mx-auto mb-4" />
-          <div className="text-[#A0A0A0] text-sm">Validating session...</div>
-        </div>
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   return (

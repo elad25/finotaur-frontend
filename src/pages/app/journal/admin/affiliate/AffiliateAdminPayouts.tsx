@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 
 // ============================================
 // TYPES
@@ -548,9 +548,7 @@ export default function AffiliateAdminPayouts() {
         }}
       >
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={6} cols={5} />
         ) : payouts.length === 0 ? (
           <div className="text-center py-16">
             <Wallet className="h-12 w-12 text-gray-600 mx-auto mb-3" />
@@ -977,9 +975,7 @@ function PayoutDetailModal({
             </h4>
             
             {loadingCommissions ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner size="md" />
-              </div>
+              <SkeletonTable rows={4} cols={5} />
             ) : commissions.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No commissions linked to this payout</p>
             ) : (

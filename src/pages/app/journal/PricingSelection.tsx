@@ -12,7 +12,7 @@ import {
   Crown, Shield, LogOut, Check, Clock, ArrowRight, ChevronRight,
   FileText, Calendar, Headphones, Zap, X, Loader2, Rocket, Sparkles, Gift
 } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -254,14 +254,7 @@ export default function WarZonePricingSelection() {
   // LOADING STATE
   // =====================================================
   if (checkingSubscription) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#0A0A0A]">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-zinc-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
 // =====================================================

@@ -15,7 +15,7 @@ import { Check, X, Eye, EyeOff, FileText } from 'lucide-react';
 import TermsAndConditionsModal from '@/components/legal/TermsAndConditionsModal';
 import { validatePassword, getPasswordStrength } from '@/lib/passwordValidation';
 import { SEO } from '@/components/seo/SEO';
-import { Spinner } from "@/components/ui/Spinner";
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // Current terms version - update when terms change
 const CURRENT_TERMS_VERSION = '2025.11';
@@ -261,14 +261,7 @@ export default function Register() {
   };
 
   if (checking || user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-zinc-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   return (
