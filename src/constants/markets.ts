@@ -203,6 +203,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: Activity,
     routes: {
       home: '/app/all-markets/sentiment',
+      crypto: '/app/crypto/sentiment',
     },
   },
   {
