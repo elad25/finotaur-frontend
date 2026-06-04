@@ -13,7 +13,7 @@ import {
   Crown,
   ArrowUpRight
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonCard } from '@/components/ds/Skeleton';
 import { formatTradesRemaining, getUpgradeUrgency } from '@/utils/subscriptionHelpers';
 
 export function SubscriptionStatus() {
@@ -21,13 +21,7 @@ export function SubscriptionStatus() {
   const navigate = useNavigate();
 
   if (loading) {
-    return (
-      <Card className="rounded-2xl border border-yellow-200/20 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6">
-        <div className="flex items-center justify-center py-8">
-          <Spinner size="md" />
-        </div>
-      </Card>
-    );
+    return <SkeletonCard lines={3} className="rounded-2xl" />;
   }
 
   if (!limits) {

@@ -16,7 +16,7 @@ import {
   Loader2,
   Search
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonStatRow, SkeletonCard } from '@/components/ds/Skeleton';
 import { getAffiliateAdminStats, getReferralTree, adminGrantFreeMonths } from '@/services/affiliateService';
 import { AffiliateAdminStats, ReferralTreeNode } from '@/types/affiliate';
 import { useAuth } from '@/providers/AuthProvider';
@@ -97,8 +97,9 @@ export default function AdminAffiliatePanel() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] p-8 flex items-center justify-center">
-        <Spinner size="lg" />
+      <div className="min-h-screen bg-[#0A0A0A] p-8 space-y-6">
+        <SkeletonStatRow count={4} />
+        <SkeletonCard lines={3} />
       </div>
     );
   }

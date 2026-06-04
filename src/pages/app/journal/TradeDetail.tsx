@@ -11,6 +11,7 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
 import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
+import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Skeleton';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
 import OptionPayoffChart from '@/components/journal/OptionPayoffChart';
@@ -394,8 +395,10 @@ export default function JournalTradeDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-[#C9A646]" />
+      <div className="p-6 space-y-5">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-64" />
+        <SkeletonText lines={4} />
       </div>
     );
   }

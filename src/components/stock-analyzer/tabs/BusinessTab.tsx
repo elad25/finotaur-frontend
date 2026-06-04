@@ -14,8 +14,9 @@ import {
   Briefcase, TrendingUp, DollarSign, Zap, Shield,
   Target, Crown, Building2, Users, Globe,
   ChevronRight, Sparkles, BarChart2, Award,
-  Layers, ArrowUpRight, ArrowDownRight, Minus, Loader2
+  Layers, ArrowUpRight, ArrowDownRight, Minus
 } from 'lucide-react';
+import { SkeletonText } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { C } from '@/constants/stock-analyzer.constants';
@@ -819,9 +820,8 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
 
           <div className="space-y-3">
             {competitorsLoading ? (
-              <div className="flex items-center justify-center py-8 gap-3">
-                <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
-                <span className="text-sm text-[#6B6B6B]">Analyzing competitive landscape...</span>
+              <div className="py-4">
+                <SkeletonText lines={3} />
               </div>
             ) : competitors.length > 0 ? (
               competitors.map((comp, i) => (

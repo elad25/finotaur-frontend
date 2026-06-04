@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { compressImage, validateImage } from "@/utils/imageCompression";
 import { toast } from "sonner";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 
 export default function UploadZone({ file, onFile }:{ file?: File|null; onFile:(f:File|null)=>void; }){
   const ref = useRef<HTMLInputElement>(null);
@@ -58,10 +58,8 @@ export default function UploadZone({ file, onFile }:{ file?: File|null; onFile:(
         onChange={(e)=> handleFile(e.target.files?.[0] ?? null)}
       />
       {compressing ? (
-        <div className="flex flex-col items-center gap-3">
-          <Spinner size="md" />
-          <div className="text-sm text-zinc-300">Compressing image...</div>
-          <div className="text-xs text-zinc-500">This won't take long</div>
+        <div className="py-2">
+          <SkeletonText lines={2} />
         </div>
       ) : !file ? (
         <button

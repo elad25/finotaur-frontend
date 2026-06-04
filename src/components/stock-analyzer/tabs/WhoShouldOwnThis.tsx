@@ -11,8 +11,9 @@
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  AlertTriangle, Loader2, RefreshCw, Sparkles,
+  AlertTriangle, RefreshCw, Sparkles,
 } from 'lucide-react';
+import { SkeletonCard } from '@/components/ds/Skeleton';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { Card } from '../ui';
 import { authFetch } from '@/utils/authFetch';
@@ -357,17 +358,7 @@ export const WhoShouldOwnThis = memo(({ data }: { data: StockData }) => {
     return () => abortRef.current?.abort();
   }, [data.ticker]);
 
-  if (isLoading && !profile) return (
-    <Card>
-      <div className="p-5 flex items-center gap-3">
-        <Loader2 className="w-4 h-4 text-[#C9A646] animate-spin shrink-0" />
-        <div>
-          <p className="text-sm font-semibold text-white">Who Should Own This Stock</p>
-          <p className="text-xs text-[#888]">Analyzing investor profile...</p>
-        </div>
-      </div>
-    </Card>
-  );
+  if (isLoading && !profile) return <SkeletonCard lines={2} />;
 
   if (error && !profile) return (
     <Card>

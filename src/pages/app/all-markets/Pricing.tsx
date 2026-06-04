@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { useAuth } from '@/providers/AuthProvider';
 import { 
   Check, Shield, Zap, Clock, TrendingUp, Gift, X, AlertTriangle, Crown
@@ -457,14 +457,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   // ============================================
 
   if (checkingSubscription) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-zinc-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   // ============================================

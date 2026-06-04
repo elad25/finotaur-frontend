@@ -1,6 +1,6 @@
 // src/pages/app/all-markets/Chart.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonChart } from '@/components/ds/Skeleton';
 import { PriceGate } from '@/components/compliance/PriceGate';
 import {
   createChart,
@@ -2933,11 +2933,8 @@ export default function ChartPage() {
           )}
           
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/80 z-10">
-              <div className="flex flex-col items-center gap-2">
-                <Spinner size="md" />
-                <span className="text-[#787b86] text-sm">Loading {symbol}...</span>
-              </div>
+            <div className="absolute inset-0 z-10">
+              <SkeletonChart />
             </div>
           )}
         </div>

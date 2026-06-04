@@ -20,7 +20,6 @@ import {
   LineChart,
   ArrowRight,
   RefreshCw,
-  Loader2,
   Clock,
   AlertTriangle
 } from 'lucide-react';
@@ -39,6 +38,7 @@ import {
 } from 'recharts';
 
 import { DataFreshness } from '@/components/macro/DataFreshness';
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 
 // ============================================================
 // TYPES
@@ -245,7 +245,7 @@ const KPICard = ({
     <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">{title}</p>
     {loading ? (
       <div className="h-8 flex items-center">
-        <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
+        <Skeleton className="h-7 w-24 rounded" />
       </div>
     ) : (
       <>
@@ -454,11 +454,7 @@ const YieldCurveChart = ({ yields }: { yields: YieldData[] }) => {
 // Current Yield Display
 const YieldDisplay = ({ yields, loading }: { yields: YieldData[]; loading: boolean }) => {
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
-      </div>
-    );
+    return <SkeletonStatRow count={4} />;
   }
 
   return (
@@ -614,8 +610,8 @@ export default function MacroRates() {
               </div>
               
               {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <div className="p-4">
+                  <SkeletonTable rows={6} cols={8} />
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -810,8 +806,8 @@ export default function MacroRates() {
               </div>
               
               {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <div className="p-4">
+                  <SkeletonTable rows={6} cols={8} />
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -987,8 +983,8 @@ export default function MacroRates() {
               </div>
               
               {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <div className="p-4">
+                  <SkeletonTable rows={6} cols={8} />
                 </div>
               ) : (
                 <div className="overflow-x-auto">

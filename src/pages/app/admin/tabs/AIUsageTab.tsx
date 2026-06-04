@@ -21,7 +21,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { StatsCard } from '@/components/admin/StatsCard';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 
 type WindowDays = 7 | 30 | 90;
@@ -218,8 +218,9 @@ export function AIUsageTab() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <LoadingSkeleton lines={12} />
+      <div className="p-8 space-y-6">
+        <SkeletonStatRow count={3} />
+        <SkeletonTable rows={8} cols={5} />
       </div>
     );
   }

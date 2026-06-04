@@ -4,7 +4,8 @@ import { memo, Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { motion, AnimatePresence } from 'framer-motion';
 import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Brain } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonChart } from '@/components/ds/Skeleton';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -17,8 +18,8 @@ const DarkPoolTab        = lazy(() => import('@/features/options-ai/components/t
 
 function TabFallback() {
   return (
-    <div className="flex items-center justify-center py-24">
-      <Spinner size="md" />
+    <div className="py-6">
+      <SkeletonChart height="h-64" />
     </div>
   );
 }
@@ -150,11 +151,7 @@ function OptionsIntelligenceAI() {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('options_intelligence');
   if (accessLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (!access.hasAccess) {

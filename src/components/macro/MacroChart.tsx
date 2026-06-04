@@ -30,7 +30,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Card } from '@/components/ds/Card';
-import { Spinner } from '@/components/ds/Spinner';
+import { SkeletonChart } from '@/components/ds/Skeleton';
 import { fetchETFBars } from '@/services/etf-analyzer.api';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import type { OhlcBar } from '@/types/etf.types';
@@ -576,8 +576,8 @@ export function MacroChart({
 
       {/* Chart or loading/empty state */}
       {anyLoading && loadedSeries.length === 0 ? (
-        <div className="flex items-center justify-center" style={{ height }}>
-          <Spinner size="md" color="gold" />
+        <div style={{ height }}>
+          <SkeletonChart height="h-full" />
         </div>
       ) : loadedSeries.length > 0 ? (
         <div style={{ width: '100%', height }}>

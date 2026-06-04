@@ -14,7 +14,6 @@ import {
   XCircle,
   AlertTriangle,
   Eye,
-  Loader2,
   Calendar,
   DollarSign,
   TrendingUp,
@@ -27,8 +26,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   REFERRAL_STATUS_DISPLAY, 
-  type ReferralStatus 
+  type ReferralStatus
 } from '@/features/affiliate/types/affiliate.types';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 
 // 🔥 v2.3.0: Fixed interface to match DB schema
 interface Referral {
@@ -283,11 +283,7 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
-      </div>
-    );
+    return <SkeletonTable rows={8} cols={6} className="mt-4" />;
   }
 
   return (

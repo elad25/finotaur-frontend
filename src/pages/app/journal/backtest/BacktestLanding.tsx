@@ -7,7 +7,7 @@ import {
   PlayCircle, Layers, Settings
 } from 'lucide-react';
 import { useEffect } from 'react';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 /**
  * 🎯 BACKTEST LANDING PAGE - Premium Feature Lock
@@ -29,11 +29,7 @@ export default function BacktestLanding() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   return (

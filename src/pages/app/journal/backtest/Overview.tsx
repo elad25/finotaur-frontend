@@ -27,7 +27,7 @@ import {
 import { BORDER_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useBacktestStats } from "@/hooks/useBacktestStats";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonStatRow, SkeletonChart, SkeletonTable } from "@/components/ds/Skeleton";
 
 // ================================================
 // LAZY LOAD HEAVY COMPONENTS
@@ -962,11 +962,10 @@ function BacktestOverviewContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#070808]">
-        <div className="text-center">
-          <Spinner size="lg" className="mx-auto mb-4" />
-          <div className="text-[#A0A0A0] text-xl">Loading backtest results...</div>
-        </div>
+      <div className="min-h-screen bg-[#070808] p-6 space-y-5">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-72" />
+        <SkeletonTable rows={6} cols={6} />
       </div>
     );
   }

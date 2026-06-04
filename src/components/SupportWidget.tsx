@@ -18,7 +18,7 @@ import {
   CheckCircle2, AlertCircle, Info, Megaphone, Download,
   TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound, ThumbsUp
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -1531,8 +1531,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                     {loadingUpdates ? (
-                      <div className="flex items-center justify-center h-full">
-                        <Spinner size="md" />
+                      <div className="p-4 space-y-3">
+                        <SkeletonText lines={4} />
                       </div>
                     ) : systemUpdates.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full p-8">

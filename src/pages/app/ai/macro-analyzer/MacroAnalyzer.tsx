@@ -13,7 +13,7 @@ import React, {
 } from 'react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
@@ -232,11 +232,7 @@ export default function MacroAnalyzer() {
   }, []);
 
   if (accessLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (!access.hasAccess) {

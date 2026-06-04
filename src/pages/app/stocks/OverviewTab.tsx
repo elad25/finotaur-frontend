@@ -63,7 +63,6 @@ export default function OverviewTab({ symbol }: Props) {
       <CompanyOverviewCard name={profile?.name} description={profile?.description} />
 
       {error && <div className="text-sm text-red-400">{error}</div>}
-      {loading && <div className="text-sm text-gray-400">Loading…</div>}
     </div>
   );
 }

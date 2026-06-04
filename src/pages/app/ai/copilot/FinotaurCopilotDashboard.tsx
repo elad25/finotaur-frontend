@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonCard } from '@/components/ds/Skeleton';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Link } from 'react-router-dom';
 import {
@@ -33,8 +33,8 @@ export function FinotaurCopilotDashboard() {
   if (ib.loading) {
     return (
       <ErrorBoundary boundary="ai-copilot">
-        <div className="mt-5 flex items-center justify-center py-20">
-          <Spinner size="md" />
+        <div className="mt-5 space-y-3">
+          <SkeletonCard lines={3} withGrid />
         </div>
       </ErrorBoundary>
     );

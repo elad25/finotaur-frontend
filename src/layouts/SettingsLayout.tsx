@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation";
+import { SkeletonCard } from "@/components/ds/Skeleton";
 
 // ============================================
 // TYPES - Matches actual DB schema
@@ -2818,8 +2819,8 @@ export const SettingsLayout = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-[#C9A646]" />
+      <div className="py-12 px-6">
+        <SkeletonCard lines={3} />
       </div>
     );
   }

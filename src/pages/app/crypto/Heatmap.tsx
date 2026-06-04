@@ -12,6 +12,7 @@ import { useHeatmap, type HeatmapCoin } from '@/hooks/crypto/useHeatmap';
 import { formatCompact } from './_shared/formatters';
 import { SectionHeader } from './_shared/GlassUI';
 import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
+import { Skeleton } from '@/components/ds/Skeleton';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -67,12 +68,12 @@ const TopStatsBar = memo(function TopStatsBar({
 }) {
   if (isLoading) {
     return (
-      <div className="animate-pulse mb-6">
-        <div className="h-4 w-40 bg-white/10 rounded mb-2" />
-        <div className="h-10 w-52 bg-white/10 rounded mb-3" />
-        <div className="flex gap-2">
+      <div className="mb-6 space-y-2">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-10 w-52" />
+        <div className="flex gap-2 pt-1">
           {[1, 2].map((i) => (
-            <div key={i} className="h-6 w-24 bg-white/10 rounded-full" />
+            <Skeleton key={i} className="h-6 w-24 rounded-full" />
           ))}
         </div>
       </div>

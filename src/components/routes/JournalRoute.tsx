@@ -39,7 +39,7 @@ import { lazy } from '@/lib/lazyWithRetry';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // =====================================================
 // LAZY LOAD LANDING PAGE
@@ -59,7 +59,7 @@ const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLanding
 
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
   <ErrorBoundary>
-    <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
   </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
@@ -102,7 +102,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   // LOADING STATE
   // ═══════════════════════════════════════════
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // ═══════════════════════════════════════════
@@ -110,7 +110,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   // But just in case, show loading
   // ═══════════════════════════════════════════
   if (!user) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // ═══════════════════════════════════════════
@@ -129,7 +129,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   if (premiumOnly && !isPremium) {
     console.log('[JournalRoute] ❌ Premium required - showing landing page');
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<RouteSkeleton />}>
         <JournalLandingPage />
       </Suspense>
     );
@@ -146,7 +146,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   // ═══════════════════════════════════════════
   console.log('[JournalRoute] ❌ No journal access - showing landing page');
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteSkeleton />}>
       <JournalLandingPage />
     </Suspense>
   );

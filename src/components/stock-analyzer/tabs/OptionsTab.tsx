@@ -16,11 +16,12 @@
 import { memo, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Target, TrendingUp, TrendingDown, AlertTriangle,
-  Loader2, RefreshCw, ChevronDown, ChevronUp,
+  RefreshCw, ChevronDown, ChevronUp,
   Sparkles, Activity, BarChart3, Eye,
   ArrowUpRight, ArrowDownRight, Zap, Shield,
   Calendar, DollarSign, Flame, Filter,
 } from 'lucide-react';
+import { Skeleton, SkeletonChart } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { C, cardStyle } from '@/constants/stock-analyzer.constants';
@@ -466,7 +467,7 @@ const AdviceCard = memo(({ advice, isLoading, ticker }: {
             <p className="text-sm font-bold text-[#C9A646]">FINOTAUR OPTIONS INSIGHT</p>
             <p className="text-[10px] text-[#6B6B6B]">AI-powered analysis</p>
           </div>
-          <Loader2 className="w-4 h-4 text-[#C9A646] animate-spin ml-auto" />
+          <Skeleton className="ml-auto h-4 w-4 rounded-full" />
         </div>
         <div className="space-y-2">
           <div className="h-5 w-4/5 rounded animate-pulse" style={{ background: 'rgba(201,166,70,0.1)' }} />
@@ -1503,9 +1504,7 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
         </div>
 
         {isLoading ? (
-          <div className="h-[280px] flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" />
-          </div>
+          <SkeletonChart height="h-[280px]" className="border-none bg-transparent" />
         ) : (
           <MaxPainChart painData={painData} currentPrice={data.price} maxPainStrike={maxPainStrike} strikeData={strikeData} />
         )}
@@ -1537,9 +1536,7 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
 
         <div className="mt-4">
           {isLoading ? (
-            <div className="h-[280px] flex items-center justify-center">
-              <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" />
-            </div>
+            <SkeletonChart height="h-[280px]" className="border-none bg-transparent" />
           ) : (
             <OIBarChart strikeData={strikeData} currentPrice={data.price} />
           )}
@@ -1625,9 +1622,7 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
 
         <div className="mt-4">
           {isLoading ? (
-            <div className="h-[500px] flex items-center justify-center">
-              <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" />
-            </div>
+            <SkeletonChart height="h-[500px]" className="border-none bg-transparent" />
           ) : (
             <GammaExposureChart chain={chain} currentPrice={data.price} ticker={ticker} />
           )}
@@ -1646,9 +1641,7 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
 
         <div className="mt-4">
           {isLoading ? (
-            <div className="h-[420px] flex items-center justify-center">
-              <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" />
-            </div>
+            <SkeletonChart height="h-[420px]" className="border-none bg-transparent" />
           ) : (
             <AlgoFlowChart chain={chain} ticker={ticker} currentPrice={data.price} />
           )}

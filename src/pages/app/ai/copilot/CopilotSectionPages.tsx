@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonCard, SkeletonTable } from '@/components/ds/Skeleton';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -225,8 +226,9 @@ export function CopilotMacroPage() {
   if (loading) {
     return (
       <CopilotPageShell title="Macro" eyebrow="Portfolio-aware macro lens" icon={Globe}>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="md" />
+        <div className="space-y-3">
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={3} />
         </div>
       </CopilotPageShell>
     );
@@ -351,9 +353,7 @@ export function CopilotHoldingsPage() {
   if (ib.loading) {
     return (
       <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="md" />
-        </div>
+        <SkeletonTable rows={6} cols={5} />
       </CopilotPageShell>
     );
   }
@@ -412,8 +412,8 @@ export function CopilotRisksPage() {
   if (ib.loading) {
     return (
       <CopilotPageShell title="Risks" eyebrow="AI risk map for the portfolio" icon={Shield}>
-        <div className="flex items-center justify-center py-20">
-          <Spinner size="md" />
+        <div className="space-y-3">
+          <SkeletonCard lines={3} withGrid />
         </div>
       </CopilotPageShell>
     );
@@ -659,11 +659,7 @@ function CopilotPageShell({
   const hasSubscriberAccess = hasBetaAccess || canAccessPage('my_portfolio').hasAccess;
 
   if (adminLoading || accessLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-ink-primary">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (!hasSubscriberAccess) {

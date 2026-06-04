@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import { Users, ChevronRight, Clock, GraduationCap, UserPlus, X, Check } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -135,9 +135,7 @@ function MyMentorSection() {
         </form>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-10">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={2} cols={4} />
         ) : mentors.length === 0 ? (
           <p className="text-sm text-zinc-500 py-2">You haven't added a mentor yet.</p>
         ) : (
@@ -293,9 +291,7 @@ function MyStudentsSection() {
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Spinner size="md" />
-          </div>
+          <SkeletonTable rows={3} cols={4} />
         ) : (
           <>
             {requests.length > 0 && (

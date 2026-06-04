@@ -8,6 +8,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { useFearGreed, useTopCoins, useFundingRates, useCryptoNews } from './_shared/hooks';
 import { timeAgo } from './_shared/formatters';
+import { SkeletonStat, SkeletonTable } from '@/components/ds/Skeleton';
 
 const TABS = [
   { id: 'overview', label: '📊 Overview' },
@@ -49,15 +50,7 @@ interface DSFearGreedProps {
 }
 function DSFearGreedGauge({ value, label, loading }: DSFearGreedProps) {
   if (loading) {
-    return (
-      <Card padding="compact">
-        <div className="animate-pulse space-y-2">
-          <div className="h-3 w-16 bg-surface-2 rounded" />
-          <div className="h-8 w-12 bg-surface-2 rounded" />
-          <div className="h-3 w-20 bg-surface-2 rounded" />
-        </div>
-      </Card>
-    );
+    return <SkeletonStat />;
   }
   const accentClass =
     value >= 60 ? 'text-gold-primary' : value <= 40 ? 'text-num-negative' : 'text-ink-secondary';
@@ -112,21 +105,9 @@ function DSSignalBadge({ signal, label, value, description, icon }: DSSignalProp
   );
 }
 
-// ── Inline DS Table Skeleton ──────────────────────────────────
+// DSTableSkeleton — now delegates to the canonical SkeletonTable from ds/Skeleton
 function DSTableSkeleton({ rows = 8 }: { rows?: number }) {
-  return (
-    <div className="animate-pulse space-y-2">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex gap-4 py-2.5 px-3 rounded-[12px] bg-surface-2">
-          <div className="h-4 w-8 bg-surface-1 rounded" />
-          <div className="h-4 w-20 bg-surface-1 rounded" />
-          <div className="h-4 flex-1 bg-surface-1/60 rounded" />
-          <div className="h-4 w-16 bg-surface-1 rounded" />
-          <div className="h-4 w-12 bg-surface-1 rounded" />
-        </div>
-      ))}
-    </div>
-  );
+  return <SkeletonTable rows={rows} cols={5} />;
 }
 
 // ── Inline DS Empty State ─────────────────────────────────────

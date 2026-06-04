@@ -9,6 +9,8 @@ import { useParams } from 'react-router-dom';
 import { PageTemplate } from '@/components/PageTemplate';
 import { useCoinDetail, useTopCoins, useTechnicalSignals, useFundingRates } from './_shared/hooks';
 import { GlassCard, GlassStat, GlassTabs, SectionHeader, SignalBadge, Sparkline, EmptyState } from './_shared/GlassUI';
+import { SkeletonChart, SkeletonCard } from '@/components/ds/Skeleton';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { formatPrice, formatCompact, formatPercent, formatCompactNum, getPriceColor, formatDate, formatSupply, calcVolMcapRatio, formatRatio, clamp } from './_shared/formatters';
 import type { KlineData, TechnicalSignal } from './_shared/types';
 
@@ -96,11 +98,11 @@ const ChartSignalsTab = memo(function ChartSignalsTab({ symbol }: { symbol: stri
     <div className="space-y-4">
       <GlassCard>
         <div className="flex items-center justify-between mb-2"><SectionHeader title="Price Chart" subtitle={`${symbol}/USDT`} /><GlassTabs tabs={INTERVALS} active={interval} onChange={setInterval_} /></div>
-        {loading && !klines ? <div className="h-[350px] flex items-center justify-center text-white/20 text-sm">Loading...</div> : <CandleChart klines={klines || []} />}
+        {loading && !klines ? <SkeletonChart height="h-[350px]" /> : <CandleChart klines={klines || []} />}
       </GlassCard>
       <GlassCard glow="cyan">
         <SectionHeader title="⚡ Market Signals" subtitle="Auto-generated analysis" />
-        {signals.length === 0 ? <div className="animate-pulse space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-white/[0.04] rounded-xl" />)}</div> : (
+        {signals.length === 0 ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">{[1,2,3].map(i => <SkeletonCard key={i} lines={2} />)}</div> : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">{signals.map(s => <SignalBadge key={s.id} signal={s.signal} label={s.label} value={s.value} description={s.description} icon={s.icon} />)}</div>
         )}
       </GlassCard>
@@ -215,7 +217,7 @@ export default function CoinDetail() {
   const [tab, setTab] = useState('chart');
   const symbol = coin?.symbol?.toUpperCase() || coinId?.toUpperCase() || 'BTC';
 
-  if (loading && !coin) return <PageTemplate title="Loading..." description=""><GlassCard><div className="animate-pulse h-40 bg-white/[0.04] rounded-xl" /></GlassCard></PageTemplate>;
+  if (loading && !coin) return <RouteSkeleton />;
 
   return (
     <PageTemplate title={coin?.name || coinId || 'Coin'} description={`Live data for ${coin?.name || ''}`}>

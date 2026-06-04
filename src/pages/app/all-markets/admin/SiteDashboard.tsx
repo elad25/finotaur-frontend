@@ -14,7 +14,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonTable, SkeletonText, SkeletonStatRow, SkeletonStat } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { 
   BarChart3, Users, Crown, Shield, TrendingUp, 
@@ -2722,9 +2722,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <CardTitle className="text-[#F4F4F4] text-lg">{title}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-center py-8">
-              <Spinner size="sm" />
-            </div>
+            <SkeletonText />
           </CardContent>
         </Card>
       );
@@ -3718,8 +3716,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             </CardHeader>
             <CardContent>
               {allUsersLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spinner size="md" />
+                <div className="py-4">
+                  <SkeletonTable />
                 </div>
               ) : allUsers.length === 0 ? (
                 <div className="text-center py-12 text-[#606060]">
@@ -4210,8 +4208,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           </div>
 
           {kpiLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Spinner size="lg" />
+            <div className="py-4">
+              <SkeletonStatRow />
             </div>
           ) : kpiMetrics ? (
             <>
@@ -4799,12 +4797,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               </Card>
             </>
           ) : (
-            <div className="text-center py-20">
-              <div className="relative">
-                <BarChart3 className="h-16 w-16 mx-auto mb-4 text-[#C9A646] opacity-30" />
-                <Spinner size="md" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-              </div>
-              <p className="text-[#808080]">Loading KPIs automatically...</p>
+            <div className="py-4">
+              <SkeletonStatRow />
             </div>
           )}
         </TabsContent>
@@ -5294,9 +5288,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               </CardHeader>
               <CardContent>
                 {deepDiveLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Spinner size="sm" />
-                  </div>
+                  <SkeletonText />
                 ) : cancellationAnalysis ? (
                   <div className="space-y-4">
                     {/* Avg Days Before Cancel */}
@@ -5353,9 +5345,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               </CardHeader>
               <CardContent>
                 {deepDiveLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Spinner size="sm" />
-                  </div>
+                  <SkeletonText />
                 ) : trialAnalysis ? (
                   <div className="space-y-4">
                     {/* Conversion Funnel */}
@@ -5444,8 +5434,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             </CardHeader>
             <CardContent>
               {subscriptionEventsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Spinner size="md" />
+                <div className="py-4">
+                  <SkeletonTable />
                 </div>
               ) : subscriptionEvents.length === 0 ? (
                 <div className="text-center py-12 text-[#606060]">

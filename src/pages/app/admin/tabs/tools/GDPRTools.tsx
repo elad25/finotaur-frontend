@@ -13,7 +13,6 @@ import { Link } from 'react-router-dom';
 import {
   FileDown,
   Search,
-  Loader2,
   Download,
   AlertTriangle,
   ArrowLeft,
@@ -23,6 +22,7 @@ import {
   Crown,
   Activity,
 } from 'lucide-react';
+import { SkeletonText, SkeletonCard } from '@/components/ds/Skeleton';
 import { getAllUsers, getUserById } from '@/services/adminService';
 import type { UserWithStats } from '@/types/admin';
 
@@ -229,9 +229,8 @@ export function GDPRTools() {
         {debounced.length >= 2 && (
           <div className="border border-gray-800 rounded overflow-hidden max-h-72 overflow-y-auto">
             {searching ? (
-              <div className="p-4 text-gray-500 text-sm flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Searching…
+              <div className="p-4">
+                <SkeletonText lines={3} />
               </div>
             ) : candidates.length === 0 ? (
               <div className="p-4 text-gray-500 text-sm">
@@ -295,10 +294,7 @@ export function GDPRTools() {
               <span>{fullError}</span>
             </div>
           ) : loadingFull || !full ? (
-            <div className="text-gray-500 text-sm flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading profile…
-            </div>
+            <SkeletonCard lines={4} withGrid />
           ) : (
             <>
               <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

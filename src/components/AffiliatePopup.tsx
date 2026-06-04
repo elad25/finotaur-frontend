@@ -36,7 +36,7 @@ import {
   ChevronDown,
   CheckCircle2
 } from 'lucide-react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonCard } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -506,10 +506,9 @@ export default function AffiliatePopup({ onClose }: AffiliatePopupProps) {
           {/* Content */}
           <div className="p-5 max-h-[70vh] overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner size="md" />
+              <div className="py-4">
+                <SkeletonCard lines={3} />
               </div>
-
             ) : affiliateData.isAffiliate ? (
               /* ============================================
                  🔥 v2.2 SIMPLIFIED AFFILIATE VIEW

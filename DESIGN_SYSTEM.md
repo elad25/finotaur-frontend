@@ -737,3 +737,28 @@ Canonical loader: `src/components/ds/Spinner.tsx`.
 - `<Spinner size="sm|md|lg" color="gold|inherit" />` — gold ring (bright gold arc over a faint track). Use `color="inherit"` inside gold-filled buttons.
 - `<PageLoader text="Loading..." timedOut={false} />` — full-screen route/auth loader.
 Spin speed is globally 1.2s per rotation (tailwind.config.ts `animation.spin`). Do NOT create new bespoke spinners — use these. (Globe loaders in Copilot/Warzone are intentional exceptions.)
+
+### Skeleton vs Spinner — when each (LOCKED 2026-06-04)
+
+The rule, no exceptions:
+
+| Loading situation | Use |
+|---|---|
+| Content / data with a known layout (page, card, table, chart, KPI row) | **Skeleton** |
+| Route / lazy-chunk transition | **Skeleton** (`RouteSkeleton`, route-aware) |
+| In-button action feedback (Save, Submit, Connect, Refresh icon) | **Spinner** (`<Spinner color="inherit">`) |
+| Copilot / Warzone landing visual | **GlobeLoader** (intentional exception) |
+
+Rationale: a spinner on a full page hides the layout and feels slower; a skeleton mirrors the destination so the swap is shift-free and reads as "filling in". Spinners are reserved for short, localized action feedback where there is no layout to mirror.
+
+Canonical skeleton: `src/components/ds/Skeleton.tsx` (uses the gold `animate-shimmer` sweep).
+- `<Skeleton className="h-4 w-32" />` — base shimmer block; size via className.
+- `<SkeletonText lines={3} />` — paragraph lines.
+- `<SkeletonStat />` / `<SkeletonStatRow count={4} />` — KPI cells / header row.
+- `<SkeletonCard lines withGrid />` — content card (optional sub-grid).
+- `<SkeletonTable rows cols />` — data table.
+- `<SkeletonChart height="h-64" />` — chart panel.
+- `<SkeletonGrid count cols />` — responsive card grid.
+- `RouteSkeleton` (`src/components/ds/RouteSkeleton.tsx`) — route-transition fallback; maps the current path to the right silhouette. Wired into `App.tsx` `SuspenseRoute`.
+
+Do NOT hand-roll one-off skeleton components — compose from the primitives above. Do NOT fall back to a full-page spinner for data/route loading.

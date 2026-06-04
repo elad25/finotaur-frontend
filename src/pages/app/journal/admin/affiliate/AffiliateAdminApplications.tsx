@@ -30,6 +30,7 @@ import {
 } from '@/features/affiliate/hooks/useAffiliateAdmin';
 import type { AffiliateApplication, AffiliateApplicationStatus } from '@/features/affiliate/types/affiliate.types';
 import { supabase } from '@/lib/supabase';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import { generateRejectionEmail } from '@/features/affiliate/utils/affiliateEmailTemplates';
 
 interface Props {
@@ -248,11 +249,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
-      </div>
-    );
+    return <SkeletonTable rows={6} cols={5} className="mt-4" />;
   }
 
   return (

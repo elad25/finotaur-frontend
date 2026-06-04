@@ -2,7 +2,7 @@
 import React from 'react';
 import { Theme } from '../types';
 import { cn } from '@/lib/utils';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from '@/components/ds/Skeleton';
 
 // ✅ Export interface
 export interface LoadingOverlayProps {
@@ -34,7 +34,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
             : 'bg-white/90 border-gray-200'
         )}
       >
-        <Spinner size="md" />
+        <Skeleton className="h-8 w-8 rounded-full" />
         <p
           className={cn(
             'text-sm font-medium',

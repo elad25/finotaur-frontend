@@ -10,7 +10,7 @@ import { useSearchParams } from 'react-router-dom';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Plus, Sparkles } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
@@ -45,11 +45,7 @@ export default function AIAssistant() {
   
   // ✅ Early return AFTER all hooks
   if (accessLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (!access.hasAccess) {

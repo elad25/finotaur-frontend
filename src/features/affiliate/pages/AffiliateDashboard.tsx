@@ -42,7 +42,7 @@ import {
   BarChart3,
   Trophy
 } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { Skeleton, SkeletonStatRow, SkeletonTable, SkeletonText } from '@/components/ds/Skeleton';
 import { 
   useAffiliateProfile, 
   useAffiliateReferrals,
@@ -124,11 +124,19 @@ export default function AffiliateDashboard() {
   // Loading state
   if (profileLoading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
-          <p className="text-gray-400">Loading dashboard...</p>
+      <div className="min-h-screen bg-[#0A0A0A] p-8 max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="h-16 mb-8">
+          <Skeleton className="h-7 w-48 mb-2" />
         </div>
+        {/* Affiliate code card */}
+        <Skeleton className="h-28 w-full rounded-2xl mb-8" />
+        {/* Stats row */}
+        <SkeletonStatRow count={4} className="mb-8" />
+        {/* Tier progress */}
+        <Skeleton className="h-40 w-full rounded-2xl mb-8" />
+        {/* Tab content */}
+        <SkeletonTable rows={5} cols={3} />
       </div>
     );
   }
@@ -538,9 +546,7 @@ function OverviewTab({ profile }: { profile: any }) {
         </h3>
 
         {activityLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Spinner size="sm" />
-          </div>
+          <SkeletonText lines={4} />
         ) : activity && activity.length > 0 ? (
           <div className="space-y-3">
             {activity.map((item) => (
@@ -665,9 +671,7 @@ function ReferralsTab() {
 
       {/* Referrals List */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Spinner size="md" />
-        </div>
+        <SkeletonTable rows={5} cols={3} />
       ) : referrals && referrals.length > 0 ? (
         <div className="space-y-3">
           {referrals.map((referral) => {
@@ -789,9 +793,7 @@ function EarningsTab() {
   return (
     <div className="space-y-6">
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Spinner size="md" />
-        </div>
+        <SkeletonTable rows={6} cols={3} />
       ) : commissions && commissions.length > 0 ? (
         Object.entries(groupedCommissions || {}).map(([month, monthCommissions]) => {
           const totalForMonth = monthCommissions.reduce((sum, c) => sum + (c.commission_amount_usd || 0), 0);
@@ -896,9 +898,7 @@ function PayoutsTab() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Spinner size="md" />
-        </div>
+        <SkeletonTable rows={4} cols={3} />
       ) : payouts && payouts.length > 0 ? (
         <div className="space-y-3">
           {payouts.map((payout) => (

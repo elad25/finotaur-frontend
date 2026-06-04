@@ -10,7 +10,7 @@ import {
   Save, Check, AlertCircle, Copy, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from '@/components/ds/Skeleton';
 
 // =====================================================
 // TYPES
@@ -310,8 +310,11 @@ export default function AffiliateSettings() {
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="p-4 lg:p-6 space-y-6 max-w-3xl mx-auto">
+        <Skeleton className="h-8 w-48 mb-2" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <Skeleton className="h-36 w-full rounded-xl" />
       </div>
     );
   }

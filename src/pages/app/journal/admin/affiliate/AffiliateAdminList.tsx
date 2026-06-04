@@ -33,6 +33,7 @@ import {
 } from '@/features/affiliate/hooks/useAffiliateAdmin';
 import { TIER_INFO, type Affiliate, type AffiliateStatus } from '@/features/affiliate/types/affiliate.types';
 import { toast } from 'sonner';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 
 export default function AffiliateAdminList() {
   const [statusFilter, setStatusFilter] = useState<AffiliateStatus | 'all'>('all');
@@ -123,11 +124,7 @@ export default function AffiliateAdminList() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
-      </div>
-    );
+    return <SkeletonTable rows={8} cols={5} className="mt-4" />;
   }
 
   return (

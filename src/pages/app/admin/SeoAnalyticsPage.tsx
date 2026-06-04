@@ -7,6 +7,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { Eyebrow } from '@/components/ds/Card';
+import { Skeleton, SkeletonChart, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 import { Button } from '@/components/ds/Button';
 import { HealthBadges } from '@/components/admin/seo/HealthBadges';
 import { MetricTiles } from '@/components/admin/seo/MetricTiles';
@@ -19,36 +20,24 @@ import type { AnalyticsResponse } from '@/lib/seo/analyticsTypes';
 // ---------------------------------------------------------------------------
 // Skeleton helpers
 // ---------------------------------------------------------------------------
-function SkeletonBlock({ className = '' }: { className?: string }) {
-  return (
-    <div
-      className={`rounded-xl bg-white/5 animate-pulse ${className}`}
-    />
-  );
-}
-
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
       {/* badges row */}
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((i) => (
-          <SkeletonBlock key={i} className="h-7 w-28" />
+          <Skeleton key={i} className="h-7 w-28" />
         ))}
       </div>
       {/* metric tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <SkeletonBlock key={i} className="h-28" />
-        ))}
-      </div>
+      <SkeletonStatRow count={4} />
       {/* charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SkeletonBlock className="h-[240px]" />
-        <SkeletonBlock className="h-[240px]" />
+        <SkeletonChart height="h-[240px]" />
+        <SkeletonChart height="h-[240px]" />
       </div>
       {/* table */}
-      <SkeletonBlock className="h-[360px]" />
+      <SkeletonTable rows={8} cols={5} />
     </div>
   );
 }

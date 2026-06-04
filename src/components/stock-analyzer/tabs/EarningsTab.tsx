@@ -17,7 +17,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonText } from '@/components/ds/Skeleton';
 import {
   BarChart3, TrendingUp, TrendingDown, AlertTriangle,
   RefreshCw, ChevronDown, ChevronUp,
@@ -1091,13 +1091,7 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
   if (isLoading && !earningsData) {
     return (
       <div className="space-y-4">
-        {/* Loading header */}
-        <div className="flex items-center justify-center gap-3 py-3">
-          <Spinner size="sm" />
-          <span className="text-sm text-[#8B8B8B]">
-            Analyzing {data.ticker} latest earnings...
-          </span>
-        </div>
+        <SkeletonText lines={2} className="py-3" />
         <EarningsLoadingSkeleton />
       </div>
     );

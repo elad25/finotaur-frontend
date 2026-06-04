@@ -12,7 +12,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Target, BarChart3, Award, ArrowDownRight, AlertTriangle, ShieldCheck, Crosshair, Zap
 } from 'lucide-react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonGrid } from '@/components/ds/Skeleton';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 
@@ -220,8 +221,8 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
 
     {/* Sector Grid */}
     {isLoading ? (
-      <div className="flex w-full max-w-[1224px] items-center justify-center py-24">
-        <Spinner size="md" />
+      <div className="w-full max-w-[1224px]">
+        <SkeletonGrid count={11} cols={4} />
       </div>
     ) : isError ? (
       <div className="w-full max-w-[1224px] py-16 text-center">
@@ -599,11 +600,7 @@ export default function SectorAnalyzer() {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('sector_analyzer');
   if (accessLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Spinner size="md" />
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   if (!access.hasAccess) {

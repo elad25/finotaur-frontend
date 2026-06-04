@@ -8,6 +8,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { api } from '@/lib/apiBase';
 import { GlassCard, GlassTabs, SectionHeader, EmptyState } from './_shared/GlassUI';
 import { timeAgo } from './_shared/formatters';
+import { SkeletonCard } from '@/components/ds/Skeleton';
 
 const TABS = [
   { id: 'learn', label: '📚 Learn' },
@@ -83,7 +84,7 @@ const ReportsTab = memo(function ReportsTab() {
     return () => { alive = false; };
   }, []);
 
-  if (loading) return <div className="animate-pulse space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-16 bg-white/[0.04] rounded-xl" />)}</div>;
+  if (loading) return <div className="space-y-3">{[1, 2, 3].map(i => <SkeletonCard key={i} lines={2} />)}</div>;
   if (reports.length === 0) return <EmptyState icon="📑" title="No reports yet" description="AI crypto reports generated bi-monthly by our 18 AI agents" />;
 
   return (

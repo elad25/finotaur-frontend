@@ -35,7 +35,7 @@ import {
   Legend,
 } from 'recharts';
 import { StatsCard } from '@/components/admin/StatsCard';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonStatRow, SkeletonChart, SkeletonTable } from '@/components/ds/Skeleton';
 import {
   getAdminStats,
   getSubscriberStats,
@@ -112,8 +112,10 @@ export function OverviewTab() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <LoadingSkeleton lines={12} />
+      <div className="p-6 space-y-6">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-64" />
+        <SkeletonTable rows={6} cols={5} />
       </div>
     );
   }

@@ -13,7 +13,7 @@ import {
   TrendingUp, Clock, Calendar, ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonStatRow, SkeletonChart } from '@/components/ds/Skeleton';
 
 // =====================================================
 // CONSTANTS
@@ -305,8 +305,14 @@ export default function AffiliateAnalytics() {
   // Loading state
   if (profileLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+        <Skeleton className="h-8 w-36 mb-2" />
+        <SkeletonStatRow count={4} />
+        <div className="grid lg:grid-cols-2 gap-6">
+          <SkeletonChart />
+          <SkeletonChart />
+        </div>
+        <Skeleton className="h-40 w-full rounded-xl" />
       </div>
     );
   }
@@ -394,9 +400,7 @@ export default function AffiliateAnalytics() {
           </h3>
 
           {analyticsLoading ? (
-            <div className="h-48 flex items-center justify-center">
-              <Spinner size="md" />
-            </div>
+            <SkeletonChart className="h-48" />
           ) : clicksData.daily?.length > 0 ? (
             <div className="h-48 flex items-end gap-1">
               {clicksData.daily.slice(-14).map((day: { date: string; clicks: number }, i: number) => (
@@ -456,9 +460,7 @@ export default function AffiliateAnalytics() {
         <h3 className="text-white font-medium mb-6">Conversion Funnel</h3>
 
         {analyticsLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Spinner size="md" />
-          </div>
+          <SkeletonStatRow count={4} />
         ) : (
           <div className="flex items-center justify-between gap-2 overflow-x-auto">
             <FunnelStep 

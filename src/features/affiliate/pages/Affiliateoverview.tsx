@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useCallback, useMemo, memo } from 'react';
-import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton, SkeletonStatRow } from '@/components/ds/Skeleton';
 
 // =====================================================
 // CONSTANTS
@@ -232,8 +232,14 @@ export default function AffiliateOverview() {
   // Loading state
   if (profileLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <SkeletonStatRow count={4} />
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Skeleton className="h-48 w-full rounded-xl" />
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </div>
       </div>
     );
   }

@@ -28,7 +28,7 @@ import { Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import { AdminSidebar } from './components/AdminSidebar';
 import { OverviewTab } from './tabs/OverviewTab';
 import { LeadsPlaceholder } from './tabs/LeadsPlaceholder';
@@ -80,7 +80,7 @@ const Maintenance = lazy(
 function TabFallback() {
   return (
     <div className="p-8">
-      <LoadingSkeleton lines={8} />
+      <SkeletonTable rows={8} cols={5} />
     </div>
   );
 }

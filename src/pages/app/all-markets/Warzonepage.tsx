@@ -10,17 +10,7 @@
 import { Suspense, memo } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useUserMeta } from '@/hooks/useUserStatus';
-import { Spinner } from '@/components/ui/Spinner';
-
-// Loading component
-const PageLoader = () => (
-  <div className="flex items-center justify-center min-h-[60vh] bg-[#080812]">
-    <div className="flex flex-col items-center gap-4">
-      <Spinner size="lg" />
-      <p className="text-sm text-gray-500">Loading...</p>
-    </div>
-  </div>
-);
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // Lazy imports - from WarzoneComponents folder
 const Warzonelanding = lazy(() => import('./WarzoneComponents/Warzonelanding'));
@@ -37,13 +27,13 @@ function WarZonePage() {
   const { isAdmin, isLoading } = useUserMeta();
 
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // Admin view — WAR ZONE ticker tracking dashboard
   if (isAdmin) {
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<RouteSkeleton />}>
         <WarZoneAdmin />
       </Suspense>
     );
@@ -51,7 +41,7 @@ function WarZonePage() {
 
   // User view
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteSkeleton />}>
       <Warzonelanding />
     </Suspense>
   );

@@ -1,7 +1,7 @@
 // src/pages/app/all-markets/Overview.tsx
 import { api } from '@/lib/apiBase';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Spinner } from '@/components/ui/Spinner';
+import { SkeletonChart } from '@/components/ds/Skeleton';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { LicensedDataPlaceholder } from '@/components/markets/LicensedDataPlaceholder';
 import { AdminGateBadge } from '@/components/markets/AdminGateBadge';
@@ -705,8 +705,8 @@ function MarketTickerStrip({ newsItems = [] }: { newsItems?: { headline: string;
           </div>
           
           {chartLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/50 z-20">
-              <Spinner size="sm" />
+            <div className="absolute inset-0 z-20">
+              <SkeletonChart />
             </div>
           )}
           
