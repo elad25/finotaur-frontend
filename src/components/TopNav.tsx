@@ -194,7 +194,7 @@ export const TopNav = () => {
                 className="flex items-center gap-2 rounded-full hover:bg-[#1A1A1A] px-2 py-1"
               >
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center"
                   style={{
                     background: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)',
                     color: '#fff',
@@ -204,10 +204,10 @@ export const TopNav = () => {
                     viewBox="0 0 24 24"
                     fill="currentColor"
                     aria-hidden="true"
-                    className="w-6 h-6"
+                    className="w-8 h-8"
                   >
-                    <circle cx="12" cy="8" r="4.2" />
-                    <path d="M12 13.4c-4.3 0-7.8 2.6-7.8 5.8 0 .6.5 1.1 1.1 1.1h13.4c.6 0 1.1-.5 1.1-1.1 0-3.2-3.5-5.8-7.8-5.8z" />
+                    <circle cx="12" cy="7.5" r="5" />
+                    <path d="M12 13.8c-5.7 0-9.8 3-9.8 6.9V23h19.6v-2.3c0-3.9-4.1-6.9-9.8-6.9z" />
                   </svg>
                 </div>
 
