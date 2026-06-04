@@ -38,6 +38,7 @@ export type PlanId =
   | 'platform_finotaur_monthly'
   | 'platform_finotaur_yearly'
   | 'platform_enterprise_monthly'
+  | 'platform_enterprise_yearly'
   // Standalone products
   | 'newsletter_monthly'
   | 'newsletter_yearly'
@@ -99,6 +100,7 @@ export const WHOP_PLAN_IDS = {
   
   // 🔥 Platform - Copilot ($200/month, no trial)
   platform_enterprise_monthly: 'plan_nHveClWPmjJNT',
+  platform_enterprise_yearly: 'plan_dfy2uADNyEExg',
   
 // ═══════════════════════════════════════════
   // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED WITH WHOP!
@@ -124,6 +126,7 @@ export const WHOP_PRODUCT_IDS = {
   platform_finotaur_monthly: 'prod_LtP5GbpPfp9bn',
   platform_finotaur_yearly: 'prod_CbWpZrn5P7wc9',
   platform_enterprise_monthly: 'prod_CIKv0J5Rq6aFk',
+  platform_enterprise_yearly: 'prod_9e5E84XpsrhWE',
   
 // ═══════════════════════════════════════════
   // 🔥 v4.3.0: Newsletter (War Zone) - Product IDs
@@ -142,7 +145,8 @@ export const PLATFORM_PRODUCT_IDS = new Set([
   'prod_YAdXQrHtt72Gd',  // Core Yearly
   'prod_LtP5GbpPfp9bn',  // Finotaur Monthly
   'prod_CbWpZrn5P7wc9',  // Finotaur Yearly
-  'prod_CIKv0J5Rq6aFk',  // Enterprise
+  'prod_CIKv0J5Rq6aFk',  // Copilot Monthly
+  'prod_9e5E84XpsrhWE',  // Copilot Yearly
 ]);
 
 // Reverse lookup (for webhooks)
@@ -166,6 +170,7 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   'prod_LtP5GbpPfp9bn': { plan: 'platform_finotaur', interval: 'monthly', category: 'platform', isPlatform: true },
   'prod_CbWpZrn5P7wc9': { plan: 'platform_finotaur', interval: 'yearly', category: 'platform', isPlatform: true },
   'prod_CIKv0J5Rq6aFk': { plan: 'platform_enterprise', interval: 'monthly', category: 'platform', isPlatform: true },
+  'prod_9e5E84XpsrhWE': { plan: 'platform_enterprise', interval: 'yearly', category: 'platform', isPlatform: true },
   
 // ═══════════════════════════════════════════
   // 🔥 v4.3.0: Newsletter (War Zone) - All Products
@@ -196,6 +201,8 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',
   'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',
   'plan_nHveClWPmjJNT': 'platform_enterprise_monthly',
+  'plan_dfy2uADNyEExg': 'platform_enterprise_yearly',
+  'prod_9e5E84XpsrhWE': 'platform_enterprise_yearly',
   
   // ═══════════════════════════════════════════
   // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED!
@@ -492,6 +499,35 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
+  platform_enterprise_yearly: {
+    id: 'platform_enterprise_yearly',
+    whopPlanId: WHOP_PLAN_IDS.platform_enterprise_yearly,
+    whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_yearly,
+    name: 'platform_enterprise',
+    displayName: 'Copilot',
+    price: 2000,
+    period: 'yearly',
+    periodLabel: '/year',
+    monthlyEquivalent: 166.67,
+    maxTrades: 0,
+    trialDays: 0,
+    badge: 'AI Portfolio Manager',
+    category: 'platform',
+    isPlatform: true,
+    comingSoon: false,
+    contactSales: false,
+    includesJournal: 'premium',
+    features: [
+      'Everything in Finotaur, plus:',
+      'AI Portfolio Manager that invests & trades alongside you',
+      'Stop flying blind — 24/7 AI oversight of every position you hold',
+      'My Portfolio — live tracking & mark-to-market of your real book',
+      'Proactive AI risk detection & alerts on your holdings',
+      'Daily AI portfolio brief with actionable guidance',
+      'Priority support',
+    ],
+  },
+
   // ═══════════════════════════════════════════
   // 🔥 v4.3.0: NEWSLETTER (WAR ZONE) - UPDATED!
   // Monthly: $49/month with 7-day trial
@@ -732,6 +768,7 @@ export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
     WHOP_PLAN_IDS.premium_yearly,
     WHOP_PLAN_IDS.platform_core_yearly,
     WHOP_PLAN_IDS.platform_finotaur_yearly,
+    WHOP_PLAN_IDS.platform_enterprise_yearly,
     WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
     WHOP_PLAN_IDS.top_secret_yearly,
   ];

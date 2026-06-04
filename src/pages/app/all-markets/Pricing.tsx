@@ -124,8 +124,8 @@ const plans: PlanConfig[] = [
     id: 'enterprise',
     name: 'Copilot',
     monthlyPrice: '$200',
-    yearlyPrice: '$200',
-    yearlyMonthlyEquivalent: '$200',
+    yearlyPrice: '$2,000',
+    yearlyMonthlyEquivalent: '$167',
     description: 'Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.',
     trialDays: 0,
     features: [
@@ -139,6 +139,7 @@ const plans: PlanConfig[] = [
     ],
     cta: 'Get Copilot',
     featured: false,
+    savings: 'Save 17%',
   },
 ];
 
@@ -172,10 +173,11 @@ const [journalYearlyPlan, setJournalYearlyPlan] = useState<string | null>(null);
 const [platformYearlyExpiresAt, setPlatformYearlyExpiresAt] = useState<string | null>(null);
 const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null);
 
-  const { 
+  const {
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
-    checkoutPlatformEnterpriseMonthly, isLoading: checkoutLoading,
+    checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
+    isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message })
   });
@@ -280,7 +282,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
       } else if (planId === 'finotaur') {
         billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
       } else if (planId === 'enterprise') {
-        checkoutPlatformEnterpriseMonthly();
+        billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
       }
     } catch (error) {
       toast.error('Failed to start checkout');
@@ -332,15 +334,14 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     }
 
     // 🔥 גישה C: חסום Yearly → Monthly upgrade
-    // Enterprise מותר תמיד (אין לו yearly) — אבל מציג popup מיוחד
-    if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier && planId !== 'enterprise') {
+    if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier) {
       setBillingInterval('yearly');
       toast.info("You're on a yearly plan — switch to Yearly billing above to upgrade.");
       return;
     }
 
-    // 🔥 Enterprise מ-Yearly: אפשרי אבל מציג אזהרה על ביטול המנוי הנוכחי
-    if (currentBillingInterval === 'yearly' && planId === 'enterprise') {
+    // 🔥 Enterprise מ-Yearly (Monthly billing selected): מציג אזהרה על ביטול המנוי הנוכחי
+    if (currentBillingInterval === 'yearly' && planId === 'enterprise' && billingInterval === 'monthly') {
       setShowEnterpriseYearlyWarning(true);
       return;
     }
@@ -373,10 +374,6 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     if (plan.id === 'free') {
       return { price: 'Free', period: 'forever', billedAs: undefined };
     }
-    if (plan.id === 'enterprise') {
-      return { price: '$200', period: '/month', billedAs: undefined };
-    }
-    
     if (billingInterval === 'monthly') {
       return { 
         price: plan.monthlyPrice, 
@@ -624,11 +621,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             // 🔥 גישה C: חסום Yearly → Monthly upgrade
             const planTierVal = PLAN_TIER[plan.id] ?? 0;
             const currentTierVal = PLAN_TIER[currentPlatformPlan] ?? 0;
-            const isBlockedYearlyToMonthly = 
-              currentBillingInterval === 'yearly' && 
-              billingInterval === 'monthly' && 
-              planTierVal > currentTierVal && 
-              plan.id !== 'enterprise' &&
+            const isBlockedYearlyToMonthly =
+              currentBillingInterval === 'yearly' &&
+              billingInterval === 'monthly' &&
+              planTierVal > currentTierVal &&
               !isCurrentPlan;
             
             return (
@@ -710,7 +706,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 )}
 
                 {/* Savings Badge */}
-                {plan.savings && billingInterval === 'yearly' && !plan.featured && plan.id !== 'free' && plan.id !== 'enterprise' && (
+                {plan.savings && billingInterval === 'yearly' && !plan.featured && plan.id !== 'free' && (
                   <div className="absolute top-2 right-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg" style={{ zIndex: 50 }}>
                     {plan.savings}
                   </div>

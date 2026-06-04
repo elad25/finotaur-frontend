@@ -104,10 +104,11 @@ const plans: Plan[] = [
     id: "enterprise",
     name: "Copilot",
     monthlyPrice: "$200",
-    yearlyPrice: "$200",
-    yearlyMonthlyEquivalent: "$200",
+    yearlyPrice: "$2,000",
+    yearlyMonthlyEquivalent: "$167",
     description: "Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.",
     badge: "AI Portfolio Manager",
+    savings: "Save 17%",
     features: [
       "Everything in Finotaur, plus:",
       "AI Portfolio Manager that invests & trades alongside you",
@@ -141,8 +142,6 @@ const Pricing = () => {
 
   const getDisplayPrice = (plan: Plan) => {
     if (plan.isFree) return { price: "Free", period: "" };
-    if (plan.id === "enterprise")
-      return { price: plan.monthlyPrice, period: "/month" };
     if (billingInterval === "monthly")
       return { price: plan.monthlyPrice, period: "/month" };
     return {

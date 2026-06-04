@@ -136,7 +136,7 @@ export function UpgradeGate({
   const {
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
-    checkoutPlatformEnterpriseMonthly,
+    checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
     isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message }),
@@ -152,7 +152,7 @@ export function UpgradeGate({
     } else if (planKey === 'finotaur') {
       billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
     } else if (planKey === 'enterprise') {
-      checkoutPlatformEnterpriseMonthly();
+      billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
     }
   };
 
@@ -526,9 +526,12 @@ export function UpgradeGate({
                   <span className="text-lg font-bold text-white">Copilot</span>
                 </div>
                 <div className="flex items-baseline justify-center gap-1 mb-1">
-                  <span className="text-4xl font-bold text-white">$200</span>
+                  <span className="text-4xl font-bold text-white">{billingInterval === 'yearly' ? '$167' : '$200'}</span>
                   <span className="text-sm text-[#6B6B6B]">/month</span>
                 </div>
+                {billingInterval === 'yearly' && (
+                  <span className="text-xs text-green-400">Billed $2,000/year</span>
+                )}
               </div>
 
               {/* Tagline */}
