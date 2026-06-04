@@ -110,6 +110,12 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
                     title="Closed to the public"
                   />
                 )}
+                {fn.priceGated && (
+                  <Lock
+                    className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500"
+                    title="Price gated"
+                  />
+                )}
               </div>
             )}
           </button>

@@ -143,6 +143,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       commodities: '/app/commodities/overview',
       macro:       '/app/macro/overview',
     },
+    priceGated: true,  // compliance gate: Overview pages render raw Polygon price/chart data for stocks + all-markets
   },
   {
     id: 'screener',
