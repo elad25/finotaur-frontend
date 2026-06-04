@@ -63,10 +63,10 @@ const COLORS = {
   // Bar
   bar: '#2A303B',
   
-  // Chart
-  chartLine: '#9AA3AE',
-  chartGrid: '#2A3038',
-  chartFill: '#3A4250',
+  // Chart — ETF Compare gold style
+  chartLine: '#C9A646',
+  chartGrid: 'rgba(255,255,255,0.04)',
+  chartFill: '#C9A646',
   
   // Accents - full color for dot, tinted for text
   fear: '#8E3B2F',
@@ -408,7 +408,7 @@ function ContextChart({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4" style={{ color: COLORS.muted }} />
-          <span className="text-sm" style={{ color: COLORS.secondary }}>{title}</span>
+          <span className="text-[11px] uppercase tracking-wider" style={{ color: COLORS.muted }}>{title}</span>
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-light tabular-nums" style={{ color: COLORS.primary }}>
@@ -423,21 +423,27 @@ function ContextChart({
         </div>
       </div>
       
-      {/* Time range selector */}
-      <div className="flex gap-1 mb-4">
-        {timeRanges.map((range) => (
-          <button
-            key={range}
-            onClick={() => setSelectedRange(range)}
-            className="px-2.5 py-1 text-[10px] rounded transition-all duration-150"
-            style={{
-              color: selectedRange === range ? COLORS.primary : COLORS.muted,
-              backgroundColor: selectedRange === range ? COLORS.cardInner : 'transparent'
-            }}
-          >
-            {range}
-          </button>
-        ))}
+      {/* Time range selector — ETF segmented control */}
+      <div className="flex justify-end mb-4">
+        <div
+          className="flex rounded-[6px] overflow-hidden border"
+          style={{ borderColor: COLORS.divider }}
+        >
+          {timeRanges.map((range) => (
+            <button
+              key={range}
+              onClick={() => setSelectedRange(range)}
+              className="px-2.5 py-1 text-[10px] font-medium transition-colors"
+              style={
+                selectedRange === range
+                  ? { color: '#E8C766', backgroundColor: 'rgba(201,166,70,0.20)' }
+                  : { color: COLORS.muted, backgroundColor: 'transparent' }
+              }
+            >
+              {range}
+            </button>
+          ))}
+        </div>
       </div>
       
       {/* Chart */}
@@ -449,7 +455,7 @@ function ContextChart({
           >
             <defs>
               <linearGradient id={`gradient-${title.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={COLORS.chartFill} stopOpacity={0.4} />
+                <stop offset="0%" stopColor={COLORS.chartFill} stopOpacity={0.18} />
                 <stop offset="100%" stopColor={COLORS.chartFill} stopOpacity={0} />
               </linearGradient>
             </defs>
@@ -458,14 +464,14 @@ function ContextChart({
               strokeDasharray="0" 
               vertical={false}
               stroke={COLORS.chartGrid}
-              strokeOpacity={0.5}
+              strokeOpacity={1}
             />
             
             <XAxis 
               dataKey="date"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 9, fill: COLORS.muted }}
+              tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.42)' }}
               interval={tickInterval}
               dy={5}
             />
@@ -475,16 +481,16 @@ function ContextChart({
               orientation="right"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 9, fill: COLORS.muted }}
+              tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.42)' }}
               width={35}
               tickFormatter={(v) => v.toFixed(1)}
             />
             
             <RechartsTooltip
               contentStyle={{
-                backgroundColor: COLORS.cardInner,
-                border: 'none',
-                borderRadius: '6px',
+                backgroundColor: COLORS.card,
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
                 fontSize: '11px',
                 padding: '8px 12px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
@@ -499,10 +505,10 @@ function ContextChart({
             
             {referenceLine && (
               <ReferenceLine 
-                y={referenceLine} 
-                stroke={COLORS.muted}
+                y={referenceLine}
+                stroke="rgba(255,255,255,0.25)"
                 strokeDasharray="4 4"
-                strokeOpacity={0.4}
+                strokeOpacity={1}
               />
             )}
             
@@ -510,7 +516,7 @@ function ContextChart({
               type="monotone"
               dataKey="value"
               stroke={COLORS.chartLine}
-              strokeWidth={1.5}
+              strokeWidth={2}
               fill={`url(#gradient-${title.replace(/\s/g, '')})`}
               dot={false}
               activeDot={{ r: 3, fill: COLORS.chartLine, stroke: COLORS.card, strokeWidth: 2 }}
