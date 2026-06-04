@@ -502,9 +502,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   
-  if (context === undefined) {
+  // During the SEO prerender there is no AuthProvider (the prerender harness in
+  // entry-server.tsx is intentionally minimal). In the browser a missing
+  // provider is still a real bug, so keep throwing there; during SSR fall back
+  // to an unauthenticated context so downstream gates resolve to their most
+  // restrictive *public* state (e.g. PriceGate shows the licensed-data
+  // placeholder, never the raw data). All hooks below run unconditionally on
+  // both paths to satisfy the Rules of Hooks.
+  if (context === undefined && typeof window !== 'undefined') {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+  const safeContext: AuthContextType = context ?? {
+    user: null,
+    isLoading: false,
+    login: async () => {},
+    register: async () => {},
+    logout: async () => {},
+    signInWithGoogle: async () => {},
+  };
 
   // 🔥 CRITICAL FIX: Only check impersonation, don't create it
   const [impersonationData, setImpersonationData] = useState<{
@@ -515,7 +530,7 @@ export function useAuth() {
     try {
       const data = sessionStorage.getItem('imp_user_data');
       // 🔥 Only use if explicitly set AND we're not currently logging in
-      if (data && context.user) {
+      if (data && safeContext.user) {
         return JSON.parse(data);
       }
       return null;
@@ -555,7 +570,7 @@ export function useAuth() {
     // 1. impersonationData exists
     // 2. We have a real user (admin) logged in
     // 3. The impersonated ID is different from the real user ID
-    if (impersonationData && context.user && impersonationData.id !== context.user.id) {
+    if (impersonationData && safeContext.user && impersonationData.id !== safeContext.user.id) {
       // 🔥 Log only once per impersonation
       logOnce(`imp-effective-${impersonationData.id}`, '🎭 Using impersonated user:', impersonationData.id, impersonationData.email);
       
@@ -573,11 +588,11 @@ export function useAuth() {
     }
     
     // Otherwise, use the real logged-in user
-    return context.user;
-  }, [context.user, impersonationData]);
+    return safeContext.user;
+  }, [safeContext.user, impersonationData]);
 
   return {
-    ...context,
+    ...safeContext,
     user: effectiveUser,
   };
 }
