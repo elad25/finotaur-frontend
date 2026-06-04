@@ -47,11 +47,31 @@ export interface SeasonalityData {
   ts: number;
 }
 
+/** @deprecated Use CotMarket / CotSnapshot instead */
 export interface CotReport {
   market: string;
   specNet: number;
   commercialNet: number;
   reportDate: string;
+}
+
+// ── COT (Commitments of Traders) types — matches GET /api/commodities/cot ──
+
+export interface CotMarket {
+  symbol: string;
+  name: string;
+  sector: string;
+  reportDate: string;
+  managedMoney: { long: number; short: number; net: number };
+  producerMerchant: { long: number; short: number; net: number };
+  openInterest: number;
+}
+
+export interface CotSnapshot {
+  reportDate: string | null;
+  markets: CotMarket[];
+  attribution?: string[];
+  ts: number;
 }
 
 export interface InventoryReport {

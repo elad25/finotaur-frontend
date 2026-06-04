@@ -4,8 +4,8 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
-import { fetchCommoditiesSnapshot, fetchSeasonality } from './api';
-import type { CommoditiesSnapshot, SeasonalityData } from './types';
+import { fetchCommoditiesSnapshot, fetchSeasonality, fetchCot } from './api';
+import type { CommoditiesSnapshot, SeasonalityData, CotSnapshot } from './types';
 
 function usePoll<T>(fetcher: () => Promise<T>, interval: number, deps: any[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -35,4 +35,9 @@ export function useCommoditiesSnapshot() {
 /** Fetch seasonality data once; refetches when symbol changes. */
 export function useSeasonality(symbol: string) {
   return usePoll<SeasonalityData>(() => fetchSeasonality(symbol), 0, [symbol]);
+}
+
+/** Poll COT data every hour — COT is a weekly report, high TTL is intentional. */
+export function useCot() {
+  return usePoll<CotSnapshot>(() => fetchCot(), 3_600_000);
 }
