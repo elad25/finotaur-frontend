@@ -53,7 +53,7 @@ export function useRealYieldsSnapshot() {
   return useQuery<RealYieldsSnapshot, Error>({
     queryKey: ['macro', 'real-yields', 'snapshot'],
     queryFn: fetchRealYieldsSnapshot,
-    ...QUERY_TTL.fredHourly,
+    ...QUERY_TTL.fredDaily,
   });
 }
 
@@ -61,6 +61,6 @@ export function useRealYieldsSeries(days = 365) {
   return useQuery<RealYieldsSeriesResponse, Error>({
     queryKey: ['macro', 'real-yields', 'series', days],
     queryFn: () => fetchRealYieldsSeries(days),
-    ...QUERY_TTL.fredHourly,
+    ...QUERY_TTL.fredDaily,
   });
 }

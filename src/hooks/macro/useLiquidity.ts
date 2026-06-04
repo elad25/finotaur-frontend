@@ -54,7 +54,7 @@ export function useLiquiditySnapshot() {
   return useQuery<LiquiditySnapshot, Error>({
     queryKey: ['macro', 'liquidity', 'snapshot'],
     queryFn: fetchLiquiditySnapshot,
-    ...QUERY_TTL.fredHourly,
+    ...QUERY_TTL.fredDaily,
   });
 }
 
@@ -62,6 +62,6 @@ export function useLiquiditySeries(days = 365) {
   return useQuery<LiquiditySeriesResponse, Error>({
     queryKey: ['macro', 'liquidity', 'series', days],
     queryFn: () => fetchLiquiditySeries(days),
-    ...QUERY_TTL.fredHourly,
+    ...QUERY_TTL.fredDaily,
   });
 }

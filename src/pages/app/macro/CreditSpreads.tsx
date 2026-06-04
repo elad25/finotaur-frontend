@@ -8,6 +8,7 @@
 // Regime history bar is rendered as a pure CSS/SVG color band.
 
 import { memo, useMemo } from 'react';
+import { DataFreshness } from '@/components/macro/DataFreshness';
 import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -127,7 +128,6 @@ const RegimeHero = memo(function RegimeHero() {
 
   const regime = snapshot?.regime ?? 'neutral';
   const cfg = REGIME_CONFIG[regime];
-  const asOf = snapshot?.ts ?? '';
 
   return (
     <div className="mb-6">
@@ -145,9 +145,7 @@ const RegimeHero = memo(function RegimeHero() {
           )}
         </div>
       </div>
-      {asOf && (
-        <p className="text-xs text-white/30 mt-2">as of {asOf}</p>
-      )}
+      <DataFreshness asOf={snapshot?.ts} ttlHours={36} className="mt-2" />
     </div>
   );
 });

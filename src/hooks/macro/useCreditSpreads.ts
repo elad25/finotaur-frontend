@@ -49,7 +49,7 @@ export function useCreditSpreadsSnapshot() {
   return useQuery<CreditSpreadsSnapshot, Error>({
     queryKey: ['macro', 'credit-spreads', 'snapshot'],
     queryFn: fetchCreditSpreadsSnapshot,
-    ...QUERY_TTL.fredHourly,
+    ...QUERY_TTL.fredDaily,
   });
 }
 
@@ -57,6 +57,6 @@ export function useCreditSpreadsSeries(days = 365) {
   return useQuery<CreditSpreadsSeriesResponse, Error>({
     queryKey: ['macro', 'credit-spreads', 'series', days],
     queryFn: () => fetchCreditSpreadsSeries(days),
-    ...QUERY_TTL.fredHourly,
+    ...QUERY_TTL.fredDaily,
   });
 }

@@ -1173,8 +1173,6 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
 // =============================================================================
 
 const CalendarTab: React.FC = () => {
-  const today = 'Dec 8';
-  
   const upcomingEvents = calendarEvents.filter(e => !e.isPast);
   const pastEvents = calendarEvents.filter(e => e.isPast);
 
@@ -1408,7 +1406,7 @@ export default function MacroTerminal() {
               </div>
               <div>
                 <h1 className="text-lg font-medium tracking-tight">Macro Intelligence Terminal</h1>
-                <p className="text-[11px] text-zinc-600">Real-time economic regime analysis • Updated Dec 8, 2024</p>
+                <p className="text-[11px] text-zinc-600">Real-time economic regime analysis</p>
               </div>
             </div>
             
