@@ -206,7 +206,7 @@ export const TopNav = () => {
                     viewBox="0 0 24 24"
                     fill="currentColor"
                     aria-hidden="true"
-                    className="w-9 h-9"
+                    className="!w-9 !h-9"
                   >
                     <ellipse cx="12" cy="8.5" rx="4.1" ry="4.6" />
                     <path d="M12 14c-5 0-9 3-9 6.7V22h18v-1.3c0-3.7-4-6.7-9-6.7z" />
