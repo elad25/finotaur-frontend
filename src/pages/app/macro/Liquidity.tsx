@@ -83,7 +83,8 @@ const LiquidityHero = memo(function LiquidityHero() {
       <p className="text-3xl sm:text-4xl font-bold tabular-nums text-white/90 font-mono">
         {net != null ? fmtCompactNoSign(net) : '—'}
       </p>
-      <DataFreshness asOf={snapshot?.latest?.date ?? snapshot?.ts} ttlHours={36} className="mt-0.5" />
+      {/* Howell Net Liquidity is a WEEKLY FRED series (WALCL, Wed as-of / Thu release) — allow ~10d before "stale" */}
+      <DataFreshness asOf={snapshot?.latest?.date ?? snapshot?.ts} ttlHours={240} className="mt-0.5" />
       <div className="flex flex-wrap gap-2 mt-3">
         {mom != null && (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/5 border border-white/10 ${pctColor(mom)}`}>
