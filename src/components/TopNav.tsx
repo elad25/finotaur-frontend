@@ -196,10 +196,10 @@ export const TopNav = () => {
                 <div
                   className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center ring-1 ring-white/20"
                   style={{
-                    background: 'linear-gradient(135deg, #7FD7FB 0%, #29A9EC 50%, #0C7AD0 100%)',
+                    background: 'linear-gradient(135deg, #5DBFEF 0%, #1B86CF 50%, #075A9C 100%)',
                     color: '#fff',
                     boxShadow:
-                      'inset 0 1px 1.5px rgba(255,255,255,0.5), 0 2px 10px rgba(31,150,230,0.45)',
+                      'inset 0 1px 1.5px rgba(255,255,255,0.45), 0 2px 10px rgba(20,120,200,0.45)',
                   }}
                 >
                   <svg
