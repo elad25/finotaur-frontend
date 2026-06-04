@@ -34,10 +34,11 @@ import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxInte
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import { classifyEquity } from '@/lib/symbolCategories';
-import { searchCrypto } from '@/data/cryptoCoins';
-import { searchForex } from '@/data/forexPairs';
-import { searchIndices } from '@/data/indices';
-import { searchBonds } from '@/data/treasuryYields';
+import { searchCrypto, CRYPTO_COINS } from '@/data/cryptoCoins';
+import { searchForex, FOREX_PAIRS } from '@/data/forexPairs';
+import { searchIndices, INDICES } from '@/data/indices';
+import { searchBonds, TREASURY_YIELDS } from '@/data/treasuryYields';
+import { POPULAR_STOCKS, POPULAR_ETFS } from '@/data/popularSymbols';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -527,7 +528,28 @@ export function GlobalOmnibox() {
     | { kind: 'suggest'; data: EnrichedItem };
 
   const flatItems: FlatItem[] = (() => {
-    if (!query.trim()) return [];
+    if (!query.trim()) {
+      // Empty state: keyboard-nav over popular items (or recently-viewed for All tab)
+      if (activeTab === 'All') {
+        // Include recently-viewed entries so ↑/↓/Enter work on them
+        const recent = getRecentlyViewed();
+        return recent.map((r) => ({
+          kind: 'result' as const,
+          data: {
+            id: `recent-${r.symbol}`,
+            icon: <TrendingUp className="h-4 w-4" />,
+            primary: `Analyze ${r.symbol}`,
+            action: () => {
+              saveRecentTicker(r.symbol);
+              navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
+              close_();
+            },
+          },
+        }));
+      }
+      // Non-All tab: popular items for keyboard nav
+      return popularForTab(activeTab).map((s) => ({ kind: 'suggest' as const, data: s }));
+    }
 
     const items: FlatItem[] = [];
 
@@ -658,6 +680,55 @@ export function GlobalOmnibox() {
   const EXAMPLE_CHIPS = ['NVDA', 'TSLA', 'AAPL', 'SPY'];
 
   // -------------------------------------------------------------------------
+  // Popular items per tab — shown in the empty state when a non-All tab is active
+  // -------------------------------------------------------------------------
+
+  function popularForTab(tab: AssetTab): EnrichedItem[] {
+    switch (tab) {
+      case 'Stocks':
+        return POPULAR_STOCKS.map((e) => ({
+          symbol: e.symbol,
+          name: e.name,
+          assetType: 'stock' as const,
+        }));
+      case 'Funds':
+        return POPULAR_ETFS.map((e) => ({
+          symbol: e.symbol,
+          name: e.name,
+          assetType: 'etf' as const,
+        }));
+      case 'Crypto':
+        return CRYPTO_COINS.slice(0, 8).map((c) => ({
+          symbol: c.symbol,
+          name: c.name,
+          assetType: 'crypto' as const,
+          coinId: c.coinId,
+        }));
+      case 'Forex':
+        return FOREX_PAIRS.slice(0, 8).map((p) => ({
+          symbol: p.symbol,
+          name: p.name,
+          assetType: 'fx' as const,
+        }));
+      case 'Indices':
+        return INDICES.slice(0, 8).map((i) => ({
+          symbol: i.symbol,
+          name: i.name,
+          assetType: 'index' as const,
+        }));
+      case 'Bonds':
+        return TREASURY_YIELDS.map((b) => ({
+          symbol: b.symbol,
+          name: b.name,
+          assetType: 'bond' as const,
+        }));
+      default:
+        // All, Futures, Economy, Options — no curated popular list
+        return [];
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Render helpers — shared between desktop modal and mobile overlay
   // -------------------------------------------------------------------------
 
@@ -686,65 +757,97 @@ export function GlobalOmnibox() {
   }
 
   function renderModalBody() {
-    if (!query.trim()) {
-      // Empty state
-      const recent = getRecentlyViewed();
-      return (
-        <div className="p-3 space-y-3">
-          <p className="text-xs text-[#555] leading-relaxed px-1">
-            Type a ticker (e.g. NVDA) to search, or ask Fino a question
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {EXAMPLE_CHIPS.map((sym) => (
-              <button
-                key={sym}
-                type="button"
-                onClick={() => {
-                  setQuery(sym);
-                  saveRecentTicker(sym);
-                  navigate(`/app/ai/stock-analyzer?symbol=${sym}`);
-                  close_();
-                }}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
-                style={{
-                  background: 'rgba(201,166,70,0.06)',
-                  borderColor: 'rgba(201,166,70,0.2)',
-                  color: '#C9A646',
-                }}
-              >
-                <TrendingUp className="h-3 w-3" />
-                {sym}
-              </button>
-            ))}
-          </div>
-          {recent.length > 0 && (
-            <div>
-              <GroupHeader label="Recently viewed" />
-              {recent.map((r, i) => (
-                <ResultItem
-                  key={r.symbol}
-                  result={{
-                    id: `recent-${r.symbol}`,
-                    icon: <TrendingUp className="h-4 w-4" />,
-                    primary: `Analyze ${r.symbol}`,
-                    action: () => {
-                      saveRecentTicker(r.symbol);
-                      navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
+    const isEmptyQuery = !query.trim();
+
+    // TabBar is always rendered (both empty and has-query states)
+    const tabBar = <TabBar activeTab={activeTab} onChange={setActiveTab} />;
+
+    if (isEmptyQuery) {
+      // Empty state — show TabBar + content that depends on the active tab
+      if (activeTab === 'All') {
+        const recent = getRecentlyViewed();
+        return (
+          <>
+            {tabBar}
+            <div className="p-3 space-y-3">
+              <p className="text-xs text-[#555] leading-relaxed px-1">
+                Type a ticker (e.g. NVDA) to search, or ask Fino a question
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {EXAMPLE_CHIPS.map((sym) => (
+                  <button
+                    key={sym}
+                    type="button"
+                    onClick={() => {
+                      setQuery(sym);
+                      saveRecentTicker(sym);
+                      navigate(`/app/ai/stock-analyzer?symbol=${sym}`);
                       close_();
-                    },
-                  }}
-                  highlighted={highlightIndex === i}
-                  onMouseEnter={() => setHighlightIndex(i)}
-                  onClick={() => {
-                    saveRecentTicker(r.symbol);
-                    navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
-                    close_();
-                  }}
-                />
-              ))}
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                    style={{
+                      background: 'rgba(201,166,70,0.06)',
+                      borderColor: 'rgba(201,166,70,0.2)',
+                      color: '#C9A646',
+                    }}
+                  >
+                    <TrendingUp className="h-3 w-3" />
+                    {sym}
+                  </button>
+                ))}
+              </div>
+              {recent.length > 0 && (
+                <div>
+                  <GroupHeader label="Recently viewed" />
+                  {recent.map((r, i) => (
+                    <ResultItem
+                      key={r.symbol}
+                      result={{
+                        id: `recent-${r.symbol}`,
+                        icon: <TrendingUp className="h-4 w-4" />,
+                        primary: `Analyze ${r.symbol}`,
+                        action: () => {
+                          saveRecentTicker(r.symbol);
+                          navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
+                          close_();
+                        },
+                      }}
+                      highlighted={highlightIndex === i}
+                      onMouseEnter={() => setHighlightIndex(i)}
+                      onClick={() => {
+                        saveRecentTicker(r.symbol);
+                        navigate(`/app/ai/stock-analyzer?symbol=${r.symbol}`);
+                        close_();
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        );
+      }
+
+      // Non-All tab in empty state — show popular list for this category
+      const popular = popularForTab(activeTab);
+      return (
+        <>
+          {tabBar}
+          <div className="p-2">
+            {popular.length > 0 ? (
+              <>
+                <GroupHeader label={`Popular ${activeTab}`} />
+                {popular.map((item, idx) =>
+                  renderItemAt({ kind: 'suggest', data: item }, idx),
+                )}
+              </>
+            ) : (
+              <div className="py-6 text-center text-xs text-[#555]">
+                No symbols available in {activeTab} yet
+              </div>
+            )}
+          </div>
+        </>
       );
     }
 
@@ -754,7 +857,7 @@ export function GlobalOmnibox() {
 
     return (
       <>
-        <TabBar activeTab={activeTab} onChange={setActiveTab} />
+        {tabBar}
 
         <div className="p-2">
           {flatItems.length === 0 && !showLoadingDots && (
