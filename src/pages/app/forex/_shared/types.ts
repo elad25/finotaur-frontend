@@ -75,3 +75,108 @@ export interface ForexMoversResponse {
   ts: number;       // Unix ms timestamp of the data
   source: string;
 }
+
+// ============================================================
+// Sprint-2 types — AI commentary, calendar, CB rates, COT,
+// correlation, and macro cockpit payloads
+// ============================================================
+
+/** Response from /api/forex/commentary */
+export interface ForexCommentaryResponse {
+  commentary: string;
+  generated_at: string;
+  model: string | null;
+  source: string;
+}
+
+/** A single economic calendar event. */
+export interface ForexCalendarEvent {
+  datetime: string;
+  currency: string;
+  country: string;
+  title: string;
+  impact: string;
+  actual: string | number | null;
+  forecast: string | number | null;
+  previous: string | number | null;
+  unit?: string | null;
+}
+
+/** Response from /api/forex/calendar */
+export interface ForexCalendarResponse {
+  events: ForexCalendarEvent[];
+  ts: number;
+  source: string;
+}
+
+/** A single central-bank rate entry. */
+export interface CBRate {
+  bank: string;
+  currency: string;
+  rate: number | null;
+  lastChangeDate: string | null;
+  lastChangeDir: string | null;
+  nextMeeting: string | null;
+  note?: string;
+}
+
+/** A carry-trade differential entry. */
+export interface CarryEntry {
+  symbol: string;
+  base: string;
+  quote: string;
+  differential: number;
+}
+
+/** Response from /api/forex/cb-rates */
+export interface ForexCBRatesResponse {
+  banks: CBRate[];
+  carry: CarryEntry[];
+  asOf: string;
+  source: string;
+}
+
+/** COT (Commitment of Traders) net position for a currency. */
+export interface COTPosition {
+  currency: string;
+  reportDate: string;
+  noncommLong: number;
+  noncommShort: number;
+  net: number;
+  wowChange: number;
+  openInterest: number;
+}
+
+/** Response from /api/forex/cot */
+export interface ForexCOTResponse {
+  positions: COTPosition[];
+  ts: number;
+  source: string;
+}
+
+/** Response from /api/forex/correlation */
+export interface ForexCorrelationResponse {
+  window: string;
+  symbols: string[];
+  matrix: number[][];
+  ts: number;
+  source: string;
+}
+
+/** A generic macro indicator label/value pair. */
+export interface MacroIndicator {
+  label: string;
+  value: string | number | null;
+  date: string | null;
+}
+
+/** Response from /api/forex/macro/:currency */
+export interface ForexMacroResponse {
+  currency: string;
+  policyRate: CBRate | null;
+  cot: COTPosition | null;
+  indicators: MacroIndicator[];
+  aiSummary: string;
+  generated_at: string;
+  source: string;
+}

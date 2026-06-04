@@ -11,6 +11,12 @@ import type {
   ForexMoversResponse,
   DXYSeriesResponse,
   ForexIntradayResponse,
+  ForexCommentaryResponse,
+  ForexCalendarResponse,
+  ForexCBRatesResponse,
+  ForexCOTResponse,
+  ForexCorrelationResponse,
+  ForexMacroResponse,
 } from './types';
 
 function usePoll<T>(fetcher: () => Promise<T>, interval: number, deps: any[] = []) {
@@ -64,5 +70,60 @@ export function useForexIntraday(symbol: string) {
     () => forexFetch<ForexIntradayResponse>('/api/forex/intraday/' + symbol),
     60_000,
     [symbol],
+  );
+}
+
+// ============================================================
+// Sprint-2 hooks
+// ============================================================
+
+/** AI market commentary — fetch once (no interval). */
+export function useForexCommentary() {
+  return usePoll<ForexCommentaryResponse>(
+    () => forexFetch<ForexCommentaryResponse>('/api/forex/commentary'),
+    0,
+  );
+}
+
+/** Economic calendar — 30min poll. `days` defaults to 7. */
+export function useForexCalendar(days = 7) {
+  return usePoll<ForexCalendarResponse>(
+    () => forexFetch<ForexCalendarResponse>('/api/forex/calendar?days=' + days),
+    1_800_000,
+    [days],
+  );
+}
+
+/** Central-bank policy rates + carry differentials — 1h poll. */
+export function useForexCBRates() {
+  return usePoll<ForexCBRatesResponse>(
+    () => forexFetch<ForexCBRatesResponse>('/api/forex/cb-rates'),
+    3_600_000,
+  );
+}
+
+/** COT (Commitment of Traders) positioning — 1h poll. */
+export function useForexCOT() {
+  return usePoll<ForexCOTResponse>(
+    () => forexFetch<ForexCOTResponse>('/api/forex/cot'),
+    3_600_000,
+  );
+}
+
+/** Pair correlation matrix — 1h poll. `window` defaults to '30d'. */
+export function useForexCorrelation(window = '30d') {
+  return usePoll<ForexCorrelationResponse>(
+    () => forexFetch<ForexCorrelationResponse>('/api/forex/correlation?window=' + window),
+    3_600_000,
+    [window],
+  );
+}
+
+/** Macro cockpit for a single currency — 1h poll. */
+export function useForexMacro(currency: string) {
+  return usePoll<ForexMacroResponse>(
+    () => forexFetch<ForexMacroResponse>('/api/forex/macro/' + currency),
+    3_600_000,
+    [currency],
   );
 }

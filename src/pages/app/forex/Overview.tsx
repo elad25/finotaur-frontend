@@ -11,6 +11,7 @@ import DXYHero from './components/DXYHero';
 import SessionClock from './components/SessionClock';
 import CurrencyStrengthMeter from './components/CurrencyStrengthMeter';
 import TopMovers from './components/TopMovers';
+import AIMarketBrief from './components/AIMarketBrief';
 
 export default function ForexOverview() {
   const { data: heatmap, loading: hLoading } = useForexHeatmap();
@@ -24,6 +25,9 @@ export default function ForexOverview() {
       <div className="space-y-4">
         {/* Hero band — DXY index */}
         <DXYHero />
+
+        {/* AI Market Brief — just below hero, above session clock */}
+        <AIMarketBrief />
 
         {/* Session clock + strength meter side by side on wide screens */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
