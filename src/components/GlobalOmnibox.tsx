@@ -22,6 +22,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -32,6 +33,8 @@ import { Search, X, TrendingUp, ArrowRight, Command, Globe } from 'lucide-react'
 import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxIntent';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
+import { classifyEquity } from '@/lib/symbolCategories';
+import { searchCrypto } from '@/data/cryptoCoins';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +87,9 @@ interface OmniboxResult {
   action: () => void;
 }
 
+// SuggestItem extended with an optional CoinGecko id for crypto routing.
+type EnrichedItem = SuggestItem & { coinId?: string };
+
 // ---------------------------------------------------------------------------
 // SSR-safe localStorage helpers
 // ---------------------------------------------------------------------------
@@ -119,9 +125,10 @@ function saveRecentTicker(symbol: string) {
 function routeForSuggest(
   sym: string,
   assetType: SuggestItem['assetType'],
+  coinId?: string,
 ): string {
   if (assetType === 'etf') return `/app/etfs/${sym}/overview`;
-  if (assetType === 'crypto') return '/app/crypto/overview';
+  if (assetType === 'crypto') return coinId ? `/app/crypto/coin/${coinId}` : '/app/crypto/overview';
   if (assetType === 'fx') return '/app/forex/overview';
   if (assetType === 'futures') return '/app/futures/overview';
   // stock / index / unknown / undefined → Stock Analyzer
@@ -168,7 +175,7 @@ function MonogramIcon({ symbol, assetType }: { symbol: string; assetType?: Sugge
 // ---------------------------------------------------------------------------
 
 interface SuggestRowProps {
-  item: SuggestItem;
+  item: EnrichedItem;
   highlighted: boolean;
   onMouseEnter: () => void;
   onClick: () => void;
@@ -365,14 +372,41 @@ export function GlobalOmnibox() {
   const suggestState = useSymbolSuggest(debouncedQuery);
 
   // -------------------------------------------------------------------------
-  // Filter suggestions by active tab
+  // Enrich suggestions: re-classify equities (ETF detection) + inject crypto
   // -------------------------------------------------------------------------
 
-  const filteredSuggestions: SuggestItem[] = (() => {
+  const enrichedSuggestions: EnrichedItem[] = useMemo(() => {
+    // Re-classify equities: backend hardcodes 'stock'; tag known ETFs as 'etf'.
+    const equities: EnrichedItem[] = suggestState.data.map((it) => ({
+      ...it,
+      assetType: classifyEquity(it.symbol),
+    }));
+    // Inject crypto matches from the bundled static list (backend returns none).
+    const cryptos: EnrichedItem[] = debouncedQuery.trim()
+      ? searchCrypto(debouncedQuery, 6).map((c) => ({
+          symbol: c.symbol,
+          name: c.name,
+          assetType: 'crypto' as const,
+          coinId: c.coinId,
+        }))
+      : [];
+    // De-dupe: if a symbol already appears among equities, keep the equity entry.
+    const equitySymbols = new Set(equities.map((e) => e.symbol.toUpperCase()));
+    const dedupedCryptos = cryptos.filter(
+      (c) => !equitySymbols.has(c.symbol.toUpperCase()),
+    );
+    return [...equities, ...dedupedCryptos];
+  }, [suggestState.data, debouncedQuery]);
+
+  // -------------------------------------------------------------------------
+  // Filter enriched suggestions by active tab
+  // -------------------------------------------------------------------------
+
+  const filteredSuggestions: EnrichedItem[] = (() => {
     if (!debouncedQuery.trim()) return [];
     const filters = TAB_FILTER[activeTab];
-    if (filters.length === 0) return suggestState.data; // All tab
-    return suggestState.data.filter((item) =>
+    if (filters.length === 0) return enrichedSuggestions; // All tab
+    return enrichedSuggestions.filter((item) =>
       filters.includes(item.assetType ?? 'unknown'),
     );
   })();
@@ -458,7 +492,7 @@ export function GlobalOmnibox() {
 
   type FlatItem =
     | { kind: 'result'; data: OmniboxResult }
-    | { kind: 'suggest'; data: SuggestItem };
+    | { kind: 'suggest'; data: EnrichedItem };
 
   const flatItems: FlatItem[] = (() => {
     if (!query.trim()) return [];
@@ -511,7 +545,7 @@ export function GlobalOmnibox() {
     } else {
       const sym = item.data.symbol;
       saveRecentTicker(sym);
-      navigate(routeForSuggest(sym, item.data.assetType));
+      navigate(routeForSuggest(sym, item.data.assetType, item.data.coinId));
       close_();
     }
   }
