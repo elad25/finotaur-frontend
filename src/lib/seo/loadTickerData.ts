@@ -75,7 +75,16 @@ export function getTickerData(ticker: string): SeoTickerData | null {
 
   // Try enriched first
   const enrichedEntry = getEnrichedMap().get(upper);
-  if (enrichedEntry) return enrichedEntry;
+  if (enrichedEntry) {
+    // Compliance: Polygon-sourced prices must not appear on public prerendered
+    // pages. Null the price fields here so every downstream consumer
+    // (TickerHero, JSON-LD FAQ, seoDescription) receives null and guards
+    // accordingly. All other data (name, sector, fundamentals, news) is kept.
+    return {
+      ...enrichedEntry,
+      price: { last: null, change_pct: null, as_of: null },
+    };
+  }
 
   // Fall back to universe entry — build a minimal SeoTickerData
   const universeEntry = getUniverseMap().get(upper);
