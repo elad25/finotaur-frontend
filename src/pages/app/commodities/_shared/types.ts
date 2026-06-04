@@ -24,15 +24,27 @@ export interface CommodityMacro {
 export interface CommoditiesSnapshot {
   commodities: CommodityQuote[];
   macro: CommodityMacro;
+  attribution?: string[];
   ts: number;
 }
 
 // ── Legacy / futures-specific types (kept for Seasonality, Positioning, etc.) ─
 
+/** @deprecated Use SeasonalityData instead */
 export interface SeasonalityProfile {
   symbol: string;
   dayOfYearAvgPct: number[];
   currentYearPct: number[];
+}
+
+/** Matches GET /api/commodities/seasonality response. */
+export interface SeasonalityData {
+  symbol: string;
+  /** 12 cumulative % values Jan–Dec from January baseline. May contain nulls. */
+  monthlyAvgPct: (number | null)[];
+  /** Current-year cumulative % — nulls for future months. */
+  currentYearPct: (number | null)[];
+  ts: number;
 }
 
 export interface CotReport {

@@ -4,7 +4,7 @@
 // ============================================================
 
 import { api } from '@/lib/apiBase';
-import type { CommoditiesSnapshot } from './types';
+import type { CommoditiesSnapshot, SeasonalityData } from './types';
 
 const cache = new Map<string, { data: any; ts: number }>();
 const inflight = new Map<string, Promise<any>>();
@@ -41,4 +41,8 @@ export function fetchCommoditiesSnapshot(): Promise<CommoditiesSnapshot> {
 
 export function fetchCommoditySeries(symbol: string, days = 365): Promise<any> {
   return commodityFetch(`/api/commodities/series?symbol=${symbol}&days=${days}`);
+}
+
+export function fetchSeasonality(symbol: string): Promise<SeasonalityData> {
+  return commodityFetch<SeasonalityData>(`/api/commodities/seasonality?symbol=${symbol}`);
 }
