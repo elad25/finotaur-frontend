@@ -168,7 +168,7 @@ const OverviewTab = memo(function OverviewTab() {
       r.push(mkSignal(dir, 'Fear & Greed', `${v} — ${fg.value_classification}`, v <= 25 ? 'Extreme fear — historically a buying opportunity' : v >= 75 ? 'Extreme greed — historically signals tops' : 'Market mood within normal range', v <= 40 ? '😨' : v >= 60 ? '🤑' : '😐'));
     }
     const breadthDir: SignalDirection = gPct > 65 ? 'bullish' : gPct < 35 ? 'bearish' : 'neutral';
-    r.push(mkSignal(breadthDir, 'Market Breadth', `${gPct.toFixed(0)}% positive`, gPct > 65 ? 'Broad strength — majority rising' : gPct < 35 ? 'Broad weakness — majority declining' : 'Mixed market', gPct > 65 ? '🟢' : gPct < 35 ? '🔴' : '🟡'));
+    r.push(mkSignal(breadthDir, 'Market Breadth', `${gPct.toFixed(0)}% positive`, gPct > 65 ? 'Broad strength — majority rising' : gPct < 35 ? 'Broad weakness — majority declining' : 'Mixed market', gPct > 65 ? '▲' : gPct < 35 ? '▼' : '▬'));
     if (avgFunding != null) {
       const fundDir: SignalDirection = avgFunding > 0.03 ? 'bearish' : avgFunding < -0.01 ? 'bullish' : 'neutral';
       r.push(mkSignal(fundDir, 'Funding Sentiment', avgFunding > 0.03 ? 'Overheated Long' : avgFunding < -0.01 ? 'Short Crowded' : 'Balanced', `Avg funding: ${avgFunding.toFixed(4)}%`, '💰'));
@@ -208,9 +208,9 @@ const OverviewTab = memo(function OverviewTab() {
           <div className="bg-[#E24B4A] transition-all duration-700" style={{ width: `${lPct}%` }} />
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-gold-primary">🟢 {breadth.g} Gainers ({gPct.toFixed(0)}%)</span>
+          <span className="text-gold-primary inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gold-primary inline-block" />{breadth.g} Gainers ({gPct.toFixed(0)}%)</span>
           <span className="text-ink-muted">{breadth.n} Flat</span>
-          <span className="text-num-negative">🔴 {breadth.l} Losers ({lPct.toFixed(0)}%)</span>
+          <span className="text-num-negative inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#E24B4A] inline-block" />{breadth.l} Losers ({lPct.toFixed(0)}%)</span>
         </div>
       </Card>
     </div>
