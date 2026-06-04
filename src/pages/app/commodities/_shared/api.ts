@@ -4,16 +4,18 @@
 // ============================================================
 
 import { api } from '@/lib/apiBase';
-import type { CommoditiesSnapshot, SeasonalityData } from './types';
+import type { CommoditiesSnapshot, SeasonalityData, CotSnapshot } from './types';
 
 const cache = new Map<string, { data: any; ts: number }>();
 const inflight = new Map<string, Promise<any>>();
 
 const SNAPSHOT_TTL = 300_000; // 5 min — matches poll interval
 const SERIES_TTL = 60_000;    // 1 min for historical series
+const COT_TTL = 3_600_000;    // 1 hr — COT is weekly, no need to re-fetch often
 
 function getTTL(path: string): number {
   if (path.includes('/series')) return SERIES_TTL;
+  if (path.includes('/cot')) return COT_TTL;
   return SNAPSHOT_TTL;
 }
 
@@ -45,4 +47,8 @@ export function fetchCommoditySeries(symbol: string, days = 365): Promise<any> {
 
 export function fetchSeasonality(symbol: string): Promise<SeasonalityData> {
   return commodityFetch<SeasonalityData>(`/api/commodities/seasonality?symbol=${symbol}`);
+}
+
+export function fetchCot(): Promise<CotSnapshot> {
+  return commodityFetch<CotSnapshot>('/api/commodities/cot');
 }
