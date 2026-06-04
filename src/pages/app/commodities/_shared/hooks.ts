@@ -4,8 +4,8 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
-import { fetchCommoditiesSnapshot } from './api';
-import type { CommoditiesSnapshot } from './types';
+import { fetchCommoditiesSnapshot, fetchSeasonality } from './api';
+import type { CommoditiesSnapshot, SeasonalityData } from './types';
 
 function usePoll<T>(fetcher: () => Promise<T>, interval: number, deps: any[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -30,4 +30,9 @@ function usePoll<T>(fetcher: () => Promise<T>, interval: number, deps: any[] = [
 /** Poll the commodities snapshot every 5 minutes. */
 export function useCommoditiesSnapshot() {
   return usePoll<CommoditiesSnapshot>(() => fetchCommoditiesSnapshot(), 300_000);
+}
+
+/** Fetch seasonality data once; refetches when symbol changes. */
+export function useSeasonality(symbol: string) {
+  return usePoll<SeasonalityData>(() => fetchSeasonality(symbol), 0, [symbol]);
 }

@@ -131,6 +131,13 @@ export default function CommoditiesOverview() {
             })}
           </div>
         )}
+
+        {/* Data-source attribution */}
+        {data?.attribution && data.attribution.length > 0 && (
+          <p className="text-[11px] text-[#505050] leading-relaxed">
+            Data: {data.attribution.join(' · ')}
+          </p>
+        )}
       </div>
     </PageTemplate>
   );
