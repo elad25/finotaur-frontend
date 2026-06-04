@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { useFlowData } from "@/pages/app/ai/flow-scanner/shared/useFlowData";
 import type { FlowItem } from "@/pages/app/ai/flow-scanner/shared/types";
+import { Card, Eyebrow } from "@/components/ds/Card";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Types
@@ -80,21 +81,14 @@ interface Form4State {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Design tokens (match Flow Scanner / dark glass aesthetic)
+// Design tokens — ETF / DS gold-on-black
+// Raw hex only where inline-style logic (dynamic opacity, gradient) requires it.
+// Everything else uses DS Tailwind classes.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const T = {
-  gold:     "#C9A646",
-  bullish:  "#22C55E",
-  bearish:  "#EF4444",
-  neutral:  "#8B8B8B",
-  purple:   "#A855F7",
-  blue:     "#3B82F6",
-  bg:       "rgba(255,255,255,0.018)",
-  border:   "rgba(255,255,255,0.07)",
-  mutedText:"#6B6B6B",
-  cardHover:"rgba(255,255,255,0.025)",
-} as const;
+const GOLD    = '#C9A646'; // --gold-primary
+const RED     = '#E24B4A'; // --num-negative
+const MUTED   = 'rgba(255,255,255,0.55)'; // ink-secondary hex equivalent
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -121,13 +115,13 @@ function computeInsiderScore(items: FlowItem[]): number {
   return Math.round(((buys - sells) / total) * 100);
 }
 
-/** Score → label + color */
-function scoreLabel(score: number): { label: string; color: string } {
-  if (score >= 60)  return { label: "Strong Bullish", color: T.bullish };
-  if (score >= 20)  return { label: "Bullish",        color: T.bullish };
-  if (score >= -20) return { label: "Neutral",        color: T.neutral  };
-  if (score >= -60) return { label: "Bearish",        color: T.bearish  };
-  return               { label: "Strong Bearish",  color: T.bearish  };
+/** Score → label + DS hex accent (gold for bullish, red for bearish, muted for neutral) */
+function scoreLabel(score: number): { label: string; hex: string; textClass: string } {
+  if (score >= 60)  return { label: "Strong Bullish", hex: GOLD, textClass: 'text-gold-primary' };
+  if (score >= 20)  return { label: "Bullish",        hex: GOLD, textClass: 'text-gold-primary' };
+  if (score >= -20) return { label: "Neutral",        hex: MUTED, textClass: 'text-ink-secondary' };
+  if (score >= -60) return { label: "Bearish",        hex: RED,  textClass: 'text-num-negative'  };
+  return               { label: "Strong Bearish",  hex: RED,  textClass: 'text-num-negative'  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -205,50 +199,31 @@ function useEdgarForm4(symbol: string): Form4State {
 // Sub-components
 // ──────────────────────────────────────────────────────────────────────────────
 
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={`rounded-xl p-4 ${className}`}
-      style={{ background: T.bg, border: `1px solid ${T.border}` }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500 mb-3">
-      {children}
-    </div>
-  );
-}
-
 /** Gauge bar: maps score −100..100 to a horizontal fill */
 function SentimentGauge({ score }: { score: number }) {
   const pct = Math.round(((score + 100) / 200) * 100); // 0–100% width
-  const { label, color } = scoreLabel(score);
+  const { hex, textClass } = scoreLabel(score);
 
   return (
     <div>
       <div className="flex justify-between items-baseline mb-1.5">
-        <span className="text-xs text-neutral-400">Bearish</span>
-        <span className="text-sm font-bold" style={{ color }}>{label}</span>
-        <span className="text-xs text-neutral-400">Bullish</span>
+        <span className="text-xs text-ink-muted">Bearish</span>
+        <span className={`text-sm font-bold ${textClass}`}>{scoreLabel(score).label}</span>
+        <span className="text-xs text-ink-muted">Bullish</span>
       </div>
-      <div className="h-2 rounded-full bg-neutral-800 overflow-hidden">
+      <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{
             width: `${pct}%`,
-            background: `linear-gradient(90deg, ${T.bearish}, ${color})`,
+            background: `linear-gradient(90deg, ${RED}, ${hex})`,
           }}
         />
       </div>
       <div className="flex justify-center mt-1.5">
-        <span className="text-xs text-neutral-500">
-          Score: <span className="text-neutral-200 font-semibold">{score > 0 ? `+${score}` : score}</span>
-          <span className="ml-1 text-neutral-600"> / 100</span>
+        <span className="text-xs text-ink-muted">
+          Score: <span className="font-mono tabular-nums text-ink-primary font-semibold">{score > 0 ? `+${score}` : score}</span>
+          <span className="ml-1 text-ink-tertiary"> / 100</span>
         </span>
       </div>
     </div>
@@ -257,15 +232,16 @@ function SentimentGauge({ score }: { score: number }) {
 
 /** Market backdrop pill from flow scanner's computed market sentiment */
 function MarketBackdropPill({ sentiment }: { sentiment: string }) {
+  // bullish = gold, bearish = red, neutral = muted — no green/purple/blue
   const cfg =
-    sentiment === "bullish" ? { color: T.bullish, Icon: TrendingUp,   label: "Bullish" } :
-    sentiment === "bearish" ? { color: T.bearish, Icon: TrendingDown,  label: "Bearish" } :
-                              { color: T.neutral, Icon: Minus,         label: "Neutral" };
+    sentiment === "bullish" ? { hex: GOLD,  textClass: 'text-gold-primary',   Icon: TrendingUp,  label: "Bullish" } :
+    sentiment === "bearish" ? { hex: RED,   textClass: 'text-num-negative',   Icon: TrendingDown, label: "Bearish" } :
+                              { hex: MUTED, textClass: 'text-ink-secondary',  Icon: Minus,        label: "Neutral" };
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
-      style={{ background: `${cfg.color}15`, color: cfg.color, border: `1px solid ${cfg.color}30` }}
+      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-[6px] text-xs font-semibold ${cfg.textClass}`}
+      style={{ background: `${cfg.hex}15`, border: `1px solid ${cfg.hex}30` }}
     >
       <cfg.Icon className="h-3.5 w-3.5" />
       {cfg.label}
@@ -278,67 +254,68 @@ function InsiderCard({ item }: { item: FlowItem }) {
   const isCluster = item.type === "cluster_insider";
   const isBuy     = item.type === "insider_buy" || isCluster;
   const isInst    = item.type.startsWith("institutional");
-  const accent    =
-    isCluster ? T.purple :
-    isBuy     ? T.bullish :
-    isInst    ? T.blue   : T.bearish;
+  // DS color mapping: cluster→gold, buy→gold, inst→muted-white, sell→red
+  const accentHex =
+    isCluster ? GOLD  :
+    isBuy     ? GOLD  :
+    isInst    ? MUTED : RED;
 
+  // Form badge: open-market = gold, 10b5-1 = muted
   const formBadge =
-    item.form4Type === "open_market" ? { label: "Open Market", color: T.bullish } :
-    item.form4Type === "10b5-1"      ? { label: "10b5-1 Plan", color: T.neutral  } :
+    item.form4Type === "open_market" ? { label: "Open Market", hex: GOLD  } :
+    item.form4Type === "10b5-1"      ? { label: "10b5-1 Plan", hex: MUTED } :
     null;
 
   return (
     <div
-      className="relative rounded-xl p-4 transition-all duration-200"
-      style={{ background: T.bg, border: `1px solid ${accent}20` }}
+      className="relative rounded-[12px] p-4 transition-all duration-200 border-[0.5px] border-border-ds-subtle hover:border-border-ds-default bg-surface-1"
     >
       {/* accent bar */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
-        style={{ background: accent }}
+        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[12px]"
+        style={{ background: accentHex }}
       />
 
       <div className="pl-3 flex flex-wrap gap-x-6 gap-y-2 items-start">
         {/* Ticker + company */}
         <div className="min-w-[90px]">
           <div className="flex items-center gap-1.5">
-            {isCluster && <Star className="h-3 w-3 fill-current" style={{ color: T.purple }} />}
-            <span className="text-base font-bold text-white">{item.ticker}</span>
+            {isCluster && <Star className="h-3 w-3 fill-current text-gold-primary" />}
+            <span className="text-base font-bold text-ink-primary">{item.ticker}</span>
           </div>
-          <p className="text-[10px] text-neutral-500 truncate max-w-[110px]">{item.company}</p>
+          <p className="text-[10px] text-ink-muted truncate max-w-[110px]">{item.company}</p>
         </div>
 
         {/* Insider / institution info */}
         <div className="flex-1 min-w-[130px]">
           {isCluster ? (
             <div className="flex items-center gap-1.5 mb-0.5">
-              <AlertTriangle className="h-3 w-3" style={{ color: T.purple }} />
-              <span className="text-xs font-bold" style={{ color: T.purple }}>
+              <AlertTriangle className="h-3 w-3 text-gold-primary" />
+              <span className="text-xs font-bold text-gold-primary">
                 {item.clusterCount} Insiders Buying
               </span>
             </div>
           ) : isInst ? (
             <div className="flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-neutral-500" />
-              <span className="text-xs font-semibold text-white truncate max-w-[160px]">
+              <Building2 className="h-3.5 w-3.5 text-ink-muted" />
+              <span className="text-xs font-semibold text-ink-primary truncate max-w-[160px]">
                 {item.institutionName ?? "Institution"}
               </span>
             </div>
           ) : (
             <div>
-              <div className="text-xs font-semibold text-white truncate max-w-[160px]">
+              <div className="text-xs font-semibold text-ink-primary truncate max-w-[160px]">
                 {item.insiderName ?? "Insider"}
               </div>
-              <div className="text-[10px] text-neutral-500">{item.insiderTitle ?? ""}</div>
+              <div className="text-[10px] text-ink-muted">{item.insiderTitle ?? ""}</div>
             </div>
           )}
         </div>
 
         {/* Type badge */}
         <div
-          className="text-[10px] font-semibold px-2 py-0.5 rounded-lg self-start mt-0.5"
-          style={{ background: `${accent}18`, color: accent }}
+          className="text-[10px] font-semibold px-2 py-0.5 rounded-[6px] self-start mt-0.5"
+          style={{ background: `${accentHex}18`, color: accentHex }}
         >
           {isCluster
             ? "Cluster Buy"
@@ -357,9 +334,9 @@ function InsiderCard({ item }: { item: FlowItem }) {
 
         {/* Value + shares */}
         <div className="text-right">
-          <div className="text-xs font-bold" style={{ color: T.gold }}>{item.value}</div>
+          <div className="text-xs font-bold font-mono tabular-nums text-gold-primary">{item.value}</div>
           {item.insiderShares != null && (
-            <div className="text-[10px] text-neutral-500">
+            <div className="text-[10px] font-mono tabular-nums text-ink-muted">
               {item.insiderShares.toLocaleString()} sh
             </div>
           )}
@@ -368,8 +345,8 @@ function InsiderCard({ item }: { item: FlowItem }) {
         {/* Form type */}
         {formBadge && (
           <div
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded self-start mt-0.5 hidden sm:block"
-            style={{ background: `${formBadge.color}12`, color: formBadge.color }}
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-[6px] self-start mt-0.5 hidden sm:block"
+            style={{ background: `${formBadge.hex}12`, color: formBadge.hex }}
           >
             {formBadge.label}
           </div>
@@ -378,17 +355,17 @@ function InsiderCard({ item }: { item: FlowItem }) {
         {/* Direction icon */}
         <div className="ml-auto self-center">
           {item.direction === "bullish"
-            ? <ArrowUpRight className="h-4 w-4" style={{ color: T.bullish }} />
+            ? <ArrowUpRight className="h-4 w-4 text-gold-primary" />
             : item.direction === "bearish"
-            ? <ArrowDownRight className="h-4 w-4" style={{ color: T.bearish }} />
-            : <Minus className="h-4 w-4" style={{ color: T.neutral }} />}
+            ? <ArrowDownRight className="h-4 w-4 text-num-negative" />
+            : <Minus className="h-4 w-4 text-ink-secondary" />}
         </div>
       </div>
 
       {/* Signal narrative */}
       {item.signal && (
-        <div className="mt-2.5 pt-2.5 border-t border-white/[0.04] pl-3">
-          <p className="text-[11px] text-neutral-500 line-clamp-2">{item.signal}</p>
+        <div className="mt-2.5 pt-2.5 border-t border-border-ds-subtle pl-3">
+          <p className="text-[11px] text-ink-muted line-clamp-2">{item.signal}</p>
         </div>
       )}
     </div>
@@ -402,16 +379,16 @@ function EdgarFilingRow({ entry }: { entry: EdgarForm4Entry }) {
       href={entry.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-start justify-between gap-4 py-3 hover:bg-white/[0.02] rounded-lg px-2 transition-colors group"
+      className="flex items-start justify-between gap-4 py-3 hover:bg-white/[0.02] rounded-[6px] px-2 transition-colors group"
     >
       <div className="flex items-start gap-2 flex-1 min-w-0">
-        <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color: T.gold }} />
+        <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0 text-gold-primary" />
         <div className="min-w-0">
-          <div className="text-xs font-semibold text-white group-hover:text-[#C9A646] transition-colors truncate">
+          <div className="text-xs font-semibold text-ink-primary group-hover:text-gold-primary transition-colors truncate">
             {entry.entityName}
           </div>
           {entry.periodOfReport && (
-            <div className="text-[10px] text-neutral-500">
+            <div className="text-[10px] text-ink-muted">
               Period: {fmtDate(entry.periodOfReport)}
             </div>
           )}
@@ -419,12 +396,12 @@ function EdgarFilingRow({ entry }: { entry: EdgarForm4Entry }) {
       </div>
       <div className="text-right shrink-0">
         <div
-          className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-          style={{ background: `${T.gold}15`, color: T.gold }}
+          className="text-[10px] font-bold px-1.5 py-0.5 rounded-[6px] text-gold-primary"
+          style={{ background: `${GOLD}15` }}
         >
           Form 4
         </div>
-        <div className="text-[10px] text-neutral-500 mt-0.5">{fmtDate(entry.fileDate)}</div>
+        <div className="text-[10px] text-ink-muted mt-0.5">{fmtDate(entry.fileDate)}</div>
       </div>
     </a>
   );
@@ -475,7 +452,7 @@ export default function StocksSentiment() {
 
   // Insider sentiment score: our own computation, SEC-derived inputs
   const insiderScore = useMemo(() => computeInsiderScore(insiderItems), [insiderItems]);
-  const { label: scoreLbl, color: scoreColor } = scoreLabel(insiderScore);
+  const { textClass: scoreLblClass } = scoreLabel(insiderScore);
 
   // Summary counts
   const buyCount    = insiderItems.filter(i => i.type === "insider_buy" || i.type === "cluster_insider").length;
@@ -488,7 +465,7 @@ export default function StocksSentiment() {
   // ── Loading / error ─────────────────────────────────────────────────────────
   if (flowLoading) {
     return (
-      <div className="p-6 flex items-center gap-2 text-neutral-500 text-sm">
+      <div className="p-6 flex items-center gap-2 text-ink-muted text-sm">
         <RefreshCw className="h-4 w-4 animate-spin" />
         Loading sentiment data…
       </div>
@@ -497,26 +474,37 @@ export default function StocksSentiment() {
 
   if (flowError) {
     return (
-      <div className="p-6 text-red-400 text-sm">
+      <div className="p-6 text-num-negative text-sm">
         Error loading sentiment data: {flowError}
       </div>
     );
   }
 
+  // Stats grid rows — DS color mapping:
+  // Insider Buys (bullish) → gold; Insider Sells (bearish) → red;
+  // Cluster Buys (was purple) → gold; Institutional (was blue) → ink-secondary hex
+  const statsGrid = [
+    { label: "Insider Buys",  value: buyCount,                hex: GOLD,  Icon: TrendingUp  },
+    { label: "Insider Sells", value: sellCount,               hex: RED,   Icon: TrendingDown },
+    { label: "Cluster Buys",  value: clusterBuys,             hex: GOLD,  Icon: Star         },
+    { label: "Institutional", value: institutionalItems.length, hex: MUTED, Icon: Building2  },
+  ];
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 space-y-5">
+    <div className="p-ds-4 space-y-ds-5">
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-neutral-100">Sentiment</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            {symbol} · Insider & institutional activity from SEC EDGAR filings
+        <div className="space-y-ds-1">
+          <Eyebrow>Stocks</Eyebrow>
+          <h2 className="text-h3 font-medium text-ink-primary">Sentiment</h2>
+          <p className="text-xs text-ink-secondary mt-0.5">
+            {symbol} · Insider &amp; institutional activity from SEC EDGAR filings
           </p>
         </div>
         <button
           onClick={refresh}
-          className="text-[10px] text-neutral-500 hover:text-neutral-300 flex items-center gap-1 transition-colors"
+          className="text-[10px] text-ink-muted hover:text-ink-secondary flex items-center gap-1 transition-colors"
         >
           <RefreshCw className="h-3 w-3" />
           Refresh
@@ -524,22 +512,19 @@ export default function StocksSentiment() {
       </div>
 
       {/* ── Row 1: Composite score + Market backdrop ───────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-ds-4">
 
         {/* Insider Sentiment Score */}
-        <Card>
-          <SectionLabel>Insider Sentiment Score</SectionLabel>
-          <div className="text-center mb-4">
-            <div
-              className="text-5xl font-black tabular-nums"
-              style={{ color: scoreColor }}
-            >
+        <Card padding="default">
+          <Eyebrow className="mb-ds-3">Insider Sentiment Score</Eyebrow>
+          <div className="text-center mb-ds-4">
+            <div className={`text-5xl font-black tabular-nums font-mono ${scoreLblClass}`}>
               {insiderScore > 0 ? `+${insiderScore}` : insiderScore}
             </div>
-            <div className="text-sm font-semibold mt-1" style={{ color: scoreColor }}>
-              {scoreLbl}
+            <div className={`text-sm font-semibold mt-1 ${scoreLblClass}`}>
+              {scoreLabel(insiderScore).label}
             </div>
-            <div className="text-[10px] text-neutral-600 mt-0.5">
+            <div className="text-[10px] text-ink-tertiary mt-0.5">
               Based on SEC Form 4 filings · EDGAR public domain
             </div>
           </div>
@@ -547,30 +532,25 @@ export default function StocksSentiment() {
         </Card>
 
         {/* Stats grid */}
-        <Card>
-          <SectionLabel>Insider Activity Summary</SectionLabel>
+        <Card padding="default">
+          <Eyebrow className="mb-ds-3">Insider Activity Summary</Eyebrow>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Insider Buys",     value: buyCount,       color: T.bullish, Icon: TrendingUp   },
-              { label: "Insider Sells",    value: sellCount,      color: T.bearish, Icon: TrendingDown  },
-              { label: "Cluster Buys",     value: clusterBuys,    color: T.purple,  Icon: Star         },
-              { label: "Institutional",    value: institutionalItems.length, color: T.blue, Icon: Building2 },
-            ].map(({ label, value, color, Icon }) => (
+            {statsGrid.map(({ label, value, hex, Icon }) => (
               <div
                 key={label}
-                className="rounded-lg p-3 text-center"
-                style={{ background: `${color}08`, border: `1px solid ${color}20` }}
+                className="rounded-[6px] p-3 text-center"
+                style={{ background: `${hex}08`, border: `1px solid ${hex}20` }}
               >
-                <Icon className="h-4 w-4 mx-auto mb-1" style={{ color }} />
-                <div className="text-xl font-bold" style={{ color }}>{value}</div>
-                <div className="text-[10px] text-neutral-500 mt-0.5">{label}</div>
+                <Icon className="h-4 w-4 mx-auto mb-1" style={{ color: hex }} />
+                <div className="text-xl font-bold font-mono tabular-nums" style={{ color: hex }}>{value}</div>
+                <div className="text-[10px] text-ink-muted mt-0.5">{label}</div>
               </div>
             ))}
           </div>
 
           {/* Market backdrop */}
-          <div className="mt-3 pt-3 border-t border-white/[0.04] flex items-center justify-between">
-            <span className="text-[10px] text-neutral-500 uppercase tracking-wider">
+          <div className="mt-3 pt-3 border-t border-border-ds-subtle flex items-center justify-between">
+            <span className="text-[10px] text-ink-muted uppercase tracking-wider">
               Market Flow Sentiment
             </span>
             <MarketBackdropPill sentiment={marketSentiment} />
@@ -580,18 +560,18 @@ export default function StocksSentiment() {
 
       {/* ── Row 2: Flow scanner signals for this symbol ─────────────────────── */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <Users className="h-4 w-4" style={{ color: T.purple }} />
-          <span className="text-sm font-semibold text-white">
+        <div className="flex items-center gap-2 mb-ds-3">
+          <Users className="h-4 w-4 text-gold-primary" />
+          <span className="text-sm font-semibold text-ink-primary">
             Insider &amp; Institutional Signals
           </span>
           <span
-            className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-            style={{ background: `${T.purple}18`, color: T.purple }}
+            className="text-[10px] px-2 py-0.5 rounded-[6px] font-semibold text-gold-primary"
+            style={{ background: `${GOLD}18` }}
           >
             {allSignals.length}
           </span>
-          <span className="text-[10px] text-neutral-600 ml-auto">
+          <span className="text-[10px] text-ink-muted ml-auto">
             Source: SEC EDGAR Form 4 via Flow Scanner
           </span>
         </div>
@@ -603,13 +583,13 @@ export default function StocksSentiment() {
             ))}
           </div>
         ) : (
-          <Card>
+          <Card padding="default">
             <div className="py-10 text-center">
-              <Activity className="h-8 w-8 mx-auto mb-2 text-neutral-700" />
-              <p className="text-sm text-neutral-500">
-                No recent insider or institutional signals for <strong className="text-neutral-300">{symbol}</strong>.
+              <Activity className="h-8 w-8 mx-auto mb-2 text-ink-muted" />
+              <p className="text-sm text-ink-secondary">
+                No recent insider or institutional signals for <strong className="text-ink-primary">{symbol}</strong>.
               </p>
-              <p className="text-[11px] text-neutral-600 mt-1">
+              <p className="text-[11px] text-ink-muted mt-1">
                 Flow scanner covers ~50 high-liquidity tickers. New Form 4 filings are ingested every 15 minutes.
               </p>
             </div>
@@ -619,62 +599,60 @@ export default function StocksSentiment() {
 
       {/* ── Row 3: Direct EDGAR Form 4 feed (90 days, per-symbol) ────────────── */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <FileText className="h-4 w-4" style={{ color: T.gold }} />
-          <span className="text-sm font-semibold text-white">
+        <div className="flex items-center gap-2 mb-ds-3">
+          <FileText className="h-4 w-4 text-gold-primary" />
+          <span className="text-sm font-semibold text-ink-primary">
             Recent Form 4 Filings
           </span>
           <span
-            className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-            style={{ background: `${T.gold}18`, color: T.gold }}
+            className="text-[10px] px-2 py-0.5 rounded-[6px] font-semibold text-gold-primary"
+            style={{ background: `${GOLD}18` }}
           >
             90 days
           </span>
-          <span className="text-[10px] text-neutral-600 ml-auto">
+          <span className="text-[10px] text-ink-muted ml-auto">
             Source: EDGAR EFTS · public domain
           </span>
         </div>
 
-        <Card>
+        <Card padding="default">
           {edgarState.loading ? (
-            <div className="flex items-center gap-2 py-6 text-neutral-500 text-xs">
+            <div className="flex items-center gap-2 py-6 text-ink-muted text-xs">
               <RefreshCw className="h-3 w-3 animate-spin" />
               Fetching SEC EDGAR…
             </div>
           ) : edgarState.error ? (
             <div className="py-6 text-center">
-              <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-yellow-600" />
-              <p className="text-xs text-neutral-500">
+              <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-gold-primary" />
+              <p className="text-xs text-ink-muted">
                 Could not reach SEC EDGAR: {edgarState.error}
               </p>
               <a
                 href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${symbol}&type=4&dateb=&owner=include&count=20`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs underline mt-1 inline-block"
-                style={{ color: T.gold }}
+                className="text-xs underline mt-1 inline-block text-gold-primary"
               >
                 View on EDGAR →
               </a>
             </div>
           ) : edgarState.entries.length > 0 ? (
-            <div className="divide-y divide-white/[0.04]">
+            <div className="divide-y divide-border-ds-subtle">
               {edgarState.entries.map(entry => (
                 <EdgarFilingRow key={entry.id} entry={entry} />
               ))}
             </div>
           ) : (
             <div className="py-8 text-center">
-              <FileText className="h-8 w-8 mx-auto mb-2 text-neutral-700" />
-              <p className="text-sm text-neutral-500">
-                No Form 4 filings found for <strong className="text-neutral-300">{symbol}</strong> in the last 90 days.
+              <FileText className="h-8 w-8 mx-auto mb-2 text-ink-muted" />
+              <p className="text-sm text-ink-secondary">
+                No Form 4 filings found for <strong className="text-ink-primary">{symbol}</strong> in the last 90 days.
               </p>
               <a
                 href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${symbol}&type=4&dateb=&owner=include&count=20`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs underline mt-2 inline-block"
-                style={{ color: T.gold }}
+                className="text-xs underline mt-2 inline-block text-gold-primary"
               >
                 Search EDGAR directly →
               </a>
@@ -684,11 +662,8 @@ export default function StocksSentiment() {
       </div>
 
       {/* ── Footer disclaimer ──────────────────────────────────────────────── */}
-      <div
-        className="text-[10px] text-neutral-600 rounded-lg px-3 py-2 border"
-        style={{ borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.01)" }}
-      >
-        <strong className="text-neutral-500">Data source:</strong> SEC EDGAR (public domain).
+      <div className="text-[10px] text-ink-muted rounded-[6px] px-3 py-2 border border-border-ds-subtle bg-surface-1">
+        <strong className="text-ink-secondary">Data source:</strong> SEC EDGAR (public domain).
         Insider score and market sentiment are analytics derived by FINOTAUR from Form 4 filings.
         No raw price values from third-party vendors are displayed on this page.
         Form 4 data reflects reported officer/director transactions; not investment advice.
