@@ -233,17 +233,13 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // נ MACRO & NEWS
   // ===============================================
   'macro': [
-    { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
-    { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
-    { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },
-    { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
-    { label: 'Global Calendar', path: '/app/macro/calendar', icon: Calendar },
-    { label: 'Interest Rates', path: '/app/macro/rates', icon: LineChart },
-    { label: 'Economic Indicators', path: '/app/macro/indicators', icon: BarChart3 },
-    { label: 'Major Events', path: '/app/macro/events', icon: Zap },
-    { label: 'Reports & PDFs', path: '/app/macro/reports', icon: FileText },
-    { label: 'Sentiment', path: '/app/macro/sentiment', icon: Activity },
-    { label: 'News', path: '/app/macro/news', icon: Newspaper },
+    { label: 'Pulse', path: '/app/macro/pulse', icon: LayoutDashboard },
+    { label: 'Rates & Central Banks', path: '/app/macro/rates', icon: LineChart },
+    { label: 'Inflation & Growth', path: '/app/macro/indicators', icon: BarChart3 },
+    { label: 'Global Markets', path: '/app/macro/global', icon: Map },
+    { label: 'Risk & Regime', path: '/app/macro/risk', icon: Activity },
+    { label: 'Economic Calendar', path: '/app/macro/calendar', icon: Calendar },
+    { label: 'Macro Desk', path: '/app/macro/desk', icon: FileText },
   ],
 
 
