@@ -98,7 +98,13 @@ interface YieldData {
 // API HOOKS
 // ============================================================
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// VITE_API_URL is the server origin WITHOUT the /api prefix (e.g.
+// https://finotaur-server-production.up.railway.app). The rates routes are
+// mounted under /api, so we must append it. When unset (local dev), the Vite
+// proxy serves '/api' on the same origin.
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 function useRatesData() {
   const [data, setData] = useState<{
