@@ -331,7 +331,7 @@ export const domains: Record<string, Domain> = {
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/forex/overview' },
-      { label: 'News',     path: '/app/forex/news' },
+      { label: 'Macro Cockpit', path: '/app/forex/currency/USD' },
     ],
     sidebar: [
       { label: 'Dashboard',          path: '/app/forex/overview',         icon: LayoutDashboard },
@@ -341,11 +341,8 @@ export const domains: Record<string, Domain> = {
       { label: 'Correlation Map',    path: '/app/forex/correlation',      icon: Map },
       { label: 'Economic Calendar',  path: '/app/forex/calendar',         icon: Calendar },
       { label: 'Major/Cross Pairs',  path: '/app/forex/pairs',            icon: Globe },
-      { label: 'Interest Rates',     path: '/app/forex/rates',            icon: LineChart },
       { label: 'Central Bank Watch', path: '/app/forex/cb-watch',         icon: Building },
       { label: 'COT Positioning',    path: '/app/forex/cot',              icon: BarChart3 },
-      { label: 'Macro Reports',      path: '/app/forex/deep-analysis',    icon: FileText },
-      { label: 'Alerts & Watchlists', path: '/app/forex/alerts',          icon: Bell },
       { label: 'Calculators',         path: '/app/forex/tools',           icon: Calculator },
     ],
   },
