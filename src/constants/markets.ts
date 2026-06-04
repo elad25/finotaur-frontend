@@ -110,7 +110,15 @@ export type MarketFunction =
   | 'etf-news'
   | 'etf-holdings'
   | 'etf-flows'
-  | 'etf-performance';
+  | 'etf-performance'
+  // New macro sidebar tabs (isolated — not shared with other asset classes)
+  | 'macro-pulse'
+  | 'macro-rates-cb'
+  | 'macro-inflation'
+  | 'macro-global'
+  | 'macro-risk'
+  | 'macro-calendar'
+  | 'macro-desk';
 
 export interface MarketFunctionMeta {
   id: MarketFunction;
@@ -597,10 +605,27 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Dedicated sidebar items for the Macro asset class.
+// These 7 tabs map to the new macro container pages shipped in the
+// macro-nav redesign. They are isolated here so shared MARKET_FUNCTIONS
+// entries (used by stocks, forex, etc.) are never mutated or relabelled.
+// ---------------------------------------------------------------------------
+const MACRO_FUNCTIONS: MarketFunctionMeta[] = [
+  { id: 'macro-pulse',     label: 'Pulse',                icon: LayoutDashboard, routes: { macro: '/app/macro/pulse' },      locked: false },
+  { id: 'macro-rates-cb',  label: 'Rates & Central Banks', icon: LineChart,       routes: { macro: '/app/macro/rates' },      locked: false },
+  { id: 'macro-inflation', label: 'Inflation & Growth',   icon: BarChart3,       routes: { macro: '/app/macro/indicators' }, locked: false },
+  { id: 'macro-global',    label: 'Global Markets',       icon: Map,             routes: { macro: '/app/macro/global' },     locked: false },
+  { id: 'macro-risk',      label: 'Risk & Regime',        icon: Activity,        routes: { macro: '/app/macro/risk' },       locked: false },
+  { id: 'macro-calendar',  label: 'Economic Calendar',    icon: Calendar,        routes: { macro: '/app/macro/calendar' },   locked: false },
+  { id: 'macro-desk',      label: 'Macro Desk',           icon: FileText,        routes: { macro: '/app/macro/desk' },       locked: false },
+];
+
+// ---------------------------------------------------------------------------
 // Helper: get the sidebar items for a given asset class
 // (only functions that have a route for that asset)
 // ---------------------------------------------------------------------------
 export function getMarketsItemsForAsset(asset: AssetClass): MarketFunctionMeta[] {
+  if (asset === 'macro') return MACRO_FUNCTIONS;
   return MARKET_FUNCTIONS.filter((fn) => fn.routes[asset] !== undefined);
 }
 
