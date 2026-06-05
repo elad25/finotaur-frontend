@@ -69,6 +69,8 @@ interface NewsletterPreferences {
 interface ProfileData {
   // Basic info
   display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   email: string | null;
   avatar_url: string | null;
   preferred_timezone: string | null;
@@ -253,13 +255,17 @@ const GeneralTab = () => {
   const [isEditing, setIsEditing] = useState(false);
   
   // Local state for form fields
-  const [displayName, setDisplayName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [timezone, setTimezone] = useState("America/New_York");
 
-  // Sync local state with profile data
+  // Sync local state with profile data. Fall back to splitting display_name
+  // for legacy rows that predate first_name/last_name.
   useEffect(() => {
     if (profile) {
-      setDisplayName(profile.display_name || user?.email?.split('@')[0] || '');
+      const fallback = profile.display_name || user?.email?.split('@')[0] || '';
+      setFirstName(profile.first_name ?? fallback.split(' ')[0] ?? '');
+      setLastName(profile.last_name ?? fallback.split(' ').slice(1).join(' ') ?? '');
       setTimezone(profile.preferred_timezone || "America/New_York");
     }
   }, [profile, user]);
@@ -269,21 +275,29 @@ const GeneralTab = () => {
     
     setSaving(true);
     try {
+      const trimmedFirst = firstName.trim();
+      const trimmedLast = lastName.trim();
+      const composedDisplayName = [trimmedFirst, trimmedLast].filter(Boolean).join(' ');
+
       const { error } = await supabase
         .from('profiles')
         .update({
-          display_name: displayName,
+          first_name: trimmedFirst || null,
+          last_name: trimmedLast || null,
+          display_name: composedDisplayName,
           preferred_timezone: timezone,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
 
       if (error) throw error;
-      
+
       // Update local state
-      setProfile(prev => prev ? { 
-        ...prev, 
-        display_name: displayName, 
+      setProfile(prev => prev ? {
+        ...prev,
+        first_name: trimmedFirst || null,
+        last_name: trimmedLast || null,
+        display_name: composedDisplayName,
         preferred_timezone: timezone,
       } : null);
       
@@ -299,7 +313,9 @@ const GeneralTab = () => {
 
   const handleCancel = () => {
     // Reset to original values
-    setDisplayName(profile?.display_name || user?.email?.split('@')[0] || '');
+    const fallback = profile?.display_name || user?.email?.split('@')[0] || '';
+    setFirstName(profile?.first_name ?? fallback.split(' ')[0] ?? '');
+    setLastName(profile?.last_name ?? fallback.split(' ').slice(1).join(' ') ?? '');
     setTimezone(profile?.preferred_timezone || "America/New_York");
     setIsEditing(false);
   };
@@ -376,19 +392,32 @@ const GeneralTab = () => {
         </div>
         
         <div className="space-y-4">
-          {/* Display Name */}
+          {/* Name */}
           <div className="grid gap-1.5">
-            <Label className="text-sm text-zinc-300">Display Name</Label>
+            <Label className="text-sm text-zinc-300">Name</Label>
             {isEditing ? (
-              <Input 
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Enter your name"
-                className="max-w-md h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+                <Input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="First name"
+                  autoComplete="given-name"
+                  className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                />
+                <Input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Last name"
+                  autoComplete="family-name"
+                  className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                />
+              </div>
             ) : (
               <div className="max-w-md h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
-                {profile?.display_name || user?.email?.split('@')[0] || 'Not set'}
+                {profile?.display_name ||
+                  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+                  user?.email?.split('@')[0] ||
+                  'Not set'}
               </div>
             )}
             <p className="text-xs text-zinc-500">Shown in the app and community</p>
@@ -2948,6 +2977,8 @@ export const SettingsLayout = () => {
         .from('profiles')
         .select(`
           display_name,
+          first_name,
+          last_name,
           email,
           avatar_url,
           preferred_timezone,
