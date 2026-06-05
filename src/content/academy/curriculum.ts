@@ -28,6 +28,9 @@ export interface FinotaurLink {
  */
 export type AccessLevel = "free" | "basic";
 
+/** Learning tier. "basics" = free & general; "deep" = advanced (BASIC+). */
+export type Tier = "basics" | "deep";
+
 export interface Chapter {
   slug: string;
   title: string;
@@ -49,6 +52,8 @@ export interface Module {
   subtitle: string;
   /** Module cover tile image. */
   image: string;
+  /** Learning tier — drives ordering, index grouping, and default gating. */
+  tier: Tier;
   chapters: Chapter[];
 }
 
@@ -71,20 +76,25 @@ interface ModuleDef {
 
 const ASSET_BASE = "/assets/academy";
 
-function buildModule(def: ModuleDef, number: number): Module {
+function buildModule(def: ModuleDef, number: number, tier: Tier): Module {
   return {
     slug: def.slug,
     number,
     title: def.title,
     subtitle: def.subtitle,
+    tier,
     image: `${ASSET_BASE}/${def.slug}/_cover.webp`,
-    chapters: def.chapters.map(([slug, title, plainSummary, access]) => ({
+    chapters: def.chapters.map(([slug, title, plainSummary, access], i) => ({
       slug,
       title,
       plainSummary,
       image: `${ASSET_BASE}/${def.slug}/${slug}.webp`,
       finotaur: def.finotaur,
-      access: (access as AccessLevel) ?? "free",
+      // Default gating: basics = free; deep = first chapter free (taster),
+      // the rest BASIC+. An explicit 4th tuple value always wins.
+      access:
+        (access as AccessLevel) ??
+        (tier === "deep" ? (i === 0 ? "free" : "basic") : "free"),
     })),
   };
 }
@@ -185,6 +195,22 @@ const F_PROP: FinotaurLink = {
   feature: "Trade Journal & Funding",
   blurb:
     "Passing and keeping a prop-firm account is a discipline game. Finotaur's Journal tracks your daily loss, drawdown, and rule adherence, and the Funding area connects you to broker and prop options.",
+  ctaLabel: "Explore the Journal",
+  ctaHref: "/journal",
+};
+
+const F_SENTIMENT: FinotaurLink = {
+  feature: "War Zone & Market Dashboards",
+  blurb:
+    "Finotaur's War Zone and market dashboards surface the fear/greed, breadth, and volatility signals in this section — so you can read the market's mood in real time.",
+  ctaLabel: "Start free",
+  ctaHref: "/register",
+};
+
+const F_PLAN: FinotaurLink = {
+  feature: "Trade Journal & Backtesting",
+  blurb:
+    "A plan is only as good as your follow-through. Finotaur's Backtesting engine proves your edge and the Journal tracks every rule, so your system actually improves over time.",
   ctaLabel: "Explore the Journal",
   ctaHref: "/journal",
 };
@@ -593,9 +619,233 @@ const MODULE_DEFS: ModuleDef[] = [
       ["support-resistance-term", "Support & Resistance", "Price floors and ceilings, in brief."],
     ],
   },
+
+  // ===================================================================
+  // BASICS-tier additions (free).
+  // ===================================================================
+  {
+    slug: "personal-finance",
+    title: "Personal Finance & Financial Independence",
+    subtitle: "Get your own money right first — budgeting, debt, accounts, and building wealth that compounds.",
+    finotaur: F_ACCOUNT,
+    chapters: [
+      ["money-mindset", "Your Money Mindset", "The beliefs that shape every financial decision."],
+      ["budgeting-systems", "Budgeting Systems That Work", "Simple frameworks to control your cash flow."],
+      ["emergency-fund", "Building an Emergency Fund", "Your financial shock absorber."],
+      ["paying-off-debt", "Paying Off Debt Strategically", "Snowball, avalanche, and what to clear first."],
+      ["tax-advantaged-accounts", "Tax-Advantaged Accounts", "Why where you invest matters as much as what."],
+      ["goal-based-investing", "Goal-Based Investing", "Matching investments to what you're saving for."],
+      ["index-investing", "Index Investing & the Three-Fund Portfolio", "The simplest path to long-term growth."],
+      ["financial-independence", "Financial Independence (FIRE)", "The math of buying back your time."],
+    ],
+  },
+  {
+    slug: "crypto-essentials",
+    title: "Crypto Essentials — What to Know",
+    subtitle: "The practical, safety-first guide to actually using crypto without getting wrecked.",
+    finotaur: F_CRYPTO,
+    chapters: [
+      ["buying-your-first-crypto", "Buying Your First Crypto", "From zero to your first coin, safely."],
+      ["choosing-an-exchange", "Choosing a Crypto Exchange", "What matters when you pick a platform."],
+      ["self-custody-and-seed-phrases", "Self-Custody & Seed Phrases", "Not your keys, not your coins."],
+      ["hot-vs-cold-wallets", "Hot vs. Cold Wallets", "Where to store crypto and why."],
+      ["avoiding-scams-and-rug-pulls", "Avoiding Scams & Rug Pulls", "The red flags that save your money."],
+      ["gas-fees-and-networks", "Gas Fees & Networks", "Why a transfer costs what it costs."],
+      ["crypto-security-checklist", "A Crypto Security Checklist", "Lock down your accounts and wallets."],
+      ["crypto-taxes-basics", "Crypto Taxes — The Basics", "Why every trade can be a taxable event."],
+    ],
+  },
+
+  // ===================================================================
+  // DEEP-tier additions (BASIC+; first chapter free taster).
+  // ===================================================================
+  {
+    slug: "forex",
+    title: "Forex — Deep Dive",
+    subtitle: "The world's largest market — sessions, leverage, pairs, the carry trade, and trading the news.",
+    finotaur: F_MARKETS,
+    chapters: [
+      ["forex-market-hours", "Market Hours & Sessions", "Why the 24-hour market still has prime time."],
+      ["pips-lots-and-position-size", "Pips, Lots & Position Size", "The math behind every forex trade."],
+      ["currency-pairs-explained", "Major, Minor & Exotic Pairs", "How currencies are quoted and grouped."],
+      ["leverage-and-margin-forex", "Leverage & Margin in Forex", "The double-edged sword of FX."],
+      ["the-carry-trade", "The Carry Trade", "Earning the interest-rate difference."],
+      ["currency-correlations", "Currency Correlations", "Why pairs move together — or opposite."],
+      ["central-banks-and-forex", "Central Banks & Rates", "The biggest driver of currency value."],
+      ["trading-forex-news", "Trading the News", "High-impact events and how price reacts."],
+      ["forex-risk-management", "Forex Risk Management", "Surviving leverage and volatility."],
+    ],
+  },
+  {
+    slug: "commodities",
+    title: "Commodities — Deep Dive",
+    subtitle: "Oil, gold, copper, and crops — what moves real-world assets and how to read them.",
+    finotaur: F_MARKETS,
+    chapters: [
+      ["what-drives-commodities", "What Drives Commodity Prices", "Supply, demand, and global forces."],
+      ["crude-oil-and-energy", "Crude Oil & Energy", "The market that moves the world."],
+      ["gold-and-precious-metals", "Gold & Precious Metals", "The classic store of value."],
+      ["industrial-metals", "Industrial Metals", "Copper as 'Dr. Copper' and the economy."],
+      ["agricultural-commodities", "Agricultural Commodities", "Grains, softs, and the weather trade."],
+      ["supply-demand-and-seasonality", "Supply, Demand & Seasonality", "The recurring rhythms of commodities."],
+      ["commodities-and-the-dollar", "Commodities & the Dollar", "Why a stronger dollar pressures commodities."],
+      ["commodities-as-inflation-hedge", "Commodities as an Inflation Hedge", "Real assets when money loses value."],
+    ],
+  },
+  {
+    slug: "fixed-income",
+    title: "Fixed Income — Deep Dive",
+    subtitle: "Bonds in depth — pricing, yield, duration, credit, and the risks behind 'safe' assets.",
+    finotaur: F_MACRO,
+    chapters: [
+      ["how-bonds-are-priced", "How Bonds Are Priced", "Why bond prices move opposite to yields."],
+      ["yield-to-maturity", "Yield to Maturity & Current Yield", "The real return on a bond."],
+      ["duration-and-convexity", "Duration & Convexity", "Measuring a bond's interest-rate risk."],
+      ["credit-ratings", "Credit Ratings & Default Risk", "From AAA to junk, and what it means."],
+      ["government-vs-corporate", "Government vs. Corporate Bonds", "Safety, yield, and the trade-off."],
+      ["the-yield-curve-revisited", "Reading the Yield Curve", "What the curve says about the economy."],
+      ["bond-risks", "The Risks of Bonds", "Why 'safe' assets can still lose money."],
+      ["building-a-bond-ladder", "Building a Bond Ladder", "Managing rates and reinvestment."],
+    ],
+  },
+  {
+    slug: "wyckoff",
+    title: "The Wyckoff Method",
+    subtitle: "Reading the footprints of big money — accumulation, distribution, and the price cycle.",
+    finotaur: F_TECHNICAL,
+    chapters: [
+      ["wyckoff-introduction", "Introduction to Wyckoff", "A century-old framework for smart money."],
+      ["the-three-laws", "The Three Wyckoff Laws", "Supply/demand, cause/effect, effort/result."],
+      ["the-price-cycle", "The Price Cycle", "Accumulation, markup, distribution, markdown."],
+      ["accumulation", "Accumulation", "How institutions quietly build positions."],
+      ["distribution", "Distribution", "How they quietly unload them."],
+      ["springs-and-upthrusts", "Springs & Upthrusts", "The traps that catch retail traders."],
+      ["the-composite-operator", "The Composite Operator", "Thinking like the market's biggest player."],
+    ],
+  },
+  {
+    slug: "market-sentiment",
+    title: "Market Sentiment & Internals",
+    subtitle: "Reading the market's mood — the VIX, put/call, breadth, and the fear/greed pendulum.",
+    finotaur: F_SENTIMENT,
+    chapters: [
+      ["what-is-market-sentiment", "What Is Market Sentiment", "Why crowd psychology moves prices."],
+      ["the-vix", "The VIX — the Fear Index", "The market's expectation of volatility."],
+      ["put-call-ratio", "The Put/Call Ratio", "Reading options positioning as sentiment."],
+      ["fear-and-greed", "Fear & Greed", "The emotional pendulum of markets."],
+      ["market-breadth", "Market Breadth", "Is the whole market moving, or just a few names?"],
+      ["advance-decline-and-tick", "Advance/Decline & TICK", "The internals that reveal real strength."],
+      ["sentiment-as-contrarian-signal", "Sentiment as a Contrarian Signal", "When extreme emotion marks a turn."],
+    ],
+  },
+  {
+    slug: "intermarket-analysis",
+    title: "Intermarket Analysis & Sector Rotation",
+    subtitle: "Nothing trades in a vacuum — how stocks, bonds, commodities, and currencies pull on each other.",
+    finotaur: F_MACRO,
+    chapters: [
+      ["what-is-intermarket-analysis", "What Is Intermarket Analysis", "Reading markets as one connected system."],
+      ["stocks-bonds-commodities-dollar", "Stocks, Bonds, Commodities & the Dollar", "The four pillars and their relationships."],
+      ["risk-on-risk-off", "Risk-On / Risk-Off", "How capital rotates between safety and risk."],
+      ["the-business-cycle", "The Business Cycle & Markets", "Which assets lead at each phase."],
+      ["sector-rotation", "Sector Rotation", "How money rotates through sectors."],
+      ["relative-strength", "Relative Strength & RRG", "Spotting the leaders and the laggards."],
+      ["intermarket-in-practice", "Intermarket Analysis in Practice", "Putting the relationships to work."],
+    ],
+  },
+  {
+    slug: "trading-plan-system",
+    title: "Building a Trading Plan & System",
+    subtitle: "Turn scattered trades into a repeatable process — edge, rules, backtesting, and the journal loop.",
+    finotaur: F_PLAN,
+    chapters: [
+      ["why-you-need-a-plan", "Why You Need a Trading Plan", "The difference between trading and gambling."],
+      ["defining-your-edge", "Defining Your Edge", "What actually makes you money over time."],
+      ["writing-your-trading-plan", "Writing Your Trading Plan", "The document that keeps you honest."],
+      ["entry-and-exit-rules", "Entry & Exit Rules", "Removing emotion from the decision."],
+      ["backtesting-your-strategy", "Backtesting Your Strategy", "Proving an edge on historical data."],
+      ["forward-testing", "Forward Testing & Paper Trading", "Validating before you risk real money."],
+      ["the-journal-feedback-loop", "The Journal Feedback Loop", "How reviewing trades compounds skill."],
+      ["reviewing-and-improving", "Reviewing & Improving Your System", "Iterating toward consistency."],
+    ],
+  },
+  {
+    slug: "trading-psychology",
+    title: "Trading Psychology — Deep Dive",
+    subtitle: "The inner game — mastering fear, greed, losses, and the impulses that blow up accounts.",
+    finotaur: F_JOURNAL,
+    chapters: [
+      ["the-traders-mindset", "The Trader's Mindset", "Thinking in probabilities, not certainties."],
+      ["fear-and-greed-psych", "Fear & Greed", "The two emotions behind most mistakes."],
+      ["handling-losses", "Handling Losses", "Why losing well is a skill."],
+      ["overtrading", "Overtrading", "When doing less makes more."],
+      ["revenge-trading", "Revenge Trading", "The fastest way to blow up an account."],
+      ["fomo", "FOMO", "Chasing moves and how to stop."],
+      ["patience-and-discipline", "Patience & Discipline", "Waiting for your setup."],
+      ["emotional-resilience", "Building Emotional Resilience", "Staying steady through drawdowns."],
+      ["journaling-your-emotions", "Journaling Your Emotions", "Turning feelings into data."],
+    ],
+  },
 ];
 
-export const CURRICULUM: Module[] = MODULE_DEFS.map((def, i) => buildModule(def, i + 1));
+// ---------------------------------------------------------------------
+// Ordering + tiers. Modules display basics-first, then deep dives.
+// ---------------------------------------------------------------------
+
+const BASICS_ORDER = [
+  "getting-started",
+  "economic-foundations",
+  "personal-finance",
+  "market-structure",
+  "asset-classes",
+  "microeconomics",
+  "fundamental-analysis",
+  "technical-analysis",
+  "macroeconomics",
+  "risk-management",
+  "trading-styles",
+  "portfolio-construction",
+  "crypto-essentials",
+  "trading-glossary",
+];
+
+const DEEP_ORDER = [
+  "options-derivatives",
+  "options-advanced",
+  "stocks",
+  "crypto",
+  "futures",
+  "forex",
+  "commodities",
+  "fixed-income",
+  "order-flow",
+  "order-flow-tools",
+  "wyckoff",
+  "market-sentiment",
+  "intermarket-analysis",
+  "ict-smart-money",
+  "trading-plan-system",
+  "trading-psychology",
+  "prop-firms",
+];
+
+const defBySlug: Record<string, ModuleDef> = Object.fromEntries(
+  MODULE_DEFS.map((d) => [d.slug, d]),
+);
+
+const ORDERED: Array<{ slug: string; tier: Tier }> = [
+  ...BASICS_ORDER.map((slug) => ({ slug, tier: "basics" as Tier })),
+  ...DEEP_ORDER.map((slug) => ({ slug, tier: "deep" as Tier })),
+];
+
+export const CURRICULUM: Module[] = ORDERED.map(({ slug, tier }, i) => {
+  const def = defBySlug[slug];
+  return def ? buildModule(def, i + 1, tier) : null;
+}).filter((m): m is Module => m !== null);
+
+/** Modules split by tier — for the grouped index. */
+export const BASICS_MODULES: Module[] = CURRICULUM.filter((m) => m.tier === "basics");
+export const DEEP_MODULES: Module[] = CURRICULUM.filter((m) => m.tier === "deep");
 
 // ---------------------------------------------------------------------
 // Lookup + navigation helpers.
@@ -697,7 +947,7 @@ const TOPIC_DEFS: TopicDef[] = [
     title: "Crypto",
     subtitle: "Blockchains, Bitcoin, DeFi, stablecoins, perpetuals, and on-chain data — the whole digital-asset stack.",
     coverModule: "crypto",
-    includeModules: ["crypto"],
+    includeModules: ["crypto-essentials", "crypto"],
     includeChapters: [["asset-classes", "crypto-market-structure"]],
   },
   {
@@ -710,10 +960,10 @@ const TOPIC_DEFS: TopicDef[] = [
   },
   {
     slug: "macro",
-    title: "Macro",
-    subtitle: "The big forces — growth, central banks, inflation, the yield curve, and the cycle that moves everything.",
+    title: "Macro & Intermarket",
+    subtitle: "The big forces — growth, central banks, the yield curve, bonds, and how every market pulls on the others.",
     coverModule: "macroeconomics",
-    includeModules: ["macroeconomics"],
+    includeModules: ["macroeconomics", "fixed-income", "intermarket-analysis"],
   },
   {
     slug: "order-flow",
@@ -735,6 +985,57 @@ const TOPIC_DEFS: TopicDef[] = [
     subtitle: "Plain-English definitions of the terms every trader needs — your quick-reference glossary.",
     coverModule: "trading-glossary",
     includeModules: ["trading-glossary"],
+  },
+  {
+    slug: "forex",
+    title: "Forex",
+    subtitle: "The world's largest market — sessions, pips and lots, the carry trade, and trading the news.",
+    coverModule: "forex",
+    includeModules: ["forex"],
+    includeChapters: [["asset-classes", "forex-basics"]],
+  },
+  {
+    slug: "commodities",
+    title: "Commodities",
+    subtitle: "Oil, gold, copper, and crops — what moves real-world assets and how they signal the economy.",
+    coverModule: "commodities",
+    includeModules: ["commodities"],
+    includeChapters: [["asset-classes", "commodities-overview"]],
+  },
+  {
+    slug: "sentiment",
+    title: "Sentiment & Internals",
+    subtitle: "Reading the market's mood — the VIX, put/call, breadth, and the fear/greed pendulum.",
+    coverModule: "market-sentiment",
+    includeModules: ["market-sentiment"],
+  },
+  {
+    slug: "smart-money",
+    title: "Smart Money",
+    subtitle: "Following the footprints of institutions — Wyckoff and the ICT / smart-money toolkit.",
+    coverModule: "ict-smart-money",
+    includeModules: ["wyckoff", "ict-smart-money"],
+  },
+  {
+    slug: "strategy",
+    title: "Strategy & Systems",
+    subtitle: "From a style to a system — trading styles, building a plan, backtesting, and the journal loop.",
+    coverModule: "trading-plan-system",
+    includeModules: ["trading-styles", "trading-plan-system"],
+  },
+  {
+    slug: "psychology",
+    title: "Psychology & Risk",
+    subtitle: "The inner game and staying alive — risk management, discipline, and mastering your own mind.",
+    coverModule: "trading-psychology",
+    includeModules: ["risk-management", "trading-psychology"],
+  },
+  {
+    slug: "personal-finance",
+    title: "Personal Finance",
+    subtitle: "Get your own money right — budgeting, debt, accounts, index investing, and independence.",
+    coverModule: "personal-finance",
+    includeModules: ["personal-finance"],
   },
 ];
 
