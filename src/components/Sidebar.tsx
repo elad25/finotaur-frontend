@@ -258,7 +258,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'ai': [
-    { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp, priceGated: true },
+    { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
     { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
     { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
     { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
