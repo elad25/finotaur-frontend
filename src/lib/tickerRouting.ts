@@ -8,14 +8,12 @@ import type { SuggestItem } from '@/components/Search/useSymbolSuggest';
  * Returns the navigation path for a given ticker symbol and its asset type.
  *
  * @param sym       - Ticker symbol (any casing; callers typically pass uppercase)
- * @param assetType - Asset class string from the backend or a local classification.
- *                    Accepts SuggestItem['assetType'] or a plain string so that
- *                    components using different data sources can pass their resolved type.
+ * @param assetType - Asset class from the backend or a local classification.
  * @param coinId    - Optional CoinGecko id used to deep-link into a specific crypto coin page.
  */
 export function routeForSuggest(
   sym: string,
-  assetType: SuggestItem['assetType'] | (string & {}), // eslint-disable-line @typescript-eslint/ban-types
+  assetType: SuggestItem['assetType'],
   coinId?: string,
 ): string {
   if (assetType === 'etf')     return `/app/etfs/${sym}/overview`;
