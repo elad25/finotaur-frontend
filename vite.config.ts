@@ -232,38 +232,87 @@ proxy: {
         manualChunks: {
           // Core React
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          
+
           // Data layer
           'vendor-data': ['@tanstack/react-query', '@supabase/supabase-js'],
-          
+
           // Animation
           'vendor-motion': ['framer-motion'],
-          
-          // UI Components (Radix)
+
+          // UI Components (Radix) — all installed @radix-ui/react-* packages
           'vendor-radix': [
+            '@radix-ui/react-accordion',
+            '@radix-ui/react-alert-dialog',
+            '@radix-ui/react-aspect-ratio',
+            '@radix-ui/react-avatar',
+            '@radix-ui/react-checkbox',
+            '@radix-ui/react-collapsible',
+            '@radix-ui/react-context-menu',
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tooltip',
+            '@radix-ui/react-hover-card',
+            '@radix-ui/react-label',
+            '@radix-ui/react-menubar',
+            '@radix-ui/react-navigation-menu',
             '@radix-ui/react-popover',
-            '@radix-ui/react-tabs',
+            '@radix-ui/react-progress',
+            '@radix-ui/react-radio-group',
+            '@radix-ui/react-scroll-area',
+            '@radix-ui/react-select',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-slider',
             '@radix-ui/react-slot',
-            '@radix-ui/react-checkbox',
             '@radix-ui/react-switch',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-toast',
+            '@radix-ui/react-toggle',
+            '@radix-ui/react-toggle-group',
+            '@radix-ui/react-tooltip',
           ],
-          
+
           // Icons
           'vendor-icons': ['lucide-react'],
-          
-          // Charts - ONLY recharts, NOT d3 (d3 will be bundled automatically)
+
+          // Charts — recharts only; lightweight-charts is lazy-loaded per route
           'vendor-charts': ['recharts'],
-          
+
+          // Geo/map libs — heavy but only used on world-map screens
+          'vendor-geo': ['d3-geo', 'topojson-client'],
+
+          // Error monitoring — loads after critical path
+          'vendor-monitoring': ['@sentry/react', '@sentry/browser', '@sentry/core'],
+
+          // Lightweight trading charts (separate cache bucket from recharts)
+          'vendor-lwc': ['lightweight-charts'],
+
+          // Markdown rendering — react-markdown + its full remark/micromark/hast ecosystem
+          // This entire dep tree always lands together; one chunk is cleaner than many tiny ones
+          'vendor-markdown': [
+            'react-markdown',
+            'remark-gfm',
+            'remark-parse',
+            'remark-rehype',
+            'unified',
+            'micromark',
+            'micromark-core-commonmark',
+            'micromark-extension-gfm',
+            'mdast-util-from-markdown',
+            'mdast-util-to-markdown',
+            'mdast-util-to-hast',
+            'mdast-util-gfm',
+            'hast-util-to-jsx-runtime',
+            'vfile',
+          ],
+
+          // Analytics & consent — non-critical, loads after interactive
+          'vendor-analytics': ['posthog-js', 'vanilla-cookieconsent'],
+
           // Utils
           'vendor-utils': [
             'dayjs',
-            'date-fns', 
-            'clsx', 
-            'tailwind-merge', 
+            'date-fns',
+            'clsx',
+            'tailwind-merge',
             'class-variance-authority',
             'immer',
             'zustand',
