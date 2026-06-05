@@ -21,14 +21,13 @@ import {
   ArrowUpRight, ArrowDownRight, Zap, Shield,
   Calendar, DollarSign, Flame, Filter,
 } from 'lucide-react';
+import { LockedOverlay } from '../LockedOverlay';
 import { Skeleton, SkeletonChart } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
-import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader } from '../ui';
 import { fmtBig, isValid } from '@/utils/stock-analyzer.utils';
 import { authFetch } from '@/utils/authFetch';
-import { stockCache, getNextEarningsDate } from '@/services/stock-analyzer.cache';
 import { AlgoFlowChart } from '../AlgoFlowChart';
 import { GammaExposureChart } from '../GammaExposureChart';
 
@@ -115,6 +114,14 @@ interface AIAdvice {
 const optionsCacheMap = new Map<string, OptionsCache>();
 const aiAdviceCacheMap = new Map<string, { advice: AIAdvice; generatedAt: string }>();
 const CACHE_TTL = 15 * 60 * 1000; // 15 min
+
+// =====================================================
+// PROPRIETARY DATA FLAG
+// When false, skip all options API calls and render
+// LockedOverlay instead.
+// Set VITE_ENABLE_PROPRIETARY_DATA=true to unlock.
+// =====================================================
+const PROPRIETARY_DATA_ENABLED = import.meta.env.VITE_ENABLE_PROPRIETARY_DATA === 'true';
 
 // =====================================================
 // DATA FETCHING
@@ -1369,6 +1376,7 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
 
   // ── Main data fetch ──
   const fetchData = useCallback(async (exp?: string) => {
+    if (!PROPRIETARY_DATA_ENABLED) return;
     setIsLoading(true);
     setError(null);
 
@@ -1435,6 +1443,28 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
   const totalPutOI = useMemo(() => chain.filter(c => c.type === 'put').reduce((s, c) => s + (c.openInterest || 0), 0), [chain]);
 
   const visibleUnusual = showAllUnusual ? unusual : unusual.slice(0, 4);
+
+  // ── Proprietary-data gate: all hooks have run — safe to return early ──
+  if (!PROPRIETARY_DATA_ENABLED) {
+    return (
+      <LockedOverlay
+        title="Unlocking soon"
+        subtitle="Options data — commercial license in progress"
+        className="min-h-[320px]"
+      >
+        {/* Decorative placeholder so blur has something to show */}
+        <div className="space-y-4 p-6">
+          {[1, 2, 3].map(i => (
+            <div
+              key={i}
+              className="rounded-2xl h-36"
+              style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
+            />
+          ))}
+        </div>
+      </LockedOverlay>
+    );
+  }
 
   // ── Error state ──
   if (error && chain.length === 0) {

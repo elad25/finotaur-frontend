@@ -12,10 +12,10 @@ import {
   ArrowUpRight, ArrowDownRight, Minus, Building2,
   Star, Shield, Zap, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { LockedOverlay } from '../LockedOverlay';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { authFetch } from '@/utils/authFetch';
-import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader } from '../ui';
 import { isValid, fmtBig, fmtPct } from '@/utils/stock-analyzer.utils';
 
@@ -70,6 +70,14 @@ interface WallStreetAIData {
 // =====================================================
 
 const ANTHROPIC_WALLSTREET_ENABLED = import.meta.env.VITE_ENABLE_ANTHROPIC_WALLSTREET === 'true';
+
+// =====================================================
+// PROPRIETARY DATA FLAG
+// When false, skip all analyst / forward-estimates /
+// options API calls and render LockedOverlay instead.
+// Set VITE_ENABLE_PROPRIETARY_DATA=true to unlock.
+// =====================================================
+const PROPRIETARY_DATA_ENABLED = import.meta.env.VITE_ENABLE_PROPRIETARY_DATA === 'true';
 
 interface AnthropicAnalystOpinion {
   firm: string;
@@ -786,6 +794,7 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
   const tickerRef = useRef(data.ticker);
 
   const generate = useCallback(async (force = false) => {
+    if (!PROPRIETARY_DATA_ENABLED) return;
     const ticker = data.ticker;
     if (!force && wallStreetCache.has(ticker)) {
       setAiData(wallStreetCache.get(ticker)!.data);
@@ -873,6 +882,28 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
   const displayedAnalysts = aiData?.analysts
     ? (showAllAnalysts ? aiData.analysts : aiData.analysts.slice(0, 6))
     : [];
+
+  // ── Proprietary-data gate: all hooks have run — safe to return early ──
+  if (!PROPRIETARY_DATA_ENABLED) {
+    return (
+      <LockedOverlay
+        title="Unlocking soon"
+        subtitle="Premium analyst data — commercial license in progress"
+        className="min-h-[320px]"
+      >
+        {/* Decorative placeholder so blur has something to show */}
+        <div className="space-y-4 p-6">
+          {[1, 2, 3].map(i => (
+            <div
+              key={i}
+              className="rounded-2xl h-36"
+              style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
+            />
+          ))}
+        </div>
+      </LockedOverlay>
+    );
+  }
 
   return (
     <div className="space-y-4">
