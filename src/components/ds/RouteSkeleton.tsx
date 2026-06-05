@@ -171,6 +171,13 @@ function GenericPage({ pathname }: { pathname: string }) {
 
 export function RouteSkeleton() {
   const { pathname } = useLocation();
+  // Skeletons are ONLY for the authenticated app shell, whose layouts are known.
+  // Public/marketing/auth/legal pages (landing "/", "/auth/*", "/legal/*", …)
+  // must NOT show an app-content skeleton — they have their own hero/markup and
+  // the lazy chunk loads fast. Render nothing for them.
+  if (!pathname.startsWith("/app") && !pathname.startsWith("/copilot")) {
+    return null;
+  }
   const Bespoke = resolve(pathname);
   if (Bespoke) return <Bespoke />;
   return <GenericPage pathname={pathname} />;
