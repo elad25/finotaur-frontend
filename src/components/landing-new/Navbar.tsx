@@ -28,6 +28,7 @@ const Navbar = () => {
     { href: "#pricing", label: "Pricing" },
     { href: "/journal", label: "Journal", isRoute: true },
     { href: "/about", label: "About", isRoute: true },
+    { href: "/academy", label: "Academy", isRoute: true },
   ];
 
   const handleNavClick = (link: typeof navLinks[0]) => {

@@ -140,6 +140,12 @@ const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccess
 const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailurePage"));
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
 const DesignLab = lazy(() => import("@/pages/DesignLab"));
+
+// ACADEMY (public learning center)
+const AcademyIndex = lazy(() => import("@/pages/academy/AcademyIndex"));
+const AcademyTopicHub = lazy(() => import("@/pages/academy/TopicHub"));
+const AcademyModule = lazy(() => import("@/pages/academy/AcademyModule"));
+const AcademyChapter = lazy(() => import("@/pages/academy/AcademyChapter"));
 const PlansPage = lazy(() => import("@/pages/app/Plans"));
 const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
@@ -429,6 +435,10 @@ function AppContent() {
         <Route path="/links" element={<LinksPage />} />
         <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />
         <Route path="/journal" element={<JournalPublicPage />} />
+        <Route path="/academy" element={<SuspenseRoute><AcademyIndex /></SuspenseRoute>} />
+        <Route path="/academy/topics/:topicSlug" element={<SuspenseRoute><AcademyTopicHub /></SuspenseRoute>} />
+        <Route path="/academy/:moduleSlug" element={<SuspenseRoute><AcademyModule /></SuspenseRoute>} />
+        <Route path="/academy/:moduleSlug/:chapterSlug" element={<SuspenseRoute><AcademyChapter /></SuspenseRoute>} />
         <Route path="/glossary" element={<GlossaryIndex />} />
         <Route path="/glossary/:slug" element={<GlossaryTerm />} />
         <Route path="/research" element={<ResearchIndex />} />

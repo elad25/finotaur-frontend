@@ -18,8 +18,9 @@ import SpotlightTour from '@/components/onboarding/SpotlightTour';
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
   // Phase 1: War Zone and Top Secret now have their own sidebars — removed from this list.
-  // '/app/all-markets/warzone',  // War Zone has sidebar now
   // '/app/top-secret',           // Top Secret has sidebar now
+  '/app/all-markets/warzone',  // War Zone renders chrome-free (no product sidebar)
+  '/app/warzone',              // legacy War Zone path alias
   '/app/home',              // Home hub renders full-width (no product sidebar needed)
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
@@ -32,6 +33,8 @@ const NO_SIDEBAR_ROUTES = [
 // Home hub is standalone — no product SubNav (it is its own surface).
 const NO_SUBNAV_ROUTES = [
   '/app/home',
+  '/app/all-markets/warzone',  // War Zone renders chrome-free (no Latest/Compose sub-nav)
+  '/app/warzone',              // legacy War Zone path alias
 ];
 
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
