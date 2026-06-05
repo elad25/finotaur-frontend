@@ -19,6 +19,99 @@ import { stockCache, getNextEarningsDate } from './stock-analyzer.cache';
 import { authFetch } from '@/utils/authFetch';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app'}/api/market-data`;
+
+// =====================================================
+// SEC-FUNDAMENTALS EDGE FUNCTION
+// =====================================================
+// Returns company + financials from public-domain SEC/EDGAR data.
+// URL: ${SUPABASE_URL}/functions/v1/sec-fundamentals?symbol=<SYM>&price=<lastClose>
+// Response shape (relevant fields):
+//   company: { symbol, name, sector, industry, website, logo, cik, exchange }
+//   financials: { revenue, netIncome, eps, grossMargin, operatingMargin, netMargin,
+//     roe, roa, debtToEquity, currentRatio, fcf, fcfPerShare, ebitda,
+//     revenueGrowth, netIncomeGrowth, epsGrowth, peRatio, priceToBook,
+//     priceToSales, evToEbitda, evToRevenue, totalEquity, totalLiabilities,
+//     operatingIncome, sharesOutstanding, confidence, ... }
+//   source: 'sec'
+// =====================================================
+
+interface SecFundamentalsCompany {
+  symbol?: string;
+  name?: string;
+  sector?: string;
+  industry?: string;
+  website?: string | null;
+  logo?: string | null;
+  cik?: string;
+  exchange?: string;
+}
+
+interface SecFundamentalsFinancials {
+  revenue?: number | null;
+  netIncome?: number | null;
+  eps?: number | null;
+  grossMargin?: number | null;
+  operatingMargin?: number | null;
+  netMargin?: number | null;
+  roe?: number | null;
+  roa?: number | null;
+  debtToEquity?: number | null;
+  currentRatio?: number | null;
+  fcf?: number | null;
+  fcfPerShare?: number | null;
+  ebitda?: number | null;
+  revenueGrowth?: number | null;
+  netIncomeGrowth?: number | null;
+  epsGrowth?: number | null;
+  peRatio?: number | null;
+  priceToBook?: number | null;
+  priceToSales?: number | null;
+  evToEbitda?: number | null;
+  evToRevenue?: number | null;
+  totalEquity?: number | null;
+  totalLiabilities?: number | null;
+  operatingIncome?: number | null;
+  sharesOutstanding?: number | null;
+  confidence?: string | null;
+  // Additional fields the edge function may return
+  [key: string]: unknown;
+}
+
+interface SecFundamentalsResponse {
+  company: SecFundamentalsCompany;
+  financials: SecFundamentalsFinancials;
+  source: string;
+  meta?: { errors?: string[] };
+}
+
+async function fetchSecFundamentals(
+  symbol: string,
+  lastClosePrice: number | null,
+): Promise<SecFundamentalsResponse | null> {
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+
+  let url = `${SUPABASE_URL}/functions/v1/sec-fundamentals?symbol=${encodeURIComponent(symbol)}`;
+  if (lastClosePrice != null && lastClosePrice > 0) {
+    url += `&price=${lastClosePrice}`;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { apikey: SUPABASE_ANON_KEY },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as SecFundamentalsResponse;
+    // Validate minimal shape
+    if (!json?.company || !json?.financials) return null;
+    return json;
+  } catch {
+    return null;
+  }
+}
 // =====================================================
 // SAFE FETCH
 // =====================================================
@@ -89,27 +182,12 @@ export async function fetchAllStockData(ticker: string): Promise<StockData> {
   // Step 1: Get next earnings date (cached for 24h)
   const nextEarningsDate = await getNextEarningsDate(symbol);
 
-  // Step 2: Fetch all endpoints in parallel
-  // Quote is ALWAYS fresh; the rest use earnings-based cache
-  const [quoteRaw, companyRaw, financialsRaw, analystRaw, forwardEstRaw] = await Promise.all([
+  // Step 2: Fetch quote, analyst, and forward-estimates from Railway;
+  // fetch company+financials from the sec-fundamentals edge function (SEC public data).
+  // Quote is ALWAYS fresh; analyst/forwardEst use earnings-based cache.
+  const [quoteRaw, analystRaw, forwardEstRaw] = await Promise.all([
     // ❌ Quote — ALWAYS FRESH
     safeFetch<any>(`${API_BASE}/quote-extended/${symbol}`),
-
-    // ✅ Company — cached until next earnings
-    stockCache.getOrFetch(
-      `${symbol}:company`,
-      () => safeFetch<any>(`${API_BASE}/company/${symbol}`),
-      symbol,
-      nextEarningsDate
-    ),
-
-    // ✅ Financials — cached until next earnings
-    stockCache.getOrFetch(
-      `${symbol}:financials`,
-      () => safeFetch<any>(`${API_BASE}/financials/${symbol}`),
-      symbol,
-      nextEarningsDate
-    ),
 
     // ✅ Analyst — cached until next earnings
     stockCache.getOrFetch(
@@ -128,16 +206,120 @@ export async function fetchAllStockData(ticker: string): Promise<StockData> {
     ),
   ]);
 
-  const q = quoteRaw || {};
-  const co = companyRaw || {};
-  const f = financialsRaw || {};
-  const a = analystRaw || {};
-  const fwd = forwardEstRaw || {};
+  // Step 3: Fetch company + financials from sec-fundamentals edge function.
+  // Pass lastClose from the quote so the edge function can derive PE and ratios.
+  // Uses earnings-based cache; falls back to Railway on failure.
+  const quotePrice: number | null = (quoteRaw?.price as number | undefined) ?? null;
+  const secRaw = await stockCache.getOrFetch<SecFundamentalsResponse | null>(
+    `${symbol}:sec-fundamentals`,
+    () => fetchSecFundamentals(symbol, quotePrice),
+    symbol,
+    nextEarningsDate,
+  );
+
+  // Fallback to Railway if SEC edge returned nothing useful
+  const secOk = secRaw != null && (secRaw.company?.name || secRaw.financials?.revenue != null);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- settled to any so downstream property accesses remain unchanged
+  let companyRaw: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let financialsRaw: any;
+
+  if (secOk) {
+    // Map SEC edge response → the shape the rest of this function expects
+    const secCo = secRaw!.company;
+    const secFin = secRaw!.financials;
+
+    companyRaw = {
+      name:                     secCo.name,
+      sector:                   secCo.sector,
+      industry:                 secCo.industry,
+      website:                  secCo.website,
+      logo:                     secCo.logo,
+      exchange:                 secCo.exchange,
+      // SEC does not provide employee count or HQ — keep null
+      employees:                null,
+      headquarters:             null,
+      listDate:                 null,
+      // marketCap not from SEC — will fall through to quote
+      marketCap:                null,
+    } as Record<string, unknown>;
+
+    financialsRaw = {
+      revenue:              secFin.revenue,
+      netIncome:            secFin.netIncome,
+      eps:                  secFin.eps,
+      grossMargin:          secFin.grossMargin,
+      operatingMargin:      secFin.operatingMargin,
+      netMargin:            secFin.netMargin,
+      roe:                  secFin.roe,
+      roa:                  secFin.roa,
+      debtToEquity:         secFin.debtToEquity,
+      currentRatio:         secFin.currentRatio,
+      // Edge function returns `fcf` (TTM) and `fcfPerShare`
+      freeCashFlowPerShare: secFin.fcfPerShare,
+      ebitda:               secFin.ebitda,
+      revenueGrowth:        secFin.revenueGrowth,
+      netIncomeGrowth:      secFin.netIncomeGrowth,
+      epsGrowth:            secFin.epsGrowth,
+      peRatio:              secFin.peRatio,
+      priceToBook:          secFin.priceToBook,
+      priceToSales:         secFin.priceToSales,
+      evToEbitda:           secFin.evToEbitda,
+      evToRevenue:          secFin.evToRevenue,
+      totalEquity:          secFin.totalEquity,
+      totalLiabilities:     secFin.totalLiabilities,
+      operatingIncome:      secFin.operatingIncome,
+      sharesOutstanding:    secFin.sharesOutstanding,
+      // Fields not in SEC edge → null (UI renders "—" for null)
+      beta:                 null,
+      dividendYield:        null,
+      dividendPerShare:     null,
+      payoutRatio:          null,
+      roic:                 null,
+      debtToAssets:         null,
+      quickRatio:           null,
+      revenuePerShare:      null,
+      bookValuePerShare:    null,
+      forwardPe:            null,
+      pegRatio:             null,
+    } as Record<string, unknown>;
+  } else {
+    // Graceful fallback: Railway endpoints (original path)
+    const [railwayCompany, railwayFinancials] = await Promise.all([
+      stockCache.getOrFetch(
+        `${symbol}:company`,
+        () => safeFetch<any>(`${API_BASE}/company/${symbol}`),
+        symbol,
+        nextEarningsDate,
+      ),
+      stockCache.getOrFetch(
+        `${symbol}:financials`,
+        () => safeFetch<any>(`${API_BASE}/financials/${symbol}`),
+        symbol,
+        nextEarningsDate,
+      ),
+    ]);
+    companyRaw = (railwayCompany as Record<string, unknown>) || {};
+    financialsRaw = (railwayFinancials as Record<string, unknown>) || {};
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed sources; typed at the SecFundamentalsFinancials interface level above
+  const q: any = quoteRaw || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const co: any = companyRaw;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const f: any = financialsRaw;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const a: any = analystRaw || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fwd: any = forwardEstRaw || {};
 
   const dataSources: string[] = [];
   if (quoteRaw) dataSources.push('quote');
-  if (companyRaw) dataSources.push('company');
-  if (financialsRaw) dataSources.push('financials');
+  if (secOk) dataSources.push('sec-fundamentals');
+  else if (Object.keys(companyRaw).length) dataSources.push('company');
+  if (!secOk && Object.keys(financialsRaw).length) dataSources.push('financials');
   if (analystRaw) dataSources.push('analyst');
   if (forwardEstRaw) dataSources.push('forwardEst');
 
@@ -285,7 +467,7 @@ export async function fetchAllStockData(ticker: string): Promise<StockData> {
     freeCashFlowPerShare: fcfPerShare,
     revenuePerShare: f.revenuePerShare || null,
     bookValuePerShare: f.bookValuePerShare || null,
-    eps: q.eps || null,
+    eps: q.eps || f.eps || null,
 
     dividendYield: f.dividendYield || q.dividendYield || null,
     dividendPerShare: f.dividendPerShare || null,
