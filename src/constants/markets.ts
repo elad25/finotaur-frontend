@@ -310,6 +310,14 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       crypto: '/app/crypto/stablecoins',
     },
   },
+  {
+    id: 'block-trades',
+    label: 'Block Trades',
+    icon: Layers,
+    routes: {
+      crypto: '/app/crypto/whales/trades',
+    },
+  },
 
   // ── Futures-specific ──────────────────────────────────────────────────────
   {
