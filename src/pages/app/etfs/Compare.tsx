@@ -32,7 +32,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { Card } from '@/components/ds/Card';
-import { fetchETFBars, type EtfBarsRange } from '@/services/etf-analyzer.api';
+import { fetchCompareBars, type EtfBarsRange } from '@/services/etf-analyzer.api';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import type { OhlcBar } from '@/types/etf.types';
 
@@ -264,7 +264,7 @@ export default function ETFCompare() {
         return [...prev, { ticker: sym, bars: [], loading: true, error: null }];
       });
       try {
-        const bars = await fetchETFBars(sym, currentRange);
+        const bars = await fetchCompareBars(sym, currentRange);
         setSeries((prev) =>
           prev.map((s) => (s.ticker === sym ? { ...s, bars, loading: false } : s)),
         );
@@ -362,7 +362,7 @@ export default function ETFCompare() {
       await (async () => {
         setSeries((prev) => [...prev, { ticker: t, bars: [], loading: true, error: null }]);
         try {
-          const bars = await fetchETFBars(t, newRange);
+          const bars = await fetchCompareBars(t, newRange);
           setSeries((prev) =>
             prev.map((s) => (s.ticker === t ? { ...s, bars, loading: false } : s)),
           );

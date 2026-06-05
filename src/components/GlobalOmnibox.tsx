@@ -34,6 +34,7 @@ import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxInte
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import { classifyEquity } from '@/lib/symbolCategories';
+import { routeForSuggest } from '@/lib/tickerRouting';
 import { searchCrypto, CRYPTO_COINS } from '@/data/cryptoCoins';
 import { searchForex, FOREX_PAIRS } from '@/data/forexPairs';
 import { searchIndices, INDICES } from '@/data/indices';
@@ -120,24 +121,6 @@ function saveRecentTicker(symbol: string) {
   } catch {
     // ignore
   }
-}
-
-// ---------------------------------------------------------------------------
-// Routing helper — returns the correct path for a suggest result
-// ---------------------------------------------------------------------------
-
-function routeForSuggest(
-  sym: string,
-  assetType: SuggestItem['assetType'],
-  coinId?: string,
-): string {
-  if (assetType === 'etf') return `/app/etfs/${sym}/overview`;
-  if (assetType === 'crypto') return coinId ? `/app/crypto/coin/${coinId}` : '/app/crypto/overview';
-  if (assetType === 'fx') return `/app/forex/pair/${sym}`;
-  if (assetType === 'futures') return '/app/futures/overview';
-  if (assetType === 'bond') return '/app/macro/rates';
-  // stock / index / unknown / undefined → Stock Analyzer
-  return `/app/ai/stock-analyzer?symbol=${sym}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -382,11 +365,19 @@ export function GlobalOmnibox() {
   // -------------------------------------------------------------------------
 
   const enrichedSuggestions: EnrichedItem[] = useMemo(() => {
-    // Re-classify equities: backend hardcodes 'stock'; tag known ETFs as 'etf'.
-    const equities: EnrichedItem[] = suggestState.data.map((it) => ({
-      ...it,
-      assetType: classifyEquity(it.symbol),
-    }));
+    // Trust the backend assetType when it carries a meaningful non-stock classification
+    // (e.g. 'etf' for QQQ, 'fx', 'index', etc.).  Only fall back to classifyEquity when
+    // the backend says 'stock', 'unknown', or returns nothing — classifyEquity can still
+    // upgrade a backend 'stock' to 'etf' for the 152 symbols it knows about, but it must
+    // never downgrade a backend-confirmed 'etf' back to 'stock'.
+    const equities: EnrichedItem[] = suggestState.data.map((it) => {
+      const backendType = it.assetType;
+      const resolved: SuggestItem['assetType'] =
+        backendType && backendType !== 'stock' && backendType !== 'unknown'
+          ? backendType
+          : classifyEquity(it.symbol);
+      return { ...it, assetType: resolved };
+    });
     // Inject crypto matches from the bundled static list (backend returns none).
     const cryptos: EnrichedItem[] = debouncedQuery.trim()
       ? searchCrypto(debouncedQuery, 6).map((c) => ({

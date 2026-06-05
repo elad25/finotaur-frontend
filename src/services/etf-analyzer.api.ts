@@ -164,3 +164,27 @@ export async function fetchETFBars(
   etfBarsCache.set(cacheKey, { data: bars, fetchedAt: Date.now() });
   return bars;
 }
+
+// ─── fetchCompareBars ─────────────────────────────────────────────────────────
+// Ungated, Yahoo-sourced endpoint. Uses the same etfBarsCache with a distinct
+// key prefix ("cmp:") so entries never collide with fetchETFBars entries.
+
+export async function fetchCompareBars(
+  ticker: string,
+  range: EtfBarsRange = '1Y',
+): Promise<OhlcBar[]> {
+  const symbol = ticker.toUpperCase().trim();
+  const cacheKey = `cmp:${symbol}:${range}`;
+
+  const cached = etfBarsCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < ETF_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const payload = await apiFetch<{ symbol: string; range: string; bars: OhlcBar[] }>(
+    `${SERVER_BASE}/api/etf/compare/bars?symbol=${symbol}&range=${range}`,
+  );
+  const bars = payload.bars ?? [];
+  etfBarsCache.set(cacheKey, { data: bars, fetchedAt: Date.now() });
+  return bars;
+}
