@@ -252,8 +252,6 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
   const displayPrice       = hasBars ? barsState.derived.price        : data.price;
   const displayChange      = hasBars ? barsState.derived.change       : data.change;
   const displayChangePct   = hasBars ? barsState.derived.changePercent : data.changePercent;
-  const displayWeek52High  = hasBars ? barsState.derived.high52w      : data.week52High;
-  const displayWeek52Low   = hasBars ? barsState.derived.low52w       : data.week52Low;
 
   const handlePriceUpdate = useCallback((update: QuoteUpdate) => {
     if (!onPriceUpdate) return;
