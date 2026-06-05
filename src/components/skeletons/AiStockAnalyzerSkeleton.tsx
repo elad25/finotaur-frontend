@@ -1,54 +1,72 @@
 /**
- * Skeleton for /app/ai/stock-analyzer
+ * AiStockAnalyzerSkeleton — mirrors /app/ai/stock-analyzer (landing state).
  *
- * Loaded state: AIArenaShell with a centered title + search bar (landing),
- * or a usage-badge + search bar + 7-tab nav + content area (result loaded).
- * The skeleton mirrors the LANDING state — search bar hero + popular tickers row.
+ * The first-load / before-ticker-selected state is the StockAnalyzerLandingHero:
+ * a full-bleed premium hero card (min-h-[580px], rounded-[8px]) laid out as
+ * a 2-column (lg) split:
+ *
+ *   Left column (always visible):
+ *     1. h1 "Stock Analyzer" (text-[44px]→[66px])
+ *     2. Subtitle line
+ *     3. SearchBar (hero variant with Analyze button, max-w-[760px])
+ *     4. "Popular tickers" label + 8 ticker chips
+ *
+ *   Right column (hidden below lg):
+ *     Two decorative preview cards (MarketPreviewCard + AnalysisPreviewCard)
+ *
+ * The tabs + content area only appear after a ticker is resolved, so they
+ * are NOT part of this skeleton.
+ *
+ * Container: AIArenaShell adds no extra wrapper beyond the page scroll area,
+ * and the hero is edge-to-edge within the shell's padding.
  */
 import {
   SkeletonPage,
-  SkeletonHeader,
   Skeleton,
 } from "@/components/skeletons/shell";
 
 export function AiStockAnalyzerSkeletonPage() {
   return (
-    <SkeletonPage maxWidth="max-w-[1240px]">
-      {/* Title block (AIArenaShell heading) */}
-      <SkeletonHeader titleWidth="w-56" withEyebrow={false} />
+    <SkeletonPage maxWidth="max-w-[1600px]">
+      {/* Full-bleed hero card */}
+      <div className="relative min-h-[580px] overflow-hidden rounded-[8px] border border-border-ds-subtle bg-surface-1 px-ds-5 py-ds-8 md:px-8 lg:px-[72px]">
+        <div className="grid min-h-[580px] items-center gap-ds-9 lg:grid-cols-[1.02fr_0.98fr]">
 
-      {/* Sub-title line */}
-      <Skeleton className="h-4 w-80 mx-auto" />
+          {/* Left column — always visible */}
+          <div className="max-w-3xl space-y-ds-7">
+            {/* h1 title */}
+            <Skeleton className="h-[60px] w-72 md:h-[72px]" />
+            {/* Subtitle */}
+            <Skeleton className="h-5 w-[420px] max-w-full" />
 
-      {/* Search bar hero */}
-      <div className="w-full rounded-[16px] border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-4 flex items-center gap-ds-3 mt-ds-4">
-        <Skeleton className="h-5 w-5 rounded-full flex-shrink-0" />
-        <Skeleton className="h-5 flex-1" />
-        <Skeleton className="h-9 w-28 rounded-[12px] flex-shrink-0" />
+            {/* SearchBar (hero, with Analyze button) */}
+            <div className="flex items-center gap-ds-3 rounded-[16px] border border-border-ds-subtle bg-surface-base p-ds-3 max-w-[760px]">
+              <Skeleton className="h-5 w-5 flex-shrink-0 rounded-full" />
+              <Skeleton className="h-5 flex-1" />
+              <Skeleton className="h-10 w-32 flex-shrink-0 rounded-[12px]" />
+            </div>
+
+            {/* "Popular tickers" label */}
+            <Skeleton className="h-3 w-28" />
+
+            {/* 8 ticker chips */}
+            <div className="flex flex-wrap gap-ds-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-16 rounded-[8px]" />
+              ))}
+            </div>
+          </div>
+
+          {/* Right column — decorative preview cards (visible at lg+) */}
+          <div className="relative hidden min-h-[390px] lg:block">
+            {/* MarketPreviewCard */}
+            <Skeleton className="absolute right-[126px] top-[8px] h-[320px] w-[404px] rounded-[16px]" />
+            {/* AnalysisPreviewCard */}
+            <Skeleton className="absolute right-0 top-[82px] h-[220px] w-[216px] rounded-[14px]" />
+          </div>
+
+        </div>
       </div>
-
-      {/* Popular tickers row */}
-      <div className="flex flex-wrap gap-ds-2 justify-center mt-ds-2">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-7 w-16 rounded-[8px]" />
-        ))}
-      </div>
-
-      {/* Tab strip placeholder */}
-      <div className="flex gap-ds-2 overflow-x-auto border-b border-border-ds-subtle pb-ds-3 mt-ds-6">
-        {["Overview", "Business", "Financials", "Valuation", "Wall St", "Earnings", "Options"].map(
-          (_, i) => (
-            <Skeleton key={i} className="h-5 w-20 flex-shrink-0" />
-          ),
-        )}
-      </div>
-
-      {/* Content area placeholder */}
-      <div className="grid grid-cols-1 gap-ds-5 md:grid-cols-2">
-        <Skeleton className="h-48 w-full rounded-[12px]" />
-        <Skeleton className="h-48 w-full rounded-[12px]" />
-      </div>
-      <Skeleton className="h-64 w-full rounded-[12px]" />
     </SkeletonPage>
   );
 }
