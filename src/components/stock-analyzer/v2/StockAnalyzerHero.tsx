@@ -240,6 +240,10 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoRetried, setLogoRetried] = useState(false);
 
+  // SEC submissions rarely expose a website (so no Clearbit logo). Fall back to
+  // the free FMP ticker-image CDN (by symbol, no auth). On error → ticker initials.
+  const logoSrc = data.logo || `https://financialmodelingprep.com/image-stock/${data.ticker}.png`;
+
   // ── Single chart-bars fetch shared by sparkline AND price header ─────────
   // chart-bars is Yahoo-sourced via the edge function — always legal, always
   // available even when the Railway quote-extended endpoint returns $0.
@@ -296,9 +300,9 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
             boxShadow: '0 16px 36px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)',
           }}
         >
-          {data.logo && !logoFailed ? (
+          {logoSrc && !logoFailed ? (
             <img
-              src={logoRetried ? `${data.logo}?retry=1` : data.logo}
+              src={logoRetried ? `${logoSrc}?retry=1` : logoSrc}
               alt={data.ticker}
               loading="lazy"
               className="h-full w-full object-contain p-1"
