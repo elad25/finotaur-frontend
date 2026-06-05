@@ -54,7 +54,7 @@ export default function AcademyIndex() {
       )}
       {/* Cover */}
       <header className="mx-auto max-w-5xl px-5 pb-4 pt-12 text-center sm:pt-16">
-        <span className="academy-eyebrow text-[1.6rem]">your trading notebook</span>
+        <span className="academy-eyebrow">Learn the markets</span>
         <h1 className="mt-3 text-[2.8rem] leading-[1.05] sm:text-[4rem]">Finotaur Academy</h1>
         <p className="mx-auto mt-4 max-w-2xl text-[1.2rem] leading-snug text-[var(--ink-soft)]">
           Everything we know about markets, written in plain words — from your first dollar to
