@@ -8,6 +8,7 @@ import { GlassCard, GlassTabs, EmptyState } from '../_shared/GlassUI';
 import { useWhaleStream } from '@/hooks/crypto/useWhaleStream';
 import { StreamStatusPill } from './components/StreamStatusPill';
 import { WhaleTradesPanel } from './panels/WhaleTradesPanel';
+import { OrderWallsPanel } from './panels/OrderWallsPanel';
 
 const VALID = ['trades', 'walls', 'oi', 'liquidations', 'onchain'] as const;
 type SignalId = (typeof VALID)[number];
@@ -47,10 +48,12 @@ export default function WhalesHub() {
         </div>
         {active === 'trades' ? (
           <WhaleTradesPanel stream={stream} />
+        ) : active === 'walls' ? (
+          <OrderWallsPanel />
         ) : (
           <GlassCard>
             <EmptyState
-              icon={active === 'walls' ? '🧱' : active === 'oi' ? '📊' : active === 'liquidations' ? '💧' : '⛓️'}
+              icon={active === 'oi' ? '📊' : active === 'liquidations' ? '💧' : '⛓️'}
               title="Coming soon"
               description="This signal ships in the next phase."
             />

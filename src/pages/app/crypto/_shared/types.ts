@@ -129,3 +129,22 @@ export interface WhaleTrade {
 }
 
 export type WhaleStreamEvent = { type: 'trade'; data: WhaleTrade };
+
+// ── Order Book Walls ──────────────────────────────────────────
+export interface OrderWall {
+  symbol: string;
+  side: 'bid' | 'ask';
+  price: number;
+  qty: number;
+  notionalUsd: number;
+  distancePct: number | null;
+  midPrice: number | null;
+  capturedAt: string;
+}
+
+export interface SymbolWalls {
+  symbol: string;
+  midPrice: number | null;
+  bids: OrderWall[];
+  asks: OrderWall[];
+}
