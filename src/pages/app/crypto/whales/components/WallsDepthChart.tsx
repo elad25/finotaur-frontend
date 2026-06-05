@@ -2,7 +2,7 @@
 // Daily candlestick chart (lightweight-charts) with horizontal price-lines at
 // each wall level — green lines for bids (support), red for asks (resistance).
 
-import { useEffect, useRef, memo } from 'react';
+import { useEffect, useRef, memo, useState } from 'react';
 import {
   createChart,
   ColorType,
@@ -14,7 +14,7 @@ import {
 } from 'lightweight-charts';
 import type { OrderWall } from '../../_shared/types';
 import { formatCompact } from '../../_shared/formatters';
-import { useKlines } from '../../_shared/hooks';
+import { fetchWallsKlines } from '../../_shared/api';
 
 interface WallsDepthChartProps {
   symbol: string;
@@ -25,12 +25,6 @@ interface WallsDepthChartProps {
 // Max wall lines to overlay (to avoid visual clutter)
 const MAX_WALL_LINES = 8;
 
-// Map Binance-style symbol (e.g. BTCUSDT) to the interval the kline API expects.
-// The fetchKlines endpoint at /api/crypto/klines accepts Binance-style symbols directly.
-function symbolToKlineSymbol(symbol: string): string {
-  return symbol; // API accepts BTCUSDT, ETHUSDT, etc. directly
-}
-
 export const WallsDepthChart = memo(function WallsDepthChart({
   symbol,
   walls,
@@ -40,12 +34,34 @@ export const WallsDepthChart = memo(function WallsDepthChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  // Fetch 90 daily candles via the shared klines hook (same source as CoinDetail)
-  const { data: klines, loading: klinesLoading } = useKlines(
-    symbolToKlineSymbol(symbol),
-    '1d',
-    90,
-  );
+  // Fetch 90 daily candles from the walls-specific klines endpoint.
+  // The new endpoint returns { time (unix seconds), open, high, low, close } directly.
+  const [candles, setCandles] = useState<CandlestickData[] | null>(null);
+  const [klinesLoading, setKlinesLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCandles(null);
+    setKlinesLoading(true);
+    fetchWallsKlines(symbol, 90)
+      .then((raw: { time: number; open: number; high: number; low: number; close: number }[]) => {
+        if (cancelled) return;
+        const mapped: CandlestickData[] = raw
+          .filter(k => k.time && k.open && k.high && k.low && k.close)
+          .map(k => ({
+            time: k.time as UTCTimestamp,
+            open: k.open,
+            high: k.high,
+            low: k.low,
+            close: k.close,
+          }))
+          .sort((a, b) => (a.time as number) - (b.time as number));
+        setCandles(mapped);
+      })
+      .catch(() => { if (!cancelled) setCandles([]); })
+      .finally(() => { if (!cancelled) setKlinesLoading(false); });
+    return () => { cancelled = true; };
+  }, [symbol]);
 
   // Chart init / cleanup
   useEffect(() => {
@@ -96,29 +112,16 @@ export const WallsDepthChart = memo(function WallsDepthChart({
     };
   }, [symbol]); // re-init when symbol changes
 
-  // Update candle data when klines arrive
+  // Update candle data when candles arrive
   useEffect(() => {
-    if (!seriesRef.current || !klines || klines.length === 0) return;
-
-    const candleData: CandlestickData[] = klines
-      .filter(k => k.time && k.open && k.high && k.low && k.close)
-      .map(k => ({
-        // KlineData.time is a Unix timestamp in seconds (from /api/crypto/klines)
-        time: k.time as UTCTimestamp,
-        open: k.open,
-        high: k.high,
-        low: k.low,
-        close: k.close,
-      }))
-      .sort((a, b) => (a.time as number) - (b.time as number));
-
+    if (!seriesRef.current || !candles || candles.length === 0) return;
     try {
-      seriesRef.current.setData(candleData);
+      seriesRef.current.setData(candles);
       if (chartRef.current) {
         chartRef.current.timeScale().fitContent();
       }
     } catch { /* data race on unmount */ }
-  }, [klines]);
+  }, [candles]);
 
   // Overlay wall lines whenever walls or candle series changes
   useEffect(() => {
@@ -142,7 +145,7 @@ export const WallsDepthChart = memo(function WallsDepthChart({
     }
   }, [walls.bids, walls.asks]);
 
-  const isLoading = klinesLoading && !klines;
+  const isLoading = klinesLoading && candles === null;
 
   return (
     <div className="relative rounded-xl overflow-hidden bg-white/[0.02] border border-white/[0.05]">
@@ -151,7 +154,7 @@ export const WallsDepthChart = memo(function WallsDepthChart({
           <div className="text-xs text-white/30">Loading chart...</div>
         </div>
       )}
-      {!klinesLoading && (!klines || klines.length === 0) && (
+      {!klinesLoading && (!candles || candles.length === 0) && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div className="text-xs text-white/30">Chart unavailable — wall levels shown in table below</div>
         </div>
