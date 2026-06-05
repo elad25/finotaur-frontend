@@ -48,6 +48,7 @@ export const PLANS: Plan[] = [
       '14-day free trial',
       'Broker sync (12,000+ brokers)',
       '25 trades/month',
+      '📚 Full Finotaur Academy (300+ lessons)',
       'Full performance analytics',
       'Strategy builder & tracking',
       'Calendar & trading sessions',

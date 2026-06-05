@@ -60,6 +60,7 @@ const plans: Plan[] = [
     description: "Full market intelligence tools",
     trialDays: 14,
     features: [
+      "📚 Full Finotaur Academy (300+ lessons)",
       "Stock Analyzer (5 analyses/day)",
       "Sector Analyzer (3 sectors/month)",
       "Flow Scanner",

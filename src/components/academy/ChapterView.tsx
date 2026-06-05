@@ -46,9 +46,11 @@ interface ChapterViewProps {
   markdown: string | null;
   /** When true, deep content is hidden behind the members lock. */
   locked?: boolean;
+  /** When true, access is still resolving — show a neutral placeholder. */
+  checking?: boolean;
 }
 
-export function ChapterView({ module, chapter, markdown, locked = false }: ChapterViewProps) {
+export function ChapterView({ module, chapter, markdown, locked = false, checking = false }: ChapterViewProps) {
   const parsed = parseChapterMarkdown(markdown);
   const hasBody = parsed.plainWords || parsed.fullExplanation;
 
@@ -72,7 +74,7 @@ export function ChapterView({ module, chapter, markdown, locked = false }: Chapt
       </section>
 
       {/* 3. Quick demo */}
-      {!locked && parsed.quickDemo && (
+      {!locked && !checking && parsed.quickDemo && (
         <section className="academy-demo academy-prose mb-7">
           <span className="academy-hand mb-1 block text-[1.3rem] leading-none">Quick demo</span>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{parsed.quickDemo}</ReactMarkdown>
@@ -89,7 +91,12 @@ export function ChapterView({ module, chapter, markdown, locked = false }: Chapt
         />
       </figure>
 
-      {locked ? (
+      {checking ? (
+        /* Access still resolving — neutral placeholder, no content, no lock. */
+        <p className="academy-prose my-8 text-center italic text-[var(--ink-faint)]">
+          Checking your access…
+        </p>
+      ) : locked ? (
         /* Gated: teaser above, members lock here. */
         <AcademyLockCard />
       ) : (

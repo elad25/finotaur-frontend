@@ -4,6 +4,7 @@
 import { useEffect } from "react";
 import { AcademyLayout } from "@/components/academy/AcademyLayout";
 import { ModuleTile } from "@/components/academy/ModuleTile";
+import { useAcademyAccess } from "@/hooks/useAcademyAccess";
 import {
   TOPICS,
   BASICS_MODULES,
@@ -32,12 +33,25 @@ function ModuleGrid({ modules }: { modules: Module[] }) {
 }
 
 export default function AcademyIndex() {
+  const { hasBasicPlus } = useAcademyAccess();
+
   useEffect(() => {
     document.title = "Academy — Finotaur";
   }, []);
 
   return (
     <AcademyLayout>
+      {/* Member welcome — confirms the whole Academy is included */}
+      {hasBasicPlus && (
+        <div className="mx-auto mt-6 max-w-5xl px-5">
+          <div className="academy-fino flex items-center justify-center gap-2 text-center">
+            <span aria-hidden>🎓</span>
+            <span className="text-[1.05rem] text-[var(--ink)]">
+              You're a Finotaur member — <strong>the entire Academy is unlocked for you.</strong>
+            </span>
+          </div>
+        </div>
+      )}
       {/* Cover */}
       <header className="mx-auto max-w-5xl px-5 pb-4 pt-12 text-center sm:pt-16">
         <span className="academy-eyebrow text-[1.6rem]">your trading notebook</span>
@@ -90,13 +104,23 @@ export default function AcademyIndex() {
         <div className="mb-2 flex flex-wrap items-baseline gap-3">
           <h2 className="text-[2rem]">Deep Dives</h2>
           <span className="rounded-full border border-[rgba(176,131,22,0.4)] bg-[#fff7d6] px-3 py-0.5 text-[0.8rem] font-semibold text-[var(--gold-deep)]">
-            🔒 Members — first chapter free
+            {hasBasicPlus ? "✓ Included with your plan" : "🔒 Members — first chapter free"}
           </span>
         </div>
         <p className="mb-5 max-w-2xl text-[1.1rem] leading-snug text-[var(--ink-soft)]">
-          The serious depth — options, order flow, smart money, the asset deep-dives, and building a
-          real trading system. The first chapter of each is free; the rest unlock with any Finotaur
-          plan from Basic up.
+          {hasBasicPlus ? (
+            <>
+              The serious depth — options, order flow, smart money, the asset deep-dives, and
+              building a real trading system. <strong>It's all unlocked for you</strong> — enjoy.
+            </>
+          ) : (
+            <>
+              The serious depth — options, order flow, smart money, the asset deep-dives, and
+              building a real trading system. The first chapter of each is free, and{" "}
+              <strong>every Finotaur member reads the rest free</strong> with any paid plan from
+              Basic up.
+            </>
+          )}
         </p>
         <ModuleGrid modules={DEEP_MODULES} />
       </section>

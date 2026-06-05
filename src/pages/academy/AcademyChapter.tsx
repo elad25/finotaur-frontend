@@ -43,9 +43,13 @@ export default function AcademyChapter() {
   const { module, chapter } = found;
   const markdown = getChapterMarkdown(moduleSlug, chapterSlug);
   const { prev, next } = getAdjacentChapters(moduleSlug, chapterSlug);
-  // Gated only while subscription state is known (avoid a flash of lock
-  // before the tier resolves for a logged-in member).
-  const locked = chapter.access === "basic" && !access.isLoading && !access.canRead("basic");
+  // A gated chapter resolves to one of three states. While the subscription
+  // tier is still loading we show a neutral "checking" state — never the full
+  // content (so a non-member can't glimpse it) and never the lock (so a paying
+  // member isn't flashed a paywall).
+  const isGated = chapter.access === "basic";
+  const checking = isGated && access.isLoading;
+  const locked = isGated && !access.isLoading && !access.canRead("basic");
 
   return (
     <AcademyLayout>
@@ -56,7 +60,7 @@ export default function AcademyChapter() {
           </Link>
         </div>
 
-        <ChapterView module={module} chapter={chapter} markdown={markdown} locked={locked} />
+        <ChapterView module={module} chapter={chapter} markdown={markdown} locked={locked} checking={checking} />
 
         {/* Prev / next */}
         <nav className="mx-auto mt-8 flex max-w-3xl items-stretch justify-between gap-4">
