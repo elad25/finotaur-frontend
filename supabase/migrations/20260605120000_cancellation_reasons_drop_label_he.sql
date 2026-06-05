@@ -1,0 +1,26 @@
+-- ============================================================================
+-- Migration: cancellation_reasons_drop_label_he
+-- Date: 2026-06-05
+-- Session: english-only-cancellation-reasons
+--
+-- Purpose: Enforce the English-only IRON RULE. The cancellation_reasons lookup
+--          table carried a Hebrew `label_he` column (seeded in migration
+--          2026-05-26_lifecycle_03). The product is English-only, so the Hebrew
+--          labels have no use and are a landmine for any future consumer that
+--          renders them. This drops the column entirely.
+--
+-- Pre-req: Application code must already be deployed WITHOUT any reference to
+--          label_he (server route GET/POST /cancellation-feedback and the
+--          frontend CancellationReason type). Run this ONLY after that deploy,
+--          so no live code SELECTs the column while it is being removed.
+--
+-- Reversible: the original Hebrew strings live in migration history
+--   (2026-05-26_lifecycle_03_cancellation_reasons_seed.sql); the column can be
+--   re-added and re-seeded from there if ever needed.
+--
+-- Rollback (manual):
+--   ALTER TABLE public.cancellation_reasons ADD COLUMN label_he TEXT;
+--   -- then re-run the INS ... ON CONFLICT block from migration #03 to repopulate.
+-- ============================================================================
+
+ALTER TABLE public.cancellation_reasons DROP COLUMN IF EXISTS label_he;
