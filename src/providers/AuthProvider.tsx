@@ -14,7 +14,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
 }
@@ -287,11 +287,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   .maybeSingle();
 
                 if (existingProfile && !existingProfile.affiliate_code) {
-                  const displayName =
-                    session.user.user_metadata?.full_name ||
-                    session.user.user_metadata?.name ||
+                  const meta = session.user.user_metadata ?? {};
+                  const fullName: string =
+                    meta.full_name ||
+                    meta.name ||
                     session.user.email?.split('@')[0] ||
                     'User';
+                  // Google provides given_name/family_name; fall back to splitting full name.
+                  const firstName: string = meta.given_name || fullName.split(' ')[0] || '';
+                  const lastName: string =
+                    meta.family_name || fullName.split(' ').slice(1).join(' ') || '';
+                  const displayName =
+                    [firstName, lastName].filter(Boolean).join(' ').trim() || fullName;
                   const affiliateCode = await generateAffiliateCode(displayName);
 
                   // Persist pre-OAuth terms acceptance (set by Register.tsx
@@ -308,6 +315,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     .update({
                       affiliate_code: affiliateCode,
                       display_name: displayName,
+                      first_name: firstName || null,
+                      last_name: lastName || null,
                       ...termsFields,
                     })
                     .eq('id', userId);
@@ -383,7 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name: string) => {
+  const register = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
     try {
       // 🔥 FIX: Check if user already exists first
       const { data: existingUser } = await supabase
@@ -396,12 +405,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('This email is already registered. Please sign in instead.');
       }
 
+      const displayName = [firstName, lastName].filter(Boolean).join(' ').trim();
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            display_name: name,
+            display_name: displayName,
+            first_name: firstName || null,
+            last_name: lastName || null,
           },
         },
       });
@@ -409,7 +422,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Registration failed - no user returned');
 
-      const newAffiliateCode = await generateAffiliateCode(name);
+      const newAffiliateCode = await generateAffiliateCode(displayName);
 
       const profileReady = await waitForProfile(authData.user.id);
       if (!profileReady) {

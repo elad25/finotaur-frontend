@@ -58,7 +58,8 @@ export default function Register() {
   const navigate = useNavigate();
   const location = useLocation();
   const postRegisterDest = getSafeFrom((location.state as { from?: { pathname?: string } } | null)?.from?.pathname);
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,6 +79,7 @@ export default function Register() {
   const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Refs for auto-focus
+  const lastNameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
@@ -153,7 +155,7 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name || !email || !password || !confirmPassword) {
+    if (!firstName || !lastName || !email || !password || !confirmPassword) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -182,7 +184,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await register(email, password, name);
+      await register(email, password, firstName.trim(), lastName.trim());
 
       // ✅ Save terms acceptance synchronously after successful registration
       const { data: { user: newUser } } = await supabase.auth.getUser();
@@ -302,22 +304,40 @@ export default function Register() {
             }`}
           >
             <form onSubmit={handleSubmit} className="space-y-3">
-              {/* Name Field */}
-              <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-zinc-300 text-xs font-medium">
-                  Full Name
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="John Trader"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e, emailRef)}
-                  className="bg-zinc-800 border-zinc-700 text-white h-9 text-sm transition-all duration-200 focus:border-yellow-500/50 focus:ring-2 focus:ring-yellow-500/20"
-                  autoComplete="name"
-                  autoFocus
-                />
+              {/* Name Fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="firstName" className="text-zinc-300 text-xs font-medium">
+                    First Name
+                  </Label>
+                  <Input
+                    id="firstName"
+                    type="text"
+                    placeholder="John"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, lastNameRef)}
+                    className="bg-zinc-800 border-zinc-700 text-white h-9 text-sm transition-all duration-200 focus:border-yellow-500/50 focus:ring-2 focus:ring-yellow-500/20"
+                    autoComplete="given-name"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lastName" className="text-zinc-300 text-xs font-medium">
+                    Last Name
+                  </Label>
+                  <Input
+                    ref={lastNameRef}
+                    id="lastName"
+                    type="text"
+                    placeholder="Trader"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(e, emailRef)}
+                    className="bg-zinc-800 border-zinc-700 text-white h-9 text-sm transition-all duration-200 focus:border-yellow-500/50 focus:ring-2 focus:ring-yellow-500/20"
+                    autoComplete="family-name"
+                  />
+                </div>
               </div>
 
               {/* Email Field */}
