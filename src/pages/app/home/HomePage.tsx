@@ -298,7 +298,7 @@ export default function HomePage() {
             );
           })}
 
-          {/* Academy — public learning center (free + members content) */}
+          {/* Academy — featured public learning center */}
           <Card
             role="button"
             tabIndex={0}
@@ -311,15 +311,34 @@ export default function HomePage() {
               }
             }}
             aria-label="Go to Academy"
-            className="cursor-pointer hover:border-gold-border hover:bg-[#C9A646]/10 transition-colors"
+            className="group relative overflow-hidden cursor-pointer border-gold-border/60 bg-gradient-to-br from-[#C9A646]/[0.12] via-[#C9A646]/[0.03] to-transparent transition-all duration-300 hover:border-gold-border hover:shadow-glow-gold-resting"
           >
-            <div className="flex items-center gap-ds-3">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-surface-base border border-border-ds-subtle text-gold-primary">
-                <Library className="h-5 w-5" aria-hidden="true" />
+            {/* faint ruled-paper motif — a nod to the notebook */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 opacity-[0.05]"
+              style={{
+                backgroundImage:
+                  'repeating-linear-gradient(to bottom, transparent 0, transparent 15px, #C9A646 15px, #C9A646 16px)',
+              }}
+            />
+            {/* Free badge */}
+            <span className="absolute right-3 top-3 rounded-full border border-gold-border bg-[#C9A646]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-gold-bright">
+              Free
+            </span>
+
+            <div className="relative flex items-center gap-ds-3">
+              <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[14px] bg-gradient-gold text-black shadow-btn-gold transition-transform duration-300 group-hover:scale-105">
+                <Library className="h-6 w-6" aria-hidden="true" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink-primary">Academy</p>
-                <p className="text-xs text-ink-secondary mt-0.5">Learn markets — free courses &amp; encyclopedia.</p>
+                <p className="mt-0.5 text-xs text-ink-secondary">
+                  300+ free lessons — markets, options, crypto, psychology &amp; more.
+                </p>
+                <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-gold-primary opacity-70 transition-opacity group-hover:opacity-100">
+                  Open the Academy →
+                </span>
               </div>
             </div>
           </Card>
