@@ -14,7 +14,7 @@ const TTLS: Record<string, number> = {
   global: 60_000, coins: 60_000, trending: 300_000, 'fear-greed': 600_000,
   categories: 300_000, exchanges: 600_000, klines: 30_000, funding: 60_000,
   coin: 120_000, news: 120_000, reports: 300_000, whales: 15_000,
-  walls: 8_000,
+  walls: 8_000, wallsKlines: 3_600_000,
 };
 
 function getTTL(url: string): number {
@@ -79,6 +79,9 @@ export const fetchSymbolWalls = (symbol: string) =>
   cryptoFetch(`/api/crypto/whales/walls/${symbol}`).then(
     (d: any) => d ?? { symbol, midPrice: null, bids: [], asks: [] }
   );
+
+export const fetchWallsKlines = (symbol: string, days = 90) =>
+  cryptoFetch(`/api/crypto/whales/klines?symbol=${symbol}&days=${days}`).then((d: any) => d?.candles ?? []);
 
 export const whaleStreamUrl = (opts: { symbols?: string[]; minUsd?: number } = {}) => {
   const p = new URLSearchParams();
