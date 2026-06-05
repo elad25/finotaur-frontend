@@ -287,6 +287,7 @@ const CryptoAcademy = lazy(() => import("@/pages/app/crypto/Academy"));
 const CryptoDefiTvl = lazy(() => import("@/pages/app/crypto/DefiTvl"));
 const CryptoStablecoins = lazy(() => import("@/pages/app/crypto/Stablecoins"));
 const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
+const CryptoWhales = lazy(() => import("@/pages/app/crypto/whales/WhalesHub"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -554,6 +555,8 @@ function AppContent() {
           <Route path="crypto/defi-tvl" element={<LockedRoute domainId="crypto"><CryptoDefiTvl /></LockedRoute>} />
           <Route path="crypto/stablecoins" element={<LockedRoute domainId="crypto"><CryptoStablecoins /></LockedRoute>} />
           <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
+          <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
+          <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
 
           {/* FUTURES — sealed pending licensed data feed (CME licensed; Yahoo gray).
               Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.

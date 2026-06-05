@@ -3,9 +3,9 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
-  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -78,6 +78,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Top Movers', path: '/app/crypto/movers', icon: TrendingUp },
       { label: 'Reports', path: '/app/crypto/reports', icon: FileText },
       { label: 'Calendar', path: '/app/crypto/calendar', icon: Calendar },
+      { label: 'Whale Tracker', path: '/app/crypto/whales/trades', icon: Waves },
     ],
   },
 
