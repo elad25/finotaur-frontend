@@ -14,6 +14,7 @@ import {
   Flame,
   FileText,
   BookOpen,
+  Library,
   Zap,
   Send,
   type LucideIcon,
@@ -296,6 +297,32 @@ export default function HomePage() {
               </Card>
             );
           })}
+
+          {/* Academy — public learning center (free + members content) */}
+          <Card
+            role="button"
+            tabIndex={0}
+            padding="default"
+            onClick={() => navigate('/academy')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                navigate('/academy');
+              }
+            }}
+            aria-label="Go to Academy"
+            className="cursor-pointer hover:border-gold-border hover:bg-[#C9A646]/10 transition-colors"
+          >
+            <div className="flex items-center gap-ds-3">
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-surface-base border border-border-ds-subtle text-gold-primary">
+                <Library className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink-primary">Academy</p>
+                <p className="text-xs text-ink-secondary mt-0.5">Learn markets — free courses &amp; encyclopedia.</p>
+              </div>
+            </div>
+          </Card>
         </div>
       </section>
 
