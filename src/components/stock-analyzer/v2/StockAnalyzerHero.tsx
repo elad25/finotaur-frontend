@@ -240,9 +240,12 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoRetried, setLogoRetried] = useState(false);
 
-  // SEC submissions rarely expose a website (so no Clearbit logo). Fall back to
-  // the free FMP ticker-image CDN (by symbol, no auth). On error → ticker initials.
-  const logoSrc = data.logo || `https://financialmodelingprep.com/image-stock/${data.ticker}.png`;
+  // Logo from our self-hosted store: the `stock-logo` edge function lazily caches
+  // each ticker's logo into the `stock-logos` Supabase bucket (fetched once from a
+  // non-FMP source) and serves it from our own CDN thereafter. On error → initials.
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const logoSrc = data.logo
+    || (supabaseUrl ? `${supabaseUrl}/functions/v1/stock-logo?symbol=${encodeURIComponent(data.ticker)}` : null);
 
   // ── Single chart-bars fetch shared by sparkline AND price header ─────────
   // chart-bars is Yahoo-sourced via the edge function — always legal, always
