@@ -1,7 +1,6 @@
 // src/components/stock-analyzer/v2/StockAnalyzerHero.tsx
 import { memo, useCallback, useState, useEffect, useRef, type ReactNode } from 'react';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
-import { PriceGate } from '@/components/compliance/PriceGate';
 import { cn } from '@/lib/utils';
 import { Price, Change } from '@/components/ds/NumberDisplay';
 import type { StockData } from '@/types/stock-analyzer.types';
@@ -343,11 +342,7 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
         </div>
       </div>
 
-      {/* Live price/change block — raw Polygon quote; gated until licensed */}
-      <PriceGate
-        title="Live price unavailable"
-        description="Real-time price and day-change data will be available soon."
-      >
+      {/* Live price/change block — chart-bars + SEC fundamentals data, public */}
       <div className="flex flex-col items-start gap-ds-3 lg:items-end">
         <div className="flex items-center gap-ds-2">
           <span
@@ -422,7 +417,6 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
 
         {actions && <div className="mt-ds-1 flex items-center gap-ds-2">{actions}</div>}
       </div>
-      </PriceGate>
     </div>
   );
 });
