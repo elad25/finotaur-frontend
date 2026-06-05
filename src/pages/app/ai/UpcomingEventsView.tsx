@@ -17,6 +17,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, RefreshCw } from 'lucide-react';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiUpcomingEventsSkeletonPage } from '@/components/skeletons/AiUpcomingEventsSkeleton';
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Card } from '@/components/ds/Card';
@@ -62,7 +63,7 @@ export default function UpcomingEventsView() {
 
   // ─── Gating ────────────────────────────────────────────────────────────
   if (subLoading) {
-    return <RouteSkeleton />;
+    return <AiUpcomingEventsSkeletonPage />;
   }
 
   if (!hasAccess) {

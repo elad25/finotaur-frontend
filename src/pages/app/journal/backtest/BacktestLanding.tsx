@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { JournalBacktestLandingSkeletonPage } from "@/components/skeletons/JournalBacktestLandingSkeleton";
 
 /**
  * 🎯 BACKTEST LANDING PAGE - Premium Feature Lock
@@ -29,7 +30,7 @@ export default function BacktestLanding() {
   };
 
   if (isLoading) {
-    return <RouteSkeleton />;
+    return <JournalBacktestLandingSkeletonPage />;
   }
 
   return (

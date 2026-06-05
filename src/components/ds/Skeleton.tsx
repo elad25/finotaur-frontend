@@ -111,16 +111,33 @@ export function SkeletonStatRow({
   );
 }
 
-/** A generic content card — title, body lines, optional sub-grid. */
+/** A generic content card — title, body lines, optional sub-grid.
+ *  If `children` are provided, they render inside the card frame instead of
+ *  the default title+lines (lets a page skeleton place custom inner shapes). */
 export function SkeletonCard({
   lines = 2,
   withGrid = false,
   className,
+  children,
 }: {
   lines?: number;
   withGrid?: boolean;
   className?: string;
+  children?: React.ReactNode;
 }) {
+  if (children) {
+    return (
+      <div
+        className={cn(
+          "rounded-[12px] border-[0.5px] border-border-ds-subtle bg-surface-1 p-ds-5",
+          className,
+        )}
+        aria-hidden="true"
+      >
+        {children}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
@@ -223,18 +240,25 @@ export function SkeletonChart({
   );
 }
 
-/** A responsive grid of N cards (markets overview, watchlists, etc.). */
+/** A responsive grid of cards (markets overview, watchlists, etc.).
+ *  Provide `count`, OR `rows` (× cols) for a rows×cols grid. `cardHeight`
+ *  applies a fixed height to each card. */
 export function SkeletonGrid({
-  count = 6,
+  count,
   cols = 3,
+  rows,
   cardLines = 2,
+  cardHeight,
   className,
 }: {
   count?: number;
   cols?: 2 | 3 | 4;
+  rows?: number;
   cardLines?: number;
+  cardHeight?: string;
   className?: string;
 }) {
+  const total = count ?? (rows ? rows * cols : 6);
   const colsClass =
     cols === 2
       ? "sm:grid-cols-2"
@@ -243,8 +267,8 @@ export function SkeletonGrid({
         : "sm:grid-cols-2 lg:grid-cols-3";
   return (
     <div className={cn("grid grid-cols-1 gap-ds-4", colsClass, className)} aria-hidden="true">
-      {Array.from({ length: count }).map((_, i) => (
-        <SkeletonCard key={i} lines={cardLines} />
+      {Array.from({ length: total }).map((_, i) => (
+        <SkeletonCard key={i} lines={cardLines} className={cardHeight} />
       ))}
     </div>
   );

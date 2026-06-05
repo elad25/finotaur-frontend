@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import html2canvas from 'html2canvas';
 import { Skeleton } from '@/components/ds/Skeleton';
+import { AffiliateMarketingSkeletonPage } from '@/components/skeletons/AffiliateMarketingSkeleton';
 
 // Logo paths - Update these to match your actual asset paths
 const LOGO_WITH_BULL = '/logo.png'; // The bull head logo
@@ -277,19 +278,7 @@ export default function AffiliateMarketing() {
   const useCodeText = language === 'en' ? 'Use code:' : 'השתמשו בקוד:';
 
   if (loading) {
-    return (
-      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
-        <Skeleton className="h-8 w-52 mb-2" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Skeleton className="h-96 w-full rounded-xl" />
-          <div className="space-y-6">
-            <Skeleton className="h-44 w-full rounded-xl" />
-            <Skeleton className="h-44 w-full rounded-xl" />
-          </div>
-        </div>
-      </div>
-    );
+    return <AffiliateMarketingSkeletonPage />;
   }
 
   // Render logo based on template settings

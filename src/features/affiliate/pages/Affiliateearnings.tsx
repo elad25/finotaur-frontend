@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliateEarningsSkeletonPage } from '@/components/skeletons/AffiliateEarningsSkeleton';
 
 // =====================================================
 // TYPES
@@ -425,15 +426,7 @@ export default function AffiliateEarnings() {
 
   // Loading state
   if (!affiliateId && loading) {
-    return (
-      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
-        <Skeleton className="h-8 w-32 mb-2" />
-        <SkeletonStatRow count={4} />
-        <Skeleton className="h-28 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <SkeletonTable rows={8} cols={6} />
-      </div>
-    );
+    return <AffiliateEarningsSkeletonPage />;
   }
 
   return (

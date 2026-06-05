@@ -39,6 +39,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
+import { StocksInsiderSkeletonPage } from '@/components/skeletons/StocksInsiderSkeleton';
 import {
   TrendingUp,
   TrendingDown,
@@ -560,12 +561,7 @@ export default function StocksInsider() {
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (flowLoading) {
-    return (
-      <div className="p-6 flex items-center gap-2 text-neutral-500 text-sm">
-        <RefreshCw className="h-4 w-4 animate-spin" />
-        Loading insider data…
-      </div>
-    );
+    return <StocksInsiderSkeletonPage />;
   }
 
   if (flowError) {

@@ -43,6 +43,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useParams } from "react-router-dom";
+import { StocksSentimentSkeletonPage } from '@/components/skeletons/StocksSentimentSkeleton';
 import {
   TrendingUp,
   TrendingDown,
@@ -464,12 +465,7 @@ export default function StocksSentiment() {
 
   // ── Loading / error ─────────────────────────────────────────────────────────
   if (flowLoading) {
-    return (
-      <div className="p-6 flex items-center gap-2 text-ink-muted text-sm">
-        <RefreshCw className="h-4 w-4 animate-spin" />
-        Loading sentiment data…
-      </div>
-    );
+    return <StocksSentimentSkeletonPage />;
   }
 
   if (flowError) {

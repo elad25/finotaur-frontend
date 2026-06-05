@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliatePayoutsSkeletonPage } from '@/components/skeletons/AffiliatePayoutsSkeleton';
 
 // ============================================
 // TYPES
@@ -337,15 +338,7 @@ export default function AffiliatePayouts() {
   const canRequestPayout = balance.availableBalance >= MIN_PAYOUT_AMOUNT && balance.paypalEmail;
 
   if (loading && !affiliateId) {
-    return (
-      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
-        <Skeleton className="h-8 w-36 mb-2" />
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <SkeletonStatRow count={4} />
-        <Skeleton className="h-20 w-full rounded-xl" />
-        <SkeletonTable rows={6} cols={6} />
-      </div>
-    );
+    return <AffiliatePayoutsSkeletonPage />;
   }
 
   // ============================================

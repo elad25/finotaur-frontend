@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { JournalNotesSkeletonPage } from "@/components/skeletons/JournalNotesSkeleton";
 import { NotebookPen, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import PageTitle from '@/components/PageTitle';
 import { Card } from '@/components/ds/Card';
@@ -82,20 +83,7 @@ export default function JournalNotes() {
   // ── Loading ───────────────────────────────────────────────────────────────────
 
   if (isLoading) {
-    return (
-      <div className="p-6 space-y-4">
-        <PageTitle title="Notebook" subtitle="Your notes, ideas, and insights" />
-        <div className="flex gap-4">
-          {[120, 280, '1fr'].map((w, i) => (
-            <div
-              key={i}
-              className="h-[480px] rounded-2xl bg-zinc-900/40 border border-zinc-800 animate-pulse"
-              style={{ width: typeof w === 'string' ? undefined : w, flex: typeof w === 'string' ? 1 : undefined }}
-            />
-          ))}
-        </div>
-      </div>
-    );
+    return <JournalNotesSkeletonPage />;
   }
 
   // ── Layout ────────────────────────────────────────────────────────────────────

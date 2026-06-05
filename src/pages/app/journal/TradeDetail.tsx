@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { JournalTradeDetailSkeletonPage } from "@/components/skeletons/JournalTradeDetailSkeleton";
 import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -394,13 +395,7 @@ export default function JournalTradeDetail() {
   };
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-5">
-        <SkeletonStatRow count={4} />
-        <SkeletonChart height="h-64" />
-        <SkeletonText lines={4} />
-      </div>
-    );
+    return <JournalTradeDetailSkeletonPage />;
   }
 
   if (!trade) {

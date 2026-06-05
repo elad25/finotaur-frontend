@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { MacroSentimentSkeletonPage } from '@/components/skeletons/MacroSentimentSkeleton';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -1072,7 +1073,7 @@ export default function MacroSentiment() {
     setExpandedPanels(prev => ({ ...prev, [panelId]: !prev[panelId] }));
   };
 
-  if (loading) return <div className="macro-sentiment-page"><LoadingSkeleton /></div>;
+  if (loading) return <MacroSentimentSkeletonPage />;
   if (error || !data) return (
     <div className="macro-sentiment-page">
       <div className="error-state">

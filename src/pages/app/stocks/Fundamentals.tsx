@@ -9,7 +9,7 @@ import {
   IndustryComparison,
   DCFBox,
 } from "@/components/fundamentals";
-import { SkeletonStatRow, SkeletonTable, SkeletonChart } from '@/components/ds/Skeleton';
+import { StocksFundamentalsSkeletonPage } from '@/components/skeletons/StocksFundamentalsSkeleton';
 
 export default function Fundamentals() {
   const { symbol: symbolParam } = useParams();
@@ -20,13 +20,7 @@ export default function Fundamentals() {
   const error = f?.error;
   const loading = f?.isLoading ?? f?.loading ?? false;
 
-  if (loading) return (
-    <div className="space-y-6 p-4">
-      <SkeletonStatRow count={4} />
-      <SkeletonChart height="h-48" />
-      <SkeletonTable rows={6} cols={4} />
-    </div>
-  );
+  if (loading) return <StocksFundamentalsSkeletonPage />;
   if (error) return <div className="p-4 text-red-400 text-sm">Error: {error?.message || "failed to load"}</div>;
   if (!data) return <div className="p-4 text-neutral-400 text-sm">No fundamentals available.</div>;
 

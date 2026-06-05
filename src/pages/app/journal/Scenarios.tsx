@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { JournalScenariosSkeletonPage } from "@/components/skeletons/JournalScenariosSkeleton";
 import PageTitle from "@/components/PageTitle";
 import { Sun, Moon, Eye, Save, Sparkles, TrendingUp, TrendingDown, AlertTriangle, ChevronDown, Brain } from "lucide-react";
 import { getTrades } from "@/routes/journal";
@@ -327,14 +328,7 @@ export default function JournalScenarios() {
   const currentScenarioData = currentScenario.scenarios[activeTab];
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
-        <PageTitle title="Gameplan" subtitle="Plan your trading day ahead" />
-        <div className="flex items-center justify-center h-64">
-          <div className="text-zinc-500">Loading data...</div>
-        </div>
-      </div>
-    );
+    return <JournalScenariosSkeletonPage />;
   }
 
   return (

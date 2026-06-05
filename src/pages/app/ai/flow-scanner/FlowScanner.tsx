@@ -8,6 +8,7 @@
 import { useState, Suspense, memo, useCallback } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiFlowScannerSkeletonPage } from '@/components/skeletons/AiFlowScannerSkeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, GitMerge, PieChart, Users, Zap } from 'lucide-react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -222,7 +223,7 @@ export default function FlowScanner() {
   const access = canAccessPage('flow_scanner');
 
   if (accessLoading) {
-    return <RouteSkeleton />;
+    return <AiFlowScannerSkeletonPage />;
   }
 
   if (!access.hasAccess) {

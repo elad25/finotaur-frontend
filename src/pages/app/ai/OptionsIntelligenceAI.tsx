@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Brain } from 'lucide-react';
 import { SkeletonChart } from '@/components/ds/Skeleton';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiOptionsIntelligenceSkeletonPage } from '@/components/skeletons/AiOptionsIntelligenceSkeleton';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -151,7 +152,7 @@ function OptionsIntelligenceAI() {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('options_intelligence');
   if (accessLoading) {
-    return <RouteSkeleton />;
+    return <AiOptionsIntelligenceSkeletonPage />;
   }
 
   if (!access.hasAccess) {

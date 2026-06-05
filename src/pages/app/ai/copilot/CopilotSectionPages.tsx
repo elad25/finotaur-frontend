@@ -2,6 +2,12 @@ import React from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { SkeletonCard, SkeletonTable } from '@/components/ds/Skeleton';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiCopilotTopOpportunitiesSkeletonPage } from '@/components/skeletons/AiCopilotTopOpportunitiesSkeleton';
+import { AiCopilotMacroSkeletonPage } from '@/components/skeletons/AiCopilotMacroSkeleton';
+import { AiCopilotHoldingsSkeletonPage } from '@/components/skeletons/AiCopilotHoldingsSkeleton';
+import { AiCopilotRisksSkeletonPage } from '@/components/skeletons/AiCopilotRisksSkeleton';
+import { AiCopilotAiAnalystSkeletonPage } from '@/components/skeletons/AiCopilotAiAnalystSkeleton';
+import { AiCopilotAiChatSkeletonPage } from '@/components/skeletons/AiCopilotAiChatSkeleton';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {

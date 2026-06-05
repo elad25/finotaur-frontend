@@ -13,6 +13,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { JournalBacktestTradesSkeletonPage } from "@/components/skeletons/JournalBacktestTradesSkeleton";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -178,19 +179,7 @@ function BacktestTradesInner() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#0A0A0A] p-6 text-zinc-100">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-6 h-9 w-48 animate-pulse rounded-md bg-zinc-900" />
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-xl bg-zinc-900" />
-            ))}
-          </div>
-          <div className="mt-6 h-96 animate-pulse rounded-xl bg-zinc-900" />
-        </div>
-      </div>
-    );
+    return <JournalBacktestTradesSkeletonPage />;
   }
 
   if (error) {

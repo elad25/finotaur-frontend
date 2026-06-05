@@ -11,6 +11,7 @@ import { Suspense, memo } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useUserMeta } from '@/hooks/useUserStatus';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AllMarketsWarzoneSkeletonPage } from '@/components/skeletons/AllMarketsWarzoneSkeleton';
 
 // Lazy imports - from WarzoneComponents folder
 const Warzonelanding = lazy(() => import('./WarzoneComponents/Warzonelanding'));
@@ -27,7 +28,7 @@ function WarZonePage() {
   const { isAdmin, isLoading } = useUserMeta();
 
   if (isLoading) {
-    return <RouteSkeleton />;
+    return <AllMarketsWarzoneSkeletonPage />;
   }
 
   // Admin view — WAR ZONE ticker tracking dashboard

@@ -10,7 +10,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { useCoinDetail, useTopCoins, useTechnicalSignals, useFundingRates } from './_shared/hooks';
 import { GlassCard, GlassStat, GlassTabs, SectionHeader, SignalBadge, Sparkline, EmptyState } from './_shared/GlassUI';
 import { SkeletonChart, SkeletonCard } from '@/components/ds/Skeleton';
-import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { CryptoCoinDetailSkeletonPage } from '@/components/skeletons/CryptoCoinDetailSkeleton';
 import { formatPrice, formatCompact, formatPercent, formatCompactNum, getPriceColor, formatDate, formatSupply, calcVolMcapRatio, formatRatio, clamp } from './_shared/formatters';
 import type { KlineData, TechnicalSignal } from './_shared/types';
 
@@ -217,7 +217,7 @@ export default function CoinDetail() {
   const [tab, setTab] = useState('chart');
   const symbol = coin?.symbol?.toUpperCase() || coinId?.toUpperCase() || 'BTC';
 
-  if (loading && !coin) return <RouteSkeleton />;
+  if (loading && !coin) return <CryptoCoinDetailSkeletonPage />;
 
   return (
     <PageTemplate title={coin?.name || coinId || 'Coin'} description={`Live data for ${coin?.name || ''}`}>

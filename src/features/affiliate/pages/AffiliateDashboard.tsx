@@ -43,6 +43,7 @@ import {
   Trophy
 } from 'lucide-react';
 import { Skeleton, SkeletonStatRow, SkeletonTable, SkeletonText } from '@/components/ds/Skeleton';
+import { AffiliateDashboardSkeletonPage } from '@/components/skeletons/AffiliateDashboardSkeleton';
 import { 
   useAffiliateProfile, 
   useAffiliateReferrals,
@@ -123,22 +124,7 @@ export default function AffiliateDashboard() {
 
   // Loading state
   if (profileLoading) {
-    return (
-      <div className="min-h-screen bg-[#0A0A0A] p-8 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="h-16 mb-8">
-          <Skeleton className="h-7 w-48 mb-2" />
-        </div>
-        {/* Affiliate code card */}
-        <Skeleton className="h-28 w-full rounded-2xl mb-8" />
-        {/* Stats row */}
-        <SkeletonStatRow count={4} className="mb-8" />
-        {/* Tier progress */}
-        <Skeleton className="h-40 w-full rounded-2xl mb-8" />
-        {/* Tab content */}
-        <SkeletonTable rows={5} cols={3} />
-      </div>
-    );
+    return <AffiliateDashboardSkeletonPage />;
   }
 
   // Not an affiliate
