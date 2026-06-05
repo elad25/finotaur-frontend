@@ -1,5 +1,6 @@
 // src/components/stock-analyzer/v2/StockAnalyzerHero.tsx
-import { memo, useCallback, useState, type ReactNode } from 'react';
+import { memo, useCallback, useState, useEffect, useRef, type ReactNode } from 'react';
+import { ResponsiveContainer, LineChart, Line } from 'recharts';
 import { PriceGate } from '@/components/compliance/PriceGate';
 import { cn } from '@/lib/utils';
 import { Price, Change } from '@/components/ds/NumberDisplay';
@@ -8,6 +9,150 @@ import { usePricePolling } from '@/hooks/usePricePolling';
 import type { QuoteUpdate } from '@/services/fetchQuoteOnly';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { Clock, RefreshCw, WifiOff } from 'lucide-react';
+
+// ─── Sparkline data shape ─────────────────────────────────────────────────────
+
+interface SparkPoint {
+  c: number;
+}
+
+// ─── useStockSparkline — fetch 1Y daily close bars via chart-bars edge fn ─────
+
+type SparklineState =
+  | { status: 'loading' }
+  | { status: 'empty' }
+  | { status: 'ready'; points: SparkPoint[] };
+
+function useStockSparkline(ticker: string): SparklineState {
+  const [state, setState] = useState<SparklineState>({ status: 'loading' });
+  // Track the last ticker we fetched so we reset on symbol change
+  const lastTicker = useRef<string>('');
+
+  useEffect(() => {
+    if (!ticker) {
+      setState({ status: 'empty' });
+      return;
+    }
+
+    // Reset to loading whenever the ticker changes
+    if (lastTicker.current !== ticker) {
+      lastTicker.current = ticker;
+      setState({ status: 'loading' });
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        if (!cancelled) setState({ status: 'empty' });
+        return;
+      }
+
+      // 1Y daily bars: from = 365 days ago, to = now (unix seconds)
+      const nowSec = Math.floor(Date.now() / 1000);
+      const fromSec = nowSec - 365 * 24 * 60 * 60;
+
+      const url =
+        `${SUPABASE_URL}/functions/v1/chart-bars` +
+        `?symbol=${encodeURIComponent(ticker)}` +
+        `&interval=1d` +
+        `&from=${fromSec}` +
+        `&to=${nowSec}`;
+
+      try {
+        const resp = await fetch(url, {
+          method: 'GET',
+          headers: { apikey: SUPABASE_ANON_KEY },
+        });
+
+        if (cancelled) return;
+
+        if (!resp.ok) {
+          setState({ status: 'empty' });
+          return;
+        }
+
+        const data = (await resp.json()) as { bars?: Array<{ time: number; close: number }> };
+        if (cancelled) return;
+
+        if (!Array.isArray(data.bars) || data.bars.length === 0) {
+          setState({ status: 'empty' });
+          return;
+        }
+
+        // Subsample to ≤60 points — recharts handles it fine but keeps render lean
+        const raw = data.bars;
+        const step = raw.length > 60 ? Math.ceil(raw.length / 60) : 1;
+        const points: SparkPoint[] = raw
+          .filter((_, i) => i % step === 0 || i === raw.length - 1)
+          .map((b) => ({ c: b.close }));
+
+        setState({ status: 'ready', points });
+      } catch {
+        if (!cancelled) setState({ status: 'empty' });
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [ticker]);
+
+  return state;
+}
+
+// ─── HeroSparkline — compact gold line chart (156×88) ───────────────────────
+
+function HeroSparkline({ ticker }: { ticker: string }) {
+  const sparkline = useStockSparkline(ticker);
+
+  // Loading state: subtle animated placeholder bar
+  if (sparkline.status === 'loading') {
+    return (
+      <div
+        className="h-full w-full flex items-end"
+        aria-hidden="true"
+      >
+        <div className="w-full h-0.5 rounded-full bg-white/10 animate-pulse" />
+      </div>
+    );
+  }
+
+  // Empty / error state: muted dash
+  if (sparkline.status === 'empty' || sparkline.points.length === 0) {
+    return (
+      <div
+        className="h-full w-full flex items-center justify-center"
+        aria-hidden="true"
+      >
+        <span className="text-[10px] text-ink-muted/40 select-none">—</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full w-full" aria-hidden="true">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          data={sparkline.points}
+          margin={{ top: 4, right: 0, left: 0, bottom: 4 }}
+        >
+          <Line
+            type="monotone"
+            dataKey="c"
+            stroke="#C9A646"
+            strokeWidth={1.4}
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 function formatTimeRemaining(ms: number): string {
   if (ms <= 0) return 'refreshing...';
@@ -163,18 +308,8 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
               <Change value={data.changePercent} format="percent" decimals={2} />
             </div>
           </div>
-          <div className="hidden h-[88px] w-[156px] border-l border-white/[0.08] pl-ds-5 lg:block" aria-hidden="true">
-            <svg viewBox="0 0 156 88" className="h-full w-full overflow-visible">
-              <path
-                d="M2 68 L22 55 L35 58 L48 31 L62 39 L74 24 L88 29 L101 18 L116 42 L132 49 L152 34"
-                fill="none"
-                stroke="rgba(201,166,70,0.82)"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M2 78 H152" stroke="rgba(255,255,255,0.13)" strokeWidth="1" strokeDasharray="2 4" />
-            </svg>
+          <div className="hidden h-[88px] w-[156px] border-l border-white/[0.08] pl-ds-5 lg:block">
+            <HeroSparkline ticker={data.ticker} />
           </div>
         </div>
 
