@@ -307,6 +307,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Sentiment & News', path: '/app/crypto/sentiment',  icon: Newspaper },
       { label: 'DeFi TVL',        path: '/app/crypto/defi-tvl',   icon: Coins },
       { label: 'Stablecoins',     path: '/app/crypto/stablecoins', icon: DollarSign },
+      { label: 'Block Trades',    path: '/app/crypto/whales/trades', icon: Layers },
       { label: 'Heatmap',         path: '/app/crypto/heatmap',     icon: Map },
       { label: 'Watchlist',       path: '/app/crypto/watchlist',   icon: Bell },
       // Academy removed from sidebar (route /app/crypto/academy still exists)
