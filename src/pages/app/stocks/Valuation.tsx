@@ -31,6 +31,7 @@
 
 import React from "react";
 import { useParams } from "react-router-dom";
+import { StocksValuationSkeletonPage } from '@/components/skeletons/StocksValuationSkeleton';
 import {
   ResponsiveContainer,
   BarChart,
@@ -511,7 +512,7 @@ export default function StocksValuation() {
 
   // ---- Loading / error states (match Fundamentals.tsx pattern) ----
   if (loading) {
-    return <div className="p-4 text-neutral-400 text-sm">Loading valuation data…</div>;
+    return <StocksValuationSkeletonPage />;
   }
   if (error) {
     return (

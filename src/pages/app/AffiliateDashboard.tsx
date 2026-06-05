@@ -27,6 +27,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliateDashboardSkeletonPage } from '@/components/skeletons/AffiliateDashboardSkeleton';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { 
@@ -81,20 +82,7 @@ export default function AffiliateDashboard() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Header */}
-        <Skeleton className="h-8 w-56 mb-6" />
-        {/* Referral link card */}
-        <Skeleton className="h-24 w-full rounded-xl mb-6" />
-        {/* Stats row */}
-        <SkeletonStatRow count={4} className="mb-6" />
-        {/* Earnings breakdown row */}
-        <SkeletonStatRow count={3} className="mb-6" />
-        {/* Tab content */}
-        <SkeletonTable rows={5} cols={4} />
-      </div>
-    );
+    return <AffiliateDashboardSkeletonPage />;
   }
 
   // Not an affiliate - Show application form

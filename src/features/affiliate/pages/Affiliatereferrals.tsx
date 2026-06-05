@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliateReferralsSkeletonPage } from '@/components/skeletons/AffiliateReferralsSkeleton';
 
 // =====================================================
 // CONSTANTS
@@ -268,14 +269,7 @@ export default function AffiliateReferrals() {
 
   // Loading state
   if (profileLoading) {
-    return (
-      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
-        <Skeleton className="h-8 w-40 mb-2" />
-        <SkeletonStatRow count={5} />
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <SkeletonTable rows={8} cols={6} />
-      </div>
-    );
+    return <AffiliateReferralsSkeletonPage />;
   }
 
   if (!profile) {

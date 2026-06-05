@@ -20,7 +20,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { Card, Eyebrow } from '@/components/ds/Card';
-import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AllMarketsSentimentSkeletonPage } from '@/components/skeletons/AllMarketsSentimentSkeleton';
 
 // ============================================
 // TYPES
@@ -639,7 +639,7 @@ export default function AllMarketsSentiment() {
   );
 
   if (isLoading || !marketData) {
-    return <RouteSkeleton />;
+    return <AllMarketsSentimentSkeletonPage />;
   }
 
   return (

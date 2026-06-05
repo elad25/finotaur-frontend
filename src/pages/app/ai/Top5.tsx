@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { SkeletonCard } from '@/components/ds/Skeleton';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiTop5SkeletonPage } from '@/components/skeletons/AiTop5Skeleton';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -1863,7 +1864,7 @@ export default function Top5() {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('ai_scanner');
   if (accessLoading) {
-    return <RouteSkeleton />;
+    return <AiTop5SkeletonPage />;
   }
 
   if (!access.hasAccess) {

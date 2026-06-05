@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { SkeletonGrid } from '@/components/ds/Skeleton';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiSectorAnalyzerSkeletonPage } from '@/components/skeletons/AiSectorAnalyzerSkeleton';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 
@@ -600,7 +601,7 @@ export default function SectorAnalyzer() {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('sector_analyzer');
   if (accessLoading) {
-    return <RouteSkeleton />;
+    return <AiSectorAnalyzerSkeletonPage />;
   }
 
   if (!access.hasAccess) {

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton, SkeletonStatRow, SkeletonChart } from '@/components/ds/Skeleton';
+import { AffiliateAnalyticsSkeletonPage } from '@/components/skeletons/AffiliateAnalyticsSkeleton';
 
 // =====================================================
 // CONSTANTS
@@ -304,17 +305,7 @@ export default function AffiliateAnalytics() {
 
   // Loading state
   if (profileLoading) {
-    return (
-      <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
-        <Skeleton className="h-8 w-36 mb-2" />
-        <SkeletonStatRow count={4} />
-        <div className="grid lg:grid-cols-2 gap-6">
-          <SkeletonChart />
-          <SkeletonChart />
-        </div>
-        <Skeleton className="h-40 w-full rounded-xl" />
-      </div>
-    );
+    return <AffiliateAnalyticsSkeletonPage />;
   }
 
   if (!profile) {

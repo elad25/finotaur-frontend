@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation";
-import { SkeletonCard } from "@/components/ds/Skeleton";
+import { SettingsLayoutSkeletonPage } from "@/components/skeletons/SettingsLayoutSkeleton";
 
 // ============================================
 // TYPES - Matches actual DB schema
@@ -2818,11 +2818,7 @@ export const SettingsLayout = () => {
   }, [user?.id]);
 
   if (loading) {
-    return (
-      <div className="py-12 px-6">
-        <SkeletonCard lines={3} />
-      </div>
-    );
+    return <SettingsLayoutSkeletonPage />;
   }
 
   const renderTab = () => {

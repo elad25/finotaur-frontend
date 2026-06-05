@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { JournalStatisticsSkeletonPage } from "@/components/skeletons/JournalStatisticsSkeleton";
 import dayjs from "dayjs";
 import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
@@ -300,19 +301,7 @@ export default function StatisticsPage() {
   const stats = useMemo(() => calculateStatistics(filteredTrades), [filteredTrades]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-radial from-[#0A0A0A] to-[#111315] p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <Skeleton className="h-12 w-64" />
-          <Skeleton className="h-16 w-full" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-32" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <JournalStatisticsSkeletonPage />;
   }
 
   return (

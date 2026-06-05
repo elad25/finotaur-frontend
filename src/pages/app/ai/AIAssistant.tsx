@@ -11,6 +11,7 @@ import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Plus, Sparkles } from 'lucide-react';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiAssistantSkeletonPage } from '@/components/skeletons/AiAssistantSkeleton';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
@@ -45,7 +46,7 @@ export default function AIAssistant() {
   
   // ✅ Early return AFTER all hooks
   if (accessLoading) {
-    return <RouteSkeleton />;
+    return <AiAssistantSkeletonPage />;
   }
 
   if (!access.hasAccess) {
