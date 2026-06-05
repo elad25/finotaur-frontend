@@ -14,6 +14,7 @@ const TTLS: Record<string, number> = {
   global: 60_000, coins: 60_000, trending: 300_000, 'fear-greed': 600_000,
   categories: 300_000, exchanges: 600_000, klines: 30_000, funding: 60_000,
   coin: 120_000, news: 120_000, reports: 300_000, whales: 15_000,
+  walls: 8_000,
 };
 
 function getTTL(url: string): number {
@@ -65,6 +66,19 @@ export const fetchWhaleTrades = (opts: { minUsd?: number; symbol?: string; side?
   if (opts.limit) p.set('limit', String(opts.limit));
   return cryptoFetch(`/api/crypto/whales/trades?${p.toString()}`).then((d: any) => d?.items ?? d ?? []);
 };
+
+// ── Order Book Walls ─────────────────────────────────────────
+export const fetchWalls = (opts: { limit?: number; side?: string } = {}) => {
+  const p = new URLSearchParams();
+  if (opts.limit) p.set('limit', String(opts.limit));
+  if (opts.side) p.set('side', opts.side);
+  return cryptoFetch(`/api/crypto/whales/walls?${p.toString()}`).then((d: any) => d?.items ?? []);
+};
+
+export const fetchSymbolWalls = (symbol: string) =>
+  cryptoFetch(`/api/crypto/whales/walls/${symbol}`).then(
+    (d: any) => d ?? { symbol, midPrice: null, bids: [], asks: [] }
+  );
 
 export const whaleStreamUrl = (opts: { symbols?: string[]; minUsd?: number } = {}) => {
   const p = new URLSearchParams();
