@@ -1,7 +1,8 @@
 // src/components/markets/WatchlistTable.tsx
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
-import { fetchQuote, shortLabel, Quote } from "./quotes";
+import { shortLabel, Quote } from "./quotes";
 
 const DEFAULTS = ["TVC:DXY","BINANCE:BTCUSDT","AMEX:SPY","NASDAQ:QQQ","TVC:VIX","FOREXCOM:XAUUSD","FX:EURUSD"];
 
@@ -37,24 +38,34 @@ export const WatchlistTable: React.FC<WatchlistTableProps> = ({ value, onChange 
     return DEFAULTS;
   });
   const [input, setInput] = useState("");
-  const [rows, setRows] = useState<Row[]>(items.map((sym)=>({sym})));
 
-  // Live polling every 5s
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const data: Row[] = [];
+  // Batch-fetch all symbols in one round trip; pause when tab is hidden
+  const { data: quoteMap = {} } = useQuery<Record<string, Quote>>({
+    queryKey: ["watchlist-quotes", items],
+    queryFn: async () => {
+      if (!items.length) return {};
+      const r = await fetch("/api/quotes?symbols=" + items.map(encodeURIComponent).join(","));
+      if (!r.ok) return {};
+      // /api/quotes returns a MAP keyed by UPPERCASED symbol: { AAPL: {price,ch,chp}, ... }
+      // (or {} / {error} when price-gated). Same Quote shape as the old /api/quote.
+      const data: unknown = await r.json();
+      if (!data || typeof data !== "object" || Array.isArray(data) || (data as any).error) return {};
+      const src = data as Record<string, Partial<Quote>>;
+      const map: Record<string, Quote> = {};
       for (const sym of items) {
-        const q = await fetchQuote(sym);
-        if (!alive) return;
-        data.push({ sym, q });
+        const q = src[sym.toUpperCase()] ?? src[sym];
+        if (q && typeof q === "object") {
+          map[sym] = { price: q.price ?? null, ch: q.ch ?? null, chp: q.chp ?? null };
+        }
       }
-      if (alive) setRows(data);
-    };
-    load();
-    const iv = setInterval(load, 5000);
-    return () => { alive = false; clearInterval(iv); };
-  }, [items]);
+      return map;
+    },
+    staleTime: 4000,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  });
+
+  const rows: Row[] = items.map((sym) => ({ sym, q: quoteMap[sym] }));
 
   const save = (arr: string[]) => {
     setItems(arr);
