@@ -19,11 +19,13 @@ import SpotlightTour from '@/components/onboarding/SpotlightTour';
 const NO_SIDEBAR_ROUTES = [
   // Phase 1: War Zone and Top Secret now have their own sidebars — removed from this list.
   // '/app/top-secret',           // Top Secret has sidebar now
+  '/app/top-secret',           // Top Secret renders like War Zone: no product sidebar
   '/app/all-markets/warzone',  // War Zone renders chrome-free (no product sidebar)
   '/app/warzone',              // legacy War Zone path alias
   '/app/home',              // Home hub renders full-width (no product sidebar needed)
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
+  '/app/all-markets/top-secret-admin',
   '/app/settings',
   // Admin CRM ships its own internal sidebar (12 tabs), so the global one
   // would collide.
@@ -35,6 +37,9 @@ const NO_SUBNAV_ROUTES = [
   '/app/home',
   '/app/all-markets/warzone',  // War Zone renders chrome-free (no Latest/Compose sub-nav)
   '/app/warzone',              // legacy War Zone path alias
+  '/app/top-secret',           // Top Secret renders like War Zone: no product sub-nav
+  '/app/all-markets/top-secret',
+  '/app/all-markets/top-secret-admin',
 ];
 
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
