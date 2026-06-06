@@ -321,7 +321,7 @@ export function CreateBacktestSessionModal({
                   value={startBalance}
                   onChange={(e) => setStartBalance(e.target.value)}
                   placeholder="10000"
-                  className="pl-6 bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40"
+                  className="no-spinner pl-6 bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40"
                 />
               </div>
               <p className="text-[10px] text-gray-600">Leverage is 1:1</p>
