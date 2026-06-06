@@ -29,6 +29,10 @@ export interface ReplayControlsProps {
   scissorsArmed?: boolean;
   /** Toggle the scissors jump tool on/off. */
   onToggleScissors?: () => void;
+  /** @deprecated Progress slider removed. Kept in interface so callers remain type-safe. */
+  progress?: number;
+  /** @deprecated Progress slider removed. Kept in interface so callers remain type-safe. */
+  onProgressChange?: (percentage: number) => void;
 }
 
 function speedLabel(s: ReplaySpeed): string {
@@ -54,14 +58,12 @@ export function ReplayControls({
   onStepBack,
   onReset,
   onSpeedChange,
-  onSeek,
   showScissors = false,
   scissorsArmed = false,
   onToggleScissors,
 }: ReplayControlsProps) {
   const atEnd = cursor >= maxIndex;
   const atStart = cursor <= -1;
-  const totalBars = Math.max(0, maxIndex + 1);
   const stepSize = getStepSize(speed);
 
   // ─── Speed dropdown state ──────────────────────────────────────
@@ -181,27 +183,6 @@ export function ReplayControls({
           <RotateCcw size={12} />
           REPLAY
         </button>
-      )}
-
-      {/* Scrub bar — drag to jump to any bar. Text/percent labels removed per
-          Elad 2026-05-29; the slider alone conveys position. */}
-      {onSeek && totalBars > 0 && (
-        <div className="ml-auto flex items-center">
-          <input
-            type="range"
-            min={0}
-            max={maxIndex}
-            step={1}
-            value={Math.max(0, cursor)}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              if (next !== cursor) onSeek(next);
-            }}
-            title="Scrub to any bar"
-            aria-label="Replay scrub bar"
-            className="h-1.5 w-48 cursor-pointer accent-[#C9A646]"
-          />
-        </div>
       )}
     </div>
   );

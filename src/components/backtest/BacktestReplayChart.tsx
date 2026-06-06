@@ -1191,7 +1191,7 @@ export function BacktestReplayChart({
             onRedo={redo}
             onLockToggle={lockSelected}
             onVisibilityToggle={toggleVisibility}
-            className="absolute left-2 top-2 z-[30]"
+            className="absolute left-0 top-0 bottom-0 z-[30]"
           />
         )}
 
