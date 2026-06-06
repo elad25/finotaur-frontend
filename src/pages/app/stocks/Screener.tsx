@@ -111,7 +111,9 @@ export default function StocksScreener() {
 
   return (
     <div className="space-y-3 px-4 py-4 sm:px-6">
-      <AssetSwitch active={assetTab} onChange={setAssetTab} />
+      <div className="flex justify-center">
+        <AssetSwitch active={assetTab} onChange={setAssetTab} />
+      </div>
 
       {assetTab === 'stocks' ? (
         <StocksScreenerInner
