@@ -1,11 +1,11 @@
 // ============================================================
 // src/pages/app/stocks/_screener/FilterPanel.tsx
-// Preset pills + 4 collapsible filter groups
+// Asset tabs + analysis mode tabs + collapsible filter groups
 // ============================================================
 
 import { memo, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { PRESETS, FILTER_DEFS, FILTER_GROUPS } from './filters';
+import { FILTER_DEFS, FILTER_GROUPS } from './filters';
 import type { FilterDef, FilterGroup as FilterGroupId } from './filters';
 import type { Filters } from './types';
 import { EMPTY_FILTERS } from './types';
@@ -15,6 +15,18 @@ const INPUT_CLS =
   'w-full bg-white/[0.05] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white/70 focus:outline-none focus:border-cyan-500/30 font-mono placeholder-white/20';
 
 const LABEL_CLS = 'text-[10px] text-white/30 uppercase block mb-1 font-medium tracking-wider';
+
+const ASSET_TABS = [
+  { id: 'stocks', label: 'Stocks' },
+  { id: 'crypto', label: 'Crypto' },
+] as const;
+
+const ANALYSIS_TABS = [
+  { id: 'fundamental', label: 'Fundamental' },
+  { id: 'technical', label: 'Technical' },
+] as const;
+
+type AnalysisTab = (typeof ANALYSIS_TABS)[number]['id'];
 
 // ── Numeric Min/Max pair ──────────────────────────────────────
 const NumericPair = memo(function NumericPair({
@@ -149,14 +161,16 @@ const FilterGroup = memo(function FilterGroupComponent({
   groupId,
   filters,
   meta,
+  defaultOpen,
   onChange,
 }: {
   groupId: FilterGroupId;
   filters: Filters;
   meta: { sectors: string[]; exchanges: string[] };
+  defaultOpen: boolean;
   onChange: (key: keyof Filters, val: string | string[]) => void;
 }) {
-  const [open, setOpen] = useState(groupId === 'descriptive');
+  const [open, setOpen] = useState(defaultOpen);
   const groupMeta = FILTER_GROUPS.find(g => g.id === groupId)!;
   const defs = FILTER_DEFS.filter(d => d.group === groupId);
 
@@ -216,19 +230,21 @@ const FilterGroup = memo(function FilterGroupComponent({
 // ── Main FilterPanel ──────────────────────────────────────────
 interface FilterPanelProps {
   filters: Filters;
-  activePreset: string | null;
   meta: { sectors: string[]; exchanges: string[] };
   onFiltersChange: (next: Filters) => void;
-  onPresetSelect: (id: string) => void;
+  activeAsset?: 'stocks' | 'crypto';
+  onAssetChange?: (id: 'stocks' | 'crypto') => void;
 }
 
 export const FilterPanel = memo(function FilterPanel({
   filters,
-  activePreset,
   meta,
   onFiltersChange,
-  onPresetSelect,
+  activeAsset = 'stocks',
+  onAssetChange,
 }: FilterPanelProps) {
+  const [analysisTab, setAnalysisTab] = useState<AnalysisTab>('fundamental');
+
   const handleChange = useCallback(
     (key: keyof Filters, val: string | string[]) => {
       onFiltersChange({ ...filters, [key]: val });
@@ -238,43 +254,66 @@ export const FilterPanel = memo(function FilterPanel({
 
   const handleReset = useCallback(() => {
     onFiltersChange({ ...EMPTY_FILTERS });
-    onPresetSelect('');
-  }, [onFiltersChange, onPresetSelect]);
+  }, [onFiltersChange]);
+
+  const visibleGroups = analysisTab === 'fundamental'
+    ? FILTER_GROUPS.filter(g => g.id !== 'technical')
+    : FILTER_GROUPS.filter(g => g.id === 'technical');
 
   return (
     <div className="space-y-3">
-      {/* Preset pills */}
-      <div className="flex flex-wrap items-center gap-2">
-        {PRESETS.map(p => (
-          <button
-            key={p.id}
-            onClick={() => onPresetSelect(p.id)}
-            className={cn(
-              'px-3 py-1.5 rounded-xl text-xs font-medium transition-all border',
-              activePreset === p.id
-                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
-                : 'bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70',
-            )}
-          >
-            {p.icon} {p.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-xl border border-white/[0.06] bg-white/[0.03] p-1">
+          {ASSET_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => onAssetChange?.(tab.id)}
+              className={cn(
+                'min-w-24 rounded-[12px] px-4 py-2 text-xs font-semibold transition-all duration-150',
+                activeAsset === tab.id
+                  ? 'bg-white/[0.08] text-white border border-white/[0.12]'
+                  : 'text-white/35 hover:text-white/70',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <button
           onClick={handleReset}
-          className="ml-auto px-3 py-1.5 rounded-xl text-xs font-medium border border-white/[0.06] text-white/30 hover:text-white/60 transition-colors"
+          className="px-3 py-1.5 rounded-[12px] text-xs font-medium border border-white/[0.06] text-white/30 hover:text-white/60 transition-colors"
         >
           Reset
         </button>
       </div>
 
+      <div className="inline-flex w-full rounded-xl border border-white/[0.06] bg-white/[0.03] p-1 sm:w-auto">
+        {ANALYSIS_TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setAnalysisTab(tab.id)}
+            className={cn(
+              'flex-1 rounded-[12px] px-4 py-2 text-xs font-semibold transition-all duration-150 sm:min-w-32',
+              analysisTab === tab.id
+                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                : 'text-white/35 hover:text-white/70',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Collapsible filter groups */}
       <div className="space-y-2">
-        {FILTER_GROUPS.map(g => (
+        {visibleGroups.map(g => (
           <FilterGroup
             key={g.id}
             groupId={g.id}
             filters={filters}
             meta={meta}
+            defaultOpen={analysisTab === 'technical' || g.id === 'descriptive'}
             onChange={handleChange}
           />
         ))}
