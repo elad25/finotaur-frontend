@@ -23,6 +23,7 @@ import {
   TrendingUp,
   Brain,
   Search,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -170,6 +171,15 @@ export const ADMIN_TABS: AdminTab[] = [
     superAdminOnly: true,
     description: 'Maintenance, audit log, impersonation sessions',
     mountedFrom: 'pages/app/journal/admin/maintenance/page.tsx',
+  },
+  {
+    id: 'ai-command',
+    label: 'AI Command Center',
+    path: '/app/admin/ai',
+    icon: Sparkles,
+    phase: 2,
+    enabled: true,
+    description: 'AI-generated growth & retention recommendations — approve, dismiss, or snooze',
   },
   {
     id: 'executive',

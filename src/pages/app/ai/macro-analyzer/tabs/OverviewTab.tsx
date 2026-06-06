@@ -18,6 +18,7 @@ import {
 } from '../shared/ui';
 import { useOverview } from '../shared/api';
 import type { IndicatorData, RegimeData } from '../shared/api';
+import { FinoInsightCard } from '@/components/ai-insight/FinoInsightCard';
 
 // =====================================================
 // ERROR / LOADING STATES
@@ -427,6 +428,9 @@ function OverviewTab() {
 
   return (
     <div className="space-y-6">
+      {/* L1 ambient AI insight — from pre-generated backend card */}
+      <FinoInsightCard kind="macro" />
+
       {/* AI Narrative - built from real data */}
       <AIMacroNarrative
         indicators={data.indicators}

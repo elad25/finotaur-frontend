@@ -24,6 +24,7 @@
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { Skeleton } from '@/components/ds/Skeleton';
 import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
+import { FinoInsightCard } from '@/components/ai-insight/FinoInsightCard';
 import {
   Building2, Activity, FileText, Sparkles, BarChart3, Globe,
   Brain, Shield, AlertTriangle, Calendar,
@@ -1156,6 +1157,9 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
   return (
     <StockTabErrorBoundary>
     <div className="space-y-ds-7">
+      {/* L1 ambient AI insight — from pre-generated backend card */}
+      <FinoInsightCard kind="stock" symbol={data.ticker} />
+
       {/* ========== INVESTMENT STORY — AI Enhanced ========== */}
       <Card highlight>
         <div className="relative p-ds-6 md:p-ds-7">

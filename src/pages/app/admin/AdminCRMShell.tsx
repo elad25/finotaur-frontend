@@ -40,6 +40,7 @@ import { HealthRiskPanel } from './tabs/tools/HealthRiskPanel';
 import { BulkActions } from './tabs/tools/BulkActions';
 import { GDPRTools } from './tabs/tools/GDPRTools';
 import { AIUsageTab } from './tabs/AIUsageTab';
+import { AICommandCenterTab } from './tabs/AICommandCenterTab';
 import SeoAnalyticsPage from './SeoAnalyticsPage';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
@@ -170,6 +171,9 @@ export function AdminCRMShell() {
           <Route path="tools/health" element={<HealthRiskPanel />} />
           <Route path="tools/bulk" element={<BulkActions />} />
           <Route path="tools/gdpr" element={<GDPRTools />} />
+
+          {/* AI Command Center */}
+          <Route path="ai" element={<AICommandCenterTab />} />
 
           {/* Executive Dashboard (planned) */}
           <Route path="executive" element={<ExecutivePlaceholder />} />
