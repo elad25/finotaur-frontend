@@ -97,6 +97,7 @@ interface EditDraft {
   tags: string; // comma-separated; split on save
   actual_user_r: string; // string for input binding; parsed to number | null on save
   option_outcome: string; // '' = normal close (saved as NULL)
+  expiration_date: string; // ISO date string, options only
 }
 
 // Local mirror of MultiUploadZone's internal Screenshot shape (not exported from that module).
@@ -179,6 +180,7 @@ function tradeToEditDraft(trade: Trade): EditDraft {
     actual_user_r:
       trade.actual_user_r != null ? String(trade.actual_user_r) : '',
     option_outcome: trade.option_outcome ?? '',
+    expiration_date: trade.expiration_date ?? '',
   };
 }
 
@@ -344,6 +346,7 @@ export default function JournalTradeDetail() {
       actual_user_r: number | null;
       screenshots: string[];
       option_outcome?: string | null;
+      expiration_date?: string | null;
     } = {
       notes: draft.notes || null,
       setup: draft.setup || null,
@@ -355,10 +358,11 @@ export default function JournalTradeDetail() {
       screenshots: finalScreenshots,
     };
 
-    // Options-only: persist the expiration outcome (empty string → NULL).
-    // Guarded so non-option trades never write this column.
+    // Options-only: persist the expiration outcome and expiration date
+    // (empty string → NULL). Guarded so non-option trades never write these columns.
     if (trade.asset_class === 'options') {
       payload.option_outcome = draft.option_outcome || null;
+      payload.expiration_date = draft.expiration_date || null;
     }
 
     try {
@@ -968,6 +972,36 @@ export default function JournalTradeDetail() {
                 className="w-48 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-600 px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646] transition-colors"
               />
             </div>
+
+            {/* Options-only: settlement outcome + expiration date */}
+            {trade.asset_class === 'options' && (
+              <>
+                <div>
+                  <label className="text-sm text-zinc-400 mb-1.5 block font-medium">Option outcome</label>
+                  <select
+                    value={draft.option_outcome}
+                    onChange={(e) => setDraft({ ...draft, option_outcome: e.target.value })}
+                    className="w-full rounded-lg bg-zinc-800 border border-zinc-700 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646] transition-colors"
+                  >
+                    {OPTION_OUTCOMES.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm text-zinc-400 mb-1.5 block font-medium">Expiration date</label>
+                  <input
+                    type="date"
+                    value={draft.expiration_date}
+                    onChange={(e) => setDraft({ ...draft, expiration_date: e.target.value })}
+                    className="w-48 rounded-lg bg-zinc-800 border border-zinc-700 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646] transition-colors"
+                  />
+                </div>
+              </>
+            )}
           </div>
         ) : (
           /* ---- VIEW MODE ---- */

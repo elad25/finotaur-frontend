@@ -49,6 +49,7 @@ import { useCommissions } from '@/hooks/useRiskSettings';
 import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
 import { computeLiquidationPrice, getPipSize, parseForexPair, computeQuoteRate } from '@/utils/tradeCalculations';
+import { normalizeAssetClass } from '@/utils/assetClass';
 import { supabase } from '@/lib/supabase';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
@@ -1144,10 +1145,10 @@ const {
     // - options: fixed 100 per contract
     // - forex: quote_rate conversion (default 1)
     // - others: symbol-based lookup
-    const effectiveMultiplier = st.assetClass === 'options'
+    const effectiveMultiplier = normalizeAssetClass(st.assetClass) === 'options'
       ? 100
       : getAssetMultiplier(st.symbol);
-    const quoteRate = st.assetClass === 'forex' ? (st.quoteRate ?? 1) : 1;
+    const quoteRate = normalizeAssetClass(st.assetClass) === 'forex' ? (st.quoteRate ?? 1) : 1;
     const grossPnL = priceChange * st.quantity * effectiveMultiplier * quoteRate;
     const netPnL = grossPnL - st.fees;
 
@@ -1589,7 +1590,7 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           // OPTIONAL TRADE FIELDS
           // ═══════════════════════════════════════════
-          asset_class: st.assetClass || null,
+          asset_class: normalizeAssetClass(st.assetClass) ?? (st.assetClass || null),
           take_profit_price: st.takeProfitPrice || null,
           exit_price: hasExitPrice ? finalExitPrice : null,
           fees: st.fees || 0,
@@ -1606,7 +1607,7 @@ if (hasResult && directRiskUSD > 0) {
           // CALCULATED FIELDS (FLAT - NOT NESTED!)
           // ═══════════════════════════════════════════
           // Options always use multiplier 100; other assets use symbol lookup
-          multiplier: st.assetClass === 'options' ? 100 : finalMultiplier,
+          multiplier: normalizeAssetClass(st.assetClass) === 'options' ? 100 : finalMultiplier,
           rr: st.rr || null,
           risk_usd: st.riskUSD || null,
           reward_usd: st.rewardUSD || null,
@@ -1655,17 +1656,18 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           // ASSET-CLASS-SPECIFIC FIELDS
           // ═══════════════════════════════════════════
-          option_type: st.assetClass === 'options' ? (st.optionType ?? null) : null,
-          strike_price: st.assetClass === 'options' ? (st.strikePrice ?? null) : null,
-          expiration_date: st.assetClass === 'options' ? (st.expirationDate ?? null) : null,
+          option_type: normalizeAssetClass(st.assetClass) === 'options' ? (st.optionType ?? null) : null,
+          strike_price: normalizeAssetClass(st.assetClass) === 'options' ? (st.strikePrice ?? null) : null,
+          expiration_date: normalizeAssetClass(st.assetClass) === 'options' ? (st.expirationDate ?? null) : null,
+          option_outcome: normalizeAssetClass(st.assetClass) === 'options' ? (st.optionOutcome || null) : null,
           // Crypto
-          leverage: st.assetClass === 'crypto' ? (st.leverage ?? null) : null,
-          position_type: st.assetClass === 'crypto' ? (st.positionType ?? null) : null,
-          funding_paid: (st.assetClass === 'crypto' && st.positionType === 'Perpetual') ? (st.fundingPaid ?? null) : null,
+          leverage: normalizeAssetClass(st.assetClass) === 'crypto' ? (st.leverage ?? null) : null,
+          position_type: normalizeAssetClass(st.assetClass) === 'crypto' ? (st.positionType ?? null) : null,
+          funding_paid: (normalizeAssetClass(st.assetClass) === 'crypto' && st.positionType === 'Perpetual') ? (st.fundingPaid ?? null) : null,
           // Forex
-          lot_size: st.assetClass === 'forex' ? (st.lotSize ?? null) : null,
-          account_currency: st.assetClass === 'forex' ? (st.accountCurrency ?? 'USD') : null,
-          quote_rate: st.assetClass === 'forex' ? (st.quoteRate ?? 1) : null,
+          lot_size: normalizeAssetClass(st.assetClass) === 'forex' ? (st.lotSize ?? null) : null,
+          account_currency: normalizeAssetClass(st.assetClass) === 'forex' ? (st.accountCurrency ?? 'USD') : null,
+          quote_rate: normalizeAssetClass(st.assetClass) === 'forex' ? (st.quoteRate ?? 1) : null,
         };
         
         if (isDev) {
@@ -1997,18 +1999,18 @@ if (hasResult && directRiskUSD > 0) {
             <div className="mb-6">
               <Label className="text-xs text-zinc-400 mb-2 block">Asset Class</Label>
               <div className="flex flex-wrap gap-2">
-                {(['stocks', 'futures', 'options', 'crypto', 'forex'] as const).map((cls) => (
+                {(['stock', 'futures', 'options', 'crypto', 'forex'] as const).map((cls) => (
                   <button
                     key={cls}
                     type="button"
                     onClick={() => st.setAssetClass(cls as any)}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 border ${
-                      st.assetClass === cls
+                      normalizeAssetClass(st.assetClass) === cls
                         ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 shadow-[0_0_12px_rgba(201,166,70,0.15)]'
                         : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600'
                     }`}
                   >
-                    {cls.charAt(0).toUpperCase() + cls.slice(1)}
+                    {cls === 'stock' ? 'Stock' : cls.charAt(0).toUpperCase() + cls.slice(1)}
                   </button>
                 ))}
               </div>
@@ -2507,7 +2509,7 @@ if (hasResult && directRiskUSD > 0) {
                 {/* ─── CONDITIONAL ASSET-CLASS FIELDS ─── */}
 
                 {/* OPTIONS fields */}
-                {st.assetClass === 'options' && (
+                {normalizeAssetClass(st.assetClass) === 'options' && (
                   <div className="mb-6 p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
                     <div className="flex items-center justify-between mb-4">
                       <p className="text-xs text-yellow-400 uppercase tracking-wider">Options Details</p>
@@ -2571,6 +2573,30 @@ if (hasResult && directRiskUSD > 0) {
                         />
                       </div>
                     </div>
+                    <div className="mt-4">
+                      <Label className="text-xs text-zinc-400 mb-2 block">How it closed</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {([
+                          { label: 'Open / not yet', value: '', key: 'open' },
+                          { label: 'Expired worthless', value: 'expired_worthless', key: 'expired_worthless' },
+                          { label: 'Assigned', value: 'assigned', key: 'assigned' },
+                          { label: 'Exercised', value: 'exercised', key: 'exercised' },
+                        ] as const).map((opt) => (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => st.setOptionOutcome(opt.value)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all border ${
+                              st.optionOutcome === opt.value
+                                ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 shadow-[0_0_12px_rgba(201,166,70,0.15)]'
+                                : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <p className="text-[10px] text-zinc-500 mt-3">Multiplier is fixed at 100 for options contracts.</p>
                     </>
                     )}
@@ -2590,7 +2616,7 @@ if (hasResult && directRiskUSD > 0) {
                 )}
 
                 {/* CRYPTO fields */}
-                {st.assetClass === 'crypto' && (
+                {normalizeAssetClass(st.assetClass) === 'crypto' && (
                   <div className="mb-6 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
                     <p className="text-xs text-blue-400 uppercase tracking-wider mb-4">Crypto Details</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2661,7 +2687,7 @@ if (hasResult && directRiskUSD > 0) {
                 )}
 
                 {/* FOREX fields */}
-                {st.assetClass === 'forex' && (
+                {normalizeAssetClass(st.assetClass) === 'forex' && (
                   <div className="mb-6 p-4 rounded-xl border border-purple-500/20 bg-purple-500/5">
                     <p className="text-xs text-purple-400 uppercase tracking-wider mb-4">Forex Details</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
