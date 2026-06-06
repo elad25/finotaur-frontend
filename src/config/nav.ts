@@ -5,7 +5,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves, Calculator
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -85,11 +85,16 @@ export const domains: Record<string, Domain> = {
   futures: {
     id: 'futures',
     label: 'Futures',
-    subNav: [{ label: 'Overview', path: '/app/futures/overview' }],
+    subNav: [
+      { label: 'Overview', path: '/app/futures/overview' },
+      { label: 'Contracts', path: '/app/futures/contracts' },
+    ],
     sidebar: [
       { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
-      { label: 'Open Interests', path: '/app/futures/open-interests', icon: BarChart3 },
-      { label: 'Calendar', path: '/app/futures/calendar', icon: Calendar },
+      { label: 'Contracts', path: '/app/futures/contracts', icon: Layers },
+      { label: 'Curves', path: '/app/futures/curves', icon: LineChart },
+      { label: 'Positioning', path: '/app/futures/positioning', icon: BarChart3 },
+      { label: 'Calculators', path: '/app/futures/tools', icon: Calculator },
     ],
   },
 

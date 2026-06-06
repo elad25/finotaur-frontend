@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Search, Map, TrendingUp, Calendar, Newspaper,
   Activity, Bell, FileText, BarChart3, DollarSign, Target, Zap, Award,
   Users, LineChart, Globe, Coins, Flame, Brain, Droplet, Layers, PieChart,
-  Home, Wallet, Sparkles, Filter, GitCompare,
+  Home, Wallet, Sparkles, Filter, GitCompare, Calculator,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -71,6 +71,9 @@ export type MarketFunction =
   | 'stablecoins'
   // Futures-specific
   | 'open-interests'
+  | 'futures-contracts'
+  | 'futures-curves'
+  | 'futures-tools'
   // Forex-specific
   | 'strength'
   | 'correlation'
@@ -322,10 +325,34 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
   // ── Futures-specific ──────────────────────────────────────────────────────
   {
     id: 'open-interests',
-    label: 'Open Interest',
+    label: 'Positioning',
     icon: BarChart3,
     routes: {
-      futures: '/app/futures/open-interests',
+      futures: '/app/futures/positioning',
+    },
+  },
+  {
+    id: 'futures-contracts',
+    label: 'Contracts',
+    icon: Layers,
+    routes: {
+      futures: '/app/futures/contracts',
+    },
+  },
+  {
+    id: 'futures-curves',
+    label: 'Curves',
+    icon: GitCompare,
+    routes: {
+      futures: '/app/futures/curves',
+    },
+  },
+  {
+    id: 'futures-tools',
+    label: 'Calculators',
+    icon: Calculator,
+    routes: {
+      futures: '/app/futures/tools',
     },
   },
 

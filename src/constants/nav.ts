@@ -27,6 +27,7 @@ import {
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
   Link, Gift, Swords, Crown, Shield, Copy, Droplet, Grid3x3, Calculator,
+  GitCompare,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -44,9 +45,9 @@ export const FINNHUB_LICENSED = false;
 // and uncomment 'options' in domainOrder.
 export const OPTIONS_ENABLED = false;
 
-// Sealed pending licensed futures data feed (CME licensed; Yahoo gray).
-// To re-enable: set FUTURES_ENABLED = true, then restore subNav/sidebar in
-// the futures domain below and swap ComingSoon back to real components in App.tsx.
+// Futures live market data feed is sealed (CME licensed; Yahoo gray).
+// The current Futures section is static contract intelligence + local
+// calculators only: no quotes, charts, DOM, volume, or OI.
 export const FUTURES_ENABLED = false;
 
 export interface NavItem {
@@ -314,15 +315,23 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // No free/legal futures data feed (CME licensed; Yahoo gray). Sealed pending licensed source.
-  // To re-enable: set FUTURES_ENABLED = true above and restore subNav/sidebar entries below.
+  // Licensed-data-safe futures workspace. Keep raw exchange data sealed until FUTURES_ENABLED is backed by a licensed feed.
   futures: {
     id: 'futures',
     label: 'Futures',
     locked: false,
     beta: false,
-    subNav: [],
-    sidebar: [],
+    subNav: [
+      { label: 'Overview', path: '/app/futures/overview' },
+      { label: 'Contracts', path: '/app/futures/contracts' },
+    ],
+    sidebar: [
+      { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
+      { label: 'Contracts', path: '/app/futures/contracts', icon: Layers },
+      { label: 'Curves', path: '/app/futures/curves', icon: GitCompare },
+      { label: 'Positioning', path: '/app/futures/positioning', icon: BarChart3 },
+      { label: 'Calculators', path: '/app/futures/tools', icon: Calculator },
+    ],
   },
 
   forex: {

@@ -62,6 +62,7 @@ import {
   FileBarChart,
   Sparkles, // נ”¥ For beta items
   Link2,
+  GitCompare,
 } from 'lucide-react';
 import { 
   prefetchSettingsData,
@@ -176,8 +177,10 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // ===============================================
   'futures': [
     { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
-    { label: 'Open Interests', path: '/app/futures/open-interests', icon: BarChart3 },
-    { label: 'Calendar', path: '/app/futures/calendar', icon: Calendar },
+    { label: 'Contracts', path: '/app/futures/contracts', icon: Layers },
+    { label: 'Curves', path: '/app/futures/curves', icon: GitCompare },
+    { label: 'Positioning', path: '/app/futures/positioning', icon: BarChart3 },
+    { label: 'Calculators', path: '/app/futures/tools', icon: Calculator },
   ],
 
   // ===============================================
