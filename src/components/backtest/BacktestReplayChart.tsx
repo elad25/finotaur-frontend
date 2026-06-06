@@ -99,8 +99,8 @@ function maxLookbackSeconds(iv: Interval): number {
     case '15m':
     case '30m': return 60 * DAY;
     case '60m':
-    case '1h':
-    case '4h': return 730 * DAY;          // ~2y of hourly
+    case '1h': return 180 * DAY;          // Yahoo 1h is flaky near its 730d ceiling — cap to a fast, reliable window
+    case '4h': return 365 * DAY;          // 4h tolerates a longer window; still well under Yahoo's limit
     case '1d':
     case '1wk':
     case '1mo': return 20 * 365 * DAY;    // effectively all available
@@ -422,7 +422,14 @@ export function BacktestReplayChart({
       })
       .catch((err) => {
         if (cancelled) return;
-        setLoad({ kind: 'error', message: err instanceof Error ? err.message : 'Failed to fetch bars' });
+        const raw = err instanceof Error ? err.message : 'Failed to fetch bars';
+        const isUpstream = /chart-bars HTTP|upstream|Failed to fetch|malformed/i.test(raw);
+        setLoad({
+          kind: 'error',
+          message: isUpstream
+            ? 'Market data is temporarily unavailable for this symbol and timeframe. Please try again, or switch to a shorter timeframe.'
+            : raw,
+        });
       });
 
     return () => { cancelled = true; };
