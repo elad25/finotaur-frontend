@@ -41,6 +41,7 @@ const NO_SUBNAV_ROUTES = [
   '/app/all-markets/top-secret',
   '/app/all-markets/top-secret-admin',
   '/app/futures',              // Futures uses the left sidebar as its only section navigation
+  '/app/ai',                   // AI Arena uses the left sidebar as its only section navigation
 ];
 
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
