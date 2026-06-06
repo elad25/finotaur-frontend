@@ -1,30 +1,3 @@
-import {
-  Activity,
-  BarChart3,
-  Calculator,
-  GitCompare,
-  LayoutDashboard,
-  Layers,
-  type LucideIcon,
-} from 'lucide-react';
-
-export type FuturesTabId = 'overview' | 'contracts' | 'curves' | 'positioning' | 'tools';
-
-export interface FuturesTab {
-  id: FuturesTabId;
-  label: string;
-  path: string;
-  icon: LucideIcon;
-}
-
-export const futuresTabs: FuturesTab[] = [
-  { id: 'overview', label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
-  { id: 'contracts', label: 'Contracts', path: '/app/futures/contracts', icon: Layers },
-  { id: 'curves', label: 'Curves', path: '/app/futures/curves', icon: GitCompare },
-  { id: 'positioning', label: 'Positioning', path: '/app/futures/positioning', icon: BarChart3 },
-  { id: 'tools', label: 'Calculators', path: '/app/futures/tools', icon: Calculator },
-];
-
 export interface FuturesContract {
   symbol: string;
   name: string;

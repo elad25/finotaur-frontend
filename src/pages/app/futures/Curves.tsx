@@ -5,7 +5,6 @@ import { curvePlaybooks } from './_shared/data';
 export default function FuturesCurves() {
   return (
     <FuturesPageShell
-      active="curves"
       title="Futures Curves"
       description="Term-structure playbooks for reading contango, backwardation, spreads, and rollover risk without live exchange data."
     >

@@ -5,7 +5,6 @@ import { formatCurrency, futuresContracts } from './_shared/data';
 export default function FuturesContracts() {
   return (
     <FuturesPageShell
-      active="contracts"
       title="Futures Contracts"
       description="Contract specifications, tick value, and risk context for the most common retail futures products."
     >

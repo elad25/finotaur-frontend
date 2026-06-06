@@ -5,7 +5,6 @@ import { positioningFramework } from './_shared/data';
 export default function FuturesPositioning() {
   return (
     <FuturesPageShell
-      active="positioning"
       title="Futures Positioning"
       description="A COT-style framework for interpreting who may be carrying risk, without pulling or redistributing exchange data."
     >

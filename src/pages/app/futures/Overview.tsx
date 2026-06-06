@@ -6,7 +6,6 @@ import { marketGroups, regimeChecklist } from './_shared/data';
 export default function FuturesOverview() {
   return (
     <FuturesPageShell
-      active="overview"
       title="Futures Overview"
       description="A licensed-data-safe futures command center for contract context, regime reading, and risk preparation."
     >

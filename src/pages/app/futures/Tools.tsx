@@ -35,7 +35,6 @@ export default function FuturesTools() {
 
   return (
     <FuturesPageShell
-      active="tools"
       title="Futures Calculators"
       description="Local risk and contract-sizing tools based on static contract specs. No market data connection required."
     >
