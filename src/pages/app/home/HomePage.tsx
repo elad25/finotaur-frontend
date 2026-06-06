@@ -311,22 +311,34 @@ export default function HomePage() {
               }
             }}
             aria-label="Go to Academy"
-            className="cursor-pointer border-[#d8c79a] hover:border-[#b08316] transition-colors"
+            className="sm:col-span-2 cursor-pointer border-[#d8c79a] hover:border-[#b08316] transition-colors"
             style={{
               backgroundColor: '#ece0c4',
               backgroundImage:
                 'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(99,132,173,0.32) 31px, rgba(99,132,173,0.32) 32px)',
             }}
           >
-            <div className="flex items-center gap-ds-3">
-              {/* Inverted: black books inside a black-bordered square tile */}
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[8px] border-2 border-[#1a1a1a]">
-                <Library className="h-5 w-5 text-[#1a1a1a]" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-[#2b2620]">Academy</p>
-                <p className="text-xs text-[#5c5443] mt-0.5">300+ free lessons — markets, options, crypto &amp; more.</p>
+            <div className="flex items-center justify-between gap-ds-4">
+              <div className="flex items-center gap-ds-3">
+                {/* Inverted: black books inside a black-bordered square tile */}
+                <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[8px] border-2 border-[#1a1a1a]">
+                  <Library className="h-5 w-5 text-[#1a1a1a]" aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-[#2b2620]">Academy</p>
+                  <p className="text-xs text-[#5c5443] mt-0.5">300+ free lessons — markets, options, crypto &amp; more.</p>
+                </div>
               </div>
+              {/* Visual CTA — the whole card is the interactive target (navigates to /academy) */}
+              <span
+                className="hidden sm:inline-flex flex-shrink-0 items-center rounded-[10px] px-4 py-2 text-sm font-semibold text-[#1a1a1a]"
+                style={{
+                  background:
+                    'linear-gradient(135deg, #e3c569 0%, #c9a646 55%, #a8842f 100%)',
+                }}
+              >
+                Explore Academy
+              </span>
             </div>
           </Card>
         </div>
