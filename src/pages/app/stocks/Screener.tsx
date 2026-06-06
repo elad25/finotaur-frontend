@@ -4,7 +4,6 @@
 // ============================================================
 
 import { useCallback, useState } from 'react';
-import { PageTemplate } from '@/components/PageTemplate';
 import { GlassCard } from '@/pages/app/crypto/_shared/GlassUI';
 import { useScreenerMeta, useStockScreener } from './_screener/hooks';
 import { FilterPanel } from './_screener/FilterPanel';
@@ -25,16 +24,16 @@ function AssetSwitch({
   onChange: (id: 'stocks' | 'crypto') => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 pt-4 sm:px-6">
+    <div className="inline-flex rounded-xl border border-white/[0.06] bg-white/[0.03] p-1">
       {(['stocks', 'crypto'] as const).map(tab => (
         <button
           key={tab}
           onClick={() => onChange(tab)}
           className={[
-            'min-w-24 rounded-[12px] border px-4 py-2 text-xs font-semibold transition-all duration-150',
+            'min-w-24 rounded-[12px] px-4 py-2 text-xs font-semibold transition-all duration-150',
             active === tab
-              ? 'border-white/[0.12] bg-white/[0.08] text-white'
-              : 'border-white/[0.06] bg-white/[0.03] text-white/35 hover:text-white/70',
+              ? 'border border-white/[0.12] bg-white/[0.08] text-white'
+              : 'text-white/35 hover:text-white/70',
           ].join(' ')}
         >
           {tab === 'stocks' ? 'Stocks' : 'Crypto'}
@@ -86,6 +85,7 @@ function StocksScreenerInner({
           onFiltersChange={handleFiltersChange}
           activeAsset={activeAsset}
           onAssetChange={onAssetChange}
+          showAssetTabs={false}
         />
       </GlassCard>
 
@@ -109,24 +109,18 @@ function StocksScreenerInner({
 export default function StocksScreener() {
   const [assetTab, setAssetTab] = useState<'stocks' | 'crypto'>('stocks');
 
-  if (assetTab === 'crypto') {
-    return (
-      <div>
-        <AssetSwitch active={assetTab} onChange={setAssetTab} />
-        <CryptoScreener />
-      </div>
-    );
-  }
-
   return (
-    <PageTemplate
-      title="Screener"
-      description="Filter and discover opportunities across US equities."
-    >
-      <StocksScreenerInner
-        activeAsset={assetTab}
-        onAssetChange={id => setAssetTab(id)}
-      />
-    </PageTemplate>
+    <div className="space-y-3 px-4 py-4 sm:px-6">
+      <AssetSwitch active={assetTab} onChange={setAssetTab} />
+
+      {assetTab === 'stocks' ? (
+        <StocksScreenerInner
+          activeAsset={assetTab}
+          onAssetChange={id => setAssetTab(id)}
+        />
+      ) : (
+        <CryptoScreener embedded />
+      )}
+    </div>
   );
 }

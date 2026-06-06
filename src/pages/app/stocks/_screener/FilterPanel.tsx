@@ -234,6 +234,7 @@ interface FilterPanelProps {
   onFiltersChange: (next: Filters) => void;
   activeAsset?: 'stocks' | 'crypto';
   onAssetChange?: (id: 'stocks' | 'crypto') => void;
+  showAssetTabs?: boolean;
 }
 
 export const FilterPanel = memo(function FilterPanel({
@@ -242,6 +243,7 @@ export const FilterPanel = memo(function FilterPanel({
   onFiltersChange,
   activeAsset = 'stocks',
   onAssetChange,
+  showAssetTabs = true,
 }: FilterPanelProps) {
   const [analysisTab, setAnalysisTab] = useState<AnalysisTab>('fundamental');
 
@@ -263,26 +265,31 @@ export const FilterPanel = memo(function FilterPanel({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-flex rounded-xl border border-white/[0.06] bg-white/[0.03] p-1">
-          {ASSET_TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => onAssetChange?.(tab.id)}
-              className={cn(
-                'min-w-24 rounded-[12px] px-4 py-2 text-xs font-semibold transition-all duration-150',
-                activeAsset === tab.id
-                  ? 'bg-white/[0.08] text-white border border-white/[0.12]'
-                  : 'text-white/35 hover:text-white/70',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {showAssetTabs && (
+          <div className="inline-flex rounded-xl border border-white/[0.06] bg-white/[0.03] p-1">
+            {ASSET_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => onAssetChange?.(tab.id)}
+                className={cn(
+                  'min-w-24 rounded-[12px] px-4 py-2 text-xs font-semibold transition-all duration-150',
+                  activeAsset === tab.id
+                    ? 'bg-white/[0.08] text-white border border-white/[0.12]'
+                    : 'text-white/35 hover:text-white/70',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <button
           onClick={handleReset}
-          className="px-3 py-1.5 rounded-[12px] text-xs font-medium border border-white/[0.06] text-white/30 hover:text-white/60 transition-colors"
+          className={cn(
+            'px-3 py-1.5 rounded-[12px] text-xs font-medium border border-white/[0.06] text-white/30 hover:text-white/60 transition-colors',
+            !showAssetTabs && 'ml-auto',
+          )}
         >
           Reset
         </button>
