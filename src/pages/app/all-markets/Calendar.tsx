@@ -3,7 +3,6 @@ import {
   Calendar,
   Clock,
   Filter,
-  ChevronDown,
   Star,
   Globe,
   TrendingUp,
@@ -135,15 +134,16 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const CALENDAR_ENDPOINT = '/api/all-markets/calendar';
 
 // ============================================
-// COUNTRY FLAGS - Unicode Emoji Flags
+// COUNTRY FLAGS - local, preloaded map. No runtime flag downloads.
 // ============================================
 
+const DEFAULT_COUNTRY_CODES = ['US', 'EU', 'DE', 'GB'];
+
 const COUNTRIES = [
-  { code: 'ALL', name: 'All Countries', flag: '🌍' },
   { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
   { code: 'EU', name: 'Eurozone', flag: '🇪🇺' },
   { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+  { code: 'GB', name: 'London', flag: '🇬🇧' },
   { code: 'FR', name: 'France', flag: '🇫🇷' },
   { code: 'JP', name: 'Japan', flag: '🇯🇵' },
   { code: 'CN', name: 'China', flag: '🇨🇳' },
@@ -160,6 +160,41 @@ const COUNTRIES = [
   { code: 'HK', name: 'Hong Kong', flag: '🇭🇰' },
 ];
 
+const COUNTRY_FLAG_MAP: Record<string, string> = COUNTRIES.reduce(
+  (acc, country) => ({ ...acc, [country.code]: country.flag }),
+  {
+    USA: '🇺🇸',
+    UK: '🇬🇧',
+    EA: '🇪🇺',
+    ALL: '🌍',
+    Global: '🌍',
+  } as Record<string, string>,
+);
+
+const normalizeCountryCode = (code?: string | null): string => {
+  const upper = (code || '').toUpperCase();
+  if (upper === 'UK') return 'GB';
+  if (upper === 'EA') return 'EU';
+  if (upper === 'USA') return 'US';
+  return upper;
+};
+
+const countryMatches = (eventCode: string | undefined, selectedCountries: string[]): boolean => {
+  const normalized = normalizeCountryCode(eventCode);
+  return selectedCountries.map(normalizeCountryCode).includes(normalized);
+};
+
+const getCalendarSection = (data: CalendarData | null, tab: TabType) => {
+  if (!data) return undefined;
+  if (tab === 'economic') return data.economic;
+  if (tab === 'holidays') return data.holidays;
+  if (tab === 'earnings') return data.earnings;
+  if (tab === 'dividends') return data.dividends;
+  if (tab === 'splits') return data.splits;
+  if (tab === 'ipo') return data.ipos;
+  return data.expirations;
+};
+
 // ============================================
 // CUSTOM HOOK
 // ============================================
@@ -169,13 +204,13 @@ const COUNTRIES = [
  * client-side. Returns a new CalendarData object with filtered event arrays and
  * updated counts. The raw server response is never mutated.
  *
- * - country: filters economic + holidays only (other tabs have no country dim)
+ * - countries: filters economic + holidays only (other tabs have no country dim)
  * - importance: filters economic only; empty array = "no filter" (show all)
  * - search: case-insensitive substring match across all tabs' text fields
  */
 function filterCalendarData(
   raw: CalendarData | null,
-  country: string,
+  countries: string[],
   importance: Importance[],
   search: string,
 ): CalendarData | null {
@@ -183,14 +218,14 @@ function filterCalendarData(
 
   const searchLC = search.trim().toLowerCase();
   const filterBySearch = searchLC.length > 0;
-  const filterByCountry = country !== 'ALL';
+  const filterByCountry = countries.length > 0;
   // Empty importance array = show all (all toggles de-selected = no filter)
   const filterByImportance = importance.length > 0 && importance.length < 3;
 
   // --- economic ---
   let economicEvents = raw.economic?.events ?? [];
   if (filterByCountry) {
-    economicEvents = economicEvents.filter(e => e.countryCode === country);
+    economicEvents = economicEvents.filter(e => countryMatches(e.countryCode, countries));
   }
   if (filterByImportance) {
     economicEvents = economicEvents.filter(e => importance.includes(e.importance));
@@ -206,7 +241,7 @@ function filterCalendarData(
   // --- holidays ---
   let holidayEvents = raw.holidays?.events ?? [];
   if (filterByCountry) {
-    holidayEvents = holidayEvents.filter(e => e.countryCode === country);
+    holidayEvents = holidayEvents.filter(e => countryMatches(e.countryCode, countries));
   }
   if (filterBySearch) {
     holidayEvents = holidayEvents.filter(e =>
@@ -290,7 +325,7 @@ function filterCalendarData(
 function useCalendarData(
   tab: TabType,
   timeFilter: TimeFilter,
-  country: string,
+  countries: string[],
   importance: Importance[],
   search: string
 ) {
@@ -327,11 +362,61 @@ function useCalendarData(
 
   // Client-side derived view: filter raw data without a network round-trip
   const data = useMemo(
-    () => filterCalendarData(rawData, country, importance, search),
-    [rawData, country, importance, search]
+    () => filterCalendarData(rawData, countries, importance, search),
+    [rawData, countries, importance, search]
   );
 
   return { data, loading, error, refetch: fetchData };
+}
+
+function useWeeklyEventCount(
+  tab: TabType,
+  countries: string[],
+  importance: Importance[],
+  search: string
+) {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchWeeklyCount() {
+      if (tab === 'economic') {
+        setCount(null);
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({ tab, dateFilter: 'thisWeek' });
+        const response = await fetch(`${API_BASE_URL}${CALENDAR_ENDPOINT}?${params}`);
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const filtered = filterCalendarData(result.data, countries, importance, search);
+        const section = getCalendarSection(filtered, tab);
+
+        if (!cancelled) {
+          setCount(section?.count ?? 0);
+        }
+      } catch (err) {
+        console.error('Weekly calendar count error:', err);
+        if (!cancelled) {
+          setCount(null);
+        }
+      }
+    }
+
+    fetchWeeklyCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, countries, importance, search]);
+
+  return count;
 }
 
 // ============================================
@@ -443,30 +528,18 @@ const NowIndicator: React.FC = () => (
   </tr>
 );
 
-// Flag Component with emoji
+// Flag Component with local map
 const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> = ({ 
   countryCode, 
   size = 'md' 
 }) => {
-  const flags: Record<string, string> = {
-    US: '🇺🇸', USA: '🇺🇸',
-    GB: '🇬🇧', UK: '🇬🇧',
-    EU: '🇪🇺', EA: '🇪🇺',
-    DE: '🇩🇪', FR: '🇫🇷', IT: '🇮🇹', ES: '🇪🇸',
-    JP: '🇯🇵', CN: '🇨🇳', AU: '🇦🇺', CA: '🇨🇦',
-    CH: '🇨🇭', NZ: '🇳🇿', IL: '🇮🇱', KR: '🇰🇷',
-    IN: '🇮🇳', HK: '🇭🇰', BR: '🇧🇷', MX: '🇲🇽',
-    RU: '🇷🇺', ZA: '🇿🇦', SG: '🇸🇬', SE: '🇸🇪',
-    NO: '🇳🇴', PL: '🇵🇱', TR: '🇹🇷', ALL: '🌍',
-  };
-  
   const sizeClasses = {
     sm: 'text-base',
     md: 'text-lg',
     lg: 'text-xl'
   };
   
-  const flag = flags[countryCode?.toUpperCase()] || '🏳️';
+  const flag = COUNTRY_FLAG_MAP[normalizeCountryCode(countryCode)] || '🏳️';
   
   return (
     <span className={`${sizeClasses[size]} leading-none`}>
@@ -510,18 +583,26 @@ const TimeFilterButton: React.FC<{
   active: boolean;
   onClick: () => void;
   label: string;
-}> = ({ active, onClick, label }) => (
+  count?: number | null;
+}> = ({ active, onClick, label, count }) => (
   <button
     onClick={onClick}
     className={`
-      px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
+      flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
       ${active
         ? 'bg-amber-500 text-black font-semibold'
         : 'text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/50'
       }
     `}
   >
-    {label}
+    <span>{label}</span>
+    {count !== undefined && count !== null && (
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+        active ? 'bg-black/15 text-black' : 'bg-neutral-800 text-neutral-500'
+      }`}>
+        {count}
+      </span>
+    )}
   </button>
 );
 
@@ -548,8 +629,17 @@ const DataValue: React.FC<{
   if (value === null || value === undefined || value === '') {
     return <span className="text-neutral-600">—</span>;
   }
+
+  const displayValue =
+    typeof value === 'string'
+      ? value.replace(/&nbsp;|\u00a0/g, ' ').trim()
+      : value;
+
+  if (displayValue === '') {
+    return <span className="text-neutral-600">—</span>;
+  }
   
-  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  const numValue = typeof displayValue === 'string' ? parseFloat(displayValue) : displayValue;
   const numCompare = compareWith ? (typeof compareWith === 'string' ? parseFloat(compareWith) : compareWith) : null;
   
   let colorClass = 'text-neutral-200';
@@ -564,7 +654,7 @@ const DataValue: React.FC<{
   
   return (
     <span className={`${colorClass} ${type === 'actual' ? 'font-semibold' : ''}`}>
-      {value}
+      {displayValue}
     </span>
   );
 };
@@ -1142,7 +1232,7 @@ const EmptyState: React.FC<{ message?: string }> = ({ message = 'No events found
 export default function AllMarketsCalendar() {
   const [activeTab, setActiveTab] = useState<TabType>('economic');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('today');
-  const [selectedCountry, setSelectedCountry] = useState('ALL');
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(DEFAULT_COUNTRY_CODES);
   const [showFilters, setShowFilters] = useState(false);
   const [importanceFilter, setImportanceFilter] = useState<Importance[]>([1, 2, 3]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1151,7 +1241,14 @@ export default function AllMarketsCalendar() {
   const { data, loading, error, refetch } = useCalendarData(
     activeTab,
     timeFilter,
-    selectedCountry,
+    selectedCountries,
+    importanceFilter,
+    searchQuery
+  );
+
+  const weeklyEventCount = useWeeklyEventCount(
+    activeTab,
+    selectedCountries,
     importanceFilter,
     searchQuery
   );
@@ -1162,7 +1259,7 @@ export default function AllMarketsCalendar() {
   }, []);
 
   const tabs = [
-    { id: 'economic' as TabType, label: 'Economic Calendar', icon: <Calendar size={16} />, count: data?.economic?.count },
+    { id: 'economic' as TabType, label: 'Economic Calendar', icon: <Calendar size={16} />, count: undefined },
     { id: 'holidays' as TabType, label: 'Holidays', icon: <Globe size={16} />, count: data?.holidays?.count },
     { id: 'earnings' as TabType, label: 'Earnings', icon: <TrendingUp size={16} />, count: data?.earnings?.count },
     { id: 'dividends' as TabType, label: 'Dividends', icon: <DollarSign size={16} />, count: data?.dividends?.count },
@@ -1178,6 +1275,15 @@ export default function AllMarketsCalendar() {
     { id: 'thisWeek' as TimeFilter, label: 'This Week' },
     { id: 'nextWeek' as TimeFilter, label: 'Next Week' },
   ];
+
+  const toggleCountry = (countryCode: string) => {
+    setSelectedCountries((current) => {
+      if (current.includes(countryCode)) {
+        return current.filter((code) => code !== countryCode);
+      }
+      return [...current, countryCode];
+    });
+  };
 
   return (
     <div className="min-h-screen bg-black">
@@ -1224,6 +1330,7 @@ export default function AllMarketsCalendar() {
                 active={timeFilter === filter.id}
                 onClick={() => setTimeFilter(filter.id)}
                 label={filter.label}
+                count={activeTab !== 'economic' && filter.id === 'thisWeek' ? weeklyEventCount : undefined}
               />
             ))}
           </div>
@@ -1253,22 +1360,31 @@ export default function AllMarketsCalendar() {
               )}
             </div>
 
-            <div className="relative flex items-center">
-              <div className="absolute left-3 pointer-events-none">
-                <CountryFlag countryCode={selectedCountry} size="sm" />
+            <div className="flex items-center gap-2 bg-neutral-900/80 border border-neutral-800 rounded-lg px-2 py-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-neutral-500 px-1">Country</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {COUNTRIES.slice(0, 4).map((country) => {
+                  const selected = selectedCountries.includes(country.code);
+
+                  return (
+                    <button
+                      key={country.code}
+                      type="button"
+                      onClick={() => toggleCountry(country.code)}
+                      className={`
+                        flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-all
+                        ${selected
+                          ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
+                          : 'border-neutral-800 bg-neutral-950/50 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
+                        }
+                      `}
+                    >
+                      <CountryFlag countryCode={country.code} size="sm" />
+                      <span>{country.name}</span>
+                    </button>
+                  );
+                })}
               </div>
-              <select
-                value={selectedCountry}
-                onChange={(e) => setSelectedCountry(e.target.value)}
-                className="appearance-none pl-10 pr-10 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                {COUNTRIES.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.flag} {country.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
             </div>
 
             <button
@@ -1299,6 +1415,35 @@ export default function AllMarketsCalendar() {
         {showFilters && (
           <div className="mb-6 p-4 bg-neutral-900/80 border border-amber-500/20 rounded-lg">
             <div className="flex flex-wrap items-center gap-6">
+              <div>
+                <label className="block text-xs text-amber-400/80 uppercase tracking-wider mb-2 font-semibold">
+                  Countries
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {COUNTRIES.map((country) => {
+                    const selected = selectedCountries.includes(country.code);
+
+                    return (
+                      <button
+                        key={country.code}
+                        type="button"
+                        onClick={() => toggleCountry(country.code)}
+                        className={`
+                          flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all border
+                          ${selected
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                            : 'bg-neutral-800/50 text-neutral-500 border-neutral-700 hover:text-neutral-300'
+                          }
+                        `}
+                      >
+                        <CountryFlag countryCode={country.code} size="sm" />
+                        <span>{country.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs text-amber-400/80 uppercase tracking-wider mb-2 font-semibold">
                   Impact Level
