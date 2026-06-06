@@ -297,8 +297,10 @@ const CryptoWhales = lazy(() => import("@/pages/app/crypto/whales/WhalesHub"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
-const FuturesOpenInterests = lazy(() => import("@/pages/app/futures/OpenInterests"));
-const FuturesCalendar = lazy(() => import("@/pages/app/futures/Calendar"));
+const FuturesContracts = lazy(() => import("@/pages/app/futures/Contracts"));
+const FuturesCurves = lazy(() => import("@/pages/app/futures/Curves"));
+const FuturesPositioning = lazy(() => import("@/pages/app/futures/Positioning"));
+const FuturesTools = lazy(() => import("@/pages/app/futures/Tools"));
 
 // Forex
 const ForexOverview = lazy(() => import("@/pages/app/forex/Overview"));
@@ -568,14 +570,15 @@ function AppContent() {
           <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
           <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
 
-          {/* FUTURES — sealed pending licensed data feed (CME licensed; Yahoo gray).
-              Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.
-              To re-enable: swap OptionsComingSoon back to FuturesOverview/FuturesOpenInterests/FuturesCalendar
-              and set FUTURES_ENABLED=true in constants/nav.ts. */}
+          {/* FUTURES: licensed-data-safe workspace only. No live CME quotes/charts/DOM/OI fetches. */}
           <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />
-          <Route path="futures/overview" element={<OptionsComingSoon title="Futures" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
-          <Route path="futures/open-interests" element={<OptionsComingSoon title="Futures — Open Interests" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
-          <Route path="futures/calendar" element={<OptionsComingSoon title="Futures — Calendar" description="Live futures data is coming soon — we're securing a licensed data feed." />} />
+          <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
+          <Route path="futures/contracts" element={<LockedRoute domainId="futures"><FuturesContracts /></LockedRoute>} />
+          <Route path="futures/curves" element={<LockedRoute domainId="futures"><FuturesCurves /></LockedRoute>} />
+          <Route path="futures/positioning" element={<LockedRoute domainId="futures"><FuturesPositioning /></LockedRoute>} />
+          <Route path="futures/tools" element={<LockedRoute domainId="futures"><FuturesTools /></LockedRoute>} />
+          <Route path="futures/open-interests" element={<Navigate to="/app/futures/positioning" replace />} />
+          <Route path="futures/calendar" element={<Navigate to="/app/futures/overview" replace />} />
           
           {/* FOREX */}
           <Route path="forex/overview" element={<LockedRoute domainId="forex"><ForexOverview /></LockedRoute>} />
