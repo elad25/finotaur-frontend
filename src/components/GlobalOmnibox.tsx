@@ -39,6 +39,7 @@ import { searchCrypto, CRYPTO_COINS } from '@/data/cryptoCoins';
 import { searchForex, FOREX_PAIRS } from '@/data/forexPairs';
 import { searchIndices, INDICES } from '@/data/indices';
 import { searchBonds, TREASURY_YIELDS } from '@/data/treasuryYields';
+import { searchEtfs } from '@/data/etfs';
 import { POPULAR_STOCKS, POPULAR_ETFS } from '@/data/popularSymbols';
 
 // ---------------------------------------------------------------------------
@@ -411,15 +412,25 @@ export function GlobalOmnibox() {
           assetType: 'bond' as const,
         }))
       : [];
+    // Inject ETF matches from the bundled static list (covers sector/leveraged/
+    // international ETFs absent from the SEC-based backend suggest endpoint).
+    const etfsInjected: EnrichedItem[] = debouncedQuery.trim()
+      ? searchEtfs(debouncedQuery, 8).map((e) => ({
+          symbol: e.symbol,
+          name: e.name,
+          assetType: 'etf' as const,
+        }))
+      : [];
     // De-dupe: if a symbol already appears among equities, keep the equity entry.
     const equitySymbols = new Set(equities.map((e) => e.symbol.toUpperCase()));
+    const dedupedEtfs = etfsInjected.filter((e) => !equitySymbols.has(e.symbol.toUpperCase()));
     const dedupedCryptos = cryptos.filter(
       (c) => !equitySymbols.has(c.symbol.toUpperCase()),
     );
     const dedupedFx = fx.filter((f) => !equitySymbols.has(f.symbol.toUpperCase()));
     const dedupedIdx = idx.filter((i) => !equitySymbols.has(i.symbol.toUpperCase()));
     const dedupedBonds = bonds.filter((b) => !equitySymbols.has(b.symbol.toUpperCase()));
-    return [...equities, ...dedupedCryptos, ...dedupedFx, ...dedupedIdx, ...dedupedBonds];
+    return [...equities, ...dedupedEtfs, ...dedupedCryptos, ...dedupedFx, ...dedupedIdx, ...dedupedBonds];
   }, [suggestState.data, debouncedQuery]);
 
   // -------------------------------------------------------------------------
