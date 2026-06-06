@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { BacktestChart } from "@/components/backtest/BacktestChart";
+import { displaySymbol } from "@/utils/displaySymbol";
+import type { Interval } from "@/components/charting/types";
 import { CreateBacktestSessionModal } from "@/components/backtest/CreateBacktestSessionModal";
 import { useBacktestSessionStore } from "@/store/useBacktestSessionStore";
 import type { BacktestSession } from "@/types/backtestSession";
@@ -74,13 +76,18 @@ export default function Chart() {
             <span className="text-sm text-white font-medium">
               {activeSession.name}
               <span className="text-gray-500 font-normal">
-                {" · "}{activeSession.symbol} · ${activeSession.startBalance.toLocaleString()}
+                {" · "}{displaySymbol(activeSession.symbol)} · ${activeSession.startBalance.toLocaleString()}
               </span>
             </span>
           )}
         </div>
         <div className="flex-1 min-h-0">
-          <BacktestChart startingBalance={activeSession?.startBalance} />
+          <BacktestChart
+            key={activeSession?.id}
+            initialSymbol={activeSession?.symbol}
+            initialInterval={activeSession?.timeframe as Interval}
+            startingBalance={activeSession?.startBalance}
+          />
         </div>
       </div>
     );
@@ -135,7 +142,7 @@ export default function Chart() {
                   <div className="min-w-0">
                     <p className="text-white font-medium truncate">{s.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {s.symbol} · ${s.startBalance.toLocaleString()}
+                      {displaySymbol(s.symbol)} · ${s.startBalance.toLocaleString()}
                       {s.strategyName ? ` · ${s.strategyName}` : ""}
                     </p>
                   </div>
