@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Calendar,
   Clock,
@@ -16,6 +16,8 @@ import {
   X,
   CheckCircle2,
   Building2,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 
 // ============================================
@@ -137,7 +139,7 @@ const CALENDAR_ENDPOINT = '/api/all-markets/calendar';
 // COUNTRY FLAGS - local, preloaded map. No runtime flag downloads.
 // ============================================
 
-const DEFAULT_COUNTRY_CODES = ['US', 'EU', 'DE', 'GB'];
+const DEFAULT_COUNTRY_CODES = ['US', 'GB', 'DE'];
 
 const COUNTRIES = [
   { code: 'US', name: 'United States', flag: '🇺🇸' },
@@ -160,16 +162,6 @@ const COUNTRIES = [
   { code: 'HK', name: 'Hong Kong', flag: '🇭🇰' },
 ];
 
-const COUNTRY_FLAG_MAP: Record<string, string> = COUNTRIES.reduce(
-  (acc, country) => ({ ...acc, [country.code]: country.flag }),
-  {
-    USA: '🇺🇸',
-    UK: '🇬🇧',
-    EA: '🇪🇺',
-    ALL: '🌍',
-    Global: '🌍',
-  } as Record<string, string>,
-);
 
 const normalizeCountryCode = (code?: string | null): string => {
   const upper = (code || '').toUpperCase();
@@ -528,23 +520,121 @@ const NowIndicator: React.FC = () => (
   </tr>
 );
 
-// Flag Component with local map
-const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> = ({ 
-  countryCode, 
-  size = 'md' 
-}) => {
-  const sizeClasses = {
-    sm: 'text-base',
-    md: 'text-lg',
-    lg: 'text-xl'
-  };
-  
-  const flag = COUNTRY_FLAG_MAP[normalizeCountryCode(countryCode)] || '🏳️';
-  
+// Flag Component using flagcdn real flag images (emoji flags don't render on Windows/Chrome)
+const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> = ({ countryCode, size = 'md' }) => {
+  const dims = { sm: 'w-4 h-3', md: 'w-5 h-3.5', lg: 'w-6 h-4' };
+  const code = normalizeCountryCode(countryCode).toLowerCase();
   return (
-    <span className={`${sizeClasses[size]} leading-none`}>
-      {flag}
-    </span>
+    <img
+      src={`https://flagcdn.com/w40/${code}.png`}
+      srcSet={`https://flagcdn.com/w80/${code}.png 2x`}
+      alt={countryCode}
+      loading="lazy"
+      className={`${dims[size]} object-cover rounded-[2px] ring-1 ring-white/10 inline-block`}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+    />
+  );
+};
+
+const CountryFilterDropdown: React.FC<{
+  countries: typeof COUNTRIES;
+  selected: string[];
+  onToggle: (code: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+}> = ({ countries, selected, onToggle, onSelectAll, onClear }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyHandler);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-3 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-300 hover:border-amber-500/50 transition-colors"
+      >
+        <Globe size={14} className="text-neutral-400" />
+        <span>Country</span>
+        {selected.length > 0 && (
+          <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full">
+            {selected.length}
+          </span>
+        )}
+        <ChevronDown
+          size={14}
+          className={`text-neutral-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 z-50 w-64 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              Select all
+            </button>
+            <span className="text-[10px] text-neutral-500">{selected.length} selected</span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Scrollable country list */}
+          <div className="max-h-72 overflow-y-auto py-1">
+            {countries.map((country) => {
+              const isSelected = selected.includes(country.code);
+              return (
+                <button
+                  key={country.code}
+                  type="button"
+                  onClick={() => onToggle(country.code)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-neutral-800/60 transition-colors"
+                >
+                  {/* Checkbox indicator */}
+                  <span
+                    className={`flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      isSelected ? 'bg-amber-500 border-amber-500' : 'border-neutral-600 bg-transparent'
+                    }`}
+                  >
+                    {isSelected && <Check size={12} className="text-white" />}
+                  </span>
+                  <CountryFlag countryCode={country.code} size="sm" />
+                  <span className={isSelected ? 'text-neutral-100' : 'text-neutral-400'}>
+                    {country.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -645,7 +735,7 @@ const DataValue: React.FC<{
   let colorClass = 'text-neutral-200';
   
   if (type === 'actual' && numCompare !== null && !isNaN(numValue) && !isNaN(numCompare)) {
-    if (numValue > numCompare) colorClass = 'text-emerald-400';
+    if (numValue > numCompare) colorClass = 'text-white font-semibold';
     else if (numValue < numCompare) colorClass = 'text-red-400';
   }
   
@@ -770,7 +860,7 @@ const EconomicCalendarTable: React.FC<{
                               {event.time || '—'}
                             </span>
                             {event.isReleased && (
-                              <CheckCircle2 size={12} className="text-emerald-500" />
+                              <CheckCircle2 size={12} className="text-amber-500/70" />
                             )}
                           </div>
                         </td>
@@ -801,7 +891,7 @@ const EconomicCalendarTable: React.FC<{
                               <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
                             )}
                             {event.isRevised && (
-                              <span className="text-xs text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">R</span>
+                              <span className="text-xs text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
                             )}
                           </div>
                         </td>
@@ -1181,11 +1271,11 @@ const Legend: React.FC = () => (
       <span>Preliminary</span>
     </div>
     <div className="flex items-center gap-2">
-      <span className="text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">R</span>
+      <span className="text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
       <span>Revised</span>
     </div>
     <div className="flex items-center gap-2">
-      <CheckCircle2 size={12} className="text-emerald-500" />
+      <CheckCircle2 size={12} className="text-amber-500/70" />
       <span>Released</span>
     </div>
     <div className="h-4 w-px bg-neutral-700" />
@@ -1360,32 +1450,13 @@ export default function AllMarketsCalendar() {
               )}
             </div>
 
-            <div className="flex items-center gap-2 bg-neutral-900/80 border border-neutral-800 rounded-lg px-2 py-1.5">
-              <span className="text-[10px] uppercase tracking-wider text-neutral-500 px-1">Country</span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {COUNTRIES.slice(0, 4).map((country) => {
-                  const selected = selectedCountries.includes(country.code);
-
-                  return (
-                    <button
-                      key={country.code}
-                      type="button"
-                      onClick={() => toggleCountry(country.code)}
-                      className={`
-                        flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-all
-                        ${selected
-                          ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
-                          : 'border-neutral-800 bg-neutral-950/50 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300'
-                        }
-                      `}
-                    >
-                      <CountryFlag countryCode={country.code} size="sm" />
-                      <span>{country.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <CountryFilterDropdown
+              countries={COUNTRIES}
+              selected={selectedCountries}
+              onToggle={toggleCountry}
+              onSelectAll={() => setSelectedCountries(COUNTRIES.map((c) => c.code))}
+              onClear={() => setSelectedCountries([])}
+            />
 
             <button
               onClick={() => refetch()}
@@ -1415,35 +1486,6 @@ export default function AllMarketsCalendar() {
         {showFilters && (
           <div className="mb-6 p-4 bg-neutral-900/80 border border-amber-500/20 rounded-lg">
             <div className="flex flex-wrap items-center gap-6">
-              <div>
-                <label className="block text-xs text-amber-400/80 uppercase tracking-wider mb-2 font-semibold">
-                  Countries
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {COUNTRIES.map((country) => {
-                    const selected = selectedCountries.includes(country.code);
-
-                    return (
-                      <button
-                        key={country.code}
-                        type="button"
-                        onClick={() => toggleCountry(country.code)}
-                        className={`
-                          flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-all border
-                          ${selected
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                            : 'bg-neutral-800/50 text-neutral-500 border-neutral-700 hover:text-neutral-300'
-                          }
-                        `}
-                      >
-                        <CountryFlag countryCode={country.code} size="sm" />
-                        <span>{country.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs text-amber-400/80 uppercase tracking-wider mb-2 font-semibold">
                   Impact Level
