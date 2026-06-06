@@ -44,6 +44,12 @@ export interface Trade {
   metrics?: TradeMetrics;
   created_at?: string;
   updated_at?: string;
+  // Options fields
+  option_type?: 'CALL' | 'PUT';
+  strike_price?: number;
+  expiration_date?: string;
+  option_outcome?: string;
+  underlying_symbol?: string;
 }
 
 // ================================================
@@ -347,6 +353,7 @@ export async function getTrades(userId?: string) {
         quantity, entry_price, stop_price, take_profit_price, exit_price,
         fees, fees_mode, session, strategy_id, setup, notes, mistake, next_time,
         tags, screenshot_url, outcome, pnl, quality_tag, metrics,
+        multiplier, option_type, strike_price, expiration_date, option_outcome, underlying_symbol,
         strategy:strategies(id, name)
       `)
       .eq('user_id', effectiveUserId)

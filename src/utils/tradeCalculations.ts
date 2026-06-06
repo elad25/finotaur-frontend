@@ -54,6 +54,7 @@ export const ASSET_MULTIPLIERS: Record<string, { class: string; mult: number }> 
 } as const;
 
 import { normalizeSymbol } from './normalizeSymbol';
+import { normalizeAssetClass } from './assetClass';
 
 // Helper: Get multiplier for symbol.
 // Tries the exact symbol first, then falls back to the futures root
@@ -80,23 +81,26 @@ export function getAssetMultiplier(symbol: string, assetClass?: string): number 
 }
 
 // Helper: Get asset class for symbol (with futures-root fallback).
+// Returns a canonical asset-class token via normalizeAssetClass; unknown symbols → 'stock'.
 export function getAssetClass(symbol: string): string {
-  if (!symbol) return 'stocks';
+  if (!symbol) return 'stock';
   const symbolUpper = symbol.toUpperCase().trim();
-  if (ASSET_MULTIPLIERS[symbolUpper]) return ASSET_MULTIPLIERS[symbolUpper].class;
-  const root = normalizeSymbol(symbolUpper);
-  if (root && root !== symbolUpper && ASSET_MULTIPLIERS[root]) return ASSET_MULTIPLIERS[root].class;
-  return 'stocks';
+  const rawClass = ASSET_MULTIPLIERS[symbolUpper]?.class
+    ?? ((() => { const root = normalizeSymbol(symbolUpper); return root && root !== symbolUpper ? ASSET_MULTIPLIERS[root]?.class : null; })())
+    ?? 'stock';
+  return normalizeAssetClass(rawClass) ?? 'stock';
 }
 
 // Helper: Detect asset class from symbol (auto-detection, with root fallback).
+// Returns a canonical asset-class token, or null when the symbol is not recognised.
 export function detectAssetClass(symbol: string): string | null {
   if (!symbol) return null;
   const symbolUpper = symbol.toUpperCase().trim();
-  if (ASSET_MULTIPLIERS[symbolUpper]) return ASSET_MULTIPLIERS[symbolUpper].class;
-  const root = normalizeSymbol(symbolUpper);
-  if (root && root !== symbolUpper && ASSET_MULTIPLIERS[root]) return ASSET_MULTIPLIERS[root].class;
-  return null;
+  const rawClass = ASSET_MULTIPLIERS[symbolUpper]?.class
+    ?? ((() => { const root = normalizeSymbol(symbolUpper); return root && root !== symbolUpper ? ASSET_MULTIPLIERS[root]?.class : null; })())
+    ?? null;
+  if (!rawClass) return null;
+  return normalizeAssetClass(rawClass);
 }
 
 // ================================================================
@@ -259,9 +263,9 @@ export interface Trade {
  *   preserving existing behavior for futures, stocks, crypto, and forex.
  */
 export function getEffectiveMultiplier(trade: Pick<Trade, 'symbol' | 'asset_class'>): number {
-  const assetClass = trade.asset_class ?? getAssetClass(trade.symbol);
+  const assetClass = normalizeAssetClass(trade.asset_class ?? getAssetClass(trade.symbol));
   if (assetClass === 'options') return 100;
-  return getAssetMultiplier(trade.symbol, assetClass);
+  return getAssetMultiplier(trade.symbol, assetClass ?? undefined);
 }
 
 /**
@@ -278,7 +282,7 @@ export function getEffectiveMultiplier(trade: Pick<Trade, 'symbol' | 'asset_clas
  *             Byte-identical to the pre-existing formula for these two classes.
  */
 export function pointsToUsd(trade: Trade, points: number): number {
-  const assetClass = trade.asset_class ?? getAssetClass(trade.symbol);
+  const assetClass = normalizeAssetClass(trade.asset_class ?? getAssetClass(trade.symbol));
 
   if (assetClass === 'options') {
     // Standard US equity option: 100 shares per contract
@@ -379,7 +383,7 @@ export function calculateActualR(
 
   const grossPnL = pointsToUsd(tradeCtx, priceDiff);
   // For crypto, also subtract funding_paid if present
-  const fundingAdj = (tradeCtx.asset_class ?? getAssetClass(symbol)) === 'crypto'
+  const fundingAdj = normalizeAssetClass(tradeCtx.asset_class ?? getAssetClass(symbol)) === 'crypto'
     ? (tradeCtx.funding_paid ?? 0)
     : 0;
   const netPnL = grossPnL - fees - fundingAdj;
@@ -424,7 +428,7 @@ export function calculatePnL(trade: Trade): number {
 
   // Crypto: also subtract funding_paid (perp/perpetual swap carry cost).
   // For all other classes funding_paid is undefined/0, so this is a no-op.
-  const assetClass = trade.asset_class ?? getAssetClass(trade.symbol);
+  const assetClass = normalizeAssetClass(trade.asset_class ?? getAssetClass(trade.symbol));
   const fundingAdj = assetClass === 'crypto' ? (trade.funding_paid ?? 0) : 0;
 
   const netPnL = grossPnL - trade.fees - fundingAdj;
@@ -628,7 +632,7 @@ export interface OptionExtremum {
 
 /** True when this trade is a single-leg option with the fields we need. */
 function isOptionTrade(trade: Pick<Trade, 'asset_class'>): boolean {
-  return (trade.asset_class ?? '') === 'options';
+  return normalizeAssetClass(trade.asset_class) === 'options';
 }
 
 /** Strip time-of-day so DTE is measured in whole calendar days (local). */

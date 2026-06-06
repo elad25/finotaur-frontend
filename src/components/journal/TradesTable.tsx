@@ -122,6 +122,26 @@ export const TradesTable = ({ trades }: TradesTableProps) => {
 
                   <TableCell className="font-bold text-gold">
                     {trade.symbol}
+                    {trade.asset_class === 'options' &&
+                      trade.strike_price != null &&
+                      trade.option_type &&
+                      trade.expiration_date && (
+                        <div className="text-xs font-normal text-muted-foreground mt-0.5 tabular-nums">
+                          {trade.strike_price}
+                          {trade.option_type === 'CALL' ? 'C' : 'P'}
+                          {' · '}
+                          {(() => {
+                            try {
+                              return new Date(trade.expiration_date!).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                              });
+                            } catch {
+                              return trade.expiration_date;
+                            }
+                          })()}
+                        </div>
+                      )}
                   </TableCell>
 
                   <TableCell className="text-sm text-muted-foreground">
@@ -162,17 +182,25 @@ export const TradesTable = ({ trades }: TradesTableProps) => {
 
                   <TableCell
                     className={`text-right font-bold tabular-nums ${
-                      trade.outcome === 'OPEN' 
+                      trade.outcome === 'OPEN'
                         ? 'text-muted-foreground'
-                        : isProfitable 
-                          ? 'text-emerald-400' 
+                        : isProfitable
+                          ? 'text-emerald-400'
                           : 'text-red-400'
                     }`}
                   >
                     {trade.outcome === 'OPEN' ? (
                       <span className="text-xs font-normal">OPEN</span>
                     ) : (
-                      formatCurrency(trade.pnl || 0)
+                      <>
+                        {formatCurrency(trade.pnl || 0)}
+                        {trade.asset_class === 'options' &&
+                          trade.option_outcome === 'expired_worthless' && (
+                            <span className="ml-1.5 inline-block rounded px-1.5 py-0.5 text-xs font-semibold bg-zinc-700/60 text-zinc-400 border border-zinc-600/50">
+                              Expired
+                            </span>
+                          )}
+                      </>
                     )}
                   </TableCell>
 

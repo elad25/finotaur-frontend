@@ -16,6 +16,7 @@ import { computeRR as smartComputeRR, detectAssetClass, inferDirection } from "@
 import { getStrategyById } from "@/utils/storage";
 import type { AssetClass } from "@/utils/smartCalc";
 import { getAssetMultiplier, computeLiquidationPrice, getPipSize, parseForexPair, computeQuoteRate } from "@/utils/tradeCalculations";
+import { normalizeAssetClass as normalizeCanonicalAssetClass } from "@/utils/assetClass";
 
 export type Side = "LONG" | "SHORT";
 
@@ -88,6 +89,7 @@ type State = {
   optionType?: 'CALL' | 'PUT';
   strikePrice?: number;
   expirationDate?: string;
+  optionOutcome: string;
   leverage?: number;
   positionType?: 'Spot' | 'Perpetual';
   fundingPaid?: number;
@@ -124,6 +126,7 @@ type Actions = {
   setOptionType: (v?: 'CALL' | 'PUT') => void;
   setStrikePrice: (v?: number) => void;
   setExpirationDate: (v?: string) => void;
+  setOptionOutcome: (v: string) => void;
   setLeverage: (v?: number) => void;
   setPositionType: (v?: 'Spot' | 'Perpetual') => void;
   setFundingPaid: (v?: number) => void;
@@ -146,7 +149,7 @@ export interface TradePayload {
   stop_price: number;
   open_at: string | null;
   close_at: string | null;
-  asset_class: AssetClass | null;
+  asset_class: string | null;
   take_profit_price: number | null;
   exit_price: number | null;
   fees: number;
@@ -177,6 +180,7 @@ export interface TradePayload {
   option_type?: 'CALL' | 'PUT' | null;
   strike_price?: number | null;
   expiration_date?: string | null;
+  option_outcome?: string | null;
   leverage?: number | null;
   position_type?: 'Spot' | 'Perpetual' | null;
   funding_paid?: number | null;
@@ -254,6 +258,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   optionType: undefined,
   strikePrice: undefined,
   expirationDate: undefined,
+  optionOutcome: '',
   leverage: undefined,
   positionType: undefined,
   fundingPaid: undefined,
@@ -417,6 +422,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   setOptionType: (v) => { set({ optionType: v }); get().saveDraft(); },
   setStrikePrice: (v) => { set({ strikePrice: v }); get().saveDraft(); },
   setExpirationDate: (v) => { set({ expirationDate: v }); get().saveDraft(); },
+  setOptionOutcome: (v) => { set({ optionOutcome: v }); get().saveDraft(); },
   setLeverage: (v) => { set({ leverage: v }); get().saveDraft(); },
   setPositionType: (v) => { set({ positionType: v }); get().saveDraft(); },
   setFundingPaid: (v) => { set({ fundingPaid: v }); get().saveDraft(); },
@@ -502,9 +508,10 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     const s = get();
     const normalizedSession = normalizeSession(s.session);
     
-    // 🔥 FIX: Ensure assetClass in payload is normalized
+    // Ensure assetClass in payload is normalized to canonical vocabulary
     const rawAssetClass = s.assetClass || detectAssetClass(s.symbol);
     const assetClass = normalizeAssetClass(rawAssetClass as string) || "stocks";
+    const canonicalClass = normalizeCanonicalAssetClass(rawAssetClass as string);
     
     return {
       symbol: s.symbol,
@@ -514,7 +521,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       stop_price: s.stopPrice,
       open_at: s.openAt || new Date().toISOString(),
       close_at: s.exitPrice && s.exitPrice > 0 ? (s.closeAt || new Date().toISOString()) : null,
-      asset_class: assetClass,  // 🔥 Always normalized!
+      asset_class: canonicalClass ?? assetClass,  // canonical vocabulary (e.g. 'stock' not 'stocks')
       take_profit_price: toNull(s.takeProfitPrice) || null,
       exit_price: s.exitPrice && s.exitPrice > 0 ? s.exitPrice : null,
       fees: s.fees || 0,
@@ -540,23 +547,24 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       broker: s.broker || 'manual',
       import_source: s.importSource || 'manual',
       // Asset-class-specific fields — only set when relevant
-      option_type: assetClass === 'options' ? (s.optionType ?? null) : null,
-      strike_price: assetClass === 'options' ? (s.strikePrice ?? null) : null,
-      expiration_date: assetClass === 'options' ? (s.expirationDate ?? null) : null,
-      leverage: assetClass === 'crypto' ? (s.leverage ?? null) : null,
-      position_type: assetClass === 'crypto' ? (s.positionType ?? null) : null,
-      funding_paid: (assetClass === 'crypto' && s.positionType === 'Perpetual') ? (s.fundingPaid ?? null) : null,
-      lot_size: assetClass === 'forex' ? (s.lotSize ?? null) : null,
-      account_currency: assetClass === 'forex' ? (s.accountCurrency ?? 'USD') : null,
-      quote_rate: assetClass === 'forex'
+      option_type: canonicalClass === 'options' ? (s.optionType ?? null) : null,
+      strike_price: canonicalClass === 'options' ? (s.strikePrice ?? null) : null,
+      expiration_date: canonicalClass === 'options' ? (s.expirationDate ?? null) : null,
+      option_outcome: canonicalClass === 'options' ? (s.optionOutcome || null) : null,
+      leverage: canonicalClass === 'crypto' ? (s.leverage ?? null) : null,
+      position_type: canonicalClass === 'crypto' ? (s.positionType ?? null) : null,
+      funding_paid: (canonicalClass === 'crypto' && s.positionType === 'Perpetual') ? (s.fundingPaid ?? null) : null,
+      lot_size: canonicalClass === 'forex' ? (s.lotSize ?? null) : null,
+      account_currency: canonicalClass === 'forex' ? (s.accountCurrency ?? 'USD') : null,
+      quote_rate: canonicalClass === 'forex'
         ? computeQuoteRate({ symbol: s.symbol, accountCurrency: s.accountCurrency, current: s.quoteRate })
         : null,
-      liquidation_price: assetClass === 'crypto'
+      liquidation_price: canonicalClass === 'crypto'
         ? computeLiquidationPrice({ entryPrice: s.entryPrice, leverage: s.leverage, side: s.side })
         : null,
-      pip_size: assetClass === 'forex' ? getPipSize(s.symbol) : null,
-      base_currency: assetClass === 'forex' ? parseForexPair(s.symbol).base : null,
-      quote_currency: assetClass === 'forex' ? parseForexPair(s.symbol).quote : null,
+      pip_size: canonicalClass === 'forex' ? getPipSize(s.symbol) : null,
+      base_currency: canonicalClass === 'forex' ? parseForexPair(s.symbol).base : null,
+      quote_currency: canonicalClass === 'forex' ? parseForexPair(s.symbol).quote : null,
     };
   },
 
@@ -591,6 +599,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         optionType: s.optionType,
         strikePrice: s.strikePrice,
         expirationDate: s.expirationDate,
+        optionOutcome: s.optionOutcome,
         leverage: s.leverage,
         positionType: s.positionType,
         fundingPaid: s.fundingPaid,
@@ -682,6 +691,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         optionType: undefined,
         strikePrice: undefined,
         expirationDate: undefined,
+        optionOutcome: '',
         leverage: undefined,
         positionType: undefined,
         fundingPaid: undefined,

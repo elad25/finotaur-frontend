@@ -48,6 +48,20 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const IBRIT_BASE = 'https://ndcdyn.interactivebrokers.com/Reporting/IBRITService';
+
+// ─── normalizeAssetClass: maps IBKR raw security-type codes to canonical UI values ───
+// IBKR sends 'OPT', 'STK', 'FUT', etc.; the UI checks asset_class === 'options' / 'stock' / etc.
+function normalizeAssetClass(raw: string | null | undefined): string | null {
+  switch ((raw ?? '').trim().toLowerCase()) {
+    case 'opt': case 'option': case 'options': return 'options';
+    case 'stk': case 'stock': case 'stocks': case 'equity': case 'equities': case 'shares': return 'stock';
+    case 'fut': case 'future': case 'futures': return 'futures';
+    case 'cash': case 'fx': case 'forex': return 'forex';
+    case 'crypto': case 'perp': case 'perpetual': case 'coin': return 'crypto';
+    case 'etf': case 'etfs': return 'etf';
+    default: return null;
+  }
+}
 const SYNC_DAYS_BACK = 30;
 const MAX_CONCURRENT_DAYS = 5;
 const DEFAULT_SERVICE_CODE = 'finotaur-ws';
@@ -310,12 +324,30 @@ function mapActivityToTrade(rec: Record<string, string>, userId: string, brokerC
     entry_price: Number(rec.UnitPrice) || Number(rec.TradePrice) || 0,
     fees: Math.abs(Number(rec.Commission) || Number(rec.IBCommission) || 0),
     open_at: openAt,
-    asset_class: (rec.AssetType || rec.AssetClass || 'STK').toLowerCase(), // column is asset_class, NOT asset_type
+    asset_class: normalizeAssetClass(rec.AssetType || rec.AssetClass), // column is asset_class, NOT asset_type
     underlying_symbol: underlying || null,
     contract_id: rawContractId || null,
     ib_conid: rec.ConID || null,
     sync_source: 'interactive_brokers_ibrit_v8',
     broker_connection_id: brokerConnectionId ?? null,
+    // Option contract metadata — populated only when IBKR identifies this trade as an option.
+    // Guards prevent crashes when fields are absent (not all Flex schemas include them).
+    ...(normalizeAssetClass(rec.AssetType || rec.AssetClass) === 'options' ? {
+      strike_price: rec.Strike ? Number(rec.Strike) || null : null,
+      option_type: (() => {
+        const pc = (rec['Put/Call'] || rec.PutCall || '').trim().toUpperCase();
+        if (!pc) return null;
+        return pc.charAt(0) === 'P' ? 'PUT' : pc.charAt(0) === 'C' ? 'CALL' : null;
+      })(),
+      expiration_date: (() => {
+        const raw = rec.Expiry || rec.Expiration || '';
+        if (!raw) return null;
+        // IBKR sends YYYYMMDD; convert to ISO date YYYY-MM-DD
+        if (/^\d{8}$/.test(raw)) return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+        return raw; // already ISO or other format — pass through
+      })(),
+      multiplier: 100,
+    } : {}),
   };
 }
 
@@ -358,7 +390,7 @@ function parsePositionsFromCsv(sections: ParsedSections): Record<string, unknown
         CostBasisMoney: rec.CostBasis || '0',
         FifoPnlUnrealized: rec.UnrealizedPL || '0',
         CurrencyPrimary: rec.Currency || 'USD',
-        AssetClass: rec.AssetType || 'STK',
+        AssetClass: normalizeAssetClass(rec.AssetType) ?? 'stock',
       });
     }
   }
@@ -380,7 +412,7 @@ function aggregatePositions(trades: Record<string, string>[]): Record<string, un
     const buySell = (buySellRaw === 'BUY' || buySellRaw === 'SELL') ? buySellRaw : '';
     const signedQty = buySell === 'SELL' ? -Math.abs(qty) : Math.abs(qty);
     const underlyingSym = sym.split(/\s+/)[0] || sym;
-    const entry = map.get(underlyingSym) ?? { Symbol: underlyingSym, Description: t.SecurityDescription || t.Description || underlyingSym, netQty: 0, totalCost: 0, lastPrice: px, CurrencyPrimary: t.Currency || t.CurrencyPrimary || 'USD', AssetClass: t.AssetType || t.AssetClass || 'STK' };
+    const entry = map.get(underlyingSym) ?? { Symbol: underlyingSym, Description: t.SecurityDescription || t.Description || underlyingSym, netQty: 0, totalCost: 0, lastPrice: px, CurrencyPrimary: t.Currency || t.CurrencyPrimary || 'USD', AssetClass: normalizeAssetClass(t.AssetType || t.AssetClass) ?? 'stock' };
     entry.netQty += signedQty;
     if (buySell === 'BUY') entry.totalCost += Math.abs(qty) * px;
     entry.lastPrice = px || entry.lastPrice;
@@ -1068,11 +1100,11 @@ async function backfillWithMarks(userId: string, days: number): Promise<{
   // 9. Compute multipliers (100 for options, 1 for everything else)
   const multipliers = new Map<string, number>();
   for (const ticker of uniqueTickers) {
-    // Check current holdings first, then trade asset class
+    // Check current holdings first, then trade asset class; normalize both to canonical form
     const acFromHoldings = currentHoldings.get(ticker)?.assetClass ?? '';
     const acFromTrades = tradeAssetClass.get(ticker) ?? '';
-    const ac = (acFromHoldings || acFromTrades).toLowerCase();
-    const isOption = ac === 'opt' || ac === 'option' || ac === 'options';
+    const ac = normalizeAssetClass(acFromHoldings || acFromTrades);
+    const isOption = ac === 'options';
     multipliers.set(ticker, isOption ? 100 : 1);
   }
 
