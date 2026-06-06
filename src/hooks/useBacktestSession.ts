@@ -463,8 +463,11 @@ function makeEmptyState(initialBalance: number): SessionState {
   };
 }
 
-function storageKeyFor(userId: string | null | undefined): string | null {
-  return userId ? STORAGE_PREFIX + userId : null;
+function storageKeyFor(userId: string | null | undefined, sessionId?: string | null): string | null {
+  if (!userId) return null;
+  // Session-scoped key: each backtest session persists/restores its own state.
+  // Falls back to a user-global key when no sessionId is supplied (legacy callers).
+  return sessionId ? `${STORAGE_PREFIX}${userId}:${sessionId}` : STORAGE_PREFIX + userId;
 }
 
 // Per-position field validation. A persisted trade from an older schema (or a
@@ -518,10 +521,14 @@ function loadPersistedState(initialBalance: number, key: string | null): Session
   return empty;
 }
 
-export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
+export function useBacktestSession(initialBalance: number = 10000, sessionId?: string | null): UseBacktestSessionReturn {
   // useEffectiveUser returns the student's id in Mentor View (read-only there).
   const { id: userId } = useEffectiveUser();
-  const key = storageKeyFor(userId);
+  // Session-scoped key so a freshly-opened session starts from its OWN
+  // configured balance + empty trades, instead of inheriting the previously
+  // opened session's persisted balance/position/P&L (which made every session
+  // show the default $10,000 and a stale open position).
+  const key = storageKeyFor(userId, sessionId);
 
   // Initialize empty. The real restore happens in the hydration effect below
   // once `key` is known — `useAuth().user` is frequently null on first render

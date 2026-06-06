@@ -84,6 +84,7 @@ export default function Chart() {
         <div className="flex-1 min-h-0">
           <BacktestChart
             key={activeSession?.id}
+            sessionId={activeSession?.id}
             initialSymbol={activeSession?.symbol}
             initialInterval={activeSession?.timeframe as Interval}
             startingBalance={activeSession?.startBalance}

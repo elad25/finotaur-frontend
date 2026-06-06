@@ -308,6 +308,8 @@ export interface BacktestChartProps {
   initialSymbol?: string;
   initialInterval?: Interval;
   startingBalance?: number;
+  /** Active session id — scopes persisted paper-trading state per session. */
+  sessionId?: string;
   theme?: 'dark' | 'light';
 }
 
@@ -315,6 +317,7 @@ export function BacktestChart({
   initialSymbol = 'MNQ=F',
   initialInterval = '5m',
   startingBalance = 10000,
+  sessionId,
   theme = 'dark',
 }: BacktestChartProps) {
   const [symbol, setSymbol] = useState(initialSymbol);
@@ -347,7 +350,7 @@ export function BacktestChart({
 
   const { id: userId } = useEffectiveUser();
 
-  const session = useBacktestSession(startingBalance);
+  const session = useBacktestSession(startingBalance, sessionId);
   const {
     state,
     openPosition,
