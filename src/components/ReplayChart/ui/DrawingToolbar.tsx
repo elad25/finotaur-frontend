@@ -21,8 +21,6 @@ import {
 } from 'lucide-react';
 import { Theme, DrawingType } from '../types';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 
 // ✅ Export interface
 export interface DrawingToolbarProps {
@@ -41,24 +39,42 @@ export interface DrawingToolbarProps {
   className?: string;
 }
 
-const TOOLS: Array<{
-  id: DrawingType | 'cursor' | 'cross';
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  shortcut?: string;
-}> = [
-  { id: 'cursor', icon: MousePointer2, label: 'Select', shortcut: 'C' },
-  { id: 'cross', icon: MousePointer2, label: 'Crosshair', shortcut: 'X' },
-  { id: 'trendline', icon: TrendingUp, label: 'Trend Line', shortcut: 'T' },
-  { id: 'horizontal', icon: Minus, label: 'Horizontal Line', shortcut: 'H' },
-  { id: 'vertical', icon: MoveVertical, label: 'Vertical Line', shortcut: 'V' },
-  { id: 'ray', icon: GitCommit, label: 'Ray', shortcut: 'R' },
-  { id: 'rectangle', icon: Square, label: 'Rectangle' },
-  { id: 'circle', icon: Circle, label: 'Circle' },
-  { id: 'brush', icon: Pencil, label: 'Brush' },
-  { id: 'text', icon: Type, label: 'Text' },
-  { id: 'measure', icon: Ruler, label: 'Measure' },
-  { id: 'fibonacci', icon: Percent, label: 'Fibonacci', shortcut: 'F' },
+// Tool groups — same 12 tool ids/icons/labels/shortcuts, sectioned TradingView-style.
+const TOOL_GROUPS: Array<
+  Array<{
+    id: DrawingType | 'cursor' | 'cross';
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    shortcut?: string;
+  }>
+> = [
+  // cursors
+  [
+    { id: 'cursor', icon: MousePointer2, label: 'Select', shortcut: 'C' },
+    { id: 'cross', icon: MousePointer2, label: 'Crosshair', shortcut: 'X' },
+  ],
+  // lines
+  [
+    { id: 'trendline', icon: TrendingUp, label: 'Trend Line', shortcut: 'T' },
+    { id: 'ray', icon: GitCommit, label: 'Ray', shortcut: 'R' },
+    { id: 'horizontal', icon: Minus, label: 'Horizontal Line', shortcut: 'H' },
+    { id: 'vertical', icon: MoveVertical, label: 'Vertical Line', shortcut: 'V' },
+  ],
+  // shapes
+  [
+    { id: 'rectangle', icon: Square, label: 'Rectangle' },
+    { id: 'circle', icon: Circle, label: 'Circle' },
+  ],
+  // annotate
+  [
+    { id: 'brush', icon: Pencil, label: 'Brush' },
+    { id: 'text', icon: Type, label: 'Text' },
+  ],
+  // measure
+  [
+    { id: 'measure', icon: Ruler, label: 'Measure' },
+    { id: 'fibonacci', icon: Percent, label: 'Fibonacci', shortcut: 'F' },
+  ],
 ];
 
 export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
@@ -78,150 +94,126 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
 }) => {
   const isDark = theme === 'dark';
 
+  const divider = (
+    <div
+      className={cn(
+        'my-1 h-px w-6',
+        isDark ? 'bg-[#C9A646]/15' : 'bg-gray-200'
+      )}
+    />
+  );
+
+  const toolBtn = (
+    tool: { id: DrawingType | 'cursor' | 'cross'; icon: React.ComponentType<{ className?: string }>; label: string; shortcut?: string }
+  ) => {
+    const isActive = currentTool === tool.id;
+    return (
+      <button
+        key={tool.id}
+        type="button"
+        title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+        onClick={() => onToolSelect(tool.id)}
+        className={cn(
+          'group relative flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+          isActive
+            ? 'bg-[#C9A646]/15 text-[#C9A646] before:absolute before:left-[-4px] before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:rounded-r before:bg-[#C9A646] before:content-[""]'
+            : isDark
+            ? 'text-zinc-400 hover:bg-white/5 hover:text-[#C9A646]'
+            : 'text-gray-500 hover:bg-gray-100 hover:text-[#C9A646]'
+        )}
+      >
+        <tool.icon className="h-[18px] w-[18px]" />
+        {/* TradingView-style tooltip — appears to the right */}
+        <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-xl transition-opacity duration-100 group-hover:opacity-100">
+          {tool.label}
+          {tool.shortcut && (
+            <kbd className="ml-2 rounded bg-white/10 px-1 text-[10px] text-zinc-400">
+              {tool.shortcut}
+            </kbd>
+          )}
+        </span>
+      </button>
+    );
+  };
+
+  const actionBtn = ({
+    icon: Icon,
+    label,
+    onClick,
+    disabled = false,
+    danger = false,
+    shortcut,
+  }: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    onClick?: () => void;
+    disabled?: boolean;
+    danger?: boolean;
+    shortcut?: string;
+  }) => (
+    <button
+      type="button"
+      title={`${label}${shortcut ? ` (${shortcut})` : ''}`}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'group relative flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+        'disabled:pointer-events-none disabled:opacity-30',
+        danger
+          ? 'text-zinc-400 hover:bg-rose-500/10 hover:text-rose-400'
+          : isDark
+          ? 'text-zinc-400 hover:bg-white/5 hover:text-[#C9A646]'
+          : 'text-gray-500 hover:bg-gray-100 hover:text-[#C9A646]'
+      )}
+    >
+      <Icon className="h-[18px] w-[18px]" />
+      <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-xl transition-opacity duration-100 group-hover:opacity-100">
+        {label}
+        {shortcut && (
+          <kbd className="ml-2 rounded bg-white/10 px-1 text-[10px] text-zinc-400">
+            {shortcut}
+          </kbd>
+        )}
+      </span>
+    </button>
+  );
+
   return (
     <div
       className={cn(
-        'absolute top-4 left-4 z-20 backdrop-blur-md rounded-lg border p-2 flex flex-col gap-1',
+        'flex h-full w-11 flex-col items-center gap-0.5 border-r px-1 py-2 backdrop-blur-sm',
         isDark
-          ? 'bg-black/80 border-[#C9A646]/30'
-          : 'bg-white/80 border-gray-200',
+          ? 'border-[#C9A646]/15 bg-[#0b0b0d]/95'
+          : 'border-gray-200 bg-white/95',
         className
       )}
     >
-      {TOOLS.map((tool, index) => (
-        <React.Fragment key={tool.id}>
-          {(index === 2 || index === 6 || index === 9) && (
-            <Separator
-              className={cn(
-                'my-1',
-                isDark ? 'bg-[#C9A646]/20' : 'bg-gray-200'
-              )}
-            />
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onToolSelect(tool.id)}
-            className={cn(
-              'h-9 w-9 p-0 group relative',
-              currentTool === tool.id
-                ? isDark
-                  ? 'bg-[#C9A646]/20 text-[#C9A646]'
-                  : 'bg-blue-100 text-blue-600'
-                : isDark
-                ? 'hover:bg-[#C9A646]/10 text-[#C9A646]'
-                : 'hover:bg-gray-100 text-gray-700'
-            )}
-            title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
-          >
-            <tool.icon className="h-4 w-4" />
-            
-            <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity">
-              {tool.label}
-              {tool.shortcut && (
-                <span className="ml-2 opacity-60">{tool.shortcut}</span>
-              )}
-            </div>
-          </Button>
+      {/* Tool groups separated by dividers */}
+      {TOOL_GROUPS.map((group, gi) => (
+        <React.Fragment key={gi}>
+          {group.map((tool) => toolBtn(tool))}
+          {/* Divider after every group except the last */}
+          {gi < TOOL_GROUPS.length - 1 && divider}
         </React.Fragment>
       ))}
 
-      <Separator
-        className={cn('my-1', isDark ? 'bg-[#C9A646]/20' : 'bg-gray-200')}
-      />
-
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onUndo}
-        disabled={!canUndo}
-        className={cn(
-          'h-9 w-9 p-0',
-          isDark
-            ? 'hover:bg-[#C9A646]/10 text-[#C9A646] disabled:opacity-30'
-            : 'hover:bg-gray-100 disabled:opacity-30'
+      {/* Bottom action cluster — pushed to the bottom */}
+      <div className="mt-auto flex flex-col items-center gap-0.5">
+        {divider}
+        {actionBtn({ icon: Undo2, label: 'Undo', onClick: onUndo, disabled: !canUndo, shortcut: 'Ctrl+Z' })}
+        {actionBtn({ icon: Redo2, label: 'Redo', onClick: onRedo, disabled: !canRedo, shortcut: 'Ctrl+Shift+Z' })}
+        {hasSelection && (
+          <>
+            {actionBtn({
+              icon: isSelectionLocked ? Lock : Unlock,
+              label: isSelectionLocked ? 'Unlock' : 'Lock',
+              onClick: onLockToggle,
+            })}
+            {actionBtn({ icon: Trash2, label: 'Delete', onClick: onDeleteSelected, danger: true, shortcut: 'Del' })}
+          </>
         )}
-        title="Undo (Ctrl+Z)"
-      >
-        <Undo2 className="h-4 w-4" />
-      </Button>
-
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onRedo}
-        disabled={!canRedo}
-        className={cn(
-          'h-9 w-9 p-0',
-          isDark
-            ? 'hover:bg-[#C9A646]/10 text-[#C9A646] disabled:opacity-30'
-            : 'hover:bg-gray-100 disabled:opacity-30'
-        )}
-        title="Redo (Ctrl+Shift+Z)"
-      >
-        <Redo2 className="h-4 w-4" />
-      </Button>
-
-      {hasSelection && (
-        <>
-          <Separator
-            className={cn('my-1', isDark ? 'bg-[#C9A646]/20' : 'bg-gray-200')}
-          />
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onLockToggle}
-            className={cn(
-              'h-9 w-9 p-0',
-              isDark
-                ? 'hover:bg-[#C9A646]/10 text-[#C9A646]'
-                : 'hover:bg-gray-100'
-            )}
-            title={isSelectionLocked ? 'Unlock' : 'Lock'}
-          >
-            {isSelectionLocked ? (
-              <Lock className="h-4 w-4" />
-            ) : (
-              <Unlock className="h-4 w-4" />
-            )}
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onDeleteSelected}
-            className={cn(
-              'h-9 w-9 p-0',
-              isDark
-                ? 'hover:bg-red-500/10 text-red-500'
-                : 'hover:bg-red-50 text-red-600'
-            )}
-            title="Delete (Del)"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </>
-      )}
-
-      <Separator
-        className={cn('my-1', isDark ? 'bg-[#C9A646]/20' : 'bg-gray-200')}
-      />
-
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={onVisibilityToggle}
-        className={cn(
-          'h-9 w-9 p-0',
-          isDark
-            ? 'hover:bg-[#C9A646]/10 text-[#C9A646]'
-            : 'hover:bg-gray-100'
-        )}
-        title="Toggle All Drawings"
-      >
-        <Eye className="h-4 w-4" />
-      </Button>
+        {actionBtn({ icon: Eye, label: 'Show/Hide Drawings', onClick: onVisibilityToggle })}
+      </div>
     </div>
   );
 };
