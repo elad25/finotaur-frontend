@@ -314,8 +314,16 @@ export default function HomePage() {
             className="cursor-pointer hover:border-gold-border hover:bg-[#C9A646]/10 transition-colors"
           >
             <div className="flex items-center gap-ds-3">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] bg-surface-base border border-border-ds-subtle text-gold-primary">
-                <Library className="h-5 w-5" aria-hidden="true" />
+              {/* Notebook-style icon tile: cream paper + ruled lines + gold books */}
+              <span
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[12px] border border-[#d8c79a]"
+                style={{
+                  backgroundColor: '#f4ecd8',
+                  backgroundImage:
+                    'repeating-linear-gradient(to bottom, transparent 0, transparent 6px, rgba(99,132,173,0.30) 6px, rgba(99,132,173,0.30) 7px)',
+                }}
+              >
+                <Library className="h-5 w-5 text-[#8a6410]" aria-hidden="true" />
               </span>
               <div>
                 <p className="text-sm font-semibold text-ink-primary">Academy</p>
