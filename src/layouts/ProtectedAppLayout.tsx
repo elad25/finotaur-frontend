@@ -40,6 +40,7 @@ const NO_SUBNAV_ROUTES = [
   '/app/top-secret',           // Top Secret renders like War Zone: no product sub-nav
   '/app/all-markets/top-secret',
   '/app/all-markets/top-secret-admin',
+  '/app/futures',              // Futures uses the left sidebar as its only section navigation
 ];
 
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
