@@ -313,15 +313,15 @@ export default function HomePage() {
             aria-label="Go to Academy"
             className="cursor-pointer border-[#d8c79a] hover:border-[#b08316] transition-colors"
             style={{
-              backgroundColor: '#f4ecd8',
+              backgroundColor: '#ece0c4',
               backgroundImage:
-                'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(99,132,173,0.30) 31px, rgba(99,132,173,0.30) 32px)',
+                'repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(99,132,173,0.32) 31px, rgba(99,132,173,0.32) 32px)',
             }}
           >
             <div className="flex items-center gap-ds-3">
-              {/* Inverted: black books sitting directly on the notebook-paper card */}
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center">
-                <Library className="h-6 w-6 text-[#1a1a1a]" aria-hidden="true" />
+              {/* Inverted: black books inside a black-bordered square tile */}
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[8px] border-2 border-[#1a1a1a]">
+                <Library className="h-5 w-5 text-[#1a1a1a]" aria-hidden="true" />
               </span>
               <div>
                 <p className="text-sm font-semibold text-[#2b2620]">Academy</p>
