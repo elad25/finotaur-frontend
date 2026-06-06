@@ -13,6 +13,7 @@ import { useLocation } from 'react-router-dom';
 import { hasConsent, onConsentChange } from '@/lib/consent';
 import { initGA4, destroyGA4, trackPageView as ga4PageView, trackEvent as ga4Event } from './ga4';
 import { initPostHog, destroyPostHog, trackPageView as phPageView, trackEvent as phEvent } from './posthog';
+import { sendServerEvent } from './serverEvents';
 
 // ─── Allowed event names (enforced at compile time) ──────────────────────────
 
@@ -72,6 +73,8 @@ export function track(
 ): void {
   ga4Event(eventName, params);
   phEvent(eventName, params);
+  // Mirror to our backend for AI agents (consent-gated, fire-and-forget).
+  sendServerEvent(eventName, params);
 }
 
 /**
@@ -101,6 +104,7 @@ export function useAnalytics(): void {
         const path = window.location.pathname + window.location.search;
         ga4PageView(path);
         phPageView(path);
+        sendServerEvent('page_view', { path }, window.location.pathname);
       } else {
         teardownAnalytics();
       }
@@ -114,5 +118,6 @@ export function useAnalytics(): void {
     const path = location.pathname + location.search;
     ga4PageView(path);
     phPageView(path);
+    sendServerEvent('page_view', { path }, location.pathname);
   }, [location]);
 }
