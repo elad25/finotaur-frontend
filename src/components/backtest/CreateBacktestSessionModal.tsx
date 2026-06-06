@@ -4,7 +4,7 @@
 // 1:1 layout with the reference "Create new session" dialog, in Finotaur
 // gold-on-black. "Connect to playbook" → "Connect to strategy" (our Strategies).
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CalendarDays, Plus, Loader2 } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
@@ -37,10 +37,11 @@ import { useBacktestSessionStore } from '@/store/useBacktestSessionStore';
 import {
   ASSET_TYPE_LABELS,
   COMING_SOON_ASSETS,
-  SYMBOLS_BY_ASSET,
   type BacktestAssetType,
   type BacktestSession,
 } from '@/types/backtestSession';
+import { SymbolAutocomplete } from './SymbolAutocomplete';
+import type { AssetClass } from './symbolUniverse';
 import { cn } from '@/lib/utils';
 
 const GOLD = '#C9A646';
@@ -91,7 +92,6 @@ export function CreateBacktestSessionModal({
   const [creatingStrategy, setCreatingStrategy] = useState(false);
   const [newStrategyName, setNewStrategyName] = useState('');
 
-  const symbolOptions = useMemo(() => SYMBOLS_BY_ASSET[assetType] ?? [], [assetType]);
 
   const resetForm = () => {
     setName('');
@@ -298,18 +298,13 @@ export function CreateBacktestSessionModal({
           {/* Symbol */}
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-400">Symbol</Label>
-            <Select value={symbol} onValueChange={setSymbol}>
-              <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-[#C9A646]/40">
-                <SelectValue placeholder="Select a symbol" />
-              </SelectTrigger>
-              <SelectContent className="z-[10000] bg-[#0A0A0A] border-[#C9A646]/20 text-white">
-                {symbolOptions.map((sym) => (
-                  <SelectItem key={sym} value={sym} className="focus:bg-[#C9A646]/10">
-                    {sym}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SymbolAutocomplete
+              symbol={symbol}
+              assetClass={assetType as AssetClass}
+              filterToAssetClass
+              variant="field"
+              onSelect={setSymbol}
+            />
           </div>
 
           {/* Start balance + Date range */}
