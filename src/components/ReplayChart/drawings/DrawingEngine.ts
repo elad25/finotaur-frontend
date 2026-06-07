@@ -376,6 +376,29 @@ export class DrawingEngine {
     return true;
   }
 
+  /**
+   * Update top-level fields on a drawing (text, emoji, fontSize, fontWeight,
+   * textAlign, iconName, etc.). Style sub-fields go through updateDrawingStyle.
+   */
+  updateDrawingData(id: string, patch: Partial<Drawing>): boolean {
+    const drawing = this.drawings.find(d => d.id === id);
+    if (!drawing) return false;
+
+    const previousState = { ...drawing };
+    // Apply patch fields, excluding id/type/tool/points which must not change.
+    const { id: _id, type: _type, tool: _tool, points: _points, ...safePatch } = patch as Partial<Drawing> & { id?: string; type?: string; tool?: string; points?: unknown };
+    Object.assign(drawing, safePatch);
+    drawing.updatedAt = Date.now();
+
+    this.addToHistory({
+      type: 'edit',
+      drawing: { ...drawing },
+      previousState,
+    });
+
+    return true;
+  }
+
   // ===================================
   // DRAG & DROP
   // ===================================

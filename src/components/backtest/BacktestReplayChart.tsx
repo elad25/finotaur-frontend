@@ -47,6 +47,7 @@ import { ReplayControls } from './ReplayControls';
 import { useDrawings } from '@/components/ReplayChart/hooks/useDrawings';
 import { DrawingLayer } from '@/components/ReplayChart/drawings/DrawingLayer';
 import { DrawingToolbar } from '@/components/ReplayChart/ui/DrawingToolbar';
+import { DrawingStylePopover } from '@/components/ReplayChart/ui/DrawingStylePopover';
 import { POINTS_REQUIRED } from '@/components/ReplayChart/types';
 
 // Height of the time-axis row (lightweight-charts default is ~28px).
@@ -300,6 +301,8 @@ export function BacktestReplayChart({
     deleteSelected,
     lockSelected,
     toggleVisibility,
+    updateStyle,
+    updateDrawingData,
     undo,
     redo,
   } = useDrawings({
@@ -1218,6 +1221,24 @@ export function BacktestReplayChart({
             onLockToggle={lockSelected}
             onVisibilityToggle={toggleVisibility}
             className="absolute left-0 top-0 bottom-0 z-[30]"
+          />
+        )}
+
+        {/* ── Per-drawing style popover — appears just right of the toolbar
+            when exactly one drawing is selected. z-[31] sits above the toolbar. ── */}
+        {enableDrawings && selectedDrawing && (
+          <DrawingStylePopover
+            drawing={selectedDrawing}
+            onUpdateStyle={(patch) => updateStyle(selectedDrawing.id, patch)}
+            onUpdateDrawing={(patch) => updateDrawingData(selectedDrawing.id, patch)}
+            onDelete={() => {
+              deleteSelected();
+              setOverlayTick((n) => n + 1);
+            }}
+            onClose={() => {
+              deselectAll();
+              setOverlayTick((n) => n + 1);
+            }}
           />
         )}
 

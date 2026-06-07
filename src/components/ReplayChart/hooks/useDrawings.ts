@@ -33,6 +33,7 @@ export interface UseDrawingsReturn {
   lockSelected: () => boolean;
   toggleVisibility: () => void;
   updateStyle: (id: string, style: Partial<DrawingStyle>) => boolean;
+  updateDrawingData: (id: string, patch: Partial<Drawing>) => boolean;
   undo: () => boolean;
   redo: () => boolean;
   bringToFront: (id: string) => boolean;
@@ -191,6 +192,14 @@ export const useDrawings = ({
     return result;
   }, [syncDrawings]);
 
+  const updateDrawingData = useCallback((id: string, patch: Partial<Drawing>) => {
+    const result = engineRef.current?.updateDrawingData(id, patch) || false;
+    if (result) {
+      syncDrawings();
+    }
+    return result;
+  }, [syncDrawings]);
+
   const undo = useCallback(() => {
     const result = engineRef.current?.undo() || false;
     if (result) {
@@ -256,6 +265,7 @@ export const useDrawings = ({
     lockSelected,
     toggleVisibility,
     updateStyle,
+    updateDrawingData,
     undo,
     redo,
     bringToFront,
