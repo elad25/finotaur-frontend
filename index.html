@@ -4,6 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Self-healing chunk recovery (runs before the module entry; classic script so it
+         always executes even when every hashed chunk fails). After a deploy, a returning
+         tab may reference old /assets/*.js hashes that no longer exist; Cloudflare then
+         serves the index.html shell (text/html) for them, so the module script fails with
+         a MIME error and main.tsx never runs → infinite boot splash. We catch that failure
+         and force ONE reload to fetch the fresh, no-cache shell (which points at the current
+         hashes). A 12s sessionStorage guard prevents any reload loop during a real outage. -->
+    <script>
+      (function () {
+        try {
+          var KEY = '__finotaur_chunk_reload_at';
+          function recover() {
+            var last = parseInt(sessionStorage.getItem(KEY) || '0', 10);
+            if (Date.now() - last < 12000) return; // reloaded very recently — don't loop
+            sessionStorage.setItem(KEY, String(Date.now()));
+            location.reload();
+          }
+          // Resource load errors (script/link) don't bubble — listen in the capture phase.
+          window.addEventListener('error', function (e) {
+            var t = e && e.target;
+            if (!t || t === window) return;
+            var tag = (t.tagName || '').toUpperCase();
+            var url = t.src || t.href || '';
+            if ((tag === 'SCRIPT' || tag === 'LINK') && url.indexOf('/assets/') !== -1) {
+              recover();
+            }
+          }, true);
+          // Vite raises this for failed lazy dynamic imports.
+          window.addEventListener('vite:preloadError', function () { recover(); });
+        } catch (_) { /* never block boot */ }
+      })();
+    </script>
+
     <!-- Primary SEO -->
     <title>Finotaur — AI Trading Intelligence for Stocks, Options & Crypto</title>
     <meta name="description" content="Finotaur is the AI-powered trading intelligence platform for retail traders. Free AI stock analysis, options flow scanner, dark pool data, and institutional-grade research — Bloomberg Terminal quality at retail pricing." />
@@ -17,6 +50,7 @@
     <meta name="theme-color" content="#0a0a0a" />
     <meta name="application-name" content="Finotaur" />
     <meta name="apple-mobile-web-app-title" content="Finotaur" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
