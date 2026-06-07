@@ -568,11 +568,10 @@ export class DrawingEngine {
         return Math.sqrt(dx * dx + dy * dy);
       }
 
-      // Emoji / icon markers — 1 point, Euclidean distance to anchor.
+      // Emoji / icon markers + 1-point annotation markers — Euclidean distance to anchor.
       case 'emoji':
       case 'sticker':
       case 'icon':
-      // Annotation markers — 1 point each.
       case 'comment':
       case 'price-label':
       case 'signpost':
