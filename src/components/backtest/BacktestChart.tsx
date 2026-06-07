@@ -673,8 +673,6 @@ export function BacktestChart({
     return rows;
   }, [statsByStrategy, strategyLib.strategies]);
 
-  // True when no trades have been made yet — used to allow editing starting balance.
-  const sessionEmpty = state.closedPositions.length === 0 && !state.activePosition;
 
   const handleClose = useCallback((reason: 'manual' | 'sl' | 'tp' = 'manual') => {
     // Prefer the replay cursor price (currentBarRef); fall back to manually
@@ -1020,32 +1018,15 @@ export function BacktestChart({
         {/* Balance display */}
         <div className="ml-auto flex items-center gap-4">
           <div className="text-right">
-            {sessionEmpty ? (
-              <>
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Starting</div>
-                <input
-                  type="number"
-                  value={state.startingBalance}
-                  min="1"
-                  step="any"
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isFinite(n) && n > 0) reset(n);
-                  }}
-                  className="mt-1 w-28 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-sm text-zinc-200 focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-              </>
-            ) : (
-              <>
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Starting</div>
-                <div
-                  className="text-sm font-semibold text-zinc-200"
-                  title="Reset the session to edit the starting balance"
-                >
-                  ${state.startingBalance.toLocaleString()}
-                </div>
-              </>
-            )}
+            {/* Starting balance is fixed to the value set in the create-session
+                popup — locked (read-only) for the whole session. */}
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500">Starting</div>
+            <div
+              className="text-sm font-semibold text-zinc-200"
+              title="Set when you created the session"
+            >
+              ${state.startingBalance.toLocaleString()}
+            </div>
           </div>
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-wider text-zinc-500">Net P&L</div>

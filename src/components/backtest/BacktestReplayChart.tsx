@@ -47,6 +47,7 @@ import { ReplayControls } from './ReplayControls';
 import { useDrawings } from '@/components/ReplayChart/hooks/useDrawings';
 import { DrawingLayer } from '@/components/ReplayChart/drawings/DrawingLayer';
 import { DrawingToolbar } from '@/components/ReplayChart/ui/DrawingToolbar';
+import { POINTS_REQUIRED } from '@/components/ReplayChart/types';
 
 // Height of the time-axis row (lightweight-charts default is ~28px).
 const TIMESCALE_HEIGHT = 28;
@@ -291,6 +292,7 @@ export function BacktestReplayChart({
     setCurrentTool,
     startDrawing,
     updateDrawing,
+    commitPoint,
     finishDrawing,
     cancelDrawing,
     selectDrawing,
@@ -317,6 +319,7 @@ export function BacktestReplayChart({
   // re-registered on every render.
   const startDrawingRef = useRef(startDrawing);
   const updateDrawingRef = useRef(updateDrawing);
+  const commitPointRef = useRef(commitPoint);
   const finishDrawingRef = useRef(finishDrawing);
   const cancelDrawingRef = useRef(cancelDrawing);
   const selectDrawingRef = useRef(selectDrawing);
@@ -327,6 +330,7 @@ export function BacktestReplayChart({
 
   useEffect(() => { startDrawingRef.current = startDrawing; }, [startDrawing]);
   useEffect(() => { updateDrawingRef.current = updateDrawing; }, [updateDrawing]);
+  useEffect(() => { commitPointRef.current = commitPoint; }, [commitPoint]);
   useEffect(() => { finishDrawingRef.current = finishDrawing; }, [finishDrawing]);
   useEffect(() => { cancelDrawingRef.current = cancelDrawing; }, [cancelDrawing]);
   useEffect(() => { selectDrawingRef.current = selectDrawing; }, [selectDrawing]);
@@ -335,9 +339,7 @@ export function BacktestReplayChart({
   useEffect(() => { activeDrawingRef.current = activeDrawing; }, [activeDrawing]);
   useEffect(() => { selectedDrawingRef.current = selectedDrawing; }, [selectedDrawing]);
 
-  // Single-point draw tools complete in one click (horizontal / vertical only
-  // need 1 point; finishDrawing() validates they pass with points.length === 1).
-  const SINGLE_POINT_TOOLS = new Set(['horizontal', 'vertical']);
+  // (SINGLE_POINT_TOOLS removed — generalized via POINTS_REQUIRED map below)
 
   // Delete / Escape key bindings for selected drawings and in-progress drawings.
   useEffect(() => {
@@ -583,17 +585,34 @@ export function BacktestReplayChart({
 
         const dataPoint = { time: param.time as number, price: Number(priceRaw) };
 
+        // Generalised N-point creation loop using POINTS_REQUIRED.
+        // cursor/cross are already filtered above; cast is safe.
+        const required = POINTS_REQUIRED[tool as keyof typeof POINTS_REQUIRED] ?? 2;
+
         if (!activeDrawingRef.current) {
-          // First click — start the drawing.
+          // First click — start the drawing (engine stores the first anchor).
           startDrawingRef.current(dataPoint);
-          if (SINGLE_POINT_TOOLS.has(tool)) {
-            // Horizontal / vertical only need one point — finish immediately.
+
+          if (required <= 1) {
+            // Single-anchor tools (horizontal, vertical, horizontal-ray, cross-line,
+            // text, note) finish immediately after the first click.
             finishDrawingRef.current();
           }
+          // For required >= 2 we keep the drawing active and wait for more clicks.
         } else {
-          // Second (or later) click — anchor the second point and finish.
-          updateDrawingRef.current(dataPoint);
-          finishDrawingRef.current();
+          // Subsequent click while a drawing is in progress.
+          const current = activeDrawingRef.current;
+          const committed = current.points.length; // points already locked
+
+          if (required > 0 && committed < required) {
+            // Still have more intermediate anchors to collect: commit this point
+            // and keep the drawing open for the next anchor.
+            commitPointRef.current(dataPoint);
+          } else {
+            // Final anchor reached — lock last point and finish.
+            updateDrawingRef.current(dataPoint);
+            finishDrawingRef.current();
+          }
         }
 
         setOverlayTick((n) => n + 1);

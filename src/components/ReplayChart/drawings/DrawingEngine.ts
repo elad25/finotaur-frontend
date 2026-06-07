@@ -1,9 +1,9 @@
-// @ts-nocheck — OQ-69 cascade: Drawing shape type drift. Tracked.
-// drawings/DrawingEngine.ts - FIXED VERSION
+// drawings/DrawingEngine.ts
 // ✅ Fixed: colors.default → colors.primary
 // ✅ Fixed: lineStyle: 0 → lineStyle: 'solid'
+// ✅ Fixed: Drawing object now includes all required fields (tool, color, lineWidth, timestamp)
 
-import { Drawing, DrawingPoint, DrawingType, DrawingStyle, Theme } from '../types';
+import { Drawing, DrawingPoint, DrawingType, DrawingStyle, Theme, POINTS_REQUIRED } from '../types';
 import { DRAWING_COLORS } from '../constants';
 import {
   pointToLineDistance,
@@ -100,17 +100,22 @@ export class DrawingEngine {
 
     // 🔥 FIX: colors.default → colors.primary
     // 🔥 FIX: lineStyle: 0 → lineStyle: 'solid'
+    // 🔥 FIX: Added required Drawing fields: tool, color, lineWidth, timestamp
     this.activeDrawing = {
       id: this.generateId(),
       type: this.currentTool as DrawingType,
+      tool: this.currentTool as DrawingType,
       points: [point],
       style: {
         color: colors.primary,
         lineWidth: 2,
         lineStyle: 'solid',
       },
+      color: colors.primary,
+      lineWidth: 2,
       visible: true,
       locked: false,
+      timestamp: Date.now(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -123,34 +128,73 @@ export class DrawingEngine {
 
     switch (type) {
       case 'brush':
-        // For brush, keep adding points
+      case 'highlighter':
+        // Freehand tools: keep appending every move point.
         this.activeDrawing.points.push(point);
         break;
 
       case 'horizontal':
-        // Horizontal line only updates price
+        // Horizontal line only updates price; time is locked to the first click.
         this.activeDrawing.points = [
-          { time: this.activeDrawing.points[0].time, price: point.price }
+          { time: this.activeDrawing.points[0].time, price: point.price },
         ];
         break;
 
       case 'vertical':
-        // Vertical line only updates time
+        // Vertical line only updates time; price is locked to the first click.
         this.activeDrawing.points = [
-          { time: point.time, price: this.activeDrawing.points[0].price }
+          { time: point.time, price: this.activeDrawing.points[0].price },
         ];
         break;
 
-      default:
-        // For other tools, update the second point
-        if (this.activeDrawing.points.length === 1) {
+      default: {
+        // General N-point tools: the last slot is always the live "preview" point
+        // that tracks the cursor. If the array already has a preview slot (length ≥ 2
+        // for 2-point tools, or after commitPoint() added one for 3+-point tools),
+        // overwrite that last slot. If there is only the first committed anchor (just
+        // started), append so the renderer has two points to draw the rubber-band.
+        const required = POINTS_REQUIRED[type] ?? 2;
+        if (required === 0) {
+          // Should not reach here for non-freehand tools, but guard gracefully.
           this.activeDrawing.points.push(point);
-        } else {
-          this.activeDrawing.points[1] = point;
+          break;
         }
+        if (this.activeDrawing.points.length <= required) {
+          if (this.activeDrawing.points.length === 1) {
+            // First mouse-move after startDrawing: append the preview anchor so
+            // the renderer always has at least 2 points for a visible rubber-band.
+            this.activeDrawing.points.push(point);
+          } else {
+            // Subsequent moves while still collecting anchors: update the last
+            // (in-progress) preview slot in-place.
+            this.activeDrawing.points[this.activeDrawing.points.length - 1] = point;
+          }
+        }
+        // If points.length === required, all anchors are committed and finishDrawing()
+        // is about to be called by the click loop — nothing to update.
         break;
+      }
     }
 
+    this.activeDrawing.updatedAt = Date.now();
+  }
+
+  /**
+   * Commit the current in-progress (last) point and append a new preview point
+   * for the next anchor. Called by the click loop when the user clicks mid-way
+   * through a 3+-point tool (e.g. triangle: click 1→2 commits p1, starts p2).
+   */
+  commitPoint(point: DrawingPoint): void {
+    if (!this.activeDrawing) return;
+    const { type } = this.activeDrawing;
+    const required = POINTS_REQUIRED[type] ?? 2;
+    if (required < 3) return; // Only relevant for 3+-point tools.
+
+    // Lock the current last point to the clicked position, then add a new preview.
+    const last = this.activeDrawing.points.length - 1;
+    this.activeDrawing.points[last] = point;
+    // Append a duplicate as the new in-progress preview anchor.
+    this.activeDrawing.points.push({ ...point });
     this.activeDrawing.updatedAt = Date.now();
   }
 
@@ -158,14 +202,17 @@ export class DrawingEngine {
     if (!this.activeDrawing) return null;
 
     const { type, points } = this.activeDrawing;
+    const required = POINTS_REQUIRED[type] ?? 2;
 
-    // Validate minimum points
-    if (type === 'brush' && points.length < 2) {
-      this.activeDrawing = null;
-      return null;
-    }
-
-    if (type !== 'brush' && type !== 'horizontal' && type !== 'vertical' && points.length < 2) {
+    // Validate minimum points using the POINTS_REQUIRED map.
+    if (required === 0) {
+      // Freehand tools (brush, highlighter) need at least 2 recorded positions.
+      if (points.length < 2) {
+        this.activeDrawing = null;
+        return null;
+      }
+    } else if (points.length < required) {
+      // Fixed-anchor tools must have all required anchor points committed.
       this.activeDrawing = null;
       return null;
     }
@@ -464,10 +511,79 @@ export class DrawingEngine {
 
       case 'text':
       case 'note':
-      case 'measure':
+      case 'measure': {
         const dx = point.x - points[0].time;
         const dy = point.y - points[0].price;
         return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // fibonacci: 2-point tool — distance to the segment between anchor points.
+      case 'fibonacci':
+        if (points.length < 2) return Infinity;
+        return pointToLineDistance(
+          point,
+          { x: points[0].time, y: points[0].price },
+          { x: points[1].time, y: points[1].price }
+        );
+
+      // New line-segment tools: reuse the existing line-distance helper.
+      case 'trend-angle':
+      case 'arrow':
+      case 'horizontal-ray':
+        if (points.length < 2) return Infinity;
+        return pointToLineDistance(
+          point,
+          { x: points[0].time, y: points[0].price },
+          { x: points[1].time, y: points[1].price }
+        );
+
+      // cross-line: distance to the closer of its horizontal or vertical axis.
+      case 'cross-line':
+        if (points.length < 1) return Infinity;
+        return Math.min(
+          Math.abs(point.y - points[0].price),
+          Math.abs(point.x - points[0].time)
+        );
+
+      // Multi-anchor tools: distance to nearest anchor point (acceptable for selection).
+      case 'parallel-channel':
+      case 'rotated-rectangle':
+      case 'triangle':
+      case 'arc':
+      case 'pitchfork':
+      case 'fibonacci-extension':
+      case 'ellipse': {
+        let minAnchorDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minAnchorDist) minAnchorDist = dist;
+        }
+        return minAnchorDist;
+      }
+
+      // highlighter: same as brush — distance to nearest segment.
+      case 'highlighter': {
+        let minSegDist = Infinity;
+        for (let i = 0; i < points.length - 1; i++) {
+          const dist = pointToLineDistance(
+            point,
+            { x: points[i].time, y: points[i].price },
+            { x: points[i + 1].time, y: points[i + 1].price }
+          );
+          minSegDist = Math.min(minSegDist, dist);
+        }
+        return minSegDist;
+      }
+
+      // gann-fan: distance to first anchor point (fan origin).
+      case 'gann-fan': {
+        if (points.length < 1) return Infinity;
+        const gdx = point.x - points[0].time;
+        const gdy = point.y - points[0].price;
+        return Math.sqrt(gdx * gdx + gdy * gdy);
+      }
 
       default:
         return Infinity;

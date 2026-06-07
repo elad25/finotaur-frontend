@@ -578,19 +578,19 @@ export interface DrawdownPoint {
 // ✅ DRAWING TYPES (COMPLETE WITH ALL TOOLS)
 // ============================================================================
 
-export type DrawingTool = 
-  | 'cursor' 
-  | 'cross' 
-  | 'trendline' 
-  | 'horizontal' 
+export type DrawingTool =
+  | 'cursor'
+  | 'cross'
+  | 'trendline'
+  | 'horizontal'
   | 'vertical'
-  | 'ray' 
+  | 'ray'
   | 'extended'
-  | 'rectangle' 
-  | 'circle' 
+  | 'rectangle'
+  | 'circle'
   | 'ellipse'
   | 'triangle'
-  | 'text' 
+  | 'text'
   | 'note'
   | 'brush'
   | 'measure'
@@ -598,9 +598,29 @@ export type DrawingTool =
   | 'fibonacci-extension'
   | 'pitchfork'
   | 'gann-fan'
-  | 'arrow';
+  | 'arrow'
+  // New tools (OQ-69 drawing-tools extension)
+  | 'trend-angle'
+  | 'horizontal-ray'
+  | 'cross-line'
+  | 'parallel-channel'
+  | 'rotated-rectangle'
+  | 'arc'
+  | 'highlighter';
 
 export type DrawingType = DrawingTool; // Alias
+
+// Number of click-anchors each drawing tool needs before it is complete.
+// 1 = single click; 2/3 = fixed multi-click; 0 = freehand drag (brush-style, ends on mouse-up).
+export const POINTS_REQUIRED: Record<DrawingType, number> = {
+  cursor: 0, cross: 0,
+  horizontal: 1, vertical: 1, text: 1, note: 1, 'horizontal-ray': 1, 'cross-line': 1,
+  trendline: 2, ray: 2, extended: 2, arrow: 2, 'trend-angle': 2, rectangle: 2, circle: 2,
+  ellipse: 2, measure: 2, fibonacci: 2, 'gann-fan': 2,
+  triangle: 3, 'fibonacci-extension': 3, pitchfork: 3, 'parallel-channel': 3,
+  'rotated-rectangle': 3, arc: 3,
+  brush: 0, highlighter: 0,
+};
 
 export interface Point {
   time: Time;

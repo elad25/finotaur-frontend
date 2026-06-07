@@ -1,6 +1,6 @@
 // hooks/useDrawings.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Drawing, DrawingType, DrawingPoint, DrawingStyle, Theme } from '../types';
+import { Drawing, DrawingType, DrawingPoint, DrawingStyle, Theme, POINTS_REQUIRED } from '../types';
 import { DrawingEngine } from '../drawings/DrawingEngine';
 
 // ✅ Export interfaces
@@ -22,6 +22,7 @@ export interface UseDrawingsReturn {
   setCurrentTool: (tool: DrawingType | 'cursor' | 'cross') => void;
   startDrawing: (point: DrawingPoint) => void;
   updateDrawing: (point: DrawingPoint) => void;
+  commitPoint: (point: DrawingPoint) => void;
   finishDrawing: () => Drawing | null;
   cancelDrawing: () => void;
   selectDrawing: (point: { x: number; y: number }, threshold?: number) => Drawing | null;
@@ -113,6 +114,11 @@ export const useDrawings = ({
 
   const updateDrawing = useCallback((point: DrawingPoint) => {
     engineRef.current?.updateDrawing(point);
+    setActiveDrawing(engineRef.current?.getActiveDrawing() || null);
+  }, []);
+
+  const commitPoint = useCallback((point: DrawingPoint) => {
+    engineRef.current?.commitPoint(point);
     setActiveDrawing(engineRef.current?.getActiveDrawing() || null);
   }, []);
 
@@ -239,6 +245,7 @@ export const useDrawings = ({
     setCurrentTool,
     startDrawing,
     updateDrawing,
+    commitPoint,
     finishDrawing,
     cancelDrawing,
     selectDrawing,

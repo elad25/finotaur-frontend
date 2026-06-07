@@ -30,6 +30,9 @@ export interface SaveSessionInput {
   trades: PaperPosition[];
   pendingOrders: PendingOrder[];
   notes?: string;
+  /** Optional link to the active strategy at save time. Used by AI Phase F
+   *  compare_live_vs_backtest. Populated from activeStrategyId in BacktestChart. */
+  strategyId?: string;
 }
 
 export interface SavedSessionSummary {
@@ -172,6 +175,7 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
         ? input.statistics.profitFactor
         : 9999,
       notes: input.notes,
+      strategy_id: input.strategyId ?? null,
       trades: input.trades.map(paperToWire),
       pending_orders: input.pendingOrders.map(pendingToWire),
     };
