@@ -12,7 +12,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Drawing, DrawingStyle, DrawingType } from '../types';
+import { Drawing, DrawingStyle, DrawingType, PositionRisk } from '../types';
+import { computePositionStats } from '../drawings/positionMath';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,8 @@ const FILL_TYPES: DrawingType[] = [
 ];
 
 const TEXT_TYPES: DrawingType[] = ['text', 'note'];
+
+const POSITION_TYPES: DrawingType[] = ['long-position', 'short-position'];
 
 // These types are not in the current DrawingType union but may be added later.
 // Using string[] intentionally to guard gracefully without compile errors.
@@ -123,9 +126,10 @@ export const DrawingStylePopover: React.FC<DrawingStylePopoverProps> = ({
   const currentFillColor = style.fillColor ?? '';
   const currentFillOpacity = style.fillOpacity ?? 0.2;
 
-  const showFill = FILL_TYPES.includes(drawing.type);
-  const showText = TEXT_TYPES.includes(drawing.type);
-  const showEmoji = EMOJI_TYPES.includes(drawing.type);
+  const showFill     = FILL_TYPES.includes(drawing.type);
+  const showText     = TEXT_TYPES.includes(drawing.type);
+  const showEmoji    = EMOJI_TYPES.includes(drawing.type);
+  const showPosition = POSITION_TYPES.includes(drawing.type);
 
   // Current text-related values (top-level fields on Drawing)
   const currentText = drawing.text ?? '';
@@ -349,6 +353,93 @@ export const DrawingStylePopover: React.FC<DrawingStylePopoverProps> = ({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── Position section (long-position / short-position only) ── */}
+      {showPosition && onUpdateDrawing && (
+        <div>
+          <SectionLabel>Position</SectionLabel>
+
+          {/* Qty input */}
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="w-20 shrink-0 text-[10px] text-zinc-500">Qty</span>
+            <input
+              type="number"
+              min={0.0001}
+              step={1}
+              value={drawing.risk?.qty ?? 1}
+              onChange={(e) => {
+                const qty = Math.max(0.0001, Number(e.target.value) || 1);
+                // Build a valid PositionRisk — entry/stop/target come from points (cosmetic),
+                // only qty and accountSize are stored here.
+                const pts = drawing.points;
+                const existingRisk = drawing.risk;
+                const updated: PositionRisk = {
+                  entry:       pts[0]?.price ?? existingRisk?.entry ?? 0,
+                  stop:        pts[1]?.price ?? existingRisk?.stop  ?? 0,
+                  target:      pts[2]?.price ?? existingRisk?.target ?? 0,
+                  qty,
+                  accountSize: existingRisk?.accountSize,
+                };
+                onUpdateDrawing({ risk: updated });
+              }}
+              className="w-full rounded border border-[#2A2A2A] bg-[#111] px-2 py-0.5 text-xs text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          {/* Account size input (enables risk % display) */}
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="w-20 shrink-0 text-[10px] text-zinc-500">Account $</span>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              placeholder="optional"
+              value={drawing.risk?.accountSize ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const accountSize = raw === '' ? undefined : Math.max(0, Number(raw));
+                const pts = drawing.points;
+                const existingRisk = drawing.risk;
+                const updated: PositionRisk = {
+                  entry:       pts[0]?.price ?? existingRisk?.entry ?? 0,
+                  stop:        pts[1]?.price ?? existingRisk?.stop  ?? 0,
+                  target:      pts[2]?.price ?? existingRisk?.target ?? 0,
+                  qty:         existingRisk?.qty ?? 1,
+                  accountSize,
+                };
+                onUpdateDrawing({ risk: updated });
+              }}
+              className="w-full rounded border border-[#2A2A2A] bg-[#111] px-2 py-0.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-white/20"
+            />
+          </div>
+
+          {/* Read-only stats derived from points */}
+          {(() => {
+            const stats = computePositionStats(drawing);
+            if (!stats) return (
+              <p className="text-[10px] text-zinc-600 italic">
+                Place all 3 points to see stats
+              </p>
+            );
+            return (
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-zinc-400">
+                <span className="text-zinc-500">R:R</span>
+                <span className="text-right text-white">{stats.rr.toFixed(2)}</span>
+                <span className="text-zinc-500">Risk $</span>
+                <span className="text-right text-red-400">{stats.riskAmount.toFixed(2)}</span>
+                <span className="text-zinc-500">Reward $</span>
+                <span className="text-right text-green-400">{stats.rewardAmount.toFixed(2)}</span>
+                {stats.riskPct != null && (
+                  <>
+                    <span className="text-zinc-500">Risk %</span>
+                    <span className="text-right text-red-400">{stats.riskPct.toFixed(2)}%</span>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -598,6 +598,33 @@ export class DrawingEngine {
           Math.abs(point.x - points[0].time)
         );
 
+      // Position tools (3-point): min distance to any of the 3 anchors.
+      case 'long-position':
+      case 'short-position': {
+        let minPosDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minPosDist) minPosDist = dist;
+        }
+        return minPosDist;
+      }
+
+      // Range tools (2-point): min distance to either anchor.
+      case 'price-range':
+      case 'date-range':
+      case 'date-price-range': {
+        let minRangeDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minRangeDist) minRangeDist = dist;
+        }
+        return minRangeDist;
+      }
+
       // Multi-anchor tools: distance to nearest anchor point (acceptable for selection).
       case 'parallel-channel':
       case 'rotated-rectangle':

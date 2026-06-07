@@ -47,6 +47,15 @@ import {
   renderArrowLeft,
   renderArrowRight,
 } from './markers';
+import {
+  renderLongPosition,
+  renderShortPosition,
+} from './position';
+import {
+  renderPriceRange,
+  renderDateRange,
+  renderDatePriceRange,
+} from './ranges';
 
 export type { Renderer, RenderCtx } from './types';
 
@@ -103,6 +112,13 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   'arrow-down': renderArrowDown,
   'arrow-left': renderArrowLeft,
   'arrow-right': renderArrowRight,
+
+  // Position / Range tools (P7)
+  'long-position': renderLongPosition,
+  'short-position': renderShortPosition,
+  'price-range': renderPriceRange,
+  'date-range': renderDateRange,
+  'date-price-range': renderDatePriceRange,
 
   // cursor and cross have no render — intentionally omitted (Partial allows this)
 };

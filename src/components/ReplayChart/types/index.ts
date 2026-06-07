@@ -620,7 +620,13 @@ export type DrawingTool =
   | 'arrow-up'
   | 'arrow-down'
   | 'arrow-left'
-  | 'arrow-right';
+  | 'arrow-right'
+  // Position / Range tools (P7)
+  | 'long-position'
+  | 'short-position'
+  | 'price-range'
+  | 'date-range'
+  | 'date-price-range';
 
 export type DrawingType = DrawingTool; // Alias
 
@@ -640,6 +646,9 @@ export const POINTS_REQUIRED: Record<DrawingType, number> = {
   callout: 2,
   comment: 1, 'price-label': 1, signpost: 1, flag: 1,
   'arrow-up': 1, 'arrow-down': 1, 'arrow-left': 1, 'arrow-right': 1,
+  // Position / Range tools (P7)
+  'long-position': 3, 'short-position': 3,
+  'price-range': 2, 'date-range': 2, 'date-price-range': 2,
 };
 
 export interface Point {
