@@ -679,7 +679,35 @@ export interface Drawing {
   showLabels?: boolean;
   extendLeft?: boolean;
   extendRight?: boolean;
+
+  // Variant sub-type (pitchfork: 'schiff'|'modified'|'inside'; fib/gann sub-kinds; pattern sub-kinds)
+  variant?: string;
+
+  // Long/Short Position & risk tools — full risk math (entry/stop/target as prices, qty, optional account size)
+  risk?: {
+    entry: number;
+    stop: number;
+    target: number;
+    qty: number;
+    accountSize?: number;
+  };
+
+  // Emoji / sticker / icon annotations (rendered at points[0])
+  emoji?: string;
+  iconName?: string;
+
+  // Anchored vs floating annotations: 'bar' = anchored to time/price, 'screen' = fixed screen position
+  anchor?: 'bar' | 'screen';
+
+  // Fib/Gann fans & arcs: explicit level/angle config
+  arcLevels?: number[];
+  angles?: number[];
+
+  // Pattern tools: auto-computed ratio labels per segment (display cache)
+  ratioLabels?: string[];
 }
+
+export type PositionRisk = NonNullable<Drawing['risk']>;
 
 // ============================================================================
 // TAG TYPES
