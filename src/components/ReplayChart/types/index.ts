@@ -626,7 +626,22 @@ export type DrawingTool =
   | 'short-position'
   | 'price-range'
   | 'date-range'
-  | 'date-price-range';
+  | 'date-price-range'
+  // Advanced Fibonacci tools (P2)
+  | 'fib-channel'
+  | 'fib-timezone'
+  | 'fib-circles'
+  | 'fib-speed-fan'
+  | 'fib-spiral'
+  | 'fib-wedge'
+  | 'pitchfan'
+  // Advanced Gann / Pitchfork tools (P2)
+  | 'gann-box'
+  | 'gann-square'
+  | 'gann-square-fixed'
+  | 'pitchfork-schiff'
+  | 'pitchfork-modified'
+  | 'pitchfork-inside';
 
 export type DrawingType = DrawingTool; // Alias
 
@@ -649,6 +664,12 @@ export const POINTS_REQUIRED: Record<DrawingType, number> = {
   // Position / Range tools (P7)
   'long-position': 3, 'short-position': 3,
   'price-range': 2, 'date-range': 2, 'date-price-range': 2,
+  // Advanced Fibonacci tools (P2)
+  'fib-channel': 3, 'fib-timezone': 2, 'fib-circles': 2,
+  'fib-speed-fan': 2, 'fib-spiral': 2, 'fib-wedge': 3, 'pitchfan': 3,
+  // Advanced Gann / Pitchfork tools (P2)
+  'gann-box': 2, 'gann-square': 2, 'gann-square-fixed': 2,
+  'pitchfork-schiff': 3, 'pitchfork-modified': 3, 'pitchfork-inside': 3,
 };
 
 export interface Point {

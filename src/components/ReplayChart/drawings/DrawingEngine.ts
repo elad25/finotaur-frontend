@@ -665,6 +665,41 @@ export class DrawingEngine {
         return Math.sqrt(gdx * gdx + gdy * gdy);
       }
 
+      // Advanced 2-pt fib/gann tools (P2): min distance to either anchor.
+      case 'fib-timezone':
+      case 'fib-circles':
+      case 'fib-speed-fan':
+      case 'fib-spiral':
+      case 'gann-box':
+      case 'gann-square':
+      case 'gann-square-fixed': {
+        let min2Dist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < min2Dist) min2Dist = dist;
+        }
+        return min2Dist;
+      }
+
+      // Advanced 3-pt fib/gann/pitchfork tools (P2): min distance to any of 3 anchors.
+      case 'fib-channel':
+      case 'fib-wedge':
+      case 'pitchfan':
+      case 'pitchfork-schiff':
+      case 'pitchfork-modified':
+      case 'pitchfork-inside': {
+        let min3Dist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < min3Dist) min3Dist = dist;
+        }
+        return min3Dist;
+      }
+
       default:
         return Infinity;
     }

@@ -26,6 +26,23 @@ import {
   renderFibonacciExtension,
 } from './fib';
 import {
+  renderFibChannel,
+  renderFibTimezone,
+  renderFibCircles,
+  renderFibSpeedFan,
+  renderFibSpiral,
+  renderFibWedge,
+  renderPitchfan,
+} from './fibadvanced';
+import {
+  renderGannBox,
+  renderGannSquare,
+  renderGannSquareFixed,
+  renderPitchforkSchiff,
+  renderPitchforkModified,
+  renderPitchforkInside,
+} from './gann';
+import {
   renderBrush,
   renderHighlighter,
 } from './freehand';
@@ -87,6 +104,23 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   // Fibonacci family
   fibonacci: renderFibonacci,
   'fibonacci-extension': renderFibonacciExtension,
+
+  // Advanced Fibonacci family (P2)
+  'fib-channel': renderFibChannel,
+  'fib-timezone': renderFibTimezone,
+  'fib-circles': renderFibCircles,
+  'fib-speed-fan': renderFibSpeedFan,
+  'fib-spiral': renderFibSpiral,
+  'fib-wedge': renderFibWedge,
+  pitchfan: renderPitchfan,
+
+  // Advanced Gann / Pitchfork family (P2)
+  'gann-box': renderGannBox,
+  'gann-square': renderGannSquare,
+  'gann-square-fixed': renderGannSquareFixed,
+  'pitchfork-schiff': renderPitchforkSchiff,
+  'pitchfork-modified': renderPitchforkModified,
+  'pitchfork-inside': renderPitchforkInside,
 
   // Freehand family
   brush: renderBrush,
