@@ -268,8 +268,8 @@ export function CompanyResearchCenter() {
   const { open: openFino } = useFinoChat();
 
   // Core state
-  const [ticker, setTicker] = useState('AAPL');
-  const [companyName, setCompanyName] = useState('Apple Inc.');
+  const [ticker, setTicker] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [cik, setCik] = useState('');
   const [filings, setFilings] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(false);
@@ -360,10 +360,8 @@ export function CompanyResearchCenter() {
     [],
   );
 
-  // On mount → load default
-  useEffect(() => {
-    load('AAPL', 'Apple Inc.');
-  }, [load]);
+  // No default ticker — the page opens on an empty state until the user picks
+  // a company from search suggestions.
 
   // ---------------------------------------------------------------------------
   // Suggestions debounce
@@ -378,8 +376,10 @@ export function CompanyResearchCenter() {
     }
     debRef.current = setTimeout(async () => {
       try {
+        // /api/symbols/suggest matches by ticker prefix AND company name and is
+        // live in production (the older /api/sec/tickers route 404s on prod).
         const data = await getJsonSmart(
-          `/api/sec/tickers?q=${encodeURIComponent(query)}`,
+          `/api/symbols/suggest?q=${encodeURIComponent(query)}`,
         );
         const items: Suggestion[] = Array.isArray(data?.items) ? data.items : [];
         setSuggestions(items);
@@ -485,6 +485,17 @@ export function CompanyResearchCenter() {
         )}
       </div>
 
+      {!ticker ? (
+        /* Empty state — no company selected yet */
+        <div className="flex flex-col items-center justify-center py-ds-9 text-center">
+          <FileText size={34} className="mb-ds-3 text-ink-secondary/40" />
+          <p className="text-[15px] font-medium text-ink-primary">Search for a company</p>
+          <p className="mt-1.5 max-w-[340px] text-[13px] text-ink-secondary">
+            Find quarterly and annual reports by company name, ticker, or CIK.
+          </p>
+        </div>
+      ) : (
+        <>
       {/* ------------------------------------------------------------------ */}
       {/* C. Tab bar (centered)                                                */}
       {/* ------------------------------------------------------------------ */}
@@ -774,6 +785,8 @@ export function CompanyResearchCenter() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }
