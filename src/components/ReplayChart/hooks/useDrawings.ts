@@ -25,7 +25,13 @@ export interface UseDrawingsReturn {
   commitPoint: (point: DrawingPoint) => void;
   finishDrawing: () => Drawing | null;
   cancelDrawing: () => void;
-  selectDrawing: (point: { x: number; y: number }, threshold?: number) => Drawing | null;
+  /** Set active drawing points wholesale; component owns commit logic. */
+  setActivePoints: (tool: DrawingType, points: DrawingPoint[]) => void;
+  selectDrawing: (
+    point: { x: number; y: number },
+    threshold?: number,
+    toPixel?: (p: DrawingPoint) => { x: number; y: number } | null,
+  ) => Drawing | null;
   deselectAll: () => void;
   deleteSelected: () => boolean;
   deleteById: (id: string) => boolean;
@@ -141,8 +147,17 @@ export const useDrawings = ({
     setActiveDrawing(null);
   }, []);
 
-  const selectDrawing = useCallback((point: { x: number; y: number }, threshold?: number) => {
-    const result = engineRef.current?.selectDrawing(point, threshold) || null;
+  const setActivePoints = useCallback((tool: DrawingType, points: DrawingPoint[]) => {
+    engineRef.current?.setActivePoints(tool, points);
+    setActiveDrawing(engineRef.current?.getActiveDrawing() ?? null);
+  }, []);
+
+  const selectDrawing = useCallback((
+    point: { x: number; y: number },
+    threshold?: number,
+    toPixel?: (p: DrawingPoint) => { x: number; y: number } | null,
+  ) => {
+    const result = engineRef.current?.selectDrawing(point, threshold, toPixel) || null;
     setSelectedDrawing(result);
     syncDrawings();
     return result;
@@ -280,6 +295,7 @@ export const useDrawings = ({
     commitPoint,
     finishDrawing,
     cancelDrawing,
+    setActivePoints,
     selectDrawing,
     deselectAll,
     deleteSelected,

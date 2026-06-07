@@ -44,8 +44,10 @@ export const DrawingLayer: React.FC<DrawingLayerProps> = ({
 
     const toPixel = (point: DrawingPoint): { x: number; y: number } | null => {
       try {
-        const x = timeScale.timeToCoordinate(point.time as Time);
         if (!candlestickSeries) return null;
+        const x = point.logical != null
+          ? timeScale.logicalToCoordinate(point.logical as any)
+          : timeScale.timeToCoordinate(point.time as Time);
         const y = candlestickSeries.priceToCoordinate(point.price);
         if (x === null || y === null) return null;
         return { x, y };

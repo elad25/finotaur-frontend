@@ -296,6 +296,7 @@ export function BacktestReplayChart({
     commitPoint,
     finishDrawing,
     cancelDrawing,
+    setActivePoints,
     selectDrawing,
     deselectAll,
     deleteSelected,
@@ -338,22 +339,36 @@ export function BacktestReplayChart({
   const commitPointRef = useRef(commitPoint);
   const finishDrawingRef = useRef(finishDrawing);
   const cancelDrawingRef = useRef(cancelDrawing);
+  const setActivePointsRef = useRef(setActivePoints);
   const selectDrawingRef = useRef(selectDrawing);
   const deleteSelectedRef = useRef(deleteSelected);
   const deselectAllRef = useRef(deselectAll);
   const activeDrawingRef = useRef(activeDrawing);
   const selectedDrawingRef = useRef(selectedDrawing);
 
+  // Committed anchor points for the current in-progress drawing.
+  // The click handler appends each click here; the crosshair preview appends a
+  // floating cursor point on top for rubber-banding without mutating committed pts.
+  const pendingPointsRef = useRef<import('@/components/ReplayChart/types').DrawingPoint[]>([]);
+
   useEffect(() => { startDrawingRef.current = startDrawing; }, [startDrawing]);
   useEffect(() => { updateDrawingRef.current = updateDrawing; }, [updateDrawing]);
   useEffect(() => { commitPointRef.current = commitPoint; }, [commitPoint]);
   useEffect(() => { finishDrawingRef.current = finishDrawing; }, [finishDrawing]);
   useEffect(() => { cancelDrawingRef.current = cancelDrawing; }, [cancelDrawing]);
+  useEffect(() => { setActivePointsRef.current = setActivePoints; }, [setActivePoints]);
   useEffect(() => { selectDrawingRef.current = selectDrawing; }, [selectDrawing]);
   useEffect(() => { deleteSelectedRef.current = deleteSelected; }, [deleteSelected]);
   useEffect(() => { deselectAllRef.current = deselectAll; }, [deselectAll]);
   useEffect(() => { activeDrawingRef.current = activeDrawing; }, [activeDrawing]);
   useEffect(() => { selectedDrawingRef.current = selectedDrawing; }, [selectedDrawing]);
+
+  // Clear pending points when the tool changes so a half-finished drawing is
+  // abandoned cleanly (same as pressing Escape).
+  useEffect(() => {
+    pendingPointsRef.current = [];
+    cancelDrawingRef.current?.();
+  }, [currentTool]);
 
   // (SINGLE_POINT_TOOLS removed — generalized via POINTS_REQUIRED map below)
 
@@ -376,6 +391,7 @@ export function BacktestReplayChart({
           e.preventDefault();
         }
       } else if (e.key === 'Escape') {
+        pendingPointsRef.current = [];
         cancelDrawingRef.current?.();
         deselectAllRef.current?.();
         setOverlayTick((n) => n + 1);
@@ -579,11 +595,35 @@ export function BacktestReplayChart({
     // laid out (clientWidth / barSpacing ready) before we scroll.
     requestAnimationFrame(() => { if (!cancelled) centerCursorBar(chart, container, false); });
 
+    // Helper: convert a pixel point (from param.point) to a whitespace-safe
+    // DrawingPoint using logical (bar-index) x-coordinate so clicks anywhere on
+    // the chart — including right of the last bar — are captured correctly.
+    const toDataPoint = (px: { x: number; y: number }): import('@/components/ReplayChart/types').DrawingPoint | null => {
+      const ts = chart.timeScale();
+      const priceRaw = seriesRef.current?.coordinateToPrice(px.y as any);
+      if (priceRaw == null) return null;
+      const logical = ts.coordinateToLogical(px.x as any); // valid in whitespace
+      const timeAt = ts.coordinateToTime(px.x as any);     // Time | null
+      let price = Number(priceRaw);
+      // Magnet snap: if enabled and a bar exists at this time, snap to nearest OHLC.
+      if (magnetEnabledRef.current && timeAt != null) {
+        const bar = bars.find((b) => (b.time as number) === (timeAt as number));
+        if (bar) {
+          const cands = [bar.open, bar.high, bar.low, bar.close];
+          price = cands.reduce((a, c) => (Math.abs(c - price) < Math.abs(a - price) ? c : a));
+        }
+      }
+      return {
+        time: (timeAt as number) ?? 0,
+        price,
+        logical: logical == null ? undefined : Number(logical),
+      };
+    };
+
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the
     // DOM contextmenu listener below — this only fires on left-click.
     chart.subscribeClick((param) => {
-      if (!param.time) return;
       // Place-order armed: the DOM mousedown listener handled this click already
       // (it fired before subscribeClick). Skip all other click behaviours so we
       // don't also trigger jump/trade on the same click.
@@ -592,66 +632,28 @@ export function BacktestReplayChart({
       // ── Drawing tool active: wire create / select flow ──────────
       const tool = currentToolRef.current;
       if (tool !== 'cursor' && tool !== 'cross') {
-        // Need both screen point (for potential future use) and data-space point.
+        // Use pixel coordinates only — no dependency on param.time so clicks
+        // anywhere on the chart (including whitespace right of the last bar) work.
         if (!param.point) return;
-        const priceRaw = seriesRef.current
-          ? seriesRef.current.coordinateToPrice(param.point.y)
-          : null;
-        if (priceRaw == null) return;
+        const dp = toDataPoint(param.point);
+        if (!dp) return;
 
-        // ── Magnet snap: snap price to nearest OHLC of the bar at this time ──
-        let snappedPrice = Number(priceRaw);
-        if (magnetEnabledRef.current) {
-          const clickedTimeNum = param.time as number;
-          // Find the bar whose time matches the clicked time.
-          const bar = bars.find((b) => (b.time as number) === clickedTimeNum);
-          if (bar) {
-            const candidates = [bar.open, bar.high, bar.low, bar.close];
-            const closest = candidates.reduce((prev, curr) =>
-              Math.abs(curr - snappedPrice) < Math.abs(prev - snappedPrice) ? curr : prev
-            );
-            snappedPrice = closest;
-          }
-          // If bar not found in the loaded window, keep raw price as-is.
-        }
-
-        const dataPoint = { time: param.time as number, price: snappedPrice };
-
-        // Generalised N-point creation loop using POINTS_REQUIRED.
-        // cursor/cross are already filtered above; cast is safe.
         const required = POINTS_REQUIRED[tool as keyof typeof POINTS_REQUIRED] ?? 2;
 
-        if (!activeDrawingRef.current) {
-          // First click — start the drawing (engine stores the first anchor).
-          startDrawingRef.current(dataPoint);
+        if (required === 0) {
+          // Freehand tools (brush/highlighter) are handled by mousedown/drag — skip.
+          return;
+        }
 
-          if (required <= 1) {
-            // Single-anchor tools (horizontal, vertical, horizontal-ray, cross-line,
-            // text, note) finish immediately after the first click.
-            finishDrawingRef.current();
-            // Only revert to cursor when stay-in-tool is OFF.
-            if (!stayInToolRef.current) {
-              setCurrentTool('cursor');
-            }
-          }
-          // For required >= 2 we keep the drawing active and wait for more clicks.
-        } else {
-          // Subsequent click while a drawing is in progress.
-          const current = activeDrawingRef.current;
-          const committed = current.points.length; // points already locked
+        pendingPointsRef.current = [...pendingPointsRef.current, dp];
+        setActivePointsRef.current(tool, pendingPointsRef.current);
 
-          if (required > 0 && committed < required) {
-            // Still have more intermediate anchors to collect: commit this point
-            // and keep the drawing open for the next anchor.
-            commitPointRef.current(dataPoint);
-          } else {
-            // Final anchor reached — lock last point and finish.
-            updateDrawingRef.current(dataPoint);
-            finishDrawingRef.current();
-            // Only revert to cursor when stay-in-tool is OFF.
-            if (!stayInToolRef.current) {
-              setCurrentTool('cursor');
-            }
+        if (pendingPointsRef.current.length >= required) {
+          // All anchors collected — commit the drawing.
+          finishDrawingRef.current();
+          pendingPointsRef.current = [];
+          if (!stayInToolRef.current) {
+            setCurrentTool('cursor');
           }
         }
 
@@ -661,7 +663,20 @@ export function BacktestReplayChart({
 
       // ── Cursor mode: try to select a drawing first ───────────────
       if (tool === 'cursor' && param.point) {
-        const hit = selectDrawingRef.current({ x: param.point.x, y: param.point.y });
+        // Build a pixel-space converter so hit-testing works in whitespace too.
+        const toPixelForHit = (p: import('@/components/ReplayChart/types').DrawingPoint) => {
+          const ts = chart.timeScale();
+          const x = p.logical != null
+            ? ts.logicalToCoordinate(p.logical as any)
+            : ts.timeToCoordinate(p.time as any);
+          const y = seriesRef.current?.priceToCoordinate(p.price as any) ?? null;
+          return (x == null || y == null) ? null : { x: x as number, y: y as number };
+        };
+        const hit = selectDrawingRef.current(
+          { x: param.point.x, y: param.point.y },
+          undefined,
+          toPixelForHit,
+        );
         if (hit) {
           setOverlayTick((n) => n + 1);
           return; // Selected a drawing — don't trigger trade/jump.
@@ -669,6 +684,8 @@ export function BacktestReplayChart({
         // No drawing hit — fall through to existing trade/jump logic.
       }
 
+      // For non-drawing clicks we still need param.time (trade / jump).
+      if (!param.time) return;
       const clickedTime = param.time as number;
       // Scissors armed → this click is a time-rewind (jump). Disarm right after
       // so the next click trades normally and the scissors cursor disappears.
@@ -718,25 +735,20 @@ export function BacktestReplayChart({
     // handleCrosshairMove — param type inferred from chart.subscribeCrosshairMove signature.
     const handleCrosshairMove: Parameters<typeof chart.subscribeCrosshairMove>[0] = (param) => {
       // ── Live drawing rubber-band preview ──────────────────────────
-      // While a multi-point draw tool is active and the first point has been
-      // placed (activeDrawing exists), stream cursor position as a preview
-      // second point so the in-progress drawing rubber-bands with the mouse.
+      // When the user has committed at least one anchor (pendingPointsRef has
+      // entries), stream the cursor position as a floating last point so the
+      // in-progress drawing rubber-bands. Does NOT depend on param.time — uses
+      // pixel coords so it works in whitespace right of the last bar.
       const moveTool = currentToolRef.current;
       if (
         moveTool !== 'cursor' &&
         moveTool !== 'cross' &&
-        activeDrawingRef.current &&
-        param.point &&
-        param.time
+        pendingPointsRef.current.length > 0 &&
+        param.point
       ) {
-        const previewPriceRaw = seriesRef.current
-          ? seriesRef.current.coordinateToPrice(param.point.y)
-          : null;
-        if (previewPriceRaw != null) {
-          updateDrawingRef.current({
-            time: param.time as number,
-            price: Number(previewPriceRaw),
-          });
+        const cursorDp = toDataPoint(param.point);
+        if (cursorDp) {
+          setActivePointsRef.current(moveTool, [...pendingPointsRef.current, cursorDp]);
           setOverlayTick((n) => n + 1);
         }
         // Do NOT return here — still allow scissors hover logic below.
@@ -844,6 +856,50 @@ export function BacktestReplayChart({
     };
     container.addEventListener('mousedown', handlePlaceOrderMousedown);
 
+    // ── Freehand drawing (brush / highlighter): mousedown→drag→mouseup ──────
+    // POINTS_REQUIRED = 0 marks freehand tools; the subscribeClick handler above
+    // skips them (returns early for required === 0). This mouse handler fills
+    // the gap: mousedown starts, mousemove appends, mouseup finishes.
+    // move/up are on window so a drag that leaves the container still tracks.
+    let freehandActive = false;
+
+    const toLocalPx = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const handleFreehandDown = (e: MouseEvent) => {
+      const t = currentToolRef.current;
+      if (t !== 'brush' && t !== 'highlighter') return;
+      if (e.button !== 0) return;            // left button only
+      const dp = toDataPoint(toLocalPx(e));
+      if (!dp) return;
+      freehandActive = true;
+      startDrawingRef.current(dp);           // engine creates active drawing with 1 point
+      setOverlayTick((n) => n + 1);
+      e.preventDefault();
+    };
+
+    const handleFreehandMove = (e: MouseEvent) => {
+      if (!freehandActive) return;
+      const dp = toDataPoint(toLocalPx(e));
+      if (!dp) return;
+      updateDrawingRef.current(dp);          // engine appends point for brush/highlighter (push semantics)
+      setOverlayTick((n) => n + 1);
+    };
+
+    const handleFreehandUp = () => {
+      if (!freehandActive) return;
+      freehandActive = false;
+      finishDrawingRef.current();            // engine validates >= 2 points for freehand, pushes to drawings
+      if (!stayInToolRef.current) setCurrentTool('cursor');
+      setOverlayTick((n) => n + 1);
+    };
+
+    container.addEventListener('mousedown', handleFreehandDown);
+    window.addEventListener('mousemove', handleFreehandMove);
+    window.addEventListener('mouseup', handleFreehandUp);
+
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -895,6 +951,9 @@ export function BacktestReplayChart({
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('mousedown', handlePlaceOrderMousedown);
+      container.removeEventListener('mousedown', handleFreehandDown);
+      window.removeEventListener('mousemove', handleFreehandMove);
+      window.removeEventListener('mouseup', handleFreehandUp);
       container.removeEventListener('mouseleave', handleMouseLeave);
       container.removeEventListener('mousemove', handleAxisCursor);
       container.removeEventListener('mouseleave', handleAxisLeave);
