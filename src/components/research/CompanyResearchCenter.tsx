@@ -102,6 +102,20 @@ function fmtDate(d?: string): string {
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Only these SEC report types are surfaced (the reference shows 10-K / 10-Q / 8-K).
+// The /api/sec/filings feed also returns Form 4, SD, 144, etc. — those are noise
+// for a research-document view, so they are filtered out at load time.
+const REPORT_FORMS = ['10-K', '10-Q', '8-K'] as const;
+
+/** Strip amendment suffix so "10-K/A" maps to "10-K". */
+function baseForm(form: string): string {
+  return form.replace(/\/A$/i, '').toUpperCase();
+}
+
+function isReportForm(form: string): boolean {
+  return (REPORT_FORMS as readonly string[]).includes(baseForm(form));
+}
+
 interface ReportMeta {
   title: string;
   period: string;
@@ -110,7 +124,7 @@ interface ReportMeta {
 }
 
 function reportMeta(form: string, reportDate?: string): ReportMeta {
-  switch (form) {
+  switch (baseForm(form)) {
     case '10-K':
       return {
         title: 'Annual Report',
@@ -368,7 +382,9 @@ export function CompanyResearchCenter() {
           upper;
         setCompanyName(resolvedName);
 
-        const rows: Filing[] = (json?.filings ?? []).map((f: Filing) => ({
+        const rows: Filing[] = (json?.filings ?? [])
+          .filter((f: Filing) => isReportForm(f.form))
+          .map((f: Filing) => ({
           ...f,
           filingUrl:
             f.filingUrl ||
@@ -437,7 +453,7 @@ export function CompanyResearchCenter() {
   // ---------------------------------------------------------------------------
 
   const filtered = filings.filter(
-    (f) => activeTab === 'all' || f.form === activeTab,
+    (f) => activeTab === 'all' || baseForm(f.form) === activeTab,
   );
   const sorted =
     sort === 'latest'
