@@ -43,12 +43,13 @@ function fmtVolume(n: number | null | undefined): string {
   return String(n);
 }
 
-/** Background style for heatmap/cell tinting. null pct → transparent. */
+/** Background style for heatmap/cell tinting. null pct → transparent.
+ *  Approved green-for-gains exception (Elad, 2026-06-07) — classic stock coloring. */
 function heatColor(pct: number | null): React.CSSProperties {
   if (pct == null) return {};
   if (pct > 0) {
     const alpha = Math.min(0.06 + Math.abs(pct) / 40, 0.32);
-    return { backgroundColor: `rgba(201,166,70,${alpha.toFixed(3)})` };
+    return { backgroundColor: `rgba(16,185,129,${alpha.toFixed(3)})` };
   }
   if (pct < 0) {
     const alpha = Math.min(0.06 + Math.abs(pct) / 40, 0.32);
@@ -57,10 +58,11 @@ function heatColor(pct: number | null): React.CSSProperties {
   return {};
 }
 
-/** Tailwind color class for a number: positive → white, negative → red. */
+/** Tailwind color class for a number: positive → green, negative → red.
+ *  Green is an approved exception for the Sectors pages only (classic stock coloring). */
 function numColor(n: number | null | undefined): string {
   if (n == null) return 'text-ink-secondary';
-  return n >= 0 ? 'text-ink-primary' : 'text-num-negative';
+  return n >= 0 ? 'text-emerald-400' : 'text-num-negative';
 }
 
 // ─── Leaders / Laggards strip ─────────────────────────────────────────────────
@@ -76,7 +78,7 @@ const LeadersStrip = memo(function LeadersStrip({ sectors }: { sectors: Sector[]
       <span
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono tabular-nums border"
         style={isLeader
-          ? { borderColor: 'rgba(201,166,70,0.35)', backgroundColor: 'rgba(201,166,70,0.08)' }
+          ? { borderColor: 'rgba(16,185,129,0.35)', backgroundColor: 'rgba(16,185,129,0.08)' }
           : { borderColor: 'rgba(226,75,74,0.35)', backgroundColor: 'rgba(226,75,74,0.08)' }
         }
       >

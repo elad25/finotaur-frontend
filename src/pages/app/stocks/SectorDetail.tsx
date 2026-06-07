@@ -54,9 +54,11 @@ function fmtNum(
   return `${n.toFixed(decimals)}${suffix}`;
 }
 
+/** Positive → green, negative → red. Approved green exception for the Sectors
+ *  pages only (Elad, 2026-06-07) — classic stock coloring. */
 function numColor(n: number | null | undefined): string {
   if (n == null) return 'text-ink-secondary';
-  return n >= 0 ? 'text-ink-primary' : 'text-num-negative';
+  return n >= 0 ? 'text-emerald-400' : 'text-num-negative';
 }
 
 // ─── Simple SVG sparkline from series data (1M sectorReturn) ─────────────────
@@ -80,7 +82,7 @@ const Sparkline = memo(function Sparkline({ values, width = 120, height = 36 }: 
     })
     .join(' ');
   const lastVal = values[values.length - 1];
-  const strokeColor = lastVal >= 0 ? '#C9A646' : '#E24B4A';
+  const strokeColor = lastVal >= 0 ? '#10b981' : '#E24B4A';
   return (
     <svg
       width={width}
