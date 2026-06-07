@@ -47,6 +47,8 @@ import { ReplayControls } from './ReplayControls';
 import { useDrawings } from '@/components/ReplayChart/hooks/useDrawings';
 import { DrawingLayer } from '@/components/ReplayChart/drawings/DrawingLayer';
 import { DrawingToolbar } from '@/components/ReplayChart/ui/DrawingToolbar';
+import { DrawingStylePopover } from '@/components/ReplayChart/ui/DrawingStylePopover';
+import { POINTS_REQUIRED } from '@/components/ReplayChart/types';
 
 // Height of the time-axis row (lightweight-charts default is ~28px).
 const TIMESCALE_HEIGHT = 28;
@@ -291,6 +293,7 @@ export function BacktestReplayChart({
     setCurrentTool,
     startDrawing,
     updateDrawing,
+    commitPoint,
     finishDrawing,
     cancelDrawing,
     selectDrawing,
@@ -298,6 +301,11 @@ export function BacktestReplayChart({
     deleteSelected,
     lockSelected,
     toggleVisibility,
+    hideAll,
+    lockAll,
+    removeAll,
+    updateStyle,
+    updateDrawingData,
     undo,
     redo,
   } = useDrawings({
@@ -305,6 +313,16 @@ export function BacktestReplayChart({
     theme: 'dark',
     autoSave: true,
   });
+
+  // ─── Utility toolbar state ────────────────────────────────────
+  const [magnetEnabled, setMagnetEnabled] = useState(false);
+  const [stayInTool, setStayInTool] = useState(false);
+  // Mirror stayInTool and currentTool as refs so the chart-lifecycle closure
+  // (subscribeClick) can read the latest values without being re-registered.
+  const stayInToolRef = useRef(stayInTool);
+  useEffect(() => { stayInToolRef.current = stayInTool; }, [stayInTool]);
+  const magnetEnabledRef = useRef(magnetEnabled);
+  useEffect(() => { magnetEnabledRef.current = magnetEnabled; }, [magnetEnabled]);
 
   // Mirror current drawing tool into a ref so chart-lifecycle closures
   // (subscribeClick, mousedown) can read the latest value without being
@@ -317,6 +335,7 @@ export function BacktestReplayChart({
   // re-registered on every render.
   const startDrawingRef = useRef(startDrawing);
   const updateDrawingRef = useRef(updateDrawing);
+  const commitPointRef = useRef(commitPoint);
   const finishDrawingRef = useRef(finishDrawing);
   const cancelDrawingRef = useRef(cancelDrawing);
   const selectDrawingRef = useRef(selectDrawing);
@@ -327,6 +346,7 @@ export function BacktestReplayChart({
 
   useEffect(() => { startDrawingRef.current = startDrawing; }, [startDrawing]);
   useEffect(() => { updateDrawingRef.current = updateDrawing; }, [updateDrawing]);
+  useEffect(() => { commitPointRef.current = commitPoint; }, [commitPoint]);
   useEffect(() => { finishDrawingRef.current = finishDrawing; }, [finishDrawing]);
   useEffect(() => { cancelDrawingRef.current = cancelDrawing; }, [cancelDrawing]);
   useEffect(() => { selectDrawingRef.current = selectDrawing; }, [selectDrawing]);
@@ -335,9 +355,7 @@ export function BacktestReplayChart({
   useEffect(() => { activeDrawingRef.current = activeDrawing; }, [activeDrawing]);
   useEffect(() => { selectedDrawingRef.current = selectedDrawing; }, [selectedDrawing]);
 
-  // Single-point draw tools complete in one click (horizontal / vertical only
-  // need 1 point; finishDrawing() validates they pass with points.length === 1).
-  const SINGLE_POINT_TOOLS = new Set(['horizontal', 'vertical']);
+  // (SINGLE_POINT_TOOLS removed — generalized via POINTS_REQUIRED map below)
 
   // Delete / Escape key bindings for selected drawings and in-progress drawings.
   useEffect(() => {
@@ -581,19 +599,60 @@ export function BacktestReplayChart({
           : null;
         if (priceRaw == null) return;
 
-        const dataPoint = { time: param.time as number, price: Number(priceRaw) };
+        // ── Magnet snap: snap price to nearest OHLC of the bar at this time ──
+        let snappedPrice = Number(priceRaw);
+        if (magnetEnabledRef.current) {
+          const clickedTimeNum = param.time as number;
+          // Find the bar whose time matches the clicked time.
+          const bar = bars.find((b) => (b.time as number) === clickedTimeNum);
+          if (bar) {
+            const candidates = [bar.open, bar.high, bar.low, bar.close];
+            const closest = candidates.reduce((prev, curr) =>
+              Math.abs(curr - snappedPrice) < Math.abs(prev - snappedPrice) ? curr : prev
+            );
+            snappedPrice = closest;
+          }
+          // If bar not found in the loaded window, keep raw price as-is.
+        }
+
+        const dataPoint = { time: param.time as number, price: snappedPrice };
+
+        // Generalised N-point creation loop using POINTS_REQUIRED.
+        // cursor/cross are already filtered above; cast is safe.
+        const required = POINTS_REQUIRED[tool as keyof typeof POINTS_REQUIRED] ?? 2;
 
         if (!activeDrawingRef.current) {
-          // First click — start the drawing.
+          // First click — start the drawing (engine stores the first anchor).
           startDrawingRef.current(dataPoint);
-          if (SINGLE_POINT_TOOLS.has(tool)) {
-            // Horizontal / vertical only need one point — finish immediately.
+
+          if (required <= 1) {
+            // Single-anchor tools (horizontal, vertical, horizontal-ray, cross-line,
+            // text, note) finish immediately after the first click.
             finishDrawingRef.current();
+            // Only revert to cursor when stay-in-tool is OFF.
+            if (!stayInToolRef.current) {
+              setCurrentTool('cursor');
+            }
           }
+          // For required >= 2 we keep the drawing active and wait for more clicks.
         } else {
-          // Second (or later) click — anchor the second point and finish.
-          updateDrawingRef.current(dataPoint);
-          finishDrawingRef.current();
+          // Subsequent click while a drawing is in progress.
+          const current = activeDrawingRef.current;
+          const committed = current.points.length; // points already locked
+
+          if (required > 0 && committed < required) {
+            // Still have more intermediate anchors to collect: commit this point
+            // and keep the drawing open for the next anchor.
+            commitPointRef.current(dataPoint);
+          } else {
+            // Final anchor reached — lock last point and finish.
+            updateDrawingRef.current(dataPoint);
+            finishDrawingRef.current();
+            // Only revert to cursor when stay-in-tool is OFF.
+            if (!stayInToolRef.current) {
+              setCurrentTool('cursor');
+            }
+          }
         }
 
         setOverlayTick((n) => n + 1);
@@ -1198,7 +1257,32 @@ export function BacktestReplayChart({
             onRedo={redo}
             onLockToggle={lockSelected}
             onVisibilityToggle={toggleVisibility}
+            magnetEnabled={magnetEnabled}
+            onToggleMagnet={() => setMagnetEnabled((v) => !v)}
+            stayInTool={stayInTool}
+            onToggleStayInTool={() => setStayInTool((v) => !v)}
+            onHideAll={hideAll}
+            onLockAll={lockAll}
+            onRemoveAll={removeAll}
             className="absolute left-0 top-0 bottom-0 z-[30]"
+          />
+        )}
+
+        {/* ── Per-drawing style popover — appears just right of the toolbar
+            when exactly one drawing is selected. z-[31] sits above the toolbar. ── */}
+        {enableDrawings && selectedDrawing && (
+          <DrawingStylePopover
+            drawing={selectedDrawing}
+            onUpdateStyle={(patch) => updateStyle(selectedDrawing.id, patch)}
+            onUpdateDrawing={(patch) => updateDrawingData(selectedDrawing.id, patch)}
+            onDelete={() => {
+              deleteSelected();
+              setOverlayTick((n) => n + 1);
+            }}
+            onClose={() => {
+              deselectAll();
+              setOverlayTick((n) => n + 1);
+            }}
           />
         )}
 

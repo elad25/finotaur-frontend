@@ -22,6 +22,7 @@ export interface UseDrawingsReturn {
   setCurrentTool: (tool: DrawingType | 'cursor' | 'cross') => void;
   startDrawing: (point: DrawingPoint) => void;
   updateDrawing: (point: DrawingPoint) => void;
+  commitPoint: (point: DrawingPoint) => void;
   finishDrawing: () => Drawing | null;
   cancelDrawing: () => void;
   selectDrawing: (point: { x: number; y: number }, threshold?: number) => Drawing | null;
@@ -31,7 +32,14 @@ export interface UseDrawingsReturn {
   deleteAll: () => void;
   lockSelected: () => boolean;
   toggleVisibility: () => void;
+  /** Hide all drawings (set visible=false). */
+  hideAll: () => void;
+  /** Lock all drawings (set locked=true). */
+  lockAll: () => void;
+  /** Delete all drawings + save. */
+  removeAll: () => void;
   updateStyle: (id: string, style: Partial<DrawingStyle>) => boolean;
+  updateDrawingData: (id: string, patch: Partial<Drawing>) => boolean;
   undo: () => boolean;
   redo: () => boolean;
   bringToFront: (id: string) => boolean;
@@ -116,6 +124,11 @@ export const useDrawings = ({
     setActiveDrawing(engineRef.current?.getActiveDrawing() || null);
   }, []);
 
+  const commitPoint = useCallback((point: DrawingPoint) => {
+    engineRef.current?.commitPoint(point);
+    setActiveDrawing(engineRef.current?.getActiveDrawing() || null);
+  }, []);
+
   const finishDrawing = useCallback(() => {
     const result = engineRef.current?.finishDrawing() || null;
     setActiveDrawing(null);
@@ -177,8 +190,33 @@ export const useDrawings = ({
     syncDrawings();
   }, [syncDrawings]);
 
+  const hideAll = useCallback(() => {
+    engineRef.current?.hideAll();
+    syncDrawings();
+  }, [syncDrawings]);
+
+  const lockAll = useCallback(() => {
+    engineRef.current?.lockAll();
+    setSelectedDrawing(null);
+    syncDrawings();
+  }, [syncDrawings]);
+
+  const removeAll = useCallback(() => {
+    engineRef.current?.removeAll();
+    setSelectedDrawing(null);
+    syncDrawings();
+  }, [syncDrawings]);
+
   const updateStyle = useCallback((id: string, style: Partial<DrawingStyle>) => {
     const result = engineRef.current?.updateDrawingStyle(id, style) || false;
+    if (result) {
+      syncDrawings();
+    }
+    return result;
+  }, [syncDrawings]);
+
+  const updateDrawingData = useCallback((id: string, patch: Partial<Drawing>) => {
+    const result = engineRef.current?.updateDrawingData(id, patch) || false;
     if (result) {
       syncDrawings();
     }
@@ -239,6 +277,7 @@ export const useDrawings = ({
     setCurrentTool,
     startDrawing,
     updateDrawing,
+    commitPoint,
     finishDrawing,
     cancelDrawing,
     selectDrawing,
@@ -248,7 +287,11 @@ export const useDrawings = ({
     deleteAll,
     lockSelected,
     toggleVisibility,
+    hideAll,
+    lockAll,
+    removeAll,
     updateStyle,
+    updateDrawingData,
     undo,
     redo,
     bringToFront,

@@ -578,19 +578,19 @@ export interface DrawdownPoint {
 // ✅ DRAWING TYPES (COMPLETE WITH ALL TOOLS)
 // ============================================================================
 
-export type DrawingTool = 
-  | 'cursor' 
-  | 'cross' 
-  | 'trendline' 
-  | 'horizontal' 
+export type DrawingTool =
+  | 'cursor'
+  | 'cross'
+  | 'trendline'
+  | 'horizontal'
   | 'vertical'
-  | 'ray' 
+  | 'ray'
   | 'extended'
-  | 'rectangle' 
-  | 'circle' 
+  | 'rectangle'
+  | 'circle'
   | 'ellipse'
   | 'triangle'
-  | 'text' 
+  | 'text'
   | 'note'
   | 'brush'
   | 'measure'
@@ -598,9 +598,119 @@ export type DrawingTool =
   | 'fibonacci-extension'
   | 'pitchfork'
   | 'gann-fan'
-  | 'arrow';
+  | 'arrow'
+  // New tools (OQ-69 drawing-tools extension)
+  | 'trend-angle'
+  | 'horizontal-ray'
+  | 'cross-line'
+  | 'parallel-channel'
+  | 'rotated-rectangle'
+  | 'arc'
+  | 'highlighter'
+  // Emoji / icon markers
+  | 'emoji'
+  | 'sticker'
+  | 'icon'
+  // Annotation markers
+  | 'callout'
+  | 'comment'
+  | 'price-label'
+  | 'signpost'
+  | 'flag'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'arrow-left'
+  | 'arrow-right'
+  // Position / Range tools (P7)
+  | 'long-position'
+  | 'short-position'
+  | 'price-range'
+  | 'date-range'
+  | 'date-price-range'
+  // Advanced Fibonacci tools (P2)
+  | 'fib-channel'
+  | 'fib-timezone'
+  | 'fib-circles'
+  | 'fib-speed-fan'
+  | 'fib-spiral'
+  | 'fib-wedge'
+  | 'pitchfan'
+  // Advanced Gann / Pitchfork tools (P2)
+  | 'gann-box'
+  | 'gann-square'
+  | 'gann-square-fixed'
+  | 'pitchfork-schiff'
+  | 'pitchfork-modified'
+  | 'pitchfork-inside'
+  // Pattern tools (P6)
+  | 'xabcd'
+  | 'cypher'
+  | 'abcd'
+  | 'three-drives'
+  | 'head-shoulders'
+  | 'triangle-pattern'
+  | 'elliott-impulse'
+  | 'elliott-correction'
+  | 'elliott-triangle'
+  | 'elliott-wxy'
+  | 'elliott-wxyxz'
+  | 'cyclic-lines'
+  | 'time-cycles'
+  | 'sine-line'
+  // Curves (Shapes group)
+  | 'curve'
+  | 'double-curve'
+  // Projection (Position group)
+  | 'forecast'
+  | 'projection'
+  | 'bars-pattern'
+  | 'ghost-feed'
+  // Anchored Annotations (Annotations group)
+  | 'anchored-text'
+  | 'anchored-note'
+  | 'price-note'
+  | 'arrow-marker';
 
 export type DrawingType = DrawingTool; // Alias
+
+// Number of click-anchors each drawing tool needs before it is complete.
+// 1 = single click; 2/3 = fixed multi-click; 0 = freehand drag (brush-style, ends on mouse-up).
+export const POINTS_REQUIRED: Record<DrawingType, number> = {
+  cursor: 0, cross: 0,
+  horizontal: 1, vertical: 1, text: 1, note: 1, 'horizontal-ray': 1, 'cross-line': 1,
+  trendline: 2, ray: 2, extended: 2, arrow: 2, 'trend-angle': 2, rectangle: 2, circle: 2,
+  ellipse: 2, measure: 2, fibonacci: 2, 'gann-fan': 2,
+  triangle: 3, 'fibonacci-extension': 3, pitchfork: 3, 'parallel-channel': 3,
+  'rotated-rectangle': 3, arc: 3,
+  brush: 0, highlighter: 0,
+  // Emoji / icon markers (1 point each)
+  emoji: 1, sticker: 1, icon: 1,
+  // Annotation markers
+  callout: 2,
+  comment: 1, 'price-label': 1, signpost: 1, flag: 1,
+  'arrow-up': 1, 'arrow-down': 1, 'arrow-left': 1, 'arrow-right': 1,
+  // Position / Range tools (P7)
+  'long-position': 3, 'short-position': 3,
+  'price-range': 2, 'date-range': 2, 'date-price-range': 2,
+  // Advanced Fibonacci tools (P2)
+  'fib-channel': 3, 'fib-timezone': 2, 'fib-circles': 2,
+  'fib-speed-fan': 2, 'fib-spiral': 2, 'fib-wedge': 3, 'pitchfan': 3,
+  // Advanced Gann / Pitchfork tools (P2)
+  'gann-box': 2, 'gann-square': 2, 'gann-square-fixed': 2,
+  'pitchfork-schiff': 3, 'pitchfork-modified': 3, 'pitchfork-inside': 3,
+  // Pattern tools (P6)
+  xabcd: 5, cypher: 5, abcd: 4, 'three-drives': 7,
+  'head-shoulders': 7, 'triangle-pattern': 4,
+  'elliott-impulse': 6, 'elliott-correction': 4, 'elliott-triangle': 6,
+  'elliott-wxy': 4, 'elliott-wxyxz': 6,
+  'cyclic-lines': 2, 'time-cycles': 2, 'sine-line': 2,
+  // Curves (Shapes group)
+  curve: 3, 'double-curve': 5,
+  // Projection (Position group)
+  forecast: 3, projection: 3, 'bars-pattern': 2, 'ghost-feed': 2,
+  // Anchored Annotations (Annotations group)
+  'anchored-text': 1, 'anchored-note': 1, 'price-note': 1, 'arrow-marker': 1,
+};
 
 export interface Point {
   time: Time;
@@ -659,7 +769,35 @@ export interface Drawing {
   showLabels?: boolean;
   extendLeft?: boolean;
   extendRight?: boolean;
+
+  // Variant sub-type (pitchfork: 'schiff'|'modified'|'inside'; fib/gann sub-kinds; pattern sub-kinds)
+  variant?: string;
+
+  // Long/Short Position & risk tools — full risk math (entry/stop/target as prices, qty, optional account size)
+  risk?: {
+    entry: number;
+    stop: number;
+    target: number;
+    qty: number;
+    accountSize?: number;
+  };
+
+  // Emoji / sticker / icon annotations (rendered at points[0])
+  emoji?: string;
+  iconName?: string;
+
+  // Anchored vs floating annotations: 'bar' = anchored to time/price, 'screen' = fixed screen position
+  anchor?: 'bar' | 'screen';
+
+  // Fib/Gann fans & arcs: explicit level/angle config
+  arcLevels?: number[];
+  angles?: number[];
+
+  // Pattern tools: auto-computed ratio labels per segment (display cache)
+  ratioLabels?: string[];
 }
+
+export type PositionRisk = NonNullable<Drawing['risk']>;
 
 // ============================================================================
 // TAG TYPES

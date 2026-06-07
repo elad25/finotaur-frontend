@@ -64,7 +64,7 @@ function toIsoDate(d: Date): string {
 
 function formatRangeLabel(range?: DateRange): string {
   if (!range?.from) return 'Select date range';
-  const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   if (!range.to) return fmt(range.from);
   return `${fmt(range.from)} — ${fmt(range.to)}`;
 }
