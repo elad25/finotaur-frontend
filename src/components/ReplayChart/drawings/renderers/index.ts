@@ -74,6 +74,18 @@ import {
   renderDatePriceRange,
 } from './ranges';
 import {
+  renderCurve,
+  renderDoubleCurve,
+  renderForecast,
+  renderProjection,
+  renderBarsPattern,
+  renderGhostFeed,
+  renderAnchoredText,
+  renderAnchoredNote,
+  renderPriceNote,
+  renderArrowMarker,
+} from './extras';
+import {
   renderXABCD,
   renderCypher,
   renderABCD,
@@ -111,6 +123,8 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   triangle: renderTriangle,
   'rotated-rectangle': renderRotatedRectangle,
   arc: renderArc,
+  curve: renderCurve,
+  'double-curve': renderDoubleCurve,
 
   // Channels family
   'parallel-channel': renderParallelChannel,
@@ -162,6 +176,11 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   'arrow-down': renderArrowDown,
   'arrow-left': renderArrowLeft,
   'arrow-right': renderArrowRight,
+  // Anchored annotations
+  'anchored-text': renderAnchoredText,
+  'anchored-note': renderAnchoredNote,
+  'price-note': renderPriceNote,
+  'arrow-marker': renderArrowMarker,
 
   // Position / Range tools (P7)
   'long-position': renderLongPosition,
@@ -169,6 +188,11 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   'price-range': renderPriceRange,
   'date-range': renderDateRange,
   'date-price-range': renderDatePriceRange,
+  // Projection tools (Position group)
+  forecast: renderForecast,
+  projection: renderProjection,
+  'bars-pattern': renderBarsPattern,
+  'ghost-feed': renderGhostFeed,
 
   // Pattern tools (P6) — Harmonic
   xabcd: renderXABCD,

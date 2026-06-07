@@ -656,7 +656,20 @@ export type DrawingTool =
   | 'elliott-wxyxz'
   | 'cyclic-lines'
   | 'time-cycles'
-  | 'sine-line';
+  | 'sine-line'
+  // Curves (Shapes group)
+  | 'curve'
+  | 'double-curve'
+  // Projection (Position group)
+  | 'forecast'
+  | 'projection'
+  | 'bars-pattern'
+  | 'ghost-feed'
+  // Anchored Annotations (Annotations group)
+  | 'anchored-text'
+  | 'anchored-note'
+  | 'price-note'
+  | 'arrow-marker';
 
 export type DrawingType = DrawingTool; // Alias
 
@@ -691,6 +704,12 @@ export const POINTS_REQUIRED: Record<DrawingType, number> = {
   'elliott-impulse': 6, 'elliott-correction': 4, 'elliott-triangle': 6,
   'elliott-wxy': 4, 'elliott-wxyxz': 6,
   'cyclic-lines': 2, 'time-cycles': 2, 'sine-line': 2,
+  // Curves (Shapes group)
+  curve: 3, 'double-curve': 5,
+  // Projection (Position group)
+  forecast: 3, projection: 3, 'bars-pattern': 2, 'ghost-feed': 2,
+  // Anchored Annotations (Annotations group)
+  'anchored-text': 1, 'anchored-note': 1, 'price-note': 1, 'arrow-marker': 1,
 };
 
 export interface Point {

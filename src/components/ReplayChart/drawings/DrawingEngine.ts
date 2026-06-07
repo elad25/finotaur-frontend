@@ -118,6 +118,10 @@ export class DrawingEngine {
       timestamp: Date.now(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      // Anchored annotations default to bar-anchored placement.
+      ...(this.currentTool === 'anchored-text' || this.currentTool === 'anchored-note'
+        ? { anchor: 'bar' as const }
+        : {}),
     };
   }
 
@@ -647,6 +651,34 @@ export class DrawingEngine {
           if (dist < minRangeDist) minRangeDist = dist;
         }
         return minRangeDist;
+      }
+
+      // 1-point anchored annotations: Euclidean distance to points[0].
+      case 'anchored-text':
+      case 'anchored-note':
+      case 'price-note':
+      case 'arrow-marker': {
+        const dx = point.x - points[0].time;
+        const dy = point.y - points[0].price;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // Multi-point extras (curves, forecast, projection, bars-pattern, ghost-feed):
+      // min distance to any anchor point.
+      case 'curve':
+      case 'double-curve':
+      case 'forecast':
+      case 'projection':
+      case 'bars-pattern':
+      case 'ghost-feed': {
+        let minExtraDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minExtraDist) minExtraDist = dist;
+        }
+        return minExtraDist;
       }
 
       // Multi-anchor tools: distance to nearest anchor point (acceptable for selection).

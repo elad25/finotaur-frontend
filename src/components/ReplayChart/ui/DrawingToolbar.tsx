@@ -63,6 +63,11 @@ import {
   Waves,
   Repeat,
   AudioWaveform,
+  // Extras batch
+  Frame,
+  BarChart3,
+  Ghost,
+  ArrowDownToLine,
 } from 'lucide-react';
 import { Theme, DrawingType } from '../types';
 import { cn } from '@/lib/utils';
@@ -162,6 +167,8 @@ const TOOL_GROUPS: ToolGroup[] = [
       { id: 'ellipse', icon: Circle, label: 'Ellipse' },
       { id: 'triangle', icon: Triangle, label: 'Triangle' },
       { id: 'arc', icon: Spline, label: 'Arc' },
+      { id: 'curve', icon: Spline, label: 'Curve' },
+      { id: 'double-curve', icon: Spline, label: 'Double Curve' },
     ],
   },
   {
@@ -203,6 +210,10 @@ const TOOL_GROUPS: ToolGroup[] = [
       { id: 'arrow-down', icon: ArrowDown, label: 'Arrow Down' },
       { id: 'arrow-left', icon: ArrowLeft, label: 'Arrow Left' },
       { id: 'arrow-right', icon: ArrowRight, label: 'Arrow Right' },
+      { id: 'anchored-text', icon: Type, label: 'Anchored Text' },
+      { id: 'anchored-note', icon: StickyNote, label: 'Anchored Note' },
+      { id: 'price-note', icon: Tag, label: 'Price Note' },
+      { id: 'arrow-marker', icon: ArrowDownToLine, label: 'Arrow Marker' },
     ],
   },
   {
@@ -214,6 +225,10 @@ const TOOL_GROUPS: ToolGroup[] = [
       { id: 'price-range', icon: MoveVertical, label: 'Price Range' },
       { id: 'date-range', icon: MoveHorizontal, label: 'Date Range' },
       { id: 'date-price-range', icon: Maximize2, label: 'Date & Price Range' },
+      { id: 'forecast', icon: TrendingUp, label: 'Forecast' },
+      { id: 'projection', icon: Frame, label: 'Projection' },
+      { id: 'bars-pattern', icon: BarChart3, label: 'Bars Pattern' },
+      { id: 'ghost-feed', icon: Ghost, label: 'Ghost Feed' },
     ],
   },
   {
