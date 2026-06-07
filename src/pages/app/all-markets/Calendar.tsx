@@ -515,28 +515,22 @@ const isEventPast = (date: string, time: string): boolean => {
   return eventDate < now;
 };
 
-// Check if we should show NOW indicator after this event
-const shouldShowNowAfter = (
-  currentEvent: { date: string; time: string },
-  nextEvent: { date: string; time: string } | null,
+// Index among a day's TIME-SORTED events where the NOW line belongs:
+// before the first event still in the future; events.length if all are past.
+// Returns null when this isn't today.
+const getNowInsertIndex = (
+  events: { date: string; time: string }[],
   isToday: boolean
-): boolean => {
-  if (!isToday) return false;
-  
+): number | null => {
+  if (!isToday) return null;
   const now = new Date();
-  const currentEventTime = new Date(normalizeDate(currentEvent.date) + 'T00:00:00');
-  const [currHours, currMinutes] = (currentEvent.time || '00:00').split(':').map(Number);
-  currentEventTime.setHours(currHours || 0, currMinutes || 0, 0, 0);
-  
-  if (currentEventTime > now) return false;
-  
-  if (!nextEvent) return true;
-  
-  const nextEventTime = new Date(normalizeDate(nextEvent.date) + 'T00:00:00');
-  const [nextHours, nextMinutes] = (nextEvent.time || '00:00').split(':').map(Number);
-  nextEventTime.setHours(nextHours || 0, nextMinutes || 0, 0, 0);
-  
-  return now >= currentEventTime && now < nextEventTime;
+  for (let i = 0; i < events.length; i++) {
+    const t = new Date(normalizeDate(events[i].date) + 'T00:00:00');
+    const [h, m] = (events[i].time || '00:00').split(':').map(Number);
+    t.setHours(h || 0, m || 0, 0, 0);
+    if (t > now) return i;
+  }
+  return events.length;
 };
 
 // ============================================
@@ -555,16 +549,25 @@ const ImportanceStars: React.FC<{ level: Importance }> = ({ level }) => (
   </div>
 );
 
-// 🔥 NOW INDICATOR LINE
-const NowIndicator: React.FC = () => (
-  <tr>
-    <td colSpan={7} className="px-0 py-0">
-      <div className="relative py-1">
-        <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-lg shadow-amber-500/50" />
-      </div>
-    </td>
-  </tr>
-);
+// 🔥 NOW INDICATOR LINE — gold line marking the current moment in the day's timeline
+const NowIndicator: React.FC = () => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  return (
+    <tr aria-label="current time">
+      <td colSpan={7} className="px-0 py-0">
+        <div className="relative py-1.5">
+          <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-lg shadow-amber-500/50" />
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold font-mono shadow-md shadow-amber-500/40">
+            <span className="w-1.5 h-1.5 rounded-full bg-black/70 animate-pulse" />
+            NOW {hh}:{mm}
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+};
 
 // Flag Component using flagcdn real flag images (emoji flags don't render on Windows/Chrome)
 const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> = ({ countryCode, size = 'md' }) => {
@@ -867,96 +870,96 @@ const EconomicCalendarTable: React.FC<{
             </div>
             
             {/* Events table */}
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
-                  <th className="px-4 py-3 w-20">Time</th>
-                  <th className="px-4 py-3 w-24">Country</th>
-                  <th className="px-4 py-3 w-24">Impact</th>
-                  <th className="px-4 py-3">Event</th>
-                  <th className="px-4 py-3 w-24 text-right">Actual</th>
-                  <th className="px-4 py-3 w-24 text-right">Forecast</th>
-                  <th className="px-4 py-3 w-24 text-right">Previous</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dateEvents.map((event, index) => {
-                  const nextEvent = dateEvents[index + 1] || null;
-                  const showNowAfter = isToday && isShowingToday && shouldShowNowAfter(
-                    { date: event.date, time: event.time },
-                    nextEvent ? { date: nextEvent.date, time: nextEvent.time } : null,
-                    isToday
-                  );
-                  const isPast = isEventPast(event.date, event.time);
-                  
-                  return (
-                    <React.Fragment key={event.id}>
-                      <tr
-                        className={`
-                          border-b border-neutral-800/30 transition-colors
-                          ${event.isReleased || isPast
-                            ? 'bg-neutral-900/50 opacity-75' 
-                            : 'hover:bg-neutral-800/30'
-                          }
-                        `}
-                      >
-                        <td className="px-4 py-3 text-sm font-mono">
-                          <div className="flex items-center gap-2">
-                            <span className={isPast ? 'text-neutral-500' : 'text-neutral-300'}>
-                              {event.time || '—'}
-                            </span>
-                            {event.isReleased && (
-                              <CheckCircle2 size={12} className="text-amber-500/70" />
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <CountryFlag countryCode={event.countryCode} size="md" />
-                            <span className="text-xs text-neutral-500">{event.currency}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {event.isHoliday ? (
-                            <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
-                              Holiday
-                            </span>
-                          ) : (
-                            <ImportanceStars level={event.importance} />
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-sm ${isPast ? 'text-neutral-400' : 'text-neutral-200'}`}>
-                              {event.event}
-                            </span>
-                            {event.isSpeech && (
-                              <Mic size={14} className="text-purple-400" />
-                            )}
-                            {event.isPreliminary && (
-                              <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
-                            )}
-                            {event.isRevised && (
-                              <span className="text-xs text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <DataValue value={event.actual} compareWith={event.forecast} type="actual" />
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <DataValue value={event.forecast} type="forecast" />
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <DataValue value={event.previous} type="previous" />
-                        </td>
-                      </tr>
-                      {showNowAfter && <NowIndicator />}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+            {(() => {
+              const nowIndex = isToday && isShowingToday ? getNowInsertIndex(dateEvents, isToday) : null;
+              return (
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+                      <th className="px-4 py-3 w-20">Time</th>
+                      <th className="px-4 py-3 w-24">Country</th>
+                      <th className="px-4 py-3 w-24">Impact</th>
+                      <th className="px-4 py-3">Event</th>
+                      <th className="px-4 py-3 w-24 text-right">Actual</th>
+                      <th className="px-4 py-3 w-24 text-right">Forecast</th>
+                      <th className="px-4 py-3 w-24 text-right">Previous</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dateEvents.map((event, index) => {
+                      const isPast = isEventPast(event.date, event.time);
+
+                      return (
+                        <React.Fragment key={event.id}>
+                          {nowIndex === index && <NowIndicator />}
+                          <tr
+                            className={`
+                              border-b border-neutral-800/30 transition-colors
+                              ${event.isReleased || isPast
+                                ? 'bg-neutral-900/50 opacity-75'
+                                : 'hover:bg-neutral-800/30'
+                              }
+                            `}
+                          >
+                            <td className="px-4 py-3 text-sm font-mono">
+                              <div className="flex items-center gap-2">
+                                <span className={isPast ? 'text-neutral-500' : 'text-neutral-300'}>
+                                  {event.time || '—'}
+                                </span>
+                                {event.isReleased && (
+                                  <CheckCircle2 size={12} className="text-amber-500/70" />
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <CountryFlag countryCode={event.countryCode} size="md" />
+                                <span className="text-xs text-neutral-500">{event.currency}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {event.isHoliday ? (
+                                <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                                  Holiday
+                                </span>
+                              ) : (
+                                <ImportanceStars level={event.importance} />
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-sm ${isPast ? 'text-neutral-400' : 'text-neutral-200'}`}>
+                                  {event.event}
+                                </span>
+                                {event.isSpeech && (
+                                  <Mic size={14} className="text-purple-400" />
+                                )}
+                                {event.isPreliminary && (
+                                  <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
+                                )}
+                                {event.isRevised && (
+                                  <span className="text-xs text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <DataValue value={event.actual} compareWith={event.forecast} type="actual" />
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <DataValue value={event.forecast} type="forecast" />
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <DataValue value={event.previous} type="previous" />
+                            </td>
+                          </tr>
+                          {nowIndex === dateEvents.length && index === dateEvents.length - 1 && <NowIndicator />}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
         );
       })}
@@ -1367,7 +1370,7 @@ const EmptyState: React.FC<{ message?: string }> = ({ message = 'No events found
 
 export default function AllMarketsCalendar() {
   const [activeTab, setActiveTab] = useState<TabType>('economic');
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('today');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('thisWeek');
   const [selectedCountries, setSelectedCountries] = useState<string[]>(DEFAULT_COUNTRY_CODES);
   const [showFilters, setShowFilters] = useState(false);
   const [importanceFilter, setImportanceFilter] = useState<Importance[]>([1, 2, 3]);
