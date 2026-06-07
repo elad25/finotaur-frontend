@@ -274,6 +274,7 @@ const StocksEarnings = lazy(() => import("@/pages/app/stocks/Earnings"));
 const StocksMovers = lazy(() => import("@/pages/app/stocks/Movers"));
 const StocksNews = lazy(() => import("@/pages/app/stocks/News"));
 const StocksSectors = lazy(() => import("@/pages/app/stocks/Sectors"));
+const StocksSectorDetail = lazy(() => import("@/pages/app/stocks/SectorDetail"));
 const StocksCatalysts = lazy(() => import("@/pages/app/stocks/Catalysts"));
 const StocksUpgrades = lazy(() => import("@/pages/app/stocks/Upgrades"));
 const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
@@ -543,6 +544,7 @@ function AppContent() {
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />
+          <Route path="stocks/sectors/:id" element={<LockedRoute domainId="stocks"><StocksSectorDetail /></LockedRoute>} />
           <Route path="stocks/catalysts" element={<LockedRoute domainId="stocks"><StocksCatalysts /></LockedRoute>} />
           {/* Stocks Upgrades/Downgrades — sealed: analyst-ratings source (Finnhub/FMP) not licensed for redistribution. Sealed pending licensed source.
               To re-enable: restore <LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute> and remove locked:true from nav.ts. */}

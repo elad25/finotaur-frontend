@@ -1,166 +1,150 @@
 // src/pages/app/stocks/Sectors.tsx
-// Sector ETF overview — live snapshots from /api/sectors (cached Polygon proxy).
-// Mirrors the macro/Liquidity page pattern: TanStack Query + GlassUI primitives.
+// Market Sectors — factual data-only view. No AI text, no buy/sell signals.
+// Two views: Table (default, sortable) + Heatmap (tiled by timeframe return).
 
-import { memo, useState } from 'react';
+import React, { memo, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageTemplate } from '@/components/PageTemplate';
-import { Card } from '@/components/ds/Card';
-import { Button } from '@/components/ds/Button';
-import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
-import {
-  GlassCard,
-  GlassStatSkeleton,
-  SectionHeader,
-} from '../crypto/_shared/GlassUI';
-import { useSectors, type SectorItem } from '@/hooks/stocks/useSectors';
+import { SectionSpinner } from '@/components/ds/Spinner';
+import { useSectorsAll, type Sector, type SectorVsMarketEntry } from '@/hooks/stocks/useSectors';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function pctColor(n: number): string {
-  return n >= 0 ? 'text-emerald-400' : 'text-red-400';
+type Period = '1D' | '1W' | '1M' | 'YTD' | '1Y';
+
+/** Extract the sectorReturn for a given period from vsMarket array. */
+function perfFor(sector: Sector, period: Period): number | null {
+  if (!sector.vsMarket) return null;
+  const entry = sector.vsMarket.find((v: SectorVsMarketEntry) => v.period === period);
+  return entry?.sectorReturn ?? null;
 }
 
-function fmtPct(n: number): string {
-  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+/** Format a percentage with U+2212 for negatives, or "—" if null. */
+function fmtPct(n: number | null | undefined): string {
+  if (n == null) return '—';
+  const sign = n >= 0 ? '+' : '−';
+  return `${sign}${Math.abs(n).toFixed(2)}%`;
 }
 
-function fmtPrice(n: number): string {
+/** Format a price number. */
+function fmtPrice(v: number | string | null | undefined): string {
+  if (v == null) return '—';
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  if (isNaN(n)) return '—';
   return `$${n.toFixed(2)}`;
 }
 
-function fmtVolume(n: number): string {
+/** Compact volume: e.g. 219800000 → "219.8M" */
+function fmtVolume(n: number | null | undefined): string {
+  if (n == null) return '—';
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return String(n);
 }
 
-// ─── Sector Card ─────────────────────────────────────────────────────────────
+/** Background style for heatmap/cell tinting. null pct → transparent. */
+function heatColor(pct: number | null): React.CSSProperties {
+  if (pct == null) return {};
+  if (pct > 0) {
+    const alpha = Math.min(0.06 + Math.abs(pct) / 40, 0.32);
+    return { backgroundColor: `rgba(201,166,70,${alpha.toFixed(3)})` };
+  }
+  if (pct < 0) {
+    const alpha = Math.min(0.06 + Math.abs(pct) / 40, 0.32);
+    return { backgroundColor: `rgba(226,75,74,${alpha.toFixed(3)})` };
+  }
+  return {};
+}
 
-const SectorCard = memo(function SectorCard({ sector }: { sector: SectorItem }) {
-  const isPositive = sector.changePercent >= 0;
-  const barWidth = Math.min(Math.abs(sector.changePercent) * 12, 100);
+/** Tailwind color class for a number: positive → white, negative → red. */
+function numColor(n: number | null | undefined): string {
+  if (n == null) return 'text-ink-secondary';
+  return n >= 0 ? 'text-ink-primary' : 'text-num-negative';
+}
+
+// ─── Leaders / Laggards strip ─────────────────────────────────────────────────
+
+const LeadersStrip = memo(function LeadersStrip({ sectors }: { sectors: Sector[] }) {
+  const sorted = [...sectors].sort((a, b) => (b.changePercent ?? 0) - (a.changePercent ?? 0));
+  const top = sorted.slice(0, 3);
+  const bottom = sorted.slice(-3).reverse();
+
+  function Chip({ sector, isLeader }: { sector: Sector; isLeader: boolean }) {
+    const pct = sector.changePercent;
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono tabular-nums border"
+        style={isLeader
+          ? { borderColor: 'rgba(201,166,70,0.35)', backgroundColor: 'rgba(201,166,70,0.08)' }
+          : { borderColor: 'rgba(226,75,74,0.35)', backgroundColor: 'rgba(226,75,74,0.08)' }
+        }
+      >
+        <span className="text-ink-secondary truncate max-w-[80px]">{sector.name}</span>
+        <span className={numColor(pct)}>{fmtPct(pct)}</span>
+      </span>
+    );
+  }
 
   return (
-    <GlassCard hover className="min-w-0">
-      {/* Header row: name + symbol */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-white/90 truncate leading-tight">
-            {sector.name}
-          </p>
-          <p className="text-[11px] uppercase tracking-wider text-white/30 font-mono mt-0.5">
-            {sector.symbol}
-          </p>
-        </div>
-        {/* Change badge */}
-        <span
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${
-            isPositive
-              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-              : 'bg-red-500/15 text-red-400 border border-red-500/20'
-          }`}
-        >
-          {fmtPct(sector.changePercent)}
-        </span>
-      </div>
-
-      {/* Price row */}
-      <div className="flex items-baseline justify-between gap-2 mb-3">
-        <p className="text-2xl font-bold font-mono tabular-nums text-white/90">
-          {fmtPrice(sector.price)}
-        </p>
-        <p className={`text-sm font-mono tabular-nums ${pctColor(sector.changePercent)}`}>
-          {sector.change >= 0 ? '+' : ''}{sector.change.toFixed(2)}
-        </p>
-      </div>
-
-      {/* Change bar */}
-      <div className="h-1.5 w-full rounded-full bg-white/[0.06] mb-3 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${
-            isPositive ? 'bg-emerald-400/60' : 'bg-red-400/60'
-          }`}
-          style={{ width: `${barWidth}%` }}
-        />
-      </div>
-
-      {/* Stats row */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-        <div>
-          <p className="text-[10px] text-white/30 uppercase tracking-wider">Volume</p>
-          <p className="text-xs font-mono tabular-nums text-white/60">
-            {fmtVolume(sector.volume)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-white/30 uppercase tracking-wider">Prev Close</p>
-          <p className="text-xs font-mono tabular-nums text-white/60">
-            {fmtPrice(sector.previousClose)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-white/30 uppercase tracking-wider">Low</p>
-          <p className="text-xs font-mono tabular-nums text-white/60">
-            {fmtPrice(sector.low)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] text-white/30 uppercase tracking-wider">High</p>
-          <p className="text-xs font-mono tabular-nums text-white/60">
-            {fmtPrice(sector.high)}
-          </p>
-        </div>
-      </div>
-    </GlassCard>
-  );
-});
-
-// ─── Skeleton grid ────────────────────────────────────────────────────────────
-
-const SectorsSkeleton = memo(function SectorsSkeleton() {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {Array.from({ length: 11 }).map((_, i) => (
-        <GlassStatSkeleton key={i} />
-      ))}
+    <div className="flex flex-wrap items-center gap-3 mb-6">
+      <span className="text-[10px] uppercase tracking-widest text-ink-secondary">Leaders</span>
+      {top.map((s) => <Chip key={s.id} sector={s} isLeader />)}
+      <span className="mx-1 text-ink-secondary opacity-30">|</span>
+      <span className="text-[10px] uppercase tracking-widest text-ink-secondary">Laggards</span>
+      {bottom.map((s) => <Chip key={s.id} sector={s} isLeader={false} />)}
     </div>
   );
 });
 
-// ─── Sortable grid ────────────────────────────────────────────────────────────
+// ─── Table view ───────────────────────────────────────────────────────────────
 
-type SortKey = 'changePercent' | 'price' | 'volume' | 'name';
+type SortKey = 'name' | 'price' | '1D' | '1W' | '1M' | 'YTD' | '1Y' | 'spWeight' | 'beta';
 type SortDir = 'asc' | 'desc';
 
-const SectorsGrid = memo(function SectorsGrid() {
-  const { data, isLoading, error, refetch } = useSectors();
-  const [sortKey, setSortKey] = useState<SortKey>('changePercent');
+const PERIODS: Period[] = ['1D', '1W', '1M', 'YTD', '1Y'];
+
+const COL_LABELS: Record<SortKey, string> = {
+  name: 'Sector',
+  price: 'Price',
+  '1D': '1D%',
+  '1W': '1W%',
+  '1M': '1M%',
+  YTD: 'YTD%',
+  '1Y': '1Y%',
+  spWeight: 'S&P Wt',
+  beta: 'Beta',
+};
+
+function sectorSortValue(s: Sector, key: SortKey): number | string {
+  if (key === 'name') return s.name;
+  if (key === 'price') {
+    const n = typeof s.price === 'string' ? parseFloat(s.price) : (s.price ?? 0);
+    return isNaN(n as number) ? 0 : n;
+  }
+  if (key === 'spWeight') return s.spWeight ?? -Infinity;
+  if (key === 'beta') return s.beta ?? -Infinity;
+  // Period keys
+  return perfFor(s, key as Period) ?? -Infinity;
+}
+
+const SectorsTable = memo(function SectorsTable({ sectors }: { sectors: Sector[] }) {
+  const navigate = useNavigate();
+  const [sortKey, setSortKey] = useState<SortKey>('1D');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  if (isLoading) return <SectorsSkeleton />;
+  const toggleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  }, [sortKey]);
 
-  if (error) {
-    return (
-      <Card className="flex flex-col items-center gap-3 py-6">
-        <p className="text-sm text-ink-tertiary">Sector data unavailable</p>
-        <Button variant="goldOutline" size="compact" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </Card>
-    );
-  }
-
-  if (!data || data.sectors.length === 0) {
-    return (
-      <Card>
-        <p className="text-sm text-ink-tertiary">No sector data available</p>
-      </Card>
-    );
-  }
-
-  const sorted = [...data.sectors].sort((a, b) => {
-    const av = a[sortKey];
-    const bv = b[sortKey];
+  const sorted = [...sectors].sort((a, b) => {
+    const av = sectorSortValue(a, sortKey);
+    const bv = sectorSortValue(b, sortKey);
     if (typeof av === 'string' && typeof bv === 'string') {
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     }
@@ -169,135 +153,214 @@ const SectorsGrid = memo(function SectorsGrid() {
     return sortDir === 'asc' ? an - bn : bn - an;
   });
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortKey(key);
-      setSortDir('desc');
-    }
+  function ThBtn({ k, label }: { k: SortKey; label: string }) {
+    const active = sortKey === k;
+    return (
+      <th
+        className="px-3 py-2 text-left text-[11px] uppercase tracking-wider text-ink-secondary cursor-pointer select-none whitespace-nowrap hover:text-gold-primary transition-colors"
+        onClick={() => toggleSort(k)}
+      >
+        <span className={active ? 'text-gold-primary' : ''}>
+          {label}
+          {active && <span className="ml-0.5 opacity-70">{sortDir === 'desc' ? '↓' : '↑'}</span>}
+        </span>
+      </th>
+    );
   }
 
-  const sortLabel: Record<SortKey, string> = {
-    changePercent: '% Change',
-    price: 'Price',
-    volume: 'Volume',
-    name: 'Name',
-  };
-
   return (
-    <div>
-      {/* Sort controls */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <span className="text-xs text-white/30 uppercase tracking-wider">Sort by:</span>
-        {(['changePercent', 'price', 'volume', 'name'] as const).map((key) => (
-          <button
-            key={key}
-            onClick={() => toggleSort(key)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-              sortKey === key
-                ? 'bg-white/10 text-white/90'
-                : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'
-            }`}
-          >
-            {sortLabel[key]}
-            {sortKey === key && (
-              <span className="ml-1 opacity-60">{sortDir === 'desc' ? '↓' : '↑'}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {sorted.map((sector) => (
-          <SectorCard key={sector.symbol} sector={sector} />
-        ))}
-      </div>
+    <div className="overflow-x-auto rounded-[12px] border border-border-ds-subtle bg-surface-1">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead>
+          <tr className="border-b border-border-ds-subtle">
+            <ThBtn k="name" label="Sector" />
+            <ThBtn k="price" label="Price" />
+            {PERIODS.map((p) => <ThBtn key={p} k={p} label={`${p}%`} />)}
+            <ThBtn k="spWeight" label="S&P Wt" />
+            <ThBtn k="beta" label="Beta" />
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((sector) => (
+            <tr
+              key={sector.id}
+              onClick={() => navigate(`/app/stocks/sectors/${sector.id}`)}
+              className="border-b border-border-ds-subtle last:border-0 cursor-pointer hover:bg-surface-base transition-colors group"
+            >
+              {/* Sector name + ticker */}
+              <td className="px-3 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-medium text-ink-primary truncate group-hover:text-gold-primary transition-colors">
+                    {sector.name}
+                  </span>
+                  <span className="flex-shrink-0 text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-border-ds-subtle text-ink-secondary">
+                    {sector.ticker}
+                  </span>
+                </div>
+              </td>
+              {/* Price */}
+              <td className="px-3 py-3 font-mono tabular-nums text-ink-primary">
+                {fmtPrice(sector.price)}
+              </td>
+              {/* Period % columns */}
+              {PERIODS.map((p) => {
+                const val = perfFor(sector, p);
+                return (
+                  <td
+                    key={p}
+                    className={`px-3 py-3 font-mono tabular-nums ${numColor(val)}`}
+                    style={heatColor(val)}
+                  >
+                    {fmtPct(val)}
+                  </td>
+                );
+              })}
+              {/* S&P Weight */}
+              <td className="px-3 py-3 font-mono tabular-nums text-ink-secondary">
+                {sector.spWeight != null ? `${sector.spWeight.toFixed(1)}%` : '—'}
+              </td>
+              {/* Beta */}
+              <td className="px-3 py-3 font-mono tabular-nums text-ink-secondary">
+                {sector.beta != null ? sector.beta.toFixed(2) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 });
 
-// ─── Leader / Laggard bar ─────────────────────────────────────────────────────
+// ─── Heatmap view ─────────────────────────────────────────────────────────────
 
-const PerformanceBar = memo(function PerformanceBar() {
-  const { data, isLoading } = useSectors();
-
-  if (isLoading || !data) return null;
-
-  const sorted = [...data.sectors].sort(
-    (a, b) => b.changePercent - a.changePercent
-  );
-  const best = sorted[0];
-  const worst = sorted[sorted.length - 1];
+const SectorsHeatmap = memo(function SectorsHeatmap({ sectors }: { sectors: Sector[] }) {
+  const navigate = useNavigate();
+  const [period, setPeriod] = useState<Period>('1D');
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {/* Leader */}
-      <GlassCard glow="emerald" padding="sm">
-        <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1">
-          Top Performer
-        </p>
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold text-white/90">{best.name}</p>
-          <p className="text-lg font-bold font-mono text-emerald-400">
-            {fmtPct(best.changePercent)}
-          </p>
-        </div>
-        <p className="text-xs font-mono text-white/40 mt-0.5">{best.symbol}</p>
-      </GlassCard>
+    <div>
+      {/* Timeframe selector */}
+      <div className="flex items-center gap-2 mb-4">
+        {PERIODS.map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors ${
+              period === p
+                ? 'bg-gold-primary/15 text-gold-primary border border-gold-border'
+                : 'text-ink-secondary hover:text-ink-primary border border-transparent'
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
 
-      {/* Laggard */}
-      <GlassCard glow="red" padding="sm">
-        <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1">
-          Weakest Sector
-        </p>
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm font-semibold text-white/90">{worst.name}</p>
-          <p className="text-lg font-bold font-mono text-red-400">
-            {fmtPct(worst.changePercent)}
-          </p>
-        </div>
-        <p className="text-xs font-mono text-white/40 mt-0.5">{worst.symbol}</p>
-      </GlassCard>
+      {/* Tiles grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-ds-3">
+        {sectors.map((sector) => {
+          const val = perfFor(sector, period);
+          return (
+            <button
+              key={sector.id}
+              onClick={() => navigate(`/app/stocks/sectors/${sector.id}`)}
+              className="text-left rounded-[12px] p-ds-4 border border-border-ds-subtle bg-surface-1 hover:border-gold-border transition-all group min-w-0"
+              style={val != null ? heatColor(val) : { backgroundColor: 'var(--surface-1, #111)' }}
+            >
+              <div className="text-xs text-ink-secondary mb-1 truncate">{sector.name}</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-ink-secondary mb-2">
+                {sector.ticker}
+              </div>
+              <div className={`text-xl font-bold font-mono tabular-nums ${numColor(val)}`}>
+                {fmtPct(val)}
+              </div>
+              {sector.spWeight != null && (
+                <div className="text-[10px] text-ink-secondary mt-1 font-mono">
+                  {sector.spWeight.toFixed(1)}% of S&amp;P
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 });
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+type ViewMode = 'table' | 'heatmap';
+
 const StocksSectors = memo(function StocksSectors() {
+  const [view, setView] = useState<ViewMode>('table');
+  const { data: sectors, isLoading, error } = useSectorsAll();
+
+  const lastUpdated = sectors?.[0]?.lastUpdated
+    ? new Date(sectors[0].lastUpdated).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
   return (
     <PageTemplate
-      title="Sector Analysis"
-      description="Performance and trends across market sectors via SPDR ETFs."
+      title="Market Sectors"
+      description="Performance, fundamentals and correlations across the 11 GICS sectors — data only."
     >
-      {/* Market status badge — sector ETFs are US equity */}
-      <MarketStatusBadge hideWhenOpen className="mb-4" />
-
       <div className="space-y-6 pb-8">
-        {/* Leader / laggard summary */}
-        <section>
-          <SectionHeader
-            title="Today's Leaders"
-            subtitle="Best and worst performing sectors this session"
-          />
-          <PerformanceBar />
-        </section>
+        {/* Page sub-header row */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            {lastUpdated && (
+              <p className="text-xs text-ink-secondary font-mono">Updated {lastUpdated}</p>
+            )}
+          </div>
+          {/* View toggle */}
+          <div className="flex items-center gap-1 p-0.5 rounded-lg border border-border-ds-subtle bg-surface-1">
+            {(['table', 'heatmap'] as ViewMode[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize ${
+                  view === v
+                    ? 'bg-gold-primary/15 text-gold-primary'
+                    : 'text-ink-secondary hover:text-ink-primary'
+                }`}
+              >
+                {v === 'table' ? 'Table' : 'Heatmap'}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {/* Full sector grid */}
-        <section>
-          <SectionHeader
-            title="All Sectors"
-            subtitle="SPDR sector ETFs — live session data"
-          />
-          <SectorsGrid />
-        </section>
+        {/* Content */}
+        {isLoading && <SectionSpinner />}
 
-        {/* Attribution */}
-        <p className="text-[11px] text-white/20 text-center pt-2">
-          Market data may be delayed · Powered by Polygon.io
-        </p>
+        {error && !isLoading && (
+          <p className="text-num-negative text-sm py-8 text-center">
+            Sector data unavailable — please try again later.
+          </p>
+        )}
+
+        {!isLoading && !error && sectors && sectors.length > 0 && (
+          <>
+            {/* Leaders / Laggards strip */}
+            <LeadersStrip sectors={sectors} />
+
+            {/* Main view */}
+            {view === 'table' ? (
+              <SectorsTable sectors={sectors} />
+            ) : (
+              <SectorsHeatmap sectors={sectors} />
+            )}
+          </>
+        )}
+
+        {!isLoading && !error && sectors && sectors.length === 0 && (
+          <p className="text-ink-secondary text-sm py-8 text-center">No sector data available.</p>
+        )}
       </div>
     </PageTemplate>
   );
