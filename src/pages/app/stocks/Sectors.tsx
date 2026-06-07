@@ -298,11 +298,11 @@ const StocksSectors = memo(function StocksSectors() {
 
   return (
     <div className="space-y-6 animate-fade-in pb-8">
-      {/* Header: title + view toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold text-ink-primary">Market Sectors</h1>
-        {/* View toggle */}
-          <div className="flex items-center gap-1 p-0.5 rounded-lg border border-border-ds-subtle bg-surface-1">
+      {/* Header: centered title + view toggle pinned right */}
+      <div className="relative flex items-center justify-center pb-3">
+        <h1 className="text-3xl font-bold text-ink-primary text-center">Market Sectors</h1>
+        {/* View toggle (pinned right) */}
+          <div className="absolute right-0 flex items-center gap-1 p-0.5 rounded-lg border border-border-ds-subtle bg-surface-1">
             {(['table', 'heatmap'] as ViewMode[]).map((v) => (
               <button
                 key={v}
