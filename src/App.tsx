@@ -271,7 +271,6 @@ const ETFNews       = lazy(() => import("@/pages/app/etfs/News"));
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
 const StocksEarnings = lazy(() => import("@/pages/app/stocks/Earnings"));
-const StocksFundamentals = lazy(() => import("@/pages/app/stocks/Fundamentals"));
 const StocksMovers = lazy(() => import("@/pages/app/stocks/Movers"));
 const StocksNews = lazy(() => import("@/pages/app/stocks/News"));
 const StocksSectors = lazy(() => import("@/pages/app/stocks/Sectors"));
@@ -541,7 +540,6 @@ function AppContent() {
           {/* Stocks Earnings — sealed: earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
               To re-enable: restore <LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute> and remove locked:true from nav.ts. */}
           <Route path="stocks/earnings" element={<OptionsComingSoon title="Earnings" description="Earnings calendar data is coming soon — we're securing a commercially licensed data feed." />} />
-          <Route path="stocks/fundamentals" element={<LockedRoute domainId="stocks"><StocksFundamentals /></LockedRoute>} />
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />

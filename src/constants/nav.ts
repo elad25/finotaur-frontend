@@ -274,7 +274,6 @@ export const domains: Record<string, Domain> = {
       // Screener moved to the all-markets (home) level — see constants/markets.ts.
       // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
       { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
-      { label: 'Fundamentals',       path: '/app/stocks/fundamentals', icon: BarChart3 },
       { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp,  locked: true, priceGated: true },
       { label: 'News',               path: '/app/stocks/news',         icon: Newspaper },
       { label: 'Sector Analysis',    path: '/app/stocks/sectors',      icon: Target },

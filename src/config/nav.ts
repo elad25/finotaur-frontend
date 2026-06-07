@@ -48,7 +48,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/stocks/screener', icon: Search },
       { label: 'Earnings Calendar', path: '/app/stocks/earnings', icon: Calendar },
-      { label: 'Fundamentals', path: '/app/stocks/fundamentals', icon: BarChart3 },
       { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
       { label: 'News', path: '/app/stocks/news', icon: Newspaper },
       { label: 'Sector Analysis', path: '/app/stocks/sectors', icon: Target },
