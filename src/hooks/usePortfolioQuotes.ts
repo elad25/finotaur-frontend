@@ -1,8 +1,8 @@
 // src/hooks/usePortfolioQuotes.ts
 // ═══════════════════════════════════════════════════════════════
 // Fetches current price + changePercent per symbol from the
-// working single-symbol endpoint: /api/market-data/quote-extended/{SYMBOL}
-// Replaces the broken batch endpoint /api/market-data/quotes.
+// ungated batch endpoint: /api/market-data/watchlist-quotes
+// One request for all symbols — no per-user price gate.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -12,11 +12,14 @@ export interface QuoteLite {
   changePercent: number | null;
 }
 
-interface QuoteExtendedResponse {
-  symbol?: string;
-  price?: number | null;
-  changePercent?: number | null;
-  [key: string]: unknown;
+interface WatchlistQuoteItem {
+  symbol: string;
+  price: number | null;
+  changePercent: number | null;
+}
+
+interface WatchlistQuotesResponse {
+  quotes: WatchlistQuoteItem[];
 }
 
 export function usePortfolioQuotes(symbols: string[]): {
@@ -54,32 +57,41 @@ export function usePortfolioQuotes(symbols: string[]): {
     setLoading(true);
 
     const fetchAll = async () => {
-      const results = await Promise.all(
-        stableSymbols.map(async (sym) => {
-          try {
-            const res = await fetch(
-              `/api/market-data/quote-extended/${encodeURIComponent(sym)}`,
-            );
-            if (!res.ok) {
-              return [sym, { price: null, changePercent: null }] as const;
-            }
-            const json = (await res.json()) as QuoteExtendedResponse;
-            const price =
-              typeof json.price === 'number' ? json.price : null;
-            const changePercent =
-              typeof json.changePercent === 'number' ? json.changePercent : null;
-            return [sym, { price, changePercent }] as const;
-          } catch {
-            return [sym, { price: null, changePercent: null }] as const;
-          }
-        }),
-      );
+      try {
+        const res = await fetch(
+          `/api/market-data/watchlist-quotes?symbols=${encodeURIComponent(stableKey)}`,
+        );
+        if (!res.ok) {
+          // Discard if a newer symbol set was requested while we were fetching
+          if (currentKeyRef.current !== key) return;
+          setPriceMap(new Map());
+          setLoading(false);
+          return;
+        }
+        const json = (await res.json()) as WatchlistQuotesResponse;
 
-      // Discard if a newer symbol set was requested while we were fetching
-      if (currentKeyRef.current !== key) return;
+        // Discard if a newer symbol set was requested while we were fetching
+        if (currentKeyRef.current !== key) return;
 
-      setPriceMap(new Map(results));
-      setLoading(false);
+        const map = new Map<string, QuoteLite>();
+        for (const item of json.quotes ?? []) {
+          const sym = item.symbol?.toUpperCase();
+          if (!sym) continue;
+          map.set(sym, {
+            price: typeof item.price === 'number' ? item.price : null,
+            changePercent:
+              typeof item.changePercent === 'number' ? item.changePercent : null,
+          });
+        }
+        setPriceMap(map);
+      } catch {
+        if (currentKeyRef.current !== key) return;
+        setPriceMap(new Map());
+      } finally {
+        if (currentKeyRef.current === key) {
+          setLoading(false);
+        }
+      }
     };
 
     fetchAll();
