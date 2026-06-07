@@ -58,7 +58,6 @@ export type MarketFunction =
   | 'reports'
   | 'portfolio'
   // Stocks-specific
-  | 'fundamentals'
   | 'sectors'
   | 'catalysts'
   | 'upgrades'
@@ -229,14 +228,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
   },
 
   // ── Stocks-specific ──────────────────────────────────────────────────────
-  {
-    id: 'fundamentals',
-    label: 'Fundamentals',
-    icon: BarChart3,
-    routes: {
-      stocks: '/app/stocks/fundamentals',
-    },
-  },
   {
     id: 'sectors',
     label: 'Sector Analysis',
