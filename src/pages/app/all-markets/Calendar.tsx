@@ -171,6 +171,26 @@ const normalizeCountryCode = (code?: string | null): string => {
   return upper;
 };
 
+// NASDAQ encodes countries with non-ISO 2-letter codes that are often ambiguous
+// (e.g. "UN" = both United States and United Kingdom). Resolve ISO from the
+// country NAME (reliable) and fall back to the code only when the name is unknown.
+const COUNTRY_NAME_TO_ISO: Record<string, string> = {
+  'united states': 'US', 'usa': 'US', 'united states of america': 'US',
+  'united kingdom': 'GB', 'uk': 'GB', 'great britain': 'GB',
+  'germany': 'DE',
+  'euro zone': 'EU', 'eurozone': 'EU', 'euro area': 'EU',
+  'france': 'FR', 'japan': 'JP', 'china': 'CN', 'australia': 'AU',
+  'canada': 'CA', 'switzerland': 'CH', 'new zealand': 'NZ', 'israel': 'IL',
+  'south korea': 'KR', 'korea': 'KR', 'india': 'IN', 'brazil': 'BR',
+  'mexico': 'MX', 'singapore': 'SG', 'hong kong': 'HK', 'south africa': 'ZA',
+  'spain': 'ES', 'italy': 'IT', 'russia': 'RU', 'netherlands': 'NL',
+};
+
+const resolveCountryIso = (code?: string | null, name?: string | null): string => {
+  const byName = name ? COUNTRY_NAME_TO_ISO[name.trim().toLowerCase()] : undefined;
+  return byName || normalizeCountryCode(code);
+};
+
 const countryMatches = (eventCode: string | undefined, selectedCountries: string[]): boolean => {
   const normalized = normalizeCountryCode(eventCode);
   return selectedCountries.map(normalizeCountryCode).includes(normalized);
@@ -185,6 +205,32 @@ const getCalendarSection = (data: CalendarData | null, tab: TabType) => {
   if (tab === 'splits') return data.splits;
   if (tab === 'ipo') return data.ipos;
   return data.expirations;
+};
+
+/**
+ * Rewrite each economic/holiday event's countryCode to a proper ISO code
+ * derived from its country name (NASDAQ codes are non-ISO and ambiguous).
+ * Fixes both country filtering and flag rendering. Returns a new object.
+ */
+const withNormalizedCountryCodes = (data: CalendarData | null): CalendarData | null => {
+  if (!data) return data;
+  const fixEvents = <T extends { countryCode?: string; country?: string }>(
+    section?: { count: number; events: T[]; [k: string]: unknown }
+  ) =>
+    section
+      ? {
+          ...section,
+          events: section.events.map((e) => ({
+            ...e,
+            countryCode: resolveCountryIso(e.countryCode, e.country),
+          })),
+        }
+      : section;
+  return {
+    ...data,
+    economic: fixEvents(data.economic) as CalendarData['economic'],
+    holidays: fixEvents(data.holidays) as CalendarData['holidays'],
+  };
 };
 
 // ============================================
@@ -337,7 +383,7 @@ function useCalendarData(
       }
 
       const result = await response.json();
-      setRawData(result.data);
+      setRawData(withNormalizedCountryCodes(result.data));
       setError(null);
     } catch (err) {
       console.error('Calendar fetch error:', err);
@@ -387,7 +433,7 @@ function useWeeklyEventCount(
         }
 
         const result = await response.json();
-        const filtered = filterCalendarData(result.data, countries, importance, search);
+        const filtered = filterCalendarData(withNormalizedCountryCodes(result.data), countries, importance, search);
         const section = getCalendarSection(filtered, tab);
 
         if (!cancelled) {
