@@ -4,7 +4,6 @@
 
 import React, { memo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageTemplate } from '@/components/PageTemplate';
 import { SectionSpinner } from '@/components/ds/Spinner';
 import { useSectorsAll, type Sector, type SectorVsMarketEntry } from '@/hooks/stocks/useSectors';
 
@@ -297,29 +296,12 @@ const StocksSectors = memo(function StocksSectors() {
   const [view, setView] = useState<ViewMode>('table');
   const { data: sectors, isLoading, error } = useSectorsAll();
 
-  const lastUpdated = sectors?.[0]?.lastUpdated
-    ? new Date(sectors[0].lastUpdated).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null;
-
   return (
-    <PageTemplate
-      title="Market Sectors"
-      description="Performance, fundamentals and correlations across the 11 GICS sectors — data only."
-    >
-      <div className="space-y-6 pb-8">
-        {/* Page sub-header row */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            {lastUpdated && (
-              <p className="text-xs text-ink-secondary font-mono">Updated {lastUpdated}</p>
-            )}
-          </div>
-          {/* View toggle */}
+    <div className="space-y-6 animate-fade-in pb-8">
+      {/* Header: title + view toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold text-ink-primary">Market Sectors</h1>
+        {/* View toggle */}
           <div className="flex items-center gap-1 p-0.5 rounded-lg border border-border-ds-subtle bg-surface-1">
             {(['table', 'heatmap'] as ViewMode[]).map((v) => (
               <button
@@ -364,7 +346,6 @@ const StocksSectors = memo(function StocksSectors() {
           <p className="text-ink-secondary text-sm py-8 text-center">No sector data available.</p>
         )}
       </div>
-    </PageTemplate>
   );
 });
 
