@@ -333,7 +333,7 @@ export function CompanyResearchCenter() {
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [view, setView] = useState<ViewMode>('grid');
   const [sort, setSort] = useState<SortMode>('latest');
-  const [shown, setShown] = useState(6);
+  const [shown, setShown] = useState(12);
   const [sortOpen, setSortOpen] = useState(false);
 
   // Recently viewed
@@ -358,7 +358,7 @@ export function CompanyResearchCenter() {
 
       setLoading(true);
       setError(null);
-      setShown(6);
+      setShown(12);
 
       // Optimistically update ticker + name
       const resolved =
@@ -369,30 +369,46 @@ export function CompanyResearchCenter() {
       setCompanyName(resolved);
 
       try {
-        const json = await getJsonSmart(
-          `/api/sec/filings?symbol=${encodeURIComponent(upper)}`,
-          { signal: ac.signal },
-        );
-        const newCik: string = json?.cik ?? '';
+        // Two focused fetches so the very frequent 8-K filings can't crowd out
+        // the annual/quarterly reports. `forms` + `limit` are honoured
+        // server-side (it scans the ~1000 most recent SEC filings), so a flat
+        // single request would return mostly 8-K noise and almost no 10-Q/10-K.
+        const base = `/api/sec/filings?symbol=${encodeURIComponent(upper)}`;
+        const [reportsRes, currentRes] = await Promise.all([
+          getJsonSmart(`${base}&forms=10-Q,10-K&limit=24`, { signal: ac.signal }),
+          getJsonSmart(`${base}&forms=8-K&limit=6`, { signal: ac.signal }),
+        ]);
+
+        const newCik: string = reportsRes?.cik || currentRes?.cik || '';
         setCik(newCik);
 
         const resolvedName =
           name ||
-          json?.companyName ||
+          reportsRes?.companyName ||
           POPULAR.find((p) => p.t === upper)?.n ||
           upper;
         setCompanyName(resolvedName);
 
-        const rows: Filing[] = (json?.filings ?? [])
+        const seen = new Set<string>();
+        const rows: Filing[] = [
+          ...(reportsRes?.filings ?? []),
+          ...(currentRes?.filings ?? []),
+        ]
           .filter((f: Filing) => isReportForm(f.form))
+          .filter((f: Filing) => {
+            const key = f.accessionNumber || `${f.form}-${f.filingDate}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
           .map((f: Filing) => ({
-          ...f,
-          filingUrl:
-            f.filingUrl ||
-            (newCik && f.accessionNumber && f.primaryDocument
-              ? buildFilingUrl(newCik, f.accessionNumber, f.primaryDocument)
-              : undefined),
-        }));
+            ...f,
+            filingUrl:
+              f.filingUrl ||
+              (newCik && f.accessionNumber && f.primaryDocument
+                ? buildFilingUrl(newCik, f.accessionNumber, f.primaryDocument)
+                : undefined),
+          }));
 
         rows.sort((a, b) => (a.filingDate < b.filingDate ? 1 : -1));
         setFilings(rows);
@@ -614,7 +630,7 @@ export function CompanyResearchCenter() {
               key={tab.id}
               onClick={() => {
                 setActiveTab(tab.id);
-                setShown(6);
+                setShown(12);
               }}
               className="relative flex flex-col items-start pb-3 pt-1"
             >
@@ -748,7 +764,7 @@ export function CompanyResearchCenter() {
                 variant="outline"
                 size="default"
                 showArrow={false}
-                onClick={() => setShown((s) => s + 6)}
+                onClick={() => setShown((s) => s + 12)}
               >
                 View More Results
                 <ChevronDown size={16} />
