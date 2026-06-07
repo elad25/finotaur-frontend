@@ -1,4 +1,10 @@
 // ui/DrawingToolbar.tsx
+// TradingView-style vertical drawing toolbar.
+// • cursor + cross are standalone top buttons (no group)
+// • every other group is rendered as a DrawingToolbarGroup (fly-out on chevron hover)
+// • utility row: magnet, stay-in-tool, hide-all, lock-all, remove-all
+// • bottom cluster: undo / redo / lock-selected / delete-selected / show-hide
+
 import React from 'react';
 import {
   MousePointer2,
@@ -35,6 +41,10 @@ import {
   Lock,
   Unlock,
   Eye,
+  EyeOff,
+  LockKeyhole,
+  Magnet,
+  PenLine,
   // Emoji / icon group
   Smile,
   Sticker,
@@ -51,6 +61,7 @@ import {
 } from 'lucide-react';
 import { Theme, DrawingType } from '../types';
 import { cn } from '@/lib/utils';
+import { DrawingToolbarGroup, type ToolGroup } from './DrawingToolbarGroup';
 
 // ✅ Export interface
 export interface DrawingToolbarProps {
@@ -66,28 +77,28 @@ export interface DrawingToolbarProps {
   onRedo?: () => void;
   onLockToggle?: () => void;
   onVisibilityToggle?: () => void;
+  // ── Utility row props ──
+  magnetEnabled?: boolean;
+  onToggleMagnet?: () => void;
+  stayInTool?: boolean;
+  onToggleStayInTool?: () => void;
+  onHideAll?: () => void;
+  onLockAll?: () => void;
+  onRemoveAll?: () => void;
   className?: string;
 }
 
-// Tool groups — TradingView-style grouping, all engine-supported tool ids.
-const TOOL_GROUPS: Array<{
-  label: string;
-  tools: Array<{
-    id: DrawingType | 'cursor' | 'cross';
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    shortcut?: string;
-  }>;
-}> = [
+// ── Grouped tool definitions ──────────────────────────────────────────
+// cursor and cross are standalone; all other groups go through DrawingToolbarGroup.
+const STANDALONE_TOOLS = [
+  { id: 'cursor' as const, icon: MousePointer2, label: 'Select', shortcut: 'C' },
+  { id: 'cross' as const, icon: Crosshair, label: 'Crosshair', shortcut: 'X' },
+];
+
+const TOOL_GROUPS: ToolGroup[] = [
   {
-    label: 'Cursor',
-    tools: [
-      { id: 'cursor', icon: MousePointer2, label: 'Select', shortcut: 'C' },
-      { id: 'cross', icon: Crosshair, label: 'Crosshair', shortcut: 'X' },
-    ],
-  },
-  {
-    label: 'Lines',
+    name: 'Lines',
+    icon: TrendingUp,
     tools: [
       { id: 'trendline', icon: TrendingUp, label: 'Trend Line', shortcut: 'T' },
       { id: 'ray', icon: MoveUpRight, label: 'Ray', shortcut: 'R' },
@@ -101,7 +112,8 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Channels',
+    name: 'Channels',
+    icon: Equal,
     tools: [
       { id: 'parallel-channel', icon: Equal, label: 'Parallel Channel' },
       { id: 'pitchfork', icon: GitFork, label: 'Pitchfork' },
@@ -109,7 +121,8 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Fibonacci',
+    name: 'Fibonacci',
+    icon: Percent,
     tools: [
       { id: 'fibonacci', icon: Percent, label: 'Fib Retracement', shortcut: 'F' },
       { id: 'fibonacci-extension', icon: Percent, label: 'Fib Extension' },
@@ -123,7 +136,8 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Gann',
+    name: 'Gann',
+    icon: Grid3x3,
     tools: [
       { id: 'gann-box', icon: Grid3x3, label: 'Gann Box' },
       { id: 'gann-square', icon: Square, label: 'Gann Square' },
@@ -134,7 +148,8 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Shapes',
+    name: 'Shapes',
+    icon: Square,
     tools: [
       { id: 'rectangle', icon: Square, label: 'Rectangle' },
       { id: 'rotated-rectangle', icon: Square, label: 'Rotated Rectangle' },
@@ -145,14 +160,16 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Draw',
+    name: 'Draw',
+    icon: Pencil,
     tools: [
       { id: 'brush', icon: Pencil, label: 'Brush' },
       { id: 'highlighter', icon: Highlighter, label: 'Highlighter' },
     ],
   },
   {
-    label: 'Annotate',
+    name: 'Annotate',
+    icon: Type,
     tools: [
       { id: 'text', icon: Type, label: 'Text' },
       { id: 'note', icon: StickyNote, label: 'Note' },
@@ -160,7 +177,8 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Emoji',
+    name: 'Emoji',
+    icon: Smile,
     tools: [
       { id: 'emoji', icon: Smile, label: 'Emoji' },
       { id: 'sticker', icon: Sticker, label: 'Sticker' },
@@ -168,7 +186,8 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Annotations',
+    name: 'Annotations',
+    icon: MessageSquareQuote,
     tools: [
       { id: 'callout', icon: MessageSquareQuote, label: 'Callout' },
       { id: 'comment', icon: MessageSquare, label: 'Comment' },
@@ -182,13 +201,14 @@ const TOOL_GROUPS: Array<{
     ],
   },
   {
-    label: 'Position',
+    name: 'Position',
+    icon: TrendingUp,
     tools: [
-      { id: 'long-position',    icon: TrendingUp,      label: 'Long Position' },
-      { id: 'short-position',   icon: TrendingDown,    label: 'Short Position' },
-      { id: 'price-range',      icon: MoveVertical,    label: 'Price Range' },
-      { id: 'date-range',       icon: MoveHorizontal,  label: 'Date Range' },
-      { id: 'date-price-range', icon: Maximize2,       label: 'Date & Price Range' },
+      { id: 'long-position', icon: TrendingUp, label: 'Long Position' },
+      { id: 'short-position', icon: TrendingDown, label: 'Short Position' },
+      { id: 'price-range', icon: MoveVertical, label: 'Price Range' },
+      { id: 'date-range', icon: MoveHorizontal, label: 'Date Range' },
+      { id: 'date-price-range', icon: Maximize2, label: 'Date & Price Range' },
     ],
   },
 ];
@@ -206,6 +226,13 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
   onRedo,
   onLockToggle,
   onVisibilityToggle,
+  magnetEnabled = false,
+  onToggleMagnet,
+  stayInTool = false,
+  onToggleStayInTool,
+  onHideAll,
+  onLockAll,
+  onRemoveAll,
   className = '',
 }) => {
   const isDark = theme === 'dark';
@@ -219,14 +246,13 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
     />
   );
 
-  const toolBtn = (
-    tool: {
-      id: DrawingType | 'cursor' | 'cross';
-      icon: React.ComponentType<{ className?: string }>;
-      label: string;
-      shortcut?: string;
-    }
-  ) => {
+  /** Standalone tool button (cursor / cross) — full-width, no chevron. */
+  const standaloneBtn = (tool: {
+    id: DrawingType | 'cursor' | 'cross';
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    shortcut?: string;
+  }) => {
     const isActive = currentTool === tool.id;
     return (
       <button
@@ -246,7 +272,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
         )}
       >
         <tool.icon className="h-[18px] w-[18px]" />
-        {/* TradingView-style tooltip — appears to the right */}
+        {/* Tooltip */}
         <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 opacity-0 shadow-xl transition-opacity duration-100 group-hover:opacity-100">
           {tool.label}
           {tool.shortcut && (
@@ -259,12 +285,14 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
     );
   };
 
+  /** Generic action / toggle button used in both the utility row and action cluster. */
   const actionBtn = ({
     icon: Icon,
     label,
     onClick,
     disabled = false,
     danger = false,
+    active = false,
     shortcut,
   }: {
     icon: React.ComponentType<{ className?: string }>;
@@ -272,6 +300,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
     onClick?: () => void;
     disabled?: boolean;
     danger?: boolean;
+    active?: boolean;
     shortcut?: string;
   }) => (
     <button
@@ -284,6 +313,10 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
         'disabled:pointer-events-none disabled:opacity-30',
         danger
           ? 'text-red-500 hover:bg-red-500/10'
+          : active
+          ? isDark
+            ? 'bg-white/15 text-white'
+            : 'bg-gray-200 text-gray-900'
           : isDark
           ? 'text-zinc-300 hover:bg-white/10'
           : 'text-gray-500 hover:bg-gray-100'
@@ -301,6 +334,13 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
     </button>
   );
 
+  const handleRemoveAll = () => {
+    if (!onRemoveAll) return;
+    if (window.confirm('Remove all drawings?')) {
+      onRemoveAll();
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -312,16 +352,62 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
         className
       )}
     >
-      {/* Tool groups separated by dividers */}
+      {/* ── Standalone cursor / crosshair ── */}
+      {STANDALONE_TOOLS.map((t) => standaloneBtn(t))}
+
+      {divider}
+
+      {/* ── Grouped fly-out tool buttons ── */}
       {TOOL_GROUPS.map((group, gi) => (
-        <React.Fragment key={group.label}>
-          {group.tools.map((tool) => toolBtn(tool))}
-          {/* Divider after every group except the last */}
+        <React.Fragment key={group.name}>
+          <DrawingToolbarGroup
+            group={group}
+            activeTool={currentTool}
+            onSelectTool={onToolSelect}
+          />
           {gi < TOOL_GROUPS.length - 1 && divider}
         </React.Fragment>
       ))}
 
-      {/* Bottom action cluster — pushed to the bottom */}
+      {/* ── Utility row ── */}
+      <div className="mt-1 flex flex-col items-center gap-0.5">
+        {divider}
+        {actionBtn({
+          icon: Magnet,
+          label: 'Magnet Snap',
+          onClick: onToggleMagnet,
+          active: magnetEnabled,
+          disabled: !onToggleMagnet,
+        })}
+        {actionBtn({
+          icon: PenLine,
+          label: 'Stay in Drawing Mode',
+          onClick: onToggleStayInTool,
+          active: stayInTool,
+          disabled: !onToggleStayInTool,
+        })}
+        {actionBtn({
+          icon: EyeOff,
+          label: 'Hide All Drawings',
+          onClick: onHideAll,
+          disabled: !onHideAll,
+        })}
+        {actionBtn({
+          icon: LockKeyhole,
+          label: 'Lock All Drawings',
+          onClick: onLockAll,
+          disabled: !onLockAll,
+        })}
+        {actionBtn({
+          icon: Trash2,
+          label: 'Remove All Drawings',
+          onClick: handleRemoveAll,
+          danger: true,
+          disabled: !onRemoveAll,
+        })}
+      </div>
+
+      {/* ── Bottom action cluster — pushed to the bottom ── */}
       <div className="mt-auto flex flex-col items-center gap-0.5 pt-1">
         {divider}
         {actionBtn({ icon: Undo2, label: 'Undo', onClick: onUndo, disabled: !canUndo, shortcut: 'Ctrl+Z' })}

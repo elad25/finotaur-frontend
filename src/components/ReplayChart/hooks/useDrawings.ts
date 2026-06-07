@@ -1,6 +1,6 @@
 // hooks/useDrawings.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Drawing, DrawingType, DrawingPoint, DrawingStyle, Theme, POINTS_REQUIRED } from '../types';
+import { Drawing, DrawingType, DrawingPoint, DrawingStyle, Theme } from '../types';
 import { DrawingEngine } from '../drawings/DrawingEngine';
 
 // ✅ Export interfaces
@@ -32,6 +32,12 @@ export interface UseDrawingsReturn {
   deleteAll: () => void;
   lockSelected: () => boolean;
   toggleVisibility: () => void;
+  /** Hide all drawings (set visible=false). */
+  hideAll: () => void;
+  /** Lock all drawings (set locked=true). */
+  lockAll: () => void;
+  /** Delete all drawings + save. */
+  removeAll: () => void;
   updateStyle: (id: string, style: Partial<DrawingStyle>) => boolean;
   updateDrawingData: (id: string, patch: Partial<Drawing>) => boolean;
   undo: () => boolean;
@@ -184,6 +190,23 @@ export const useDrawings = ({
     syncDrawings();
   }, [syncDrawings]);
 
+  const hideAll = useCallback(() => {
+    engineRef.current?.hideAll();
+    syncDrawings();
+  }, [syncDrawings]);
+
+  const lockAll = useCallback(() => {
+    engineRef.current?.lockAll();
+    setSelectedDrawing(null);
+    syncDrawings();
+  }, [syncDrawings]);
+
+  const removeAll = useCallback(() => {
+    engineRef.current?.removeAll();
+    setSelectedDrawing(null);
+    syncDrawings();
+  }, [syncDrawings]);
+
   const updateStyle = useCallback((id: string, style: Partial<DrawingStyle>) => {
     const result = engineRef.current?.updateDrawingStyle(id, style) || false;
     if (result) {
@@ -264,6 +287,9 @@ export const useDrawings = ({
     deleteAll,
     lockSelected,
     toggleVisibility,
+    hideAll,
+    lockAll,
+    removeAll,
     updateStyle,
     updateDrawingData,
     undo,

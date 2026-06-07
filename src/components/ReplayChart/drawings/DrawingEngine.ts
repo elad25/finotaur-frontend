@@ -359,6 +359,30 @@ export class DrawingEngine {
     this.drawings.forEach(d => (d.visible = !allHidden));
   }
 
+  /** Hide all drawings (set visible=false on every drawing). */
+  hideAll(): void {
+    this.drawings.forEach(d => (d.visible = false));
+  }
+
+  /** Lock all drawings (set locked=true on every drawing). */
+  lockAll(): void {
+    this.drawings.forEach(d => (d.locked = true));
+    // Deselect — locked drawings cannot be interacted with.
+    this.selectedDrawing = null;
+    this.drawings.forEach(d => (d.selected = false));
+  }
+
+  /** Delete all drawings and clear history entries for them. */
+  removeAll(): void {
+    const allDrawings = [...this.drawings];
+    allDrawings.forEach(drawing => {
+      this.addToHistory({ type: 'delete', drawing: { ...drawing } });
+    });
+    this.drawings = [];
+    this.selectedDrawing = null;
+    this.activeDrawing = null;
+  }
+
   updateDrawingStyle(id: string, style: Partial<DrawingStyle>): boolean {
     const drawing = this.drawings.find(d => d.id === id);
     if (!drawing) return false;

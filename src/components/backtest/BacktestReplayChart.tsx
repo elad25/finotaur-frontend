@@ -301,6 +301,9 @@ export function BacktestReplayChart({
     deleteSelected,
     lockSelected,
     toggleVisibility,
+    hideAll,
+    lockAll,
+    removeAll,
     updateStyle,
     updateDrawingData,
     undo,
@@ -310,6 +313,16 @@ export function BacktestReplayChart({
     theme: 'dark',
     autoSave: true,
   });
+
+  // ─── Utility toolbar state ────────────────────────────────────
+  const [magnetEnabled, setMagnetEnabled] = useState(false);
+  const [stayInTool, setStayInTool] = useState(false);
+  // Mirror stayInTool and currentTool as refs so the chart-lifecycle closure
+  // (subscribeClick) can read the latest values without being re-registered.
+  const stayInToolRef = useRef(stayInTool);
+  useEffect(() => { stayInToolRef.current = stayInTool; }, [stayInTool]);
+  const magnetEnabledRef = useRef(magnetEnabled);
+  useEffect(() => { magnetEnabledRef.current = magnetEnabled; }, [magnetEnabled]);
 
   // Mirror current drawing tool into a ref so chart-lifecycle closures
   // (subscribeClick, mousedown) can read the latest value without being
@@ -586,7 +599,23 @@ export function BacktestReplayChart({
           : null;
         if (priceRaw == null) return;
 
-        const dataPoint = { time: param.time as number, price: Number(priceRaw) };
+        // ── Magnet snap: snap price to nearest OHLC of the bar at this time ──
+        let snappedPrice = Number(priceRaw);
+        if (magnetEnabledRef.current) {
+          const clickedTimeNum = param.time as number;
+          // Find the bar whose time matches the clicked time.
+          const bar = bars.find((b) => (b.time as number) === clickedTimeNum);
+          if (bar) {
+            const candidates = [bar.open, bar.high, bar.low, bar.close];
+            const closest = candidates.reduce((prev, curr) =>
+              Math.abs(curr - snappedPrice) < Math.abs(prev - snappedPrice) ? curr : prev
+            );
+            snappedPrice = closest;
+          }
+          // If bar not found in the loaded window, keep raw price as-is.
+        }
+
+        const dataPoint = { time: param.time as number, price: snappedPrice };
 
         // Generalised N-point creation loop using POINTS_REQUIRED.
         // cursor/cross are already filtered above; cast is safe.
@@ -600,6 +629,10 @@ export function BacktestReplayChart({
             // Single-anchor tools (horizontal, vertical, horizontal-ray, cross-line,
             // text, note) finish immediately after the first click.
             finishDrawingRef.current();
+            // Only revert to cursor when stay-in-tool is OFF.
+            if (!stayInToolRef.current) {
+              setCurrentTool('cursor');
+            }
           }
           // For required >= 2 we keep the drawing active and wait for more clicks.
         } else {
@@ -615,6 +648,10 @@ export function BacktestReplayChart({
             // Final anchor reached — lock last point and finish.
             updateDrawingRef.current(dataPoint);
             finishDrawingRef.current();
+            // Only revert to cursor when stay-in-tool is OFF.
+            if (!stayInToolRef.current) {
+              setCurrentTool('cursor');
+            }
           }
         }
 
@@ -1220,6 +1257,13 @@ export function BacktestReplayChart({
             onRedo={redo}
             onLockToggle={lockSelected}
             onVisibilityToggle={toggleVisibility}
+            magnetEnabled={magnetEnabled}
+            onToggleMagnet={() => setMagnetEnabled((v) => !v)}
+            stayInTool={stayInTool}
+            onToggleStayInTool={() => setStayInTool((v) => !v)}
+            onHideAll={hideAll}
+            onLockAll={lockAll}
+            onRemoveAll={removeAll}
             className="absolute left-0 top-0 bottom-0 z-[30]"
           />
         )}
