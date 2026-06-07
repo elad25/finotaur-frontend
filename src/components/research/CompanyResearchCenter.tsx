@@ -65,9 +65,6 @@ const POPULAR: RecentEntry[] = [
   { t: 'TSLA', n: 'Tesla, Inc.' },
 ];
 
-const RECENT_KEY = 'finotaur:research:recent';
-const RECENT_MAX = 8;
-
 const TABS = [
   { id: 'all', label: 'All', sub: '' },
   { id: '10-K', label: '10-K', sub: 'Annual Reports' },
@@ -146,43 +143,6 @@ function reportMeta(form: string, reportDate?: string): ReportMeta {
         dateLabel: 'Report Date',
       };
   }
-}
-
-// ---------------------------------------------------------------------------
-// localStorage helpers
-// ---------------------------------------------------------------------------
-
-function loadRecent(): RecentEntry[] {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as RecentEntry[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  // Seed with popular defaults if empty
-  return [
-    { t: 'AAPL', n: 'Apple Inc.' },
-    { t: 'NVDA', n: 'NVIDIA Corp.' },
-    { t: 'TSLA', n: 'Tesla, Inc.' },
-    { t: 'META', n: 'Meta Platforms' },
-    { t: 'MSFT', n: 'Microsoft Corp.' },
-  ];
-}
-
-function saveRecent(entries: RecentEntry[]): void {
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(entries));
-  } catch {
-    // ignore
-  }
-}
-
-function prependRecent(entries: RecentEntry[], entry: RecentEntry): RecentEntry[] {
-  const deduped = entries.filter((e) => e.t !== entry.t);
-  return [entry, ...deduped].slice(0, RECENT_MAX);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,12 +288,8 @@ export function CompanyResearchCenter() {
   const [shown, setShown] = useState(12);
   const [sortOpen, setSortOpen] = useState(false);
 
-  // Recently viewed
-  const [recent, setRecent] = useState<RecentEntry[]>(() => loadRecent());
-
   const abortRef = useRef<AbortController | null>(null);
   const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recentScrollRef = useRef<HTMLDivElement>(null);
 
   // ---------------------------------------------------------------------------
   // Load filings
@@ -394,14 +350,6 @@ export function CompanyResearchCenter() {
 
         rows.sort((a, b) => (a.filingDate < b.filingDate ? 1 : -1));
         setFilings(rows);
-
-        // Update recently viewed
-        const entry: RecentEntry = { t: upper, n: resolvedName };
-        setRecent((prev) => {
-          const next = prependRecent(prev, entry);
-          saveRecent(next);
-          return next;
-        });
       } catch (e: unknown) {
         if ((e as { name?: string }).name === 'AbortError') return;
         setError((e as Error)?.message ?? 'Request failed');
@@ -479,51 +427,10 @@ export function CompanyResearchCenter() {
       {/* ------------------------------------------------------------------ */}
       {/* A. Header row                                                        */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex items-start justify-between gap-ds-5">
-        {/* Left: title + subtitle */}
-        <div>
-          <h1 className="text-[28px] md:text-[30px] font-bold tracking-tight text-ink-primary">
-            Company Research Center
-          </h1>
-          <p className="mt-1.5 text-[13px] text-gold-primary/70">
-            Quarterly Reports • Annual Reports • SEC Filings • Investor Presentations
-          </p>
-        </div>
-
-        {/* Right: recently viewed chips (lg+) */}
-        <div className="hidden lg:block shrink-0">
-          <p className="text-[11px] uppercase tracking-wider text-ink-secondary mb-2">
-            Recently Viewed
-          </p>
-          <div ref={recentScrollRef} className="flex items-center gap-2 overflow-x-auto max-w-[480px] pb-1">
-            {recent.slice(0, 5).map((entry) => (
-              <button
-                key={entry.t}
-                onClick={() => load(entry.t, entry.n)}
-                className="flex items-center gap-2 rounded-[10px] border border-border-ds-subtle bg-surface-1 px-2.5 py-1.5 hover:border-gold-border transition-colors shrink-0"
-              >
-                <StockLogo ticker={entry.t} size={22} />
-                <div className="text-left">
-                  <span className="block text-[12px] font-semibold text-ink-primary leading-tight">
-                    {entry.t}
-                  </span>
-                  <span className="block text-[10px] text-ink-secondary leading-tight truncate max-w-[80px]">
-                    {entry.n}
-                  </span>
-                </div>
-              </button>
-            ))}
-            <button
-              onClick={() => {
-                recentScrollRef.current?.scrollBy({ left: 200, behavior: 'smooth' });
-              }}
-              className="shrink-0 border border-border-ds-subtle rounded-md p-1 text-ink-secondary hover:text-ink-primary transition-colors"
-              aria-label="Scroll recent"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
+      <div>
+        <h1 className="text-[28px] md:text-[30px] font-bold tracking-tight text-ink-primary">
+          Company Research Center
+        </h1>
       </div>
 
       {/* ------------------------------------------------------------------ */}
