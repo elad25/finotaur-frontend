@@ -72,7 +72,6 @@ const TABS = [
   { id: 'all', label: 'All', sub: '' },
   { id: '10-K', label: '10-K', sub: 'Annual Reports' },
   { id: '10-Q', label: '10-Q', sub: 'Quarterly Reports' },
-  { id: '8-K', label: '8-K', sub: 'Current Reports' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -102,10 +101,10 @@ function fmtDate(d?: string): string {
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Only these SEC report types are surfaced (the reference shows 10-K / 10-Q / 8-K).
-// The /api/sec/filings feed also returns Form 4, SD, 144, etc. — those are noise
-// for a research-document view, so they are filtered out at load time.
-const REPORT_FORMS = ['10-K', '10-Q', '8-K'] as const;
+// Only full periodic reports are surfaced: annual (10-K) + quarterly (10-Q).
+// 8-K "current reports" are interim mid-quarter event filings, and the feed also
+// returns Form 4 / SD / 144 noise — all excluded so only real reports show.
+const REPORT_FORMS = ['10-K', '10-Q'] as const;
 
 /** Strip amendment suffix so "10-K/A" maps to "10-K". */
 function baseForm(form: string): string {
@@ -138,13 +137,6 @@ function reportMeta(form: string, reportDate?: string): ReportMeta {
         period: `Q${quarterOf(reportDate)} ${yearOf(reportDate)}`,
         desc: 'Quarterly report including financial statements and management discussion.',
         dateLabel: 'Period Ended',
-      };
-    case '8-K':
-      return {
-        title: 'Current Report',
-        period: 'Material Event',
-        desc: 'Report of unscheduled material event or corporate update.',
-        dateLabel: 'Event Date',
       };
     default:
       return {
@@ -369,38 +361,28 @@ export function CompanyResearchCenter() {
       setCompanyName(resolved);
 
       try {
-        // Two focused fetches so the very frequent 8-K filings can't crowd out
-        // the annual/quarterly reports. `forms` + `limit` are honoured
-        // server-side (it scans the ~1000 most recent SEC filings), so a flat
-        // single request would return mostly 8-K noise and almost no 10-Q/10-K.
-        const base = `/api/sec/filings?symbol=${encodeURIComponent(upper)}`;
-        const [reportsRes, currentRes] = await Promise.all([
-          getJsonSmart(`${base}&forms=10-Q,10-K&limit=24`, { signal: ac.signal }),
-          getJsonSmart(`${base}&forms=8-K&limit=6`, { signal: ac.signal }),
-        ]);
+        // Full periodic reports only — quarterly (10-Q) + annual (10-K).
+        // 8-K "current reports" are interim, mid-quarter event filings (not a
+        // periodic financial report), so they are intentionally excluded.
+        // forms+limit are honoured server-side (it scans the ~1000 most recent
+        // SEC filings; without forms it returns mostly Form 4/8-K noise).
+        const json = await getJsonSmart(
+          `/api/sec/filings?symbol=${encodeURIComponent(upper)}&forms=10-Q,10-K&limit=24`,
+          { signal: ac.signal },
+        );
 
-        const newCik: string = reportsRes?.cik || currentRes?.cik || '';
+        const newCik: string = json?.cik || '';
         setCik(newCik);
 
         const resolvedName =
           name ||
-          reportsRes?.companyName ||
+          json?.companyName ||
           POPULAR.find((p) => p.t === upper)?.n ||
           upper;
         setCompanyName(resolvedName);
 
-        const seen = new Set<string>();
-        const rows: Filing[] = [
-          ...(reportsRes?.filings ?? []),
-          ...(currentRes?.filings ?? []),
-        ]
+        const rows: Filing[] = (json?.filings ?? [])
           .filter((f: Filing) => isReportForm(f.form))
-          .filter((f: Filing) => {
-            const key = f.accessionNumber || `${f.form}-${f.filingDate}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
           .map((f: Filing) => ({
             ...f,
             filingUrl:
