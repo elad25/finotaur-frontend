@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronRight,
@@ -313,6 +313,7 @@ function ReportCard({ filing, ticker, companyName, view }: ReportCardProps) {
 
 export function CompanyResearchCenter() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { open: openFino } = useFinoChat();
 
   // Core state
@@ -780,14 +781,42 @@ export function CompanyResearchCenter() {
               </div>
             </div>
 
-            {/* Last filing row (real data) */}
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-ink-secondary">Last Filing</span>
-              <div className="text-right">
-                <p className="text-[13px] font-medium text-ink-primary">{latestFilingLabel}</p>
-                <p className="text-[11px] text-ink-secondary">{fmtDate(latestFilingDate)}</p>
+            {/* Last filing row (real data) — clicking opens the Stock Analyzer
+                Earnings tab, which auto-analyzes the latest report. */}
+            {latest ? (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/app/ai/stock-analyzer?symbol=${encodeURIComponent(ticker)}&tab=earnings`,
+                  )
+                }
+                title="Analyze the latest filing in Stock Analyzer"
+                className="group -mx-1 flex w-full items-center justify-between rounded-md px-1 py-0.5 text-left transition-colors hover:bg-white/[0.03]"
+              >
+                <span className="text-[12px] text-ink-secondary">Last Filing</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="text-right">
+                    <p className="text-[13px] font-medium text-ink-primary transition-colors group-hover:text-gold-primary">
+                      {latestFilingLabel}
+                    </p>
+                    <p className="text-[11px] text-ink-secondary">{fmtDate(latestFilingDate)}</p>
+                  </div>
+                  <ChevronRight
+                    size={14}
+                    className="text-ink-secondary transition-all group-hover:translate-x-0.5 group-hover:text-gold-primary"
+                  />
+                </div>
+              </button>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-ink-secondary">Last Filing</span>
+                <div className="text-right">
+                  <p className="text-[13px] font-medium text-ink-primary">{latestFilingLabel}</p>
+                  <p className="text-[11px] text-ink-secondary">{fmtDate(latestFilingDate)}</p>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="h-px bg-border-ds-subtle" />
 
