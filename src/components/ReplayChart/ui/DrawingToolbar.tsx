@@ -58,6 +58,11 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowLeft,
+  // Pattern group (P6)
+  Activity,
+  Waves,
+  Repeat,
+  AudioWaveform,
 } from 'lucide-react';
 import { Theme, DrawingType } from '../types';
 import { cn } from '@/lib/utils';
@@ -209,6 +214,30 @@ const TOOL_GROUPS: ToolGroup[] = [
       { id: 'price-range', icon: MoveVertical, label: 'Price Range' },
       { id: 'date-range', icon: MoveHorizontal, label: 'Date Range' },
       { id: 'date-price-range', icon: Maximize2, label: 'Date & Price Range' },
+    ],
+  },
+  {
+    name: 'Patterns',
+    icon: Activity,
+    tools: [
+      // Harmonic patterns
+      { id: 'xabcd', icon: Spline, label: 'XABCD' },
+      { id: 'cypher', icon: Spline, label: 'Cypher' },
+      { id: 'abcd', icon: Spline, label: 'ABCD' },
+      { id: 'three-drives', icon: Activity, label: 'Three Drives' },
+      // Chart patterns
+      { id: 'head-shoulders', icon: Activity, label: 'Head & Shoulders' },
+      { id: 'triangle-pattern', icon: Triangle, label: 'Triangle Pattern' },
+      // Elliott Wave
+      { id: 'elliott-impulse', icon: Waves, label: 'Elliott Impulse (12345)' },
+      { id: 'elliott-correction', icon: Waves, label: 'Elliott Correction (ABC)' },
+      { id: 'elliott-triangle', icon: Waves, label: 'Elliott Triangle (ABCDE)' },
+      { id: 'elliott-wxy', icon: Waves, label: 'Elliott Double Combo (WXY)' },
+      { id: 'elliott-wxyxz', icon: Waves, label: 'Elliott Triple Combo (WXYXZ)' },
+      // Cycles
+      { id: 'cyclic-lines', icon: Repeat, label: 'Cyclic Lines' },
+      { id: 'time-cycles', icon: Repeat, label: 'Time Cycles' },
+      { id: 'sine-line', icon: AudioWaveform, label: 'Sine Line' },
     ],
   },
 ];

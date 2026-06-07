@@ -724,6 +724,31 @@ export class DrawingEngine {
         return min3Dist;
       }
 
+      // Pattern tools (P6): min distance to any anchor point.
+      case 'xabcd':
+      case 'cypher':
+      case 'abcd':
+      case 'three-drives':
+      case 'head-shoulders':
+      case 'triangle-pattern':
+      case 'elliott-impulse':
+      case 'elliott-correction':
+      case 'elliott-triangle':
+      case 'elliott-wxy':
+      case 'elliott-wxyxz':
+      case 'cyclic-lines':
+      case 'time-cycles':
+      case 'sine-line': {
+        let minPatternDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minPatternDist) minPatternDist = dist;
+        }
+        return minPatternDist;
+      }
+
       default:
         return Infinity;
     }

@@ -641,7 +641,22 @@ export type DrawingTool =
   | 'gann-square-fixed'
   | 'pitchfork-schiff'
   | 'pitchfork-modified'
-  | 'pitchfork-inside';
+  | 'pitchfork-inside'
+  // Pattern tools (P6)
+  | 'xabcd'
+  | 'cypher'
+  | 'abcd'
+  | 'three-drives'
+  | 'head-shoulders'
+  | 'triangle-pattern'
+  | 'elliott-impulse'
+  | 'elliott-correction'
+  | 'elliott-triangle'
+  | 'elliott-wxy'
+  | 'elliott-wxyxz'
+  | 'cyclic-lines'
+  | 'time-cycles'
+  | 'sine-line';
 
 export type DrawingType = DrawingTool; // Alias
 
@@ -670,6 +685,12 @@ export const POINTS_REQUIRED: Record<DrawingType, number> = {
   // Advanced Gann / Pitchfork tools (P2)
   'gann-box': 2, 'gann-square': 2, 'gann-square-fixed': 2,
   'pitchfork-schiff': 3, 'pitchfork-modified': 3, 'pitchfork-inside': 3,
+  // Pattern tools (P6)
+  xabcd: 5, cypher: 5, abcd: 4, 'three-drives': 7,
+  'head-shoulders': 7, 'triangle-pattern': 4,
+  'elliott-impulse': 6, 'elliott-correction': 4, 'elliott-triangle': 6,
+  'elliott-wxy': 4, 'elliott-wxyxz': 6,
+  'cyclic-lines': 2, 'time-cycles': 2, 'sine-line': 2,
 };
 
 export interface Point {

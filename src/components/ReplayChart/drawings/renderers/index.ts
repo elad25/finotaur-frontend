@@ -73,6 +73,22 @@ import {
   renderDateRange,
   renderDatePriceRange,
 } from './ranges';
+import {
+  renderXABCD,
+  renderCypher,
+  renderABCD,
+  renderThreeDrives,
+  renderHeadShoulders,
+  renderTrianglePattern,
+  renderElliottImpulse,
+  renderElliottCorrection,
+  renderElliottTriangle,
+  renderElliottWXY,
+  renderElliottWXYXZ,
+  renderCyclicLines,
+  renderTimeCycles,
+  renderSineLine,
+} from './patterns';
 
 export type { Renderer, RenderCtx } from './types';
 
@@ -153,6 +169,28 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   'price-range': renderPriceRange,
   'date-range': renderDateRange,
   'date-price-range': renderDatePriceRange,
+
+  // Pattern tools (P6) — Harmonic
+  xabcd: renderXABCD,
+  cypher: renderCypher,
+  abcd: renderABCD,
+  'three-drives': renderThreeDrives,
+
+  // Pattern tools (P6) — Chart Patterns
+  'head-shoulders': renderHeadShoulders,
+  'triangle-pattern': renderTrianglePattern,
+
+  // Pattern tools (P6) — Elliott Wave
+  'elliott-impulse': renderElliottImpulse,
+  'elliott-correction': renderElliottCorrection,
+  'elliott-triangle': renderElliottTriangle,
+  'elliott-wxy': renderElliottWXY,
+  'elliott-wxyxz': renderElliottWXYXZ,
+
+  // Pattern tools (P6) — Cycles
+  'cyclic-lines': renderCyclicLines,
+  'time-cycles': renderTimeCycles,
+  'sine-line': renderSineLine,
 
   // cursor and cross have no render — intentionally omitted (Partial allows this)
 };
