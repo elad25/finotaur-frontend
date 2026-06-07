@@ -720,6 +720,8 @@ export interface Point {
 export interface DrawingPoint {
   time: number;
   price: number;
+  /** Logical (bar-index) x-coordinate — whitespace-safe, stable on pan/zoom. */
+  logical?: number;
 }
 
 export interface DrawingStyle {

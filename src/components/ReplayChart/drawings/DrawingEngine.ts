@@ -202,6 +202,39 @@ export class DrawingEngine {
     this.activeDrawing.updatedAt = Date.now();
   }
 
+  /**
+   * Create-or-replace the active drawing's points (component owns commit logic).
+   * The click handler calls this on every click so the engine always reflects
+   * the full committed-point list; finishDrawing() is called by the handler
+   * once pendingPoints.length reaches POINTS_REQUIRED.
+   */
+  setActivePoints(tool: DrawingType, points: DrawingPoint[]): void {
+    if (this.currentTool === 'cursor' || this.currentTool === 'cross') return;
+    const colors = this.theme === 'dark' ? DRAWING_COLORS.dark : DRAWING_COLORS.light;
+    if (!this.activeDrawing || this.activeDrawing.type !== tool) {
+      this.activeDrawing = {
+        id: this.generateId(),
+        type: tool,
+        tool,
+        points: [...points],
+        style: { color: colors.primary, lineWidth: 2, lineStyle: 'solid' },
+        color: colors.primary,
+        lineWidth: 2,
+        visible: true,
+        locked: false,
+        timestamp: Date.now(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ...(tool === 'anchored-text' || tool === 'anchored-note'
+          ? { anchor: 'bar' as const }
+          : {}),
+      };
+    } else {
+      this.activeDrawing.points = [...points];
+      this.activeDrawing.updatedAt = Date.now();
+    }
+  }
+
   finishDrawing(): Drawing | null {
     if (!this.activeDrawing) return null;
 
@@ -244,7 +277,11 @@ export class DrawingEngine {
   // SELECTION
   // ===================================
 
-  selectDrawing(point: Point, threshold: number = 10): Drawing | null {
+  selectDrawing(
+    point: Point,
+    threshold: number = 10,
+    toPixel?: (p: DrawingPoint) => { x: number; y: number } | null,
+  ): Drawing | null {
     // Find closest drawing to the point
     let closestDrawing: Drawing | null = null;
     let minDistance = threshold;
@@ -252,7 +289,7 @@ export class DrawingEngine {
     for (const drawing of this.getVisibleDrawings()) {
       if (drawing.locked) continue;
 
-      const distance = this.getDistanceToDrawing(drawing, point);
+      const distance = this.getDistanceToDrawing(drawing, point, toPixel);
       if (distance < minDistance) {
         minDistance = distance;
         closestDrawing = drawing;
@@ -500,8 +537,21 @@ export class DrawingEngine {
   // DISTANCE CALCULATIONS
   // ===================================
 
-  private getDistanceToDrawing(drawing: Drawing, point: Point): number {
-    const { type, points } = drawing;
+  private getDistanceToDrawing(
+    drawing: Drawing,
+    point: Point,
+    toPixel?: (p: DrawingPoint) => { x: number; y: number } | null,
+  ): number {
+    const { type } = drawing;
+    // If a pixel-space converter is provided, remap all drawing anchor points to
+    // pixel coordinates so distance math is in the same space as `point`.
+    const rawPoints = drawing.points;
+    const points: Array<{ time: number; price: number }> = toPixel
+      ? rawPoints.map((p) => {
+          const px = toPixel(p);
+          return px ? { time: px.x, price: px.y } : { time: p.time, price: p.price };
+        })
+      : rawPoints;
 
     switch (type) {
       case 'trendline':
