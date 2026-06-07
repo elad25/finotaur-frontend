@@ -18,7 +18,6 @@ import {
   List,
   Search,
   Sparkles,
-  Star,
 } from 'lucide-react';
 
 import { buildFilingUrl } from '@/lib/filingUrl';
@@ -427,7 +426,7 @@ export function CompanyResearchCenter() {
       {/* ------------------------------------------------------------------ */}
       {/* A. Header row                                                        */}
       {/* ------------------------------------------------------------------ */}
-      <div>
+      <div className="text-center">
         <h1 className="text-[28px] md:text-[30px] font-bold tracking-tight text-ink-primary">
           Company Research Center
         </h1>
@@ -436,7 +435,7 @@ export function CompanyResearchCenter() {
       {/* ------------------------------------------------------------------ */}
       {/* B. Search bar                                                        */}
       {/* ------------------------------------------------------------------ */}
-      <div className="relative w-full max-w-[560px] mt-ds-5">
+      <div className="relative w-full max-w-[560px] mx-auto mt-ds-5">
         <Search
           size={18}
           className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-secondary pointer-events-none"
@@ -487,33 +486,10 @@ export function CompanyResearchCenter() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* C. Popular row                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="mt-ds-4 flex items-center gap-2 flex-wrap">
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-gold-primary">
-          <Star size={12} className="fill-gold-primary text-gold-primary" />
-          Popular
-        </span>
-        {POPULAR.slice(0, 6).map((p) => (
-          <button
-            key={p.t}
-            onClick={() => load(p.t, p.n)}
-            className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-colors ${
-              ticker === p.t
-                ? 'border-gold-border text-gold-primary bg-surface-1'
-                : 'border-border-ds-subtle bg-surface-1 text-ink-primary hover:border-gold-border hover:text-gold-primary'
-            }`}
-          >
-            {p.t}
-          </button>
-        ))}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* D. Tab bar                                                           */}
+      {/* C. Tab bar (centered)                                                */}
       {/* ------------------------------------------------------------------ */}
       <div className="mt-ds-5 border-b border-border-ds-subtle">
-        <div className="flex gap-6">
+        <div className="flex justify-center gap-6">
           {TABS.map((tab) => (
             <button
               key={tab.id}
