@@ -606,7 +606,21 @@ export type DrawingTool =
   | 'parallel-channel'
   | 'rotated-rectangle'
   | 'arc'
-  | 'highlighter';
+  | 'highlighter'
+  // Emoji / icon markers
+  | 'emoji'
+  | 'sticker'
+  | 'icon'
+  // Annotation markers
+  | 'callout'
+  | 'comment'
+  | 'price-label'
+  | 'signpost'
+  | 'flag'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'arrow-left'
+  | 'arrow-right';
 
 export type DrawingType = DrawingTool; // Alias
 
@@ -620,6 +634,12 @@ export const POINTS_REQUIRED: Record<DrawingType, number> = {
   triangle: 3, 'fibonacci-extension': 3, pitchfork: 3, 'parallel-channel': 3,
   'rotated-rectangle': 3, arc: 3,
   brush: 0, highlighter: 0,
+  // Emoji / icon markers (1 point each)
+  emoji: 1, sticker: 1, icon: 1,
+  // Annotation markers
+  callout: 2,
+  comment: 1, 'price-label': 1, signpost: 1, flag: 1,
+  'arrow-up': 1, 'arrow-down': 1, 'arrow-left': 1, 'arrow-right': 1,
 };
 
 export interface Point {

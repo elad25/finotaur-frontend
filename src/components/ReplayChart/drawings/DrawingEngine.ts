@@ -540,6 +540,36 @@ export class DrawingEngine {
         return Math.sqrt(dx * dx + dy * dy);
       }
 
+      // Emoji / icon markers — 1 point, Euclidean distance to anchor.
+      case 'emoji':
+      case 'sticker':
+      case 'icon':
+      // Annotation markers — 1 point each.
+      case 'comment':
+      case 'price-label':
+      case 'signpost':
+      case 'flag':
+      case 'arrow-up':
+      case 'arrow-down':
+      case 'arrow-left':
+      case 'arrow-right': {
+        const dx = point.x - points[0].time;
+        const dy = point.y - points[0].price;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // callout: 2-point tool — minimum distance to either anchor.
+      case 'callout': {
+        let minCalloutDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minCalloutDist) minCalloutDist = dist;
+        }
+        return minCalloutDist;
+      }
+
       // fibonacci: 2-point tool — distance to the segment between anchor points.
       case 'fibonacci':
         if (points.length < 2) return Infinity;

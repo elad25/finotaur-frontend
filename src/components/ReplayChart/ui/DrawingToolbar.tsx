@@ -28,6 +28,19 @@ import {
   Lock,
   Unlock,
   Eye,
+  // Emoji / icon group
+  Smile,
+  Sticker,
+  Shapes,
+  // Annotation group
+  MessageSquareQuote,
+  MessageSquare,
+  Tag,
+  Signpost,
+  Flag,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
 } from 'lucide-react';
 import { Theme, DrawingType } from '../types';
 import { cn } from '@/lib/utils';
@@ -119,6 +132,28 @@ const TOOL_GROUPS: Array<{
       { id: 'text', icon: Type, label: 'Text' },
       { id: 'note', icon: StickyNote, label: 'Note' },
       { id: 'measure', icon: Ruler, label: 'Measure' },
+    ],
+  },
+  {
+    label: 'Emoji',
+    tools: [
+      { id: 'emoji', icon: Smile, label: 'Emoji' },
+      { id: 'sticker', icon: Sticker, label: 'Sticker' },
+      { id: 'icon', icon: Shapes, label: 'Icon' },
+    ],
+  },
+  {
+    label: 'Annotations',
+    tools: [
+      { id: 'callout', icon: MessageSquareQuote, label: 'Callout' },
+      { id: 'comment', icon: MessageSquare, label: 'Comment' },
+      { id: 'price-label', icon: Tag, label: 'Price Label' },
+      { id: 'signpost', icon: Signpost, label: 'Signpost' },
+      { id: 'flag', icon: Flag, label: 'Flag' },
+      { id: 'arrow-up', icon: ArrowUp, label: 'Arrow Up' },
+      { id: 'arrow-down', icon: ArrowDown, label: 'Arrow Down' },
+      { id: 'arrow-left', icon: ArrowLeft, label: 'Arrow Left' },
+      { id: 'arrow-right', icon: ArrowRight, label: 'Arrow Right' },
     ],
   },
 ];

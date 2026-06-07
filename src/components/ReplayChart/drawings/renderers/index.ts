@@ -33,6 +33,20 @@ import {
   renderTextOrNote,
   renderMeasure,
 } from './annotations';
+import {
+  renderEmoji,
+  renderSticker,
+  renderIcon,
+  renderCallout,
+  renderComment,
+  renderPriceLabel,
+  renderSignpost,
+  renderFlag,
+  renderArrowUp,
+  renderArrowDown,
+  renderArrowLeft,
+  renderArrowRight,
+} from './markers';
 
 export type { Renderer, RenderCtx } from './types';
 
@@ -73,6 +87,22 @@ export const RENDERERS: Partial<Record<DrawingType, Renderer>> = {
   text: renderTextOrNote,
   note: renderTextOrNote,
   measure: renderMeasure,
+
+  // Emoji / icon markers
+  emoji: renderEmoji,
+  sticker: renderSticker,
+  icon: renderIcon,
+
+  // Annotation markers
+  callout: renderCallout,
+  comment: renderComment,
+  'price-label': renderPriceLabel,
+  signpost: renderSignpost,
+  flag: renderFlag,
+  'arrow-up': renderArrowUp,
+  'arrow-down': renderArrowDown,
+  'arrow-left': renderArrowLeft,
+  'arrow-right': renderArrowRight,
 
   // cursor and cross have no render — intentionally omitted (Partial allows this)
 };
