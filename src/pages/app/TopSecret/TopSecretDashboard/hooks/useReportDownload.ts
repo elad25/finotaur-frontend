@@ -7,6 +7,7 @@
 import { useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
+import { buildReportFilename } from '@/lib/reportFilename';
 import { API_BASE_URL, REPORT_TYPE_CONFIG, type Report } from '../utils/helpers';
 
 // ========================================
@@ -144,7 +145,7 @@ async function downloadReportPdf(report: Report): Promise<boolean> {
   const titleSlug = (report.ticker || report.title || 'Report')
     .replace(/[^a-zA-Z0-9]/g, '_')
     .substring(0, 30);
-  const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+  const filename = buildReportFilename(typeLabel, titleSlug, dateStr);
 
   const { paths, urls } = buildDownloadPaths(report);
 
