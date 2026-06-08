@@ -21,6 +21,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { buildReportFilename } from '@/lib/reportFilename';
 import {
   FileText,
   TrendingUp,
@@ -260,7 +261,7 @@ async function downloadReportPdf(report: PublishedReport): Promise<boolean> {
     const titleSlug = (report.ticker || report.title || 'Report')
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 30);
-    const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+    const filename = buildReportFilename(typeLabel, titleSlug, dateStr);
     
     const downloadFromUrl = async (url: string): Promise<boolean> => {
       try {

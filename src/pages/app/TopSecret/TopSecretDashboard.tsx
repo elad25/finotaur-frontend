@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { buildReportFilename } from '@/lib/reportFilename';
  import {
   FileText,
   TrendingUp,
@@ -438,7 +439,7 @@ async function downloadReportPdf(report: Report): Promise<boolean> {
   const titleSlug = (report.ticker || report.title || 'Report')
     .replace(/[^a-zA-Z0-9]/g, '_')
     .substring(0, 30);
-  const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+  const filename = buildReportFilename(typeLabel, titleSlug, dateStr);
   
   // Helper to trigger browser download
   const triggerDownload = (blob: Blob, name: string): void => {
