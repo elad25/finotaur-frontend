@@ -44,11 +44,9 @@ import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { PositionBox, type PositionBoxModel } from '@/components/charting/PositionBox';
 import { ReplayControls } from './ReplayControls';
-import { useDrawings } from '@/components/ReplayChart/hooks/useDrawings';
-import { DrawingsPrimitive } from '@/components/ReplayChart/drawings/DrawingsPrimitive';
-import { DrawingToolbar } from '@/components/ReplayChart/ui/DrawingToolbar';
-import { DrawingStylePopover } from '@/components/ReplayChart/ui/DrawingStylePopover';
-import { POINTS_REQUIRED } from '@/components/ReplayChart/types';
+import { DrawingController } from '@/components/ReplayChart/drawings2/DrawingController';
+import { DrawingToolbar2 } from '@/components/ReplayChart/drawings2/DrawingToolbar2';
+import type { ToolId } from '@/components/ReplayChart/drawings2/base';
 
 // Height of the time-axis row (lightweight-charts default is ~28px).
 const TIMESCALE_HEIGHT = 28;
@@ -282,110 +280,20 @@ export function BacktestReplayChart({
   useEffect(() => { placeOrderArmedRef.current = placeOrderArmed; }, [placeOrderArmed]);
   useEffect(() => { onPlaceLimitAtPriceRef.current = onPlaceLimitAtPrice; }, [onPlaceLimitAtPrice]);
 
-  // ─── Drawing tools ───────────────────────────────────────────
-  const {
-    drawings,
-    activeDrawing,
-    selectedDrawing,
-    currentTool,
-    canUndo,
-    canRedo,
-    setCurrentTool,
-    startDrawing,
-    updateDrawing,
-    commitPoint,
-    finishDrawing,
-    cancelDrawing,
-    setActivePoints,
-    selectDrawing,
-    deselectAll,
-    deleteSelected,
-    lockSelected,
-    toggleVisibility,
-    hideAll,
-    lockAll,
-    removeAll,
-    updateStyle,
-    updateDrawingData,
-    undo,
-    redo,
-  } = useDrawings({
-    symbol,
-    theme: 'dark',
-    autoSave: true,
-  });
+  // ─── Drawing tools (drawings2 — new per-primitive system) ───────────────────
+  const drawingControllerRef = useRef<DrawingController | null>(null);
+  const [currentTool, setCurrentTool] = useState<ToolId>('cursor');
+  const [drawingColor, setDrawingColor] = useState('#C9A646');
+  const [drawingWidth, setDrawingWidth] = useState(2);
+  const [hasSelection, setHasSelection] = useState(false);
 
-  // ─── Utility toolbar state ────────────────────────────────────
-  const [magnetEnabled, setMagnetEnabled] = useState(false);
-  const [stayInTool, setStayInTool] = useState(false);
-  // Mirror stayInTool and currentTool as refs so the chart-lifecycle closure
-  // (subscribeClick) can read the latest values without being re-registered.
-  const stayInToolRef = useRef(stayInTool);
-  useEffect(() => { stayInToolRef.current = stayInTool; }, [stayInTool]);
-  const magnetEnabledRef = useRef(magnetEnabled);
-  useEffect(() => { magnetEnabledRef.current = magnetEnabled; }, [magnetEnabled]);
-
-  // Mirror current drawing tool into a ref so chart-lifecycle closures
-  // (subscribeClick, mousedown) can read the latest value without being
-  // re-registered — same pattern as scissorsArmedRef / placeOrderArmedRef.
-  const currentToolRef = useRef(currentTool);
+  // Keep a ref for currentTool so chart-lifecycle closures read the latest value.
+  const currentToolRef = useRef<ToolId>(currentTool);
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
 
-  // Ref-mirrors for drawing functions and state so the once-mounted chart
-  // lifecycle closures always call the latest versions without being
-  // re-registered on every render.
-  const startDrawingRef = useRef(startDrawing);
-  const updateDrawingRef = useRef(updateDrawing);
-  const commitPointRef = useRef(commitPoint);
-  const finishDrawingRef = useRef(finishDrawing);
-  const cancelDrawingRef = useRef(cancelDrawing);
-  const setActivePointsRef = useRef(setActivePoints);
-  const selectDrawingRef = useRef(selectDrawing);
-  const deleteSelectedRef = useRef(deleteSelected);
-  const deselectAllRef = useRef(deselectAll);
-  const activeDrawingRef = useRef(activeDrawing);
-  const selectedDrawingRef = useRef(selectedDrawing);
-  // Ref mirror for drawings so the primitive getter closure always reads the
-  // latest array without needing to be re-created on every render.
-  const drawingsRef = useRef(drawings);
-  useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
-  // Holds the attached primitive so the redraw effect and cleanup can reach it.
-  const drawingsPrimitiveRef = useRef<DrawingsPrimitive | null>(null);
-
-  // Committed anchor points for the current in-progress drawing.
-  // The click handler appends each click here; the crosshair preview appends a
-  // floating cursor point on top for rubber-banding without mutating committed pts.
-  const pendingPointsRef = useRef<import('@/components/ReplayChart/types').DrawingPoint[]>([]);
-
-  useEffect(() => { startDrawingRef.current = startDrawing; }, [startDrawing]);
-  useEffect(() => { updateDrawingRef.current = updateDrawing; }, [updateDrawing]);
-  useEffect(() => { commitPointRef.current = commitPoint; }, [commitPoint]);
-  useEffect(() => { finishDrawingRef.current = finishDrawing; }, [finishDrawing]);
-  useEffect(() => { cancelDrawingRef.current = cancelDrawing; }, [cancelDrawing]);
-  useEffect(() => { setActivePointsRef.current = setActivePoints; }, [setActivePoints]);
-  useEffect(() => { selectDrawingRef.current = selectDrawing; }, [selectDrawing]);
-  useEffect(() => { deleteSelectedRef.current = deleteSelected; }, [deleteSelected]);
-  useEffect(() => { deselectAllRef.current = deselectAll; }, [deselectAll]);
-  useEffect(() => { activeDrawingRef.current = activeDrawing; }, [activeDrawing]);
-  useEffect(() => { selectedDrawingRef.current = selectedDrawing; }, [selectedDrawing]);
-
-  // Notify the primitive to repaint whenever drawings or activeDrawing change.
-  // The primitive reads fresh state via the getter closure, so no re-attach needed.
-  useEffect(() => { drawingsPrimitiveRef.current?.requestRedraw(); }, [drawings, activeDrawing]);
-
-  // Clear pending points when the tool changes so a half-finished drawing is
-  // abandoned cleanly (same as pressing Escape).
-  useEffect(() => {
-    pendingPointsRef.current = [];
-    cancelDrawingRef.current?.();
-  }, [currentTool]);
-
-  // (SINGLE_POINT_TOOLS removed — generalized via POINTS_REQUIRED map below)
-
-  // Delete / Escape key bindings for selected drawings and in-progress drawings.
+  // Delete key binding for selected drawings.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Never steal keys while the user is typing in an input / textarea / contenteditable.
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -395,16 +303,19 @@ export function BacktestReplayChart({
       ) return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedDrawingRef.current) {
-          deleteSelectedRef.current();
-          setOverlayTick((n) => n + 1);
+        const dc = drawingControllerRef.current;
+        if (dc) {
+          dc.deleteSelected();
+          setHasSelection(false);
           e.preventDefault();
         }
       } else if (e.key === 'Escape') {
-        pendingPointsRef.current = [];
-        cancelDrawingRef.current?.();
-        deselectAllRef.current?.();
-        setOverlayTick((n) => n + 1);
+        const dc = drawingControllerRef.current;
+        if (dc) {
+          dc.setActiveTool('cursor');
+          setCurrentTool('cursor');
+          setHasSelection(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -600,47 +511,22 @@ export function BacktestReplayChart({
     }));
     series.setData(visible);
 
-    // Attach the drawings primitive so it draws on the chart's own canvas and
-    // auto-repaints on every pan / zoom / resize — eliminates the separate
-    // overlay canvas that could drift out of alignment.
-    const drawingsPrimitive = new DrawingsPrimitive(() => ({
-      drawings: drawingsRef.current,
-      activeDrawing: activeDrawingRef.current,
-      theme: 'dark',
-    }));
-    series.attachPrimitive(drawingsPrimitive as any);
-    drawingsPrimitiveRef.current = drawingsPrimitive;
+    // Create the drawings2 controller — subscribes to click + crosshair,
+    // attaches/detaches per-primitive drawings, persists to localStorage.
+    const dc = new DrawingController(chart, series as unknown as import('lightweight-charts').ISeriesApi<'Candlestick'>, {
+      symbol,
+      onChange: () => setOverlayTick((n) => n + 1),
+      onSelectionChange: (has) => setHasSelection(has),
+    });
+    drawingControllerRef.current = dc;
+    // Sync the current tool into the controller (in case it was set before mount).
+    dc.setActiveTool(currentToolRef.current);
 
     // Center the current (cursor) bar on load — history on the left half, open
     // "future" room on the right that reveals as you PLAY (Elad 2026-05-31:
     // "current bar exactly in the middle"). Deferred a frame so the chart has
     // laid out (clientWidth / barSpacing ready) before we scroll.
     requestAnimationFrame(() => { if (!cancelled) centerCursorBar(chart, container, false); });
-
-    // Helper: convert a pixel point (from param.point) to a whitespace-safe
-    // DrawingPoint using logical (bar-index) x-coordinate so clicks anywhere on
-    // the chart — including right of the last bar — are captured correctly.
-    const toDataPoint = (px: { x: number; y: number }): import('@/components/ReplayChart/types').DrawingPoint | null => {
-      const ts = chart.timeScale();
-      const priceRaw = seriesRef.current?.coordinateToPrice(px.y as any);
-      if (priceRaw == null) return null;
-      const logical = ts.coordinateToLogical(px.x as any); // valid in whitespace
-      const timeAt = ts.coordinateToTime(px.x as any);     // Time | null
-      let price = Number(priceRaw);
-      // Magnet snap: if enabled and a bar exists at this time, snap to nearest OHLC.
-      if (magnetEnabledRef.current && timeAt != null) {
-        const bar = bars.find((b) => (b.time as number) === (timeAt as number));
-        if (bar) {
-          const cands = [bar.open, bar.high, bar.low, bar.close];
-          price = cands.reduce((a, c) => (Math.abs(c - price) < Math.abs(a - price) ? c : a));
-        }
-      }
-      return {
-        time: (timeAt as number) ?? 0,
-        price,
-        logical: logical == null ? undefined : Number(logical),
-      };
-    };
 
     // Click handler: jump-to-time (TV replay UX) takes priority when wired;
     // falls back to click-to-trade. Right-click is handled separately via the
@@ -651,60 +537,21 @@ export function BacktestReplayChart({
       // don't also trigger jump/trade on the same click.
       if (placeOrderArmedRef.current) return;
 
-      // ── Drawing tool active: wire create / select flow ──────────
+      // ── Drawing tool active: DrawingController owns all drawing clicks ───────
+      // When any drawing tool is active (not cursor), skip trade/jump logic.
       const tool = currentToolRef.current;
-      if (tool !== 'cursor' && tool !== 'cross') {
-        // Use pixel coordinates only — no dependency on param.time so clicks
-        // anywhere on the chart (including whitespace right of the last bar) work.
-        if (!param.point) return;
-        const dp = toDataPoint(param.point);
-        if (!dp) return;
-
-        const required = POINTS_REQUIRED[tool as keyof typeof POINTS_REQUIRED] ?? 2;
-
-        if (required === 0) {
-          // Freehand tools (brush/highlighter) are handled by mousedown/drag — skip.
-          return;
-        }
-
-        pendingPointsRef.current = [...pendingPointsRef.current, dp];
-        setActivePointsRef.current(tool, pendingPointsRef.current);
-
-        if (pendingPointsRef.current.length >= required) {
-          // All anchors collected — commit the drawing.
-          finishDrawingRef.current();
-          pendingPointsRef.current = [];
-          if (!stayInToolRef.current) {
-            setCurrentTool('cursor');
-          }
-        }
-
-        setOverlayTick((n) => n + 1);
-        return; // Do NOT fall through to trade / jump logic.
+      if (tool !== 'cursor') {
+        // The controller's subscribeClick handler (registered in DrawingController
+        // constructor) already processed this click. We just skip trade/jump.
+        return;
       }
 
-      // ── Cursor mode: try to select a drawing first ───────────────
-      if (tool === 'cursor' && param.point) {
-        // Build a pixel-space converter so hit-testing works in whitespace too.
-        const toPixelForHit = (p: import('@/components/ReplayChart/types').DrawingPoint) => {
-          const ts = chart.timeScale();
-          const x = p.logical != null
-            ? ts.logicalToCoordinate(p.logical as any)
-            : ts.timeToCoordinate(p.time as any);
-          const y = seriesRef.current?.priceToCoordinate(p.price as any) ?? null;
-          return (x == null || y == null) ? null : { x: x as number, y: y as number };
-        };
-        const hit = selectDrawingRef.current(
-          { x: param.point.x, y: param.point.y },
-          undefined,
-          toPixelForHit,
-        );
-        if (hit) {
-          setOverlayTick((n) => n + 1);
-          return; // Selected a drawing — don't trigger trade/jump.
-        }
-        // No drawing hit — fall through to existing trade/jump logic.
-      }
+      // ── Cursor mode: DrawingController handles selection via its own click
+      // subscription. We still fall through to trade/jump if the controller
+      // did NOT consume the click (i.e. no drawing was hit). Since the
+      // controller uses a separate subscribeClick, we can't know here whether
+      // it consumed it — so we only skip trade/jump if a drawing tool is active.
+      // Selection in cursor mode is fully owned by the controller.
 
       // For non-drawing clicks we still need param.time (trade / jump).
       if (!param.time) return;
@@ -756,25 +603,7 @@ export function BacktestReplayChart({
     // when the crosshair leaves the plot area.
     // handleCrosshairMove — param type inferred from chart.subscribeCrosshairMove signature.
     const handleCrosshairMove: Parameters<typeof chart.subscribeCrosshairMove>[0] = (param) => {
-      // ── Live drawing rubber-band preview ──────────────────────────
-      // When the user has committed at least one anchor (pendingPointsRef has
-      // entries), stream the cursor position as a floating last point so the
-      // in-progress drawing rubber-bands. Does NOT depend on param.time — uses
-      // pixel coords so it works in whitespace right of the last bar.
-      const moveTool = currentToolRef.current;
-      if (
-        moveTool !== 'cursor' &&
-        moveTool !== 'cross' &&
-        pendingPointsRef.current.length > 0 &&
-        param.point
-      ) {
-        const cursorDp = toDataPoint(param.point);
-        if (cursorDp) {
-          setActivePointsRef.current(moveTool, [...pendingPointsRef.current, cursorDp]);
-          setOverlayTick((n) => n + 1);
-        }
-        // Do NOT return here — still allow scissors hover logic below.
-      }
+      // Rubber-band preview is handled by DrawingController's subscribeCrosshairMove.
 
       // Only follow the mouse while the scissors tool is armed. Once disarmed
       // (after a rewind), clear the preview so a normal crosshair takes over.
@@ -863,7 +692,7 @@ export function BacktestReplayChart({
     const handlePlaceOrderMousedown = (e: MouseEvent) => {
       if (e.button !== 0) return; // left button only
       // Drawing tool active: let the DrawingLayer handle this pointer event.
-      if (currentToolRef.current !== 'cursor' && currentToolRef.current !== 'cross') return;
+      if (currentToolRef.current !== 'cursor') return;
       if (!placeOrderArmedRef.current || !onPlaceLimitAtPriceRef.current) return;
       if (!seriesRef.current || !containerRef.current) return;
       e.preventDefault();
@@ -877,50 +706,6 @@ export function BacktestReplayChart({
       onPlaceLimitAtPriceRef.current(Number(price), currentPrice);
     };
     container.addEventListener('mousedown', handlePlaceOrderMousedown);
-
-    // ── Freehand drawing (brush / highlighter): mousedown→drag→mouseup ──────
-    // POINTS_REQUIRED = 0 marks freehand tools; the subscribeClick handler above
-    // skips them (returns early for required === 0). This mouse handler fills
-    // the gap: mousedown starts, mousemove appends, mouseup finishes.
-    // move/up are on window so a drag that leaves the container still tracks.
-    let freehandActive = false;
-
-    const toLocalPx = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    };
-
-    const handleFreehandDown = (e: MouseEvent) => {
-      const t = currentToolRef.current;
-      if (t !== 'brush' && t !== 'highlighter') return;
-      if (e.button !== 0) return;            // left button only
-      const dp = toDataPoint(toLocalPx(e));
-      if (!dp) return;
-      freehandActive = true;
-      startDrawingRef.current(dp);           // engine creates active drawing with 1 point
-      setOverlayTick((n) => n + 1);
-      e.preventDefault();
-    };
-
-    const handleFreehandMove = (e: MouseEvent) => {
-      if (!freehandActive) return;
-      const dp = toDataPoint(toLocalPx(e));
-      if (!dp) return;
-      updateDrawingRef.current(dp);          // engine appends point for brush/highlighter (push semantics)
-      setOverlayTick((n) => n + 1);
-    };
-
-    const handleFreehandUp = () => {
-      if (!freehandActive) return;
-      freehandActive = false;
-      finishDrawingRef.current();            // engine validates >= 2 points for freehand, pushes to drawings
-      if (!stayInToolRef.current) setCurrentTool('cursor');
-      setOverlayTick((n) => n + 1);
-    };
-
-    container.addEventListener('mousedown', handleFreehandDown);
-    window.addEventListener('mousemove', handleFreehandMove);
-    window.addEventListener('mouseup', handleFreehandUp);
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -973,9 +758,6 @@ export function BacktestReplayChart({
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('mousedown', handlePlaceOrderMousedown);
-      container.removeEventListener('mousedown', handleFreehandDown);
-      window.removeEventListener('mousemove', handleFreehandMove);
-      window.removeEventListener('mouseup', handleFreehandUp);
       container.removeEventListener('mouseleave', handleMouseLeave);
       container.removeEventListener('mousemove', handleAxisCursor);
       container.removeEventListener('mouseleave', handleAxisLeave);
@@ -986,9 +768,9 @@ export function BacktestReplayChart({
         jumpTimerRef.current = null;
       }
       priceLinesRef.current.clear();
-      // Detach the drawings primitive before removing the chart.
-      try { series.detachPrimitive(drawingsPrimitive as any); } catch { /* already detached */ }
-      drawingsPrimitiveRef.current = null;
+      // Destroy the drawings controller (unsubscribes + detaches all primitives).
+      drawingControllerRef.current?.destroy();
+      drawingControllerRef.current = null;
       // chart.remove() is idempotent in lightweight-charts — safe to call
       // even if the container was already detached by concurrent mode.
       chart.remove();
@@ -1301,57 +1083,45 @@ export function BacktestReplayChart({
             activePosition={activePosition}
             pendingOrders={pendingOrders}
             viewVersion={overlayTick}
-            draggingEnabled={currentTool === 'cursor' || currentTool === 'cross'}
+            draggingEnabled={currentTool === 'cursor'}
             onUpdateSL={onUpdateSL ?? (() => {})}
             onUpdateTP={onUpdateTP ?? (() => {})}
             onUpdatePendingPrice={onUpdatePendingPrice ?? (() => {})}
           />
         )}
 
-        {/* ── Drawing toolbar — vertical strip on the left edge, below the
-            ReplayControls top bar. z-[30] keeps it above all overlays. ── */}
+        {/* ── Drawing toolbar (drawings2) — vertical strip on the left edge. ── */}
         {enableDrawings && (
-          <DrawingToolbar
-            currentTool={currentTool}
-            hasSelection={!!selectedDrawing}
-            isSelectionLocked={selectedDrawing?.locked ?? false}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            theme="dark"
-            onToolSelect={setCurrentTool}
-            onDeleteSelected={deleteSelected}
-            onUndo={undo}
-            onRedo={redo}
-            onLockToggle={lockSelected}
-            onVisibilityToggle={toggleVisibility}
-            magnetEnabled={magnetEnabled}
-            onToggleMagnet={() => setMagnetEnabled((v) => !v)}
-            stayInTool={stayInTool}
-            onToggleStayInTool={() => setStayInTool((v) => !v)}
-            onHideAll={hideAll}
-            onLockAll={lockAll}
-            onRemoveAll={removeAll}
+          <DrawingToolbar2
+            activeTool={currentTool}
+            onSelectTool={(t) => {
+              setCurrentTool(t);
+              drawingControllerRef.current?.setActiveTool(t);
+            }}
+            hasSelection={hasSelection}
+            onDelete={() => {
+              drawingControllerRef.current?.deleteSelected();
+              setHasSelection(false);
+            }}
+            onClear={() => {
+              drawingControllerRef.current?.clearAll();
+              setHasSelection(false);
+            }}
+            color={drawingColor}
+            width={drawingWidth}
+            onColorChange={(c) => {
+              setDrawingColor(c);
+              drawingControllerRef.current?.setOptions({ color: c });
+            }}
+            onWidthChange={(w) => {
+              setDrawingWidth(w);
+              drawingControllerRef.current?.setOptions({ width: w });
+            }}
             className="absolute left-0 top-0 bottom-0 z-[30]"
           />
         )}
 
-        {/* ── Per-drawing style popover — appears just right of the toolbar
-            when exactly one drawing is selected. z-[31] sits above the toolbar. ── */}
-        {enableDrawings && selectedDrawing && (
-          <DrawingStylePopover
-            drawing={selectedDrawing}
-            onUpdateStyle={(patch) => updateStyle(selectedDrawing.id, patch)}
-            onUpdateDrawing={(patch) => updateDrawingData(selectedDrawing.id, patch)}
-            onDelete={() => {
-              deleteSelected();
-              setOverlayTick((n) => n + 1);
-            }}
-            onClose={() => {
-              deselectAll();
-              setOverlayTick((n) => n + 1);
-            }}
-          />
-        )}
+        {/* DrawingStylePopover removed — style is set via the toolbar swatches/width buttons. */}
 
         {/* ── TV-style replay cursor overlays — only while the scissors tool
             is armed; after a rewind it disarms and a normal crosshair returns. ── */}
