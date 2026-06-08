@@ -45,7 +45,7 @@ import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { PositionBox, type PositionBoxModel } from '@/components/charting/PositionBox';
 import { ReplayControls } from './ReplayControls';
 import { useDrawings } from '@/components/ReplayChart/hooks/useDrawings';
-import { DrawingLayer } from '@/components/ReplayChart/drawings/DrawingLayer';
+import { DrawingsPrimitive } from '@/components/ReplayChart/drawings/DrawingsPrimitive';
 import { DrawingToolbar } from '@/components/ReplayChart/ui/DrawingToolbar';
 import { DrawingStylePopover } from '@/components/ReplayChart/ui/DrawingStylePopover';
 import { POINTS_REQUIRED } from '@/components/ReplayChart/types';
@@ -345,6 +345,12 @@ export function BacktestReplayChart({
   const deselectAllRef = useRef(deselectAll);
   const activeDrawingRef = useRef(activeDrawing);
   const selectedDrawingRef = useRef(selectedDrawing);
+  // Ref mirror for drawings so the primitive getter closure always reads the
+  // latest array without needing to be re-created on every render.
+  const drawingsRef = useRef(drawings);
+  useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
+  // Holds the attached primitive so the redraw effect and cleanup can reach it.
+  const drawingsPrimitiveRef = useRef<DrawingsPrimitive | null>(null);
 
   // Committed anchor points for the current in-progress drawing.
   // The click handler appends each click here; the crosshair preview appends a
@@ -362,6 +368,10 @@ export function BacktestReplayChart({
   useEffect(() => { deselectAllRef.current = deselectAll; }, [deselectAll]);
   useEffect(() => { activeDrawingRef.current = activeDrawing; }, [activeDrawing]);
   useEffect(() => { selectedDrawingRef.current = selectedDrawing; }, [selectedDrawing]);
+
+  // Notify the primitive to repaint whenever drawings or activeDrawing change.
+  // The primitive reads fresh state via the getter closure, so no re-attach needed.
+  useEffect(() => { drawingsPrimitiveRef.current?.requestRedraw(); }, [drawings, activeDrawing]);
 
   // Clear pending points when the tool changes so a half-finished drawing is
   // abandoned cleanly (same as pressing Escape).
@@ -589,6 +599,18 @@ export function BacktestReplayChart({
       close: b.close,
     }));
     series.setData(visible);
+
+    // Attach the drawings primitive so it draws on the chart's own canvas and
+    // auto-repaints on every pan / zoom / resize — eliminates the separate
+    // overlay canvas that could drift out of alignment.
+    const drawingsPrimitive = new DrawingsPrimitive(() => ({
+      drawings: drawingsRef.current,
+      activeDrawing: activeDrawingRef.current,
+      theme: 'dark',
+    }));
+    series.attachPrimitive(drawingsPrimitive as any);
+    drawingsPrimitiveRef.current = drawingsPrimitive;
+
     // Center the current (cursor) bar on load — history on the left half, open
     // "future" room on the right that reveals as you PLAY (Elad 2026-05-31:
     // "current bar exactly in the middle"). Deferred a frame so the chart has
@@ -964,6 +986,9 @@ export function BacktestReplayChart({
         jumpTimerRef.current = null;
       }
       priceLinesRef.current.clear();
+      // Detach the drawings primitive before removing the chart.
+      try { series.detachPrimitive(drawingsPrimitive as any); } catch { /* already detached */ }
+      drawingsPrimitiveRef.current = null;
       // chart.remove() is idempotent in lightweight-charts — safe to call
       // even if the container was already detached by concurrent mode.
       chart.remove();
@@ -1261,23 +1286,6 @@ export function BacktestReplayChart({
               );
             })}
           </div>
-        )}
-
-        {/* ── Drawing canvas overlay — sits above chart canvas, below UI chrome.
-            pointer-events are managed by DrawingLayer itself: auto when a draw
-            tool is active, none in cursor/cross mode so chart interactions pass
-            through. Re-renders on overlayTick (pan/zoom/resize) to keep coords
-            in sync — same pattern as PositionBox. ── */}
-        {enableDrawings && chartRef.current && seriesRef.current && (
-          <DrawingLayer
-            key={`drawing-layer-${overlayTick}`}
-            drawings={drawings}
-            activeDrawing={activeDrawing}
-            chart={chartRef.current}
-            candlestickSeries={seriesRef.current}
-            containerRef={containerRef}
-            theme="dark"
-          />
         )}
 
         {/* ── Draggable order-lines overlay — SL/TP/pending trigger lines.
