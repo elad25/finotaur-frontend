@@ -189,7 +189,7 @@ export const domains: Record<string, Domain> = {
     beta: false,
     subNav: [
       { label: 'Journal',     path: '/app/journal/overview' },
-      { label: 'Backtest',    path: '/app/journal/backtest/overview' },
+      { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
       { label: 'Mentor Mode', path: '/app/journal/mentor' },
     ],
     sidebar: [
