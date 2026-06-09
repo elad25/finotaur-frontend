@@ -237,11 +237,30 @@ async function fetchIBRITActivity(token: string, queryId: string, serviceCode: s
     const res = await fetch(url.toString(), { method: 'GET', headers: { 'Accept': 'text/csv,text/plain,*/*' }, signal: controller.signal });
     const text = await res.text();
     if (!res.ok) throw new Error(`IBRIT HTTP ${res.status}: ${text.slice(0, 200)}`);
+    // IBRIT JSON error envelope (e.g. {"msg":"Service code is not configured for account.","rc":1057}).
+    // Surface these as real errors instead of silently parsing them into an empty statement.
+    const jsonStart = text.trimStart();
+    if (jsonStart.startsWith('{')) {
+      try {
+        const env = JSON.parse(jsonStart) as { rc?: number; msg?: string };
+        if (typeof env.rc === 'number' && env.rc !== 0) {
+          // 1010 NO_STATEMENT, 1600 "no statement available for date", 1410 "try again later" (transient):
+          // these mean "no data for this requested day" — skip it, don't fail the whole sync. The loop
+          // walks 30 days back, so the latest day that DOES have a statement is still used.
+          if (env.rc === 1010 || env.rc === 1600 || env.rc === 1410) return empty;
+          throw new Error(`IBRIT error ${env.rc}: ${String(env.msg ?? '').slice(0, 200)}`);
+        }
+      } catch (e) {
+        // Propagate our surfaced IBRIT error; ignore JSON.parse failures (body wasn't our envelope).
+        if (e instanceof Error && e.message.startsWith('IBRIT error')) throw e;
+      }
+    }
     // IBRIT inline error code (e.g. "1052: Invalid token")
     const errMatch = text.match(/^(?:ERROR\s+)?(\d{4}):/m);
     if (errMatch) {
       const code = errMatch[1];
-      if (code === '1010') return empty; // NO_STATEMENT — no activity on this day (not an error)
+      // 1010/1600/1410 = no statement for this day / transient — skip, not a hard error (see above).
+      if (code === '1010' || code === '1600' || code === '1410') return empty;
       throw new Error(`IBRIT error ${code}: ${text.slice(0, 300)}`);
     }
     const parsed = parseIBRITFlexQuery(text);
@@ -679,6 +698,9 @@ async function syncOneUser(userId: string): Promise<UserSyncSummary> {
   if (connErr || !conn || !conn.is_active) {
     return { userId, tradesInserted: 0, tradeErrors: 0, positionsCount: 0, daysQueried: 0, daysWithData: 0, daysEmpty: 0, daysErrored: 0, firstError: null, skipped: 'no_active_connection' };
   }
+  // connection_data is read below for existing positions / account summary / write-back merge.
+  // (Defined here at syncOneUser scope; resolveIBCreds derives its own local copy independently.)
+  const cd = (conn.connection_data || {}) as Record<string, unknown>;
   const creds = await resolveIBCreds(conn);
   if (!creds) {
     return { userId, tradesInserted: 0, tradeErrors: 0, positionsCount: 0, daysQueried: 0, daysWithData: 0, daysEmpty: 0, daysErrored: 0, firstError: 'missing_credentials' };
