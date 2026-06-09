@@ -57,7 +57,7 @@ const testimonials: Testimonial[] = [
     name: "David Chen",
     role: "Funded Account Manager",
     avatar: "DC",
-    text: "Finotaur showed me I was overtrading Mondays by 3x. Fixed that one pattern and added $4,200 to my P&L in 30 days. The AI insights are legitimately game-changing.",
+    text: "Finotaur showed me I was overtrading Mondays by 3x. Fixing that one pattern reshaped how I trade. The AI insights are legitimately game-changing.",
     highlight: "legitimately game-changing",
   },
   {
