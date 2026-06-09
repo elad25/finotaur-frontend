@@ -4,11 +4,12 @@ import {
   Wallet, Clock, CheckCircle, XCircle, RefreshCw,
   ChevronLeft, ChevronRight, AlertCircle, Send, Search,
   DollarSign, Mail, User, Users, ExternalLink, Play, Filter,
-  Loader2, CheckCheck, Ban, Eye
+  CheckCheck, Ban, Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { SkeletonTable } from '@/components/ds/Skeleton';
+import { Spinner } from '@/components/ds/Spinner';
 
 // ============================================
 // TYPES
@@ -451,7 +452,7 @@ export default function AffiliateAdminPayouts() {
             >
               {batchProcessing ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                   Processing...
                 </>
               ) : (
@@ -667,7 +668,7 @@ export default function AffiliateAdminPayouts() {
                                   )}
                                 >
                                   {isProcessing ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <Spinner size="sm" />
                                   ) : (
                                     <Play className="h-3.5 w-3.5" />
                                   )}
@@ -696,7 +697,7 @@ export default function AffiliateAdminPayouts() {
                                 )}
                               >
                                 {isCheckingStatus ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <Spinner size="sm" />
                                 ) : (
                                   <RefreshCw className="h-3.5 w-3.5" />
                                 )}
@@ -1219,7 +1220,7 @@ function PayoutDetailModal({
                 >
                   {isProcessing ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Spinner size="sm" color="inherit" />
                       Processing...
                     </>
                   ) : (
@@ -1244,7 +1245,7 @@ function PayoutDetailModal({
               >
                 {isCheckingStatus ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Spinner size="sm" color="inherit" />
                     Checking...
                   </>
                 ) : (
