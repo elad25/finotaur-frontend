@@ -387,6 +387,11 @@ export function CopilotHoldingsPage() {
     );
   }
 
+  // Exclude cash holdings from position counts and the holdings table.
+  // Cash is intentionally kept in snapshot.holdings so PortfolioValuePanel
+  // can sum it for the "AVAILABLE CASH" stat — do not remove it from there.
+  const tradablePositions = snapshot.holdings.filter((h) => h.assetClass !== 'CASH');
+
   // Sum unrealized P&L; sign drives the positive/negative tone on the Metric card.
   const totalPnl = snapshot.holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0);
   const pnlSign = totalPnl >= 0 ? '+' : '−';
@@ -395,12 +400,12 @@ export function CopilotHoldingsPage() {
   return (
     <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
       <div className="grid gap-3 md:grid-cols-3">
-        <Metric label="Positions" value={String(snapshot.holdings.length)} />
+        <Metric label="Positions" value={String(tradablePositions.length)} />
         <Metric label="Market value" value={`$${Math.round(snapshot.totalValue).toLocaleString('en')}`} />
         <Metric label="Unrealized P&L" value={pnlDisplay} positive={totalPnl >= 0} />
       </div>
       <div className="mt-3">
-        <HoldingsTable holdings={snapshot.holdings} />
+        <HoldingsTable holdings={tradablePositions} />
       </div>
     </CopilotPageShell>
   );

@@ -319,7 +319,7 @@ export function buildBriefModules(
   };
 
   // ── PORTFOLIO TODAY ───────────────────────────────────────────────────────
-  const holdingCount = snapshot?.holdings.length ?? 0;
+  const holdingCount = snapshot?.holdings.filter((h) => h.assetClass !== 'CASH').length ?? 0;
   const topSectorCall = brief?.sector_calls?.[0];
   const portfolioHeadline = snapshot
     ? `${holdingCount} position${holdingCount !== 1 ? 's' : ''}${topSectorCall ? ` — ${topSectorCall.sector} ${topSectorCall.stance}` : ''}`
@@ -499,7 +499,7 @@ export function buildBriefModulesFromDaily(
   };
 
   // ── PORTFOLIO TODAY ───────────────────────────────────────────────────────
-  const holdingCount = snapshot?.holdings.length ?? 0;
+  const holdingCount = snapshot?.holdings.filter((h) => h.assetClass !== 'CASH').length ?? 0;
   // Prefer the personalized glance (which references real tickers and P&L)
   // over the generic position-count fallback. The personalized glance is
   // supplied by the server when livePortfolio is present in the request.
