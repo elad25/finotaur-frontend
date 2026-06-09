@@ -377,7 +377,9 @@ export function DrawingToolbar2({
       )}
     >
       {/* ── TOP: Drawing tool groups ── */}
-      {TOOL_GROUPS.map((group) => (
+      {/* Cursor group intentionally hidden: 'cursor' is the controller's default
+          mode, so chart navigation/crosshair still works without the button. */}
+      {TOOL_GROUPS.filter((group) => group.id !== 'cursors').map((group) => (
         <GroupButton
           key={group.id}
           group={group}
