@@ -2,14 +2,12 @@
 // ============================================
 // OPTIMIZED FOR 5000+ CONCURRENT USERS
 // ============================================
-// Version: v9.0.0-WHOP-VERIFIED-ONLY
-// 
+// Version: v9.0.0-CATEGORY-FILTERED
+//
 // 🔥 v9.0.0 CHANGES:
-// - getAllUsers now returns ONLY Whop-verified subscribers
-// - Added filter: whop_membership_id IS NOT NULL
-// - Only shows users who actually paid via Whop
-// - Free/legacy users excluded from main list
-// - Added "Free (Legacy)" filter to see users without Whop
+// - getAllUsers filters subscribers by product category
+// - Supported categories: platform, journal, newsletter
+// - Each category maps to a distinct subscriber segment
 // ============================================
 
 import { supabase, cachedQuery, supabaseCache } from '@/lib/supabase';
@@ -32,6 +30,7 @@ import {
   SubscriptionStatus,
   SubscriberStats,
   Subscriber,
+  ProductCategory,
 } from '@/types/admin';
 
 // ============================================
@@ -240,11 +239,34 @@ function mapDbRowToUserWithStats(user: any): UserWithStats {
     strategies_count: Number(user.strategies_count) || 0,
     last_trade_date: user.last_trade_date || null,
     
-    // 🔥 v9.0.0: Whop identifiers
+    // Whop identifiers (kept for backward compat; unused for filtering)
     whop_membership_id: user.whop_membership_id || null,
     whop_user_id: user.whop_user_id || null,
     whop_product_id: user.whop_product_id || null,
+
+    // Real product-status columns
+    platform_subscription_status: user.platform_subscription_status || null,
+    newsletter_status: user.newsletter_status || null,
+    top_secret_status: user.top_secret_status || null,
+
+    // Derived product membership badges
+    products: deriveProducts(user),
   };
+}
+
+/** Derive which product categories a user belongs to from the real profile columns. */
+function deriveProducts(user: {
+  platform_subscription_status?: string | null;
+  account_type?: string | null;
+  newsletter_status?: string | null;
+  top_secret_status?: string | null;
+}): ProductCategory[] {
+  const cats: ProductCategory[] = [];
+  if (user.platform_subscription_status === 'active') cats.push('platform');
+  if (user.account_type === 'basic' || user.account_type === 'premium') cats.push('journal');
+  if (user.newsletter_status === 'active') cats.push('warzone');
+  if (user.top_secret_status === 'active') cats.push('top_secret');
+  return cats;
 }
 
 // ============================================
@@ -252,75 +274,82 @@ function mapDbRowToUserWithStats(user: any): UserWithStats {
 // ============================================
 
 /**
- * ⚡ v9.0.0: Returns ONLY Whop-verified Journal subscribers
- * 
- * 🔥 CRITICAL CHANGES:
- * - Default: Only users with whop_membership_id (paid via Whop)
- * - Filter 'free': Shows legacy users WITHOUT Whop membership
- * - Filter 'trial': Users in trial period (still need whop_membership_id)
- * - Filter 'basic'/'premium': Specific plan type (with whop_membership_id)
+ * Returns subscribers segmented by real product-category columns.
+ * No longer depends on whop_membership_id.
+ *
+ * product_filter:
+ *   undefined / omitted → all active subscribers across all products
+ *   'platform'          → platform_subscription_status = 'active'
+ *   'journal'           → account_type IN ('basic','premium')
+ *   'newsletter'        → newsletter_status = 'active' OR top_secret_status = 'active'
+ *   'free'              → account_type = 'free' (legacy)
+ *
+ * account_type (legacy, still honoured when product_filter is absent):
+ *   'trial'   → account_type='basic' AND is_in_trial=true
+ *   'basic'   → account_type='basic'
+ *   'premium' → account_type='premium'
  */
 export async function getAllUsers(
   filters?: UserFilters,
   pagination?: PaginationParams
 ): Promise<PaginatedResponse<UserWithStats>> {
   const cacheKey = `admin-users-${JSON.stringify({ filters, pagination })}`;
-  
+
   return cachedQuery(
     cacheKey,
     async () => {
-      console.time('⚡ getAllUsers (Whop-verified only)');
-      
+      console.time('⚡ getAllUsers');
+
       const page = pagination?.page || 1;
       const pageSize = pagination?.pageSize || 50;
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
 
-      // ============================================
-      // 🔥 v9.0.0: WHOP-VERIFIED SUBSCRIBERS ONLY
-      // ============================================
-      
       let query = supabase
         .from('profiles')
         .select('*', { count: 'exact' })
         .is('deleted_at', null);
 
       // ============================================
-      // FILTER LOGIC
+      // FILTER LOGIC — category-based (real columns)
       // ============================================
-      
-      if (filters?.account_type === 'free') {
-        // 🔥 SPECIAL CASE: "Free (Legacy)" - users WITHOUT Whop membership
-        // These are users who registered but never paid via Whop
-        query = query
-          .is('whop_membership_id', null)
-          .or('account_type.eq.free,account_type.is.null');
-          
+
+      if (filters?.product_filter === 'platform') {
+        // Platform subscribers
+        query = query.eq('platform_subscription_status', 'active');
+
+      } else if (filters?.product_filter === 'journal') {
+        // Journal subscribers (Basic or Premium)
+        query = query.in('account_type', ['basic', 'premium']);
+
+      } else if (filters?.product_filter === 'newsletter') {
+        // Newsletter (WAR ZONE) or Top Secret
+        query = query.or('newsletter_status.eq.active,top_secret_status.eq.active');
+
+      } else if (filters?.product_filter === 'free' || filters?.account_type === 'free') {
+        // Free / legacy users
+        query = query.or('account_type.eq.free,account_type.is.null');
+
       } else if (filters?.account_type === 'trial') {
-        // 🔥 TRIAL: Users in trial period WITH Whop membership
+        // Legacy: trial filter
         query = query
-          .not('whop_membership_id', 'is', null)
           .eq('account_type', 'basic')
           .eq('is_in_trial', true);
-          
+
       } else if (filters?.account_type === 'basic') {
-        // 🔥 BASIC: Basic plan users WITH Whop membership
-        query = query
-          .not('whop_membership_id', 'is', null)
-          .eq('account_type', 'basic');
-          
+        query = query.eq('account_type', 'basic');
+
       } else if (filters?.account_type === 'premium') {
-        // 🔥 PREMIUM: Premium plan users WITH Whop membership
-        query = query
-          .not('whop_membership_id', 'is', null)
-          .eq('account_type', 'premium');
-          
+        query = query.eq('account_type', 'premium');
+
       } else {
-        // 🔥 DEFAULT (All Subscribers): Only Whop-verified users
-        // Shows all basic + premium users who paid via Whop
-        query = query
-          .not('whop_membership_id', 'is', null)
-          .in('account_type', ['basic', 'premium']);
+        // Default: any subscriber across any product
+        query = query.or(
+          'platform_subscription_status.eq.active,' +
+          'account_type.in.(basic,premium),' +
+          'newsletter_status.eq.active,' +
+          'top_secret_status.eq.active'
+        );
       }
 
       // ============================================
@@ -352,8 +381,8 @@ export async function getAllUsers(
         throw error;
       }
 
-      console.timeEnd('⚡ getAllUsers (Whop-verified only)');
-      console.log(`📊 Found ${count} Whop-verified subscribers`);
+      console.timeEnd('⚡ getAllUsers');
+      console.log(`📊 Found ${count} subscribers`);
 
       // 🔥 v9.0.0: Map to UserWithStats with proper type safety
       const usersWithStats: UserWithStats[] = (data || []).map(mapDbRowToUserWithStats);
@@ -1001,111 +1030,132 @@ export async function getTradeVolumeData(days: number = 30): Promise<TradeVolume
 // ============================================
 
 /**
- * Get subscriber statistics - 🔥 NOW COUNTS ONLY WHOP-VERIFIED
+ * Get subscriber statistics — based on real profile columns, no whop dependency.
  */
 export async function getSubscriberStats(): Promise<SubscriberStats> {
   return cachedQuery(
     'subscriber-stats',
     async () => {
-      console.time('⚡ getSubscriberStats (Whop-verified only)');
+      console.time('⚡ getSubscriberStats');
 
-      // 🔥 v9.0.0: Only count subscribers with whop_membership_id
-      const { data: subscribers, error } = await supabase
+      // Fetch all non-deleted, non-admin profiles that belong to at least one product
+      const { data: rows, error } = await supabase
         .from('profiles')
-        .select('account_type, subscription_interval, subscription_status, subscription_started_at, updated_at, role, whop_membership_id')
-        .not('whop_membership_id', 'is', null)  // 🔥 CRITICAL: Only Whop-verified
-        .in('account_type', ['basic', 'premium', 'newsletter', 'top_secret'])
+        .select(
+          'account_type, subscription_interval, subscription_status, ' +
+          'subscription_started_at, updated_at, role, is_in_trial, ' +
+          'platform_subscription_status, newsletter_status, top_secret_status'
+        )
+        .is('deleted_at', null)
+        .or(
+          'platform_subscription_status.eq.active,' +
+          'account_type.in.(basic,premium),' +
+          'newsletter_status.eq.active,' +
+          'top_secret_status.eq.active'
+        )
         .neq('role', 'admin')
         .neq('role', 'super_admin');
 
       if (error) throw error;
 
+      const subscribers = rows || [];
       const now = new Date();
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const activeSubscribers = subscribers?.filter(
-        s => s.subscription_status === 'active'
-      ) || [];
+      // Category counts (a user can appear in multiple)
+      const platformSubs = subscribers.filter(s => s.platform_subscription_status === 'active');
+      const basicSubs    = subscribers.filter(s => s.account_type === 'basic');
+      const premiumSubs  = subscribers.filter(s => s.account_type === 'premium');
+      const warzSubs     = subscribers.filter(s => s.newsletter_status === 'active');
+      const tsSubs       = subscribers.filter(s => s.top_secret_status === 'active');
 
-      const newThisMonth = subscribers?.filter(
+      // For "active" we look at subscription_status on journal subs; platform/newsletter use their own flag
+      const activeSubscribers = subscribers.filter(s =>
+        s.platform_subscription_status === 'active' ||
+        (( s.account_type === 'basic' || s.account_type === 'premium') && s.subscription_status === 'active') ||
+        s.newsletter_status === 'active' ||
+        s.top_secret_status === 'active'
+      );
+
+      const newThisMonth = subscribers.filter(
         s => new Date(s.subscription_started_at || s.updated_at) >= firstOfMonth
-      ) || [];
+      );
 
-      const basicSubs = subscribers?.filter(s => s.account_type === 'basic') || [];
-      const premiumSubs = subscribers?.filter(s => s.account_type === 'premium') || [];
-      const newsletterSubs = subscribers?.filter(s => s.account_type === 'newsletter') || [];
-      const topSecretSubs = subscribers?.filter(s => s.account_type === 'top_secret') || [];
-
-      const basicMonthly = basicSubs.filter(s => s.subscription_interval === 'monthly').length;
-      const basicYearly = basicSubs.filter(s => s.subscription_interval === 'yearly').length;
+      const basicMonthly   = basicSubs.filter(s => s.subscription_interval === 'monthly').length;
+      const basicYearly    = basicSubs.filter(s => s.subscription_interval === 'yearly').length;
       const premiumMonthly = premiumSubs.filter(s => s.subscription_interval === 'monthly').length;
-      const premiumYearly = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
+      const premiumYearly  = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
 
-      const BASIC_MONTHLY_PRICE = 24.99;
-      const BASIC_YEARLY_PRICE = 229;
-      const PREMIUM_MONTHLY_PRICE = 44.99;
-      const PREMIUM_YEARLY_PRICE = 409;
+      const BASIC_MONTHLY_PRICE    = 24.99;
+      const BASIC_YEARLY_PRICE     = 229;
+      const PREMIUM_MONTHLY_PRICE  = 44.99;
+      const PREMIUM_YEARLY_PRICE   = 409;
       const NEWSLETTER_MONTHLY_PRICE = 49;
-      const NEWSLETTER_YEARLY_PRICE = 397;
+      const NEWSLETTER_YEARLY_PRICE  = 397;
       const TOP_SECRET_MONTHLY_PRICE = 70;
-      const TOP_SECRET_YEARLY_PRICE = 500;
+      const TOP_SECRET_YEARLY_PRICE  = 500;
 
-      const basicMRR = 
-        (basicMonthly * BASIC_MONTHLY_PRICE) + 
-        (basicYearly * (BASIC_YEARLY_PRICE / 12));
-      
-      const premiumMRR = 
-        (premiumMonthly * PREMIUM_MONTHLY_PRICE) + 
-        (premiumYearly * (PREMIUM_YEARLY_PRICE / 12));
+      const basicMRR =
+        basicMonthly * BASIC_MONTHLY_PRICE +
+        basicYearly  * (BASIC_YEARLY_PRICE / 12);
 
-      const newsletterMRR = 
-        (newsletterSubs.filter(s => s.subscription_interval === 'monthly').length * NEWSLETTER_MONTHLY_PRICE) +
-        (newsletterSubs.filter(s => s.subscription_interval === 'yearly').length * (NEWSLETTER_YEARLY_PRICE / 12));
+      const premiumMRR =
+        premiumMonthly * PREMIUM_MONTHLY_PRICE +
+        premiumYearly  * (PREMIUM_YEARLY_PRICE / 12);
 
-      const topSecretMRR = 
-        (topSecretSubs.filter(s => s.subscription_interval === 'monthly').length * TOP_SECRET_MONTHLY_PRICE) +
-        (topSecretSubs.filter(s => s.subscription_interval === 'yearly').length * (TOP_SECRET_YEARLY_PRICE / 12));
+      const newsletterMRR =
+        warzSubs.filter(s => s.subscription_interval === 'monthly').length * NEWSLETTER_MONTHLY_PRICE +
+        warzSubs.filter(s => s.subscription_interval === 'yearly').length  * (NEWSLETTER_YEARLY_PRICE / 12);
+
+      const topSecretMRR =
+        tsSubs.filter(s => s.subscription_interval === 'monthly').length * TOP_SECRET_MONTHLY_PRICE +
+        tsSubs.filter(s => s.subscription_interval === 'yearly').length  * (TOP_SECRET_YEARLY_PRICE / 12);
 
       const totalMRR = basicMRR + premiumMRR + newsletterMRR + topSecretMRR;
       const totalARR = totalMRR * 12;
 
+      // Churn: cancelled journal subs in last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      // 🔥 v9.0.0: Only count Whop-verified cancelled users
       const { data: cancelledSubs } = await supabase
         .from('profiles')
         .select('id')
-        .not('whop_membership_id', 'is', null)
+        .is('deleted_at', null)
+        .in('account_type', ['basic', 'premium'])
         .eq('subscription_status', 'cancelled')
         .gte('updated_at', thirtyDaysAgo.toISOString());
 
-      const churnRate = cancelledSubs && subscribers 
-        ? (cancelledSubs.length / subscribers.length) * 100 
+      const churnRate = cancelledSubs && subscribers.length
+        ? (cancelledSubs.length / subscribers.length) * 100
         : 0;
 
-      console.timeEnd('⚡ getSubscriberStats (Whop-verified only)');
+      console.timeEnd('⚡ getSubscriberStats');
 
       return {
-        totalSubscribers: subscribers?.length || 0,
+        totalSubscribers: subscribers.length,
         activeSubscribers: activeSubscribers.length,
         newSubscribersThisMonth: newThisMonth.length,
-        
+
+        platformSubscribers: platformSubs.length,
+        journalSubscribers: basicSubs.length + premiumSubs.length,
+        newsletterSubscribers: warzSubs.length,
+        topSecretSubscribers: tsSubs.length,
+
         basicSubscribers: basicSubs.length,
         premiumSubscribers: premiumSubs.length,
-        newsletterSubscribers: newsletterSubs.length,
-        topSecretSubscribers: topSecretSubs.length,
-        
+
         basicMonthly,
         basicYearly,
         premiumMonthly,
         premiumYearly,
-        
+
         basicMRR: Math.round(basicMRR),
         premiumMRR: Math.round(premiumMRR),
+        newsletterMRR: Math.round(newsletterMRR),
+        topSecretMRR: Math.round(topSecretMRR),
         totalMRR: Math.round(totalMRR),
         totalARR: Math.round(totalARR),
-        
+
         churnRate: Math.round(churnRate * 10) / 10,
       };
     },
@@ -1114,59 +1164,71 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
 }
 
 /**
- * Get list of all subscribers - 🔥 NOW RETURNS ONLY WHOP-VERIFIED
+ * Get list of all subscribers — based on real profile columns, no whop dependency.
  */
 export async function getSubscribersList(): Promise<Subscriber[]> {
   return cachedQuery(
     'subscribers-list',
     async () => {
-      console.time('⚡ getSubscribersList (Whop-verified only)');
+      console.time('⚡ getSubscribersList');
 
-      // 🔥 v9.0.0: Only return subscribers with whop_membership_id
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, display_name, account_type, subscription_status, subscription_interval, subscription_started_at, subscription_expires_at, whop_membership_id')
-        .not('whop_membership_id', 'is', null)  // 🔥 CRITICAL: Only Whop-verified
-        .in('account_type', ['basic', 'premium', 'newsletter', 'top_secret'])
+        .select(
+          'id, email, display_name, account_type, subscription_status, ' +
+          'subscription_interval, subscription_started_at, subscription_expires_at, ' +
+          'is_in_trial, platform_subscription_status, newsletter_status, top_secret_status'
+        )
+        .is('deleted_at', null)
+        .or(
+          'platform_subscription_status.eq.active,' +
+          'account_type.in.(basic,premium),' +
+          'newsletter_status.eq.active,' +
+          'top_secret_status.eq.active'
+        )
         .order('subscription_started_at', { ascending: false });
 
       if (error) throw error;
 
-      const BASIC_MONTHLY = 24.99;
-      const BASIC_YEARLY = 229;
+      const BASIC_MONTHLY   = 24.99;
+      const BASIC_YEARLY    = 229;
       const PREMIUM_MONTHLY = 44.99;
-      const PREMIUM_YEARLY = 409;
+      const PREMIUM_YEARLY  = 409;
       const NEWSLETTER_MONTHLY = 49;
-      const NEWSLETTER_YEARLY = 397;
+      const NEWSLETTER_YEARLY  = 397;
       const TOP_SECRET_MONTHLY = 70;
-      const TOP_SECRET_YEARLY = 500;
+      const TOP_SECRET_YEARLY  = 500;
 
-      const subscribers = (data || []).map(profile => {
+      const subscribers: Subscriber[] = (data || []).map(profile => {
+        // Determine primary plan label for the billing table
+        let primaryPlan: Subscriber['subscription_plan'] = 'basic';
+        if (profile.account_type === 'premium') primaryPlan = 'premium';
+        else if (profile.newsletter_status === 'active') primaryPlan = 'newsletter';
+        else if (profile.top_secret_status === 'active') primaryPlan = 'top_secret';
+        else if (profile.platform_subscription_status === 'active') primaryPlan = 'platform';
+
         let monthlyRevenue = 0;
-        
         if (profile.account_type === 'basic') {
-          monthlyRevenue = profile.subscription_interval === 'monthly' 
-            ? BASIC_MONTHLY 
-            : BASIC_YEARLY / 12;
+          monthlyRevenue = profile.subscription_interval === 'monthly'
+            ? BASIC_MONTHLY : BASIC_YEARLY / 12;
         } else if (profile.account_type === 'premium') {
-          monthlyRevenue = profile.subscription_interval === 'monthly' 
-            ? PREMIUM_MONTHLY 
-            : PREMIUM_YEARLY / 12;
-        } else if (profile.account_type === 'newsletter') {
-          monthlyRevenue = profile.subscription_interval === 'monthly' 
-            ? NEWSLETTER_MONTHLY 
-            : NEWSLETTER_YEARLY / 12;
-        } else if (profile.account_type === 'top_secret') {
-          monthlyRevenue = profile.subscription_interval === 'monthly' 
-            ? TOP_SECRET_MONTHLY 
-            : TOP_SECRET_YEARLY / 12;
+          monthlyRevenue = profile.subscription_interval === 'monthly'
+            ? PREMIUM_MONTHLY : PREMIUM_YEARLY / 12;
+        } else if (profile.newsletter_status === 'active') {
+          monthlyRevenue = profile.subscription_interval === 'monthly'
+            ? NEWSLETTER_MONTHLY : NEWSLETTER_YEARLY / 12;
+        } else if (profile.top_secret_status === 'active') {
+          monthlyRevenue = profile.subscription_interval === 'monthly'
+            ? TOP_SECRET_MONTHLY : TOP_SECRET_YEARLY / 12;
         }
+
+        const products = deriveProducts(profile);
 
         return {
           user_id: profile.id,
           email: profile.email || '',
           full_name: profile.display_name,
-          subscription_plan: profile.account_type as 'basic' | 'premium' | 'newsletter' | 'top_secret',
+          subscription_plan: primaryPlan,
           subscription_status: (profile.subscription_status || 'active') as 'active' | 'cancelled' | 'past_due' | 'trial',
           billing_cycle: (profile.subscription_interval || 'monthly') as 'monthly' | 'yearly',
           subscription_start_date: profile.subscription_started_at || new Date().toISOString(),
@@ -1174,12 +1236,13 @@ export async function getSubscribersList(): Promise<Subscriber[]> {
           monthly_revenue: Math.round(monthlyRevenue),
           total_paid: 0,
           payment_method: null,
+          products,
         };
       });
 
-      console.timeEnd('⚡ getSubscribersList (Whop-verified only)');
-      console.log(`📊 Found ${subscribers.length} Whop-verified subscribers`);
-      
+      console.timeEnd('⚡ getSubscribersList');
+      console.log(`📊 Found ${subscribers.length} subscribers`);
+
       return subscribers;
     },
     CACHE_TTL.SUBSCRIBERS
