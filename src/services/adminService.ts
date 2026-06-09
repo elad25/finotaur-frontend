@@ -273,21 +273,116 @@ function deriveProducts(user: {
 // USER MANAGEMENT - OPTIMIZED
 // ============================================
 
+// Row shape returned by the admin_list_users SECURITY DEFINER RPC.
+// Column names match the profiles table exactly, so mapDbRowToUserWithStats
+// works without modification.
+interface AdminListUsersRow {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+  created_at: string;
+  account_type: string | null;
+  subscription_status: string | null;
+  whop_membership_id: string | null;
+  is_in_trial: boolean | null;
+  trial_ends_at: string | null;
+  subscription_cancel_at_period_end: boolean | null;
+  subscription_started_at: string | null;
+  total_pnl: number | null;
+  initial_portfolio: number | null;
+  current_portfolio: number | null;
+  risk_mode: string | null;
+  risk_percentage: number | null;
+  newsletter_status: string | null;
+  newsletter_whop_membership_id: string | null;
+  newsletter_enabled: boolean | null;
+  newsletter_paid: boolean | null;
+  newsletter_trial_ends_at: string | null;
+  newsletter_cancel_at_period_end: boolean | null;
+  newsletter_expires_at: string | null;
+  top_secret_status: string | null;
+  top_secret_whop_membership_id: string | null;
+  top_secret_enabled: boolean | null;
+  top_secret_is_in_trial: boolean | null;
+  top_secret_trial_ends_at: string | null;
+  top_secret_cancel_at_period_end: boolean | null;
+  top_secret_started_at: string | null;
+  top_secret_expires_at: string | null;
+  platform_plan: string | null;
+  platform_subscription_status: string | null;
+  platform_is_in_trial: boolean | null;
+  platform_trial_ends_at: string | null;
+  platform_cancel_at_period_end: boolean | null;
+  last_login_at: string | null;
+  trade_count: number | null;
+  subscription_interval: string | null;
+  subscription_expires_at: string | null;
+  role: string | null;
+  is_banned: boolean | null;
+}
+
 /**
- * Returns subscribers segmented by real product-category columns.
- * No longer depends on whop_membership_id.
+ * Applies the product_filter client-side on a full set of RPC rows.
+ * Called after admin_list_users returns all non-deleted users.
  *
  * product_filter:
- *   undefined / omitted → all active subscribers across all products
+ *   undefined / omitted → all active subscribers across any product
  *   'platform'          → platform_subscription_status = 'active'
  *   'journal'           → account_type IN ('basic','premium')
  *   'newsletter'        → newsletter_status = 'active' OR top_secret_status = 'active'
- *   'free'              → account_type = 'free' (legacy)
+ *   'free'              → account_type = 'free' or null (legacy)
  *
  * account_type (legacy, still honoured when product_filter is absent):
  *   'trial'   → account_type='basic' AND is_in_trial=true
  *   'basic'   → account_type='basic'
  *   'premium' → account_type='premium'
+ */
+function applyProductFilter(
+  rows: AdminListUsersRow[],
+  filters?: UserFilters
+): AdminListUsersRow[] {
+  const pf = filters?.product_filter;
+  const at = filters?.account_type;
+
+  if (pf === 'platform') {
+    return rows.filter(r => r.platform_subscription_status === 'active');
+  }
+  if (pf === 'journal') {
+    return rows.filter(r => r.account_type === 'basic' || r.account_type === 'premium');
+  }
+  if (pf === 'newsletter') {
+    return rows.filter(r => r.newsletter_status === 'active' || r.top_secret_status === 'active');
+  }
+  if (pf === 'free' || at === 'free') {
+    return rows.filter(r => r.account_type === 'free' || r.account_type == null);
+  }
+  if (at === 'trial') {
+    return rows.filter(r => r.account_type === 'basic' && r.is_in_trial === true);
+  }
+  if (at === 'basic') {
+    return rows.filter(r => r.account_type === 'basic');
+  }
+  if (at === 'premium') {
+    return rows.filter(r => r.account_type === 'premium');
+  }
+
+  // Default: any subscriber across any product
+  return rows.filter(r =>
+    r.platform_subscription_status === 'active' ||
+    r.account_type === 'basic' ||
+    r.account_type === 'premium' ||
+    r.newsletter_status === 'active' ||
+    r.top_secret_status === 'active'
+  );
+}
+
+/**
+ * Fetches all non-deleted users via the SECURITY DEFINER RPC
+ * `admin_list_users`, bypassing the profiles RLS policy that would
+ * otherwise return only the calling admin's own row.
+ *
+ * Product-category filtering and pagination are applied client-side
+ * on the returned dataset (p_limit=1000 covers all real users).
  */
 export async function getAllUsers(
   filters?: UserFilters,
@@ -302,97 +397,58 @@ export async function getAllUsers(
 
       const page = pagination?.page || 1;
       const pageSize = pagination?.pageSize || 50;
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
 
-      let query = supabase
-        .from('profiles')
-        .select('*', { count: 'exact' })
-        .is('deleted_at', null);
-
-      // ============================================
-      // FILTER LOGIC — category-based (real columns)
-      // ============================================
-
-      if (filters?.product_filter === 'platform') {
-        // Platform subscribers
-        query = query.eq('platform_subscription_status', 'active');
-
-      } else if (filters?.product_filter === 'journal') {
-        // Journal subscribers (Basic or Premium)
-        query = query.in('account_type', ['basic', 'premium']);
-
-      } else if (filters?.product_filter === 'newsletter') {
-        // Newsletter (WAR ZONE) or Top Secret
-        query = query.or('newsletter_status.eq.active,top_secret_status.eq.active');
-
-      } else if (filters?.product_filter === 'free' || filters?.account_type === 'free') {
-        // Free / legacy users
-        query = query.or('account_type.eq.free,account_type.is.null');
-
-      } else if (filters?.account_type === 'trial') {
-        // Legacy: trial filter
-        query = query
-          .eq('account_type', 'basic')
-          .eq('is_in_trial', true);
-
-      } else if (filters?.account_type === 'basic') {
-        query = query.eq('account_type', 'basic');
-
-      } else if (filters?.account_type === 'premium') {
-        query = query.eq('account_type', 'premium');
-
-      } else {
-        // Default: any subscriber across any product
-        query = query.or(
-          'platform_subscription_status.eq.active,' +
-          'account_type.in.(basic,premium),' +
-          'newsletter_status.eq.active,' +
-          'top_secret_status.eq.active'
-        );
-      }
-
-      // ============================================
-      // ADDITIONAL FILTERS
-      // ============================================
-
-      // Search filter (email or display_name)
+      // Build p_filters: only pass search term — product filtering is done client-side
+      const p_filters: Record<string, string> = {};
       if (filters?.search) {
-        const searchTerm = filters.search.toLowerCase();
-        query = query.or(`email.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`);
+        p_filters.search = filters.search;
       }
 
-      // Sorting
       const sortBy = pagination?.sortBy || 'created_at';
-      const sortOrder = pagination?.sortOrder || 'desc';
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-
-      // Pagination
-      query = query.range(from, to);
+      const sortOrder = (pagination?.sortOrder || 'desc').toUpperCase() as 'ASC' | 'DESC';
 
       // ============================================
-      // EXECUTE QUERY
+      // EXECUTE via SECURITY DEFINER RPC (bypasses RLS)
       // ============================================
-      
-      const { data, error, count } = await query;
+
+      const { data, error } = await supabase.rpc('admin_list_users', {
+        p_filters,
+        p_limit: 1000,
+        p_offset: 0,
+        p_sort_by: sortBy,
+        p_sort_order: sortOrder,
+      });
 
       if (error) {
-        console.error('❌ Error fetching users:', error);
+        console.error('❌ Error fetching users via admin_list_users RPC:', error);
         throw error;
       }
 
-      console.timeEnd('⚡ getAllUsers');
-      console.log(`📊 Found ${count} subscribers`);
+      const allRows = (data || []) as AdminListUsersRow[];
 
-      // 🔥 v9.0.0: Map to UserWithStats with proper type safety
-      const usersWithStats: UserWithStats[] = (data || []).map(mapDbRowToUserWithStats);
+      // ============================================
+      // CLIENT-SIDE: apply product_filter / account_type filter
+      // ============================================
+      const filteredRows = applyProductFilter(allRows, filters);
+
+      // ============================================
+      // CLIENT-SIDE: paginate the filtered set
+      // ============================================
+      const total = filteredRows.length;
+      const from = (page - 1) * pageSize;
+      const pageRows = filteredRows.slice(from, from + pageSize);
+
+      console.timeEnd('⚡ getAllUsers');
+      console.log(`📊 Found ${total} subscribers (${allRows.length} total from RPC)`);
+
+      const usersWithStats: UserWithStats[] = pageRows.map(mapDbRowToUserWithStats);
 
       return {
         data: usersWithStats,
-        total: count || 0,
+        total,
         page,
         pageSize,
-        totalPages: Math.ceil((count || 0) / pageSize),
+        totalPages: Math.ceil(total / pageSize),
       };
     },
     CACHE_TTL.USERS_LIST
@@ -1030,7 +1086,8 @@ export async function getTradeVolumeData(days: number = 30): Promise<TradeVolume
 // ============================================
 
 /**
- * Get subscriber statistics — based on real profile columns, no whop dependency.
+ * Get subscriber statistics — sourced from admin_list_users RPC to bypass
+ * the profiles RLS policy (which would otherwise return only 1 row).
  */
 export async function getSubscriberStats(): Promise<SubscriberStats> {
   return cachedQuery(
@@ -1038,47 +1095,54 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
     async () => {
       console.time('⚡ getSubscriberStats');
 
-      // Fetch all non-deleted, non-admin profiles that belong to at least one product
-      const { data: rows, error } = await supabase
-        .from('profiles')
-        .select(
-          'account_type, subscription_interval, subscription_status, ' +
-          'subscription_started_at, updated_at, role, is_in_trial, ' +
-          'platform_subscription_status, newsletter_status, top_secret_status'
-        )
-        .is('deleted_at', null)
-        .or(
-          'platform_subscription_status.eq.active,' +
-          'account_type.in.(basic,premium),' +
-          'newsletter_status.eq.active,' +
-          'top_secret_status.eq.active'
-        )
-        .neq('role', 'admin')
-        .neq('role', 'super_admin');
+      // Fetch all non-deleted users via SECURITY DEFINER RPC
+      const { data, error } = await supabase.rpc('admin_list_users', {
+        p_filters: {},
+        p_limit: 1000,
+        p_offset: 0,
+        p_sort_by: 'created_at',
+        p_sort_order: 'DESC',
+      });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching subscriber stats via admin_list_users RPC:', error);
+        throw error;
+      }
 
-      const subscribers = rows || [];
+      // Restrict to actual subscribers (non-admin, has at least one active product)
+      const allRows = (data || []) as AdminListUsersRow[];
+      const subscribers = allRows.filter(r =>
+        r.role !== 'admin' &&
+        r.role !== 'super_admin' &&
+        (
+          r.platform_subscription_status === 'active' ||
+          r.account_type === 'basic' ||
+          r.account_type === 'premium' ||
+          r.newsletter_status === 'active' ||
+          r.top_secret_status === 'active'
+        )
+      );
+
       const now = new Date();
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Category counts (a user can appear in multiple)
+      // Category counts (a user can appear in multiple categories)
       const platformSubs = subscribers.filter(s => s.platform_subscription_status === 'active');
       const basicSubs    = subscribers.filter(s => s.account_type === 'basic');
       const premiumSubs  = subscribers.filter(s => s.account_type === 'premium');
       const warzSubs     = subscribers.filter(s => s.newsletter_status === 'active');
       const tsSubs       = subscribers.filter(s => s.top_secret_status === 'active');
 
-      // For "active" we look at subscription_status on journal subs; platform/newsletter use their own flag
+      // "Active" = at least one active product flag
       const activeSubscribers = subscribers.filter(s =>
         s.platform_subscription_status === 'active' ||
-        (( s.account_type === 'basic' || s.account_type === 'premium') && s.subscription_status === 'active') ||
+        ((s.account_type === 'basic' || s.account_type === 'premium') && s.subscription_status === 'active') ||
         s.newsletter_status === 'active' ||
         s.top_secret_status === 'active'
       );
 
       const newThisMonth = subscribers.filter(
-        s => new Date(s.subscription_started_at || s.updated_at) >= firstOfMonth
+        s => new Date(s.subscription_started_at || s.created_at) >= firstOfMonth
       );
 
       const basicMonthly   = basicSubs.filter(s => s.subscription_interval === 'monthly').length;
@@ -1086,10 +1150,10 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
       const premiumMonthly = premiumSubs.filter(s => s.subscription_interval === 'monthly').length;
       const premiumYearly  = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
 
-      const BASIC_MONTHLY_PRICE    = 24.99;
-      const BASIC_YEARLY_PRICE     = 229;
-      const PREMIUM_MONTHLY_PRICE  = 44.99;
-      const PREMIUM_YEARLY_PRICE   = 409;
+      const BASIC_MONTHLY_PRICE      = 24.99;
+      const BASIC_YEARLY_PRICE       = 229;
+      const PREMIUM_MONTHLY_PRICE    = 44.99;
+      const PREMIUM_YEARLY_PRICE     = 409;
       const NEWSLETTER_MONTHLY_PRICE = 49;
       const NEWSLETTER_YEARLY_PRICE  = 397;
       const TOP_SECRET_MONTHLY_PRICE = 70;
@@ -1114,19 +1178,17 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
       const totalMRR = basicMRR + premiumMRR + newsletterMRR + topSecretMRR;
       const totalARR = totalMRR * 12;
 
-      // Churn: cancelled journal subs in last 30 days
+      // Churn estimate: cancelled journal subs in the last 30 days (from allRows, no second query needed)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const { data: cancelledSubs } = await supabase
-        .from('profiles')
-        .select('id')
-        .is('deleted_at', null)
-        .in('account_type', ['basic', 'premium'])
-        .eq('subscription_status', 'cancelled')
-        .gte('updated_at', thirtyDaysAgo.toISOString());
+      const cancelledCount = allRows.filter(r =>
+        (r.account_type === 'basic' || r.account_type === 'premium') &&
+        r.subscription_status === 'cancelled' &&
+        new Date(r.created_at) >= thirtyDaysAgo // using created_at as proxy — no updated_at in RPC result
+      ).length;
 
-      const churnRate = cancelledSubs && subscribers.length
-        ? (cancelledSubs.length / subscribers.length) * 100
+      const churnRate = cancelledCount && subscribers.length
+        ? (cancelledCount / subscribers.length) * 100
         : 0;
 
       console.timeEnd('⚡ getSubscriberStats');
@@ -1164,7 +1226,8 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
 }
 
 /**
- * Get list of all subscribers — based on real profile columns, no whop dependency.
+ * Get list of all subscribers — sourced from admin_list_users RPC to bypass
+ * the profiles RLS policy (which would otherwise return only 1 row).
  */
 export async function getSubscribersList(): Promise<Subscriber[]> {
   return cachedQuery(
@@ -1172,67 +1235,74 @@ export async function getSubscribersList(): Promise<Subscriber[]> {
     async () => {
       console.time('⚡ getSubscribersList');
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(
-          'id, email, display_name, account_type, subscription_status, ' +
-          'subscription_interval, subscription_started_at, subscription_expires_at, ' +
-          'is_in_trial, platform_subscription_status, newsletter_status, top_secret_status'
-        )
-        .is('deleted_at', null)
-        .or(
-          'platform_subscription_status.eq.active,' +
-          'account_type.in.(basic,premium),' +
-          'newsletter_status.eq.active,' +
-          'top_secret_status.eq.active'
-        )
-        .order('subscription_started_at', { ascending: false });
+      // Fetch all users via SECURITY DEFINER RPC, sorted by subscription start
+      const { data, error } = await supabase.rpc('admin_list_users', {
+        p_filters: {},
+        p_limit: 1000,
+        p_offset: 0,
+        p_sort_by: 'subscription_started_at',
+        p_sort_order: 'DESC',
+      });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching subscribers list via admin_list_users RPC:', error);
+        throw error;
+      }
 
-      const BASIC_MONTHLY   = 24.99;
-      const BASIC_YEARLY    = 229;
-      const PREMIUM_MONTHLY = 44.99;
-      const PREMIUM_YEARLY  = 409;
+      const allRows = (data || []) as AdminListUsersRow[];
+
+      // Keep only rows that belong to at least one active product
+      const activeRows = allRows.filter(r =>
+        r.platform_subscription_status === 'active' ||
+        r.account_type === 'basic' ||
+        r.account_type === 'premium' ||
+        r.newsletter_status === 'active' ||
+        r.top_secret_status === 'active'
+      );
+
+      const BASIC_MONTHLY      = 24.99;
+      const BASIC_YEARLY       = 229;
+      const PREMIUM_MONTHLY    = 44.99;
+      const PREMIUM_YEARLY     = 409;
       const NEWSLETTER_MONTHLY = 49;
       const NEWSLETTER_YEARLY  = 397;
       const TOP_SECRET_MONTHLY = 70;
       const TOP_SECRET_YEARLY  = 500;
 
-      const subscribers: Subscriber[] = (data || []).map(profile => {
+      const subscribers: Subscriber[] = activeRows.map(row => {
         // Determine primary plan label for the billing table
         let primaryPlan: Subscriber['subscription_plan'] = 'basic';
-        if (profile.account_type === 'premium') primaryPlan = 'premium';
-        else if (profile.newsletter_status === 'active') primaryPlan = 'newsletter';
-        else if (profile.top_secret_status === 'active') primaryPlan = 'top_secret';
-        else if (profile.platform_subscription_status === 'active') primaryPlan = 'platform';
+        if (row.account_type === 'premium') primaryPlan = 'premium';
+        else if (row.newsletter_status === 'active') primaryPlan = 'newsletter';
+        else if (row.top_secret_status === 'active') primaryPlan = 'top_secret';
+        else if (row.platform_subscription_status === 'active') primaryPlan = 'platform';
 
         let monthlyRevenue = 0;
-        if (profile.account_type === 'basic') {
-          monthlyRevenue = profile.subscription_interval === 'monthly'
+        if (row.account_type === 'basic') {
+          monthlyRevenue = row.subscription_interval === 'monthly'
             ? BASIC_MONTHLY : BASIC_YEARLY / 12;
-        } else if (profile.account_type === 'premium') {
-          monthlyRevenue = profile.subscription_interval === 'monthly'
+        } else if (row.account_type === 'premium') {
+          monthlyRevenue = row.subscription_interval === 'monthly'
             ? PREMIUM_MONTHLY : PREMIUM_YEARLY / 12;
-        } else if (profile.newsletter_status === 'active') {
-          monthlyRevenue = profile.subscription_interval === 'monthly'
+        } else if (row.newsletter_status === 'active') {
+          monthlyRevenue = row.subscription_interval === 'monthly'
             ? NEWSLETTER_MONTHLY : NEWSLETTER_YEARLY / 12;
-        } else if (profile.top_secret_status === 'active') {
-          monthlyRevenue = profile.subscription_interval === 'monthly'
+        } else if (row.top_secret_status === 'active') {
+          monthlyRevenue = row.subscription_interval === 'monthly'
             ? TOP_SECRET_MONTHLY : TOP_SECRET_YEARLY / 12;
         }
 
-        const products = deriveProducts(profile);
+        const products = deriveProducts(row);
 
         return {
-          user_id: profile.id,
-          email: profile.email || '',
-          full_name: profile.display_name,
+          user_id: row.id,
+          email: row.email || '',
+          full_name: row.display_name,
           subscription_plan: primaryPlan,
-          subscription_status: (profile.subscription_status || 'active') as 'active' | 'cancelled' | 'past_due' | 'trial',
-          billing_cycle: (profile.subscription_interval || 'monthly') as 'monthly' | 'yearly',
-          subscription_start_date: profile.subscription_started_at || new Date().toISOString(),
-          subscription_end_date: profile.subscription_expires_at,
+          subscription_status: (row.subscription_status || 'active') as 'active' | 'cancelled' | 'past_due' | 'trial',
+          billing_cycle: (row.subscription_interval || 'monthly') as 'monthly' | 'yearly',
+          subscription_start_date: row.subscription_started_at || new Date().toISOString(),
+          subscription_end_date: row.subscription_expires_at,
           monthly_revenue: Math.round(monthlyRevenue),
           total_paid: 0,
           payment_method: null,
