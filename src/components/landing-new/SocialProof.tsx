@@ -210,6 +210,11 @@ const SocialProof = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const inView = useInView(containerRef, { once: true, margin: "-80px" });
   const [stats, setStats] = useState<StatDef[] | null>(null);
+  // The stat band mounts only after the async fetch resolves, so the
+  // useInView observer can attach too late to ever fire. Force the reveal
+  // shortly after the cards mount so they never stay stuck at opacity 0.
+  const [ready, setReady] = useState(false);
+  const active = inView || ready;
 
   useEffect(() => {
     let cancelled = false;
@@ -226,6 +231,15 @@ const SocialProof = () => {
       });
     return () => { cancelled = true; };
   }, []);
+
+  // Once the qualifying cards are in state, trigger the reveal animation
+  // even if the IntersectionObserver never reports the late-mounted node.
+  useEffect(() => {
+    if (stats && stats.length > 0) {
+      const t = setTimeout(() => setReady(true), 60);
+      return () => clearTimeout(t);
+    }
+  }, [stats]);
 
   // Hide the entire band until we have data, and hide if no cards qualify
   if (stats === null || stats.length === 0) return null;
@@ -249,7 +263,7 @@ const SocialProof = () => {
         />
 
         {/* TOP hairline rule */}
-        <AnimatedHairline active={inView} />
+        <AnimatedHairline active={active} />
 
         {/* Eyebrow */}
         <div className="py-4 md:py-6">
@@ -270,7 +284,7 @@ const SocialProof = () => {
                 />
               )}
 
-              <StatCell stat={stat} index={index} active={inView} />
+              <StatCell stat={stat} index={index} active={active} />
 
               {/* Vertical separator between cells — desktop only */}
               {index < stats.length - 1 && (
@@ -284,7 +298,7 @@ const SocialProof = () => {
         </div>
 
         {/* BOTTOM hairline rule */}
-        <AnimatedHairline active={inView} />
+        <AnimatedHairline active={active} />
       </div>
     </SectionShell>
   );
