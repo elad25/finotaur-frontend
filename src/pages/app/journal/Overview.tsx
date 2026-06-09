@@ -1770,9 +1770,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                   {degradedConnection.connection_name ?? degradedConnection.broker ?? 'Broker'} connection needs attention
                 </p>
                 <p className="text-xs text-[#A0A0A0] mt-0.5">
-                  {degradedConnection.last_error
-                    ? `Last error: ${degradedConnection.last_error.slice(0, 100)}`
-                    : 'Auto-recovery failed — reconnect to resume syncing trades.'}
+                  {`We couldn't refresh your ${degradedConnection.connection_name ?? degradedConnection.broker ?? 'broker'} connection. Reconnect to keep your trades syncing.`}
                 </p>
               </div>
             </div>

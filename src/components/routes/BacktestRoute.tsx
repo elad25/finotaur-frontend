@@ -5,6 +5,7 @@ import { domains } from '@/constants/nav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { useMentorView } from '@/contexts/MentorViewContext';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // PageLoader imported from @/components/ds/Spinner
@@ -113,17 +114,30 @@ const BacktestLanding = lazy(() => import('@/pages/app/journal/backtest/Backtest
 export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
   const { hasAccess, isLoading } = useBacktestAccess();
   const { isMentorView } = useMentorView();
+  const { hasBetaAccess, isAdmin, isLoading: isAdminLoading } = useAdminAuth();
 
   // 🔒 Check if backtest domain is globally locked
   const isBacktestLocked = domains['journal-backtest']?.locked === true;
 
-  if (isLoading) {
+  if (isLoading || isAdminLoading) {
     return <RouteSkeleton />;
   }
 
   // 🔒 If backtest is globally locked, show Coming Soon page
   if (isBacktestLocked) {
     return <BacktestLockedPage />;
+  }
+
+  // 🔒 Direct-URL hardening: only beta/admin (or mentor view) may access.
+  // Regular tier-based hasAccess is no longer sufficient on its own —
+  // the Backtest sub-nav is locked: true, so non-beta/admin should always
+  // land on the landing page even if they navigate via URL.
+  if (!hasBetaAccess && !isAdmin && !isMentorView) {
+    return (
+      <Suspense fallback={<RouteSkeleton />}>
+        <BacktestLanding />
+      </Suspense>
+    );
   }
 
   // Mentor View: allow read-only entry regardless of the mentor's own tier,

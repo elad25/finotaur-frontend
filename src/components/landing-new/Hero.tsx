@@ -76,11 +76,19 @@ function WarZonePreview() {
     { time: '10:15', sym: 'NVDA', dir: 'PUT',  strike: '$890.00', up: false },
     { time: '11:00', sym: 'TSLA', dir: 'CALL', strike: '$245.30', up: true },
   ];
+
+  // Compute current date label like "Mon · Jun 09" — updates each render
+  const now = new Date();
+  const dayLabel = now.toLocaleDateString('en-US', { weekday: 'short' });
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'short' });
+  const dayNum = String(now.getDate()).padStart(2, '0');
+  const todayLabel = `${dayLabel} · ${monthLabel} ${dayNum}`;
+
   return (
     <div className="w-full h-full flex flex-col gap-2">
       {/* Header */}
       <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
-        <span className="font-sans text-[9.5px] uppercase tracking-[0.25em] text-white/60 font-medium">Fri · May 02</span>
+        <span className="font-sans text-[9.5px] uppercase tracking-[0.25em] text-white/60 font-medium">{todayLabel}</span>
         <span className="flex items-center gap-1 font-sans text-[9px] uppercase tracking-[0.22em] text-emerald-400/90 font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           Live
