@@ -38,8 +38,10 @@ import {
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
 import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
+import type { TakeProfitLeg } from '@/lib/backtest/orderEngine';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { ReplayControls } from './ReplayControls';
+import { OrderLinesOverlay } from './OrderLinesOverlay';
 
 // ─── Theme tokens — kept in sync with FinotaurChart ─────────────
 const THEME = {
@@ -99,6 +101,18 @@ export interface BacktestReplayChartProps {
   closedPositions: PaperPosition[];
   /** Phase 6: pending orders — painted as horizontal price lines on the chart. */
   pendingOrders?: PendingOrder[];
+  /**
+   * Phase 7: take-profit legs for the active position. Each leg is painted as
+   * a native chart price line (emerald/dashed, same as pending order lines) AND
+   * as a draggable handle via OrderLinesOverlay. Backward compat: falls back to
+   * `activePosition.takeProfit` when no legs are present.
+   */
+  takeProfitLegs?: TakeProfitLeg[];
+  /**
+   * Phase 7: called when the user drags a TP leg to a new price in the overlay.
+   * Parent should call `addTpLeg` / `removeTpLeg` or update the position model.
+   */
+  onTpLegPriceChange?: (legId: string, newPrice: number) => void;
   /** Called when a bar is revealed (after cursor advance). Parent uses this to fire SL/TP + pending order fills. */
   onBarReveal?: (bar: Bar) => void;
   /** Called when the user clicks a candle. Parent uses this to open a position at that bar's close. */
@@ -122,6 +136,8 @@ export function BacktestReplayChart({
   activePosition,
   closedPositions,
   pendingOrders = [],
+  takeProfitLegs,
+  onTpLegPriceChange,
   onBarReveal,
   onBarClick,
   onContextMenu,
@@ -134,6 +150,10 @@ export function BacktestReplayChart({
   const onBarRevealRef = useRef(onBarReveal);
   const onContextMenuRef = useRef(onContextMenu);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  // Phase 7: separate map for TP leg price lines (keyed by leg id).
+  const tpLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  // Track container height for the OrderLinesOverlay DOM layer.
+  const [containerHeight, setContainerHeight] = useState(0);
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
@@ -314,20 +334,24 @@ export function BacktestReplayChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
-    // Responsive resize.
+    // Responsive resize — also update containerHeight for the overlay.
     const ro = new ResizeObserver(() => {
       if (!container || !chartRef.current) return;
       chartRef.current.applyOptions({
         width: container.clientWidth,
         height: container.clientHeight,
       });
+      setContainerHeight(container.clientHeight);
     });
     ro.observe(container);
+    // Seed initial height.
+    setContainerHeight(container.clientHeight);
 
     return () => {
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
       priceLinesRef.current.clear();
+      tpLinesRef.current.clear();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -418,6 +442,83 @@ export function BacktestReplayChart({
     }
   }, [pendingOrders]);
 
+  // Phase 7: sync native price lines for TP legs (emerald/dashed, labeled
+  // "TP1 50% @ 123.45"). Mirrors the pending-order price-line pattern above.
+  // Filled legs are rendered dimmed (gray) and non-interactive.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    const existing = tpLinesRef.current;
+
+    // Resolve the current legs: prefer explicit `takeProfitLegs` prop; fall
+    // back to the legacy `activePosition.takeProfit` single-price field.
+    let legs: TakeProfitLeg[] = [];
+    if (takeProfitLegs && takeProfitLegs.length > 0) {
+      legs = takeProfitLegs;
+    } else if (activePosition?.takeProfits && activePosition.takeProfits.length > 0) {
+      legs = activePosition.takeProfits;
+    } else if (activePosition?.takeProfit != null) {
+      legs = [{
+        id: '__tp_single__',
+        price: activePosition.takeProfit,
+        sizePercent: 100,
+        filled: false,
+      }];
+    }
+
+    // Remove lines for legs that are no longer present.
+    const liveIds = new Set(legs.map((l) => l.id));
+    for (const [id, line] of existing) {
+      if (!liveIds.has(id)) {
+        series.removePriceLine(line);
+        existing.delete(id);
+      }
+    }
+
+    // Remove all TP lines when there's no active position.
+    if (!activePosition) {
+      for (const [id, line] of existing) {
+        series.removePriceLine(line);
+        existing.delete(id);
+      }
+      return;
+    }
+
+    // Add or update lines for current TP legs.
+    legs.forEach((leg, idx) => {
+      const color = leg.filled ? '#52525b' : '#34d399'; // zinc-600 when filled, emerald-400 when live
+      const title = `TP${idx + 1} ${leg.sizePercent}% @ ${leg.price.toFixed(2)}${leg.filled ? ' ✓' : ''}`;
+      const cached = existing.get(leg.id);
+      if (cached) {
+        cached.applyOptions({ price: leg.price, color, title });
+      } else {
+        const line = series.createPriceLine({
+          price: leg.price,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title,
+        });
+        existing.set(leg.id, line);
+      }
+    });
+  }, [takeProfitLegs, activePosition]);
+
+  // Overlay price conversion helpers — derived from the series each render.
+  // These are passed directly to OrderLinesOverlay; they read from seriesRef
+  // at call time so they are always current without needing to be in state.
+  const priceToCoordinate = useCallback((price: number): number | null => {
+    if (!seriesRef.current) return null;
+    const y = seriesRef.current.priceToCoordinate(price);
+    return y == null ? null : y as number;
+  }, []); // seriesRef is a ref — stable, no deps needed
+
+  const coordinateToPrice = useCallback((y: number): number | null => {
+    if (!seriesRef.current) return null;
+    return seriesRef.current.coordinateToPrice(y) as number | null;
+  }, []);
+
   // ─── Render ─────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full flex-col">
@@ -435,13 +536,24 @@ export function BacktestReplayChart({
       />
       <div className="relative flex-1" style={{ minHeight: 0 }}>
         <div ref={containerRef} className="absolute inset-0" style={{ height }} />
+        {/* Phase 7: DOM drag overlay for TP leg handles. Sits on top of the
+            canvas but below loading/error banners (z-10 < z-20 below). */}
+        {load.kind === 'ready' && containerHeight > 0 && (
+          <OrderLinesOverlay
+            priceToCoordinate={priceToCoordinate}
+            coordinateToPrice={coordinateToPrice}
+            containerHeight={containerHeight}
+            activePosition={activePosition}
+            onLegPriceChange={onTpLegPriceChange ?? (() => {})}
+          />
+        )}
         {load.kind === 'loading' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#08080a]/80 text-sm text-zinc-500">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#08080a]/80 text-sm text-zinc-500">
             Loading replay window…
           </div>
         )}
         {load.kind === 'error' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#08080a]/80 px-6 text-center text-sm text-rose-400">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#08080a]/80 px-6 text-center text-sm text-rose-400">
             {load.message}
           </div>
         )}

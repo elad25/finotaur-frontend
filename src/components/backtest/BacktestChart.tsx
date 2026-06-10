@@ -21,10 +21,10 @@
  *   - Rule-based strategy executor (Phase 3)
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
+import { X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft, Settings } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
@@ -36,12 +36,16 @@ import {
   type PaperSide,
   type PendingOrder,
   type PendingOrderType,
+  type TakeProfitLeg,
+  type CommissionConfig,
 } from '@/hooks/useBacktestSession';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { runStrategy } from '@/core/backtest/runStrategy';
 import { BacktestReplayChart, type ContextMenuPriceInfo } from './BacktestReplayChart';
 import { DateTimePicker } from './DateTimePicker';
+import { PlaceOrderPanel } from './PlaceOrderPanel';
+import { CreateBacktestSessionModal } from './CreateBacktestSessionModal';
 
 // ─── Asset class presets ────────────────────────────────────────
 // Each preset resolves to a source-native symbol. Yahoo handles futures
@@ -160,7 +164,37 @@ export function BacktestChart({
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    // Phase 7
+    addTpLeg,
+    removeTpLeg,
+    partialClose,
+    moveToBreakeven,
+    flatten,
+    reverse,
+    cancelAllPending,
+    setCommissionConfig,
+    // Phase 8
+    fillTpLeg,
   } = session;
+
+  // Phase 7: handle TP leg drag from OrderLinesOverlay — update the leg's
+  // price by removing the old entry and adding an updated one.
+  const handleTpLegPriceChange = useCallback((legId: string, newPrice: number) => {
+    const pos = state.activePosition;
+    if (!pos || !pos.takeProfits) return;
+    const leg = pos.takeProfits.find((l) => l.id === legId);
+    if (!leg) return;
+    removeTpLeg(legId);
+    addTpLeg({ ...leg, price: newPrice });
+  }, [state.activePosition, removeTpLeg, addTpLeg]);
+
+  // Phase 7: track the latest bar revealed by the replay cursor so position
+  // management actions (partial close, flatten, reverse) can use a real price
+  // and time rather than the manual livePrice input.
+  const latestReplayBarRef = useRef<Bar | null>(null);
+
+  // Phase 7: new session config modal (commission / balance reset).
+  const [sessionModalOpen, setSessionModalOpen] = useState(false);
 
   // Phase 2: Supabase persistence for "Save Session" button.
   const persistence = useBacktestPersistence();
@@ -181,7 +215,7 @@ export function BacktestChart({
   // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
   // BacktestReplayChart (cursor-controlled). In Live mode it's the
   // current FinotaurChart with manual current-price input.
-  // Phase 5: Replay is the default — Elad: "תדאג שהIMERSSIVE יעבוד חלק כמו REPLAY"
+  // Phase 5: Replay is the default — per Elad: immersive mode must work as smoothly as replay.
   type ChartMode = 'live' | 'replay';
   const [chartMode, setChartMode] = useState<ChartMode>('replay');
 
@@ -204,6 +238,53 @@ export function BacktestChart({
   // captured from the chart click; menu closes on outside click or after
   // a selection is made.
   const [contextMenu, setContextMenu] = useState<ContextMenuPriceInfo | null>(null);
+
+  // Phase 7: position management bar handlers — use latestReplayBarRef for
+  // price/time so the user doesn't need to type a price manually in replay mode.
+  const currentReplayPrice = useCallback((): number => {
+    const bar = latestReplayBarRef.current;
+    if (bar) return bar.close;
+    const p = parseFloat(livePrice);
+    return isNaN(p) || p <= 0 ? 0 : p;
+  }, [livePrice]);
+
+  const currentReplayTime = useCallback((): number => {
+    const bar = latestReplayBarRef.current;
+    return bar ? (bar.time as number) : Math.floor(Date.now() / 1000);
+  }, []);
+
+  const handlePartialClose = useCallback((pct: number) => {
+    const price = currentReplayPrice();
+    if (!price) { flashTradeError('No current price available.'); return; }
+    partialClose(pct, true, price, currentReplayTime());
+  }, [partialClose, flashTradeError, currentReplayPrice, currentReplayTime]);
+
+  const handleMoveToBreakeven = useCallback(() => {
+    moveToBreakeven();
+  }, [moveToBreakeven]);
+
+  const handleFlatten = useCallback(() => {
+    const price = currentReplayPrice();
+    if (!price) { flashTradeError('No current price available.'); return; }
+    flatten(price, currentReplayTime());
+  }, [flatten, flashTradeError, currentReplayPrice, currentReplayTime]);
+
+  const handleReverse = useCallback(() => {
+    const price = currentReplayPrice();
+    if (!price) { flashTradeError('No current price available.'); return; }
+    reverse(price, currentReplayTime());
+  }, [reverse, flashTradeError, currentReplayPrice, currentReplayTime]);
+
+  // Phase 7: new session modal confirm handler.
+  const handleSessionModalConfirm = useCallback((
+    newBalance: number,
+    config: Partial<CommissionConfig>,
+  ) => {
+    setCommissionConfig(config);
+    reset(newBalance);
+    setSessionModalOpen(false);
+    latestReplayBarRef.current = null;
+  }, [setCommissionConfig, reset]);
 
   // Phase 4: replay start moment. Defaults to "now − 4 hours" so the trader
   // immediately sees recent history with room to PLAY forward.
@@ -241,7 +322,7 @@ export function BacktestChart({
     setLivePrice('');
   };
 
-  const handleOpen = (side: PaperSide) => {
+  const handleOpen = (side: PaperSide, takeProfits?: TakeProfitLeg[]) => {
     const price = parseFloat(livePrice);
     if (!price || isNaN(price) || price <= 0) {
       flashTradeError('Enter a valid current price before opening a position.');
@@ -253,7 +334,9 @@ export function BacktestChart({
       time: Math.floor(Date.now() / 1000),
       size,
       stopLoss: slInput ? parseFloat(slInput) : undefined,
-      takeProfit: tpInput ? parseFloat(tpInput) : undefined,
+      takeProfit: (!takeProfits || takeProfits.length === 0) && tpInput ? parseFloat(tpInput) : undefined,
+      // Multi-leg TPs override single TP when provided.
+      takeProfits: takeProfits && takeProfits.length > 0 ? takeProfits : undefined,
       strategyId: activeStrategyId,
     });
     setSlInput('');
@@ -280,15 +363,27 @@ export function BacktestChart({
       strategyId: activeStrategyId,
     });
     setLivePrice(bar.close.toString());
+    latestReplayBarRef.current = bar;
   }, [state.activePosition, openPosition, size, slInput, tpInput, activeStrategyId]);
 
   // Replay: each bar revealed by the playback cursor.
   //   Phase 4: check SL/TP for any active position; auto-close on hit.
   //   Phase 6: check pending order triggers (LIMIT/STOP); auto-fill on hit
   //            ONLY when no position is open (single-position invariant).
+  //   Phase 8: multi-leg TP fill engine. Each unfilled TP leg is evaluated
+  //            against the bar's high/low before the SL check. Intra-bar
+  //            ordering rule: if both a TP leg and the SL are hit within the
+  //            same bar, the SL is assumed to fire first (worst-case / conservative
+  //            OHLC convention). TP legs are processed in ascending price order
+  //            for LONGs (nearest first) and descending for SHORTs so the most
+  //            conservative fill sequence is applied.
   // Same-bar-as-entry skip mirrors runStrategy.ts to avoid phantom stopouts
   // on the entry bar.
   const handleReplayBarReveal = useCallback((bar: Bar) => {
+    // Phase 7: keep the latest bar so position management actions can use
+    // currentReplayPrice() / currentReplayTime() without a manual price input.
+    latestReplayBarRef.current = bar;
+
     // Phase 6: pending order fills come FIRST. If a fill happens, the new
     // position is the entry bar — same-bar skip prevents same-bar SL/TP.
     if (!state.activePosition && state.pendingOrders.length > 0) {
@@ -319,26 +414,82 @@ export function BacktestChart({
     if (!pos) return;
     if ((pos.entryTime as number) === (bar.time as number)) return; // same-bar skip
 
+    const barTime = bar.time as number;
+
+    // ─── Phase 8: Intra-bar ordering rule ────────────────────────
+    // Conservative OHLC convention: if both SL and a TP leg are hit within
+    // the same bar, assume SL fired first (worst case for the trader). So we
+    // check the SL BEFORE any TP legs. Only if the SL is NOT hit do we
+    // process TP legs.
+    //
+    // Within TP legs themselves: process in ascending price order for LONG
+    // (fill the nearest leg first) and descending for SHORT.
+
     if (pos.side === 'LONG') {
+      // SL check first (conservative: assume SL fires before TP on same bar).
       if (pos.stopLoss != null && bar.low <= pos.stopLoss) {
-        closePosition({ price: pos.stopLoss, time: bar.time as number, reason: 'sl' });
+        closePosition({ price: pos.stopLoss, time: barTime, reason: 'sl' });
         return;
       }
-      if (pos.takeProfit != null && bar.high >= pos.takeProfit) {
-        closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
+
+      // Multi-leg TP fills (Phase 8). Each unfilled leg is checked in ascending
+      // price order. Multiple legs can fill on the same bar (bar might sweep
+      // through all of them in one candle) — process each in order.
+      const unfilledLegs = (pos.takeProfits ?? [])
+        .filter((l) => !l.filled && bar.high >= l.price)
+        .sort((a, b) => a.price - b.price); // nearest first for LONG
+
+      for (const leg of unfilledLegs) {
+        fillTpLeg(leg.id, barTime);
+        // Note: after fillTpLeg dispatch, state.activePosition in this closure
+        // still reflects the pre-dispatch value. We continue the loop to
+        // dispatch all triggered fills; the reducer handles atomicity.
+      }
+
+      if (unfilledLegs.length > 0) {
+        // At least one TP leg fired this bar — do not also fire legacy single TP.
         return;
+      }
+
+      // Legacy single takeProfit (no legs) — backward compat.
+      if (
+        (pos.takeProfits == null || pos.takeProfits.length === 0) &&
+        pos.takeProfit != null &&
+        bar.high >= pos.takeProfit
+      ) {
+        closePosition({ price: pos.takeProfit, time: barTime, reason: 'tp' });
       }
     } else {
+      // SHORT position.
+      // SL check first (conservative: assume SL fires before TP on same bar).
       if (pos.stopLoss != null && bar.high >= pos.stopLoss) {
-        closePosition({ price: pos.stopLoss, time: bar.time as number, reason: 'sl' });
+        closePosition({ price: pos.stopLoss, time: barTime, reason: 'sl' });
         return;
       }
-      if (pos.takeProfit != null && bar.low <= pos.takeProfit) {
-        closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
+
+      // Multi-leg TP fills — descending price order for SHORT (nearest first).
+      const unfilledLegs = (pos.takeProfits ?? [])
+        .filter((l) => !l.filled && bar.low <= l.price)
+        .sort((a, b) => b.price - a.price); // nearest (highest) first for SHORT
+
+      for (const leg of unfilledLegs) {
+        fillTpLeg(leg.id, barTime);
+      }
+
+      if (unfilledLegs.length > 0) {
         return;
+      }
+
+      // Legacy single takeProfit (no legs) — backward compat.
+      if (
+        (pos.takeProfits == null || pos.takeProfits.length === 0) &&
+        pos.takeProfit != null &&
+        bar.low <= pos.takeProfit
+      ) {
+        closePosition({ price: pos.takeProfit, time: barTime, reason: 'tp' });
       }
     }
-  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder]);
+  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder, fillTpLeg]);
 
   // Phase 6: place a pending order from the context-menu selection. SL/TP
   // come from the side-panel inputs (same as MARKET orders). Size from the
@@ -451,13 +602,6 @@ export function BacktestChart({
   };
 
   const activePos = state.activePosition;
-  const unrealizedPnl = useMemo(() => {
-    if (!activePos) return null;
-    const exit = parseFloat(livePrice);
-    if (!exit || isNaN(exit)) return null;
-    const direction = activePos.side === 'LONG' ? 1 : -1;
-    return (exit - activePos.entryPrice) * direction * activePos.size;
-  }, [activePos, livePrice]);
 
   // ─── Render ──────────────────────────────────────────────────
   // Phase 5: fullscreen-by-default. position:fixed inset-0 covers the
@@ -655,6 +799,15 @@ export function BacktestChart({
               <><Save size={12} />{saveStatus === 'saving' ? 'Saving…' : 'Save'}</>
             )}
           </button>
+          {/* Phase 7: new session button opens config modal (balance + commission). */}
+          <button
+            onClick={() => setSessionModalOpen(true)}
+            className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-[#C9A646]/40 hover:text-[#C9A646]"
+            title="Configure and start a new session"
+          >
+            <Settings size={12} />
+            New Session
+          </button>
           <button
             onClick={() => reset()}
             className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-rose-700 hover:text-rose-400"
@@ -690,6 +843,8 @@ export function BacktestChart({
               activePosition={state.activePosition}
               closedPositions={state.closedPositions}
               pendingOrders={state.pendingOrders}
+              takeProfitLegs={state.activePosition?.takeProfits}
+              onTpLegPriceChange={handleTpLegPriceChange}
               onBarReveal={handleReplayBarReveal}
               onBarClick={handleReplayBarClick}
               onContextMenu={(info) => setContextMenu(info)}
@@ -700,148 +855,74 @@ export function BacktestChart({
 
         {/* Side panel — paper trading + stats + history */}
         <aside className="flex w-80 flex-col overflow-y-auto border-l border-zinc-800 bg-zinc-950">
-          {/* Paper trading panel */}
+          {/* Paper trading panel — PlaceOrderPanel + position management bar */}
           <div className="border-b border-zinc-800 p-4">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
               Paper Trading
             </h3>
 
-            <label className="mb-3 block">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price</span>
-              <input
-                type="number"
-                value={livePrice}
-                onChange={(e) => setLivePrice(e.target.value)}
-                placeholder="e.g. 20425.50"
-                step="0.01"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
-              />
-            </label>
+            <PlaceOrderPanel
+              activePosition={activePos}
+              size={size}
+              onSizeChange={setSize}
+              slInput={slInput}
+              onSlChange={setSlInput}
+              tpInput={tpInput}
+              onTpChange={setTpInput}
+              livePrice={livePrice}
+              onLivePriceChange={setLivePrice}
+              onOpen={(side, takeProfits) => handleOpen(side, takeProfits)}
+              onClose={() => handleClose('manual')}
+              onSetSL={(price) => updateStopLoss(price)}
+              onSetTP={(price) => updateTakeProfit(price)}
+              commissionConfig={state.commissionConfig}
+              tradeError={tradeError}
+              showReplayHint={chartMode === 'replay'}
+            />
 
-            <label className="mb-3 block">
-              <span className="text-[10px] uppercase tracking-wider text-zinc-500">Size (contracts)</span>
-              <input
-                type="number"
-                value={size}
-                onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))}
-                min="0.01"
-                step="0.1"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
-              />
-            </label>
-
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Stop loss</span>
-                <input
-                  type="number"
-                  value={slInput}
-                  onChange={(e) => setSlInput(e.target.value)}
-                  placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-wider text-zinc-500">Take profit</span>
-                <input
-                  type="number"
-                  value={tpInput}
-                  onChange={(e) => setTpInput(e.target.value)}
-                  placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-                />
-              </label>
-            </div>
-
-            {!activePos ? (
-              <div>
-                <div className="grid grid-cols-2 gap-2">
+            {/* Phase 7: position management bar — shown only when a position is open.
+                Uses the latest replay bar price/time for all actions. */}
+            {activePos && (
+              <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-900/30 p-2">
+                <div className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">
+                  Manage Position
+                </div>
+                {/* Partial close row */}
+                <div className="mb-1.5 grid grid-cols-3 gap-1">
+                  {([0.25, 0.5, 0.75] as const).map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => handlePartialClose(pct)}
+                      className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
+                    >
+                      Close {pct * 100}%
+                    </button>
+                  ))}
+                </div>
+                {/* Broker actions row */}
+                <div className="grid grid-cols-3 gap-1">
                   <button
-                    onClick={() => handleOpen('LONG')}
-                    className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-emerald-600 px-3 py-2 text-white transition-colors hover:bg-emerald-500"
+                    onClick={handleMoveToBreakeven}
+                    title="Move stop loss to break-even"
+                    className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-amber-700 hover:text-amber-400"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <TrendingUp size={14} />
-                      <span className="text-sm font-bold">BUY</span>
-                    </div>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
+                    BE
                   </button>
                   <button
-                    onClick={() => handleOpen('SHORT')}
-                    className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-rose-600 px-3 py-2 text-white transition-colors hover:bg-rose-500"
+                    onClick={handleFlatten}
+                    title="Close position and cancel all pending orders"
+                    className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-rose-700 hover:text-rose-400"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <TrendingDown size={14} />
-                      <span className="text-sm font-bold">SELL</span>
-                    </div>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
+                    Flatten
+                  </button>
+                  <button
+                    onClick={handleReverse}
+                    title="Close position and open opposite"
+                    className="rounded border border-zinc-800 bg-zinc-900 py-1.5 text-[10px] font-semibold text-zinc-400 transition-colors hover:border-[#C9A646]/60 hover:text-[#C9A646]"
+                  >
+                    Reverse
                   </button>
                 </div>
-                {chartMode === 'replay' && (
-                  <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
-                    💡 Right-click on the chart to place LIMIT or STOP orders
-                  </div>
-                )}
-                {tradeError && (
-                  <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
-                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
-                    <span>{tradeError}</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="rounded-md border border-[#C9A646]/30 bg-[#C9A646]/5 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                      activePos.side === 'LONG' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-rose-600/20 text-rose-400'
-                    }`}>
-                      {activePos.side}
-                    </span>
-                    <span className="text-xs text-zinc-500">{activePos.size}× @ ${activePos.entryPrice.toFixed(2)}</span>
-                  </div>
-                  {unrealizedPnl != null && (
-                    <div className="mt-2">
-                      <div className="text-[10px] uppercase tracking-wider text-zinc-500">Unrealized</div>
-                      <div className={`text-lg font-bold ${unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
-                      </div>
-                    </div>
-                  )}
-                  {(activePos.stopLoss || activePos.takeProfit) && (
-                    <div className="mt-2 flex gap-3 text-[10px] text-zinc-500">
-                      {activePos.stopLoss && <span>SL ${activePos.stopLoss.toFixed(2)}</span>}
-                      {activePos.takeProfit && <span>TP ${activePos.takeProfit.toFixed(2)}</span>}
-                    </div>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {slInput && (
-                    <button
-                      onClick={() => updateStopLoss(parseFloat(slInput))}
-                      className="rounded-md border border-rose-700 bg-rose-950 px-2 py-1.5 text-[10px] font-semibold text-rose-400 hover:bg-rose-900"
-                    >
-                      Set SL
-                    </button>
-                  )}
-                  {tpInput && (
-                    <button
-                      onClick={() => updateTakeProfit(parseFloat(tpInput))}
-                      className="rounded-md border border-emerald-700 bg-emerald-950 px-2 py-1.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-900"
-                    >
-                      Set TP
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleClose('manual')}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[#C9A646] px-3 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#D4B55E]"
-                >
-                  <X size={16} />
-                  Close at ${livePrice || '—'}
-                </button>
               </div>
             )}
           </div>
@@ -923,12 +1004,20 @@ export function BacktestChart({
             )}
           </div>
 
-          {/* Phase 6: Pending orders */}
+          {/* Phase 6: Pending orders — with Phase 7 Cancel All button */}
           {state.pendingOrders.length > 0 && (
             <div className="border-b border-zinc-800 p-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-                Pending Orders ({state.pendingOrders.length})
-              </h3>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
+                  Pending Orders ({state.pendingOrders.length})
+                </h3>
+                <button
+                  onClick={() => cancelAllPending()}
+                  className="rounded border border-rose-800/50 bg-rose-950/30 px-2 py-0.5 text-[10px] font-semibold text-rose-500 transition-colors hover:bg-rose-950 hover:text-rose-400"
+                >
+                  Cancel All
+                </button>
+              </div>
               <div className="space-y-1.5">
                 {state.pendingOrders.map((o) => (
                   <div
@@ -1006,6 +1095,14 @@ export function BacktestChart({
           </div>
         </aside>
       </div>
+
+      {/* Phase 7: new session config modal */}
+      <CreateBacktestSessionModal
+        open={sessionModalOpen}
+        defaultBalance={state.startingBalance}
+        onConfirm={handleSessionModalConfirm}
+        onCancel={() => setSessionModalOpen(false)}
+      />
 
       {/* Phase 6: right-click context menu for pending order types.
           Position is fixed to the screen coords from the click. Two options

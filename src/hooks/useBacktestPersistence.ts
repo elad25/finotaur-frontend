@@ -14,6 +14,7 @@
 import { useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { PaperPosition, SessionStats } from './useBacktestSession';
+import { buildJournalPayload } from '@/lib/backtest/journaling';
 
 // ─── Wire types — match Edge Function payloads ─────────────────
 export interface SaveSessionInput {
@@ -68,7 +69,12 @@ export interface SavedSessionDetail {
     take_profit: number | null;
     pnl: number | null;
     pnl_percent: number | null;
+    /** DB union: 'manual' | 'sl' | 'tp'. Rich reasons (flatten/reverse) are
+     *  mapped to 'manual' at save time; the original reason lives only in
+     *  local PaperPosition.exitReason which is not persisted. */
     exit_reason: 'manual' | 'sl' | 'tp' | null;
+    /** Fees + exits detail embedded as a human-readable string. */
+    notes: string | null;
   }>;
 }
 
@@ -77,23 +83,39 @@ function toIso(d: Date | string): string {
   return typeof d === 'string' ? d : d.toISOString();
 }
 
-function unixToIso(unix: number): string {
-  return new Date(unix * 1000).toISOString();
-}
-
+/**
+ * Serialize a PaperPosition to the wire format expected by the Edge Function.
+ *
+ * Delegates to buildJournalPayload (journaling.ts) which:
+ *   - Computes weighted-average exit price from multi-fill positions.
+ *   - Maps rich ExitReasons (flatten/reverse) → 'manual' for the DB.
+ *   - Embeds fees + partial-fill detail into the notes string.
+ *   - Uses originalSize (not the post-partial-close residual size).
+ *
+ * Falls back to a minimal raw serialization for open positions (exitTime=null)
+ * so the caller can still submit them if needed, though the normal path only
+ * saves closed positions.
+ */
 function paperToWire(p: PaperPosition) {
+  const journaled = buildJournalPayload(p);
+  if (journaled) return journaled;
+
+  // Fallback for open/unclosed positions: minimal serialization.
+  // exit_reason is dropped to avoid violating the DB union constraint with
+  // rich values (flatten/reverse) that have no mapping in the DB.
   return {
     side: p.side,
-    entry_time: unixToIso(p.entryTime),
+    entry_time: new Date(p.entryTime * 1000).toISOString(),
     entry_price: p.entryPrice,
-    exit_time: p.exitTime != null ? unixToIso(p.exitTime) : undefined,
+    exit_time: p.exitTime != null ? new Date(p.exitTime * 1000).toISOString() : undefined,
     exit_price: p.exitPrice,
-    size: p.size,
+    size: p.originalSize ?? p.size,
     stop_loss: p.stopLoss,
     take_profit: p.takeProfit,
     pnl: p.pnl,
     pnl_percent: p.pnlPercent,
-    exit_reason: p.exitReason,
+    exit_reason: null as 'manual' | 'sl' | 'tp' | null,
+    notes: null as string | null,
   };
 }
 
