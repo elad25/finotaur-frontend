@@ -52,7 +52,7 @@ export const ADMIN_TABS: AdminTab[] = [
   {
     id: 'overview',
     label: 'Overview',
-    path: '/app/admin',
+    path: '/app/admin/overview',
     icon: LayoutDashboard,
     phase: 0,
     enabled: true,
@@ -174,7 +174,6 @@ export function findTabByPath(pathname: string): AdminTab | undefined {
   // resolve to the most specific tab rather than the parent prefix.
   let best: AdminTab | undefined;
   for (const t of ADMIN_TABS) {
-    if (t.path === '/app/admin') continue;
     if (!pathname.startsWith(t.path)) continue;
     if (!best || t.path.length > best.path.length) best = t;
   }
