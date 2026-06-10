@@ -74,6 +74,20 @@ function toIsoDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Returns today's date at midnight in the America/New_York timezone,
+ * expressed as a local-browser Date.  Used to gate the date-range picker
+ * so future dates cannot be selected (no backtest data exists for them).
+ * Uses Intl.DateTimeFormat to derive the NY calendar date, then constructs
+ * a midnight-local Date — zero new dependencies.
+ */
+function getTodayNY(): Date {
+  const nyDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+  // en-CA gives "YYYY-MM-DD"; parse as local midnight to avoid UTC shift.
+  const [y, m, d] = nyDateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function formatRangeLabel(range?: DateRange): string {
   if (!range?.from) return 'Select date range';
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -176,6 +190,12 @@ export function CreateBacktestSessionModal({
     }
     if (!range?.from || !range?.to) {
       setError('Please select a date range');
+      return;
+    }
+    // Guard: backtest dates must not be in the future.
+    const todayNY = getTodayNY();
+    if (range.from > todayNY || range.to > todayNY) {
+      setError('Backtest dates cannot be in the future');
       return;
     }
 
@@ -376,9 +396,23 @@ export function CreateBacktestSessionModal({
                   <Calendar
                     mode="range"
                     selected={range}
-                    onSelect={setRange}
+                    onSelect={(next) => {
+                      if (!next) { setRange(undefined); return; }
+                      // Clamp both ends to today (America/New_York) so
+                      // keyboard/programmatic paths can't produce a future date.
+                      const cap = getTodayNY();
+                      setRange({
+                        from: next.from && next.from > cap ? cap : next.from,
+                        to:   next.to   && next.to   > cap ? cap : next.to,
+                      });
+                    }}
+                    disabled={{ after: getTodayNY() }}
+                    toDate={getTodayNY()}
                     numberOfMonths={1}
                     className="text-white"
+                    classNames={{
+                      day_disabled: 'text-muted-foreground opacity-30 cursor-not-allowed',
+                    }}
                   />
                 </PopoverContent>
               </Popover>
