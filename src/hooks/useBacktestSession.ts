@@ -11,27 +11,51 @@
  * `'../types'` which doesn't exist; never mounted in any route). Rather than
  * resurrect it, Phase 1 ships a focused hook scoped to the chart page. Phase
  * 2 will introduce a single proper store if persistence demands it.
+ *
+ * Phase 7 additions:
+ *  - CommissionConfig / FillRecord support (slippage + fee simulation)
+ *  - Multi-leg take-profit (TakeProfitLeg[])
+ *  - Partial close, breakeven stop, flatten, reverse
+ *  - FILL_TP_LEG for replay-driven leg fills
+ *  - SET_COMMISSION_CONFIG for session-level fee config
  */
 
 import { useReducer, useCallback, useEffect, useRef } from 'react';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import {
+  type CommissionConfig,
+  type FillRecord,
+  type TakeProfitLeg,
+  DEFAULT_COMMISSION_CONFIG,
+  applySlippage,
+  applyCommission,
+  partialCloseSize,
+  breakevenStop,
+} from '@/lib/backtest/orderEngine';
 
 // localStorage key prefix — actual key is `<prefix><userId>` so two accounts
 // sharing a browser don't see each other's in-flight session.
 const STORAGE_PREFIX = 'finotaur:backtest:session:';
 const PERSIST_THROTTLE_MS = 500;
 
+// Float tolerance for treating remaining size as zero.
+const EPSILON = 1e-9;
+
 export type PaperSide = 'LONG' | 'SHORT';
-export type ExitReason = 'manual' | 'sl' | 'tp';
+export type ExitReason = 'manual' | 'sl' | 'tp' | 'flatten' | 'reverse';
 
 export interface PaperPosition {
   id: string;
   side: PaperSide;
   entryTime: number;          // unix seconds (matches FinotaurChart UTCTimestamp)
   entryPrice: number;
-  size: number;               // contracts / shares / units
+  size: number;               // contracts / shares / units — CURRENT remaining size
+  /** Original fill size at entry (before any partial closes). */
+  originalSize?: number;
   stopLoss?: number;
-  takeProfit?: number;
+  takeProfit?: number;        // legacy single TP price (kept for backward compat)
+  /** Multi-leg take-profit schedule. Takes precedence over `takeProfit` when set. */
+  takeProfits?: TakeProfitLeg[];
   // Phase 4: optional tag identifying which strategy was active when the trade
   // was opened. `null` / undefined = manual / unattributed. Carried from OPEN
   // through to CLOSE so per-strategy stats can be reconstructed.
@@ -40,6 +64,13 @@ export interface PaperPosition {
   // immediately at user's clicked price. 'LIMIT' / 'STOP' = filled from a
   // pending order whose trigger price was touched by a later bar.
   entryOrderType?: 'MARKET' | 'LIMIT' | 'STOP';
+  // Phase 7: fee audit trail
+  /** Total fees paid so far on this position (entry fee + exit fees). */
+  feesPaid?: number;
+  /** Gross PnL (before fees). Only set on closed positions. */
+  grossPnl?: number;
+  /** Per-fill audit trail. Includes entry fill (netPnl = -entryFee) and all exit fills. */
+  fills?: FillRecord[];
   // Filled on close:
   exitTime?: number;
   exitPrice?: number;
@@ -85,6 +116,8 @@ export interface SessionStats {
   avgRR: number;              // avgWin / avgLoss
   longestWinStreak: number;
   longestLossStreak: number;
+  /** Phase 7: total fees paid across all closed trades. */
+  totalFees: number;
 }
 
 export interface SessionState {
@@ -93,6 +126,8 @@ export interface SessionState {
   closedPositions: PaperPosition[];
   pendingOrders: PendingOrder[];   // Phase 6
   stats: SessionStats;
+  /** Phase 7: session-level fee + slippage config. */
+  commissionConfig: CommissionConfig;
 }
 
 interface OpenPayload {
@@ -102,6 +137,7 @@ interface OpenPayload {
   size: number;
   stopLoss?: number;
   takeProfit?: number;
+  takeProfits?: TakeProfitLeg[];
   /** Phase 4: tag this trade with the active strategy id (null = manual). */
   strategyId?: string | null;
   /** Phase 6: order type that opened this position. Defaults to MARKET. */
@@ -134,6 +170,32 @@ interface ClosePayload {
   reason: ExitReason;
 }
 
+// Phase 7 payloads
+interface PartialClosePayload {
+  /** Fraction 0–1 (e.g. 0.5 = close 50%) */
+  percent: number;
+  price: number;
+  time: number;
+}
+
+interface AddTpLegPayload {
+  leg: TakeProfitLeg;
+}
+interface RemoveTpLegPayload {
+  legId: string;
+}
+interface UpdateTpLegPayload {
+  legId: string;
+  price: number;
+}
+interface FillTpLegPayload {
+  legId: string;
+  time: number;
+}
+interface SetCommissionConfigPayload {
+  config: CommissionConfig;
+}
+
 export interface LoadSessionPayload {
   startingBalance: number;
   closedPositions: PaperPosition[];
@@ -157,7 +219,18 @@ type Action =
   | { type: 'LOAD_SESSION'; payload: LoadSessionPayload }
   // Replace the entire session state from a persisted/restored snapshot.
   // Used by the localStorage hydration effect once the user key is known.
-  | { type: 'HYDRATE'; payload: SessionState };
+  | { type: 'HYDRATE'; payload: SessionState }
+  // Phase 7 — broker-grade position management
+  | { type: 'ADD_TP_LEG'; payload: AddTpLegPayload }
+  | { type: 'REMOVE_TP_LEG'; payload: RemoveTpLegPayload }
+  | { type: 'UPDATE_TP_LEG'; payload: UpdateTpLegPayload }
+  | { type: 'PARTIAL_CLOSE'; payload: PartialClosePayload }
+  | { type: 'BREAKEVEN_STOP'; payload?: { offset?: number } }
+  | { type: 'FLATTEN'; payload: { price: number; time: number } }
+  | { type: 'REVERSE'; payload: { price: number; time: number; newSize: number } }
+  | { type: 'CANCEL_ALL_PENDING' }
+  | { type: 'SET_COMMISSION_CONFIG'; payload: SetCommissionConfigPayload }
+  | { type: 'FILL_TP_LEG'; payload: FillTpLegPayload };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -177,7 +250,22 @@ const EMPTY_STATS: SessionStats = {
   avgRR: 0,
   longestWinStreak: 0,
   longestLossStreak: 0,
+  totalFees: 0,
 };
+
+// ─── Helpers ────────────────────────────────────────────────────
+
+/**
+ * Net PnL for a closed position.
+ * Phase 7: if fills are present, sum their netPnl (fee-adjusted) for the final
+ * figure. Falls back to the legacy gross formula for older positions.
+ */
+function positionNetPnl(p: PaperPosition): number {
+  if (p.fills && p.fills.length > 0) {
+    return p.fills.reduce((acc, f) => acc + f.netPnl, 0);
+  }
+  return p.pnl ?? 0;
+}
 
 function computePnL(p: PaperPosition, exitPrice: number): { pnl: number; pnlPercent: number } {
   const direction = p.side === 'LONG' ? 1 : -1;
@@ -186,10 +274,35 @@ function computePnL(p: PaperPosition, exitPrice: number): { pnl: number; pnlPerc
   return { pnl, pnlPercent };
 }
 
+/** Build a single exit fill record. */
+function buildExitFill(
+  kind: FillRecord['kind'],
+  fillPrice: number,
+  qty: number,
+  pos: PaperPosition,
+  reason: FillRecord['reason'],
+  config: CommissionConfig,
+  time: number,
+): FillRecord {
+  const direction = pos.side === 'LONG' ? 1 : -1;
+  const grossPnl = (fillPrice - pos.entryPrice) * direction * qty;
+  const fees = applyCommission(fillPrice, qty, config);
+  return {
+    kind,
+    price: fillPrice,
+    qty,
+    grossPnl,
+    fees,
+    netPnl: grossPnl - fees,
+    time,
+    reason,
+  };
+}
+
 export function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
   // #6: headline stats reflect only configured trades (a defined SL and/or TP).
   // Purely discretionary trades (neither SL nor TP) are excluded from the metrics.
-  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null);
+  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null || (p.takeProfits && p.takeProfits.length > 0));
   if (configured.length === 0) return EMPTY_STATS;
 
   let winners = 0;
@@ -203,20 +316,24 @@ export function computeStats(closed: PaperPosition[], startingBalance: number): 
   let currentLossStreak = 0;
   let longestWinStreak = 0;
   let longestLossStreak = 0;
+  let totalFees = 0;
 
   for (const p of configured) {
-    const pnl = p.pnl ?? 0;
-    if (pnl > 0) {
+    // Phase 7: use net PnL (after fees) for win/loss classification and stats.
+    const netPnl = positionNetPnl(p);
+    totalFees += p.feesPaid ?? 0;
+
+    if (netPnl > 0) {
       winners++;
-      grossProfit += pnl;
-      if (pnl > largestWin) largestWin = pnl;
+      grossProfit += netPnl;
+      if (netPnl > largestWin) largestWin = netPnl;
       currentWinStreak++;
       currentLossStreak = 0;
       if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak;
-    } else if (pnl < 0) {
+    } else if (netPnl < 0) {
       losers++;
-      grossLoss += Math.abs(pnl);
-      if (Math.abs(pnl) > largestLoss) largestLoss = Math.abs(pnl);
+      grossLoss += Math.abs(netPnl);
+      if (Math.abs(netPnl) > largestLoss) largestLoss = Math.abs(netPnl);
       currentLossStreak++;
       currentWinStreak = 0;
       if (currentLossStreak > longestLossStreak) longestLossStreak = currentLossStreak;
@@ -250,38 +367,85 @@ export function computeStats(closed: PaperPosition[], startingBalance: number): 
     avgRR: avgLoss > 0 ? avgWin / avgLoss : 0,
     longestWinStreak,
     longestLossStreak,
+    totalFees,
   };
 }
+
+// ─── Reducer ────────────────────────────────────────────────────
 
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case 'OPEN': {
       if (state.activePosition) return state;
-      const { side, price, time, size, stopLoss, takeProfit, strategyId, entryOrderType } = action.payload;
+      const { side, price, time, size, stopLoss, takeProfit, takeProfits, strategyId, entryOrderType } = action.payload;
+      const orderType = entryOrderType ?? 'MARKET';
+
+      // Apply slippage to entry fill price.
+      const fillPrice = applySlippage(price, side, true, orderType, state.commissionConfig);
+      // Entry fee: charged once at entry. Recorded as an entry FillRecord with netPnl = -entryFee.
+      const entryFee = applyCommission(fillPrice, size, state.commissionConfig);
+      const entryFill: FillRecord = {
+        kind: 'entry',
+        price: fillPrice,
+        qty: size,
+        grossPnl: 0,
+        fees: entryFee,
+        netPnl: -entryFee,
+        time,
+      };
+
       const newPos: PaperPosition = {
         id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
         side,
         entryTime: time,
-        entryPrice: price,
+        entryPrice: fillPrice,
         size,
+        originalSize: size,
         stopLoss,
         takeProfit,
+        takeProfits: takeProfits ?? [],
         strategyId: strategyId ?? null,
-        entryOrderType: entryOrderType ?? 'MARKET',
+        entryOrderType: orderType,
+        feesPaid: entryFee,
+        grossPnl: 0,
+        fills: [entryFill],
       };
       return { ...state, activePosition: newPos };
     }
+
     case 'CLOSE': {
       if (!state.activePosition) return state;
+      const pos = state.activePosition;
       const { price, time, reason } = action.payload;
-      const { pnl, pnlPercent } = computePnL(state.activePosition, price);
+
+      // Determine order type for slippage: SL = stop fill, TP = limit fill, manual = market.
+      const orderType = reason === 'sl' ? 'STOP' : reason === 'tp' ? 'LIMIT' : 'MARKET';
+      const fillPrice = applySlippage(price, pos.side, false, orderType, state.commissionConfig);
+
+      // Build final_exit fill. Fee invariant: each exit fill's netPnl = gross - its own exit fee only.
+      const exitFill = buildExitFill('final_exit', fillPrice, pos.size, pos, reason, state.commissionConfig, time);
+
+      const allFills = [...(pos.fills ?? []), exitFill];
+      // Final closed PnL = sum of ALL fills' netPnl (entry fill netPnl = -entryFee).
+      const pnl = allFills.reduce((acc, f) => acc + f.netPnl, 0);
+      // Accumulate gross across ALL exit fills (matches PARTIAL_CLOSE / FILL_TP_LEG pattern).
+      const grossPnl = allFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
+      const totalFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
+      // Use original notional as denominator (matches PARTIAL_CLOSE / FLATTEN / REVERSE / FILL_TP_LEG).
+      const pnlPercent = pos.entryPrice > 0 && (pos.originalSize ?? pos.size) > 0
+        ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100
+        : 0;
+
       const closed: PaperPosition = {
-        ...state.activePosition,
+        ...pos,
         exitTime: time,
-        exitPrice: price,
+        exitPrice: fillPrice,
         pnl,
         pnlPercent,
         exitReason: reason,
+        grossPnl,
+        feesPaid: totalFeesPaid,
+        fills: allFills,
       };
       const closedPositions = [...state.closedPositions, closed];
       return {
@@ -291,6 +455,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         stats: computeStats(closedPositions, state.startingBalance),
       };
     }
+
     case 'UPDATE_SL': {
       if (!state.activePosition) return state;
       return {
@@ -298,6 +463,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         activePosition: { ...state.activePosition, stopLoss: action.payload.price },
       };
     }
+
     case 'UPDATE_TP': {
       if (!state.activePosition) return state;
       return {
@@ -305,6 +471,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         activePosition: { ...state.activePosition, takeProfit: action.payload.price },
       };
     }
+
     case 'UPDATE_PENDING': {
       const { orderId, stopLoss, takeProfit, triggerPrice } = action.payload;
       return {
@@ -321,6 +488,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         ),
       };
     }
+
     case 'RESET': {
       return {
         startingBalance: action.payload.startingBalance,
@@ -328,8 +496,10 @@ function reducer(state: SessionState, action: Action): SessionState {
         closedPositions: [],
         pendingOrders: [],
         stats: EMPTY_STATS,
+        commissionConfig: state.commissionConfig,
       };
     }
+
     case 'LOAD_TRADES': {
       const closedPositions = action.payload.trades;
       return {
@@ -339,6 +509,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         stats: computeStats(closedPositions, state.startingBalance),
       };
     }
+
     case 'LOAD_SESSION': {
       const { startingBalance, closedPositions, pendingOrders } = action.payload;
       return {
@@ -347,13 +518,16 @@ function reducer(state: SessionState, action: Action): SessionState {
         closedPositions,
         pendingOrders,
         stats: computeStats(closedPositions, startingBalance),
+        commissionConfig: state.commissionConfig,
       };
     }
+
     case 'HYDRATE': {
       // Full-state replace from a validated persisted snapshot. The payload is
       // already shape-checked + stats-recomputed by loadPersistedState.
       return action.payload;
     }
+
     case 'ADD_PENDING': {
       const { side, type: orderType, triggerPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
       const order: PendingOrder = {
@@ -369,12 +543,14 @@ function reducer(state: SessionState, action: Action): SessionState {
       };
       return { ...state, pendingOrders: [...state.pendingOrders, order] };
     }
+
     case 'CANCEL_PENDING': {
       return {
         ...state,
         pendingOrders: state.pendingOrders.filter((o) => o.id !== action.payload.orderId),
       };
     }
+
     case 'FILL_PENDING': {
       // Single-position invariant: if a position is already open, drop the
       // order without filling (it would be safer to keep it, but for
@@ -388,16 +564,40 @@ function reducer(state: SessionState, action: Action): SessionState {
       }
       const order = state.pendingOrders.find((o) => o.id === action.payload.orderId);
       if (!order) return state;
+
+      const fillPrice = applySlippage(
+        action.payload.fillPrice,
+        order.side,
+        true,
+        order.type,
+        state.commissionConfig,
+      );
+      const entryFee = applyCommission(fillPrice, order.size, state.commissionConfig);
+      const entryFill: FillRecord = {
+        kind: 'entry',
+        price: fillPrice,
+        qty: order.size,
+        grossPnl: 0,
+        fees: entryFee,
+        netPnl: -entryFee,
+        time: action.payload.fillTime,
+      };
+
       const newPos: PaperPosition = {
         id: `pos_${action.payload.fillTime}_${Math.random().toString(36).slice(2, 8)}`,
         side: order.side,
         entryTime: action.payload.fillTime,
-        entryPrice: action.payload.fillPrice,
+        entryPrice: fillPrice,
         size: order.size,
+        originalSize: order.size,
         stopLoss: order.stopLoss,
         takeProfit: order.takeProfit,
+        takeProfits: [],
         strategyId: order.strategyId ?? null,
         entryOrderType: order.type,
+        feesPaid: entryFee,
+        grossPnl: 0,
+        fills: [entryFill],
       };
       return {
         ...state,
@@ -405,10 +605,309 @@ function reducer(state: SessionState, action: Action): SessionState {
         pendingOrders: state.pendingOrders.filter((o) => o.id !== order.id),
       };
     }
+
+    // ─── Phase 7: multi-leg TP management ───────────────────────
+
+    case 'ADD_TP_LEG': {
+      if (!state.activePosition) return state;
+      const existing = state.activePosition.takeProfits ?? [];
+      return {
+        ...state,
+        activePosition: {
+          ...state.activePosition,
+          takeProfits: [...existing, action.payload.leg],
+        },
+      };
+    }
+
+    case 'REMOVE_TP_LEG': {
+      if (!state.activePosition) return state;
+      return {
+        ...state,
+        activePosition: {
+          ...state.activePosition,
+          takeProfits: (state.activePosition.takeProfits ?? []).filter(
+            (l) => l.id !== action.payload.legId,
+          ),
+        },
+      };
+    }
+
+    case 'UPDATE_TP_LEG': {
+      if (!state.activePosition) return state;
+      return {
+        ...state,
+        activePosition: {
+          ...state.activePosition,
+          takeProfits: (state.activePosition.takeProfits ?? []).map((l) =>
+            l.id === action.payload.legId ? { ...l, price: action.payload.price } : l,
+          ),
+        },
+      };
+    }
+
+    case 'PARTIAL_CLOSE': {
+      if (!state.activePosition) return state;
+      const pos = state.activePosition;
+      const { percent, price, time } = action.payload;
+
+      // Market fill with slippage.
+      const fillPrice = applySlippage(price, pos.side, false, 'MARKET', state.commissionConfig);
+      const closeQty = partialCloseSize(pos.size, percent, true);
+      if (closeQty <= 0) return state;
+
+      const exitFill = buildExitFill('partial_exit', fillPrice, closeQty, pos, 'manual', state.commissionConfig, time);
+      const newSize = pos.size - closeQty;
+      const newFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
+      const newFills = [...(pos.fills ?? []), exitFill];
+
+      // If remaining size ≤ EPSILON, treat as full close and seal the position.
+      if (newSize <= EPSILON) {
+        const pnl = newFills.reduce((acc, f) => acc + f.netPnl, 0);
+        const grossPnl = newFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
+        const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
+        const closed: PaperPosition = {
+          ...pos,
+          size: 0,
+          exitTime: time,
+          exitPrice: fillPrice,
+          pnl,
+          pnlPercent,
+          exitReason: 'manual',
+          grossPnl,
+          feesPaid: newFeesPaid,
+          fills: newFills,
+        };
+        const closedPositions = [...state.closedPositions, closed];
+        return {
+          ...state,
+          activePosition: undefined,
+          closedPositions,
+          stats: computeStats(closedPositions, state.startingBalance),
+        };
+      }
+
+      return {
+        ...state,
+        activePosition: {
+          ...pos,
+          size: newSize,
+          feesPaid: newFeesPaid,
+          fills: newFills,
+        },
+      };
+    }
+
+    case 'BREAKEVEN_STOP': {
+      if (!state.activePosition) return state;
+      const pos = state.activePosition;
+      const offset = action.payload?.offset ?? 0;
+      const beSl = breakevenStop(pos.entryPrice, pos.side, offset);
+      return {
+        ...state,
+        activePosition: { ...pos, stopLoss: beSl },
+      };
+    }
+
+    case 'FLATTEN': {
+      if (!state.activePosition) return state;
+      const pos = state.activePosition;
+      const { price, time } = action.payload;
+
+      // Market fill with slippage.
+      const fillPrice = applySlippage(price, pos.side, false, 'MARKET', state.commissionConfig);
+      const exitFill = buildExitFill('final_exit', fillPrice, pos.size, pos, 'flatten', state.commissionConfig, time);
+      const allFills = [...(pos.fills ?? []), exitFill];
+      const pnl = allFills.reduce((acc, f) => acc + f.netPnl, 0);
+      const direction = pos.side === 'LONG' ? 1 : -1;
+      const grossPnl = (fillPrice - pos.entryPrice) * direction * pos.size;
+      const totalFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
+      const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
+
+      const closed: PaperPosition = {
+        ...pos,
+        exitTime: time,
+        exitPrice: fillPrice,
+        pnl,
+        pnlPercent,
+        exitReason: 'flatten',
+        grossPnl,
+        feesPaid: totalFeesPaid,
+        fills: allFills,
+        // Cancel all TP legs — position is flat.
+        takeProfits: (pos.takeProfits ?? []).map((l) => ({ ...l, filled: true })),
+      };
+      const closedPositions = [...state.closedPositions, closed];
+      return {
+        ...state,
+        activePosition: undefined,
+        closedPositions,
+        pendingOrders: [], // flatten cancels ALL pending orders
+        stats: computeStats(closedPositions, state.startingBalance),
+      };
+    }
+
+    case 'REVERSE': {
+      if (!state.activePosition) return state;
+      const pos = state.activePosition;
+      const { price, time, newSize } = action.payload;
+
+      // Close existing at market with slippage.
+      const closeFill = applySlippage(price, pos.side, false, 'MARKET', state.commissionConfig);
+      const exitFill = buildExitFill('final_exit', closeFill, pos.size, pos, 'reverse', state.commissionConfig, time);
+      const allCloseFills = [...(pos.fills ?? []), exitFill];
+      const pnl = allCloseFills.reduce((acc, f) => acc + f.netPnl, 0);
+      const direction = pos.side === 'LONG' ? 1 : -1;
+      const grossPnl = (closeFill - pos.entryPrice) * direction * pos.size;
+      const totalFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
+      const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
+
+      const closedPos: PaperPosition = {
+        ...pos,
+        exitTime: time,
+        exitPrice: closeFill,
+        pnl,
+        pnlPercent,
+        exitReason: 'reverse',
+        grossPnl,
+        feesPaid: totalFeesPaid,
+        fills: allCloseFills,
+      };
+
+      // Open opposite position at market with slippage.
+      const oppositeSide: PaperSide = pos.side === 'LONG' ? 'SHORT' : 'LONG';
+      const entryFillPrice = applySlippage(price, oppositeSide, true, 'MARKET', state.commissionConfig);
+      const entryFee = applyCommission(entryFillPrice, newSize, state.commissionConfig);
+      const newEntryFill: FillRecord = {
+        kind: 'entry',
+        price: entryFillPrice,
+        qty: newSize,
+        grossPnl: 0,
+        fees: entryFee,
+        netPnl: -entryFee,
+        time,
+      };
+
+      const newPos: PaperPosition = {
+        id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
+        side: oppositeSide,
+        entryTime: time,
+        entryPrice: entryFillPrice,
+        size: newSize,
+        originalSize: newSize,
+        takeProfits: [],
+        strategyId: pos.strategyId ?? null,
+        entryOrderType: 'MARKET',
+        feesPaid: entryFee,
+        grossPnl: 0,
+        fills: [newEntryFill],
+      };
+
+      const closedPositions = [...state.closedPositions, closedPos];
+      return {
+        ...state,
+        activePosition: newPos,
+        closedPositions,
+        pendingOrders: [], // reverse cancels all pending orders
+        stats: computeStats(closedPositions, state.startingBalance),
+      };
+    }
+
+    case 'CANCEL_ALL_PENDING': {
+      return { ...state, pendingOrders: [] };
+    }
+
+    case 'SET_COMMISSION_CONFIG': {
+      return { ...state, commissionConfig: action.payload.config };
+    }
+
+    case 'FILL_TP_LEG': {
+      if (!state.activePosition) return state;
+      const pos = state.activePosition;
+      const { legId, time } = action.payload;
+
+      const legs = pos.takeProfits ?? [];
+      const legIndex = legs.findIndex((l) => l.id === legId);
+      if (legIndex < 0) return state; // leg not found
+      const leg = legs[legIndex];
+      if (leg.filled) return state;   // already filled
+
+      // Leg fills at limit price (no slippage — standard TP simulation convention).
+      const fillPrice = leg.price;
+      // Close qty = sizePercent% of ORIGINAL size, clamped to remaining size.
+      const originalSize = pos.originalSize ?? pos.size;
+      const closeQty = Math.min(
+        (originalSize * leg.sizePercent) / 100,
+        pos.size,
+      );
+      if (closeQty <= EPSILON) return state;
+
+      const exitFee = applyCommission(fillPrice, closeQty, state.commissionConfig);
+      const direction = pos.side === 'LONG' ? 1 : -1;
+      const grossPnl = (fillPrice - pos.entryPrice) * direction * closeQty;
+      const exitFill: FillRecord = {
+        kind: 'partial_exit',
+        price: fillPrice,
+        qty: closeQty,
+        grossPnl,
+        fees: exitFee,
+        netPnl: grossPnl - exitFee,
+        time,
+        reason: 'tp',
+      };
+
+      const newSize = pos.size - closeQty;
+      const newFeesPaid = (pos.feesPaid ?? 0) + exitFee;
+      const newFills = [...(pos.fills ?? []), exitFill];
+
+      // Mark this leg filled.
+      const newLegs = legs.map((l, i) => (i === legIndex ? { ...l, filled: true } : l));
+
+      // If remaining size ≤ EPSILON after this leg, seal the position.
+      if (newSize <= EPSILON) {
+        const pnl = newFills.reduce((acc, f) => acc + f.netPnl, 0);
+        const totalGrossPnl = newFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
+        const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * originalSize)) * 100 : 0;
+        const closed: PaperPosition = {
+          ...pos,
+          size: 0,
+          takeProfits: newLegs,
+          exitTime: time,
+          exitPrice: fillPrice,
+          pnl,
+          pnlPercent,
+          exitReason: 'tp',
+          grossPnl: totalGrossPnl,
+          feesPaid: newFeesPaid,
+          fills: newFills,
+        };
+        const closedPositions = [...state.closedPositions, closed];
+        return {
+          ...state,
+          activePosition: undefined,
+          closedPositions,
+          stats: computeStats(closedPositions, state.startingBalance),
+        };
+      }
+
+      return {
+        ...state,
+        activePosition: {
+          ...pos,
+          size: newSize,
+          takeProfits: newLegs,
+          feesPaid: newFeesPaid,
+          fills: newFills,
+        },
+      };
+    }
+
     default:
       return state;
   }
 }
+
+// ─── Public interface ────────────────────────────────────────────
 
 export interface UseBacktestSessionReturn {
   state: SessionState;
@@ -427,6 +926,27 @@ export interface UseBacktestSessionReturn {
   updatePendingRisk: (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => void;
   /** Hydrate the full session from a saved record (Phase 7+ load flow). */
   loadSession: (payload: LoadSessionPayload) => void;
+  // Phase 7
+  addTpLeg: (leg: TakeProfitLeg) => void;
+  removeTpLeg: (legId: string) => void;
+  updateTpLeg: (legId: string, price: number) => void;
+  /** Partial close: close `percent` fraction (0–1) of the active position at market price. */
+  partialClose: (percent: number, price: number, time: number) => void;
+  /** Move stop loss to entry price ± optional offset (default 0 = exact breakeven). */
+  moveToBreakeven: (offset?: number) => void;
+  /** Close active position + cancel all pending orders atomically. */
+  flatten: (price: number, time: number) => void;
+  /** Close active position + immediately open opposite side position. */
+  reverse: (price: number, time: number, newSize: number) => void;
+  /** Cancel all pending orders atomically. */
+  cancelAllPending: () => void;
+  /** Update the session-level commission/slippage config. */
+  setCommissionConfig: (config: CommissionConfig) => void;
+  /**
+   * Fill a single TP leg during replay. Closes sizePercent% of original size
+   * at the leg's limit price; marks leg filled; seals position when remaining ≤ EPSILON.
+   */
+  fillTpLeg: (legId: string, time: number) => void;
 }
 
 /**
@@ -439,7 +959,7 @@ export function computeStatsByStrategy(
   startingBalance: number,
 ): Map<string, SessionStats> {
   const buckets = new Map<string, PaperPosition[]>();
-  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null);
+  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null || (p.takeProfits && p.takeProfits.length > 0));
   for (const p of configured) {
     const key = p.strategyId || 'manual';
     const arr = buckets.get(key);
@@ -460,6 +980,7 @@ function makeEmptyState(initialBalance: number): SessionState {
     closedPositions: [],
     pendingOrders: [],
     stats: EMPTY_STATS,
+    commissionConfig: { ...DEFAULT_COMMISSION_CONFIG },
   };
 }
 
@@ -481,8 +1002,41 @@ function isValidPaperPosition(p: unknown): p is PaperPosition {
     && (o.side === 'LONG' || o.side === 'SHORT')
     && typeof o.entryTime === 'number' && Number.isFinite(o.entryTime)
     && typeof o.entryPrice === 'number' && Number.isFinite(o.entryPrice) && o.entryPrice > 0
-    && typeof o.size === 'number' && Number.isFinite(o.size) && o.size > 0
+    && typeof o.size === 'number' && Number.isFinite(o.size) && o.size >= 0
   );
+}
+
+/**
+ * Normalise a PaperPosition from localStorage, converting legacy fields to
+ * current schema so the reducer never encounters missing required fields.
+ *
+ * - Adds `originalSize` if missing (default = size at load time).
+ * - Converts legacy `TakeProfitLeg.portion` (0–1 fraction) → `sizePercent` (0–100).
+ * - Initialises `feesPaid`, `fills`, `grossPnl` if absent.
+ */
+function migratePosition(p: PaperPosition): PaperPosition {
+  // Ensure originalSize always present.
+  const originalSize = typeof p.originalSize === 'number' ? p.originalSize : p.size;
+
+  // Normalise takeProfits legs.
+  const takeProfits: TakeProfitLeg[] = (p.takeProfits ?? []).map((leg) => {
+    if (typeof (leg as TakeProfitLeg & { portion?: number }).portion === 'number' && !leg.sizePercent) {
+      // Legacy fraction → percent
+      const portion = (leg as TakeProfitLeg & { portion: number }).portion;
+      return { ...leg, sizePercent: portion * 100, id: leg.id ?? `tp_migrated_${Math.random().toString(36).slice(2, 8)}` };
+    }
+    // Ensure id present (older records may lack it).
+    return { ...leg, id: leg.id ?? `tp_migrated_${Math.random().toString(36).slice(2, 8)}` };
+  });
+
+  return {
+    ...p,
+    originalSize,
+    takeProfits,
+    feesPaid: p.feesPaid ?? 0,
+    fills: p.fills ?? [],
+    grossPnl: p.grossPnl ?? p.pnl ?? 0,
+  };
 }
 
 function loadPersistedState(initialBalance: number, key: string | null): SessionState {
@@ -502,18 +1056,43 @@ function loadPersistedState(initialBalance: number, key: string | null): Session
       typeof parsed.startingBalance === 'number' && Number.isFinite(parsed.startingBalance) && parsed.startingBalance > 0
         ? parsed.startingBalance
         : initialBalance;
-    const closedPositions = (parsed.closedPositions as unknown[]).filter(isValidPaperPosition) as PaperPosition[];
-    const activePosition = isValidPaperPosition(parsed.activePosition)
-      ? (parsed.activePosition as PaperPosition)
+    const closedPositions = (parsed.closedPositions as unknown[])
+      .filter(isValidPaperPosition)
+      .map(migratePosition) as PaperPosition[];
+    const rawActive = isValidPaperPosition(parsed.activePosition)
+      ? migratePosition(parsed.activePosition as PaperPosition)
       : undefined;
-    const pendingOrders = parsed.pendingOrders as PendingOrder[];
+    const pendingOrders = (Array.isArray(parsed.pendingOrders) ? parsed.pendingOrders : []).filter(
+      (o): o is PendingOrder => {
+        if (!o || typeof o !== 'object') return false;
+        const r = o as Record<string, unknown>;
+        return (
+          typeof r.id === 'string'
+          && (r.side === 'LONG' || r.side === 'SHORT')
+          && (r.type === 'LIMIT' || r.type === 'STOP')
+          && typeof r.triggerPrice === 'number' && Number.isFinite(r.triggerPrice)
+          && typeof r.size === 'number' && Number.isFinite(r.size) && r.size > 0
+          && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt)
+        );
+      }
+    );
+
+    // Restore commissionConfig if saved; fall back to defaults so existing
+    // sessions without a stored config continue to work.
+    const commissionConfig: CommissionConfig =
+      parsed.commissionConfig &&
+      typeof parsed.commissionConfig === 'object' &&
+      typeof (parsed.commissionConfig as Record<string, unknown>).commissionPerOrder === 'number'
+        ? (parsed.commissionConfig as CommissionConfig)
+        : { ...DEFAULT_COMMISSION_CONFIG };
 
     return {
       startingBalance,
-      activePosition,
+      activePosition: rawActive,
       closedPositions,
       pendingOrders,
       stats: computeStats(closedPositions, startingBalance),
+      commissionConfig,
     };
   } catch {
     // corrupt JSON / quota / blocked storage — fall through to empty.
@@ -622,6 +1201,47 @@ export function useBacktestSession(initialBalance: number = 10000, sessionId?: s
     dispatch({ type: 'LOAD_SESSION', payload });
   }, []);
 
+  // Phase 7 callbacks
+  const addTpLeg = useCallback((leg: TakeProfitLeg) => {
+    dispatch({ type: 'ADD_TP_LEG', payload: { leg } });
+  }, []);
+
+  const removeTpLeg = useCallback((legId: string) => {
+    dispatch({ type: 'REMOVE_TP_LEG', payload: { legId } });
+  }, []);
+
+  const updateTpLeg = useCallback((legId: string, price: number) => {
+    dispatch({ type: 'UPDATE_TP_LEG', payload: { legId, price } });
+  }, []);
+
+  const partialClose = useCallback((percent: number, price: number, time: number) => {
+    dispatch({ type: 'PARTIAL_CLOSE', payload: { percent, price, time } });
+  }, []);
+
+  const moveToBreakeven = useCallback((offset?: number) => {
+    dispatch({ type: 'BREAKEVEN_STOP', payload: { offset } });
+  }, []);
+
+  const flatten = useCallback((price: number, time: number) => {
+    dispatch({ type: 'FLATTEN', payload: { price, time } });
+  }, []);
+
+  const reverse = useCallback((price: number, time: number, newSize: number) => {
+    dispatch({ type: 'REVERSE', payload: { price, time, newSize } });
+  }, []);
+
+  const cancelAllPending = useCallback(() => {
+    dispatch({ type: 'CANCEL_ALL_PENDING' });
+  }, []);
+
+  const setCommissionConfig = useCallback((config: CommissionConfig) => {
+    dispatch({ type: 'SET_COMMISSION_CONFIG', payload: { config } });
+  }, []);
+
+  const fillTpLeg = useCallback((legId: string, time: number) => {
+    dispatch({ type: 'FILL_TP_LEG', payload: { legId, time } });
+  }, []);
+
   return {
     state,
     openPosition,
@@ -635,5 +1255,15 @@ export function useBacktestSession(initialBalance: number = 10000, sessionId?: s
     fillPendingOrder,
     updatePendingRisk,
     loadSession,
+    addTpLeg,
+    removeTpLeg,
+    updateTpLeg,
+    partialClose,
+    moveToBreakeven,
+    flatten,
+    reverse,
+    cancelAllPending,
+    setCommissionConfig,
+    fillTpLeg,
   };
 }

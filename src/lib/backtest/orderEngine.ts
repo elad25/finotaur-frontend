@@ -103,47 +103,221 @@ export function calcRewardRisk(
 // POSITION MANAGEMENT (Phase 2 — partials / breakeven / multi-TP)
 // ==========================================
 
-/** A take-profit leg: close `portion` (0–1 fraction of original size) at `price`. */
-export interface TakeProfitLeg {
-  price: number;
-  /** Fraction of the ORIGINAL position size to close at this leg (0–1). */
-  portion: number;
-}
-
 /**
- * Compute the size to close for a partial. `percent` is 0–100 of the CURRENT
- * remaining size. Clamped so you can never close more than remains.
+ * A single take-profit leg.
+ *
+ * Phase 7 extended version: includes `id` + `sizePercent` + `filled` flag.
+ * Backward-compatible addition — the old `portion` field is preserved as an
+ * alias that runStrategy.ts may still produce; new code uses `sizePercent`.
  */
-export function partialCloseSize(remainingSize: number, percent: number): number {
-  const pct = Math.max(0, Math.min(100, percent));
-  return (remainingSize * pct) / 100;
+export interface TakeProfitLeg {
+  /** Unique id generated at creation (e.g. `tp_<timestamp>_<random>`). */
+  id: string;
+  /** Trigger price for this leg. */
+  price: number;
+  /**
+   * Percentage of the ORIGINAL position size to close on fill (0–100).
+   * Fractions allowed; sum of all legs in one position must be ≤ 100.
+   */
+  sizePercent: number;
+  /** True once the leg has been partially filled and the qty removed. */
+  filled?: boolean;
+  /**
+   * Legacy alias kept for backward compat with runStrategy.ts objects that
+   * carry `portion` (0–1 fraction). The reducer normalises via migratePosition
+   * which converts portion → sizePercent. New code uses `sizePercent` only.
+   * @deprecated use sizePercent
+   */
+  portion?: number;
+}
+
+// ─── CommissionConfig ────────────────────────────────────────────
+
+/**
+ * Session-level fee and slippage model. All fields default to 0 so existing
+ * sessions behave identically to before this feature was added.
+ *
+ * commissionPerOrder — flat dollar amount charged per fill event.
+ * commissionPercent  — percentage of fill notional charged per fill (0.1 = 0.1%).
+ * slippagePercent    — worsens fill price for market + stop fills only;
+ *                      limit fills execute at the limit price (no slippage
+ *                      applied — standard simulation convention).
+ *
+ * Both commission fields stack: totalFee = commissionPerOrder + (notional * commissionPercent/100).
+ */
+export interface CommissionConfig {
+  commissionPerOrder: number;
+  commissionPercent: number;
+  slippagePercent: number;
+}
+
+export const DEFAULT_COMMISSION_CONFIG: CommissionConfig = {
+  commissionPerOrder: 0,
+  commissionPercent: 0,
+  slippagePercent: 0,
+};
+
+// ─── FillRecord ─────────────────────────────────────────────────
+
+/**
+ * Audit record for one fill event on a position (entry, partial exit,
+ * final exit). Attached as `fills` on PaperPosition.
+ */
+export interface FillRecord {
+  /** 'entry' | 'partial_exit' | 'final_exit' */
+  kind: 'entry' | 'partial_exit' | 'final_exit';
+  price: number;
+  qty: number;
+  /** Gross PnL for this fill (0 for entries). */
+  grossPnl: number;
+  /** Total fees charged for this fill. */
+  fees: number;
+  /** Net PnL = grossPnl - fees (negative for entries = entry fee deducted). */
+  netPnl: number;
+  time: number;
+  /** Exit reason; only present on exit fills. */
+  reason?: 'manual' | 'sl' | 'tp' | 'flatten' | 'reverse';
+}
+
+// ─── partialCloseSize ────────────────────────────────────────────
+
+/**
+ * Compute the number of units to close given either a direct quantity or a
+ * percentage of the CURRENT open qty.
+ *
+ * @param currentQty   Currently open quantity (must be > 0).
+ * @param percentOrQty If isPercent=true: fraction 0–1 (e.g. 0.5 = 50%).
+ *                     If isPercent=false: absolute unit count.
+ * @param isPercent    When true, percentOrQty is a fraction 0–1.
+ * @returns            Clamped close qty in (0, currentQty].
+ */
+export function partialCloseSize(
+  currentQty: number,
+  percentOrQty: number,
+  isPercent: boolean,
+): number {
+  if (currentQty <= 0) return 0;
+  const raw = isPercent ? currentQty * Math.min(percentOrQty, 1) : percentOrQty;
+  return Math.min(Math.max(raw, 0), currentQty);
 }
 
 /**
- * Breakeven stop = entry price (optionally offset by `ticks * tickSize` in the
- * favorable direction to also cover fees/slippage). Returns the new stop price.
+ * Breakeven stop = entry price ± optional offset in the favorable direction.
+ *
+ * @param entryPrice   Average entry price of the position.
+ * @param side         Position side — determines which direction is "above entry".
+ * @param offset       Optional price offset (defaults to 0). Positive offset moves
+ *                     SL slightly into profit: LONG → entryPrice + offset,
+ *                     SHORT → entryPrice - offset.
+ * @returns            Break-even stop price.
  */
 export function breakevenStop(
-  side: OrderSide,
   entryPrice: number,
-  offsetTicks = 0,
-  tickSize = 0
+  side: 'LONG' | 'SHORT',
+  offset: number = 0,
 ): number {
-  const offset = offsetTicks * tickSize;
-  return side === 'buy' ? entryPrice + offset : entryPrice - offset;
+  return side === 'LONG'
+    ? entryPrice + offset
+    : entryPrice - offset;
 }
 
+// ─── validateTakeProfitLegs ──────────────────────────────────────
+
+export type LegValidationResult =
+  | { ok: true }
+  | { ok: false; reason: string };
+
 /**
- * Validate a set of TP legs: portions must each be >0 and sum to ≤ 1 (≤100%).
- * Returns null if valid, else a reason string.
+ * Validate a take-profit leg array:
+ *   - Each leg must have price > 0 and sizePercent in (0, 100].
+ *   - Sum of all sizePercent values must be ≤ 100.
+ *   - No duplicate prices.
  */
-export function validateTakeProfitLegs(legs: TakeProfitLeg[]): string | null {
-  if (legs.length === 0) return null;
-  let total = 0;
+export function validateTakeProfitLegs(legs: TakeProfitLeg[]): LegValidationResult {
+  if (legs.length === 0) return { ok: true };
+
+  let sum = 0;
+  const prices = new Set<number>();
+
   for (const leg of legs) {
-    if (leg.portion <= 0) return 'Each take-profit portion must be greater than 0';
-    total += leg.portion;
+    if (leg.price <= 0) {
+      return { ok: false, reason: `Leg ${leg.id}: price must be > 0` };
+    }
+    if (leg.sizePercent <= 0 || leg.sizePercent > 100) {
+      return { ok: false, reason: `Leg ${leg.id}: sizePercent must be in (0, 100]` };
+    }
+    if (prices.has(leg.price)) {
+      return { ok: false, reason: `Duplicate take-profit price: ${leg.price}` };
+    }
+    prices.add(leg.price);
+    sum += leg.sizePercent;
   }
-  if (total > 1.0001) return 'Take-profit portions cannot exceed 100%';
-  return null;
+
+  if (sum > 100 + Number.EPSILON) {
+    return { ok: false, reason: `Total leg sizePercent (${sum.toFixed(2)}) exceeds 100` };
+  }
+
+  return { ok: true };
+}
+
+// ─── applySlippage ───────────────────────────────────────────────
+
+/**
+ * Adjust a fill price for slippage on market/stop orders.
+ * Limit orders are always filled at their limit price (no slippage).
+ *
+ * Slippage worsens the fill in the direction of the trade:
+ *   - Long entry  → fill price HIGHER (pay more)
+ *   - Short entry → fill price LOWER  (receive less)
+ *   - Long exit   → fill price LOWER  (receive less on sell)
+ *   - Short exit  → fill price HIGHER (pay more on buy-to-cover)
+ *
+ * @param rawPrice      Nominal fill price before slippage.
+ * @param side          Position side ('LONG' | 'SHORT').
+ * @param isEntry       True for entries, false for exits.
+ * @param orderType     Only MARKET and STOP fills incur slippage.
+ * @param config        Session commission/slippage config.
+ * @returns             Adjusted fill price.
+ */
+export function applySlippage(
+  rawPrice: number,
+  side: 'LONG' | 'SHORT',
+  isEntry: boolean,
+  orderType: 'MARKET' | 'LIMIT' | 'STOP',
+  config: CommissionConfig,
+): number {
+  // Limit fills: no slippage by convention.
+  if (orderType === 'LIMIT' || config.slippagePercent <= 0) {
+    return rawPrice;
+  }
+
+  const slippageFactor = config.slippagePercent / 100;
+  // Entry: long fills higher, short fills lower.
+  // Exit:  long exits lower (selling into slippage), short exits higher.
+  const worsens: boolean = isEntry
+    ? side === 'LONG'     // long entry → price goes up
+    : side === 'SHORT';   // short exit  → price goes up (buy-to-cover costs more)
+
+  return worsens
+    ? rawPrice * (1 + slippageFactor)
+    : rawPrice * (1 - slippageFactor);
+}
+
+// ─── applyCommission ─────────────────────────────────────────────
+
+/**
+ * Compute the total fee for a single fill event.
+ *
+ * @param fillPrice  The (already slippage-adjusted) fill price.
+ * @param qty        Number of units in this fill.
+ * @param config     Session commission config.
+ * @returns          Dollar amount to deduct from PnL as fees.
+ */
+export function applyCommission(
+  fillPrice: number,
+  qty: number,
+  config: CommissionConfig,
+): number {
+  const notional = fillPrice * qty;
+  return config.commissionPerOrder + notional * (config.commissionPercent / 100);
 }

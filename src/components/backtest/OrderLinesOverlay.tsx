@@ -7,6 +7,7 @@
  *   - Active position SL     (red,   draggable — clamps to valid side of entry)
  *   - Active position TP     (green, draggable — clamps to valid side of entry)
  *   - Each pending order trigger (amber, draggable)
+ *   - Multi-leg TP lines      (green, draggable; dimmed once filled)
  *
  * Pointer-event handling:
  *   The outer container is pointer-events:none so chart pan/zoom and drawing
@@ -34,9 +35,11 @@ import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 // ─── Types ────────────────────────────────────────────────────────
 
 interface DragState {
-  kind: 'sl' | 'tp' | 'pending';
+  kind: 'sl' | 'tp' | 'pending' | 'tp_leg';
   /** Pending order id when kind === 'pending'. */
   pendingId?: string;
+  /** TP leg id when kind === 'tp_leg'. */
+  legId?: string;
   /** Live preview Y coordinate (canvas-local). */
   previewY: number;
   /** Price shown in the preview label. */
@@ -65,6 +68,11 @@ export interface OrderLinesOverlayProps {
   onUpdateTP: (price: number) => void;
   /** Called when the user drops a pending order trigger line to a new price. */
   onUpdatePendingPrice: (orderId: string, price: number) => void;
+  /**
+   * Phase 7: Called when the user drags a multi-leg TP line to a new price.
+   * legId — the TakeProfitLeg.id; price — the new target price.
+   */
+  onUpdateTpLeg?: (legId: string, price: number) => void;
 }
 
 // ─── Visual constants ─────────────────────────────────────────────
@@ -165,6 +173,7 @@ export function OrderLinesOverlay({
   onUpdateSL,
   onUpdateTP,
   onUpdatePendingPrice,
+  onUpdateTpLeg,
 }: OrderLinesOverlayProps) {
   // Force a repaint whenever positions, orders, or the chart view changes.
   const [, forceRepaint] = useState(0);
@@ -183,7 +192,7 @@ export function OrderLinesOverlay({
 
   // Clamp a price to the valid side of the active entry.
   // LONG → SL < entry < TP; SHORT → SL > entry > TP.
-  const clampPrice = useCallback((price: number, kind: 'sl' | 'tp'): number => {
+  const clampPrice = useCallback((price: number, kind: 'sl' | 'tp' | 'tp_leg'): number => {
     if (!activePosition) return price;
     const entry = activePosition.entryPrice;
     if (activePosition.side === 'LONG') {
@@ -214,8 +223,8 @@ export function OrderLinesOverlay({
     const rawPrice = series.coordinateToPrice(y);
     if (rawPrice == null || !Number.isFinite(rawPrice)) return;
     const price =
-      drag.kind === 'sl' || drag.kind === 'tp'
-        ? clampPrice(rawPrice, drag.kind)
+      drag.kind === 'sl' || drag.kind === 'tp' || drag.kind === 'tp_leg'
+        ? clampPrice(rawPrice, drag.kind === 'tp_leg' ? 'tp_leg' : drag.kind)
         : rawPrice;
     setDrag((d) => d ? { ...d, previewY: y, previewPrice: price } : null);
   }, [drag, series, clientToLocalY, clampPrice]);
@@ -230,9 +239,11 @@ export function OrderLinesOverlay({
       onUpdateTP(finalPrice);
     } else if (drag.kind === 'pending' && drag.pendingId) {
       onUpdatePendingPrice(drag.pendingId, finalPrice);
+    } else if (drag.kind === 'tp_leg' && drag.legId && onUpdateTpLeg) {
+      onUpdateTpLeg(drag.legId, finalPrice);
     }
     setDrag(null);
-  }, [drag, onUpdateSL, onUpdateTP, onUpdatePendingPrice]);
+  }, [drag, onUpdateSL, onUpdateTP, onUpdatePendingPrice, onUpdateTpLeg]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape' && drag) {
@@ -283,8 +294,9 @@ export function OrderLinesOverlay({
       }
     }
 
-    // TP line
-    if (activePosition.takeProfit != null) {
+    // Single TP line — rendered only when no multi-leg TP schedule is set.
+    const hasMultiLeg = (activePosition.takeProfits ?? []).length > 0;
+    if (!hasMultiLeg && activePosition.takeProfit != null) {
       const tpY = drag?.kind === 'tp'
         ? drag.previewY
         : priceToY(series, activePosition.takeProfit);
@@ -302,6 +314,41 @@ export function OrderLinesOverlay({
           />,
         );
       }
+    }
+
+    // Multi-leg TP lines — rendered when takeProfits[] is set.
+    // Filled legs are dimmed and non-draggable (already executed).
+    if (hasMultiLeg) {
+      (activePosition.takeProfits ?? []).forEach((leg, idx) => {
+        const isDraggingLeg = drag?.kind === 'tp_leg' && drag.legId === leg.id;
+        const legY = isDraggingLeg
+          ? drag.previewY
+          : priceToY(series, leg.price);
+        const legPrice = isDraggingLeg ? drag.previewPrice : leg.price;
+        if (legY == null || legY <= 0) return;
+        const legLabel = `TP${idx + 1} ${leg.sizePercent.toFixed(0)}% @ ${legPrice.toFixed(2)}`;
+        // Filled legs are dimmed (opacity via isPreview flag reuse is not ideal,
+        // so we inline the style override via a key suffix and the opacity on OrderLine).
+        // We pass draggable=false for filled legs so they cannot be re-dragged.
+        const isDraggable = draggingEnabled && !leg.filled && !!onUpdateTpLeg;
+        lines.push(
+          <OrderLine
+            key={`tp_leg_${leg.id}`}
+            y={legY}
+            label={legLabel}
+            color={leg.filled ? 'rgba(34,197,94,0.4)' : COLOR.tp}
+            draggable={isDraggable}
+            isPreview={isDraggingLeg}
+            onPointerDown={isDraggable ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+              const y = clientToLocalY(e.clientY);
+              setDrag({ kind: 'tp_leg', legId: leg.id, previewY: y, previewPrice: leg.price });
+            } : undefined}
+          />,
+        );
+      });
     }
   }
 
