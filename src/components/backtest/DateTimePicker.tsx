@@ -30,6 +30,17 @@ export interface DateTimePickerProps {
   disabled?: boolean;
 }
 
+/**
+ * Returns today's date at midnight (local browser time) derived from the
+ * America/New_York calendar date.  Mirrors the same helper in
+ * CreateBacktestSessionModal so both pickers share the same "today" boundary.
+ */
+function getTodayNY(): Date {
+  const nyDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+  const [y, m, d] = nyDateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 // Yahoo-finance lookback ceilings (days). Empirical limits documented in
 // the chart-bars Edge Function. Crypto via Binance is effectively unbounded
 // — surfaced as `null` so the warning is skipped.
@@ -121,16 +132,17 @@ export function DateTimePicker({ value, interval, onChange, disabled }: DateTime
   }, [value, isOpen]);
 
   // ─── Allowed date range for the picker (data-source limits) ──
-  // The Calendar is clamped to [oldest, now] so users can only pick dates
-  // we can actually fetch bars for. No hidden warning needed.
+  // The Calendar is clamped to [oldest, todayNY] so users can only pick dates
+  // we can actually fetch bars for. Future dates are blocked because no
+  // backtest data exists for them (consistent with CreateBacktestSessionModal).
   const lookbackDays = LOOKBACK_DAYS_BY_INTERVAL[interval];
   const { fromDate, toDate, selectedDate } = useMemo(() => {
-    const now = new Date();
+    const todayNY = getTodayNY();
     const oldest = lookbackDays != null
-      ? new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000)
+      ? new Date(todayNY.getTime() - lookbackDays * 24 * 60 * 60 * 1000)
       : new Date(1970, 0, 1);
     const picked = draftDate ? new Date(draftDate + 'T00:00:00') : undefined;
-    return { fromDate: oldest, toDate: now, selectedDate: picked };
+    return { fromDate: oldest, toDate: todayNY, selectedDate: picked };
   }, [draftDate, lookbackDays]);
 
   // ─── Apply: build combined Date and fire onChange ─────────────
