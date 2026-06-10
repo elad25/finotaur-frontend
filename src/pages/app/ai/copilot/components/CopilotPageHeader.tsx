@@ -3,8 +3,7 @@
 // by CopilotStandaloneLayout above the routed content; sub-pages inherit it
 // automatically.
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Link2 } from 'lucide-react';
+import { Link2 } from 'lucide-react';
 import IBConnectionPopup from '@/components/brokers/IBConnectionPopup';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 
@@ -16,14 +15,6 @@ export function CopilotPageHeader() {
     <>
       <div className="relative overflow-hidden border-b border-gold-primary/12 pb-5 pt-1">
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
-        <Link
-          to="/app/home"
-          aria-label="Back to FINOTAUR"
-          className="absolute left-0 top-0 z-20 inline-flex items-center gap-2 rounded-[8px] border border-gold-primary/25 bg-black/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-gold-primary backdrop-blur-sm transition hover:border-gold-primary/45 hover:bg-gold-primary/10 hover:text-gold-bright"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
         {/* Offset the heading block left by half the sidebar width so it is centered
             on the full viewport, not just the (sidebar-offset) content column. Uses the
             same --finotaur-sidebar-width var as <main>'s ml, so it tracks collapse state. */}
