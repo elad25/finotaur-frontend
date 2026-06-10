@@ -32,6 +32,7 @@ import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver, type TopExposure } from './utils/portfolioRisk';
 import { TickerLogo } from './components/TickerLogo';
 import { SectorCallsPanel } from './components/SectorCallsPanel';
+import { GlassCard } from '@/pages/app/crypto/_shared/GlassUI';
 import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -226,6 +227,49 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+// Turn an AI narrative field into focused bullet points.
+// Prefers server-authored line breaks; falls back to sentence-splitting for
+// legacy prose briefs so the page reads as bullets even before regeneration.
+function toBullets(text?: string | null): string[] {
+  if (!text) return [];
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  let parts = trimmed.split(/\r?\n+/).map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 1) {
+    parts = trimmed
+      .split(/(?<=[.!?])\s+(?=[A-Z0-9"'(])/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return parts.map((s) => s.replace(/^[-•*–·]\s*/, '').trim()).filter(Boolean);
+}
+
+function MacroBulletList({ items }: { items: string[] }) {
+  return (
+    <ul className="mt-3 space-y-2.5">
+      {items.map((text, i) => (
+        <li key={i} className="flex gap-2.5">
+          <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-gold-primary/70" />
+          <span className="text-[13px] leading-[1.55] text-white/70">{text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function MacroSection({ label, items, empty }: { label: string; items: string[]; empty?: string }) {
+  return (
+    <GlassCard padding="md" className="h-full">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-primary">{label}</p>
+      {items.length === 0 ? (
+        <p className="mt-3 text-[12px] text-white/35">{empty ?? 'Not available this week.'}</p>
+      ) : (
+        <MacroBulletList items={items} />
+      )}
+    </GlassCard>
+  );
+}
+
 export function CopilotMacroPage() {
   const { brief, loading, error } = useSynthesisBrief();
 
@@ -257,56 +301,56 @@ export function CopilotMacroPage() {
     year: 'numeric',
   });
 
+  const macroPoints = toBullets(brief.macro_narrative);
+  const weeklyPoints = toBullets(brief.weekly_context);
+  const tacticalPoints = toBullets(brief.this_week_tactical);
+
   return (
     <CopilotPageShell title="Macro" eyebrow="Portfolio-aware macro lens" icon={Globe}>
       <div className="space-y-3">
-        {/* Hero — central thesis + macro narrative */}
-        <section className="overflow-hidden rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
-          <div className="flex items-center justify-between gap-3 border-b border-gold-primary/10 pb-3">
+        {/* Hero — central thesis */}
+        <GlassCard padding="md">
+          <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-primary">Central Thesis</p>
-            <p className="text-[10px] uppercase text-ink-tertiary">Week of {weekLabel}</p>
+            <p className="text-[10px] uppercase text-white/35">Week of {weekLabel}</p>
           </div>
-          {brief.central_thesis && (
-            <p className="mt-4 text-[15px] font-medium leading-[1.6] text-ink-primary">{brief.central_thesis}</p>
+          {brief.central_thesis ? (
+            <p className="mt-4 text-[15px] font-medium leading-[1.6] text-white/90">{brief.central_thesis}</p>
+          ) : (
+            <p className="mt-4 text-[12px] text-white/35">No thesis available this week.</p>
           )}
-          {brief.macro_narrative && (
-            <p className="mt-3 text-sm leading-relaxed text-ink-secondary">{brief.macro_narrative}</p>
-          )}
-        </section>
+        </GlassCard>
+
+        {/* Macro lens — bulletized */}
+        <MacroSection label="Macro Lens" items={macroPoints} />
 
         {/* Weekly context + this-week tactical */}
         <section className="grid gap-3 md:grid-cols-2">
-          <article className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gold-primary">Weekly Context</p>
-            <p className="mt-3 text-sm leading-relaxed text-ink-secondary">{brief.weekly_context}</p>
-          </article>
-          <article className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gold-primary">This Week Tactical</p>
-            <p className="mt-3 text-sm leading-relaxed text-ink-secondary">{brief.this_week_tactical}</p>
-          </article>
+          <MacroSection label="Weekly Context" items={weeklyPoints} />
+          <MacroSection label="This Week — Tactical" items={tacticalPoints} />
         </section>
 
         {/* Key risks */}
-        <section className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gold-primary">Key Risks</p>
+        <GlassCard padding="md">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-primary">Key Risks</p>
           {(!brief.key_risks || brief.key_risks.length === 0) ? (
-            <p className="mt-4 text-[12px] text-ink-tertiary">No key risks identified this week.</p>
+            <p className="mt-3 text-[12px] text-white/35">No key risks identified this week.</p>
           ) : (
-            <ul className="mt-4 space-y-4">
+            <ul className="mt-3 space-y-3">
               {brief.key_risks.map((risk, index) => (
-                <li key={index} className="flex gap-3">
+                <li key={index} className="flex gap-2.5">
                   <div className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-[4px] border border-num-negative/30 bg-num-negative/[0.07]">
                     <span className="h-1.5 w-1.5 rounded-full bg-num-negative/70" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[12px] font-medium leading-[1.5] text-ink-primary">{risk.risk}</p>
+                    <p className="text-[13px] font-medium leading-[1.5] text-white/85">{risk.risk}</p>
                     {(risk.impact || risk.probability) && (
-                      <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-ink-tertiary">
+                      <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-white/35">
                         {risk.impact && (
-                          <span>Impact: <span className="text-ink-secondary">{risk.impact}</span></span>
+                          <span>Impact: <span className="text-white/60">{risk.impact}</span></span>
                         )}
                         {risk.probability && (
-                          <span>Prob: <span className="text-ink-secondary">{risk.probability}</span></span>
+                          <span>Prob: <span className="text-white/60">{risk.probability}</span></span>
                         )}
                       </div>
                     )}
@@ -315,36 +359,36 @@ export function CopilotMacroPage() {
               ))}
             </ul>
           )}
-        </section>
+        </GlassCard>
 
         {/* Ground sentiment quotes */}
         {brief.ground_sentiment && brief.ground_sentiment.length > 0 && (
-          <section className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gold-primary">Ground Sentiment</p>
-            <div className="mt-4 space-y-3">
+          <GlassCard padding="md">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-primary">Ground Sentiment</p>
+            <div className="mt-3 space-y-2.5">
               {brief.ground_sentiment.map((item, index) => (
-                <blockquote key={index} className="rounded-[7px] border border-gold-primary/12 bg-black/24 p-4">
-                  <p className="text-[12px] leading-[1.65] text-ink-secondary">
+                <blockquote key={index} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5">
+                  <p className="text-[12px] leading-[1.65] text-white/70">
                     <span className="mr-1 text-gold-primary/60 font-serif text-xl leading-none">&ldquo;</span>
                     {item.quote}
                     <span className="ml-1 text-gold-primary/60 font-serif text-xl leading-none">&rdquo;</span>
                   </p>
                   {(item.attribution || item.source) && (
-                    <footer className="mt-2 text-[10px] text-ink-tertiary">
+                    <footer className="mt-2 text-[10px] text-white/35">
                       {[item.attribution, item.source].filter(Boolean).join(' · ')}
                     </footer>
                   )}
                 </blockquote>
               ))}
             </div>
-          </section>
+          </GlassCard>
         )}
 
         {/* Footer metadata */}
-        <p className="text-[10px] text-ink-tertiary text-center">
-          Model: <span className="font-mono text-ink-secondary">{brief.model}</span>
+        <p className="text-[10px] text-white/35 text-center">
+          Model: <span className="font-mono text-white/55">{brief.model}</span>
           {brief.qa_score != null && (
-            <> · QA: <span className="font-mono text-ink-secondary">{brief.qa_score}</span></>
+            <> · QA: <span className="font-mono text-white/55">{brief.qa_score}</span></>
           )}
         </p>
       </div>
