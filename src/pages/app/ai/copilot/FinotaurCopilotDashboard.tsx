@@ -95,12 +95,12 @@ export function FinotaurCopilotDashboard() {
         {/* Action Items strip */}
         <ActionItemsStrip analysis={analysis} />
 
-        {/* ROW 3 — allocation | Portfolio/S&P/NASDAQ comparison | top opportunities */}
-        <AssetClassAllocationCard className="xl:col-span-4" snapshot={snapshot} />
-        <MarketComparisonChart className="xl:col-span-4" portfolioSeries={snapshot.series} range={range} onRangeChange={setRange} />
-        <div className="xl:col-span-4">
+        {/* ROW 3 — left col (allocation + opportunities) | comparison chart (wider) */}
+        <div className="xl:col-span-4 flex flex-col gap-3">
+          <AssetClassAllocationCard snapshot={snapshot} />
           <TopOpportunitiesPanel />
         </div>
+        <MarketComparisonChart className="xl:col-span-8" portfolioSeries={snapshot.series} range={range} onRangeChange={setRange} />
 
         {/* ROW 4 — holdings | macro | risk */}
         <AllocationPanel className="xl:col-span-4" snapshot={snapshot} />
