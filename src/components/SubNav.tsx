@@ -193,11 +193,12 @@ export const SubNav = () => {
     }
     
     // Journal tab — must exclude sibling sub-routes that have their own sub-nav entries
-    // (backtest / affiliate / admin / finotaur-ai). Otherwise Journal stays highlighted
+    // (backtest / mentor / affiliate / admin / finotaur-ai). Otherwise Journal stays highlighted
     // alongside the actual active sibling tab.
     if (itemPath === '/app/journal/overview' || itemPath === '/app/journal') {
       return location.pathname.startsWith('/app/journal') &&
              !location.pathname.startsWith('/app/journal/backtest') &&
+             !location.pathname.startsWith('/app/journal/mentor') &&
              !location.pathname.startsWith('/app/journal/affiliate') &&
              !location.pathname.startsWith('/app/journal/admin') &&
              !location.pathname.startsWith('/app/journal/finotaur-ai');
