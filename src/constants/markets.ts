@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Search, Map, TrendingUp, Calendar, Newspaper,
   Activity, Bell, FileText, BarChart3, DollarSign, Target, Zap, Award,
   Users, LineChart, Globe, Coins, Flame, Brain, Droplet, Layers, PieChart,
-  Home, Wallet, Sparkles, Filter, GitCompare, Calculator,
+  Home, Wallet, Sparkles, Filter, GitCompare, Calculator, ScanLine,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -310,6 +310,14 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: Layers,
     routes: {
       crypto: '/app/crypto/whales/trades',
+    },
+  },
+  {
+    id: 'market-scanner',
+    label: 'Market Scanner',
+    icon: ScanLine,
+    routes: {
+      crypto: '/app/crypto/scanner',
     },
   },
 
