@@ -24,6 +24,7 @@ import {
   Brain,
   Search,
   Sparkles,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -80,6 +81,15 @@ export const ADMIN_TABS: AdminTab[] = [
     phase: 2,
     enabled: true,
     description: 'Per-user AI usage leaderboard + per-tier cost averages',
+  },
+  {
+    id: 'voice',
+    label: 'Customer Voice',
+    path: '/app/admin/voice',
+    icon: MessageSquare,
+    phase: 2,
+    enabled: true,
+    description: 'Product-feedback intelligence — requests, churn themes, bugs, pain points',
   },
   {
     id: 'seo',
