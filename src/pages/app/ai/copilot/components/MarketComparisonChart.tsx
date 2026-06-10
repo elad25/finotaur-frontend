@@ -5,7 +5,8 @@
 // Mirrors the card-shell styling of PerformanceChart.tsx.
 // =====================================================
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Card } from '@/components/ds/Card';
 import { cn } from '@/lib/utils';
 import { useBenchmarkSeries } from '../hooks/useBenchmarkSeries';
@@ -25,7 +26,7 @@ interface Props {
 const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 
 const CHART_WIDTH  = 760;
-const CHART_HEIGHT = 240;
+const CHART_HEIGHT = 320;
 const PADDING = { top: 12, right: 16, bottom: 28, left: 52 };
 
 // Line colours — gold-variant palette, no green/blue (ADL-020).
@@ -84,6 +85,9 @@ export function MarketComparisonChart({
   className,
 }: Props) {
   const { sp500, nasdaq } = useBenchmarkSeries(range);
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hoverRatio, setHoverRatio] = useState<number | null>(null);
 
   // Normalise each series independently.
   const normPortfolio = useMemo(
@@ -150,6 +154,38 @@ export function MarketComparisonChart({
     return [0, 0.25, 0.5, 0.75, 1].map((r) => yMin + r * (yMax - yMin));
   }, [yMin, yMax]);
 
+  // ── Hover helpers ────────────────────────────────────────────────────────
+  const innerW = CHART_WIDTH - PADDING.left - PADDING.right;
+
+  const handleMouseMove = (e: ReactMouseEvent<SVGSVGElement>) => {
+    if (portfolioSeries.length < 2) return;
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return;
+    const svgX = ((e.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    const ratio = (svgX - PADDING.left) / innerW;
+    if (ratio < 0 || ratio > 1) {
+      setHoverRatio(null);
+    } else {
+      setHoverRatio(ratio);
+    }
+  };
+
+  /** Return the normalised % value at a given ratio along the series. */
+  const valueAtRatio = (norm: number[], ratio: number): number | null => {
+    if (norm.length === 0) return null;
+    const idx = Math.round(ratio * (norm.length - 1));
+    return norm[Math.max(0, Math.min(norm.length - 1, idx))] ?? null;
+  };
+
+  /** SVG x-coordinate for a ratio in [0, 1]. */
+  const xForRatio = (ratio: number) => PADDING.left + ratio * innerW;
+
+  /** SVG y-coordinate for a normalised %-return value. */
+  const yForValue = (v: number) => {
+    const yRange = yMax - yMin || 1;
+    return PADDING.top + (1 - (v - yMin) / yRange) * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+  };
+
   const cardShell =
     'relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]';
 
@@ -183,7 +219,7 @@ export function MarketComparisonChart({
         <div className="relative p-5">
           <h2 className="text-[13px] font-normal uppercase text-gold-primary">PERFORMANCE</h2>
           {rangeButtons}
-          <div className="flex h-[240px] items-center justify-center text-sm text-ink-tertiary">
+          <div className="flex h-[320px] items-center justify-center text-sm text-ink-tertiary">
             Connect a broker to compare performance
           </div>
         </div>
@@ -194,6 +230,16 @@ export function MarketComparisonChart({
   // ── Full chart ───────────────────────────────────────────────────────────
   const positive = totalReturn ? totalReturn.changeAbs >= 0 : true;
   const returnColour = positive ? 'text-gold-primary' : 'text-num-negative';
+
+  // Hover tooltip values (computed only when needed)
+  const hoverPortfolio = hoverRatio !== null ? valueAtRatio(normPortfolio, hoverRatio) : null;
+  const hoverSp500     = hoverRatio !== null ? valueAtRatio(normSp500, hoverRatio) : null;
+  const hoverNasdaq    = hoverRatio !== null ? valueAtRatio(normNasdaq, hoverRatio) : null;
+  const hoverDate = hoverRatio !== null && portfolioSeries.length > 0
+    ? new Date(
+        portfolioSeries[Math.round(hoverRatio * (portfolioSeries.length - 1))].date,
+      ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
 
   return (
     <Card className={cn(cardShell, className)}>
@@ -217,148 +263,246 @@ export function MarketComparisonChart({
           {rangeButtons}
         </div>
 
-        {/* SVG Chart */}
-        <svg
-          className="h-[240px] w-full overflow-visible"
-          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-          role="img"
-          aria-label="Portfolio vs benchmark performance chart"
-        >
-          <defs>
-            <linearGradient id="mcLineGold" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%"   stopColor="#B8911F" />
-              <stop offset="42%"  stopColor="#F4D97B" />
-              <stop offset="100%" stopColor="#D4B04E" />
-            </linearGradient>
-          </defs>
+        {/* SVG Chart — wrapped in relative div so HTML tooltip can overlay */}
+        <div className="relative">
+          <svg
+            ref={svgRef}
+            className="h-[320px] w-full overflow-visible"
+            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+            role="img"
+            aria-label="Portfolio vs benchmark performance chart"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoverRatio(null)}
+          >
+            <defs>
+              <linearGradient id="mcLineGold" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%"   stopColor="#B8911F" />
+                <stop offset="42%"  stopColor="#F4D97B" />
+                <stop offset="100%" stopColor="#D4B04E" />
+              </linearGradient>
+            </defs>
 
-          {/* Horizontal gridlines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = PADDING.top + ratio * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
-            return (
-              <line
-                key={`h-${ratio}`}
-                x1={PADDING.left}
-                x2={CHART_WIDTH - PADDING.right}
-                y1={y}
-                y2={y}
-                stroke="rgba(201,166,70,0.08)"
-                strokeDasharray="4 6"
+            {/* Horizontal gridlines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+              const y = PADDING.top + ratio * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+              return (
+                <line
+                  key={`h-${ratio}`}
+                  x1={PADDING.left}
+                  x2={CHART_WIDTH - PADDING.right}
+                  y1={y}
+                  y2={y}
+                  stroke="rgba(201,166,70,0.08)"
+                  strokeDasharray="4 6"
+                />
+              );
+            })}
+
+            {/* Vertical gridlines */}
+            {[0, 0.2, 0.4, 0.6, 0.8, 1].map((ratio) => {
+              const x = PADDING.left + ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
+              return (
+                <line
+                  key={`v-${ratio}`}
+                  y1={PADDING.top}
+                  y2={CHART_HEIGHT - PADDING.bottom}
+                  x1={x}
+                  x2={x}
+                  stroke="rgba(201,166,70,0.055)"
+                  strokeDasharray="4 6"
+                />
+              );
+            })}
+
+            {/* Y-axis % ticks */}
+            {yTicks.map((tick, index) => {
+              const y =
+                CHART_HEIGHT -
+                PADDING.bottom -
+                (index / Math.max(yTicks.length - 1, 1)) *
+                  (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+              const label = `${tick >= 0 ? '+' : ''}${tick.toFixed(1)}%`;
+              return (
+                <text
+                  key={`ytick-${index}`}
+                  x={PADDING.left - 6}
+                  y={y + 4}
+                  textAnchor="end"
+                  fill="rgba(255,255,255,0.42)"
+                  fontSize="10"
+                >
+                  {label}
+                </text>
+              );
+            })}
+
+            {/* Zero baseline */}
+            {(() => {
+              const yRange = yMax - yMin || 1;
+              const zeroY = PADDING.top + (1 - (0 - yMin) / yRange) * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+              if (zeroY < PADDING.top || zeroY > CHART_HEIGHT - PADDING.bottom) return null;
+              return (
+                <line
+                  x1={PADDING.left}
+                  x2={CHART_WIDTH - PADDING.right}
+                  y1={zeroY}
+                  y2={zeroY}
+                  stroke="rgba(255,255,255,0.18)"
+                  strokeWidth="0.75"
+                />
+              );
+            })()}
+
+            {/* S&P 500 line */}
+            {normSp500.length > 0 && (
+              <polyline
+                points={toPolyPoints(normSp500, yMin, yMax)}
+                fill="none"
+                stroke={COLOURS.sp500}
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            );
-          })}
+            )}
 
-          {/* Vertical gridlines */}
-          {[0, 0.2, 0.4, 0.6, 0.8, 1].map((ratio) => {
-            const x = PADDING.left + ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
-            return (
-              <line
-                key={`v-${ratio}`}
-                y1={PADDING.top}
-                y2={CHART_HEIGHT - PADDING.bottom}
-                x1={x}
-                x2={x}
-                stroke="rgba(201,166,70,0.055)"
-                strokeDasharray="4 6"
+            {/* NASDAQ line */}
+            {normNasdaq.length > 0 && (
+              <polyline
+                points={toPolyPoints(normNasdaq, yMin, yMax)}
+                fill="none"
+                stroke={COLOURS.nasdaq}
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            );
-          })}
+            )}
 
-          {/* Y-axis % ticks */}
-          {yTicks.map((tick, index) => {
-            const y =
-              CHART_HEIGHT -
-              PADDING.bottom -
-              (index / Math.max(yTicks.length - 1, 1)) *
-                (CHART_HEIGHT - PADDING.top - PADDING.bottom);
-            const label = `${tick >= 0 ? '+' : ''}${tick.toFixed(1)}%`;
-            return (
-              <text
-                key={`ytick-${index}`}
-                x={PADDING.left - 6}
-                y={y + 4}
-                textAnchor="end"
-                fill="rgba(255,255,255,0.42)"
-                fontSize="10"
-              >
-                {label}
-              </text>
-            );
-          })}
-
-          {/* Zero baseline */}
-          {(() => {
-            const yRange = yMax - yMin || 1;
-            const zeroY = PADDING.top + (1 - (0 - yMin) / yRange) * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
-            if (zeroY < PADDING.top || zeroY > CHART_HEIGHT - PADDING.bottom) return null;
-            return (
-              <line
-                x1={PADDING.left}
-                x2={CHART_WIDTH - PADDING.right}
-                y1={zeroY}
-                y2={zeroY}
-                stroke="rgba(255,255,255,0.18)"
-                strokeWidth="0.75"
+            {/* Portfolio line — rendered last so it sits on top */}
+            {normPortfolio.length > 0 && (
+              <polyline
+                points={toPolyPoints(normPortfolio, yMin, yMax)}
+                fill="none"
+                stroke="url(#mcLineGold)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-            );
-          })()}
+            )}
 
-          {/* S&P 500 line */}
-          {normSp500.length > 0 && (
-            <polyline
-              points={toPolyPoints(normSp500, yMin, yMax)}
-              fill="none"
-              stroke={COLOURS.sp500}
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {/* X-axis date labels */}
+            {xAxisLabels.map(({ ratio, label }) => {
+              const x =
+                PADDING.left +
+                ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
+              const anchor = ratio === 0 ? 'start' : ratio === 1 ? 'end' : 'middle';
+              return (
+                <text
+                  key={`xl-${ratio}`}
+                  x={x}
+                  y={CHART_HEIGHT - PADDING.bottom + 16}
+                  textAnchor={anchor}
+                  fill="rgba(255,255,255,0.42)"
+                  fontSize="10"
+                >
+                  {label}
+                </text>
+              );
+            })}
+
+            {/* Hover crosshair + series markers */}
+            {hoverRatio !== null && (
+              <g pointerEvents="none">
+                {/* Vertical crosshair */}
+                <line
+                  x1={xForRatio(hoverRatio)}
+                  x2={xForRatio(hoverRatio)}
+                  y1={PADDING.top}
+                  y2={CHART_HEIGHT - PADDING.bottom}
+                  stroke="rgba(244,217,123,0.45)"
+                  strokeWidth="1"
+                  strokeDasharray="3 3"
+                />
+                {/* Portfolio marker */}
+                {hoverPortfolio !== null && (
+                  <circle
+                    cx={xForRatio(hoverRatio)}
+                    cy={yForValue(hoverPortfolio)}
+                    r="4"
+                    fill={COLOURS.portfolio}
+                    stroke="#070604"
+                    strokeWidth="1.5"
+                  />
+                )}
+                {/* S&P 500 marker */}
+                {hoverSp500 !== null && normSp500.length > 0 && (
+                  <circle
+                    cx={xForRatio(hoverRatio)}
+                    cy={yForValue(hoverSp500)}
+                    r="4"
+                    fill={COLOURS.sp500}
+                    stroke="#070604"
+                    strokeWidth="1.5"
+                  />
+                )}
+                {/* NASDAQ marker */}
+                {hoverNasdaq !== null && normNasdaq.length > 0 && (
+                  <circle
+                    cx={xForRatio(hoverRatio)}
+                    cy={yForValue(hoverNasdaq)}
+                    r="4"
+                    fill={COLOURS.nasdaq}
+                    stroke="#070604"
+                    strokeWidth="1.5"
+                  />
+                )}
+              </g>
+            )}
+          </svg>
+
+          {/* HTML tooltip overlay */}
+          {hoverRatio !== null && hoverDate !== null && (
+            <div
+              className="pointer-events-none absolute z-20 min-w-[150px] rounded-[7px] border border-gold-primary/35 bg-[#0a0908]/96 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-sm"
+              style={{
+                left: `${(xForRatio(hoverRatio) / CHART_WIDTH) * 100}%`,
+                top: '8px',
+                transform:
+                  xForRatio(hoverRatio) > CHART_WIDTH * 0.6
+                    ? 'translate(calc(-100% - 14px), 0)'
+                    : 'translate(14px, 0)',
+              }}
+            >
+              <p className="text-[10px] uppercase tracking-[0.12em] text-ink-tertiary">{hoverDate}</p>
+              {hoverPortfolio !== null && (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-[2px] inline-block flex-none" style={{ background: COLOURS.portfolio }} />
+                  <span className="text-[10px] text-ink-secondary">Portfolio</span>
+                  <span className="ml-auto font-mono text-[11px] tabular-nums text-gold-primary">
+                    {hoverPortfolio >= 0 ? '+' : ''}{hoverPortfolio.toFixed(2)}%
+                  </span>
+                </div>
+              )}
+              {hoverSp500 !== null && normSp500.length > 0 && (
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-[2px] inline-block flex-none" style={{ background: COLOURS.sp500 }} />
+                  <span className="text-[10px] text-ink-secondary">S&P 500</span>
+                  <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-primary">
+                    {hoverSp500 >= 0 ? '+' : ''}{hoverSp500.toFixed(2)}%
+                  </span>
+                </div>
+              )}
+              {hoverNasdaq !== null && normNasdaq.length > 0 && (
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-[2px] inline-block flex-none" style={{ background: COLOURS.nasdaq }} />
+                  <span className="text-[10px] text-ink-secondary">NASDAQ</span>
+                  <span className="ml-auto font-mono text-[11px] tabular-nums" style={{ color: COLOURS.nasdaq }}>
+                    {hoverNasdaq >= 0 ? '+' : ''}{hoverNasdaq.toFixed(2)}%
+                  </span>
+                </div>
+              )}
+            </div>
           )}
-
-          {/* NASDAQ line */}
-          {normNasdaq.length > 0 && (
-            <polyline
-              points={toPolyPoints(normNasdaq, yMin, yMax)}
-              fill="none"
-              stroke={COLOURS.nasdaq}
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-
-          {/* Portfolio line — rendered last so it sits on top */}
-          {normPortfolio.length > 0 && (
-            <polyline
-              points={toPolyPoints(normPortfolio, yMin, yMax)}
-              fill="none"
-              stroke="url(#mcLineGold)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-
-          {/* X-axis date labels */}
-          {xAxisLabels.map(({ ratio, label }) => {
-            const x =
-              PADDING.left +
-              ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
-            const anchor = ratio === 0 ? 'start' : ratio === 1 ? 'end' : 'middle';
-            return (
-              <text
-                key={`xl-${ratio}`}
-                x={x}
-                y={CHART_HEIGHT - PADDING.bottom + 16}
-                textAnchor={anchor}
-                fill="rgba(255,255,255,0.42)"
-                fontSize="10"
-              >
-                {label}
-              </text>
-            );
-          })}
-        </svg>
+        </div>
 
         {/* Range summary */}
         {rangeSummary && (
