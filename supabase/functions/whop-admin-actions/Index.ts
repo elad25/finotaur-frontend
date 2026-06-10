@@ -470,7 +470,7 @@ async function verifyAdmin(supabase, authHeader) {
   }
   // Check if user is admin
   const { data: profile } = await supabase.from("profiles").select("is_admin, role").eq("id", user.id).single();
-  const isAdmin = profile?.is_admin === true || profile?.role === "admin";
+  const isAdmin = profile?.is_admin === true || profile?.role === "admin" || profile?.role === "super_admin";
   return {
     isAdmin,
     userId: user.id

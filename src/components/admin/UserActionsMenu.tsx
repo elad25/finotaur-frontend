@@ -115,13 +115,16 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
 
           <DropdownMenuSeparator className="bg-gray-800" />
           
-          <DropdownMenuItem
-            onClick={() => setShowSendEmail(true)}
-            className="cursor-pointer hover:bg-[#1a1a1a] text-gray-300 hover:text-white"
-          >
-            <Mail className="w-4 h-4 mr-2" />
-            Send Email
-          </DropdownMenuItem>
+          {/* Send Email is pending backend integration (SendGrid/SES) — hidden until implemented */}
+          {false && (
+            <DropdownMenuItem
+              onClick={() => setShowSendEmail(true)}
+              className="cursor-pointer hover:bg-[#1a1a1a] text-gray-300 hover:text-white"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Send Email
+            </DropdownMenuItem>
+          )}
 
           <DropdownMenuSeparator className="bg-gray-800" />
           

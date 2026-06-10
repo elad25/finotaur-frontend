@@ -161,7 +161,7 @@ async function tradovateLogin(
     // DEBUG 2026-05-25 — include cid + env + purpose in the error message so the
     // frontend surfaces them in the toast. For copier-purpose the cid is the
     // customer's own (echoed back so they can verify they typed it correctly).
-    throw new Error(`Tradovate auth error: ${data.errorText} [DEBUG cid=${cid} env=${environment} purpose=${purpose}]`);
+    throw new Error(`Tradovate auth error: ${data.errorText}`);
   }
   if (!data.accessToken) {
     throw new Error('No accessToken in Tradovate response');
@@ -693,16 +693,10 @@ Deno.serve(async (req: Request) => {
       userApiKey = { cid: cidNum, sec: rawSec };
     }
 
-    const debugCid = purpose === 'copier' ? userApiKey!.cid : JOURNAL_CID;
-    const debugSecLen = purpose === 'copier' ? userApiKey!.sec.length : JOURNAL_SEC.length;
-    // DEBUG — remove after testing
     console.log('[tradovate-auth] login attempt:', {
       username,
-      passwordLength: password?.length,
       env,
       purpose,
-      cid: debugCid,
-      secLength: debugSecLen,
       source: purpose === 'copier' ? 'customer-api-key' : 'vendor-env',
     });
 
@@ -847,15 +841,9 @@ Deno.serve(async (req: Request) => {
       code = 'db_error';
       status = 500;
     }
-    // Debug payload — journal env values only; copier values are per-customer
-    // (echoed back inside the [DEBUG cid=...] suffix on the error string itself).
     return json({
       error: msg,
       code,
-      debug: {
-        journal_cid: JOURNAL_CID,
-        journal_secLength: JOURNAL_SEC?.length ?? 0,
-      },
     }, status);
   }
 });

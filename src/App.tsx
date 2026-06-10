@@ -35,6 +35,7 @@ import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
 import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { logger } from '@/lib/logger';
 
 // =====================================================
@@ -382,7 +383,9 @@ const FundingTransactions = lazy(() => import("@/pages/app/funding/Transactions"
 
 // WRAPPERS
 const SuspenseRoute = memo(({ children }: { children: React.ReactNode }) => (
-  <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
+  <ErrorBoundary boundary="suspense-route">
+    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
+  </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
 

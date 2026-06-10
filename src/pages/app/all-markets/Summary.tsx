@@ -1111,28 +1111,31 @@ export default function AllMarketsSummary() {
                   Financial Statements
                 </CardTitle>
               </CardHeader>
-              <CardContent className="py-8 text-center">
-                <div className="max-w-md mx-auto">
-                  <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-[#C9A646]" />
+              {/* Financial statements section — hidden until data pipeline is ready */}
+              {false && (
+                <CardContent className="py-8 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
+                      <FileText className="w-8 h-8 text-[#C9A646]" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Coming Soon</h3>
+                    <p className="text-sm text-zinc-500 mb-4">
+                      Detailed financial statements including Income Statement, Balance Sheet,
+                      and Cash Flow will be available here.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {["Income Statement", "Balance Sheet", "Cash Flow"].map((item) => (
+                        <span
+                          key={item}
+                          className="px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-500 border border-zinc-700/50"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Coming Soon</h3>
-                  <p className="text-sm text-zinc-500 mb-4">
-                    Detailed financial statements including Income Statement, Balance Sheet, 
-                    and Cash Flow will be available here.
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {["Income Statement", "Balance Sheet", "Cash Flow"].map((item) => (
-                      <span
-                        key={item}
-                        className="px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-500 border border-zinc-700/50"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
           </div>
         )}
@@ -1147,28 +1150,31 @@ export default function AllMarketsSummary() {
                   Latest News
                 </CardTitle>
               </CardHeader>
-              <CardContent className="py-8 text-center">
-                <div className="max-w-md mx-auto">
-                  <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
-                    <Newspaper className="w-8 h-8 text-[#C9A646]" />
+              {/* News section — hidden until news pipeline is ready */}
+              {false && (
+                <CardContent className="py-8 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
+                      <Newspaper className="w-8 h-8 text-[#C9A646]" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">Coming Soon</h3>
+                    <p className="text-sm text-zinc-500 mb-4">
+                      Real-time news feed and AI-powered summaries for {symbol || "your selected symbol"}
+                      will appear here.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {["Market News", "Press Releases", "Analysis"].map((item) => (
+                        <span
+                          key={item}
+                          className="px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-500 border border-zinc-700/50"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Coming Soon</h3>
-                  <p className="text-sm text-zinc-500 mb-4">
-                    Real-time news feed and AI-powered summaries for {symbol || "your selected symbol"} 
-                    will appear here.
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {["Market News", "Press Releases", "Analysis"].map((item) => (
-                      <span
-                        key={item}
-                        className="px-3 py-1.5 rounded-full text-xs font-medium bg-zinc-800/80 text-zinc-500 border border-zinc-700/50"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
           </div>
         )}

@@ -353,13 +353,16 @@ export default function UserDetails() {
                 View as User
               </button>
 
-              <button
-                onClick={() => setShowSendEmail(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
-              >
-                <Mail className="w-4 h-4" />
-                Send Email
-              </button>
+              {/* Send Email pending backend integration — hidden until implemented */}
+              {false && (
+                <button
+                  onClick={() => setShowSendEmail(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  Send Email
+                </button>
+              )}
 
               <button
                 onClick={() => navigate(`/app/journal/admin/users/${userId}/trades`)}

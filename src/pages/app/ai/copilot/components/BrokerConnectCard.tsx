@@ -1,13 +1,8 @@
 // src/pages/app/ai/copilot/components/BrokerConnectCard.tsx
 import { Card } from '@/components/ds/Card';
-import { Button } from '@/components/ds/Button';
 import { Link2 } from 'lucide-react';
 
 export function BrokerConnectCard() {
-  const handleConnect = () => {
-    alert('Interactive Brokers integration is in development. Stay tuned!');
-  };
-
   return (
     <Card className="flex items-center justify-between gap-ds-4">
       <div className="flex items-center gap-ds-4">
@@ -19,11 +14,11 @@ export function BrokerConnectCard() {
           <p className="text-xs text-ink-secondary mt-0.5">
             Sync your live holdings, P&amp;L, and performance automatically.
           </p>
+          <p className="text-xs text-amber-400/80 mt-1">
+            Interactive Brokers integration coming soon.
+          </p>
         </div>
       </div>
-      <Button variant="gold" size="sm" onClick={handleConnect} showArrow={false}>
-        Connect broker
-      </Button>
     </Card>
   );
 }

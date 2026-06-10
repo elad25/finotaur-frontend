@@ -10,10 +10,13 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || '';
-    return {
+    const accessToken = session?.access_token || '';
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-user-id': userId,
     };
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    return headers;
   } catch {
     return {
       'Content-Type': 'application/json',

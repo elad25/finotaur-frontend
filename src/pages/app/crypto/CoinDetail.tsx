@@ -13,6 +13,7 @@ import { SkeletonChart, SkeletonCard } from '@/components/ds/Skeleton';
 import { CryptoCoinDetailSkeletonPage } from '@/components/skeletons/CryptoCoinDetailSkeleton';
 import { formatPrice, formatCompact, formatPercent, formatCompactNum, getPriceColor, formatDate, formatSupply, calcVolMcapRatio, formatRatio, clamp } from './_shared/formatters';
 import type { KlineData, TechnicalSignal } from './_shared/types';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 
 const INTERVALS = [
   { id: '5m', label: '5m' }, { id: '15m', label: '15m' }, { id: '1h', label: '1H' },
@@ -154,7 +155,7 @@ const FundamentalsTab = memo(function FundamentalsTab({ coin }: { coin: any }) {
   ].filter(Boolean) as { l: string; u: string }[];
   return (
     <div className="space-y-4">
-      {coin.description?.en && <GlassCard><SectionHeader title="About" /><div className="text-xs text-white/40 leading-relaxed max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: coin.description.en.slice(0, 800) }} /></GlassCard>}
+      {coin.description?.en && <GlassCard><SectionHeader title="About" /><div className="text-xs text-white/40 leading-relaxed max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: sanitizeHtml(coin.description.en.slice(0, 800)) }} /></GlassCard>}
       <GlassCard>
         <SectionHeader title="Links & Community" />
         <div className="flex flex-wrap gap-2">{linkItems.map(l => <a key={l.u} href={l.u} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 rounded-lg bg-white/[0.05] text-white/50 text-[11px] hover:bg-white/[0.08] hover:text-white/70 transition-all">{l.l}</a>)}</div>

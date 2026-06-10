@@ -8,11 +8,18 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
 
+// SECURITY: Only expose the service-role key in local development.
+// In production the variable must not be set; if it is, we silently ignore it
+// so it never ends up in the browser bundle.
+const isDev = import.meta.env.DEV;
+
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// 🔥 Create Admin client (Service Role - bypasses RLS)
-export const supabaseAdmin = supabaseServiceRoleKey 
+// Admin client (Service Role - bypasses RLS) — DEV only.
+// In production this is always null; admin operations must go through
+// server-side Edge Functions that hold the key server-side.
+export const supabaseAdmin = (isDev && supabaseServiceRoleKey)
   ? createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         autoRefreshToken: false,
@@ -25,10 +32,12 @@ export const supabaseAdmin = supabaseServiceRoleKey
     })
   : null;
 
-if (supabaseAdmin) {
-  console.log('✅ Admin client initialized');
-} else {
-  console.warn('⚠️ Admin client not available (missing service role key)');
+if (isDev) {
+  if (supabaseAdmin) {
+    console.log('✅ Admin client initialized (DEV only)');
+  } else {
+    console.warn('⚠️ Admin client not available (missing service role key)');
+  }
 }
 
 /**
