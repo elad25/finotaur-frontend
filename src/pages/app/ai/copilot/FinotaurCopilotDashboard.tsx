@@ -10,7 +10,6 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { PerformanceChart } from './components/PerformanceChart';
 import { MarketComparisonChart } from './components/MarketComparisonChart';
 import { AssetClassAllocationCard } from './components/AssetClassAllocationCard';
 import { GlobeLoader } from './components/GlobeLoader';
@@ -25,7 +24,7 @@ import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
 
-// Time-range list lives inside PerformanceChart now.
+// Time-range list lives inside PortfolioValuePanel.
 
 export function FinotaurCopilotDashboard() {
   const [range, setRange] = useState<TimeRange>('1M');
@@ -89,10 +88,7 @@ export function FinotaurCopilotDashboard() {
     <ErrorBoundary boundary="ai-copilot">
       <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
         {/* ROW 1 — LEFT: portfolio value + its performance graph; CENTER: globe (unchanged); RIGHT: insights */}
-        <div className="xl:col-span-4 flex flex-col gap-3">
-          <PortfolioValuePanel range={range} snapshot={snapshot} />
-          <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} compact />
-        </div>
+        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} onRangeChange={setRange} />
         <AiBrainPanel className="xl:col-span-4" />
         <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
