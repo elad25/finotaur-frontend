@@ -28,6 +28,7 @@ import {
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
   Link, Gift, Swords, Crown, Shield, Copy, Droplet, Grid3x3, Calculator,
   GitCompare,
+  ScanLine,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -308,6 +309,7 @@ export const domains: Record<string, Domain> = {
       { label: 'DeFi TVL',        path: '/app/crypto/defi-tvl',   icon: Coins },
       { label: 'Stablecoins',     path: '/app/crypto/stablecoins', icon: DollarSign },
       { label: 'Block Trades',    path: '/app/crypto/whales/trades', icon: Layers },
+      { label: 'Market Scanner',  path: '/app/crypto/scanner',       icon: ScanLine },
       { label: 'Heatmap',         path: '/app/crypto/heatmap',     icon: Map },
       { label: 'Watchlist',       path: '/app/crypto/watchlist',   icon: Bell },
       // Academy removed from sidebar (route /app/crypto/academy still exists)

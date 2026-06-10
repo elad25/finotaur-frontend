@@ -296,6 +296,7 @@ const CryptoDefiTvl = lazy(() => import("@/pages/app/crypto/DefiTvl"));
 const CryptoStablecoins = lazy(() => import("@/pages/app/crypto/Stablecoins"));
 const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
 const CryptoWhales = lazy(() => import("@/pages/app/crypto/whales/WhalesHub"));
+const CryptoMarketScanner = lazy(() => import("@/pages/app/crypto/scanner/MarketScanner"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -576,6 +577,7 @@ function AppContent() {
           <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
           <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
           <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
+          <Route path="crypto/scanner" element={<LockedRoute domainId="crypto"><CryptoMarketScanner /></LockedRoute>} />
 
           {/* FUTURES: licensed-data-safe workspace only. No live CME quotes/charts/DOM/OI fetches. */}
           <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />
