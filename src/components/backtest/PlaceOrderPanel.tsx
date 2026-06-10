@@ -1,10 +1,16 @@
 // ==========================================
-// PLACE ORDER PANEL (Phase 2 — order parity)
+// PLACE ORDER PANEL (Phase 2 + Phase 7 — order parity)
 // ==========================================
 // 1:1 with the reference "PLACE ORDER" panel, in Finotaur gold-on-black.
 // Standard mode: manual position size + SL/TP.
 // Advanced mode: risk-based auto position sizing (% or $) against current/initial
 // balance, plus Market/Limit/Stop order kinds. Built on lib/backtest/orderEngine.
+//
+// Phase 7 additions:
+//  - Multi-leg take-profit (up to 3 legs, each with price + sizePercent)
+//  - commissionConfig prop for fee estimate display
+//  - Weighted-average TP in R:R readout when multi-leg mode is active
+//  - takeProfits[] included in PlaceOrderSubmit
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
@@ -14,9 +20,15 @@ import {
   calcRewardRisk,
   resolveRiskAmount,
   validateOrderLevels,
+  validateTakeProfitLegs,
+  applyCommission,
   type OrderKind,
   type OrderSide,
+  type TakeProfitLeg,
+  type CommissionConfig,
 } from '@/lib/backtest/orderEngine';
+
+// ─── Types ──────────────────────────────────────────────────────
 
 export interface PlaceOrderSubmit {
   side: OrderSide;
@@ -26,6 +38,8 @@ export interface PlaceOrderSubmit {
   size: number;
   stopLoss: number | null;
   takeProfit: number | null;
+  /** Phase 7: multi-leg TP schedule. When present and non-empty, takes precedence over takeProfit. */
+  takeProfits?: TakeProfitLeg[];
 }
 
 export interface PlaceOrderDraft {
@@ -42,6 +56,8 @@ interface PlaceOrderPanelProps {
   currentBalance: number;
   initialBalance: number;
   contractMultiplier?: number;
+  /** Phase 7: session-level commission config. Used to display fee estimates. */
+  commissionConfig?: CommissionConfig;
   onSubmit?: (order: PlaceOrderSubmit) => void;
   /**
    * Optional callback fired whenever the computed draft values change.
@@ -56,12 +72,38 @@ type BalanceBasis = 'current' | 'initial';
 
 const num = (v: string) => (v === '' ? NaN : Number(v));
 
+/** Generate a unique leg ID. */
+function newLegId(): string {
+  return `tp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** Split sizePercent evenly across n legs (last leg gets remainder to stay at 100). */
+function evenSplit(count: number): number[] {
+  if (count <= 0) return [];
+  const base = Math.floor(100 / count);
+  const result = Array(count).fill(base);
+  result[count - 1] = 100 - base * (count - 1);
+  return result;
+}
+
+/** Weighted average TP price across multi-leg targets (weights = sizePercent). */
+function weightedAvgTp(legs: TakeProfitLeg[]): number {
+  const total = legs.reduce((acc, l) => acc + l.sizePercent, 0);
+  if (total <= 0) return 0;
+  return legs.reduce((acc, l) => acc + l.price * l.sizePercent, 0) / total;
+}
+
+const MAX_TP_LEGS = 3;
+
+// ─── Component ──────────────────────────────────────────────────
+
 export function PlaceOrderPanel({
   marketPrice,
   symbol,
   currentBalance,
   initialBalance,
   contractMultiplier = 1,
+  commissionConfig,
   onSubmit,
   onDraftChange,
   className,
@@ -74,9 +116,14 @@ export function PlaceOrderPanel({
   const [positionSize, setPositionSize] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
 
-  // Shared SL/TP
+  // Shared SL / single TP
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
+
+  // Phase 7: multi-leg TP state
+  const [multiLegMode, setMultiLegMode] = useState(false);
+  const [legs, setLegs] = useState<TakeProfitLeg[]>([]);
+  const [legError, setLegError] = useState<string | null>(null);
 
   // Advanced-mode inputs
   const [balanceBasis, setBalanceBasis] = useState<BalanceBasis>('current');
@@ -121,16 +168,32 @@ export function PlaceOrderPanel({
     [advanced, basisBalance, riskMode, riskValue]
   );
 
+  // Effective TP price for R:R: weighted avg across multi-leg, or single field.
+  const effectiveTpPrice = useMemo(() => {
+    if (multiLegMode && legs.length > 0) {
+      return weightedAvgTp(legs);
+    }
+    const tp = num(takeProfit);
+    return Number.isFinite(tp) ? tp : 0;
+  }, [multiLegMode, legs, takeProfit]);
+
   const rr = useMemo(() => {
     const sl = num(stopLoss);
-    const tp = num(takeProfit);
-    if (!Number.isFinite(sl) || !Number.isFinite(tp) || !computedSize) {
+    if (!Number.isFinite(sl) || !effectiveTpPrice || !computedSize) {
       return { reward: 0, risk: 0, rr: 0 };
     }
     // Side used only to keep reward/risk positive; ratio is side-agnostic here.
-    const side: OrderSide = tp >= entryPrice ? 'buy' : 'sell';
-    return calcRewardRisk(side, entryPrice, sl, tp, computedSize, contractMultiplier);
-  }, [stopLoss, takeProfit, computedSize, entryPrice, contractMultiplier]);
+    const side: OrderSide = effectiveTpPrice >= entryPrice ? 'buy' : 'sell';
+    return calcRewardRisk(side, entryPrice, sl, effectiveTpPrice, computedSize, contractMultiplier);
+  }, [stopLoss, effectiveTpPrice, computedSize, entryPrice, contractMultiplier]);
+
+  // Phase 7: fee estimate for display (both entry + exit, same size).
+  const feeEstimate = useMemo(() => {
+    if (!commissionConfig || !computedSize || !entryPrice) return 0;
+    const entryFee = applyCommission(entryPrice, computedSize, commissionConfig);
+    const exitFee = applyCommission(effectiveTpPrice || entryPrice, computedSize, commissionConfig);
+    return entryFee + exitFee;
+  }, [commissionConfig, computedSize, entryPrice, effectiveTpPrice]);
 
   // Emit live draft values so a parent (e.g. BacktestChart) can read the current
   // size/SL/TP without needing to own those inputs. Fires only when values change.
@@ -146,15 +209,68 @@ export function PlaceOrderPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [computedSize, stopLoss, takeProfit]);
 
+  // ─── Multi-leg TP handlers ──────────────────────────────────────
+
+  const handleAddLeg = () => {
+    if (legs.length >= MAX_TP_LEGS) return;
+    const newCount = legs.length + 1;
+    const splits = evenSplit(newCount);
+    const newLegs: TakeProfitLeg[] = legs.map((l, i) => ({ ...l, sizePercent: splits[i] }));
+    // New leg inherits the current single TP price if set, else 0.
+    const inheritedPrice = num(takeProfit);
+    newLegs.push({
+      id: newLegId(),
+      price: Number.isFinite(inheritedPrice) ? inheritedPrice : 0,
+      sizePercent: splits[newCount - 1],
+    });
+    setLegs(newLegs);
+    setLegError(null);
+  };
+
+  const handleRemoveLeg = (legId: string) => {
+    const remaining = legs.filter((l) => l.id !== legId);
+    if (remaining.length === 0) {
+      setLegs([]);
+      setLegError(null);
+      return;
+    }
+    // Re-split evenly.
+    const splits = evenSplit(remaining.length);
+    setLegs(remaining.map((l, i) => ({ ...l, sizePercent: splits[i] })));
+    setLegError(null);
+  };
+
+  const handleLegPrice = (legId: string, value: string) => {
+    const p = num(value);
+    setLegs((prev) => prev.map((l) => (l.id === legId ? { ...l, price: Number.isFinite(p) ? p : 0 } : l)));
+    setLegError(null);
+  };
+
+  const handleLegPercent = (legId: string, value: string) => {
+    const pct = num(value);
+    setLegs((prev) => prev.map((l) => (l.id === legId ? { ...l, sizePercent: Number.isFinite(pct) ? pct : 0 } : l)));
+    setLegError(null);
+  };
+
+  // ─── Submit ────────────────────────────────────────────────────
+
   const place = (side: OrderSide) => {
+    // Validate multi-leg TP if active.
+    if (multiLegMode && legs.length > 0) {
+      const legVal = validateTakeProfitLegs(legs);
+      if (!legVal.ok) {
+        setLegError(legVal.reason);
+        return;
+      }
+    }
+
     const sl = num(stopLoss);
     const tp = num(takeProfit);
     const slVal = Number.isFinite(sl) ? sl : null;
-    const tpVal = Number.isFinite(tp) ? tp : null;
+    const tpVal = (!multiLegMode || legs.length === 0) && Number.isFinite(tp) ? tp : null;
 
-    const reason = validateOrderLevels(side, entryPrice, slVal, tpVal);
+    const reason = validateOrderLevels(side, entryPrice, slVal, tpVal ?? (effectiveTpPrice || null));
     if (reason) {
-      // Surface inline; caller can also toast.
       setError(reason);
       return;
     }
@@ -163,7 +279,16 @@ export function PlaceOrderPanel({
       return;
     }
     setError(null);
-    onSubmit?.({ side, kind, price: entryPrice, size: computedSize, stopLoss: slVal, takeProfit: tpVal });
+    setLegError(null);
+    onSubmit?.({
+      side,
+      kind,
+      price: entryPrice,
+      size: computedSize,
+      stopLoss: slVal,
+      takeProfit: tpVal,
+      takeProfits: multiLegMode && legs.length > 0 ? legs : undefined,
+    });
   };
 
   return (
@@ -299,9 +424,49 @@ export function PlaceOrderPanel({
         </div>
       </Field>
 
-      {/* SL / TP */}
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Profit target">
+      {/* Stop loss */}
+      <Field label="Stop loss">
+        <input
+          type="number"
+          value={stopLoss}
+          onChange={(e) => setStopLoss(e.target.value)}
+          placeholder="0"
+          className={inputCls}
+        />
+      </Field>
+
+      {/* Take profit — single or multi-leg */}
+      <div className="mb-2">
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-[11px] text-gray-400">
+            Profit target{multiLegMode && legs.length > 0 ? ' (multi-leg)' : ''}
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setMultiLegMode((m) => {
+                if (!m) {
+                  // Entering multi-leg: pre-populate one leg from current TP.
+                  const inheritedPrice = num(takeProfit);
+                  setLegs([{
+                    id: newLegId(),
+                    price: Number.isFinite(inheritedPrice) ? inheritedPrice : 0,
+                    sizePercent: 100,
+                  }]);
+                } else {
+                  setLegs([]);
+                  setLegError(null);
+                }
+                return !m;
+              });
+            }}
+            className="text-[10px] text-[#C9A646] hover:text-[#D4B55E]"
+          >
+            {multiLegMode ? 'Single target' : 'Multi-leg'}
+          </button>
+        </div>
+
+        {!multiLegMode ? (
           <input
             type="number"
             value={takeProfit}
@@ -309,16 +474,52 @@ export function PlaceOrderPanel({
             placeholder="0"
             className={inputCls}
           />
-        </Field>
-        <Field label="Stop loss">
-          <input
-            type="number"
-            value={stopLoss}
-            onChange={(e) => setStopLoss(e.target.value)}
-            placeholder="0"
-            className={inputCls}
-          />
-        </Field>
+        ) : (
+          <div className="space-y-1">
+            {legs.map((leg, idx) => (
+              <div key={leg.id} className="flex gap-1 items-center">
+                <span className="text-[10px] text-gray-500 w-8 shrink-0">
+                  TP{idx + 1}
+                </span>
+                <input
+                  type="number"
+                  value={leg.price || ''}
+                  onChange={(e) => handleLegPrice(leg.id, e.target.value)}
+                  placeholder="Price"
+                  className={cn(inputCls, 'flex-1')}
+                />
+                <input
+                  type="number"
+                  value={leg.sizePercent}
+                  onChange={(e) => handleLegPercent(leg.id, e.target.value)}
+                  placeholder="100"
+                  className={cn(inputCls, 'w-16 text-center')}
+                />
+                <span className="text-[10px] text-gray-600">%</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveLeg(leg.id)}
+                  className="text-gray-600 hover:text-rose-400 text-xs px-1"
+                  aria-label={`Remove TP${idx + 1}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {legs.length < MAX_TP_LEGS && (
+              <button
+                type="button"
+                onClick={handleAddLeg}
+                className="w-full text-[11px] text-[#C9A646]/70 hover:text-[#C9A646] border border-dashed border-[#C9A646]/20 hover:border-[#C9A646]/40 rounded-md py-1 transition-all mt-1"
+              >
+                + Add TP
+              </button>
+            )}
+            {legError && (
+              <p className="text-[10px] text-rose-400 mt-1">{legError}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Reward / Risk / Total */}
@@ -340,6 +541,13 @@ export function PlaceOrderPanel({
           </p>
         </div>
       </div>
+
+      {/* Phase 7: fee estimate line (only visible when commissionConfig is non-zero) */}
+      {feeEstimate > 0 && (
+        <p className="text-[10px] text-gray-500 text-center -mt-1 mb-2">
+          Fees incl. ~${feeEstimate.toFixed(2)} (entry + exit est.)
+        </p>
+      )}
 
       {error && <p className="text-[11px] text-rose-400 mb-2">{error}</p>}
 

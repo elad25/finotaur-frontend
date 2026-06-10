@@ -14,15 +14,15 @@ import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 // ─── Palette — per-asset-class colours (user-approved override of ADL-020) ───
 
 const CLASS_COLOURS: Record<string, string> = {
-  Equities:    '#E6B84F',            // gold/amber
-  ETFs:        '#4F8FE6',            // blue
-  Cash:        '#3FBFA8',            // teal
-  Bonds:       '#8B6FD6',            // purple
-  Crypto:      '#E8884F',            // orange
-  Options:     '#D65F9E',            // magenta
-  Futures:     '#4FB8D6',            // cyan
-  Commodities: '#B8884F',            // bronze
-  Other:       'rgba(255,255,255,0.28)',
+  Equities:    '#C9A646',            // gold — brand anchor
+  ETFs:        '#8A93A6',            // muted slate
+  Cash:        '#6E7F76',            // muted sage
+  Bonds:       '#7D6F8F',            // muted plum
+  Crypto:      '#A6826B',            // muted bronze
+  Options:     '#7A8A7A',            // muted moss
+  Futures:     '#7A7A8A',            // muted lavender-grey
+  Commodities: '#8A7A6B',            // muted sand
+  Other:       'rgba(255,255,255,0.22)',
 };
 
 const colourFor = (label: string): string =>

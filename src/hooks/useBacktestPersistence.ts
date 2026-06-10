@@ -15,6 +15,7 @@ import { useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import type { PaperPosition, PendingOrder, SessionStats } from './useBacktestSession';
+import { weightedAvgExitPrice } from '@/lib/backtest/journaling';
 
 // ─── Wire types — match Edge Function payloads ─────────────────
 export interface SaveSessionInput {
@@ -99,18 +100,28 @@ function unixToIso(unix: number): string {
 }
 
 function paperToWire(p: PaperPosition) {
+  // Phase 7: use originalSize for quantity (represents full position before partial closes).
+  // Weighted-average exit price across multi-fill exits; falls back to single exitPrice.
+  const exitPrice = p.fills && p.fills.length > 0
+    ? (weightedAvgExitPrice(p.fills) ?? p.exitPrice)
+    : p.exitPrice;
+
+  // Map flatten/reverse → 'manual' at DB wire boundary.
+  const exitReason: 'manual' | 'sl' | 'tp' | undefined =
+    p.exitReason === 'flatten' || p.exitReason === 'reverse' ? 'manual' : p.exitReason;
+
   return {
     side: p.side,
     entry_time: unixToIso(p.entryTime),
     entry_price: p.entryPrice,
     exit_time: p.exitTime != null ? unixToIso(p.exitTime) : undefined,
-    exit_price: p.exitPrice,
-    size: p.size,
+    exit_price: exitPrice,
+    size: p.originalSize ?? p.size,
     stop_loss: p.stopLoss,
     take_profit: p.takeProfit,
-    pnl: p.pnl,
+    pnl: p.pnl, // NET PnL (fees already deducted), not gross
     pnl_percent: p.pnlPercent,
-    exit_reason: p.exitReason,
+    exit_reason: exitReason,
     strategy_id: p.strategyId ?? null,
   };
 }

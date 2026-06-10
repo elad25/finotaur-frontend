@@ -43,6 +43,7 @@ import {
   type PendingOrder,
   type PendingOrderType,
 } from '@/hooks/useBacktestSession';
+import type { CommissionConfig } from '@/lib/backtest/orderEngine';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 import { useQueryClient } from '@tanstack/react-query';
 import { backtestStatsKeys } from '@/hooks/useBacktestStats';
@@ -311,6 +312,10 @@ export interface BacktestChartProps {
   /** Active session id — scopes persisted paper-trading state per session. */
   sessionId?: string;
   theme?: 'dark' | 'light';
+  /** Commission/slippage config captured from the create-session modal.
+   *  Applied once on mount via setCommissionConfig so the session reflects
+   *  the user's execution settings from the very first trade. */
+  initialCommissionConfig?: CommissionConfig;
 }
 
 export function BacktestChart({
@@ -319,6 +324,7 @@ export function BacktestChart({
   startingBalance = 10000,
   sessionId,
   theme = 'dark',
+  initialCommissionConfig,
 }: BacktestChartProps) {
   const [symbol, setSymbol] = useState(initialSymbol);
   // Asset class is derived from the symbol — no separate user control.
@@ -364,7 +370,26 @@ export function BacktestChart({
     cancelPendingOrder,
     fillPendingOrder,
     updatePendingRisk,
+    // Phase 7: broker-grade position management
+    partialClose,
+    moveToBreakeven,
+    flatten,
+    reverse,
+    cancelAllPending,
+    updateTpLeg,
+    fillTpLeg,
+    setCommissionConfig,
   } = session;
+
+  // Apply the commission config from the create-session modal once on mount.
+  // Guard: only call when the prop is defined (i.e. user explicitly set a config)
+  // so existing sessions loaded without this prop keep their persisted config.
+  useEffect(() => {
+    if (initialCommissionConfig !== undefined) {
+      setCommissionConfig(initialCommissionConfig);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally run only on mount — config is stable from the modal
 
   // Phase 2: Supabase persistence for "Save Session" button.
   const persistence = useBacktestPersistence();
@@ -594,13 +619,12 @@ export function BacktestChart({
     if (!pos) return;
     if ((pos.entryTime as number) === (bar.time as number)) return; // same-bar skip
 
+    // Conservative OHLC rule: SL checked FIRST, before any TP legs.
+    // This mirrors runStrategy.ts: in a real bar both events could occur, but
+    // we assume SL (worse outcome) is hit first to avoid favourable phantom fills.
     if (pos.side === 'LONG') {
       if (pos.stopLoss != null && bar.low <= pos.stopLoss) {
         closePosition({ price: pos.stopLoss, time: bar.time as number, reason: 'sl' });
-        return;
-      }
-      if (pos.takeProfit != null && bar.high >= pos.takeProfit) {
-        closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
         return;
       }
     } else {
@@ -608,12 +632,49 @@ export function BacktestChart({
         closePosition({ price: pos.stopLoss, time: bar.time as number, reason: 'sl' });
         return;
       }
+    }
+
+    // Phase 7: multi-leg TP fill logic.
+    // Sort unfilled legs so we process them in the direction of profit
+    // (ascending for LONG, descending for SHORT — nearest TP first per bar).
+    const legs = pos.takeProfits ?? [];
+    if (legs.length > 0) {
+      const unfilledLegs = legs.filter((l) => !l.filled);
+      const sortedLegs =
+        pos.side === 'LONG'
+          ? [...unfilledLegs].sort((a, b) => a.price - b.price)   // lowest TP first
+          : [...unfilledLegs].sort((a, b) => b.price - a.price);  // highest TP first
+
+      for (const leg of sortedLegs) {
+        const triggered =
+          pos.side === 'LONG' ? bar.high >= leg.price : bar.low <= leg.price;
+        if (triggered) {
+          // fillTpLeg handles partial close, fee, and position seal if needed.
+          fillTpLeg(leg.id, bar.time as number);
+          // One leg per bar (conservative). After each fill the state updates
+          // and the next bar reveal will catch remaining legs.
+          return;
+        }
+      }
+      // No TP leg triggered. Skip the legacy path only when unfilled legs remain;
+      // if all legs are already filled but the position is still open (float edge),
+      // fall through to the legacy single-TP / seal path below.
+      if (unfilledLegs.length > 0) return;
+    }
+
+    // Legacy single TP — used when no multi-leg schedule is set.
+    if (pos.side === 'LONG') {
+      if (pos.takeProfit != null && bar.high >= pos.takeProfit) {
+        closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
+        return;
+      }
+    } else {
       if (pos.takeProfit != null && bar.low <= pos.takeProfit) {
         closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
         return;
       }
     }
-  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder]);
+  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder, fillTpLeg]);
 
   // Phase 6: place a pending order from the context-menu selection. Size/SL/TP
   // come from the PlaceOrderPanel draft (orderDraft), falling back to the legacy
@@ -691,6 +752,42 @@ export function BacktestChart({
     });
   }, [currentBarRef, livePrice, flashTradeError, closePosition]);
 
+  // Phase 7: position management helpers — all use currentBarRef for current price/time.
+  const currentReplayPrice = useCallback((): number | null => {
+    return currentBarRef.current?.close ?? null;
+  }, []);
+
+  const currentReplayTime = useCallback((): number => {
+    return (currentBarRef.current?.time as number) ?? Math.floor(Date.now() / 1000);
+  }, []);
+
+  const handlePartialClose = useCallback((pct: number) => {
+    if (!state.activePosition) return;
+    const price = currentReplayPrice();
+    if (!price) { flashTradeError('No price yet — wait for the chart to reveal a bar.'); return; }
+    partialClose(pct, price, currentReplayTime());
+  }, [state.activePosition, currentReplayPrice, currentReplayTime, partialClose, flashTradeError]);
+
+  const handleMoveToBreakeven = useCallback(() => {
+    if (!state.activePosition) return;
+    moveToBreakeven();
+  }, [state.activePosition, moveToBreakeven]);
+
+  const handleFlatten = useCallback(() => {
+    if (!state.activePosition) return;
+    const price = currentReplayPrice();
+    if (!price) { flashTradeError('No price yet — wait for the chart to reveal a bar.'); return; }
+    flatten(price, currentReplayTime());
+  }, [state.activePosition, currentReplayPrice, currentReplayTime, flatten, flashTradeError]);
+
+  const handleReverse = useCallback(() => {
+    if (!state.activePosition) return;
+    const price = currentReplayPrice();
+    if (!price) { flashTradeError('No price yet — wait for the chart to reveal a bar.'); return; }
+    // Reverse keeps the same size as the current position.
+    reverse(price, currentReplayTime(), state.activePosition.size);
+  }, [state.activePosition, currentReplayPrice, currentReplayTime, reverse, flashTradeError]);
+
   const handleSaveSession = async () => {
     if (state.closedPositions.length === 0 && !state.activePosition) {
       setSaveError('Nothing to save — open or close a trade first.');
@@ -752,6 +849,8 @@ export function BacktestChart({
         size: order.size,
         stopLoss: sl,
         takeProfit: tp,
+        // Phase 7: multi-leg TP schedule from PlaceOrderPanel
+        takeProfits: order.takeProfits,
         strategyId: activeStrategyId,
       });
     } else {
@@ -1093,6 +1192,7 @@ export function BacktestChart({
             onUpdateSL={updateStopLoss}
             onUpdateTP={updateTakeProfit}
             onUpdatePendingPrice={(orderId, price) => updatePendingRisk(orderId, { triggerPrice: price })}
+            onUpdateTpLeg={updateTpLeg}
           />
           {/* Right rail — PlaceOrderPanel + open-position card + Save to journal */}
           <div className="absolute right-0 top-0 bottom-0 z-30 w-80 overflow-y-auto border-l border-white/10 bg-[#0A0A0A]/95 p-3 flex flex-col gap-3">
@@ -1101,6 +1201,7 @@ export function BacktestChart({
               symbol={displaySymbol(symbol)}
               currentBalance={state.startingBalance + state.stats.netPnl}
               initialBalance={state.startingBalance}
+              commissionConfig={state.commissionConfig}
               onSubmit={handlePanelSubmit}
               onDraftChange={setOrderDraft}
             />
@@ -1118,7 +1219,12 @@ export function BacktestChart({
                 <div className="grid grid-cols-2 gap-1.5 text-xs mb-3">
                   <div>
                     <span className="text-gray-500">Size</span>
-                    <span className="ml-2 font-mono text-white">{state.activePosition.size}</span>
+                    <span className="ml-2 font-mono text-white">
+                      {state.activePosition.size}
+                      {state.activePosition.originalSize && state.activePosition.originalSize !== state.activePosition.size && (
+                        <span className="ml-1 text-gray-600">/{state.activePosition.originalSize}</span>
+                      )}
+                    </span>
                   </div>
                   <div>
                     <span className="text-gray-500">Entry</span>
@@ -1130,20 +1236,80 @@ export function BacktestChart({
                       <span className="ml-2 font-mono text-rose-400">${state.activePosition.stopLoss.toFixed(2)}</span>
                     </div>
                   )}
-                  {state.activePosition.takeProfit != null && (
+                  {state.activePosition.takeProfit != null && !(state.activePosition.takeProfits?.length) && (
                     <div>
                       <span className="text-emerald-400/70">TP</span>
                       <span className="ml-2 font-mono text-emerald-400">${state.activePosition.takeProfit.toFixed(2)}</span>
                     </div>
                   )}
+                  {state.activePosition.feesPaid != null && state.activePosition.feesPaid > 0 && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500">Fees paid</span>
+                      <span className="ml-2 font-mono text-amber-400/80">${state.activePosition.feesPaid.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => handleClose('manual')}
-                  className="w-full rounded-lg border border-zinc-700 bg-black py-2 text-xs font-bold text-white transition-colors hover:border-zinc-500 hover:bg-zinc-900"
-                >
-                  Close Position
-                </button>
+
+                {/* Phase 7: position management bar */}
+                <div className="grid grid-cols-3 gap-1 mb-2">
+                  {([0.25, 0.5, 0.75] as const).map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => handlePartialClose(pct)}
+                      className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-[#C9A646]/40 hover:text-[#C9A646] transition-colors"
+                    >
+                      Close {pct * 100}%
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-1 mb-2">
+                  <button
+                    type="button"
+                    onClick={handleMoveToBreakeven}
+                    className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
+                    title="Move stop loss to entry price (breakeven)"
+                  >
+                    BE Stop
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFlatten}
+                    className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-rose-500/40 hover:text-rose-400 transition-colors"
+                    title="Close position and cancel all pending orders"
+                  >
+                    Flatten
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-1 mb-2">
+                  <button
+                    type="button"
+                    onClick={handleReverse}
+                    className="rounded-md border border-zinc-700 bg-zinc-900/60 py-1.5 text-[10px] font-semibold text-zinc-300 hover:border-purple-500/40 hover:text-purple-400 transition-colors"
+                    title="Close position and open opposite at same price"
+                  >
+                    Reverse
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleClose('manual')}
+                    className="rounded-md border border-zinc-700 bg-black py-1.5 text-[10px] font-bold text-white hover:border-zinc-500 hover:bg-zinc-900 transition-colors"
+                  >
+                    Close All
+                  </button>
+                </div>
               </div>
+            )}
+
+            {/* Phase 7: Cancel all pending orders button */}
+            {state.pendingOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => cancelAllPending()}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900/40 py-2 text-xs font-semibold text-zinc-400 hover:border-rose-700 hover:text-rose-400 transition-colors"
+              >
+                Cancel All Pending ({state.pendingOrders.length})
+              </button>
             )}
 
             {/* Session Stats — compact in-rail panel */}
