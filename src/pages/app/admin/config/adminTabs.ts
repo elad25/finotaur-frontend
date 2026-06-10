@@ -21,6 +21,7 @@ import {
   Sparkles,
   MessageSquare,
   Target,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -87,6 +88,15 @@ export const ADMIN_TABS: AdminTab[] = [
     phase: 2,
     enabled: true,
     description: 'Product-feedback intelligence — requests, churn themes, bugs, pain points',
+  },
+  {
+    id: 'growth',
+    label: 'Growth',
+    path: '/app/admin/growth',
+    icon: TrendingUp,
+    phase: 2,
+    enabled: true,
+    description: 'Traffic, sources, funnel and signup attribution',
   },
   {
     id: 'seo',

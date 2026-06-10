@@ -14,7 +14,7 @@ import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimePr
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
-import { Suspense, memo } from "react";
+import { Suspense, memo, useEffect } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { JournalRoute } from "@/components/routes/JournalRoute";
@@ -129,6 +129,7 @@ import LinksPage from "@/pages/LinksPage";
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
+import { captureFirstTouch } from "@/lib/analytics/attribution";
 
 // LAZY LOADED PAGES
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
@@ -404,6 +405,9 @@ function ETFSymbolRedirect() {
 function AppContent() {
   // Consent-gated analytics: boots GA4 + PostHog only after user accepts cookies.
   useAnalytics();
+
+  // Capture first-touch attribution on first render (runs once, idempotent).
+  useEffect(() => { captureFirstTouch(); }, []);
 
   return (
     <>

@@ -9,6 +9,8 @@ import { FEATURES } from '@/config/features';
 import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
 import { logger } from '@/lib/logger';
 import { setSentryUser } from '@/lib/sentry';
+import { track } from '@/lib/analytics';
+import { getFirstTouch } from '@/lib/analytics/attribution';
 
 interface AuthContextType {
   user: User | null;
@@ -326,6 +328,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   } else {
                     localStorage.removeItem('pending_terms_accepted_at');
                     localStorage.removeItem('pending_terms_version');
+                    // Fire-and-forget: attribute this OAuth signup to its first-touch source.
+                    track('signup', { method: 'oauth', ...getFirstTouch() });
                   }
                 }
               }
