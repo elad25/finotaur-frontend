@@ -5,6 +5,7 @@ import type { Interval } from "@/components/charting/types";
 import { CreateBacktestSessionModal } from "@/components/backtest/CreateBacktestSessionModal";
 import { useBacktestSessionStore } from "@/store/useBacktestSessionStore";
 import type { BacktestSession } from "@/types/backtestSession";
+import type { CommissionConfig } from "@/lib/backtest/orderEngine";
 import { Button } from "@/components/ui/button";
 import {
   Plus, History, LineChart, BookOpen, Share2, Clock,
@@ -40,6 +41,7 @@ const FEATURES = [
 export default function Chart() {
   const [isImmersiveMode, setIsImmersiveMode] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [pendingCommissionConfig, setPendingCommissionConfig] = useState<CommissionConfig | undefined>(undefined);
 
   const sessions = useBacktestSessionStore((s) => s.sessions);
   const activeSession = useBacktestSessionStore((s) => s.getActiveSession());
@@ -56,8 +58,9 @@ export default function Chart() {
     };
   }, []);
 
-  const enterSession = (session: BacktestSession) => {
+  const enterSession = (session: BacktestSession, commissionConfig?: CommissionConfig) => {
     setActiveSession(session.id);
+    setPendingCommissionConfig(commissionConfig);
     setIsImmersiveMode(true);
   };
 
@@ -88,6 +91,7 @@ export default function Chart() {
             initialSymbol={activeSession?.symbol}
             initialInterval={activeSession?.timeframe as Interval}
             startingBalance={activeSession?.startBalance}
+            initialCommissionConfig={pendingCommissionConfig}
           />
         </div>
       </div>
@@ -216,7 +220,7 @@ export default function Chart() {
       <CreateBacktestSessionModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        onCreated={(session) => enterSession(session)}
+        onCreated={(session, commissionConfig) => enterSession(session, commissionConfig)}
       />
     </div>
   );

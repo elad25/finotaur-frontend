@@ -196,6 +196,8 @@ export interface BacktestReplayChartProps {
   onUpdateSL?: (price: number) => void;
   onUpdateTP?: (price: number) => void;
   onUpdatePendingPrice?: (orderId: string, price: number) => void;
+  /** Phase 7: called when user drags a multi-leg TP line to a new price. */
+  onUpdateTpLeg?: (legId: string, price: number) => void;
 }
 
 type LoadState =
@@ -226,6 +228,7 @@ export function BacktestReplayChart({
   onUpdateSL,
   onUpdateTP,
   onUpdatePendingPrice,
+  onUpdateTpLeg,
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1087,6 +1090,7 @@ export function BacktestReplayChart({
             onUpdateSL={onUpdateSL ?? (() => {})}
             onUpdateTP={onUpdateTP ?? (() => {})}
             onUpdatePendingPrice={onUpdatePendingPrice ?? (() => {})}
+            onUpdateTpLeg={onUpdateTpLeg}
           />
         )}
 
