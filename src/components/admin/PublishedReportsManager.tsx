@@ -46,7 +46,6 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Loader2,
   X,
   Check,
   Download,
@@ -69,6 +68,7 @@ import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Skeleton, SkeletonTable } from '@/components/ds/Skeleton';
+import { Spinner } from '@/components/ds/Spinner';
 
 // ============================================
 // TYPES
@@ -808,7 +808,7 @@ const CompactReportCard = React.memo<CompactReportCardProps>(({
           >
             {isPromoting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size="sm" color="inherit" />
                 Promoting...
               </>
             ) : (
@@ -829,7 +829,7 @@ const CompactReportCard = React.memo<CompactReportCardProps>(({
               hover:opacity-90 transition-all ${isDownloading ? 'opacity-50' : ''}`}
           >
             {isDownloading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Spinner size="sm" color="inherit" />
             ) : (
               <FileDown className="w-4 h-4" />
             )}
@@ -949,7 +949,7 @@ const ArchiveReportRow = React.memo<ArchiveReportRowProps>(({
               }`}
           >
             {isPromoting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Spinner size="sm" color="inherit" />
             ) : (
               <Zap className="w-3.5 h-3.5" />
             )}
@@ -996,7 +996,7 @@ const ArchiveReportRow = React.memo<ArchiveReportRowProps>(({
             hover:opacity-90 transition-all ${isDownloading ? 'opacity-50' : ''}`}
         >
           {isDownloading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Spinner size="sm" color="inherit" />
           ) : (
             <FileDown className="w-3.5 h-3.5" />
           )}
@@ -1296,7 +1296,7 @@ const EditModal: React.FC<EditModalProps> = ({ report, onClose, onSave }) => {
             disabled={isSaving}
             className={`px-5 py-2.5 rounded-xl bg-gradient-to-r ${config?.gradient || 'from-[#C9A646] to-orange-500'} text-white font-medium hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2`}
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {isSaving ? <Spinner size="sm" color="inherit" /> : <Check className="w-4 h-4" />}
             {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>

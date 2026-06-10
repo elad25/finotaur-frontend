@@ -39,7 +39,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import {
-  Settings, Loader2, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
+  Settings, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
   Clock, Calendar, CheckCircle2, AlertCircle, Key, Eye, EyeOff, Check,
   TrendingUp, Newspaper, AlertTriangle, Flame,
   Pencil, X, Globe, User, BookOpen, ExternalLink, Mail, Download, Trash2
@@ -48,6 +48,7 @@ import { toast } from "sonner";
 import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation";
 import { SettingsLayoutSkeletonPage } from "@/components/skeletons/SettingsLayoutSkeleton";
 import { requestAccountDeletion, downloadGdprExport } from "@/services/accountLifecycleService";
+import { Spinner } from '@/components/ds/Spinner';
 
 // ============================================
 // TYPES - Matches actual DB schema
@@ -381,7 +382,7 @@ const GeneralTab = () => {
                 className="gap-2 bg-[#C9A646] hover:bg-[#B8963F] text-black"
               >
                 {saving ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                 ) : (
                   <Save className="w-3.5 h-3.5" />
                 )}
@@ -1164,7 +1165,7 @@ const BillingTab = () => {
                   className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50"
                 >
                   {cancellingPlatform ? (
-                    <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                    <><Spinner size="sm" className="mr-1.5" />Restoring...</>
                   ) : (
                     <>Undo Cancellation</>
                   )}
@@ -1555,7 +1556,7 @@ const BillingTab = () => {
   className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
 >
   {upgradingNewsletter ? (
-    <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Upgrading...</>
+    <><Spinner size="sm" color="inherit" className="mr-1.5" />Upgrading...</>
   ) : (
     <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $140)</>
   )}
@@ -1570,7 +1571,7 @@ const BillingTab = () => {
                         className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50"
                       >
                         {reactivatingNewsletter ? (
-                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                          <><Spinner size="sm" className="mr-1.5" />Restoring...</>
                         ) : (
                           <>Undo Cancellation</>
                         )}
@@ -1599,7 +1600,7 @@ const BillingTab = () => {
                     disabled={saving}
                     className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
                   >
-                    {saving ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Reactivating...</> : <>Reactivate</>}
+                    {saving ? <><Spinner size="sm" className="mr-1.5" />Reactivating...</> : <>Reactivate</>}
                   </Button>
                 </div>
               </div>
@@ -1866,7 +1867,7 @@ const BillingTab = () => {
                         className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
                       >
                         {upgradingTopSecret ? (
-                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Upgrading...</>
+                          <><Spinner size="sm" color="inherit" className="mr-1.5" />Upgrading...</>
                         ) : (
                           <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $180)</>
                         )}
@@ -1881,7 +1882,7 @@ const BillingTab = () => {
                         className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/50"
                       >
                         {reactivatingTopSecret ? (
-                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                          <><Spinner size="sm" className="mr-1.5" />Restoring...</>
                         ) : (
                           <>Undo Cancellation</>
                         )}
@@ -2013,7 +2014,7 @@ const BillingTab = () => {
               className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancellingPlatform ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /><span>Cancelling...</span></>
+                <><Spinner size="sm" /><span>Cancelling...</span></>
               ) : (
                 <><X className="w-4 h-4" /><span>Yes, Cancel My Subscription</span></>
               )}
@@ -2109,7 +2110,7 @@ const BillingTab = () => {
       >
         {cancellingNewsletter ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Spinner size="sm" />
             <span>Cancelling...</span>
           </>
         ) : (
@@ -2202,7 +2203,7 @@ const BillingTab = () => {
       >
         {cancellingTopSecret ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Spinner size="sm" />
             <span>Cancelling...</span>
           </>
         ) : (
@@ -2422,7 +2423,7 @@ const NotificationsTab = () => {
           className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
         >
           {saving ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+            <><Spinner size="sm" color="inherit" className="mr-2" />Saving...</>
           ) : (
             <><Save className="w-4 h-4 mr-2" />Save changes</>
           )}
@@ -2772,7 +2773,7 @@ const SecurityTab = () => {
                       size="sm"
                       className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
                     >
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Next'}
+                      {saving ? <Spinner size="sm" color="inherit" /> : 'Next'}
                     </Button>
                   </>
                 ) : (
@@ -2796,7 +2797,7 @@ const SecurityTab = () => {
                       size="sm"
                       className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
                     >
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update'}
+                      {saving ? <Spinner size="sm" color="inherit" /> : 'Update'}
                     </Button>
                   </>
                 )}
@@ -2821,7 +2822,7 @@ const SecurityTab = () => {
           </div>
           <Button variant="outline" size="sm" onClick={handleExportData} disabled={exporting}>
             {exporting
-              ? <Loader2 className="w-4 h-4 animate-spin" />
+              ? <Spinner size="sm" />
               : <><Download className="w-4 h-4 mr-2" /> Export</>}
           </Button>
         </div>
@@ -2904,7 +2905,7 @@ const SecurityTab = () => {
                       Cancel
                     </Button>
                     <Button variant="destructive" size="sm" onClick={handleDeleteAccount} disabled={!canDelete}>
-                      {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete my account'}
+                      {deleting ? <Spinner size="sm" /> : 'Delete my account'}
                     </Button>
                   </DialogFooter>
                 </>

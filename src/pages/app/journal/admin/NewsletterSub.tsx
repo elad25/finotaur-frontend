@@ -24,7 +24,6 @@ import {
   X,
   Zap,
   Crown,
-  Loader2,
   AlertCircle,
   Eye,
   Maximize2,
@@ -50,6 +49,7 @@ import { toast } from 'sonner';
 import { Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { SkeletonCard, Skeleton } from "@/components/ds/Skeleton";
+import { Spinner } from '@/components/ds/Spinner';
 import { RouteSkeleton } from "@/components/ds/RouteSkeleton";
 
 const WarZoneLandingSimple = lazy(() => import("@/pages/app/all-markets/WarzoneComponents/Warzonelanding"));
@@ -349,7 +349,7 @@ const AgentProgress: React.FC<{
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#C9A646]/10 border border-[#C9A646]/30">
             <span className="text-lg">{AGENT_ICONS[currentAgent] || '🤖'}</span>
             <span className="text-sm font-medium text-[#C9A646]">{currentAgent}</span>
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C9A646]" />
+            <Spinner size="sm" />
           </div>
         )}
       </div>
@@ -388,7 +388,7 @@ const AgentProgress: React.FC<{
               <span>{AGENT_ICONS[agent] || '🤖'}</span>
               <span className="truncate hidden sm:inline">{agent.substring(0, 8)}</span>
               {isCompleted && <CheckCircle className="w-3 h-3 ml-auto flex-shrink-0" />}
-              {isRunning && <Loader2 className="w-3 h-3 ml-auto flex-shrink-0 animate-spin" />}
+              {isRunning && <Spinner size="sm" className="ml-auto flex-shrink-0" />}
             </div>
           );
         })}
@@ -632,7 +632,7 @@ const ReportViewerModal: React.FC<{
               title="Download PDF"
             >
               {isDownloadingPdf ? (
-                <Loader2 className="w-5 h-5 text-red-400 animate-spin" />
+                <Spinner size="sm" />
               ) : (
                 <FileDown className="w-5 h-5 text-red-400 group-hover:text-red-300" />
               )}
@@ -701,7 +701,7 @@ const ReportViewerModal: React.FC<{
               className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors text-white font-medium flex items-center gap-2"
             >
               {isDownloadingPdf ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size="sm" color="inherit" />
               ) : (
                 <FileDown className="w-4 h-4" />
               )}
@@ -1387,7 +1387,7 @@ const clearPreview = () => {
               className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >
               {isPublishing ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Spinner size="sm" color="inherit" />
               ) : (
                 <Send className="w-5 h-5" />
               )}
@@ -1599,7 +1599,7 @@ const clearPreview = () => {
           >
             {isGeneratingPreview ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size="sm" />
                 <span>{workflowProgress?.progress || 0}%</span>
               </>
             ) : fullReport && preview ? (
