@@ -31,6 +31,9 @@ import DeleteUserModal from '@/components/admin/DeleteUserModal';
 import SendEmailModal from '@/components/admin/SendEmailModal';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
+// Send Email is pending backend integration — flip when implemented
+const SEND_EMAIL_ENABLED = false;
+
 export default function UserDetails() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -354,7 +357,7 @@ export default function UserDetails() {
               </button>
 
               {/* Send Email pending backend integration — hidden until implemented */}
-              {false && (
+              {SEND_EMAIL_ENABLED && (
                 <button
                   onClick={() => setShowSendEmail(true)}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"

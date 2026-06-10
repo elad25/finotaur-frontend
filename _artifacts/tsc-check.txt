@@ -1,0 +1,229 @@
+src/components/admin/AdminAffiliatePanel.tsx(77,9): error TS2554: Expected 3 arguments, but got 4.
+src/components/admin/SendEmailModal.tsx(4,31): error TS2307: Cannot find module '../../../../types/admin' or its corresponding type declarations.
+src/components/broker/BrokerConnectionsPopover.tsx(143,81): error TS2367: This comparison appears to be unintentional because the types '"error" | "pending" | "disconnected" | "renewing" | "degraded" | "canceled"' and '"active"' have no overlap.
+src/components/charts/BacktestDailyPnLChartV2.tsx(86,17): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/BacktestDailyPnLChartV2.tsx(117,15): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/BacktestEquityChartV2.tsx(144,15): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/BacktestEquityChartV2.tsx(170,15): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/DailyPnLChart.tsx(90,17): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/DailyPnLChart.tsx(121,15): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/EquityChart.tsx(153,15): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/charts/EquityChart.tsx(179,15): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/compliance/PriceGate.tsx(105,7): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/fundamentals/DebugFundamentalsProbe.tsx(4,27): error TS2305: Module '"../../hooks/useFundamentals"' has no exported member 'TF'.
+src/components/fundamentals/DebugFundamentalsProbe.tsx(12,28): error TS2339: Property 'isError' does not exist on type '{ data: any; snapshot: any; series: { revenue: any[]; netIncome: any[]; debt: any[]; equity: any[]; margins: { net: { date: string; net: number; }[]; gross: any; operating: any; }; }; rows: any; error: any; isLoading: boolean; }'.
+src/components/fundamentals/FundamentalsTab.tsx(6,10): error TS2614: Module '"./KeyRatiosTable"' has no exported member 'KeyRatiosTable'. Did you mean to use 'import KeyRatiosTable from "./KeyRatiosTable"' instead?
+src/components/fundamentals/FundamentalsTab.tsx(12,17): error TS2339: Property 'loading' does not exist on type '{ data: any; snapshot: any; series: { revenue: any[]; netIncome: any[]; debt: any[]; equity: any[]; margins: { net: { date: string; net: number; }[]; gross: any; operating: any; }; }; rows: any; error: any; isLoading: boolean; }'.
+src/components/fundamentals/FundamentalsTab.tsx(31,39): error TS2322: Type '{ data: any; loading: any; }' is not assignable to type 'IntrinsicAttributes & { data: any; }'.
+  Property 'loading' does not exist on type 'IntrinsicAttributes & { data: any; }'.
+src/components/fundamentals/SnapshotGrid.tsx(3,33): error TS2305: Module '"./types"' has no exported member 'SparkPoint'.
+src/components/fundamentals/SnapshotGrid.tsx(26,27): error TS2339: Property 'sparks' does not exist on type 'Snapshot'.
+src/components/fundamentals/SnapshotGrid.tsx(27,22): error TS2339: Property 'sparks' does not exist on type 'Snapshot'.
+src/components/fundamentals/SnapshotGrid.tsx(31,80): error TS2339: Property 'yoy' does not exist on type 'Snapshot'.
+src/components/fundamentals/SnapshotGrid.tsx(32,85): error TS2339: Property 'yoy' does not exist on type 'Snapshot'.
+src/components/fundamentals/SnapshotGrid.tsx(33,48): error TS2339: Property 'grossMargin' does not exist on type 'Snapshot'.
+src/components/fundamentals/SnapshotGrid.tsx(35,43): error TS2551: Property 'debtEquity' does not exist on type 'Snapshot'. Did you mean 'debtToEquity'?
+src/components/fundamentals/SnapshotGrid.tsx(35,70): error TS2551: Property 'debtEquity' does not exist on type 'Snapshot'. Did you mean 'debtToEquity'?
+src/components/fundamentals/SnapshotKPIs.tsx(2,21): error TS1149: File name 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/components/fundamentals/KpiGrid.tsx' differs from already included file name 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/components/fundamentals/KPIGrid.tsx' only in casing.
+  The file is in the program because:
+    Imported via "./KPIGrid" from file 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/components/fundamentals/index.ts'
+    Imported via './KpiGrid' from file 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/components/fundamentals/SnapshotKPIs.tsx'
+    Matched by include pattern 'src' in 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/tsconfig.json'
+src/components/fundamentals/TrendsPanel.tsx(74,6): error TS2322: Type '"rev"' is not assignable to type 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"'.
+src/components/fundamentals/TrendsPanel.tsx(75,6): error TS2322: Type '"margins"' is not assignable to type 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"'.
+src/components/fundamentals/TrendsPanel.tsx(76,6): error TS2322: Type '"deq"' is not assignable to type 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"'.
+src/components/fundamentals/TrendsPanel.tsx(77,6): error TS2322: Type '"cf"' is not assignable to type 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"'.
+src/components/fundamentals/TrendsPanel.tsx(86,13): error TS2322: Type 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"' is not assignable to type 'Key'.
+  Type 'typeof Symbol.iterator' is not assignable to type 'Key'.
+src/components/fundamentals/TrendsPanel.tsx(87,35): error TS2345: Argument of type 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"' is not assignable to parameter of type 'SetStateAction<"rev" | "margins" | "deq" | "cf">'.
+  Type 'number' is not assignable to type 'SetStateAction<"rev" | "margins" | "deq" | "cf">'.
+src/components/fundamentals/TrendsPanel.tsx(89,15): error TS2367: This comparison appears to be unintentional because the types '"rev" | "margins" | "deq" | "cf"' and 'number | unique symbol | "length" | "toString" | "concat" | "slice" | "indexOf" | "lastIndexOf" | "includes" | "at" | "charAt" | "charCodeAt" | "localeCompare" | "match" | "replace" | ... 34 more ... | "valueOf"' have no overlap.
+src/components/fundamentals/TrendTabs.tsx(8,18): error TS2339: Property 'sparks' does not exist on type 'Snapshot'.
+src/components/fundamentals/TrendTabs.tsx(9,17): error TS2339: Property 'sparks' does not exist on type 'Snapshot'.
+src/components/fundamentals/TrendTabs.tsx(10,19): error TS2339: Property 'sparks' does not exist on type 'Snapshot'.
+src/components/fundamentals/TrendTabs.tsx(11,21): error TS2339: Property 'sparks' does not exist on type 'Snapshot'.
+src/components/heatmap/HeatmapGrid.tsx(38,54): error TS2339: Property 'area' does not exist on type 'HeatmapItem'.
+src/components/journal/AutoDirectionCapsule.tsx(18,43): error TS2322: Type 'string' is not assignable to type 'Side'.
+src/components/journal/BreakdownPanel.tsx(176,11): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/journal/DirectionToggle.tsx(10,28): error TS2345: Argument of type '"Long" | "Short"' is not assignable to parameter of type 'Side'.
+  Type '"Long"' is not assignable to type 'Side'. Did you mean '"LONG"'?
+src/components/journal/DirectionToggle.tsx(12,11): error TS2367: This comparison appears to be unintentional because the types 'Side' and '"Long" | "Short"' have no overlap.
+src/components/journal/EquityChart.tsx(14,32): error TS2339: Property 'date' does not exist on type 'Trade'.
+src/components/journal/EquityChart.tsx(14,61): error TS2339: Property 'date' does not exist on type 'Trade'.
+src/components/journal/EquityChart.tsx(20,30): error TS2339: Property 'date' does not exist on type 'Trade'.
+src/components/journal/FastInputs.tsx(18,31): error TS2339: Property 'setDate' does not exist on type 'State & Actions'.
+src/components/journal/FastInputs.tsx(43,33): error TS2551: Property 'setSize' does not exist on type 'State & Actions'. Did you mean 'setSide'?
+src/components/journal/FastInputs.tsx(59,31): error TS2339: Property 'setEntry' does not exist on type 'State & Actions'.
+src/components/journal/FastInputs.tsx(65,31): error TS2339: Property 'setStop' does not exist on type 'State & Actions'.
+src/components/journal/FastInputs.tsx(71,31): error TS2339: Property 'setExit' does not exist on type 'State & Actions'.
+src/components/journal/JournalStatusBar.tsx(2,10): error TS2614: Module '"@/hooks/useAutoSave"' has no exported member 'AutoSaveState'. Did you mean to use 'import AutoSaveState from "@/hooks/useAutoSave"' instead?
+src/components/journal/JournalStatusBar.tsx(2,31): error TS1149: File name 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/hooks/useAutoSave.ts' differs from already included file name 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/hooks/useAutosave.ts' only in casing.
+  The file is in the program because:
+    Imported via "@/hooks/useAutosave" from file 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/components/journal/BottomBar.tsx'
+    Imported via "@/hooks/useAutoSave" from file 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/src/components/journal/JournalStatusBar.tsx'
+    Matched by include pattern 'src' in 'C:/Users/elad2/Projects/finotaur/finotaur-frontend/.claude/worktrees/audit-main/tsconfig.json'
+src/components/journal/JournalTabs.tsx(5,64): error TS2307: Cannot find module '@/components/markdown/SimpleMarkdown' or its corresponding type declarations.
+src/components/journal/NotesPanelLite.tsx(7,40): error TS2339: Property 'setTags' does not exist on type 'State & Actions'.
+src/components/journal/Section.tsx(14,75): error TS2339: Property 'upper' does not exist on type 'string'.
+src/components/journal/TradeFormBridge.tsx(26,39): error TS2345: Argument of type '"Long" | "Short"' is not assignable to parameter of type 'Side'.
+  Type '"Long"' is not assignable to type 'Side'. Did you mean '"LONG"'?
+src/components/journal/TradeFormBridge.tsx(27,37): error TS2339: Property 'setEntry' does not exist on type 'State & Actions'.
+src/components/journal/TradeFormBridge.tsx(28,36): error TS2339: Property 'setStop' does not exist on type 'State & Actions'.
+src/components/journal/TradeFormBridge.tsx(29,36): error TS2339: Property 'setExit' does not exist on type 'State & Actions'.
+src/components/journal/TradeFormBridge.tsx(30,35): error TS2551: Property 'setSize' does not exist on type 'State & Actions'. Did you mean 'setSide'?
+src/components/journal/TradesTable.tsx(16,27): error TS2307: Cannot find module '@/hooks/useTrades' or its corresponding type declarations.
+src/components/journal/UseAutoFees.tsx(8,17): error TS2554: Expected 3-5 arguments, but got 2.
+src/components/journal/UseAutoSession.tsx(8,42): error TS2339: Property 'date' does not exist on type 'State & Actions'.
+src/components/journal/UseAutoSession.tsx(10,10): error TS2339: Property 'date' does not exist on type 'State & Actions'.
+src/components/macro/MacroChart.tsx(277,22): error TS2503: Cannot find namespace 'JSX'.
+src/components/macro/MacroSubNav.tsx(21,77): error TS2503: Cannot find namespace 'JSX'.
+src/components/macro/MetricChart.tsx(377,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: Props): YAxis', gave the following error.
+    Type '"auto" | [number, number]' is not assignable to type 'AxisDomain'.
+      Type 'string' is not assignable to type 'AxisDomain'.
+  Overload 2 of 2, '(props: Props, context: any): YAxis', gave the following error.
+    Type '"auto" | [number, number]' is not assignable to type 'AxisDomain'.
+      Type 'string' is not assignable to type 'AxisDomain'.
+src/components/macro/MetricChart.tsx(389,15): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: Props): YAxis', gave the following error.
+    Type '"auto" | [number, number]' is not assignable to type 'AxisDomain'.
+      Type 'string' is not assignable to type 'AxisDomain'.
+  Overload 2 of 2, '(props: Props, context: any): YAxis', gave the following error.
+    Type '"auto" | [number, number]' is not assignable to type 'AxisDomain'.
+      Type 'string' is not assignable to type 'AxisDomain'.
+src/components/MarketsAssetTabs.tsx(71,19): error TS2322: Type '{ className: string; style: { color: "rgba(201,166,70,0.55)"; }; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/MarketsSidebar.tsx(92,21): error TS2322: Type '{ className: string; style: { color: "rgba(201,166,70,0.55)"; }; title: string; "aria-label": string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/MarketsSidebar.tsx(110,21): error TS2322: Type '{ className: string; style: { color: "rgba(201,166,70,0.55)"; }; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/MarketsSidebar.tsx(116,21): error TS2322: Type '{ className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/overview/AISummaryLine.tsx(3,10): error TS2614: Module '"@/lib/api"' has no exported member 'apiGet'. Did you mean to use 'import apiGet from "@/lib/api"' instead?
+src/components/overview/OverviewTab.tsx(139,14): error TS2339: Property 'companyOverview' does not exist on type 'OverviewPayload'.
+src/components/overview/OverviewTab.tsx(142,53): error TS2339: Property 'companyOverview' does not exist on type 'OverviewPayload'.
+src/components/overview/RecentNews.tsx(3,10): error TS2614: Module '"@/lib/api"' has no exported member 'apiGet'. Did you mean to use 'import apiGet from "@/lib/api"' instead?
+src/components/ProductDrawer.tsx(252,27): error TS2322: Type '{ className: string; style: { color: "rgba(201,166,70,0.55)"; }; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/SectorAnalyzer/index.ts(20,10): error TS2305: Module '"./data"' has no exported member 'sectors'.
+src/components/SectorAnalyzer/tabs/RisksTab.tsx(627,20): error TS2604: JSX element type 'Icon' does not have any construct or call signatures.
+src/components/SectorAnalyzer/tabs/RisksTab.tsx(627,20): error TS2786: 'Icon' cannot be used as a JSX component.
+  Its type 'string | number | ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>' is not a valid JSX element type.
+    Type 'number' is not assignable to type 'ElementType'.
+src/components/Sidebar.tsx(715,23): error TS2322: Type '{ className: string; style: { color: "rgba(201,166,70,0.55)"; }; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/Sidebar.tsx(723,23): error TS2322: Type '{ className: string; "aria-label": string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/Sidebar.tsx(750,23): error TS2322: Type '{ className: string; style: { color: "rgba(201,166,70,0.55)"; }; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/Sidebar.tsx(755,91): error TS2322: Type '{ className: string; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/stock-analyzer/index.ts(31,3): error TS2305: Module '"./tabs"' has no exported member 'DividendsTab'.
+src/components/stock-analyzer/index.ts(32,3): error TS2305: Module '"./tabs"' has no exported member 'NewsTab'.
+src/components/stock-analyzer/index.ts(33,3): error TS2305: Module '"./tabs"' has no exported member 'RisksTab'.
+src/components/stock-analyzer/tabs/EarningsTab.tsx(147,10): error TS2352: Conversion of type '{ quarter: string; quarterRange: string; reportDate: string; verdict: "mixed" | "miss" | "beat"; verdictSummary: string; metrics: { label: string; actual?: string | number; estimate?: string | number; surprise?: string; status?: string; }[]; ... 9 more ...; rating: "BUY" | ... 1 more ... | "HOLD"; }' to type 'EarningsData' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'verdictEmoji' is missing in type '{ quarter: string; quarterRange: string; reportDate: string; verdict: "mixed" | "miss" | "beat"; verdictSummary: string; metrics: { label: string; actual?: string | number; estimate?: string | number; surprise?: string; status?: string; }[]; ... 9 more ...; rating: "BUY" | ... 1 more ... | "HOLD"; }' but required in type 'EarningsData'.
+src/components/stock-analyzer/tabs/FinancialsTab.tsx(1089,74): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { className?: string; }, context?: any): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<...> | Promise<...> | Component<...>', gave the following error.
+    Type '{ className: string; style: { color: string; }; "aria-hidden": string; }' is not assignable to type 'IntrinsicAttributes & { className?: string; }'.
+      Property 'style' does not exist on type 'IntrinsicAttributes & { className?: string; }'.
+  Overload 2 of 2, '(props: { className?: string; }): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | Promise<...> | Component<...>', gave the following error.
+    Type '{ className: string; style: { color: string; }; "aria-hidden": string; }' is not assignable to type 'IntrinsicAttributes & { className?: string; }'.
+      Property 'style' does not exist on type 'IntrinsicAttributes & { className?: string; }'.
+src/components/SubNav.tsx(411,21): error TS2322: Type '{ className: string; title: string; "aria-label": string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/subscription/SubscriptionStatus.tsx(20,39): error TS2339: Property 'isFreeTrial' does not exist on type '{ limits: TradeLimits; isLoading: boolean; loading: boolean; error: string; isAdmin: boolean; isLifetimeUser: boolean; hasJournalAccess: boolean; effectiveJournalPlan: AccountType; ... 63 more ...; invalidateAll: () => Promise<...>; }'.
+src/components/subscription/SubscriptionStatus.tsx(33,15): error TS2339: Property 'trades_created_total' does not exist on type 'TradeLimits'.
+src/components/subscription/SubscriptionStatus.tsx(83,59): error TS2339: Property 'trades_created_total' does not exist on type 'TradeLimits'.
+src/components/ValuationDeepDive.tsx(23,3): error TS2305: Module '"../types/stock.types"' has no exported member 'DCFAnalysis'.
+src/components/ValuationDeepDive.tsx(24,3): error TS2305: Module '"../types/stock.types"' has no exported member 'ComparablesAnalysis'.
+src/components/ValuationDeepDive.tsx(26,3): error TS2305: Module '"../types/stock.types"' has no exported member 'SumOfParts'.
+src/components/ValuationDeepDive.tsx(372,41): error TS2551: Property 'current' does not exist on type 'HistoricalValuation'. Did you mean 'currentPE'?
+src/components/ValuationDeepDive.tsx(372,65): error TS2339: Property 'fiveYearAvg' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(373,47): error TS2551: Property 'current' does not exist on type 'HistoricalValuation'. Did you mean 'currentPE'?
+src/components/ValuationDeepDive.tsx(373,77): error TS2339: Property 'fiveYearAvg' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(374,41): error TS2551: Property 'current' does not exist on type 'HistoricalValuation'. Did you mean 'currentPE'?
+src/components/ValuationDeepDive.tsx(374,70): error TS2339: Property 'fiveYearAvg' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(403,74): error TS2339: Property 'percentileInRange' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(415,45): error TS2339: Property 'percentileInRange' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(429,63): error TS2339: Property 'peakTroughAnalysis' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(430,57): error TS2339: Property 'peakTroughAnalysis' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(435,63): error TS2339: Property 'peakTroughAnalysis' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(436,57): error TS2339: Property 'peakTroughAnalysis' does not exist on type 'HistoricalValuation'.
+src/components/ValuationDeepDive.tsx(526,34): error TS2339: Property 'marginOfSafety' does not exist on type 'ValuationConclusion'.
+src/components/ValuationDeepDive.tsx(604,21): error TS2339: Property 'marginOfSafety' does not exist on type 'ValuationConclusion'.
+src/components/ValuationDeepDive.tsx(610,67): error TS2339: Property 'riskRewardRatio' does not exist on type 'ValuationConclusion'.
+src/components/ValuationDeepDive.tsx(618,64): error TS2339: Property 'entryPrice' does not exist on type 'ValuationConclusion'.
+src/components/ValuationDeepDive.tsx(623,64): error TS2339: Property 'exitPrice' does not exist on type 'ValuationConclusion'.
+src/components/ValuationDeepDive.tsx(663,13): error TS2339: Property 'sumOfParts' does not exist on type 'ValuationData'.
+src/components/ValuationDeepDive.tsx(663,57): error TS2339: Property 'sumOfParts' does not exist on type 'ValuationData'.
+src/constants/markets.ts(308,5): error TS2322: Type '"block-trades"' is not assignable to type 'MarketFunction'.
+src/constants/markets.ts(376,5): error TS2322: Type '"forex-heatmap"' is not assignable to type 'MarketFunction'.
+src/constants/markets.ts(384,5): error TS2322: Type '"forex-macro-cockpit"' is not assignable to type 'MarketFunction'.
+src/constants/markets.ts(392,5): error TS2322: Type '"forex-cb-watch"' is not assignable to type 'MarketFunction'.
+src/constants/markets.ts(400,5): error TS2322: Type '"forex-cot"' is not assignable to type 'MarketFunction'.
+src/constants/markets.ts(408,5): error TS2322: Type '"forex-tools"' is not assignable to type 'MarketFunction'.
+src/core/engines/OrderExecutionEngine.ts(5,55): error TS2307: Cannot find module '../../types' or its corresponding type declarations.
+src/core/engines/PlaybackEngine.ts(5,44): error TS2307: Cannot find module '../../types' or its corresponding type declarations.
+src/core/engines/StatisticsEngine.ts(5,79): error TS2307: Cannot find module '../../types' or its corresponding type declarations.
+src/entry-server.tsx(3,31): error TS2305: Module '"react-helmet-async"' has no exported member 'FilledContext'.
+src/features/affiliate/hooks/useAffiliateDiscount.ts(36,3): error TS2353: Object literal may only specify known properties, and 'vip' does not exist in type 'Record<"standard", number>'.
+src/features/options-ai/components/tabs/FlowTab.tsx(86,3): error TS2322: Type '{ symbol: string; blocks: BlockTrade[]; totalPremium: number; bullishPremium: number; bearishPremium: number; bullishPercent: number; bearishPercent: number; direction: string; latestTime: string; }[]' is not assignable to type 'SymbolGroup[]'.
+  Type '{ symbol: string; blocks: BlockTrade[]; totalPremium: number; bullishPremium: number; bearishPremium: number; bullishPercent: number; bearishPercent: number; direction: string; latestTime: string; }' is not assignable to type 'SymbolGroup'.
+    Types of property 'direction' are incompatible.
+      Type 'string' is not assignable to type '"LONG" | "SHORT" | "NEUTRAL"'.
+src/features/options-ai/components/tabs/RegimeTab.tsx(15,19): error TS2339: Property 'marketRegime' does not exist on type 'OptionsData'.
+src/features/options-ai/hooks/useOptionsIntelligence.ts(134,25): error TS2367: This comparison appears to be unintentional because the types 'OptionsTab' and '"deepdive"' have no overlap.
+src/hooks/brokers/useBrokerConnections.ts(56,10): error TS2352: Conversion of type 'GenericStringError[]' to type 'BrokerConnection[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ error: true; } & String' is missing the following properties from type 'BrokerConnection': id, user_id, broker, status, is_active
+src/hooks/usePlan.ts(54,11): error TS2339: Property 'data' does not exist on type '{ profile: UserProfile; isLoading: boolean; isError: boolean; error: Error; refetch: () => Promise<void>; }'.
+src/lib/webpush.ts(103,7): error TS2322: Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'string | BufferSource'.
+  Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'ArrayBufferView<ArrayBuffer>'.
+    Types of property 'buffer' are incompatible.
+      Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.
+        Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.
+          Types of property '[Symbol.toStringTag]' are incompatible.
+            Type '"SharedArrayBuffer"' is not assignable to type '"ArrayBuffer"'.
+src/pages/app/ai/Top5.tsx(1234,8): error TS2339: Property 'finally' does not exist on type 'PromiseLike<void>'.
+src/pages/app/all-markets/WarzoneComponents/WarzoneSections/GlobePanel.tsx(9,25): error TS2307: Cannot find module 'cobe' or its corresponding type declarations.
+src/pages/app/journal/finotaur-ai/components/CoachChatPanel.tsx(70,26): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/CoachChatPanel.tsx(437,67): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/CoachChatPanel.tsx(484,5): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/ConversationHistorySidebar.tsx(57,38): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/DailyLimitBanner.tsx(28,69): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/MessageBubble.tsx(17,73): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/PromptChips.tsx(15,88): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/ToolCallCard.tsx(16,24): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/ToolResultRenderer.tsx(46,57): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/ToolResultRenderer.tsx(103,75): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/ToolResultRenderer.tsx(145,52): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/ToolResultRenderer.tsx(173,30): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeActionModal.tsx(24,5): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeActionModal.tsx(65,5): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeActionModal.tsx(120,5): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeActionModal.tsx(132,5): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeActionModal.tsx(179,5): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeActionModal.tsx(235,28): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/finotaur-ai/components/TradeDiffTable.tsx(54,89): error TS2503: Cannot find namespace 'JSX'.
+src/pages/app/journal/Overview.tsx(131,5): error TS2322: Type '{ className: string; "aria-label": string; role: "img"; title: string; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/pages/app/macro/CreditSpreads.tsx(84,9): error TS2322: Type 'CreditSpreadsPoint[]' is not assignable to type '{ [key: string]: string | number; date: string; }[]'.
+  Type 'CreditSpreadsPoint' is not assignable to type '{ [key: string]: string | number; date: string; }'.
+    Index signature for type 'string' is missing in type 'CreditSpreadsPoint'.
+src/pages/app/macro/RealYields.tsx(66,9): error TS2322: Type 'RealYieldsPoint[]' is not assignable to type '{ [key: string]: string | number; date: string; }[]'.
+  Type 'RealYieldsPoint' is not assignable to type '{ [key: string]: string | number; date: string; }'.
+    Index signature for type 'string' is missing in type 'RealYieldsPoint'.
+src/pages/app/TopSecret/TopSecretPage.tsx(146,15): error TS2339: Property 'data' does not exist on type '{}'.
+src/pages/app/TopSecret/TopSecretPage.tsx(146,30): error TS2339: Property 'error' does not exist on type '{}'.
+src/pages/app/TopSecret/TopSecretPage.tsx(147,9): error TS2345: Argument of type 'PostgrestBuilder<any, { role: any; top_secret_enabled: any; top_secret_status: any; top_secret_expires_at: any; }, false>' is not assignable to parameter of type 'Promise<unknown>'.
+  Type 'PostgrestBuilder<any, { role: any; top_secret_enabled: any; top_secret_status: any; top_secret_expires_at: any; }, false>' is missing the following properties from type 'Promise<unknown>': catch, finally, [Symbol.toStringTag]
