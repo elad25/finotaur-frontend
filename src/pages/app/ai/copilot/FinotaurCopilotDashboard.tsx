@@ -11,6 +11,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
+import { MarketComparisonChart } from './components/MarketComparisonChart';
+import { AssetClassAllocationCard } from './components/AssetClassAllocationCard';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
 import type { PortfolioSnapshot } from './hooks/usePortfolioData';
@@ -86,21 +88,27 @@ export function FinotaurCopilotDashboard() {
   return (
     <ErrorBoundary boundary="ai-copilot">
       <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
-        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} />
-        <AiBrainPanel className="xl:col-span-4" />
-        <InsightsPanel className="xl:col-span-4" analysis={analysis} />
-
-        {/* Action Items strip — the portfolio-manager voice. Turns analysis into
-            "what should I do today" cards. Each card links to the relevant page. */}
-        <ActionItemsStrip analysis={analysis} />
-
+        {/* ROW 1 — hero: big performance chart moved to top-left, AI core beside it */}
         <div className="xl:col-span-8">
           <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
         </div>
+        <AiBrainPanel className="xl:col-span-4" />
+
+        {/* ROW 2 — portfolio value (swapped down here), insights, opportunities */}
+        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} />
+        <InsightsPanel className="xl:col-span-4" analysis={analysis} />
         <div className="xl:col-span-4">
           <TopOpportunitiesPanel />
         </div>
 
+        {/* Action Items strip */}
+        <ActionItemsStrip analysis={analysis} />
+
+        {/* ROW 4 — image1: asset-class allocation + Portfolio/S&P/NASDAQ comparison, in the old big-chart slot */}
+        <AssetClassAllocationCard className="xl:col-span-6" snapshot={snapshot} />
+        <MarketComparisonChart className="xl:col-span-6" portfolioSeries={snapshot.series} range={range} onRangeChange={setRange} />
+
+        {/* ROW 5 — existing trio */}
         <AllocationPanel className="xl:col-span-4" snapshot={snapshot} />
         <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} />
         <RiskAnalysisPanel className="xl:col-span-4" analysis={analysis} />
