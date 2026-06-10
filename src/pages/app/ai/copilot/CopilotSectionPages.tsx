@@ -11,13 +11,16 @@ import { AiCopilotAiChatSkeletonPage } from '@/components/skeletons/AiCopilotAiC
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   BarChart3,
   Brain,
   ChevronRight,
   Globe,
   Layers,
   MessageSquare,
+  Minus,
   Shield,
   Zap,
 } from 'lucide-react';
@@ -270,6 +273,68 @@ function MacroSection({ label, items, empty }: { label: string; items: string[];
   );
 }
 
+// At-a-glance directional summary (server-authored, stored under source_provenance).
+type DirectionalItem = { label: string; direction: 'up' | 'down' | 'neutral'; note?: string };
+
+function readDirectionalSummary(brief: { source_provenance?: unknown }): DirectionalItem[] {
+  const raw = (brief.source_provenance as { directional_summary?: unknown } | null | undefined)?.directional_summary;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (it): it is DirectionalItem =>
+        !!it &&
+        typeof (it as DirectionalItem).label === 'string' &&
+        ['up', 'down', 'neutral'].includes((it as DirectionalItem).direction)
+    )
+    .map((it) => ({
+      label: it.label,
+      direction: it.direction,
+      note: typeof it.note === 'string' && it.note.trim() ? it.note : undefined,
+    }));
+}
+
+function DirectionBadge({ direction }: { direction: DirectionalItem['direction'] }) {
+  if (direction === 'up') {
+    return (
+      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-num-positive/30 bg-num-positive/[0.1]">
+        <ArrowUp className="h-3.5 w-3.5 text-num-positive" strokeWidth={2.5} />
+      </span>
+    );
+  }
+  if (direction === 'down') {
+    return (
+      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-num-negative/30 bg-num-negative/[0.1]">
+        <ArrowDown className="h-3.5 w-3.5 text-num-negative" strokeWidth={2.5} />
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-white/15 bg-white/[0.05]">
+      <Minus className="h-3.5 w-3.5 text-white/50" strokeWidth={2.5} />
+    </span>
+  );
+}
+
+function DirectionalSummaryCard({ items }: { items: DirectionalItem[] }) {
+  return (
+    <GlassCard padding="md">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-primary">At a Glance</p>
+      <p className="mt-0.5 text-[10px] text-white/35">Directional summary of the brief</p>
+      <ul className="mt-3 space-y-2.5">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-start gap-2.5">
+            <DirectionBadge direction={it.direction} />
+            <div className="min-w-0 pt-0.5">
+              <p className="text-[12.5px] font-semibold leading-tight text-white/85">{it.label}</p>
+              {it.note && <p className="mt-0.5 text-[10.5px] leading-snug text-white/40">{it.note}</p>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </GlassCard>
+  );
+}
+
 export function CopilotMacroPage() {
   const { brief, loading, error } = useSynthesisBrief();
 
@@ -304,10 +369,13 @@ export function CopilotMacroPage() {
   const macroPoints = toBullets(brief.macro_narrative);
   const weeklyPoints = toBullets(brief.weekly_context);
   const tacticalPoints = toBullets(brief.this_week_tactical);
+  const directionalItems = readDirectionalSummary(brief);
+  const hasDirectional = directionalItems.length > 0;
 
   return (
     <CopilotPageShell title="Macro" eyebrow="Portfolio-aware macro lens" icon={Globe}>
-      <div className="space-y-3">
+      <div className={hasDirectional ? 'grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_300px]' : ''}>
+        <div className="space-y-3 min-w-0">
         {/* Hero — central thesis */}
         <GlassCard padding="md">
           <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] pb-3">
@@ -391,6 +459,13 @@ export function CopilotMacroPage() {
             <> · QA: <span className="font-mono text-white/55">{brief.qa_score}</span></>
           )}
         </p>
+        </div>
+
+        {hasDirectional && (
+          <aside className="min-w-0">
+            <DirectionalSummaryCard items={directionalItems} />
+          </aside>
+        )}
       </div>
     </CopilotPageShell>
   );
