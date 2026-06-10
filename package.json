@@ -64,6 +64,7 @@
     "dayjs": "^1.11.18",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
+    "dompurify": "^3.4.9",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.24",
     "html2canvas": "^1.4.1",

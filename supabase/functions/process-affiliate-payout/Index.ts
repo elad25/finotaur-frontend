@@ -115,7 +115,49 @@ serve(async (req)=>{
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+
+    // =============================================
+    // AUTH: Require admin or super_admin role
+    // =============================================
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ success: false, error: 'Missing Authorization header' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+
+    // Verify the caller's JWT using the anon-key client (user-scoped)
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Invalid token' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+
+    // Service role client for all operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check that the caller has admin or super_admin role in profiles
+    const { data: callerProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !callerProfile || !['admin', 'super_admin'].includes(callerProfile.role)) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Admin access required' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 403,
+      });
+    }
+    // =============================================
+
     const { action, payoutId, affiliateId, amount } = await req.json();
     // =============================================
     // ACTION: REQUEST PAYOUT (Affiliate requests)

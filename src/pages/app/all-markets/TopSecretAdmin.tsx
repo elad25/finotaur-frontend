@@ -20,6 +20,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { SkeletonText, SkeletonStat } from '@/components/ds/Skeleton';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import {
   FileText,
   Users,
@@ -1964,7 +1965,7 @@ const ReportViewerModal: React.FC<{
             <div className="p-8 max-w-4xl mx-auto">
               <div 
                 className="prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(report) }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(report)) }}
               />
             </div>
           ) : (

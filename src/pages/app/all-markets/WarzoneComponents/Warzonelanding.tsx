@@ -18,6 +18,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { 
   Shield, Clock, ArrowRight, FileText,
   Loader2, Globe, Sparkles, Crown, Rocket, 
@@ -1558,7 +1559,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
     } catch (e) {
       console.error('Bundle checkout error:', e);
       setIsProcessing(false);
-      alert('Error starting checkout. Please try again.');
+      toast.error('Error starting checkout. Please try again.');
     }
   }, [user]);
 
@@ -1633,7 +1634,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
     } catch (e) {
       console.error('Bundle Yearly checkout error:', e);
       setIsProcessing(false);
-      alert('Error starting checkout. Please try again.');
+      toast.error('Error starting checkout. Please try again.');
     }
   }, [user]);
 
@@ -1746,7 +1747,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
     } catch (e) {
       console.error('Checkout error:', e);
       setIsProcessing(false);
-      alert('Error starting checkout. Please try again.');
+      toast.error('Error starting checkout. Please try again.');
     }
   }, [user, billingInterval, isTopSecretMember, topSecretMembershipId]);
 
@@ -1795,7 +1796,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
         throw new Error(data?.error || 'Failed');
       }
     } catch (e) {
-      alert('Failed. Contact support@finotaur.com');
+      toast.error('Failed. Contact support@finotaur.com');
     } finally {
       setIsCancelling(false);
     }

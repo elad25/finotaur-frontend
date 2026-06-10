@@ -11,6 +11,7 @@
 
 import React, { useMemo, useState, useEffect, memo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { toast } from 'sonner';
 import PriceChartLite from "@/components/overview/PriceChartLite";
 import NewsPreview from "@/components/overview/NewsPreview";
 import SECFilingsLuxury from "@/components/markets/SECFilingsLuxury";
@@ -848,7 +849,7 @@ function SummaryOverviewEmbed({ symbol: propSymbol, preloadedData }: Props) {
   // AI Analysis handler (placeholder)
   const handleAnalyze = async (filing: SECFiling) => {
     console.log('[AI Analysis] Analyzing filing:', filing);
-    alert(`AI Analysis for ${filing.formType} (${filing.reportDate}) coming soon!`);
+    toast.info(`AI Analysis for ${filing.formType} (${filing.reportDate}) — coming soon!`);
   };
 
   if (!symbol) {

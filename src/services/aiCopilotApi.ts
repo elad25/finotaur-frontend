@@ -33,29 +33,6 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   }
 }
 
-// Sync version for backwards compatibility (uses cached session)
-function getAuthHeadersSync(): HeadersInit {
-  // Try to get from the correct localStorage key
-  const authData = localStorage.getItem('finotaur-auth-token');
-  if (authData) {
-    try {
-      const parsed = JSON.parse(authData);
-      const userId = parsed?.user?.id || '';
-      return {
-        'Content-Type': 'application/json',
-        'x-user-id': userId,
-      };
-    } catch (e) {
-      console.warn('[AI Copilot API] Failed to parse auth token');
-    }
-  }
-  
-  return {
-    'Content-Type': 'application/json',
-    'x-user-id': '',
-  };
-}
-
 // Types
 interface ChatResponse {
   success: boolean;

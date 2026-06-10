@@ -9,6 +9,7 @@ import { Calendar, ArrowLeft, Lock } from 'lucide-react';
 import { SEO } from '@/components/seo/SEO';
 import { article, breadcrumbList } from '@/components/seo/jsonLd';
 import { ShareButtons } from '@/components/share/ShareButtons';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 
 const SITE_URL = 'https://www.finotaur.com';
 
@@ -333,7 +334,7 @@ export default function BlogPost() {
                        prose-a:text-[#C9A646] prose-a:no-underline hover:prose-a:underline
                        prose-strong:text-white prose-code:text-[#C9A646]
                        prose-blockquote:border-l-[#C9A646] prose-blockquote:text-white/60"
-            dangerouslySetInnerHTML={{ __html: post.body }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.body) }}
           />
 
           {/* Paywall block for premium teasers */}

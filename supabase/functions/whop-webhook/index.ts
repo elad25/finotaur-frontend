@@ -255,6 +255,16 @@ function isTopSecret(productId: string | undefined): boolean {
 // SIGNATURE VERIFICATION
 // ============================================
 
+// Constant-time string comparison to avoid timing oracles on the HMAC check.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 function verifyWebhookSignature(payload: string, signature: string | null): boolean {
   if (!signature || !WHOP_WEBHOOK_SECRET) {
     console.warn("⚠️ Missing signature or webhook secret");
@@ -265,14 +275,14 @@ function verifyWebhookSignature(payload: string, signature: string | null): bool
     const hmac = createHmac("sha256", WHOP_WEBHOOK_SECRET);
     hmac.update(payload);
     const expectedSignature = hmac.digest("hex");
-    
+
     const cleanSignature = signature.replace('sha256=', '');
-    const isValid = cleanSignature === expectedSignature;
-    
+    const isValid = timingSafeEqual(cleanSignature, expectedSignature);
+
     if (!isValid) {
       console.error("❌ Signature mismatch");
     }
-    
+
     return isValid;
   } catch (error) {
     console.error("❌ Signature verification error:", error);
@@ -667,25 +677,8 @@ console.log("🔍 Looking up user in pending_checkouts for:", { whopEmail, whopU
     }
   }
 
-// 🔥 PRIORITY 7: If only ONE pending checkout in last hour, use it
-  const { data: recentCheckouts } = await supabase
-    .from("pending_checkouts")
-    .select("user_id, user_email")
-    .eq("product_type", productType)
-    .is("completed_at", null)
-    .gt("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
-    .order("created_at", { ascending: false });
-
-  if (recentCheckouts?.length === 1) {
-    console.log("✅ Found SINGLE recent checkout, assuming match");
-    return {
-      id: recentCheckouts[0].user_id,
-      email: recentCheckouts[0].user_email,
-      emailMismatch: true,
-      lookupMethod: 'pending_checkout_single_recent',
-    };
-  }
-
+  // All lookup methods exhausted — return no match.
+  // The caller will log the event to whop_webhook_log (processed:false) for manual reconciliation.
   return null;
 }
 
@@ -1022,9 +1015,7 @@ serve(async (req: Request) => {
                       req.headers.get("whop-signature") ||
                       req.headers.get("X-Whop-Signature");
 
-    const skipVerification = Deno.env.get("SKIP_WEBHOOK_VERIFICATION") === "true";
-    
-    if (!skipVerification && !verifyWebhookSignature(rawBody, signature)) {
+    if (!verifyWebhookSignature(rawBody, signature)) {
       console.error("❌ Invalid webhook signature");
       return new Response(
         JSON.stringify({ error: "Invalid signature" }),

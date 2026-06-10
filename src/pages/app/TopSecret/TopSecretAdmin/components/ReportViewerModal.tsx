@@ -7,6 +7,7 @@ import { X, Copy, Check, Download, Maximize2, FileText, Clock, Plus, Trash2 } fr
 import { toast } from 'sonner';
 import { type ReportType, type ProcessorInfo, formatExactTime } from '../utils/constants';
 import { QAScoreBadge } from './QAScoreBadge';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 
 interface ReportViewerModalProps {
   report: string;
@@ -185,7 +186,7 @@ export const ReportViewerModal = memo(function ReportViewerModal({
         <div className="flex-1 overflow-auto">
           {viewMode === 'rendered' ? (
             <div className="p-8 max-w-4xl mx-auto">
-              <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: `<p class="text-gray-400 leading-relaxed mb-4">${renderMarkdown(report)}</p>` }} />
+              <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeHtml(`<p class="text-gray-400 leading-relaxed mb-4">${renderMarkdown(report)}</p>`) }} />
             </div>
           ) : (
             <div className="p-6">

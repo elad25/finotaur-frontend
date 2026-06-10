@@ -12,6 +12,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useWarZoneStatus } from '@/hooks/useUserStatus';
 import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
@@ -479,7 +480,7 @@ export function useWarZoneData(): UseWarZoneDataReturn {
       console.error('[WAR ZONE] ❌ Bucket listing failed:', err);
     }
     
-    alert(`PDF not available for ${dateStr}. Please try again or contact support.`);
+    toast.error(`PDF not available for ${dateStr}. Please try again or contact support.`);
   }, []);
 
   // ============================================

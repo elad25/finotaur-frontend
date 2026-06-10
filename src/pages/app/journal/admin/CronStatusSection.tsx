@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SkeletonCard } from '@/components/ds/Skeleton';
+import { supabase } from '@/lib/supabase';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -98,9 +99,10 @@ const CronStatusSection: React.FC = () => {
   const { data: cronStatus, isLoading: statusLoading } = useQuery({
     queryKey: ['newsletter-cron-status'],
     queryFn: async (): Promise<CronStatus> => {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${API_BASE}/api/newsletter/cron/status`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}`,
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
       });
       const data = await res.json();
@@ -109,14 +111,15 @@ const CronStatusSection: React.FC = () => {
     },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
-  
+
   // Fetch CRON logs
   const { data: cronLogs } = useQuery({
     queryKey: ['newsletter-cron-logs'],
     queryFn: async (): Promise<CronLog[]> => {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${API_BASE}/api/newsletter/cron/logs?limit=5`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}`,
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
       });
       const data = await res.json();
@@ -128,11 +131,12 @@ const CronStatusSection: React.FC = () => {
   // Toggle CRON mutation
   const toggleMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
+      const { data: { session } } = await supabase.auth.getSession();
       const endpoint = enabled ? 'start' : 'stop';
       const res = await fetch(`${API_BASE}/api/newsletter/cron/${endpoint}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}`,
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
       });
       const data = await res.json();
@@ -152,10 +156,11 @@ const CronStatusSection: React.FC = () => {
   const handleManualTrigger = async () => {
     setIsTriggering(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${API_BASE}/api/newsletter/cron/trigger`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('supabase_token')}`,
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
         },
       });
       const data = await res.json();
