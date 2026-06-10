@@ -23,9 +23,6 @@ import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
-import { HoldingsOverviewPanel } from './components/HoldingsOverviewPanel';
-import { MarketOverviewPanel } from './components/MarketOverviewPanel';
-import { CuratedNewsPanel } from './components/CuratedNewsPanel';
 
 // Time-range list lives inside PortfolioValuePanel.
 
@@ -101,138 +98,20 @@ export function FinotaurCopilotDashboard() {
         <AiBrainPanel className="xl:col-span-4" />
         <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
-        {/* ROW 2 — allocation donut | performance comparison chart | top opportunities */}
-        <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-3" />
+        {/* ROW 2 — allocation donut | performance comparison chart */}
+        <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-6" />
         <MarketComparisonChart
-          className="xl:col-span-5"
+          className="xl:col-span-6"
           portfolioSeries={snapshot.series}
           range={range}
           onRangeChange={setRange}
         />
-        <TopOpportunitiesPanel className="xl:col-span-4" />
 
-        {/* ROW 3 — holdings overview | sector exposure | market overview | curated news */}
-        <HoldingsOverviewPanel snapshot={snapshot} className="xl:col-span-3" />
-        <SectorExposurePanel snapshot={snapshot} className="xl:col-span-3" />
-        <MarketOverviewPanel className="xl:col-span-3" />
-        <CuratedNewsPanel className="xl:col-span-3" />
-
-        {/* ROW 4 — action items strip */}
-        <ActionItemsStrip analysis={analysis} />
+        {/* ROW 3 — top opportunities full width */}
+        <TopOpportunitiesPanel className="xl:col-span-12" fullWidth />
 
       </div>
     </ErrorBoundary>
-  );
-}
-
-interface ActionItem {
-  icon: ElementType;
-  title: string;
-  body: string;
-  toneClass: string;
-  href: string;
-}
-
-/**
- * Build up to 3 prioritized action items from real analysis + live brief.
- * Items are ordered by severity — red drivers first, then gold, then the
- * weekly thesis fallback so the strip is never empty.
- */
-function buildActionItems(
-  analysis: PortfolioRiskAnalysis,
-  centralThesis: string | undefined,
-): ActionItem[] {
-  const items: ActionItem[] = [];
-
-  const concentration = analysis.drivers.find((d) => d.iconKey === 'concentration');
-  if (concentration && concentration.tone !== 'green') {
-    const top = analysis.topExposures[0];
-    items.push({
-      icon: Layers3,
-      title: top ? `${top.ticker} is ${top.weightPct.toFixed(0)}% of the portfolio` : 'High concentration',
-      body: 'Consider trimming to reduce single-name risk.',
-      toneClass: concentration.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
-      href: '/copilot/risks',
-    });
-  }
-
-  const cashBuffer = analysis.drivers.find((d) => d.iconKey === 'liquidity');
-  if (cashBuffer && cashBuffer.tone !== 'green') {
-    items.push({
-      icon: ShieldCheck,
-      title: 'Low cash buffer',
-      body: cashBuffer.text,
-      toneClass: cashBuffer.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
-      href: '/copilot/holdings',
-    });
-  }
-
-  const options = analysis.drivers.find((d) => d.iconKey === 'options');
-  if (options && options.tone !== 'green') {
-    items.push({
-      icon: Zap,
-      title: 'Options leverage elevated',
-      body: options.text,
-      toneClass: options.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
-      href: '/copilot/risks',
-    });
-  }
-
-  if (items.length < 3 && centralThesis) {
-    items.push({
-      icon: TrendingUp,
-      title: "This week's thesis",
-      body: centralThesis.length > 120 ? `${centralThesis.slice(0, 117)}…` : centralThesis,
-      toneClass: 'text-gold-primary',
-      href: '/copilot/ai-analyst',
-    });
-  }
-
-  if (items.length === 0) {
-    items.push({
-      icon: ShieldCheck,
-      title: 'Portfolio in good shape',
-      body: 'Risk dimensions look balanced. Review the weekly brief for tactical views.',
-      toneClass: 'text-status-success',
-      href: '/copilot/ai-analyst',
-    });
-  }
-
-  return items.slice(0, 3);
-}
-
-function ActionItemsStrip({ analysis }: { analysis: PortfolioRiskAnalysis }) {
-  const { brief } = useSynthesisBrief();
-  const items = buildActionItems(analysis, brief?.central_thesis);
-
-  return (
-    <section className="xl:col-span-12 rounded-[7px] border border-gold-primary/14 bg-[#050505]/92 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Zap className="h-3.5 w-3.5 text-gold-primary" />
-        <p className="text-[10px] uppercase tracking-[0.14em] text-gold-primary">Action Items</p>
-      </div>
-      <div className="grid gap-3 md:grid-cols-3">
-        {items.map((item, i) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={i}
-              to={item.href}
-              className="group flex gap-3 rounded-[6px] border border-gold-primary/12 bg-black/30 p-3 transition hover:border-gold-primary/30 hover:bg-gold-primary/[0.04]"
-            >
-              <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-[7px] border border-gold-primary/18 bg-gold-primary/[0.055] ${item.toneClass}`}>
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className={`text-[12px] font-semibold leading-tight ${item.toneClass}`}>{item.title}</p>
-                <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink-secondary">{item.body}</p>
-              </div>
-              <ArrowRight className="h-3.5 w-3.5 flex-none self-center text-ink-tertiary transition group-hover:text-gold-primary" />
-            </Link>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -393,11 +272,12 @@ function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): st
 /**
  * TopOpportunitiesPanel
  *
- * Compact vertical card. Used in:
- *  - ROW 2 of the connected-state grid (xl:col-span-4 via className prop)
- *  - Empty-state / syncing branches (no className — fills its grid slot naturally)
+ * Two rendering modes:
+ *  - compact (default): vertical list, used in empty-state / syncing branches
+ *  - fullWidth: horizontal responsive grid (grid-cols-1 sm:grid-cols-2 xl:grid-cols-4),
+ *    used in ROW 3 of the connected-state dashboard (xl:col-span-12)
  */
-function TopOpportunitiesPanel({ className }: { className?: string }) {
+function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: string; fullWidth?: boolean }) {
   const { brief } = useSynthesisBrief();
 
   const items: Array<{ ticker: string; company: string; tag: string; score: number }> =
@@ -413,29 +293,51 @@ function TopOpportunitiesPanel({ className }: { className?: string }) {
         })
       : [];
 
+  const emptyNode = (
+    <p className="py-10 text-center text-[11px] leading-relaxed text-ink-tertiary">
+      No live trade ideas right now.<br />New ideas appear here after the next AI brief.
+    </p>
+  );
+
+  const itemCard = ({ ticker, company, tag, score }: typeof items[number]) => (
+    <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
+      <TickerLogo ticker={ticker} size={32} className="h-8 w-8 rounded-[3px]" />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-white">{ticker}</p>
+        <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
+      </div>
+      <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[9px] uppercase text-gold-primary">{tag}</span>
+      <div className="h-9 w-9 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-xs text-gold-primary">{score}</div>
+    </div>
+  );
+
+  if (fullWidth) {
+    return (
+      <PremiumFrame className={className ?? ''}>
+        <div className="p-5">
+          <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
+          {items.length === 0 ? (
+            emptyNode
+          ) : (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+              {items.map(itemCard)}
+            </div>
+          )}
+        </div>
+        <Link to="/app/ai/copilot/top-opportunities" className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.055] text-[11px] uppercase text-gold-primary">
+          VIEW ALL OPPORTUNITIES <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </PremiumFrame>
+    );
+  }
+
   return (
     <PremiumFrame className={`min-h-[338px] ${className ?? ''}`}>
       <div className="p-5">
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
-          {items.length === 0 && (
-            <p className="py-10 text-center text-[11px] leading-relaxed text-ink-tertiary">
-              No live trade ideas right now.<br />New ideas appear here after the next AI brief.
-            </p>
-          )}
-          {items.map(({ ticker, company, tag, score }) => {
-            return (
-              <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
-                <TickerLogo ticker={ticker} size={32} className="h-8 w-8 rounded-[3px]" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white">{ticker}</p>
-                  <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
-                </div>
-                <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[9px] uppercase text-gold-primary">{tag}</span>
-                <div className="h-9 w-9 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-xs text-gold-primary">{score}</div>
-              </div>
-            );
-          })}
+          {items.length === 0 && emptyNode}
+          {items.map(itemCard)}
         </div>
       </div>
       <Link to="/app/ai/copilot/top-opportunities" className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.055] text-[11px] uppercase text-gold-primary">
@@ -445,123 +347,3 @@ function TopOpportunitiesPanel({ className }: { className?: string }) {
   );
 }
 
-// Palette for allocation donut / sector bars — gold variants + neutrals (design system ADL-020, no green).
-const ALLOC_PALETTE: Array<{ swatch: string; conic: string }> = [
-  { swatch: 'bg-[#f4d97b]',      conic: '#f4d97b' },
-  { swatch: 'bg-[#c9a646]',      conic: '#c9a646' },
-  { swatch: 'bg-[#a98220]',      conic: '#a98220' },
-  { swatch: 'bg-[#7a5e16]',      conic: '#7a5e16' },
-  { swatch: 'bg-[#4a3a0e]',      conic: '#4a3a0e' },
-  { swatch: 'bg-white/15',       conic: 'rgba(255,255,255,0.15)' },
-];
-
-/** Build a CSS conic-gradient string from a list of (label, percent) rows. */
-function buildConicGradient(rows: Array<[string, number]>): string {
-  if (rows.length === 0) return 'rgba(255,255,255,0.13)';
-  let cursor = 0;
-  const stops: string[] = [];
-  rows.forEach(([_, pct], i) => {
-    const color = ALLOC_PALETTE[i % ALLOC_PALETTE.length].conic;
-    const start = cursor;
-    cursor += pct;
-    stops.push(`${color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`);
-  });
-  return `conic-gradient(${stops.join(', ')})`;
-}
-
-/**
- * Map IB AssetClass to a human-readable macro bucket. For now we group by asset
- * class because the IBRIT Activity report doesn't carry ticker→sector data; a
- * future enhancement could enrich equity holdings with sector lookups
- * (Polygon / IEX), but until then "Cash" / "Equities" / "Options" etc. is the
- * honest classification we can prove from the source data.
- */
-function bucketSector(cls: string | undefined): string {
-  const c = (cls || '').toUpperCase();
-  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'Equities';
-  if (c === 'OPT' || c === 'FOP' || c === 'OPTIONS') return 'Options';
-  if (c === 'FUT' || c === 'FUTURES') return 'Futures';
-  if (c === 'BOND' || c === 'BONDS') return 'Bonds';
-  if (c === 'CASH' || c === 'FOREX') return 'Cash';
-  if (c === 'CMDTY' || c === 'COMMODITIES') return 'Commodities';
-  return 'Other';
-}
-
-/**
- * SectorExposurePanel — restyled with bars list on the left + donut on the right.
- * Title renamed to "SECTOR EXPOSURE"; VIEW ALL → /app/ai/copilot/macro.
- */
-function SectorExposurePanel({
-  className,
-  snapshot,
-}: {
-  className?: string;
-  snapshot: PortfolioSnapshot;
-}) {
-  const total = snapshot.totalValue || 1;
-  const groups = new Map<string, number>();
-  for (const h of snapshot.holdings) {
-    const label = bucketSector(h.assetClass);
-    groups.set(label, (groups.get(label) || 0) + h.marketValue);
-  }
-  const sectors: Array<[string, number]> = Array.from(groups.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, val]) => [label, (val / total) * 100]);
-
-  // Bars scale so the largest sector fills the available width
-  const maxPct = Math.max(...sectors.map((s) => s[1]), 1);
-
-  // Donut
-  const conic = buildConicGradient(sectors);
-  const bucketCount = sectors.length;
-
-  return (
-    <PremiumFrame className={`min-h-[210px] ${className}`}>
-      <div className="p-5">
-        <PanelHeader title="SECTOR EXPOSURE" action="VIEW ALL" actionTo="/app/ai/copilot/macro" />
-        {sectors.length === 0 ? (
-          <p className="mt-4 text-xs text-ink-tertiary">
-            No sector data yet — connect a broker and sync your holdings to see exposure.
-          </p>
-        ) : (
-          <div className="mt-4 flex items-start gap-4">
-            {/* Bars list — left */}
-            <div className="flex-1 space-y-2.5">
-              {sectors.map(([name, value], i) => (
-                <div key={name} className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="inline-block h-1.5 w-1.5 rounded-[2px]"
-                        style={{ background: ALLOC_PALETTE[i % ALLOC_PALETTE.length].conic }}
-                      />
-                      <span className="text-ink-secondary">{name}</span>
-                    </div>
-                    <span className="font-mono text-ink-tertiary">{value.toFixed(1)}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
-                      style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Donut — right */}
-            <div
-              className="relative h-20 w-20 flex-none rounded-full p-2.5"
-              style={{ background: conic }}
-            >
-              <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#080704]">
-                <span className="font-mono text-sm text-gold-primary">{bucketCount}</span>
-                <span className="text-[8px] uppercase text-ink-tertiary">CLASSES</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </PremiumFrame>
-  );
-}
