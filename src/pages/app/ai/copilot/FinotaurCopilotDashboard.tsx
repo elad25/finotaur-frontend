@@ -23,7 +23,6 @@ import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
-import { TopMoversPanel } from './components/TopMoversPanel';
 import { HoldingsOverviewPanel } from './components/HoldingsOverviewPanel';
 import { MarketOverviewPanel } from './components/MarketOverviewPanel';
 import { CuratedNewsPanel } from './components/CuratedNewsPanel';
@@ -102,7 +101,7 @@ export function FinotaurCopilotDashboard() {
         <AiBrainPanel className="xl:col-span-4" />
         <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
-        {/* ROW 2 — allocation donut | performance comparison chart | top movers */}
+        {/* ROW 2 — allocation donut | performance comparison chart | top opportunities */}
         <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-3" />
         <MarketComparisonChart
           className="xl:col-span-5"
@@ -110,7 +109,7 @@ export function FinotaurCopilotDashboard() {
           range={range}
           onRangeChange={setRange}
         />
-        <TopMoversPanel snapshot={snapshot} className="xl:col-span-4" />
+        <TopOpportunitiesPanel className="xl:col-span-4" />
 
         {/* ROW 3 — holdings overview | sector exposure | market overview | curated news */}
         <HoldingsOverviewPanel snapshot={snapshot} className="xl:col-span-3" />
@@ -118,9 +117,8 @@ export function FinotaurCopilotDashboard() {
         <MarketOverviewPanel className="xl:col-span-3" />
         <CuratedNewsPanel className="xl:col-span-3" />
 
-        {/* ROW 4 — action items strip + top opportunities full-width */}
+        {/* ROW 4 — action items strip */}
         <ActionItemsStrip analysis={analysis} />
-        <TopOpportunitiesPanel fullWidth />
 
       </div>
     </ErrorBoundary>
@@ -251,20 +249,17 @@ function PremiumFrame({ children, className = '' }: { children: ReactNode; class
 
 function AiBrainPanel({ className }: { className?: string }) {
   return (
-    <div className={`relative min-h-[330px] ${className}`}>
-      <div className="relative h-full min-h-[330px] flex items-start justify-center overflow-visible">
-        <div className="absolute top-0 h-[286px] w-[108%] max-w-[500px] border border-gold-primary/20 bg-black/15 shadow-[0_0_90px_rgba(201,166,70,0.18)] [clip-path:polygon(10%_0,90%_0,100%_16%,100%_76%,88%_100%,12%_100%,0_76%,0_16%)]" />
-        <div className="absolute top-4 h-[252px] w-[94%] max-w-[444px] border border-gold-primary/10 [clip-path:polygon(10%_0,90%_0,100%_16%,100%_76%,88%_100%,12%_100%,0_76%,0_16%)]" />
-        <div className="absolute left-1/2 top-[110px] h-[250px] w-[470px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.24),rgba(201,166,70,0.08)_38%,transparent_68%)] blur-xl" />
+    <div className={`relative min-h-[380px] ${className}`}>
+      <div className="relative h-full min-h-[380px] flex items-start justify-center overflow-visible">
+        {/* Outer decorative clip-path frame — sized up to contain the larger globe */}
+        <div className="absolute top-0 h-[360px] w-[108%] max-w-[520px] border border-gold-primary/20 bg-black/15 shadow-[0_0_90px_rgba(201,166,70,0.18)] [clip-path:polygon(10%_0,90%_0,100%_16%,100%_80%,88%_100%,12%_100%,0_80%,0_16%)]" />
+        {/* Inner inset frame */}
+        <div className="absolute top-4 h-[324px] w-[94%] max-w-[464px] border border-gold-primary/10 [clip-path:polygon(10%_0,90%_0,100%_16%,100%_80%,88%_100%,12%_100%,0_80%,0_16%)]" />
+        {/* Radial glow centred on the globe */}
+        <div className="absolute left-1/2 top-[140px] h-[300px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.24),rgba(201,166,70,0.08)_38%,transparent_68%)] blur-xl" />
+        {/* Globe — larger, still anchored at top-0 */}
         <div className="absolute left-1/2 top-[0px] -translate-x-1/2">
-          <GlobeLoader size={280} />
-        </div>
-        <div className="absolute bottom-[-4px] left-1/2 w-[270px] -translate-x-1/2 rounded-[8px] border border-gold-primary/24 bg-black/75 px-5 py-3 text-center shadow-[0_0_36px_rgba(201,166,70,0.22)] backdrop-blur-md">
-          <div className="text-sm font-semibold uppercase text-gold-primary">AI CORE</div>
-          <p className="mt-1 text-[10px] leading-relaxed text-ink-tertiary">Real-time market analysis</p>
-          <p className="mt-1 font-mono text-[10px] text-ink-primary">24/7</p>
-          <div className="absolute -bottom-3 left-1/2 h-3 w-px bg-gold-primary/80" />
-          <Zap className="absolute -bottom-5 left-1/2 h-4 w-4 -translate-x-1/2 text-gold-primary" />
+          <GlobeLoader size={360} />
         </div>
       </div>
     </div>
@@ -324,19 +319,19 @@ function InsightsPanel({ className, analysis }: { className?: string; analysis: 
   ].slice(0, 3);
 
   return (
-    <PremiumFrame className={`min-h-[260px] ${className}`}>
-      <div className="p-5">
+    <PremiumFrame className={`min-h-[380px] ${className}`}>
+      <div className="p-6">
         <PanelHeader title="AI COPILOT INSIGHTS" action="ANALYST" actionTo="/copilot/ai-analyst" />
         <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
-          <div className="relative h-24 w-24 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-2xl tabular-nums">
+          <div className="relative h-32 w-32 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-3xl tabular-nums">
               <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">{health}%</span>
             </div>
           </div>
           <div>
             <p className="text-[10px] uppercase text-ink-tertiary">PORTFOLIO HEALTH</p>
-            <p className="mt-1 text-lg text-gold-primary">{healthLabel}</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{healthDescription}</p>
+            <p className="mt-1 text-2xl text-gold-primary">{healthLabel}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{healthDescription}</p>
           </div>
         </div>
 
@@ -351,8 +346,8 @@ function InsightsPanel({ className, analysis }: { className?: string; analysis: 
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] text-gold-primary">{row.label}</p>
-                  <p className="mt-0.5 text-[11px] text-ink-secondary">{row.text}</p>
+                  <p className="text-xs text-gold-primary">{row.label}</p>
+                  <p className="mt-0.5 text-[13px] text-ink-secondary">{row.text}</p>
                 </div>
                 <Link
                   to={row.href}
@@ -398,10 +393,11 @@ function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): st
 /**
  * TopOpportunitiesPanel
  *
- * `fullWidth` = true  → ROW 4 horizontal grid card (xl:col-span-12)
- * `fullWidth` = false (default) → compact vertical card used in empty-state branches
+ * Compact vertical card. Used in:
+ *  - ROW 2 of the connected-state grid (xl:col-span-4 via className prop)
+ *  - Empty-state / syncing branches (no className — fills its grid slot naturally)
  */
-function TopOpportunitiesPanel({ fullWidth = false }: { fullWidth?: boolean }) {
+function TopOpportunitiesPanel({ className }: { className?: string }) {
   const { brief } = useSynthesisBrief();
 
   const items: Array<{ ticker: string; company: string; tag: string; score: number }> =
@@ -417,50 +413,8 @@ function TopOpportunitiesPanel({ fullWidth = false }: { fullWidth?: boolean }) {
         })
       : [];
 
-  if (fullWidth) {
-    // ROW 4 — full-width horizontal grid
-    return (
-      <PremiumFrame className="xl:col-span-12 relative">
-        <div className="p-5">
-          <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
-          {items.length === 0 ? (
-            <p className="mt-4 py-6 text-center text-[11px] leading-relaxed text-ink-tertiary">
-              No live trade ideas right now.<br />New ideas appear here after the next AI brief.
-            </p>
-          ) : (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              {items.map(({ ticker, company, tag, score }) => (
-                <div
-                  key={ticker}
-                  className="flex items-center gap-3 rounded-[6px] border border-gold-primary/12 bg-black/30 px-3 py-3 hover:border-gold-primary/25 hover:bg-gold-primary/[0.04] transition"
-                >
-                  <TickerLogo ticker={ticker} size={36} className="h-9 w-9 flex-none rounded-[4px]" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white">{ticker}</p>
-                    <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-0.5 text-[9px] uppercase text-gold-primary">{tag}</span>
-                    <div className="h-7 w-7 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-[10px] text-gold-primary">{score}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <Link
-          to="/app/ai/copilot/top-opportunities"
-          className="flex h-10 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.04] text-[11px] uppercase text-gold-primary hover:bg-gold-primary/[0.08] transition"
-        >
-          VIEW ALL OPPORTUNITIES <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
-      </PremiumFrame>
-    );
-  }
-
-  // Compact vertical — used in not-connected / syncing empty-state branches
   return (
-    <PremiumFrame className="min-h-[338px]">
+    <PremiumFrame className={`min-h-[338px] ${className ?? ''}`}>
       <div className="p-5">
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
