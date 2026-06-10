@@ -43,6 +43,7 @@ import { AIUsageTab } from './tabs/AIUsageTab';
 import { AICommandCenterTab } from './tabs/AICommandCenterTab';
 import { CustomerVoiceTab } from './tabs/CustomerVoiceTab';
 import { FounderCockpitTab } from './tabs/FounderCockpitTab';
+import { GrowthTab } from './tabs/GrowthTab';
 import SeoAnalyticsPage from './SeoAnalyticsPage';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
@@ -181,6 +182,9 @@ export function AdminCRMShell() {
 
           {/* Customer Voice */}
           <Route path="voice" element={<CustomerVoiceTab />} />
+
+          {/* Growth Intelligence */}
+          <Route path="growth" element={<GrowthTab />} />
 
           {/* AI Command Center */}
           <Route path="ai" element={<AICommandCenterTab />} />
