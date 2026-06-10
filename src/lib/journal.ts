@@ -44,6 +44,12 @@ export interface Trade {
   metrics?: TradeMetrics;
   created_at?: string;
   updated_at?: string;
+  // Options fields
+  option_type?: 'CALL' | 'PUT';
+  strike_price?: number;
+  expiration_date?: string;
+  option_outcome?: string;
+  underlying_symbol?: string;
 }
 
 // ================================================
@@ -291,7 +297,17 @@ export async function createTrade(payload: Partial<Trade>) {
       metrics: metrics,
       quality_tag: payload.quality_tag,
       outcome: payload.exit_price ? outcome : 'OPEN',
-      pnl: payload.exit_price ? pnl : 0
+      pnl: payload.exit_price ? pnl : 0,
+      // Asset-class-specific fields (nullable — pass through as-is)
+      option_type: (payload as any).option_type ?? null,
+      strike_price: (payload as any).strike_price ?? null,
+      expiration_date: (payload as any).expiration_date ?? null,
+      leverage: (payload as any).leverage ?? null,
+      position_type: (payload as any).position_type ?? null,
+      funding_paid: (payload as any).funding_paid ?? null,
+      lot_size: (payload as any).lot_size ?? null,
+      account_currency: (payload as any).account_currency ?? null,
+      quote_rate: (payload as any).quote_rate ?? null,
     };
 
     console.log('✅ Creating trade with data:', {
@@ -337,6 +353,7 @@ export async function getTrades(userId?: string) {
         quantity, entry_price, stop_price, take_profit_price, exit_price,
         fees, fees_mode, session, strategy_id, setup, notes, mistake, next_time,
         tags, screenshot_url, outcome, pnl, quality_tag, metrics,
+        multiplier, option_type, strike_price, expiration_date, option_outcome, underlying_symbol,
         strategy:strategies(id, name)
       `)
       .eq('user_id', effectiveUserId)

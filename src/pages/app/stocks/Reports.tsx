@@ -1,14 +1,5 @@
-
-import { PageTemplate } from '@/components/PageTemplate';
-import ReportsSECDocuments from '@/components/ReportsSECDocuments';
+import CompanyResearchCenter from '@/components/research/CompanyResearchCenter';
 
 export default function StocksReports() {
-  return (
-    <PageTemplate
-      title="Reports & PDFs"
-      description="Research reports, financial statements, and analyst documents."
-    >
-      <ReportsSECDocuments />
-    </PageTemplate>
-  );
+  return <CompanyResearchCenter />;
 }

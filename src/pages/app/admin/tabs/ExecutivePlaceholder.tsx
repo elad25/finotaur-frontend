@@ -27,7 +27,7 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonStatRow, SkeletonChart, SkeletonTable } from '@/components/ds/Skeleton';
 import { StatsCard } from '@/components/admin/StatsCard';
 import {
   getUserGrowthData,
@@ -88,7 +88,13 @@ function addDays(iso: string, days: number): string {
 const FORECAST_DAYS = 30;
 const CONFIDENCE_Z = 1.96;
 
-export function ExecutivePlaceholder() {
+interface ExecutivePlaceholderProps {
+  /** When true, hides the page-level header (h1 + description).
+   *  Used when embedded inside another page (e.g. OverviewTab). */
+  embedded?: boolean;
+}
+
+export function ExecutivePlaceholder({ embedded = false }: ExecutivePlaceholderProps) {
   const [growth, setGrowth] = useState<UserGrowthData[]>([]);
   const [subStats, setSubStats] = useState<SubscriberStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,8 +181,10 @@ export function ExecutivePlaceholder() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <LoadingSkeleton lines={12} />
+      <div className="p-8 space-y-6">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-64" />
+        <SkeletonTable rows={6} cols={5} />
       </div>
     );
   }
@@ -269,22 +277,24 @@ export function ExecutivePlaceholder() {
 
   return (
     <div className="p-8 space-y-6">
-      <header className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center shrink-0">
-          <TrendingUp className="w-6 h-6 text-[#D4AF37]" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-white">Executive Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            30-day forecast on active users + MRR, with a 95% confidence band
-            from linear regression on the last 60 days.
-          </p>
-        </div>
-        <div className="text-[11px] text-gray-600 flex items-center gap-1 shrink-0">
-          <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-          <span>Live forecast</span>
-        </div>
-      </header>
+      {!embedded && (
+        <header className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-6 h-6 text-[#D4AF37]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold text-white">Executive Dashboard</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              30-day forecast on active users + MRR, with a 95% confidence band
+              from linear regression on the last 60 days.
+            </p>
+          </div>
+          <div className="text-[11px] text-gray-600 flex items-center gap-1 shrink-0">
+            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+            <span>Live forecast</span>
+          </div>
+        </header>
+      )}
 
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard

@@ -39,19 +39,22 @@ import { useAuth } from "@/providers/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import {
-  Settings, Loader2, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
+  Settings, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
   Clock, Calendar, CheckCircle2, AlertCircle, Key, Eye, EyeOff, Check,
-  TrendingUp, Newspaper, AlertTriangle, Sparkles, Brain, Flame,
-  Pencil, X, Globe, User, BookOpen, ExternalLink, Mail
+  TrendingUp, Newspaper, AlertTriangle, Flame,
+  Pencil, X, Globe, User, BookOpen, ExternalLink, Mail, Download, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation";
+import { SettingsLayoutSkeletonPage } from "@/components/skeletons/SettingsLayoutSkeleton";
+import { requestAccountDeletion, downloadGdprExport } from "@/services/accountLifecycleService";
+import { Spinner } from '@/components/ds/Spinner';
 
 // ============================================
 // TYPES - Matches actual DB schema
 // ============================================
 
-type TabId = "general" | "billing" | "credits" | "notifications" | "security";
+type TabId = "general" | "billing" | "notifications" | "security";
 
 // Newsletter preferences JSONB structure
 interface NewsletterPreferences {
@@ -67,6 +70,8 @@ interface NewsletterPreferences {
 interface ProfileData {
   // Basic info
   display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   email: string | null;
   avatar_url: string | null;
   preferred_timezone: string | null;
@@ -165,7 +170,6 @@ const useSettings = () => {
 const tabs: { id: TabId; label: string; icon: typeof Settings }[] = [
   { id: "general", label: "General", icon: Settings },
   { id: "billing", label: "Subscription", icon: CreditCard },
-  { id: "credits", label: "AI Credits", icon: Sparkles },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "security", label: "Security", icon: Shield },
 ];
@@ -192,6 +196,24 @@ function formatDate(dateString: string | null): string {
   return new Date(dateString).toLocaleDateString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric'
   });
+}
+
+// Compute the next upcoming billing date by advancing the anchor date by the
+// billing interval until it lands in the future. Returns null if no anchor.
+function computeNextBilling(anchorISO: string | null | undefined, interval: string | null | undefined): string | null {
+  if (!anchorISO) return null;
+  const anchor = new Date(anchorISO);
+  if (isNaN(anchor.getTime())) return null;
+  const now = new Date();
+  const next = new Date(anchor.getTime());
+  const stepMonths = interval === 'yearly' ? 12 : 1;
+  // Advance until strictly in the future (cap iterations to avoid infinite loop)
+  let guard = 0;
+  while (next.getTime() <= now.getTime() && guard < 600) {
+    next.setMonth(next.getMonth() + stepMonths);
+    guard++;
+  }
+  return next.toISOString();
 }
 
 function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platform') {
@@ -234,13 +256,17 @@ const GeneralTab = () => {
   const [isEditing, setIsEditing] = useState(false);
   
   // Local state for form fields
-  const [displayName, setDisplayName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [timezone, setTimezone] = useState("America/New_York");
 
-  // Sync local state with profile data
+  // Sync local state with profile data. Fall back to splitting display_name
+  // for legacy rows that predate first_name/last_name.
   useEffect(() => {
     if (profile) {
-      setDisplayName(profile.display_name || user?.email?.split('@')[0] || '');
+      const fallback = profile.display_name || user?.email?.split('@')[0] || '';
+      setFirstName(profile.first_name ?? fallback.split(' ')[0] ?? '');
+      setLastName(profile.last_name ?? fallback.split(' ').slice(1).join(' ') ?? '');
       setTimezone(profile.preferred_timezone || "America/New_York");
     }
   }, [profile, user]);
@@ -250,21 +276,29 @@ const GeneralTab = () => {
     
     setSaving(true);
     try {
+      const trimmedFirst = firstName.trim();
+      const trimmedLast = lastName.trim();
+      const composedDisplayName = [trimmedFirst, trimmedLast].filter(Boolean).join(' ');
+
       const { error } = await supabase
         .from('profiles')
         .update({
-          display_name: displayName,
+          first_name: trimmedFirst || null,
+          last_name: trimmedLast || null,
+          display_name: composedDisplayName,
           preferred_timezone: timezone,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
 
       if (error) throw error;
-      
+
       // Update local state
-      setProfile(prev => prev ? { 
-        ...prev, 
-        display_name: displayName, 
+      setProfile(prev => prev ? {
+        ...prev,
+        first_name: trimmedFirst || null,
+        last_name: trimmedLast || null,
+        display_name: composedDisplayName,
         preferred_timezone: timezone,
       } : null);
       
@@ -280,7 +314,9 @@ const GeneralTab = () => {
 
   const handleCancel = () => {
     // Reset to original values
-    setDisplayName(profile?.display_name || user?.email?.split('@')[0] || '');
+    const fallback = profile?.display_name || user?.email?.split('@')[0] || '';
+    setFirstName(profile?.first_name ?? fallback.split(' ')[0] ?? '');
+    setLastName(profile?.last_name ?? fallback.split(' ').slice(1).join(' ') ?? '');
     setTimezone(profile?.preferred_timezone || "America/New_York");
     setIsEditing(false);
   };
@@ -346,7 +382,7 @@ const GeneralTab = () => {
                 className="gap-2 bg-[#C9A646] hover:bg-[#B8963F] text-black"
               >
                 {saving ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                 ) : (
                   <Save className="w-3.5 h-3.5" />
                 )}
@@ -357,19 +393,32 @@ const GeneralTab = () => {
         </div>
         
         <div className="space-y-4">
-          {/* Display Name */}
+          {/* Name */}
           <div className="grid gap-1.5">
-            <Label className="text-sm text-zinc-300">Display Name</Label>
+            <Label className="text-sm text-zinc-300">Name</Label>
             {isEditing ? (
-              <Input 
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Enter your name"
-                className="max-w-md h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+                <Input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="First name"
+                  autoComplete="given-name"
+                  className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                />
+                <Input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Last name"
+                  autoComplete="family-name"
+                  className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                />
+              </div>
             ) : (
               <div className="max-w-md h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
-                {profile?.display_name || user?.email?.split('@')[0] || 'Not set'}
+                {profile?.display_name ||
+                  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+                  user?.email?.split('@')[0] ||
+                  'Not set'}
               </div>
             )}
             <p className="text-xs text-zinc-500">Shown in the app and community</p>
@@ -445,10 +494,10 @@ const GeneralTab = () => {
                 <p className="text-sm text-zinc-400">Unlimited trades & premium features</p>
               </div>
             </div>
-<Button 
-  disabled
-  size="sm" 
-  className="bg-zinc-600 text-zinc-400 cursor-not-allowed opacity-50"
+<Button
+  size="sm"
+  onClick={() => navigate('/app/all-markets/pricing')}
+  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
 >
   Upgrade <ArrowRight className="w-4 h-4 ml-1" />
 </Button>
@@ -996,7 +1045,7 @@ const BillingTab = () => {
             <h2 className="font-medium text-white">Finotaur Platform</h2>
           </div>
           <a 
-            href="https://whop.com/finotaur" 
+            href="https://whop.com/@me/settings/orders/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
@@ -1116,7 +1165,7 @@ const BillingTab = () => {
                   className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50"
                 >
                   {cancellingPlatform ? (
-                    <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                    <><Spinner size="sm" className="mr-1.5" />Restoring...</>
                   ) : (
                     <>Undo Cancellation</>
                   )}
@@ -1198,7 +1247,7 @@ const BillingTab = () => {
             <h2 className="font-medium text-white">Trading Journal</h2>
           </div>
           <a 
-            href="https://whop.com/finotaur" 
+            href="https://whop.com/@me/settings/orders/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
@@ -1323,7 +1372,7 @@ const BillingTab = () => {
             </div>
             {newsletterIsActive && (
               <a 
-                href="https://whop.com/finotaur" 
+                href="https://whop.com/@me/settings/orders/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-xs text-zinc-500 hover:text-purple-300 flex items-center gap-1.5 transition-colors"
@@ -1440,7 +1489,7 @@ const BillingTab = () => {
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       {newsletterPricing.isInTrial && profile?.newsletter_started_at
                         ? formatDate(new Date(new Date(profile.newsletter_started_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString())
-                        : formatDate(profile?.newsletter_expires_at)
+                        : formatDate(profile?.newsletter_expires_at ?? computeNextBilling(profile?.newsletter_paid_at ?? profile?.newsletter_started_at, profile?.newsletter_interval))
                       }
                     </p>
                   </div>
@@ -1507,7 +1556,7 @@ const BillingTab = () => {
   className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
 >
   {upgradingNewsletter ? (
-    <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Upgrading...</>
+    <><Spinner size="sm" color="inherit" className="mr-1.5" />Upgrading...</>
   ) : (
     <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $140)</>
   )}
@@ -1522,7 +1571,7 @@ const BillingTab = () => {
                         className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50"
                       >
                         {reactivatingNewsletter ? (
-                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                          <><Spinner size="sm" className="mr-1.5" />Restoring...</>
                         ) : (
                           <>Undo Cancellation</>
                         )}
@@ -1551,7 +1600,7 @@ const BillingTab = () => {
                     disabled={saving}
                     className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
                   >
-                    {saving ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Reactivating...</> : <>Reactivate</>}
+                    {saving ? <><Spinner size="sm" className="mr-1.5" />Reactivating...</> : <>Reactivate</>}
                   </Button>
                 </div>
               </div>
@@ -1628,7 +1677,7 @@ const BillingTab = () => {
             </div>
             {topSecretIsActive && (
               <a 
-                href="https://whop.com/finotaur" 
+                href="https://whop.com/@me/settings/orders/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className={cn(
@@ -1753,7 +1802,7 @@ const BillingTab = () => {
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       {topSecretPricing.isInTrial && profile?.top_secret_started_at
                         ? formatDate(new Date(new Date(profile.top_secret_started_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString())
-                        : formatDate(profile?.top_secret_expires_at)
+                        : formatDate(profile?.top_secret_expires_at ?? computeNextBilling(profile?.top_secret_trial_ends_at ?? profile?.top_secret_started_at, profile?.top_secret_interval))
                       }
                     </p>
                   </div>
@@ -1818,7 +1867,7 @@ const BillingTab = () => {
                         className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
                       >
                         {upgradingTopSecret ? (
-                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Upgrading...</>
+                          <><Spinner size="sm" color="inherit" className="mr-1.5" />Upgrading...</>
                         ) : (
                           <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $180)</>
                         )}
@@ -1833,7 +1882,7 @@ const BillingTab = () => {
                         className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/50"
                       >
                         {reactivatingTopSecret ? (
-                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                          <><Spinner size="sm" className="mr-1.5" />Restoring...</>
                         ) : (
                           <>Undo Cancellation</>
                         )}
@@ -1965,7 +2014,7 @@ const BillingTab = () => {
               className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancellingPlatform ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /><span>Cancelling...</span></>
+                <><Spinner size="sm" /><span>Cancelling...</span></>
               ) : (
                 <><X className="w-4 h-4" /><span>Yes, Cancel My Subscription</span></>
               )}
@@ -2061,7 +2110,7 @@ const BillingTab = () => {
       >
         {cancellingNewsletter ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Spinner size="sm" />
             <span>Cancelling...</span>
           </>
         ) : (
@@ -2154,7 +2203,7 @@ const BillingTab = () => {
       >
         {cancellingTopSecret ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Spinner size="sm" />
             <span>Cancelling...</span>
           </>
         ) : (
@@ -2178,76 +2227,6 @@ const BillingTab = () => {
 // ============================================
 // TAB: CREDITS (Placeholder - needs credits table)
 // ============================================
-
-const CreditsTab = () => {
-  const { profile } = useSettings();
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-purple-400" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-white">AI Credits</h1>
-          <p className="text-sm text-zinc-500">Manage your AI usage credits</p>
-        </div>
-      </div>
-
-      {/* Coming Soon Card */}
-      <Card className="p-8 border-dashed border-2 border-zinc-700 bg-zinc-900/30">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
-            <Sparkles className="w-8 h-8 text-[#C9A646]" />
-          </div>
-          <h3 className="text-lg font-semibold text-white mb-2">AI Credits Coming Soon</h3>
-          <p className="text-sm text-zinc-400 max-w-md mx-auto mb-6">
-            We're building a powerful AI credit system for advanced analysis, 
-            automated insights, and intelligent trade suggestions.
-          </p>
-          <Badge variant="outline" className="bg-[#C9A646]/10 text-[#C9A646] border-[#C9A646]/30">
-            <Clock className="w-3 h-3 mr-1" /> Coming Q2 2025
-          </Badge>
-        </div>
-      </Card>
-
-      {/* How It Will Work */}
-      <Card className="p-5 bg-zinc-900/50 border-zinc-700/50">
-        <p className="text-sm font-medium text-white mb-4">How Credits Will Work</p>
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-              <Zap className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <span className="text-emerald-400 text-sm font-medium">Light Actions</span>
-              <p className="text-zinc-500 text-xs">FREE — View data, calendars, basic analysis</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <Brain className="w-4 h-4 text-blue-400" />
-            </div>
-            <div>
-              <span className="text-blue-400 text-sm font-medium">Medium Actions</span>
-              <p className="text-zinc-500 text-xs">3-8 credits — AI trade analysis, pattern detection</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
-              <Flame className="w-4 h-4 text-orange-400" />
-            </div>
-            <div>
-              <span className="text-orange-400 text-sm font-medium">Heavy Actions</span>
-              <p className="text-zinc-500 text-xs">10-20 credits — Deep reports, portfolio analysis</p>
-            </div>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-};
 
 // ============================================
 // TAB: NOTIFICATIONS
@@ -2444,7 +2423,7 @@ const NotificationsTab = () => {
           className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
         >
           {saving ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+            <><Spinner size="sm" color="inherit" className="mr-2" />Saving...</>
           ) : (
             <><Save className="w-4 h-4 mr-2" />Save changes</>
           )}
@@ -2559,6 +2538,75 @@ const SecurityTab = () => {
       <span className={`text-xs ${ok ? 'text-green-500' : 'text-zinc-400'}`}>{label}</span>
     </div>
   );
+
+  // ── Data export + account deletion (GDPR / Danger Zone) ──
+  const [exporting, setExporting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteAck, setDeleteAck] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletionResult, setDeletionResult] = useState<{ undo_deadline?: string } | null>(null);
+
+  const emailMatches =
+    !!user?.email &&
+    deleteConfirmEmail.trim().toLowerCase() === user.email.toLowerCase();
+  const canDelete = emailMatches && deleteAck && !deleting;
+
+  const resetDeleteModal = () => {
+    setShowDeleteDialog(false);
+    setDeleteConfirmEmail("");
+    setDeleteReason("");
+    setDeleteAck(false);
+    setDeletionResult(null);
+  };
+
+  const handleExportData = async () => {
+    setExporting(true);
+    try {
+      const result = await downloadGdprExport();
+      if (result.success) {
+        toast.success(`Your data has been exported${result.filename ? ` (${result.filename})` : ''}`);
+      } else {
+        toast.error(result.error || 'Failed to export your data');
+      }
+    } catch (error) {
+      console.error('GDPR export failed:', error);
+      toast.error('Failed to export your data');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!canDelete) return;
+    setDeleting(true);
+    try {
+      const result = await requestAccountDeletion({
+        confirmEmail: deleteConfirmEmail.trim(),
+        reason: deleteReason.trim() || undefined,
+        acknowledgedPermanent: true,
+      });
+      if (result.success) {
+        setDeletionResult({ undo_deadline: result.undo_deadline });
+      } else {
+        toast.error(result.error || 'Failed to delete account');
+      }
+    } catch (error) {
+      console.error('Account deletion failed:', error);
+      toast.error('Failed to delete account');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSignOutAfterDeletion = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      window.location.href = '/';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -2725,7 +2773,7 @@ const SecurityTab = () => {
                       size="sm"
                       className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
                     >
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Next'}
+                      {saving ? <Spinner size="sm" color="inherit" /> : 'Next'}
                     </Button>
                   </>
                 ) : (
@@ -2749,11 +2797,141 @@ const SecurityTab = () => {
                       size="sm"
                       className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
                     >
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update'}
+                      {saving ? <Spinner size="sm" color="inherit" /> : 'Update'}
                     </Button>
                   </>
                 )}
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </Card>
+
+      {/* Danger Zone — data export + account deletion */}
+      <Card className="p-5 bg-zinc-900/50 border-red-900/40">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle className="w-4 h-4 text-red-400" />
+          <h2 className="font-medium text-white">Danger Zone</h2>
+        </div>
+
+        {/* Export my data */}
+        <div className="flex items-center justify-between py-3 border-b border-zinc-800">
+          <div className="pr-4">
+            <p className="text-sm text-zinc-300">Export my data</p>
+            <p className="text-xs text-zinc-500">Download a copy of your personal data (GDPR).</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExportData} disabled={exporting}>
+            {exporting
+              ? <Spinner size="sm" />
+              : <><Download className="w-4 h-4 mr-2" /> Export</>}
+          </Button>
+        </div>
+
+        {/* Delete account */}
+        <div className="flex items-center justify-between pt-3">
+          <div className="pr-4">
+            <p className="text-sm text-zinc-300">Delete account</p>
+            <p className="text-xs text-zinc-500">
+              Permanently delete your account and data. This cannot be undone after the grace period.
+            </p>
+          </div>
+
+          <Dialog
+            open={showDeleteDialog}
+            onOpenChange={(open) => (open ? setShowDeleteDialog(true) : resetDeleteModal())}
+          >
+            <DialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              {!deletionResult ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Delete your account?</DialogTitle>
+                    <DialogDescription>
+                      This schedules your account for permanent deletion and cancels any active
+                      subscriptions. You can undo it from the email we send you, before the grace
+                      period ends.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Type your email to confirm</Label>
+                      <Input
+                        type="email"
+                        value={deleteConfirmEmail}
+                        onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                        placeholder={user?.email || ''}
+                        className="h-9"
+                        autoComplete="off"
+                      />
+                      {deleteConfirmEmail && !emailMatches && (
+                        <p className="text-xs text-red-500 flex items-center gap-1">
+                          <X className="h-3 w-3" /> Email does not match your account
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">Reason (optional)</Label>
+                      <Input
+                        type="text"
+                        value={deleteReason}
+                        onChange={(e) => setDeleteReason(e.target.value)}
+                        placeholder="Tell us why you're leaving"
+                        className="h-9"
+                      />
+                    </div>
+
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={deleteAck}
+                        onChange={(e) => setDeleteAck(e.target.checked)}
+                        className="mt-0.5 accent-red-500"
+                      />
+                      <span className="text-xs text-zinc-400">
+                        I understand this will permanently delete my account and all associated
+                        data after the grace period.
+                      </span>
+                    </label>
+                  </div>
+
+                  <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={resetDeleteModal} disabled={deleting}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={handleDeleteAccount} disabled={!canDelete}>
+                      {deleting ? <Spinner size="sm" /> : 'Delete my account'}
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Account scheduled for deletion</DialogTitle>
+                    <DialogDescription>
+                      Your account has been scheduled for deletion
+                      {deletionResult.undo_deadline
+                        ? ` and will be permanently removed on ${new Date(deletionResult.undo_deadline).toLocaleDateString()}`
+                        : ''}
+                      . We've emailed you a link to undo this if you change your mind.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      size="sm"
+                      onClick={handleSignOutAfterDeletion}
+                      className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+                    >
+                      Sign out
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -2800,6 +2978,8 @@ export const SettingsLayout = () => {
         .from('profiles')
         .select(`
           display_name,
+          first_name,
+          last_name,
           email,
           avatar_url,
           preferred_timezone,
@@ -2870,18 +3050,13 @@ export const SettingsLayout = () => {
   }, [user?.id]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-[#C9A646]" />
-      </div>
-    );
+    return <SettingsLayoutSkeletonPage />;
   }
 
   const renderTab = () => {
     switch (activeTab) {
       case 'general': return <GeneralTab />;
       case 'billing': return <BillingTab />;
-      case 'credits': return <CreditsTab />;
       case 'notifications': return <NotificationsTab />;
       case 'security': return <SecurityTab />;
       default: return <GeneralTab />;

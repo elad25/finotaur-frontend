@@ -39,6 +39,7 @@ import { lazy } from '@/lib/lazyWithRetry';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // =====================================================
 // LAZY LOAD LANDING PAGE
@@ -50,15 +51,7 @@ const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLanding
 // LOADING COMPONENT
 // =====================================================
 
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// PageLoader imported from @/components/ds/Spinner
 
 // =====================================================
 // SUSPENSE WRAPPER
@@ -66,7 +59,7 @@ PageLoader.displayName = 'PageLoader';
 
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
   <ErrorBoundary>
-    <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
   </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
@@ -109,7 +102,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   // LOADING STATE
   // ═══════════════════════════════════════════
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // ═══════════════════════════════════════════
@@ -117,7 +110,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   // But just in case, show loading
   // ═══════════════════════════════════════════
   if (!user) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // ═══════════════════════════════════════════
@@ -136,7 +129,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   if (premiumOnly && !isPremium) {
     console.log('[JournalRoute] ❌ Premium required - showing landing page');
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<RouteSkeleton />}>
         <JournalLandingPage />
       </Suspense>
     );
@@ -153,7 +146,7 @@ export const JournalRoute = memo(({ children, premiumOnly = false }: JournalRout
   // ═══════════════════════════════════════════
   console.log('[JournalRoute] ❌ No journal access - showing landing page');
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteSkeleton />}>
       <JournalLandingPage />
     </Suspense>
   );

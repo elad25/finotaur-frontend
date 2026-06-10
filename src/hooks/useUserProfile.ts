@@ -24,6 +24,8 @@ import { queryKeys } from '@/lib/queryClient';
 // ============================================
 
 export interface UserProfile {
+  // Display name set in user Settings (profiles.display_name)
+  display_name?: string | null;
   // 🔥 v8.7.0: Added role for admin detection
   role?: 'user' | 'admin' | 'super_admin' | null;
   // 🔥 v8.6.1: Added 'admin' and 'vip' for special accounts
@@ -56,8 +58,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select(`
+      display_name,
       role,
-      account_type, 
+      account_type,
       subscription_interval, 
       subscription_status, 
       subscription_expires_at,

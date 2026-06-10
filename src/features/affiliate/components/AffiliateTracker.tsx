@@ -12,6 +12,7 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // ============================================
 // CONSTANTS - MUST MATCH useWhopCheckout!
@@ -412,15 +413,7 @@ export function AffiliateRefRoute() {
     processReferral();
   }, [code, searchParams, navigate]);
   
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-[#C9A646] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-[#C9A646] text-lg font-medium">Activating your referral...</p>
-        <p className="text-zinc-500 text-sm mt-2">Redirecting to Finotaur...</p>
-      </div>
-    </div>
-  );
+  return <RouteSkeleton />;
 }
 
 export default AffiliateTracker;

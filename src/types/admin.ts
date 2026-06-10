@@ -69,13 +69,24 @@ export interface UserWithStats extends AdminUser {
   active_trades: number;
   strategies_count: number;
   last_trade_date: string | null;
-  
-  // 🔥 v9.0.0: Whop identifiers (NEW)
-  // Required for filtering Whop-verified subscribers
+
+  // Whop identifiers (kept for backward compat; no longer used for filtering)
   whop_membership_id?: string | null;
   whop_user_id?: string | null;
   whop_product_id?: string | null;
+
+  // Product membership — derived from real profile columns
+  // present in every row returned by getAllUsers
+  products?: ProductCategory[];
+
+  // Raw status columns surfaced for badge rendering
+  platform_subscription_status?: string | null;
+  newsletter_status?: string | null;
+  top_secret_status?: string | null;
 }
+
+/** Which product categories a user is subscribed to. */
+export type ProductCategory = 'platform' | 'journal' | 'warzone' | 'top_secret';
 
 // ============================================
 // 🆕 v8.5.0: Archive System Types
@@ -255,10 +266,15 @@ export interface AdminAuditLog {
 // Filter & Pagination Types
 // ============================================
 
+/** Top-level product category tabs used on the admin subscribers page. */
+export type ProductFilter = 'platform' | 'journal' | 'newsletter' | 'free';
+
 export interface UserFilters {
   search?: string;
   role?: UserRole;
   account_type?: AccountType;
+  /** Category-level tab filter — replaces the old whop-based approach. */
+  product_filter?: ProductFilter;
   subscription_interval?: SubscriptionInterval;
   subscription_status?: SubscriptionStatus;
   is_banned?: boolean;
@@ -289,27 +305,31 @@ export interface SubscriberStats {
   totalSubscribers: number;
   activeSubscribers: number;
   newSubscribersThisMonth: number;
-  
-  // Plan breakdown
+
+  // Category counts (new model)
+  platformSubscribers: number;
+  journalSubscribers: number;   // basic + premium combined
+  newsletterSubscribers: number; // newsletter_status active
+  topSecretSubscribers: number;  // top_secret_status active
+
+  // Journal plan breakdown
   basicSubscribers: number;
   premiumSubscribers: number;
-  
-  // 🔥 v8.7.0: Added newsletter/top secret breakdown
-  newsletterSubscribers?: number;
-  topSecretSubscribers?: number;
-  
+
   // Billing cycle breakdown
   basicMonthly: number;
   basicYearly: number;
   premiumMonthly: number;
   premiumYearly: number;
-  
+
   // Revenue metrics
   basicMRR: number;
   premiumMRR: number;
+  newsletterMRR: number;
+  topSecretMRR: number;
   totalMRR: number;
   totalARR: number;
-  
+
   // Health metrics
   churnRate: number;
 }
@@ -318,7 +338,7 @@ export interface Subscriber {
   user_id: string;
   email: string;
   full_name: string | null;
-  subscription_plan: 'basic' | 'premium' | 'newsletter' | 'top_secret';
+  subscription_plan: 'basic' | 'premium' | 'newsletter' | 'top_secret' | 'platform';
   subscription_status: 'active' | 'cancelled' | 'past_due' | 'trial';
   billing_cycle: 'monthly' | 'yearly';
   subscription_start_date: string;
@@ -326,4 +346,6 @@ export interface Subscriber {
   monthly_revenue: number;
   total_paid: number;
   payment_method: string | null;
+  /** All product categories the subscriber belongs to. */
+  products?: ProductCategory[];
 }

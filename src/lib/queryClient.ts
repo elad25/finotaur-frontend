@@ -5,16 +5,28 @@
 
 import { QueryClient } from '@tanstack/react-query';
 
+// ⚠️ SINGLE SOURCE OF TRUTH — this is THE QueryClient the app uses.
+// QueryProvider provides this exact instance, so the helpers below
+// (invalidate/prefetch/clear) operate on the same cache components read via
+// useQueryClient(). Previously the provider created a SECOND instance, so all
+// the prefetch/invalidate helpers here ran against a dead cache no component
+// ever read from. Config below is the optimized "v2.0" set (was in the provider).
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      retry: 3,
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      networkMode: 'online',
+      staleTime: 5 * 60 * 1000,      // 5 minutes - data considered fresh
+      gcTime: 15 * 60 * 1000,         // 15 minutes - keep in memory longer
+      refetchOnMount: false,          // don't refetch on mount if fresh
+      refetchOnWindowFocus: false,    // don't refetch on tab switch
+      refetchOnReconnect: 'always',   // refetch on reconnect
+      retry: (failureCount, error: any) => {
+        // Don't retry on 4xx (client errors)
+        if (error?.status >= 400 && error?.status < 500) return false;
+        return failureCount < 2;
+      },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+      networkMode: 'offlineFirst',    // use cache first, then network
+      structuralSharing: true,
     },
     mutations: {
       retry: 1,
@@ -158,7 +170,7 @@ export const prefetchUserProfile = async () => {
         .from('profiles')
         .select('account_type, subscription_interval, subscription_status, subscription_expires_at')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       return profile;
     },
@@ -182,8 +194,8 @@ export const prefetchSettingsData = async () => {
         .from('profiles')
         .select('account_type, subscription_interval, subscription_status, subscription_expires_at, risk_settings, initial_portfolio, current_portfolio, total_pnl')
         .eq('id', user.id)
-        .single();
-      
+        .maybeSingle();
+
       return profile;
     },
   });
@@ -226,3 +238,25 @@ export const invalidateAffiliateData = (userId: string) => {
     queryKey: queryKeys.affiliate.discount(userId),
   });
 };
+
+// Cache TTL presets — match backend hotSec from src/cache/ttl.ts.
+// Keys group queries by data class. Use the matching preset in useQuery():
+//   useQuery({ ...QUERY_TTL.overview, queryKey: [...], queryFn: ... })
+export const QUERY_TTL = {
+  // Live spot quotes (10s stale, 15s refetch)
+  spot:        { staleTime: 10_000,            refetchInterval: 15_000 },
+  // Aggregated overview (30s stale, 60s refetch)
+  overview:    { staleTime: 30_000,            refetchInterval: 60_000 },
+  // FRED high-frequency (5min stale, 5min refetch)
+  fredHourly:  { staleTime: 5 * 60_000,        refetchInterval: 5 * 60_000 },
+  // FRED monthly releases (6h stale, no auto-refetch)
+  fredDaily:   { staleTime: 6 * 3_600_000,     refetchInterval: false as const },
+  // FRED quarterly (24h stale)
+  fredQuarterly: { staleTime: 24 * 3_600_000,  refetchInterval: false as const },
+  // DeFi TVL (5min stale + refetch)
+  defiTVL:     { staleTime: 5 * 60_000,        refetchInterval: 5 * 60_000 },
+  // Stablecoins (5min stale + refetch)
+  stablecoins: { staleTime: 5 * 60_000,        refetchInterval: 5 * 60_000 },
+  // Heatmap (30s stale, 60s refetch — same as overview)
+  heatmap:     { staleTime: 30_000,            refetchInterval: 60_000 },
+} as const;

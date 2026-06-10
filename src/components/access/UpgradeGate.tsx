@@ -3,7 +3,7 @@
 // 🔒 UPGRADE GATE v2.3 - Unified Plan Comparison
 // =====================================================
 // Header lock + plan name = ALWAYS gold gradient
-// Enterprise = exclusive "Coming Soon" waitlist card
+// Copilot = AI Portfolio Manager card
 // Finotaur = always "Best Value" (recommended)
 // No purple anywhere
 // =====================================================
@@ -92,14 +92,14 @@ const PLAN_TIERS: PlanTier[] = [
   },
   {
     key: 'enterprise',
-    name: 'Enterprise',
-    price: '$500',
-    description: 'Ultimate trading solution',
+    name: 'Copilot',
+    price: '$200',
+    description: 'Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.',
     icon: Sparkles,
     accentFrom: '#D4AF37',
     accentTo: '#F5E6A3',
     glow: 'rgba(212,175,55,0.25)',
-    features: [], // Not used — Enterprise has custom card
+    features: [], // Not used — Copilot has custom card
   },
 ];
 
@@ -108,10 +108,10 @@ const PLAN_TIERS: PlanTier[] = [
 // ============================================
 
 const ENTERPRISE_HIGHLIGHTS = [
-  { icon: Brain, text: 'AI Portfolio Manager — like having a licensed advisor, 24/7' },
-  { icon: Shield, text: 'Risk detection that hedge funds pay millions for' },
-  { icon: Eye, text: 'Real-time surveillance on every position you hold' },
-  { icon: TrendingUp, text: 'Unlimited analyses — no daily caps, no restrictions' },
+  { icon: Brain, text: 'AI Portfolio Manager that invests & trades alongside you' },
+  { icon: Eye, text: 'Stop flying blind — 24/7 AI oversight of every position you hold' },
+  { icon: TrendingUp, text: 'My Portfolio — live tracking & mark-to-market of your real book' },
+  { icon: Shield, text: 'Proactive AI risk detection & alerts on your holdings' },
 ];
 
 // ============================================
@@ -136,7 +136,7 @@ export function UpgradeGate({
   const {
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
-    checkoutPlatformEnterpriseMonthly,
+    checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
     isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message }),
@@ -152,14 +152,14 @@ export function UpgradeGate({
     } else if (planKey === 'finotaur') {
       billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
     } else if (planKey === 'enterprise') {
-      checkoutPlatformEnterpriseMonthly();
+      billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
     }
   };
 
   const handleJoinWaitlist = () => {
     setWaitlistJoined(true);
     toast.success("You're on the list", {
-      description: "We'll notify you the moment Enterprise launches.",
+      description: "We'll notify you when Copilot is available.",
     });
   };
 
@@ -485,7 +485,7 @@ export function UpgradeGate({
             );
           })()}
 
-          {/* ─── ENTERPRISE CARD (EXCLUSIVE COMING SOON) ─── */}
+          {/* ─── COPILOT CARD ─── */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -510,7 +510,7 @@ export function UpgradeGate({
                   boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                 }}
               >
-                <Sparkles className="w-3 h-3" /> Coming Soon
+                <Sparkles className="w-3 h-3" /> AI Portfolio Manager
               </div>
             </div>
 
@@ -523,18 +523,20 @@ export function UpgradeGate({
               <div className="text-center mb-4">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <Sparkles className="w-4 h-4" style={{ color: '#D4AF37' }} />
-                  <span className="text-lg font-bold text-white">Enterprise</span>
+                  <span className="text-lg font-bold text-white">Copilot</span>
                 </div>
                 <div className="flex items-baseline justify-center gap-1 mb-1">
-                  <span className="text-4xl font-bold text-white">$500</span>
+                  <span className="text-4xl font-bold text-white">{billingInterval === 'yearly' ? '$167' : '$200'}</span>
                   <span className="text-sm text-[#6B6B6B]">/month</span>
                 </div>
+                {billingInterval === 'yearly' && (
+                  <span className="text-xs text-green-400">Billed $2,000/year</span>
+                )}
               </div>
 
-              {/* Exclusive tagline */}
+              {/* Tagline */}
               <p className="text-sm text-[#D4AF37]/80 font-medium mb-4 leading-relaxed text-center">
-                For serious investors ready to take their portfolio to the next level.
-                Not for everyone — by application only.
+                Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.
               </p>
 
               {/* Selling points */}
@@ -555,7 +557,18 @@ export function UpgradeGate({
                 ))}
               </ul>
 
-              
+              <button
+                onClick={() => handleCheckout('enterprise')}
+                disabled={checkoutLoading}
+                className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
+                style={{
+                  background: 'linear-gradient(135deg, #D4AF37, #F5E6A3)',
+                  color: '#000',
+                  boxShadow: '0 4px 20px rgba(212,175,55,0.3)',
+                }}
+              >
+                Get Copilot
+              </button>
             </div>
           </motion.div>
         </div>

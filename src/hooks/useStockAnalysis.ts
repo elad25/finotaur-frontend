@@ -5,10 +5,11 @@
 // =====================================================
 
 import { useState, useCallback } from 'react';
-import type { 
-  StockAnalyzerData, 
+import { supabase } from '../lib/supabase';
+import type {
+  StockAnalyzerData,
   StockAnalyzerAPIResponse,
-  UseStockAnalysisReturn 
+  UseStockAnalysisReturn
 } from '../types/stock.types';
 
 // =====================================================
@@ -16,6 +17,22 @@ import type {
 // =====================================================
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
+// Build auth headers from the live Supabase session. Returns just
+// Content-Type when no session — anonymous requests still work for
+// non-gated endpoints. Never reads localStorage directly: a corrupted
+// legacy `supabase.auth.token` key used to throw SyntaxError here.
+async function buildHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  } catch {
+    // No session / Supabase init failed — fall through with anon headers.
+  }
+  return headers;
+}
 
 // =====================================================
 // MAIN HOOK: useStockAnalysis
@@ -37,15 +54,7 @@ export function useStockAnalysis(): UseStockAnalysisReturn {
     try {
       const response = await window.fetch(
         `${API_BASE_URL}/api/stock-analyzer/${ticker.toUpperCase()}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            // Add auth header if available
-            ...(localStorage.getItem('supabase.auth.token') && {
-              'Authorization': `Bearer ${JSON.parse(localStorage.getItem('supabase.auth.token') || '{}')?.currentSession?.access_token || ''}`
-            }),
-          },
-        }
+        { headers: await buildHeaders() }
       );
       
       if (!response.ok) {
@@ -81,14 +90,7 @@ export function useStockAnalysis(): UseStockAnalysisReturn {
     try {
       const response = await window.fetch(
         `${API_BASE_URL}/api/stock-analyzer/${ticker.toUpperCase()}/refresh`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(localStorage.getItem('supabase.auth.token') && {
-              'Authorization': `Bearer ${JSON.parse(localStorage.getItem('supabase.auth.token') || '{}')?.currentSession?.access_token || ''}`
-            }),
-          },
-        }
+        { headers: await buildHeaders() }
       );
       
       if (!response.ok) {

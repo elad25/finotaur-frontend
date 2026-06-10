@@ -4,15 +4,16 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Zap, 
-  TrendingUp, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  Zap,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle2,
   Clock,
   Crown,
   ArrowUpRight
 } from 'lucide-react';
+import { SkeletonCard } from '@/components/ds/Skeleton';
 import { formatTradesRemaining, getUpgradeUrgency } from '@/utils/subscriptionHelpers';
 
 export function SubscriptionStatus() {
@@ -20,13 +21,7 @@ export function SubscriptionStatus() {
   const navigate = useNavigate();
 
   if (loading) {
-    return (
-      <Card className="rounded-2xl border border-yellow-200/20 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6">
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold"></div>
-        </div>
-      </Card>
-    );
+    return <SkeletonCard lines={3} className="rounded-2xl" />;
   }
 
   if (!limits) {

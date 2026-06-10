@@ -117,18 +117,28 @@ const ExchangesTab = memo(function ExchangesTab() {
 });
 
 // ── Main ─────────────────────────────────────────────────────
-export default function CryptoScreener() {
+function CryptoScreenerContent() {
   const [tab, setTab] = useState('scanner');
   return (
+    <div className="space-y-4">
+      <GlassTabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
+      <GlassCard padding="sm">
+        {tab === 'scanner' && <ScannerTab />}
+        {tab === 'sectors' && <SectorsTab />}
+        {tab === 'exchanges' && <ExchangesTab />}
+      </GlassCard>
+    </div>
+  );
+}
+
+export default function CryptoScreener({ embedded = false }: { embedded?: boolean }) {
+  if (embedded) {
+    return <CryptoScreenerContent />;
+  }
+
+  return (
     <PageTemplate title="Market Scanner" description="Find opportunities across crypto markets">
-      <div className="space-y-4">
-        <GlassTabs tabs={PAGE_TABS} active={tab} onChange={setTab} />
-        <GlassCard padding="sm">
-          {tab === 'scanner' && <ScannerTab />}
-          {tab === 'sectors' && <SectorsTab />}
-          {tab === 'exchanges' && <ExchangesTab />}
-        </GlassCard>
-      </div>
+      <CryptoScreenerContent />
     </PageTemplate>
   );
 }

@@ -4,10 +4,12 @@ import {
   Wallet, Clock, CheckCircle, XCircle, RefreshCw,
   ChevronLeft, ChevronRight, AlertCircle, Send, Search,
   DollarSign, Mail, User, Users, ExternalLink, Play, Filter,
-  Loader2, CheckCheck, Ban, Eye
+  CheckCheck, Ban, Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { SkeletonTable } from '@/components/ds/Skeleton';
+import { Spinner } from '@/components/ds/Spinner';
 
 // ============================================
 // TYPES
@@ -450,7 +452,7 @@ export default function AffiliateAdminPayouts() {
             >
               {batchProcessing ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                   Processing...
                 </>
               ) : (
@@ -547,9 +549,7 @@ export default function AffiliateAdminPayouts() {
         }}
       >
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
-          </div>
+          <SkeletonTable rows={6} cols={5} />
         ) : payouts.length === 0 ? (
           <div className="text-center py-16">
             <Wallet className="h-12 w-12 text-gray-600 mx-auto mb-3" />
@@ -668,7 +668,7 @@ export default function AffiliateAdminPayouts() {
                                   )}
                                 >
                                   {isProcessing ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <Spinner size="sm" />
                                   ) : (
                                     <Play className="h-3.5 w-3.5" />
                                   )}
@@ -697,7 +697,7 @@ export default function AffiliateAdminPayouts() {
                                 )}
                               >
                                 {isCheckingStatus ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <Spinner size="sm" />
                                 ) : (
                                   <RefreshCw className="h-3.5 w-3.5" />
                                 )}
@@ -976,9 +976,7 @@ function PayoutDetailModal({
             </h4>
             
             {loadingCommissions ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-[#C9A646]" />
-              </div>
+              <SkeletonTable rows={4} cols={5} />
             ) : commissions.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No commissions linked to this payout</p>
             ) : (
@@ -1222,7 +1220,7 @@ function PayoutDetailModal({
                 >
                   {isProcessing ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Spinner size="sm" color="inherit" />
                       Processing...
                     </>
                   ) : (
@@ -1247,7 +1245,7 @@ function PayoutDetailModal({
               >
                 {isCheckingStatus ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Spinner size="sm" color="inherit" />
                     Checking...
                   </>
                 ) : (

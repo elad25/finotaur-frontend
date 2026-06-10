@@ -21,6 +21,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { buildReportFilename } from '@/lib/reportFilename';
 import {
   FileText,
   TrendingUp,
@@ -45,7 +46,6 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Loader2,
   X,
   Check,
   Download,
@@ -67,6 +67,8 @@ import {
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Skeleton, SkeletonTable } from '@/components/ds/Skeleton';
+import { Spinner } from '@/components/ds/Spinner';
 
 // ============================================
 // TYPES
@@ -259,7 +261,7 @@ async function downloadReportPdf(report: PublishedReport): Promise<boolean> {
     const titleSlug = (report.ticker || report.title || 'Report')
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 30);
-    const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+    const filename = buildReportFilename(typeLabel, titleSlug, dateStr);
     
     const downloadFromUrl = async (url: string): Promise<boolean> => {
       try {
@@ -392,9 +394,7 @@ const AdminStatsSection = React.memo<AdminStatsSectionProps>(({ stats, isLoading
               </div>
             </div>
             {isLoading ? (
-              <div className="h-8 flex items-center">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
-              </div>
+              <Skeleton className="h-8 w-20" />
             ) : (
               <p className={`text-2xl font-bold ${card.valueColor}`}>{card.value}</p>
             )}
@@ -439,9 +439,7 @@ const TopSecretStatsSection = React.memo<TopSecretStatsSectionProps>(({ stats, i
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
-        </div>
+        <SkeletonTable rows={4} cols={5} />
       ) : (
         <div className="space-y-6">
           {/* Summary Row */}
@@ -810,7 +808,7 @@ const CompactReportCard = React.memo<CompactReportCardProps>(({
           >
             {isPromoting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Spinner size="sm" color="inherit" />
                 Promoting...
               </>
             ) : (
@@ -831,7 +829,7 @@ const CompactReportCard = React.memo<CompactReportCardProps>(({
               hover:opacity-90 transition-all ${isDownloading ? 'opacity-50' : ''}`}
           >
             {isDownloading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Spinner size="sm" color="inherit" />
             ) : (
               <FileDown className="w-4 h-4" />
             )}
@@ -951,7 +949,7 @@ const ArchiveReportRow = React.memo<ArchiveReportRowProps>(({
               }`}
           >
             {isPromoting ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Spinner size="sm" color="inherit" />
             ) : (
               <Zap className="w-3.5 h-3.5" />
             )}
@@ -998,7 +996,7 @@ const ArchiveReportRow = React.memo<ArchiveReportRowProps>(({
             hover:opacity-90 transition-all ${isDownloading ? 'opacity-50' : ''}`}
         >
           {isDownloading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Spinner size="sm" color="inherit" />
           ) : (
             <FileDown className="w-3.5 h-3.5" />
           )}
@@ -1298,7 +1296,7 @@ const EditModal: React.FC<EditModalProps> = ({ report, onClose, onSave }) => {
             disabled={isSaving}
             className={`px-5 py-2.5 rounded-xl bg-gradient-to-r ${config?.gradient || 'from-[#C9A646] to-orange-500'} text-white font-medium hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2`}
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {isSaving ? <Spinner size="sm" color="inherit" /> : <Check className="w-4 h-4" />}
             {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
@@ -1779,9 +1777,7 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
         </div>
 
         {reportsLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-          </div>
+          <SkeletonTable rows={6} cols={5} />
         ) : sortedMonthKeys.length === 0 ? (
           <div className="text-center py-12 text-gray-500 border border-white/10 rounded-xl">
             <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />

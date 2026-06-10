@@ -12,6 +12,7 @@ import BeforeAfter from '@/components/landing-new/BeforeAfter';
 import AISection from '@/components/landing-new/AISection';
 import CoreSystem from '@/components/landing-new/CoreSystem';
 import ProductShowcase from '@/components/landing-new/ProductShowcase';
+import JournalToolsTabs from '@/components/landing-new/JournalToolsTabs';
 import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
 import PartnershipRow from '@/components/landing-new/PartnershipRow';
 import Testimonials from '@/components/landing-new/Testimonials';
@@ -43,8 +44,8 @@ const LandingPage = () => {
         ]}
       />
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
-
+        /* Playfair Display is loaded via the consolidated font <link> in index.html.
+           The former inline @import here caused a second render-blocking request after mount. */
         .heading-serif {
           font-family: 'Playfair Display', Georgia, serif;
         }
@@ -108,6 +109,7 @@ const LandingPage = () => {
       <AISection />
       <CoreSystem />
       <ProductShowcase />
+      <JournalToolsTabs />
       <PartnershipRow />
       <DesignPhilosophy />
       <Testimonials />

@@ -2,7 +2,8 @@
 // Custom hook for fetching and managing macro market data
 // Connects to /api/macro/snapshot endpoint with caching and auto-refresh
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authFetch } from '@/utils/authFetch';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -86,119 +87,70 @@ export function useMacroData(options?: {
   autoRefresh?: boolean;
   refreshInterval?: number;
 }): MacroDataState {
-  const { 
-    autoRefresh = true, 
-    refreshInterval = REFRESH_INTERVAL 
+  const {
+    autoRefresh = true,
+    refreshInterval = REFRESH_INTERVAL,
   } = options || {};
 
-  const [data, setData] = useState<MacroSnapshot | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = ['macro-snapshot'] as const;
 
-  // Calculate if data is stale
-  const isStale = lastUpdated 
-    ? Date.now() - lastUpdated.getTime() > STALE_THRESHOLD 
-    : true;
-
-  // Fetch data from API
-  const fetchData = useCallback(async (showLoading = true): Promise<void> => {
-    // Cancel any pending request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
-    if (showLoading) setIsLoading(true);
-    setError(null);
-
-    try {
+  const { data, isLoading, error, dataUpdatedAt } = useQuery<MacroSnapshot>({
+    queryKey,
+    queryFn: async () => {
       const response = await authFetch(`${API_BASE}/macro/snapshot`, {
-        signal: abortControllerRef.current.signal,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
-
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
       const snapshot: MacroSnapshot = await response.json();
-      
-      setData(snapshot);
-      setLastUpdated(new Date());
       saveToLocalCache(snapshot);
-      
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        return; // Ignore aborted requests
-      }
-
-      console.error('[useMacroData] Fetch error:', err);
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-
-      // Try to load from local cache on error
+      return snapshot;
+    },
+    // Seed the cache from localStorage so the UI shows instantly on first mount
+    placeholderData: () => {
       const cached = loadFromLocalCache();
-      if (cached && !data) {
-        setData(cached.data);
-        setLastUpdated(new Date(cached.savedAt));
-      }
-    } finally {
-      setIsLoading(false);
+      return cached?.data ?? undefined;
+    },
+    staleTime: refreshInterval - 1000,
+    refetchInterval: autoRefresh ? refreshInterval : false,
+    refetchIntervalInBackground: false,
+    // On error, fall back to localStorage so the UI stays populated
+    throwOnError: false,
+    retry: (failureCount, err: any) => {
+      if (err?.status >= 400 && err?.status < 500) return false;
+      return failureCount < 2;
+    },
+  });
+
+  // Restore from localStorage when the query itself errors and data is empty
+  const effectiveData: MacroSnapshot | null = (() => {
+    if (data) return data;
+    if (error) {
+      const cached = loadFromLocalCache();
+      return cached?.data ?? null;
     }
-  }, [data]);
+    return null;
+  })();
 
-  // Initial load - try cache first for instant display
-  useEffect(() => {
-    const cached = loadFromLocalCache();
-    if (cached) {
-      setData(cached.data);
-      setLastUpdated(new Date(cached.savedAt));
-      setIsLoading(false);
-    }
-    
-    // Then fetch fresh data
-    fetchData(!cached);
-  }, []);
+  const lastUpdated: Date | null = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
-  // Auto-refresh
-  useEffect(() => {
-    if (!autoRefresh) return;
+  const isStale = lastUpdated
+    ? Date.now() - lastUpdated.getTime() > STALE_THRESHOLD
+    : true;
 
-    intervalRef.current = setInterval(() => {
-      fetchData(false); // Don't show loading on background refresh
-    }, refreshInterval);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [autoRefresh, refreshInterval, fetchData]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+  const refetch = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey });
+  }, [queryClient]);
 
   return {
-    data,
+    data: effectiveData,
     isLoading,
-    error,
+    error: error instanceof Error ? error : null,
     lastUpdated,
     isStale,
-    refetch: () => fetchData(true),
+    refetch,
   };
 }
 
@@ -213,7 +165,7 @@ export function useMacroAsset(symbol: string): {
   error: Error | null;
 } {
   const { data, isLoading, error } = useMacroData();
-  
+
   const asset = data?.assets.find(
     a => a.symbol.toUpperCase() === symbol.toUpperCase()
   ) || null;
@@ -228,7 +180,7 @@ export function useMacroByCategory(category: MacroAsset['category']): {
   error: Error | null;
 } {
   const { data, isLoading, error } = useMacroData();
-  
+
   const assets = data?.assets.filter(a => a.category === category) || [];
 
   return { assets, isLoading, error };
@@ -257,7 +209,7 @@ export function useMarketSentiment(): {
   const validAssets = data.assets.filter(a => a.price !== null && !a.error);
   const riskOnCount = validAssets.filter(a => a.riskSentiment === 'Risk-On').length;
   const riskOffCount = validAssets.filter(a => a.riskSentiment === 'Risk-Off').length;
-  
+
   // Calculate score based on weighted assets
   const weights: Record<string, number> = {
     SPX: 2,
@@ -276,7 +228,7 @@ export function useMarketSentiment(): {
     const weight = weights[asset.symbol] || 0.5;
     const absWeight = Math.abs(weight);
     const direction = weight > 0 ? 1 : -1;
-    
+
     if (asset.dailyChangePercent !== null) {
       // Normalize change to -1 to +1 range (clamp at ±3%)
       const normalizedChange = Math.max(-1, Math.min(1, asset.dailyChangePercent / 3));
@@ -308,37 +260,37 @@ export function useMarketSentiment(): {
 // Format price based on asset type
 export function formatPrice(price: number | null, symbol: string): string {
   if (price === null) return '—';
-  
+
   // Indices - no decimals for large numbers
   if (['SPX', 'NDX', 'DJI', 'RUT'].includes(symbol)) {
     return price.toLocaleString('en-US', { maximumFractionDigits: 0 });
   }
-  
+
   // VIX - 2 decimals
   if (symbol === 'VIX') {
     return price.toFixed(2);
   }
-  
+
   // Yields - percentage
   if (symbol === 'TNX') {
     return `${(price).toFixed(2)}%`;
   }
-  
+
   // Currencies
   if (symbol === 'DXY') {
     return price.toFixed(2);
   }
-  
+
   // Commodities
   if (['CL', 'GC'].includes(symbol)) {
     return `$${price.toFixed(2)}`;
   }
-  
+
   // Crypto
   if (symbol === 'BTC') {
     return `$${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   }
-  
+
   return price.toFixed(2);
 }
 
@@ -352,9 +304,9 @@ export function formatChange(change: number | null): string {
 // Get time since last update
 export function getTimeSince(date: Date | null): string {
   if (!date) return 'Never';
-  
+
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  
+
   if (seconds < 60) return 'Just now';
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;

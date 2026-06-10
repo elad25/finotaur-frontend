@@ -28,9 +28,11 @@
 
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { useSubscription } from '@/hooks/useSubscription';
+import { PageLoader } from '@/components/ds/Spinner';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // 🔥 Lazy load the JournalLandingPage to avoid circular imports
 const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLandingPage'));
@@ -72,14 +74,24 @@ const JOURNAL_PATHS = [
 // LOADING COMPONENT
 // =====================================================
 
-const LoadingSpinner = () => (
-  <div className="flex min-h-screen items-center justify-center bg-black">
-    <div className="flex flex-col items-center gap-4">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#D4AF37] border-t-transparent" />
-      <p className="text-zinc-400 text-sm">Loading...</p>
-    </div>
-  </div>
-);
+const LOAD_TIMEOUT_MS = 20_000;
+
+
+/** Returns true after LOAD_TIMEOUT_MS elapses. Resets when `active` flips to false. */
+function useLoadTimeout(active: boolean): boolean {
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setTimedOut(true), LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [active]);
+
+  return timedOut;
+}
 
 // =====================================================
 // HELPER: Check route category
@@ -121,16 +133,17 @@ function logOnce(key: string, ...args: unknown[]) {
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading: authLoading } = useAuth();
   const location = useLocation();
-  
+
   // 🔥 v7.0: Use centralized useSubscription hook
-  const { 
-    hasJournalAccess, 
-    isAdmin, 
+  const {
+    hasJournalAccess,
+    isAdmin,
     isLoading: subLoading,
-    limits 
+    limits
   } = useSubscription();
 
   const isLoading = authLoading || (user && subLoading);
+  const loadTimedOut = useLoadTimeout(!!isLoading);
 
   // 🔥 DEBUG LOGS (only in dev, only once per path)
   logOnce(`route-${location.pathname}`, '[ProtectedRoute] Path:', location.pathname, {
@@ -146,7 +159,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // LOADING STATE - Show spinner briefly
   // ═══════════════════════════════════════════
   if (isLoading) {
-    return <LoadingSpinner />;
+    return <PageLoader timedOut={loadTimedOut} />;
   }
 
   // ═══════════════════════════════════════════
@@ -199,7 +212,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     // ❌ No journal access - Show JournalLandingPage
     logOnce(`journal-denied-${location.pathname}`, '[ProtectedRoute] ❌ No journal access - showing landing page');
     return (
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense fallback={<RouteSkeleton />}>
         <JournalLandingPage />
       </Suspense>
     );

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { SkeletonTable } from '@/components/ds/Skeleton';
 
 type RepeatRow = {
   symbol: string;
@@ -59,7 +60,7 @@ export default function StocksUpgradesPage() {
         </div>
 
         <div className="p-2 overflow-auto">
-          {loading && <div className="p-4 text-sm">Loading…</div>}
+          {loading && <SkeletonTable rows={8} cols={6} />}
           {err && <div className="p-4 text-sm text-red-400">Failed {err}</div>}
           {!loading && !err && (
             <table className="min-w-full text-sm">

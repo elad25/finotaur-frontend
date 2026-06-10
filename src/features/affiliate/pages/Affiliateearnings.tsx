@@ -11,6 +11,8 @@ import {
   Filter, Calendar, ArrowUpRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliateEarningsSkeletonPage } from '@/components/skeletons/AffiliateEarningsSkeleton';
 
 // =====================================================
 // TYPES
@@ -424,11 +426,7 @@ export default function AffiliateEarnings() {
 
   // Loading state
   if (!affiliateId && loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
-      </div>
-    );
+    return <AffiliateEarningsSkeletonPage />;
   }
 
   return (
@@ -565,9 +563,7 @@ export default function AffiliateEarnings() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
-          </div>
+          <SkeletonTable rows={8} cols={6} />
         ) : commissions.length === 0 ? (
           <div className="text-center py-16">
             <DollarSign className="h-12 w-12 text-gray-600 mx-auto mb-3" />

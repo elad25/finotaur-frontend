@@ -10,6 +10,8 @@ import {
   Save, Check, AlertCircle, Copy, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ds/Skeleton';
+import { AffiliateSettingsSkeletonPage } from '@/components/skeletons/AffiliateSettingsSkeleton';
 
 // =====================================================
 // TYPES
@@ -308,11 +310,7 @@ export default function AffiliateSettings() {
 
   // Loading state
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
-      </div>
-    );
+    return <AffiliateSettingsSkeletonPage />;
   }
 
   if (!affiliate) {

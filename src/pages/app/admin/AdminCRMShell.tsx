@@ -28,7 +28,7 @@ import { Suspense } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import { AdminSidebar } from './components/AdminSidebar';
 import { OverviewTab } from './tabs/OverviewTab';
 import { LeadsPlaceholder } from './tabs/LeadsPlaceholder';
@@ -40,6 +40,11 @@ import { HealthRiskPanel } from './tabs/tools/HealthRiskPanel';
 import { BulkActions } from './tabs/tools/BulkActions';
 import { GDPRTools } from './tabs/tools/GDPRTools';
 import { AIUsageTab } from './tabs/AIUsageTab';
+import { AICommandCenterTab } from './tabs/AICommandCenterTab';
+import { CustomerVoiceTab } from './tabs/CustomerVoiceTab';
+import { FounderCockpitTab } from './tabs/FounderCockpitTab';
+import { GrowthTab } from './tabs/GrowthTab';
+import SeoAnalyticsPage from './SeoAnalyticsPage';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
 const Users = lazy(() => import('@/pages/app/journal/admin/Users'));
@@ -79,7 +84,7 @@ const Maintenance = lazy(
 function TabFallback() {
   return (
     <div className="p-8">
-      <LoadingSkeleton lines={8} />
+      <SkeletonTable rows={8} cols={5} />
     </div>
   );
 }
@@ -97,9 +102,11 @@ export function AdminCRMShell() {
 
       <div className="flex-1 min-w-0">
         <Routes>
+          {/* Cockpit is the default landing — index redirects here */}
+          <Route index element={<Navigate to="cockpit" replace />} />
+
           {/* Overview (Phase 0 — custom built) */}
-          <Route index element={<OverviewTab />} />
-          <Route path="overview" element={<Navigate to="/app/admin" replace />} />
+          <Route path="overview" element={<OverviewTab />} />
 
           {/* Users & Profiles */}
           <Route path="users" element={<Lazy><Users /></Lazy>} />
@@ -109,6 +116,9 @@ export function AdminCRMShell() {
           <Route path="analytics" element={<Lazy><Analytics /></Lazy>} />
           <Route path="analytics/top-traders" element={<Lazy><TopTraders /></Lazy>} />
           <Route path="analytics/ai-usage" element={<AIUsageTab />} />
+
+          {/* SEO Analytics */}
+          <Route path="seo" element={<SeoAnalyticsPage />} />
 
           {/* Billing & Revenue */}
           <Route path="billing" element={<Lazy><Subscribers /></Lazy>} />
@@ -167,10 +177,22 @@ export function AdminCRMShell() {
           <Route path="tools/bulk" element={<BulkActions />} />
           <Route path="tools/gdpr" element={<GDPRTools />} />
 
+          {/* Founder Cockpit */}
+          <Route path="cockpit" element={<FounderCockpitTab />} />
+
+          {/* Customer Voice */}
+          <Route path="voice" element={<CustomerVoiceTab />} />
+
+          {/* Growth Intelligence */}
+          <Route path="growth" element={<GrowthTab />} />
+
+          {/* AI Command Center */}
+          <Route path="ai" element={<AICommandCenterTab />} />
+
           {/* Executive Dashboard (planned) */}
           <Route path="executive" element={<ExecutivePlaceholder />} />
 
-          <Route path="*" element={<Navigate to="/app/admin" replace />} />
+          <Route path="*" element={<Navigate to="/app/admin/cockpit" replace />} />
         </Routes>
       </div>
     </div>

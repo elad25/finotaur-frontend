@@ -110,3 +110,41 @@ export interface TechnicalSignal {
   description: string;
   icon: string;
 }
+
+// ── Whale Trades ─────────────────────────────────────────────
+export type WhaleSide = 'buy' | 'sell';
+
+export interface WhaleTrade {
+  id: string;            // `${market}:${symbol}:${aggTradeId}`
+  symbol: string;
+  market: 'spot' | 'futures';
+  side: WhaleSide;
+  price: number;
+  qty: number;
+  notionalUsd: number;
+  tier: string;          // 'large' | 'huge' | 'mega'
+  thresholdUsd?: number;
+  aggTradeId: number;
+  tradedAt: string;      // ISO
+}
+
+export type WhaleStreamEvent = { type: 'trade'; data: WhaleTrade };
+
+// ── Order Book Walls ──────────────────────────────────────────
+export interface OrderWall {
+  symbol: string;
+  side: 'bid' | 'ask';
+  price: number;
+  qty: number;
+  notionalUsd: number;
+  distancePct: number | null;
+  midPrice: number | null;
+  capturedAt: string;
+}
+
+export interface SymbolWalls {
+  symbol: string;
+  midPrice: number | null;
+  bids: OrderWall[];
+  asks: OrderWall[];
+}

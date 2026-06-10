@@ -31,6 +31,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** How many bars to advance per requestAnimationFrame tick at MAX speed. */
+const MAX_BARS_PER_FRAME = 10;
+
 /** Predefined replay speeds. MAX = Infinity → no delay between bars. */
 export const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10, Infinity] as const;
 export type ReplaySpeed = typeof REPLAY_SPEEDS[number];
@@ -76,6 +79,7 @@ export function useReplayPlayback({
   const maxIndexRef = useRef(maxIndex);
   const onAdvanceRef = useRef(onAdvance);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => { cursorRef.current = cursor; }, [cursor]);
   useEffect(() => { speedRef.current = speed; }, [speed]);
@@ -103,6 +107,10 @@ export function useReplayPlayback({
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   }, []);
 
   const advanceOne = useCallback(() => {
@@ -118,16 +126,40 @@ export function useReplayPlayback({
   }, [clearTimer]);
 
   // Main playback loop — re-scheduled after each tick.
+  // At MAX speed (Infinity), uses requestAnimationFrame to batch up to
+  // MAX_BARS_PER_FRAME advances per frame, preventing microtask queue
+  // saturation on large replay windows. All other speeds use setTimeout.
   const scheduleNext = useCallback(() => {
     const s = speedRef.current;
-    const delay = s === Infinity ? 0 : BASE_INTERVAL_MS / s;
-    timerRef.current = setTimeout(() => {
-      advanceOne();
-      // If still playing AND haven't hit the end, schedule the next tick.
-      if (cursorRef.current < maxIndexRef.current && timerRef.current != null) {
-        scheduleNext();
-      }
-    }, delay);
+
+    if (s === Infinity) {
+      // rAF batch path: advance up to MAX_BARS_PER_FRAME bars per frame.
+      const tick = () => {
+        let advanced = 0;
+        while (
+          advanced < MAX_BARS_PER_FRAME &&
+          cursorRef.current < maxIndexRef.current
+        ) {
+          advanceOne();
+          advanced++;
+        }
+        if (cursorRef.current < maxIndexRef.current) {
+          rafRef.current = requestAnimationFrame(tick);
+        } else {
+          rafRef.current = null;
+        }
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      const delay = BASE_INTERVAL_MS / s;
+      timerRef.current = setTimeout(() => {
+        advanceOne();
+        // If still playing AND haven't hit the end, schedule the next tick.
+        if (cursorRef.current < maxIndexRef.current && timerRef.current != null) {
+          scheduleNext();
+        }
+      }, delay);
+    }
   }, [advanceOne]);
 
   // Start / stop the loop in response to isPlaying flips.

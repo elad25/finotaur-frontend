@@ -6,15 +6,19 @@
 //     Tabs, TabNav, StockLoadingSkeleton preserved unchanged.
 // =====================================================
 
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useEffect, useRef } from 'react';
 import { Lock } from 'lucide-react';
 
 import { useStockAnalyzer } from '@/hooks/useStockAnalyzer';
+import type { TabType } from '@/types/stock-analyzer.types';
 import { POPULAR_TICKERS } from '@/constants/stock-analyzer.constants';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { UsageBadge } from '@/components/access/UsageBadge';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 import { AIArenaShell } from '@/components/ai-arena';
 import { SearchBar } from '@/components/stock-analyzer/SearchBar';
@@ -35,8 +39,21 @@ import {
   OptionsTab,
 } from '@/components/stock-analyzer/tabs';
 
+// Tabs that a `?tab=` deep-link is allowed to land on (e.g. from the Research
+// Center "Last Filing" → Earnings). Kept here so an invalid param is ignored.
+const DEEP_LINK_TABS: readonly TabType[] = [
+  'overview',
+  'business',
+  'financials',
+  'valuation',
+  'wallstreet',
+  'earnings',
+  'options',
+];
+
 export default function StockAnalyzer() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     searchQuery,
     setSearchQuery,
@@ -71,6 +88,43 @@ export default function StockAnalyzer() {
     originalHandleSelectTicker(ticker);
   };
 
+  // A `?tab=` deep-link is captured here BEFORE load completes, because
+  // loadStockData() replaces the URL with only `{ ticker }` (dropping symbol+tab).
+  // It is applied once stockData is ready (loadStockData resets to 'overview').
+  const pendingTabRef = useRef<TabType | null>(null);
+
+  // Auto-select ticker from ?symbol= URL param (e.g. from omnibox navigation)
+  useEffect(() => {
+    const symbolParam = searchParams.get('symbol');
+    if (!symbolParam) return;
+    const sym = symbolParam.toUpperCase().trim();
+    if (!sym) return;
+    const tabParam = searchParams.get('tab') as TabType | null;
+    if (tabParam && DEEP_LINK_TABS.includes(tabParam)) {
+      pendingTabRef.current = tabParam;
+    }
+    // Delay a tick so access/usage hooks have initialised
+    const timer = setTimeout(() => {
+      handleSelectTicker(sym);
+    }, 0);
+    return () => clearTimeout(timer);
+    // Intentionally only runs when the symbol param changes, not on every
+    // handleSelectTicker identity change (which would re-run on every render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Apply a captured `?tab=` deep-link once the requested stock has loaded.
+  // loadStockData() forces 'overview' on every load, so this override must run
+  // after stockData lands — keyed on the loaded ticker.
+  useEffect(() => {
+    if (!stockData || isLoading) return;
+    if (pendingTabRef.current) {
+      setActiveTab(pendingTabRef.current);
+      pendingTabRef.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockData?.ticker, isLoading]);
+
   // Show gate if daily limit reached
   const access = canAccessPage('stock_analyzer');
   if (!accessLoading && !access.hasAccess && access.reason === 'daily_limit') {
@@ -103,6 +157,7 @@ export default function StockAnalyzer() {
     );
 
   return (
+    <ErrorBoundary boundary="stock-analyzer" fallback={<AiToolErrorFallback />}>
     <AIArenaShell
       eyebrow={undefined}
       title={stockData ? undefined : 'Stock Analyzer'}
@@ -245,5 +300,6 @@ export default function StockAnalyzer() {
         </motion.div>
       )}
     </AIArenaShell>
+    </ErrorBoundary>
   );
 }

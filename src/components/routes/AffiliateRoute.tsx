@@ -5,21 +5,13 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { FEATURES } from '@/config/features';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
-// Loading component
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// PageLoader imported from @/components/ds/Spinner
 
 // Suspense wrapper
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
-  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
 
@@ -78,7 +70,7 @@ export const AffiliateRoute = memo(({ children }: { children: ReactNode }) => {
   }, [user?.id]);
 
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   if (!hasAccess) {

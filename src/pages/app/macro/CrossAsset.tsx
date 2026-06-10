@@ -1335,8 +1335,6 @@ export default function CrossAssetTerminal() {
 
   useEffect(() => {
     fetchMarketData();
-    const interval = setInterval(fetchMarketData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
   }, []);
 
   const { relationships, summary: relSummary } = useMemo(() => analyzeAssetRelationships(marketData), [marketData]);

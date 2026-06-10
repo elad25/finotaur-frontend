@@ -3,9 +3,9 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
-  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves, Calculator
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -48,7 +48,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/stocks/screener', icon: Search },
       { label: 'Earnings Calendar', path: '/app/stocks/earnings', icon: Calendar },
-      { label: 'Fundamentals', path: '/app/stocks/fundamentals', icon: BarChart3 },
       { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
       { label: 'News', path: '/app/stocks/news', icon: Newspaper },
       { label: 'Sector Analysis', path: '/app/stocks/sectors', icon: Target },
@@ -78,17 +77,23 @@ export const domains: Record<string, Domain> = {
       { label: 'Top Movers', path: '/app/crypto/movers', icon: TrendingUp },
       { label: 'Reports', path: '/app/crypto/reports', icon: FileText },
       { label: 'Calendar', path: '/app/crypto/calendar', icon: Calendar },
+      { label: 'Whale Tracker', path: '/app/crypto/whales/trades', icon: Waves },
     ],
   },
 
   futures: {
     id: 'futures',
     label: 'Futures',
-    subNav: [{ label: 'Overview', path: '/app/futures/overview' }],
+    subNav: [
+      { label: 'Overview', path: '/app/futures/overview' },
+      { label: 'Contracts', path: '/app/futures/contracts' },
+    ],
     sidebar: [
       { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
-      { label: 'Open Interests', path: '/app/futures/open-interests', icon: BarChart3 },
-      { label: 'Calendar', path: '/app/futures/calendar', icon: Calendar },
+      { label: 'Contracts', path: '/app/futures/contracts', icon: Layers },
+      { label: 'Curves', path: '/app/futures/curves', icon: LineChart },
+      { label: 'Positioning', path: '/app/futures/positioning', icon: BarChart3 },
+      { label: 'Calculators', path: '/app/futures/tools', icon: Calculator },
     ],
   },
 
@@ -243,24 +248,13 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
+  // Sealed pending licensed options data feed (Track B). Re-enable when built.
+  // To re-enable: set OPTIONS_ENABLED = true below, then restore the subNav/sidebar arrays.
   options: {
     id: 'options',
     label: 'Options',
-    subNav: [
-      { label: 'Chain', path: '/app/options/chain' },
-      { label: 'Flow', path: '/app/options/flow' },
-      { label: 'Volatility', path: '/app/options/volatility' },
-      { label: 'Strategy', path: '/app/options/strategy' },
-      { label: 'Simulator', path: '/app/options/simulator' },
-    ],
-    sidebar: [
-      { label: 'Greeks Monitor', path: '/app/options/greeks-monitor', icon: Activity },
-      { label: 'IV Rank / Percentile', path: '/app/options/iv-rank', icon: BarChart3 },
-      { label: 'OI / Volume', path: '/app/options/oi-volume', icon: BarChart3 },
-      { label: 'Unusual Activity', path: '/app/options/unusual-activity', icon: Flame },
-      { label: 'Earnings IV Crush', path: '/app/options/earnings-iv-crush', icon: FileText },
-      { label: 'Shortcuts', path: '/app/options/shortcuts', icon: Target },
-    ],
+    subNav: [],
+    sidebar: [],
   },
 };
 

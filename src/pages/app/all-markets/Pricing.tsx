@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { useAuth } from '@/providers/AuthProvider';
 import { 
   Check, Shield, Zap, Clock, TrendingUp, Gift, X, AlertTriangle, Crown
@@ -121,26 +122,24 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'enterprise',
-    name: 'Enterprise',
-    monthlyPrice: '$500',
-    yearlyPrice: '$500',
-    yearlyMonthlyEquivalent: '$500',
-    description: 'Ultimate trading solution',
+    name: 'Copilot',
+    monthlyPrice: '$200',
+    yearlyPrice: '$2,000',
+    yearlyMonthlyEquivalent: '$167',
+    description: 'Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.',
     trialDays: 0,
     features: [
       'Everything in Finotaur, plus:',
-      'Unlimited Stock Analyses',
-      'My Portfolio (exclusive)',
-      'Dedicated account manager',
-      'Custom integrations',
-      'White-label options',
-      'Unlimited API access',
-      'Custom SLA',
-      'Team management',
-      'SSO authentication',
+      'AI Portfolio Manager that invests & trades alongside you',
+      'Stop flying blind — 24/7 AI oversight of every position you hold',
+      'My Portfolio — live tracking & mark-to-market of your real book',
+      'Proactive AI risk detection & alerts on your holdings',
+      'Daily AI portfolio brief with actionable guidance',
+      'Priority support',
     ],
-    cta: 'Get Enterprise',
+    cta: 'Get Copilot',
     featured: false,
+    savings: 'Save 17%',
   },
 ];
 
@@ -174,10 +173,11 @@ const [journalYearlyPlan, setJournalYearlyPlan] = useState<string | null>(null);
 const [platformYearlyExpiresAt, setPlatformYearlyExpiresAt] = useState<string | null>(null);
 const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null);
 
-  const { 
+  const {
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
-    checkoutPlatformEnterpriseMonthly, isLoading: checkoutLoading,
+    checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
+    isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message })
   });
@@ -282,7 +282,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
       } else if (planId === 'finotaur') {
         billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
       } else if (planId === 'enterprise') {
-        checkoutPlatformEnterpriseMonthly();
+        billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
       }
     } catch (error) {
       toast.error('Failed to start checkout');
@@ -334,15 +334,14 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     }
 
     // 🔥 גישה C: חסום Yearly → Monthly upgrade
-    // Enterprise מותר תמיד (אין לו yearly) — אבל מציג popup מיוחד
-    if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier && planId !== 'enterprise') {
+    if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier) {
       setBillingInterval('yearly');
       toast.info("You're on a yearly plan — switch to Yearly billing above to upgrade.");
       return;
     }
 
-    // 🔥 Enterprise מ-Yearly: אפשרי אבל מציג אזהרה על ביטול המנוי הנוכחי
-    if (currentBillingInterval === 'yearly' && planId === 'enterprise') {
+    // 🔥 Enterprise מ-Yearly (Monthly billing selected): מציג אזהרה על ביטול המנוי הנוכחי
+    if (currentBillingInterval === 'yearly' && planId === 'enterprise' && billingInterval === 'monthly') {
       setShowEnterpriseYearlyWarning(true);
       return;
     }
@@ -375,10 +374,6 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     if (plan.id === 'free') {
       return { price: 'Free', period: 'forever', billedAs: undefined };
     }
-    if (plan.id === 'enterprise') {
-      return { price: '$499', period: '/month', billedAs: undefined };
-    }
-    
     if (billingInterval === 'monthly') {
       return { 
         price: plan.monthlyPrice, 
@@ -462,14 +457,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   // ============================================
 
   if (checkingSubscription) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
-          <p className="text-sm text-zinc-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <RouteSkeleton />;
   }
 
   // ============================================
@@ -626,11 +614,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             // 🔥 גישה C: חסום Yearly → Monthly upgrade
             const planTierVal = PLAN_TIER[plan.id] ?? 0;
             const currentTierVal = PLAN_TIER[currentPlatformPlan] ?? 0;
-            const isBlockedYearlyToMonthly = 
-              currentBillingInterval === 'yearly' && 
-              billingInterval === 'monthly' && 
-              planTierVal > currentTierVal && 
-              plan.id !== 'enterprise' &&
+            const isBlockedYearlyToMonthly =
+              currentBillingInterval === 'yearly' &&
+              billingInterval === 'monthly' &&
+              planTierVal > currentTierVal &&
               !isCurrentPlan;
             
             return (
@@ -712,7 +699,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 )}
 
                 {/* Savings Badge */}
-                {plan.savings && billingInterval === 'yearly' && !plan.featured && plan.id !== 'free' && plan.id !== 'enterprise' && (
+                {plan.savings && billingInterval === 'yearly' && !plan.featured && plan.id !== 'free' && (
                   <div className="absolute top-2 right-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg" style={{ zIndex: 50 }}>
                     {plan.savings}
                   </div>
@@ -973,7 +960,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                         {currentPlatformPlan === 'enterprise' && (
                           <div className="flex items-center gap-2 text-xs text-zinc-300">
                             <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                            <span>My Portfolio & account manager</span>
+                            <span>My Portfolio & AI portfolio manager</span>
                           </div>
                         )}
                         <div className="flex items-center gap-2 text-xs">
@@ -1001,7 +988,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  Keep My {currentPlatformPlan === 'core' ? 'Core' : currentPlatformPlan === 'finotaur' ? 'Finotaur' : 'Enterprise'} Plan
+                  Keep My {currentPlatformPlan === 'core' ? 'Core' : currentPlatformPlan === 'finotaur' ? 'Finotaur' : 'Copilot'} Plan
                 </button>
                 
                 <button
@@ -1333,7 +1320,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-4">
               You're currently on a <span className="text-white font-medium capitalize">{currentPlatformPlan} Yearly</span> plan.
-              Subscribing to Enterprise will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
+              Subscribing to Copilot will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
             </p>
             <div className="p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 mb-5">
               <p className="text-xs text-zinc-400">
@@ -1360,7 +1347,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
                 style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
               >
-                Continue to Enterprise
+                Continue to Copilot
               </button>
             </div>
           </div>

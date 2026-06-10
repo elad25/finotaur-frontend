@@ -32,6 +32,7 @@ import {
 import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ds/Spinner';
 
 // ========================================
 // TYPES
@@ -622,7 +623,7 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                   Redirecting...
                 </div>
               ) : (
@@ -691,7 +692,7 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             >
               {isLoading && selectedPlan === 'monthly' ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                   Redirecting...
                 </div>
               ) : (
@@ -857,7 +858,7 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             >
               {isLoading && selectedPlan === 'yearly' ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                   Redirecting...
                 </div>
               ) : (
@@ -947,7 +948,7 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             >
               {isLoading && selectedPlan === 'yearly' ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                  <Spinner size="sm" color="inherit" />
                   Redirecting...
                 </div>
               ) : (
@@ -1332,7 +1333,7 @@ export default function TopSecretLanding() {
                     }}
                   >
                     {isLoading && selectedPlan === 'monthly' ? (
-                      <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
+                      <Spinner size="sm" color="inherit" className="mx-auto" />
                     ) : (
                       <span className="flex items-center justify-center gap-2">
                         <Crown className="w-4 h-4" />
@@ -1419,7 +1420,7 @@ export default function TopSecretLanding() {
                     }}
                   >
                     {isLoading && selectedPlan === 'yearly' ? (
-                      <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
+                      <Spinner size="sm" color="inherit" className="mx-auto" />
                     ) : (
                       <span className="flex items-center justify-center gap-2">
                         <Crown className="w-4 h-4" />
@@ -1503,7 +1504,7 @@ export default function TopSecretLanding() {
               }}
             >
               {isLoading ? (
-                <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                <Spinner size="sm" color="inherit" />
               ) : (
                 <span className="flex items-center gap-2">
                   Start 14-Day Free Trial

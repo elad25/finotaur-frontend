@@ -4,10 +4,10 @@
 // ============================================
 
 import { useState, useEffect } from 'react';
-import { 
-  Users, 
-  TrendingUp, 
-  Gift, 
+import {
+  Users,
+  TrendingUp,
+  Gift,
   DollarSign,
   UserPlus,
   Calendar,
@@ -16,6 +16,7 @@ import {
   Loader2,
   Search
 } from 'lucide-react';
+import { SkeletonStatRow, SkeletonCard } from '@/components/ds/Skeleton';
 import { getAffiliateAdminStats, getReferralTree, adminGrantFreeMonths } from '@/services/affiliateService';
 import { AffiliateAdminStats, ReferralTreeNode } from '@/types/affiliate';
 import { useAuth } from '@/providers/AuthProvider';
@@ -96,8 +97,9 @@ export default function AdminAffiliatePanel() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] p-8 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
+      <div className="min-h-screen bg-[#0A0A0A] p-8 space-y-6">
+        <SkeletonStatRow count={4} />
+        <SkeletonCard lines={3} />
       </div>
     );
   }

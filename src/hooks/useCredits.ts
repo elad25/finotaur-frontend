@@ -137,7 +137,7 @@ export function useCredits(): UseCreditsReturn {
             platform_plan
           `)
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (profile) {
           const plan = (profile.platform_plan || 'free') as PlanType;

@@ -1,8 +1,8 @@
 // ui/LoadingOverlay.tsx
 import React from 'react';
-import { Loader2 } from 'lucide-react';
 import { Theme } from '../types';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ds/Skeleton';
 
 // ✅ Export interface
 export interface LoadingOverlayProps {
@@ -34,12 +34,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
             : 'bg-white/90 border-gray-200'
         )}
       >
-        <Loader2
-          className={cn(
-            'h-8 w-8 animate-spin',
-            isDark ? 'text-[#C9A646]' : 'text-blue-600'
-          )}
-        />
+        <Skeleton className="h-8 w-8 rounded-full" />
         <p
           className={cn(
             'text-sm font-medium',

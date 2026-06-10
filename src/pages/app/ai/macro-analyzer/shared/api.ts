@@ -505,6 +505,7 @@ export interface CPIIntelligenceData {
 // AI types
 export interface AIResult {
   analysis: string;
+  structured?: { headline: string; points: string[] };
   generatedAt: string;
   cached: boolean;
   ageMinutes: number;

@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { RefreshCw, Trash2, Edit2, Sparkles, EyeOff, Eye, Loader2, AlertCircle, CheckCircle2, Search } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
 import {
   adminListAll,
@@ -401,15 +402,7 @@ function IconButton({
 }
 
 function AdminSkeleton() {
-  return (
-    <Card variant="default" padding="default">
-      <div className="space-y-ds-3 animate-pulse">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-6 bg-surface-base rounded" />
-        ))}
-      </div>
-    </Card>
-  );
+  return <SkeletonTable rows={5} cols={6} />;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────

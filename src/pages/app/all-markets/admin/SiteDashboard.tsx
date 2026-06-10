@@ -14,6 +14,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { SkeletonTable, SkeletonText, SkeletonStatRow, SkeletonStat } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { 
   BarChart3, Users, Crown, Shield, TrendingUp, 
@@ -21,9 +22,10 @@ import {
   BookOpen, Lock, Star, Zap, Clock, Mail,
   Newspaper, Building2, ChevronDown, ChevronRight,
   Search, Filter, MoreVertical, XCircle, PlayCircle,
-  Ban, Link2, Loader2, Copy, ExternalLink,
+  Ban, Link2, Copy, ExternalLink,
   Download, Gift, History, Trash2, Edit, MoreHorizontal
 } from 'lucide-react';
+import { Spinner } from '@/components/ds/Spinner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -2721,9 +2723,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <CardTitle className="text-[#F4F4F4] text-lg">{title}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin text-[#C9A646]" />
-            </div>
+            <SkeletonText />
           </CardContent>
         </Card>
       );
@@ -3717,8 +3717,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             </CardHeader>
             <CardContent>
               {allUsersLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#C9A646]" />
+                <div className="py-4">
+                  <SkeletonTable />
                 </div>
               ) : allUsers.length === 0 ? (
                 <div className="text-center py-12 text-[#606060]">
@@ -4192,7 +4192,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <div className="flex items-center gap-3">
               {kpiLoading && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-[#1A1A1A]/80 rounded-lg border border-[#2A2A2A]">
-                  <Loader2 className="h-4 w-4 animate-spin text-[#C9A646]" />
+                  <Spinner size="sm" />
                   <span className="text-xs text-[#808080]">Loading...</span>
                 </div>
               )}
@@ -4209,8 +4209,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           </div>
 
           {kpiLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-10 w-10 animate-spin text-[#C9A646]" />
+            <div className="py-4">
+              <SkeletonStatRow />
             </div>
           ) : kpiMetrics ? (
             <>
@@ -4798,12 +4798,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               </Card>
             </>
           ) : (
-            <div className="text-center py-20">
-              <div className="relative">
-                <BarChart3 className="h-16 w-16 mx-auto mb-4 text-[#C9A646] opacity-30" />
-                <Loader2 className="h-8 w-8 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-[#C9A646]" />
-              </div>
-              <p className="text-[#808080]">Loading KPIs automatically...</p>
+            <div className="py-4">
+              <SkeletonStatRow />
             </div>
           )}
         </TabsContent>
@@ -5293,9 +5289,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               </CardHeader>
               <CardContent>
                 {deepDiveLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-[#C9A646]" />
-                  </div>
+                  <SkeletonText />
                 ) : cancellationAnalysis ? (
                   <div className="space-y-4">
                     {/* Avg Days Before Cancel */}
@@ -5352,9 +5346,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               </CardHeader>
               <CardContent>
                 {deepDiveLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-[#C9A646]" />
-                  </div>
+                  <SkeletonText />
                 ) : trialAnalysis ? (
                   <div className="space-y-4">
                     {/* Conversion Funnel */}
@@ -5443,8 +5435,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             </CardHeader>
             <CardContent>
               {subscriptionEventsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#C9A646]" />
+                <div className="py-4">
+                  <SkeletonTable />
                 </div>
               ) : subscriptionEvents.length === 0 ? (
                 <div className="text-center py-12 text-[#606060]">
@@ -5736,7 +5728,7 @@ You can use these variables:
   variant="outline"
   className="border-[#2A2A2A] text-[#A0A0A0]"
 >
-  {sendingAnnouncement ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+  {sendingAnnouncement ? <Spinner size="sm" className="mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
   Send Test Email
 </Button>
 
@@ -5745,7 +5737,7 @@ You can use these variables:
   disabled={sendingAnnouncement || !announcementSubject || !announcementBody || estimatedRecipients === 0}
   className="bg-[#C9A646] hover:bg-[#B8953F] text-black flex-1 sm:flex-none"
 >
-  {sendingAnnouncement ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+  {sendingAnnouncement ? <Spinner size="sm" className="mr-2" /> : <Mail className="h-4 w-4 mr-2" />}
   Send Announcement
 </Button>
               </div>
@@ -5824,7 +5816,7 @@ You can use these variables:
               Cancel
             </Button>
             <Button onClick={handleAdminCancel} disabled={manageActionLoading === 'cancel'} className="bg-orange-500 hover:bg-orange-600">
-              {manageActionLoading === 'cancel' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+              {manageActionLoading === 'cancel' ? <Spinner size="sm" className="mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
               Cancel Subscription
             </Button>
           </DialogFooter>
@@ -5866,7 +5858,7 @@ You can use these variables:
               Cancel
             </Button>
             <Button onClick={handleAdminExtend} disabled={manageActionLoading === 'extend'} className="bg-[#C9A646] hover:bg-[#B8953F] text-black">
-              {manageActionLoading === 'extend' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
+              {manageActionLoading === 'extend' ? <Spinner size="sm" className="mr-2" /> : <Calendar className="h-4 w-4 mr-2" />}
               Add {extendDays} Days
             </Button>
           </DialogFooter>
@@ -5908,7 +5900,7 @@ You can use these variables:
               Cancel
             </Button>
             <Button onClick={handleAdminBan} disabled={manageActionLoading === 'ban'} className="bg-red-500 hover:bg-red-600">
-              {manageActionLoading === 'ban' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+              {manageActionLoading === 'ban' ? <Spinner size="sm" className="mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
               Ban User
             </Button>
           </DialogFooter>
@@ -6372,7 +6364,7 @@ You can use these variables:
           <DialogHeader>
             <DialogTitle className="text-[#F4F4F4] flex items-center gap-2">
               {deleteConfirmDialog.loading ? (
-                <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
+                <Spinner size="sm" />
               ) : (
                 <Ban className="h-5 w-5 text-red-400" />
               )}
@@ -6389,7 +6381,7 @@ You can use these variables:
           {deleteConfirmDialog.loading ? (
             <div className="py-8 flex flex-col items-center gap-4">
               <div className="relative">
-                <div className="w-16 h-16 rounded-full border-4 border-[#2A2A2A] border-t-red-500 animate-spin" />
+                <Spinner size="lg" />
               </div>
               <p className="text-sm text-[#808080] animate-pulse">Processing deletion...</p>
               <div className="w-full bg-[#1A1A1A] rounded-full h-2 overflow-hidden">
@@ -6436,7 +6428,7 @@ You can use these variables:
               disabled={deleteConfirmDialog.loading}
             >
               {deleteConfirmDialog.loading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Spinner size="sm" className="mr-2" />
               ) : (
                 <Ban className="h-4 w-4 mr-2" />
               )}

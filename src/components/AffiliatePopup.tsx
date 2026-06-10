@@ -14,13 +14,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  Copy, 
-  Check, 
-  Gift, 
-  Users, 
-  DollarSign, 
+import {
+  X,
+  Copy,
+  Check,
+  Gift,
+  Users,
+  DollarSign,
   TrendingUp,
   Sparkles,
   Loader2,
@@ -36,6 +36,7 @@ import {
   ChevronDown,
   CheckCircle2
 } from 'lucide-react';
+import { SkeletonCard } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -505,10 +506,9 @@ export default function AffiliatePopup({ onClose }: AffiliatePopupProps) {
           {/* Content */}
           <div className="p-5 max-h-[70vh] overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" />
+              <div className="py-4">
+                <SkeletonCard lines={3} />
               </div>
-
             ) : affiliateData.isAffiliate ? (
               /* ============================================
                  🔥 v2.2 SIMPLIFIED AFFILIATE VIEW

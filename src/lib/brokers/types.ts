@@ -10,6 +10,7 @@ export type BrokerName =
   | 'mt5'
   | 'ninja_trader'
   | 'tradovate'
+  | 'binance'
   | 'manual';
 
 export type BrokerStatus =
@@ -231,6 +232,21 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
     },
     status: 'available',
     documentation: 'https://api.tradovate.com/',
+  },
+  binance: {
+    broker: 'binance',
+    displayName: 'Binance',
+    logo: '/brokers/binance.svg',
+    color: '#F0B90B',
+    features: {
+      oauth: false,
+      apiKey: true,
+      webhook: false,
+      fileImport: false,
+      realtime: true,
+    },
+    status: 'available',
+    documentation: 'https://www.binance.com/en/support/faq/how-to-create-api-keys-on-binance-360002502072',
   },
   manual: {
     broker: 'manual',

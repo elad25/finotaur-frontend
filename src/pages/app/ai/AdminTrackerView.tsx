@@ -29,6 +29,7 @@ import {
   ArrowRightLeft, Building2, Calendar, Eye,
   Filter, Download, PieChart, Award, Radar,
 } from 'lucide-react';
+import { SkeletonTable, SkeletonStatRow } from '@/components/ds/Skeleton';
 
 // ═══════════════════════════════════════════════
 // DESIGN TOKENS — Exact match from Top5.tsx
@@ -543,11 +544,9 @@ export default function AdminTrackerView() {
   // ── Loading State ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <Card className="p-10 text-center" glow>
-          <Loader2 className="h-10 w-10 mx-auto mb-4 animate-spin" style={{ color: `${GOLD.dim}0.4)` }} />
-          <p className="text-[13px] mt-2" style={{ color: 'rgba(139,139,139,0.4)' }}>Loading admin intelligence...</p>
-        </Card>
+      <div className="space-y-4 py-4">
+        <SkeletonStatRow count={4} />
+        <SkeletonTable rows={8} cols={6} />
       </div>
     );
   }

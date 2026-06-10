@@ -14,22 +14,14 @@
 import { ReactNode, Suspense, memo } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 interface BetaRouteProps {
   children: ReactNode;
   fallbackPath?: string;
 }
 
-// Loading component
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// PageLoader imported from @/components/ds/Spinner
 
 /**
  * BetaRoute - Protects routes that are in beta
@@ -44,7 +36,7 @@ export const BetaRoute = memo(({
 
   // Show loading while checking access
   if (isLoading) {
-    return <PageLoader />;
+    return <RouteSkeleton />;
   }
 
   // No beta access - redirect
@@ -56,7 +48,7 @@ export const BetaRoute = memo(({
   // Has beta access - render children
   console.log(`🧪 [BetaRoute] Beta access granted for ${location.pathname}`);
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<RouteSkeleton />}>
       {children}
     </Suspense>
   );

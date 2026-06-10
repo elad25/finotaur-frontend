@@ -1,200 +1,353 @@
 /**
- * OrderLinesOverlay — DOM-layer draggable TP leg indicators.
+ * OrderLinesOverlay — draggable SL/TP/pending-order lines over the replay chart.
  *
- * Renders absolute-positioned horizontal "line + label + drag handle"
- * elements over the chart canvas. Each TP leg becomes a draggable row.
+ * Renders an absolutely-positioned HTML overlay (matching the DrawingLayer
+ * canvas stacking pattern) that shows:
+ *   - Active position Entry  (gold,  display-only — historical fill)
+ *   - Active position SL     (red,   draggable — clamps to valid side of entry)
+ *   - Active position TP     (green, draggable — clamps to valid side of entry)
+ *   - Each pending order trigger (amber, draggable)
  *
- * Design decisions:
- *   - We do NOT duplicate lightweight-charts price-line drawing here.
- *     BacktestReplayChart adds native price lines (via series.createPriceLine)
- *     for TP legs in its own useEffect — those are the visible chart lines.
- *     This overlay adds drag handles on top so the user can reposition legs.
- *   - The parent passes `priceToCoordinate` and `coordinateToPrice` obtained
- *     from the series ref inside BacktestReplayChart. Without these the
- *     overlay renders nothing (graceful degradation).
- *   - Clamping: LONG positions require leg.price > entryPrice; SHORT
- *     positions require leg.price < entryPrice. Same rule as BacktestChart's
- *     existing single-TP clamp. Filled legs are rendered dimmed and
- *     non-draggable.
- *   - Single-TP backward compat: if `activePosition.takeProfits` is empty
- *     but `activePosition.takeProfit` is set, we synthesize a display-only
- *     entry (no drag, since there's no leg id to report back).
+ * Pointer-event handling:
+ *   The outer container is pointer-events:none so chart pan/zoom and drawing
+ *   tools pass through. Each line's hit zone is pointer-events:auto only while
+ *   rendered. On pointer-down, setPointerCapture() keeps events flowing to
+ *   that element even if the cursor drifts during a fast drag. Esc cancels.
  *
- * Props:
- *   priceToCoordinate  (price: number) => number | null  — series helper
- *   coordinateToPrice  (y: number) => number | null      — series helper
- *   containerHeight    number                             — chart div height px
- *   activePosition     PaperPosition | undefined
- *   onLegPriceChange   (legId: string, price: number) => void  — drag callback
+ * Drawing-tool gate:
+ *   The parent passes `draggingEnabled` (true only in cursor mode) to suppress
+ *   hit zones entirely when a draw tool is active, preventing order-drag from
+ *   hijacking draw-create pointer events.
  *
- * Caller:
- *   BacktestReplayChart renders this as a sibling of its chart container
- *   (absolute inset-0 z-10) and passes the series conversion callbacks via
- *   an imperative handle pattern (see BacktestReplayChart).
+ * Coordinate system:
+ *   series.priceToCoordinate(price) → canvas-local Y.
+ *   series.coordinateToPrice(y)     → price from canvas-local Y.
+ *   The overlay div is absolute-inset-0 inside the same parent as the chart
+ *   container, so getBoundingClientRect().top gives the offset to subtract
+ *   from clientY to get canvas-local Y.
  */
 
-import { useCallback, useRef } from 'react';
-import type { PaperPosition } from '@/hooks/useBacktestSession';
-import type { TakeProfitLeg } from '@/lib/backtest/orderEngine';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { ISeriesApi } from 'lightweight-charts';
+import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 
-// ─── Props ────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────
 
-export interface OrderLinesOverlayProps {
-  /** Converts a price to a y-coordinate in the chart container. */
-  priceToCoordinate: (price: number) => number | null;
-  /** Converts a y-coordinate in the chart container to a price. */
-  coordinateToPrice: (y: number) => number | null;
-  /** Total height of the chart container in pixels. */
-  containerHeight: number;
-  /** Currently open position (or undefined if flat). */
-  activePosition: PaperPosition | undefined;
-  /** Called when user finishes dragging a TP leg to a new price. */
-  onLegPriceChange: (legId: string, newPrice: number) => void;
+interface DragState {
+  kind: 'sl' | 'tp' | 'pending';
+  /** Pending order id when kind === 'pending'. */
+  pendingId?: string;
+  /** Live preview Y coordinate (canvas-local). */
+  previewY: number;
+  /** Price shown in the preview label. */
+  previewPrice: number;
 }
 
-// ─── Component ───────────────────────────────────────────────────
+export interface OrderLinesOverlayProps {
+  /** Candlestick series — used for priceToCoordinate / coordinateToPrice. */
+  series: ISeriesApi<'Candlestick'> | null;
+  /** Container div of the chart (overlay is positioned inside the same parent). */
+  container: HTMLDivElement | null;
+  /** Currently open paper position — SL/TP lines come from here. */
+  activePosition?: PaperPosition;
+  /** Pending orders — one draggable trigger line each. */
+  pendingOrders: PendingOrder[];
+  /** Bumped on every chart pan/zoom/resize so the overlay repaints pixel coords. */
+  viewVersion: number;
+  /**
+   * When false (draw tool is active), all hit zones have pointer-events:none so
+   * drawing creation is not intercepted. Set to true only in cursor mode.
+   */
+  draggingEnabled: boolean;
+  /** Called when the user drops SL to a new price. */
+  onUpdateSL: (price: number) => void;
+  /** Called when the user drops TP to a new price. */
+  onUpdateTP: (price: number) => void;
+  /** Called when the user drops a pending order trigger line to a new price. */
+  onUpdatePendingPrice: (orderId: string, price: number) => void;
+}
+
+// ─── Visual constants ─────────────────────────────────────────────
+
+const COLOR = {
+  entry: '#C9A646',   // brand gold — entry line (non-draggable)
+  sl: '#ef4444',      // red
+  tp: '#22c55e',      // green
+  pending: '#f59e0b', // amber
+  previewLine: 'rgba(255,255,255,0.30)',
+} as const;
+
+/** Half-height of the pointer hit zone per line (px). */
+const HIT_ZONE_PX = 7;
+
+// ─── Helper ───────────────────────────────────────────────────────
+
+function priceToY(series: ISeriesApi<'Candlestick'>, price: number): number | null {
+  const y = series.priceToCoordinate(price);
+  return y == null ? null : y;
+}
+
+// ─── Sub-component: a single rendered line ────────────────────────
+
+interface OrderLineProps {
+  y: number;
+  label: string;
+  color: string;
+  draggable: boolean;
+  isPreview?: boolean;
+  onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
+}
+
+function OrderLine({ y, label, color, draggable, isPreview = false, onPointerDown }: OrderLineProps) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: y - HIT_ZONE_PX,
+        left: 0,
+        right: 0,
+        height: HIT_ZONE_PX * 2,
+        pointerEvents: draggable ? 'auto' : 'none',
+        cursor: draggable ? 'ns-resize' : 'default',
+        userSelect: 'none',
+        zIndex: isPreview ? 20 : 10,
+      }}
+      onPointerDown={draggable ? onPointerDown : undefined}
+    >
+      {/* Visible line */}
+      <div
+        style={{
+          position: 'absolute',
+          top: HIT_ZONE_PX - 1,
+          left: 0,
+          right: 0,
+          height: 2,
+          backgroundColor: isPreview ? COLOR.previewLine : color,
+          opacity: isPreview ? 0.6 : 1,
+          borderTop: isPreview ? `1px dashed ${color}` : 'none',
+          pointerEvents: 'none',
+        }}
+      />
+      {/* Price label */}
+      <div
+        style={{
+          position: 'absolute',
+          top: HIT_ZONE_PX - 9,
+          right: 68,
+          background: color,
+          color: '#000',
+          fontSize: 10,
+          fontWeight: 700,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          lineHeight: '16px',
+          padding: '0 5px',
+          borderRadius: 3,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          opacity: isPreview ? 0.75 : 1,
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────
 
 export function OrderLinesOverlay({
-  priceToCoordinate,
-  coordinateToPrice,
-  containerHeight,
+  series,
+  container,
   activePosition,
-  onLegPriceChange,
+  pendingOrders,
+  viewVersion,
+  draggingEnabled,
+  onUpdateSL,
+  onUpdateTP,
+  onUpdatePendingPrice,
 }: OrderLinesOverlayProps) {
-  // Track which leg is currently being dragged.
-  const draggingRef = useRef<{ legId: string; startY: number } | null>(null);
-  // Ref on the overlay root div — used in mouseup to get bounding rect
-  // without traversing the DOM via closest().
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Force a repaint whenever positions, orders, or the chart view changes.
+  const [, forceRepaint] = useState(0);
+  useEffect(() => {
+    forceRepaint((n) => n + 1);
+  }, [viewVersion, activePosition, pendingOrders]);
 
-  // ── Build display legs ─────────────────────────────────────────
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Prefer the normalized `takeProfits` array. Fall back to the legacy
-  // single `takeProfit` field for backward compat.
-  const displayLegs: Array<TakeProfitLeg & { displayOnly?: boolean }> = (() => {
-    if (!activePosition) return [];
-    if (activePosition.takeProfits && activePosition.takeProfits.length > 0) {
-      return activePosition.takeProfits;
+  // Convert clientY → canvas-local Y using the overlay's bounding rect.
+  const clientToLocalY = useCallback((clientY: number): number => {
+    if (!overlayRef.current) return 0;
+    return clientY - overlayRef.current.getBoundingClientRect().top;
+  }, []);
+
+  // Clamp a price to the valid side of the active entry.
+  // LONG → SL < entry < TP; SHORT → SL > entry > TP.
+  const clampPrice = useCallback((price: number, kind: 'sl' | 'tp'): number => {
+    if (!activePosition) return price;
+    const entry = activePosition.entryPrice;
+    if (activePosition.side === 'LONG') {
+      return kind === 'sl' ? Math.min(price, entry) : Math.max(price, entry);
     }
-    if (activePosition.takeProfit != null) {
-      // Synthesize a display-only entry — no drag since there's no leg id.
-      return [{
-        id: '__legacy_tp__',
-        price: activePosition.takeProfit,
-        sizePercent: 100,
-        filled: false,
-        displayOnly: true,
-      }];
-    }
-    return [];
-  })();
+    // SHORT: SL above entry, TP below entry.
+    return kind === 'sl' ? Math.max(price, entry) : Math.min(price, entry);
+  }, [activePosition]);
 
-  // ── Drag handlers ─────────────────────────────────────────────
+  // ─── Drag handlers ─────────────────────────────────────────────
 
-  const handleMouseDown = useCallback((
-    e: React.MouseEvent,
-    legId: string,
+  const startDrag = useCallback((
+    e: React.PointerEvent<HTMLDivElement>,
+    kind: DragState['kind'],
+    initialPrice: number,
+    pendingId?: string,
   ) => {
     e.preventDefault();
-    draggingRef.current = { legId, startY: e.clientY };
+    e.stopPropagation();
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    const y = clientToLocalY(e.clientY);
+    setDrag({ kind, pendingId, previewY: y, previewPrice: initialPrice });
+  }, [clientToLocalY]);
 
-    // AbortController ensures both listeners are always removed when the drag
-    // ends, regardless of which early-return path is taken in mouseup.
-    const abort = new AbortController();
-    const { signal } = abort;
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag || !series) return;
+    const y = clientToLocalY(e.clientY);
+    const rawPrice = series.coordinateToPrice(y);
+    if (rawPrice == null || !Number.isFinite(rawPrice)) return;
+    const price =
+      drag.kind === 'sl' || drag.kind === 'tp'
+        ? clampPrice(rawPrice, drag.kind)
+        : rawPrice;
+    setDrag((d) => d ? { ...d, previewY: y, previewPrice: price } : null);
+  }, [drag, series, clientToLocalY, clampPrice]);
 
-    const handleMouseUp = (ue: MouseEvent) => {
-      // Always clean up listeners first — no early return before this.
-      abort.abort();
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag) return;
+    (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    const finalPrice = drag.previewPrice;
+    if (drag.kind === 'sl') {
+      onUpdateSL(finalPrice);
+    } else if (drag.kind === 'tp') {
+      onUpdateTP(finalPrice);
+    } else if (drag.kind === 'pending' && drag.pendingId) {
+      onUpdatePendingPrice(drag.pendingId, finalPrice);
+    }
+    setDrag(null);
+  }, [drag, onUpdateSL, onUpdateTP, onUpdatePendingPrice]);
 
-      if (!draggingRef.current) return;
-      const { legId: id } = draggingRef.current;
-      draggingRef.current = null;
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape' && drag) {
+      setDrag(null);
+    }
+  }, [drag]);
 
-      // Resolve the mouse position relative to the chart container using
-      // the containerRef — no DOM traversal needed.
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const localY = ue.clientY - rect.top;
+  // ─── Render ────────────────────────────────────────────────────
 
-      const rawPrice = coordinateToPrice(localY);
-      if (rawPrice == null || !activePosition) return;
+  if (!series || !container) return null;
 
-      // Clamp: LONG needs price above entry; SHORT needs price below.
-      let clampedPrice = rawPrice;
-      if (activePosition.side === 'LONG') {
-        clampedPrice = Math.max(rawPrice, activePosition.entryPrice + 0.01);
-      } else {
-        clampedPrice = Math.min(rawPrice, activePosition.entryPrice - 0.01);
+  const lines: React.ReactNode[] = [];
+
+  // Active position lines
+  if (activePosition) {
+    // Entry — always display-only (historical fill is immutable)
+    const entryY = priceToY(series, activePosition.entryPrice);
+    if (entryY != null && entryY > 0) {
+      lines.push(
+        <OrderLine
+          key="entry"
+          y={entryY}
+          label={`Entry ${activePosition.entryPrice.toFixed(2)}`}
+          color={COLOR.entry}
+          draggable={false}
+        />,
+      );
+    }
+
+    // SL line
+    if (activePosition.stopLoss != null) {
+      const slY = drag?.kind === 'sl'
+        ? drag.previewY
+        : priceToY(series, activePosition.stopLoss);
+      const slPrice = drag?.kind === 'sl' ? drag.previewPrice : activePosition.stopLoss;
+      if (slY != null && slY > 0) {
+        lines.push(
+          <OrderLine
+            key="sl"
+            y={slY}
+            label={`SL ${slPrice.toFixed(2)}`}
+            color={COLOR.sl}
+            draggable={draggingEnabled}
+            isPreview={drag?.kind === 'sl'}
+            onPointerDown={(e) => startDrag(e, 'sl', activePosition.stopLoss!)}
+          />,
+        );
       }
+    }
 
-      // Skip if this is a display-only synthetic leg.
-      if (id !== '__legacy_tp__') {
-        onLegPriceChange(id, clampedPrice);
+    // TP line
+    if (activePosition.takeProfit != null) {
+      const tpY = drag?.kind === 'tp'
+        ? drag.previewY
+        : priceToY(series, activePosition.takeProfit);
+      const tpPrice = drag?.kind === 'tp' ? drag.previewPrice : activePosition.takeProfit;
+      if (tpY != null && tpY > 0) {
+        lines.push(
+          <OrderLine
+            key="tp"
+            y={tpY}
+            label={`TP ${tpPrice.toFixed(2)}`}
+            color={COLOR.tp}
+            draggable={draggingEnabled}
+            isPreview={drag?.kind === 'tp'}
+            onPointerDown={(e) => startDrag(e, 'tp', activePosition.takeProfit!)}
+          />,
+        );
       }
-    };
+    }
+  }
 
-    // No mousemove listener needed — the final position is read from mouseup
-    // clientY directly (no live visual feedback during drag).
-    window.addEventListener('mouseup', handleMouseUp, { signal });
-  }, [activePosition, coordinateToPrice, onLegPriceChange]);
+  // Pending order trigger lines
+  for (const order of pendingOrders) {
+    const isDraggingThis = drag?.kind === 'pending' && drag.pendingId === order.id;
+    const pendingY = isDraggingThis
+      ? drag.previewY
+      : priceToY(series, order.triggerPrice);
+    const pendingPrice = isDraggingThis ? drag.previewPrice : order.triggerPrice;
+    if (pendingY == null || pendingY <= 0) continue;
+    const sideLabel = order.side === 'LONG' ? 'BUY' : 'SELL';
+    lines.push(
+      <OrderLine
+        key={`pending-${order.id}`}
+        y={pendingY}
+        label={`${sideLabel} ${order.type} ${pendingPrice.toFixed(2)}`}
+        color={COLOR.pending}
+        draggable={draggingEnabled}
+        isPreview={isDraggingThis}
+        onPointerDown={(e) => startDrag(e, 'pending', order.triggerPrice, order.id)}
+      />,
+    );
+  }
 
-  // ── Render ────────────────────────────────────────────────────
-
-  if (!activePosition || displayLegs.length === 0) return null;
+  if (lines.length === 0 && !drag) return null;
 
   return (
     <div
-      ref={containerRef}
-      className="order-lines-overlay-root pointer-events-none absolute inset-0 z-10"
-      style={{ height: containerHeight }}
+      ref={overlayRef}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        // While dragging: capture pointer-move globally so we don't lose the drag
+        // on a fast mouse sweep. Otherwise: pointer-events:none so chart pan/zoom
+        // and drawing tools pass through untouched.
+        pointerEvents: drag ? 'auto' : 'none',
+        zIndex: 15, // above DrawingLayer canvas (z-10), below context menu (z-110)
+      }}
+      onPointerMove={drag ? handlePointerMove : undefined}
+      onPointerUp={drag ? handlePointerUp : undefined}
+      onKeyDown={handleKeyDown}
+      // tabIndex enables keyboard events (Esc to cancel drag)
+      tabIndex={drag ? 0 : -1}
     >
-      {displayLegs.map((leg, idx) => {
-        const y = priceToCoordinate(leg.price);
-        if (y == null || y < 0 || y > containerHeight) return null;
-
-        const isDraggable = !leg.filled && !leg.displayOnly;
-        const isFilled = leg.filled;
-
-        return (
-          <div
-            key={leg.id}
-            className="absolute left-0 right-0"
-            style={{ top: y }}
-          >
-            {/* The horizontal line */}
-            <div
-              className={`h-px w-full ${isFilled ? 'bg-emerald-700/30' : 'bg-emerald-500/50'}`}
-              style={{ borderTop: isFilled ? '1px dashed rgba(52,211,153,0.25)' : '1px dashed rgba(52,211,153,0.55)' }}
-            />
-
-            {/* Label + drag handle (pointer-events enabled on handle only) */}
-            <div
-              className={`absolute right-2 flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] font-semibold ${
-                isFilled
-                  ? 'border-zinc-800 bg-zinc-900/70 text-zinc-600'
-                  : 'border-emerald-800/50 bg-[#08080a]/80 text-emerald-400'
-              } ${isDraggable ? 'pointer-events-auto cursor-ns-resize select-none' : 'pointer-events-none'}`}
-              style={{ top: -10 }}
-              onMouseDown={isDraggable ? (e) => handleMouseDown(e, leg.id) : undefined}
-              title={isDraggable ? 'Drag to reposition TP' : undefined}
-            >
-              {isFilled ? (
-                <span className="line-through">
-                  TP{idx + 1} {leg.sizePercent}% @ {leg.price.toFixed(2)} ✓
-                </span>
-              ) : (
-                <>
-                  TP{idx + 1} {leg.sizePercent}% @ {leg.price.toFixed(2)}
-                  {isDraggable && (
-                    <span className="text-zinc-600">⠿</span>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {lines}
     </div>
   );
 }

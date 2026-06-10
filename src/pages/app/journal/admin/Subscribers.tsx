@@ -49,7 +49,7 @@ export default function AdminSubscribers() {
   const queryClient = useQueryClient();
 
   // 🔥 REALTIME SUBSCRIPTION
-  const { isSubscribed, refresh } = useAdminRealtimeUpdates(true);
+  const { isSubscribed } = useAdminRealtimeUpdates(true);
 
   // REACT QUERY - STATS
   const {
@@ -180,20 +180,20 @@ export default function AdminSubscribers() {
           subtitle={`${stats.activeSubscribers} active`}
         />
         <StatsCard
-          title="Basic Plan"
-          value={stats.basicSubscribers}
-          change={`${stats.basicMonthly} monthly | ${stats.basicYearly} yearly`}
+          title="Journal"
+          value={stats.journalSubscribers}
+          change={`${stats.basicSubscribers} Basic · ${stats.premiumSubscribers} Premium`}
           changeType="neutral"
           icon={DollarSign}
-          subtitle={`$${stats.basicMRR.toLocaleString()} MRR`}
+          subtitle={`$${(stats.basicMRR + stats.premiumMRR).toLocaleString()} MRR`}
         />
         <StatsCard
-          title="Premium Plan"
-          value={stats.premiumSubscribers}
-          change={`${stats.premiumMonthly} monthly | ${stats.premiumYearly} yearly`}
+          title="Newsletter"
+          value={(stats.newsletterSubscribers ?? 0) + (stats.topSecretSubscribers ?? 0)}
+          change={`${stats.newsletterSubscribers ?? 0} WAR ZONE · ${stats.topSecretSubscribers ?? 0} Top Secret`}
           changeType="neutral"
           icon={TrendingUp}
-          subtitle={`$${stats.premiumMRR.toLocaleString()} MRR`}
+          subtitle={`$${((stats.newsletterMRR ?? 0) + (stats.topSecretMRR ?? 0)).toLocaleString()} MRR`}
         />
         <StatsCard
           title="Total MRR"
@@ -210,10 +210,12 @@ export default function AdminSubscribers() {
         <div className="bg-[#111111] border border-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-bold text-white mb-4">Plan Distribution</h2>
           <div className="space-y-4">
-            <PlanBar label="Basic Monthly" count={stats.basicMonthly} total={stats.totalSubscribers} color="bg-blue-500" />
-            <PlanBar label="Basic Yearly" count={stats.basicYearly} total={stats.totalSubscribers} color="bg-blue-600" />
-            <PlanBar label="Premium Monthly" count={stats.premiumMonthly} total={stats.totalSubscribers} color="bg-[#D4AF37]" />
-            <PlanBar label="Premium Yearly" count={stats.premiumYearly} total={stats.totalSubscribers} color="bg-[#FFD700]" />
+            <PlanBar label="Journal · Basic Monthly"   count={stats.basicMonthly}   total={stats.totalSubscribers} color="bg-emerald-600" />
+            <PlanBar label="Journal · Basic Yearly"    count={stats.basicYearly}    total={stats.totalSubscribers} color="bg-emerald-500" />
+            <PlanBar label="Journal · Premium Monthly" count={stats.premiumMonthly} total={stats.totalSubscribers} color="bg-[#D4AF37]" />
+            <PlanBar label="Journal · Premium Yearly"  count={stats.premiumYearly}  total={stats.totalSubscribers} color="bg-[#FFD700]" />
+            <PlanBar label="Newsletter · WAR ZONE"     count={stats.newsletterSubscribers ?? 0} total={stats.totalSubscribers} color="bg-purple-500" />
+            <PlanBar label="Newsletter · Top Secret"   count={stats.topSecretSubscribers ?? 0}  total={stats.totalSubscribers} color="bg-red-500" />
           </div>
         </div>
 
@@ -221,12 +223,20 @@ export default function AdminSubscribers() {
           <h2 className="text-xl font-bold text-white mb-4">Revenue Breakdown</h2>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Basic MRR</span>
+              <span className="text-gray-400">Journal · Basic MRR</span>
               <span className="text-white font-semibold">${stats.basicMRR.toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Premium MRR</span>
+              <span className="text-gray-400">Journal · Premium MRR</span>
               <span className="text-white font-semibold">${stats.premiumMRR.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">Newsletter · WAR ZONE MRR</span>
+              <span className="text-white font-semibold">${(stats.newsletterMRR ?? 0).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">Newsletter · Top Secret MRR</span>
+              <span className="text-white font-semibold">${(stats.topSecretMRR ?? 0).toLocaleString()}</span>
             </div>
             <div className="border-t border-gray-800 pt-4">
               <div className="flex justify-between items-center">
@@ -263,8 +273,11 @@ export default function AdminSubscribers() {
               className="bg-black border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:border-[#D4AF37] appearance-none cursor-pointer min-w-[150px]"
             >
               <option value="all">All Plans</option>
-              <option value="basic">Basic</option>
-              <option value="premium">Premium</option>
+              <option value="platform">Platform</option>
+              <option value="basic">Journal · Basic</option>
+              <option value="premium">Journal · Premium</option>
+              <option value="newsletter">WAR ZONE</option>
+              <option value="top_secret">Top Secret</option>
             </select>
           </div>
           <div className="relative">
@@ -296,6 +309,7 @@ export default function AdminSubscribers() {
             <thead className="bg-black border-b border-gray-800">
               <tr>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">User</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Products</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Plan</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Billing</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">Status</th>
@@ -344,6 +358,22 @@ function PlanBar({ label, count, total, color }: { label: string; count: number;
   );
 }
 
+const PLAN_BADGE_STYLES: Record<string, string> = {
+  platform:   'bg-[#D4AF37]/20 text-[#D4AF37]',
+  premium:    'bg-[#D4AF37]/20 text-[#D4AF37]',
+  basic:      'bg-emerald-500/20 text-emerald-400',
+  newsletter: 'bg-purple-500/20 text-purple-400',
+  top_secret: 'bg-red-500/20 text-red-400',
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  platform:   'Platform',
+  premium:    'Premium',
+  basic:      'Basic',
+  newsletter: 'WAR ZONE',
+  top_secret: 'Top Secret',
+};
+
 function SubscriberRow({ subscriber: sub }: { subscriber: Subscriber }) {
   return (
     <tr className="hover:bg-black/50 transition-colors">
@@ -353,13 +383,31 @@ function SubscriberRow({ subscriber: sub }: { subscriber: Subscriber }) {
           <p className="text-gray-400 text-sm">{sub.email}</p>
         </div>
       </td>
+      {/* Products badges */}
+      <td className="px-6 py-4">
+        <div className="flex flex-wrap gap-1">
+          {sub.products?.includes('platform') && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">Platform</span>
+          )}
+          {sub.products?.includes('journal') && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Journal</span>
+          )}
+          {sub.products?.includes('warzone') && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">WAR ZONE</span>
+          )}
+          {sub.products?.includes('top_secret') && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">Top Secret</span>
+          )}
+          {(!sub.products || sub.products.length === 0) && (
+            <span className="text-xs text-gray-500">—</span>
+          )}
+        </div>
+      </td>
       <td className="px-6 py-4">
         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          sub.subscription_plan === 'premium'
-            ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
-            : 'bg-blue-500/20 text-blue-400'
+          PLAN_BADGE_STYLES[sub.subscription_plan] ?? 'bg-gray-500/20 text-gray-400'
         }`}>
-          {sub.subscription_plan?.toUpperCase()}
+          {PLAN_LABELS[sub.subscription_plan] ?? sub.subscription_plan?.toUpperCase()}
         </span>
       </td>
       <td className="px-6 py-4">
@@ -377,10 +425,10 @@ function SubscriberRow({ subscriber: sub }: { subscriber: Subscriber }) {
         </span>
       </td>
       <td className="px-6 py-4 text-gray-300">
-        {new Date(sub.subscription_start_date).toLocaleDateString('he-IL')}
+        {new Date(sub.subscription_start_date).toLocaleDateString('en-US')}
       </td>
       <td className="px-6 py-4 text-gray-300">
-        {sub.subscription_end_date ? new Date(sub.subscription_end_date).toLocaleDateString('he-IL') : '-'}
+        {sub.subscription_end_date ? new Date(sub.subscription_end_date).toLocaleDateString('en-US') : '-'}
       </td>
       <td className="px-6 py-4 text-right">
         <span className="text-[#D4AF37] font-semibold">${sub.monthly_revenue.toLocaleString()}</span>

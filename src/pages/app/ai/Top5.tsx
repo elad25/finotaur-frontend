@@ -13,7 +13,12 @@
 //   ✅ Admin Mode Toggle preserved
 // =====================================================
 
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
+import { SkeletonCard } from '@/components/ds/Skeleton';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiTop5SkeletonPage } from '@/components/skeletons/AiTop5Skeleton';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -1505,7 +1510,7 @@ function Top5Content() {
       .from('profiles')
       .select('role, email, is_tester')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           const admin = data.role === 'admin' || data.role === 'super_admin' || data.email === 'elad2550@gmail.com';
@@ -1687,11 +1692,8 @@ function Top5Content() {
         {/* ═══ ADMIN TRACKER ═══ */}
         {adminModeEnabled && isAdmin && (
           <Suspense fallback={
-            <div className="flex items-center justify-center py-32">
-              <div className="p-10 text-center rounded-2xl" style={{ background: 'rgba(14,13,11,0.95)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                <ScanLine className="h-10 w-10 mx-auto mb-4 animate-spin" style={{ color: `${GOLD.dim}0.4)` }} />
-                <p className="text-[13px]" style={{ color: '#8A8A8A' }}>Loading admin dashboard...</p>
-              </div>
+            <div className="py-8">
+              <SkeletonCard lines={4} />
             </div>
           }>
             <AdminTrackerView />
@@ -1862,11 +1864,7 @@ export default function Top5() {
   const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('ai_scanner');
   if (accessLoading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
-      </div>
-    );
+    return <AiTop5SkeletonPage />;
   }
 
   if (!access.hasAccess) {
@@ -1882,5 +1880,9 @@ export default function Top5() {
       />
     );
   }
-  return <Top5Content />;
+  return (
+    <ErrorBoundary boundary="ai-top5">
+      <Top5Content />
+    </ErrorBoundary>
+  );
 }

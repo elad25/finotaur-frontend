@@ -22,7 +22,7 @@ import {
   Users as UsersIcon,
 } from 'lucide-react';
 import { getAllUsers } from '@/services/adminService';
-import { UserWithStats, UserFilters, PaginationParams, AccountType } from '@/types/admin';
+import { UserWithStats, UserFilters, PaginationParams, ProductFilter } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
 import UserActionsMenu from '@/components/admin/UserActionsMenu';
@@ -149,8 +149,8 @@ export default function AdminUsers() {
   if (isError) {
     return (
       <AdminLayout
-        title="Journal Subscribers"
-        description="Manage Journal subscription users"
+        title="Subscribers"
+        description="Manage subscribers across all products"
       >
         <div className="min-h-[400px] flex items-center justify-center">
           <div className="text-center">
@@ -180,8 +180,8 @@ export default function AdminUsers() {
   if (isLoading) {
     return (
       <AdminLayout
-        title="Journal Subscribers"
-        description="Manage Journal subscription users"
+        title="Subscribers"
+        description="Manage subscribers across all products"
       >
         <LoadingSkeleton lines={10} />
       </AdminLayout>
@@ -193,8 +193,8 @@ export default function AdminUsers() {
   // ============================================
   return (
     <AdminLayout
-      title="Journal Subscribers"
-      description="Manage Journal subscription users (Basic, Premium, Trial)"
+      title="Subscribers"
+      description="Manage subscribers across Platform, Journal &amp; Newsletter"
     >
       {/* 🔥 Realtime Status Bar */}
       <div className="flex items-center justify-between mb-4">
@@ -224,15 +224,14 @@ export default function AdminUsers() {
         </button>
       </div>
 
-      {/* 🔥 Info Banner - Journal Subscribers Only */}
+      {/* Info Banner */}
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-6">
         <div className="flex items-center gap-3">
           <UsersIcon className="w-5 h-5 text-blue-400" />
           <div>
-            <p className="text-blue-400 font-medium">Showing Journal Subscribers Only</p>
+            <p className="text-blue-400 font-medium">Showing all subscribers across Platform, Journal &amp; Newsletter products</p>
             <p className="text-blue-400/70 text-sm">
-              This page displays users with active Journal subscriptions (Basic, Premium, or Trial). 
-              Free/legacy users are not shown here.
+              Use the filter tabs to drill into a specific product. A user can appear in multiple categories.
             </p>
           </div>
         </div>
@@ -258,35 +257,35 @@ export default function AdminUsers() {
             )}
           </div>
 
-          {/* 🔥 v2.3.0: Updated Filter Buttons - Journal Subscribers Focus */}
+          {/* Filter tabs — product categories */}
           <div className="flex gap-2 flex-wrap">
             <FilterButton
               label="All Subscribers"
-              isActive={!filters.account_type}
-              onClick={() => handleFilterChange({ account_type: undefined })}
+              isActive={!filters.product_filter}
+              onClick={() => handleFilterChange({ product_filter: undefined })}
             />
             <FilterButton
-              label="Trial"
-              isActive={filters.account_type === 'trial'}
-              onClick={() => handleFilterChange({ account_type: 'trial' as AccountType })}
-              color="blue"
-            />
-            <FilterButton
-              label="Basic"
-              isActive={filters.account_type === 'basic'}
-              onClick={() => handleFilterChange({ account_type: 'basic' as AccountType })}
-              color="emerald"
-            />
-            <FilterButton
-              label="Premium"
-              isActive={filters.account_type === 'premium'}
-              onClick={() => handleFilterChange({ account_type: 'premium' as AccountType })}
+              label="Platform"
+              isActive={filters.product_filter === 'platform'}
+              onClick={() => handleFilterChange({ product_filter: 'platform' as ProductFilter })}
               color="gold"
             />
             <FilterButton
+              label="Journal"
+              isActive={filters.product_filter === 'journal'}
+              onClick={() => handleFilterChange({ product_filter: 'journal' as ProductFilter })}
+              color="emerald"
+            />
+            <FilterButton
+              label="Newsletter"
+              isActive={filters.product_filter === 'newsletter'}
+              onClick={() => handleFilterChange({ product_filter: 'newsletter' as ProductFilter })}
+              color="blue"
+            />
+            <FilterButton
               label="Free (Legacy)"
-              isActive={filters.account_type === 'free'}
-              onClick={() => handleFilterChange({ account_type: 'free' as AccountType })}
+              isActive={filters.product_filter === 'free'}
+              onClick={() => handleFilterChange({ product_filter: 'free' as ProductFilter })}
               color="gray"
             />
           </div>
@@ -314,12 +313,13 @@ export default function AdminUsers() {
             <thead className="bg-[#0A0A0A] border-b border-gray-800">
               <tr>
                 <TableHeader>User</TableHeader>
+                <TableHeader>Products</TableHeader>
                 <TableHeader>Plan</TableHeader>
                 <TableHeader>Status</TableHeader>
                 <TableHeader>Interval</TableHeader>
                 <TableHeader>Trades</TableHeader>
                 <TableHeader>Win Rate</TableHeader>
-                <TableHeader>P&L</TableHeader>
+                <TableHeader>P&amp;L</TableHeader>
                 <TableHeader>Joined</TableHeader>
                 <TableHeader>Actions</TableHeader>
               </tr>
@@ -327,14 +327,14 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-800">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center">
+                  <td colSpan={10} className="px-6 py-12 text-center">
                     <div className="text-gray-400">
                       <UsersIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg mb-2">No subscribers found</p>
                       <p className="text-sm">
-                        {filters.account_type 
-                          ? `No ${filters.account_type} subscribers match your search` 
-                          : 'No Journal subscribers yet'}
+                        {filters.product_filter
+                          ? `No ${filters.product_filter} subscribers match your search`
+                          : 'No subscribers yet'}
                       </p>
                     </div>
                   </td>
@@ -525,6 +525,35 @@ const UserRow = React.memo<{
             </div>
             <div className="text-sm text-gray-400">{user.email}</div>
           </div>
+        </div>
+      </td>
+
+      {/* Products */}
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex flex-wrap gap-1">
+          {user.products?.includes('platform') && (
+            <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">
+              Platform
+            </span>
+          )}
+          {user.products?.includes('journal') && (
+            <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              {isInTrial ? 'Journal · Trial' : user.account_type === 'premium' ? 'Journal · Premium' : 'Journal · Basic'}
+            </span>
+          )}
+          {user.products?.includes('warzone') && (
+            <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              WAR ZONE
+            </span>
+          )}
+          {user.products?.includes('top_secret') && (
+            <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+              Top Secret
+            </span>
+          )}
+          {(!user.products || user.products.length === 0) && (
+            <span className="text-xs text-gray-500">—</span>
+          )}
         </div>
       </td>
 

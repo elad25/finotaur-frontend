@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Calendar,
   Clock,
   Filter,
-  ChevronDown,
   Star,
   Globe,
   TrendingUp,
@@ -17,6 +16,8 @@ import {
   X,
   CheckCircle2,
   Building2,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 
 // ============================================
@@ -133,19 +134,18 @@ interface CalendarData {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 const CALENDAR_ENDPOINT = '/api/all-markets/calendar';
-const POLLING_INTERVAL = 60000;
-const TODAY_POLLING_INTERVAL = 30000;
 
 // ============================================
-// COUNTRY FLAGS - Unicode Emoji Flags
+// COUNTRY FLAGS - local, preloaded map. No runtime flag downloads.
 // ============================================
+
+const DEFAULT_COUNTRY_CODES = ['US', 'GB', 'DE'];
 
 const COUNTRIES = [
-  { code: 'ALL', name: 'All Countries', flag: '🌍' },
   { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
   { code: 'EU', name: 'Eurozone', flag: '🇪🇺' },
   { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+  { code: 'GB', name: 'London', flag: '🇬🇧' },
   { code: 'FR', name: 'France', flag: '🇫🇷' },
   { code: 'JP', name: 'Japan', flag: '🇯🇵' },
   { code: 'CN', name: 'China', flag: '🇨🇳' },
@@ -162,39 +162,228 @@ const COUNTRIES = [
   { code: 'HK', name: 'Hong Kong', flag: '🇭🇰' },
 ];
 
+
+const normalizeCountryCode = (code?: string | null): string => {
+  const upper = (code || '').toUpperCase();
+  if (upper === 'UK') return 'GB';
+  if (upper === 'EA') return 'EU';
+  if (upper === 'USA') return 'US';
+  return upper;
+};
+
+// NASDAQ encodes countries with non-ISO 2-letter codes that are often ambiguous
+// (e.g. "UN" = both United States and United Kingdom). Resolve ISO from the
+// country NAME (reliable) and fall back to the code only when the name is unknown.
+const COUNTRY_NAME_TO_ISO: Record<string, string> = {
+  'united states': 'US', 'usa': 'US', 'united states of america': 'US',
+  'united kingdom': 'GB', 'uk': 'GB', 'great britain': 'GB',
+  'germany': 'DE',
+  'euro zone': 'EU', 'eurozone': 'EU', 'euro area': 'EU',
+  'france': 'FR', 'japan': 'JP', 'china': 'CN', 'australia': 'AU',
+  'canada': 'CA', 'switzerland': 'CH', 'new zealand': 'NZ', 'israel': 'IL',
+  'south korea': 'KR', 'korea': 'KR', 'india': 'IN', 'brazil': 'BR',
+  'mexico': 'MX', 'singapore': 'SG', 'hong kong': 'HK', 'south africa': 'ZA',
+  'spain': 'ES', 'italy': 'IT', 'russia': 'RU', 'netherlands': 'NL',
+};
+
+const resolveCountryIso = (code?: string | null, name?: string | null): string => {
+  const byName = name ? COUNTRY_NAME_TO_ISO[name.trim().toLowerCase()] : undefined;
+  return byName || normalizeCountryCode(code);
+};
+
+const countryMatches = (eventCode: string | undefined, selectedCountries: string[]): boolean => {
+  const normalized = normalizeCountryCode(eventCode);
+  return selectedCountries.map(normalizeCountryCode).includes(normalized);
+};
+
+const getCalendarSection = (data: CalendarData | null, tab: TabType) => {
+  if (!data) return undefined;
+  if (tab === 'economic') return data.economic;
+  if (tab === 'holidays') return data.holidays;
+  if (tab === 'earnings') return data.earnings;
+  if (tab === 'dividends') return data.dividends;
+  if (tab === 'splits') return data.splits;
+  if (tab === 'ipo') return data.ipos;
+  return data.expirations;
+};
+
+/**
+ * Rewrite each economic/holiday event's countryCode to a proper ISO code
+ * derived from its country name (NASDAQ codes are non-ISO and ambiguous).
+ * Fixes both country filtering and flag rendering. Returns a new object.
+ */
+const withNormalizedCountryCodes = (data: CalendarData | null): CalendarData | null => {
+  if (!data) return data;
+  const fixEvents = <T extends { countryCode?: string; country?: string }>(
+    section?: { count: number; events: T[]; [k: string]: unknown }
+  ) =>
+    section
+      ? {
+          ...section,
+          events: section.events.map((e) => ({
+            ...e,
+            countryCode: resolveCountryIso(e.countryCode, e.country),
+          })),
+        }
+      : section;
+  return {
+    ...data,
+    economic: fixEvents(data.economic) as CalendarData['economic'],
+    holidays: fixEvents(data.holidays) as CalendarData['holidays'],
+  };
+};
+
 // ============================================
 // CUSTOM HOOK
 // ============================================
 
+/**
+ * Pure helper: apply country / importance / search filters to raw CalendarData
+ * client-side. Returns a new CalendarData object with filtered event arrays and
+ * updated counts. The raw server response is never mutated.
+ *
+ * - countries: filters economic + holidays only (other tabs have no country dim)
+ * - importance: filters economic only; empty array = "no filter" (show all)
+ * - search: case-insensitive substring match across all tabs' text fields
+ */
+function filterCalendarData(
+  raw: CalendarData | null,
+  countries: string[],
+  importance: Importance[],
+  search: string,
+): CalendarData | null {
+  if (!raw) return null;
+
+  const searchLC = search.trim().toLowerCase();
+  const filterBySearch = searchLC.length > 0;
+  const filterByCountry = countries.length > 0;
+  // Empty importance array = show all (all toggles de-selected = no filter)
+  const filterByImportance = importance.length > 0 && importance.length < 3;
+
+  // --- economic ---
+  let economicEvents = raw.economic?.events ?? [];
+  if (filterByCountry) {
+    economicEvents = economicEvents.filter(e => countryMatches(e.countryCode, countries));
+  }
+  if (filterByImportance) {
+    economicEvents = economicEvents.filter(e => importance.includes(e.importance));
+  }
+  if (filterBySearch) {
+    economicEvents = economicEvents.filter(e =>
+      e.event?.toLowerCase().includes(searchLC) ||
+      e.currency?.toLowerCase().includes(searchLC) ||
+      e.country?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- holidays ---
+  let holidayEvents = raw.holidays?.events ?? [];
+  if (filterByCountry) {
+    holidayEvents = holidayEvents.filter(e => countryMatches(e.countryCode, countries));
+  }
+  if (filterBySearch) {
+    holidayEvents = holidayEvents.filter(e =>
+      e.holiday?.toLowerCase().includes(searchLC) ||
+      e.country?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- earnings (no country dimension) ---
+  let earningsEvents = raw.earnings?.events ?? [];
+  if (filterBySearch) {
+    earningsEvents = earningsEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- dividends (no country dimension) ---
+  let dividendEvents = raw.dividends?.events ?? [];
+  if (filterBySearch) {
+    dividendEvents = dividendEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- splits (no country dimension) ---
+  let splitEvents = raw.splits?.events ?? [];
+  if (filterBySearch) {
+    splitEvents = splitEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- ipos (no country dimension) ---
+  let ipoEvents = raw.ipos?.events ?? [];
+  if (filterBySearch) {
+    ipoEvents = ipoEvents.filter(e =>
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.company?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  // --- expirations (no country dimension) ---
+  let expirationEvents = raw.expirations?.events ?? [];
+  if (filterBySearch) {
+    expirationEvents = expirationEvents.filter(e =>
+      e.name?.toLowerCase().includes(searchLC) ||
+      e.type?.toLowerCase().includes(searchLC) ||
+      e.symbol?.toLowerCase().includes(searchLC) ||
+      e.description?.toLowerCase().includes(searchLC)
+    );
+  }
+
+  return {
+    economic: raw.economic
+      ? { ...raw.economic, events: economicEvents, count: economicEvents.length }
+      : undefined,
+    holidays: raw.holidays
+      ? { ...raw.holidays, events: holidayEvents, count: holidayEvents.length }
+      : undefined,
+    earnings: raw.earnings
+      ? { ...raw.earnings, events: earningsEvents, count: earningsEvents.length }
+      : undefined,
+    dividends: raw.dividends
+      ? { ...raw.dividends, events: dividendEvents, count: dividendEvents.length }
+      : undefined,
+    splits: raw.splits
+      ? { ...raw.splits, events: splitEvents, count: splitEvents.length }
+      : undefined,
+    ipos: raw.ipos
+      ? { ...raw.ipos, events: ipoEvents, count: ipoEvents.length }
+      : undefined,
+    expirations: raw.expirations
+      ? { ...raw.expirations, events: expirationEvents, count: expirationEvents.length }
+      : undefined,
+  };
+}
+
 function useCalendarData(
   tab: TabType,
   timeFilter: TimeFilter,
-  country: string,
+  countries: string[],
   importance: Importance[],
   search: string
 ) {
-  const [data, setData] = useState<CalendarData | null>(null);
+  const [rawData, setRawData] = useState<CalendarData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Only tab + dateFilter go to the server; country/importance/search are client-side
   const fetchData = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
-        tab,
-        dateFilter: timeFilter,
-        country,
-        importance: importance.join(','),
-        search,
-      });
+      const params = new URLSearchParams({ tab, dateFilter: timeFilter });
 
       const response = await fetch(`${API_BASE_URL}${CALENDAR_ENDPOINT}?${params}`);
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
       const result = await response.json();
-      setData(result.data);
+      setRawData(withNormalizedCountryCodes(result.data));
       setError(null);
     } catch (err) {
       console.error('Calendar fetch error:', err);
@@ -202,20 +391,70 @@ function useCalendarData(
     } finally {
       setLoading(false);
     }
-  }, [tab, timeFilter, country, importance, search]);
+  }, [tab, timeFilter]); // country/importance/search intentionally omitted — client-side only
 
   useEffect(() => {
     setLoading(true);
     fetchData();
   }, [fetchData]);
 
-  useEffect(() => {
-    const interval = timeFilter === 'today' ? TODAY_POLLING_INTERVAL : POLLING_INTERVAL;
-    const timer = setInterval(fetchData, interval);
-    return () => clearInterval(timer);
-  }, [fetchData, timeFilter]);
+  // Client-side derived view: filter raw data without a network round-trip
+  const data = useMemo(
+    () => filterCalendarData(rawData, countries, importance, search),
+    [rawData, countries, importance, search]
+  );
 
   return { data, loading, error, refetch: fetchData };
+}
+
+function useWeeklyEventCount(
+  tab: TabType,
+  countries: string[],
+  importance: Importance[],
+  search: string
+) {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchWeeklyCount() {
+      if (tab === 'economic') {
+        setCount(null);
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({ tab, dateFilter: 'thisWeek' });
+        const response = await fetch(`${API_BASE_URL}${CALENDAR_ENDPOINT}?${params}`);
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const filtered = filterCalendarData(withNormalizedCountryCodes(result.data), countries, importance, search);
+        const section = getCalendarSection(filtered, tab);
+
+        if (!cancelled) {
+          setCount(section?.count ?? 0);
+        }
+      } catch (err) {
+        console.error('Weekly calendar count error:', err);
+        if (!cancelled) {
+          setCount(null);
+        }
+      }
+    }
+
+    fetchWeeklyCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, countries, importance, search]);
+
+  return count;
 }
 
 // ============================================
@@ -276,28 +515,22 @@ const isEventPast = (date: string, time: string): boolean => {
   return eventDate < now;
 };
 
-// Check if we should show NOW indicator after this event
-const shouldShowNowAfter = (
-  currentEvent: { date: string; time: string },
-  nextEvent: { date: string; time: string } | null,
+// Index among a day's TIME-SORTED events where the NOW line belongs:
+// before the first event still in the future; events.length if all are past.
+// Returns null when this isn't today.
+const getNowInsertIndex = (
+  events: { date: string; time: string }[],
   isToday: boolean
-): boolean => {
-  if (!isToday) return false;
-  
+): number | null => {
+  if (!isToday) return null;
   const now = new Date();
-  const currentEventTime = new Date(normalizeDate(currentEvent.date) + 'T00:00:00');
-  const [currHours, currMinutes] = (currentEvent.time || '00:00').split(':').map(Number);
-  currentEventTime.setHours(currHours || 0, currMinutes || 0, 0, 0);
-  
-  if (currentEventTime > now) return false;
-  
-  if (!nextEvent) return true;
-  
-  const nextEventTime = new Date(normalizeDate(nextEvent.date) + 'T00:00:00');
-  const [nextHours, nextMinutes] = (nextEvent.time || '00:00').split(':').map(Number);
-  nextEventTime.setHours(nextHours || 0, nextMinutes || 0, 0, 0);
-  
-  return now >= currentEventTime && now < nextEventTime;
+  for (let i = 0; i < events.length; i++) {
+    const t = new Date(normalizeDate(events[i].date) + 'T00:00:00');
+    const [h, m] = (events[i].time || '00:00').split(':').map(Number);
+    t.setHours(h || 0, m || 0, 0, 0);
+    if (t > now) return i;
+  }
+  return events.length;
 };
 
 // ============================================
@@ -316,46 +549,141 @@ const ImportanceStars: React.FC<{ level: Importance }> = ({ level }) => (
   </div>
 );
 
-// 🔥 NOW INDICATOR LINE
-const NowIndicator: React.FC = () => (
-  <tr>
-    <td colSpan={7} className="px-0 py-0">
-      <div className="relative py-1">
-        <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-lg shadow-amber-500/50" />
-      </div>
-    </td>
-  </tr>
-);
-
-// Flag Component with emoji
-const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> = ({ 
-  countryCode, 
-  size = 'md' 
-}) => {
-  const flags: Record<string, string> = {
-    US: '🇺🇸', USA: '🇺🇸',
-    GB: '🇬🇧', UK: '🇬🇧',
-    EU: '🇪🇺', EA: '🇪🇺',
-    DE: '🇩🇪', FR: '🇫🇷', IT: '🇮🇹', ES: '🇪🇸',
-    JP: '🇯🇵', CN: '🇨🇳', AU: '🇦🇺', CA: '🇨🇦',
-    CH: '🇨🇭', NZ: '🇳🇿', IL: '🇮🇱', KR: '🇰🇷',
-    IN: '🇮🇳', HK: '🇭🇰', BR: '🇧🇷', MX: '🇲🇽',
-    RU: '🇷🇺', ZA: '🇿🇦', SG: '🇸🇬', SE: '🇸🇪',
-    NO: '🇳🇴', PL: '🇵🇱', TR: '🇹🇷', ALL: '🌍',
-  };
-  
-  const sizeClasses = {
-    sm: 'text-base',
-    md: 'text-lg',
-    lg: 'text-xl'
-  };
-  
-  const flag = flags[countryCode?.toUpperCase()] || '🏳️';
-  
+// 🔥 NOW INDICATOR LINE — gold line marking the current moment in the day's timeline
+const NowIndicator: React.FC = () => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
   return (
-    <span className={`${sizeClasses[size]} leading-none`}>
-      {flag}
-    </span>
+    <tr aria-label="current time">
+      <td colSpan={7} className="px-0 py-0">
+        <div className="relative py-1.5">
+          <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-lg shadow-amber-500/50" />
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold font-mono shadow-md shadow-amber-500/40">
+            <span className="w-1.5 h-1.5 rounded-full bg-black/70 animate-pulse" />
+            NOW {hh}:{mm}
+          </span>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
+// Flag Component using flagcdn real flag images (emoji flags don't render on Windows/Chrome)
+const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> = ({ countryCode, size = 'md' }) => {
+  const dims = { sm: 'w-4 h-3', md: 'w-5 h-3.5', lg: 'w-6 h-4' };
+  const code = normalizeCountryCode(countryCode).toLowerCase();
+  return (
+    <img
+      src={`https://flagcdn.com/w40/${code}.png`}
+      srcSet={`https://flagcdn.com/w80/${code}.png 2x`}
+      alt={countryCode}
+      loading="lazy"
+      className={`${dims[size]} object-cover rounded-[2px] ring-1 ring-white/10 inline-block`}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+    />
+  );
+};
+
+const CountryFilterDropdown: React.FC<{
+  countries: typeof COUNTRIES;
+  selected: string[];
+  onToggle: (code: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+}> = ({ countries, selected, onToggle, onSelectAll, onClear }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyHandler);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-3 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-300 hover:border-amber-500/50 transition-colors"
+      >
+        <Globe size={14} className="text-neutral-400" />
+        <span>Country</span>
+        {selected.length > 0 && (
+          <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full">
+            {selected.length}
+          </span>
+        )}
+        <ChevronDown
+          size={14}
+          className={`text-neutral-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 z-50 w-64 bg-neutral-900 border border-neutral-800 rounded-lg shadow-2xl shadow-black/50 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
+            <button
+              type="button"
+              onClick={onSelectAll}
+              className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              Select all
+            </button>
+            <span className="text-[10px] text-neutral-500">{selected.length} selected</span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Scrollable country list */}
+          <div className="max-h-72 overflow-y-auto py-1">
+            {countries.map((country) => {
+              const isSelected = selected.includes(country.code);
+              return (
+                <button
+                  key={country.code}
+                  type="button"
+                  onClick={() => onToggle(country.code)}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-neutral-800/60 transition-colors"
+                >
+                  {/* Checkbox indicator */}
+                  <span
+                    className={`flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      isSelected ? 'bg-amber-500 border-amber-500' : 'border-neutral-600 bg-transparent'
+                    }`}
+                  >
+                    {isSelected && <Check size={12} className="text-white" />}
+                  </span>
+                  <CountryFlag countryCode={country.code} size="sm" />
+                  <span className={isSelected ? 'text-neutral-100' : 'text-neutral-400'}>
+                    {country.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -394,18 +722,26 @@ const TimeFilterButton: React.FC<{
   active: boolean;
   onClick: () => void;
   label: string;
-}> = ({ active, onClick, label }) => (
+  count?: number | null;
+}> = ({ active, onClick, label, count }) => (
   <button
     onClick={onClick}
     className={`
-      px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
+      flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
       ${active
         ? 'bg-amber-500 text-black font-semibold'
         : 'text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/50'
       }
     `}
   >
-    {label}
+    <span>{label}</span>
+    {count !== undefined && count !== null && (
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+        active ? 'bg-black/15 text-black' : 'bg-neutral-800 text-neutral-500'
+      }`}>
+        {count}
+      </span>
+    )}
   </button>
 );
 
@@ -432,14 +768,23 @@ const DataValue: React.FC<{
   if (value === null || value === undefined || value === '') {
     return <span className="text-neutral-600">—</span>;
   }
+
+  const displayValue =
+    typeof value === 'string'
+      ? value.replace(/&nbsp;|\u00a0/g, ' ').trim()
+      : value;
+
+  if (displayValue === '') {
+    return <span className="text-neutral-600">—</span>;
+  }
   
-  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  const numValue = typeof displayValue === 'string' ? parseFloat(displayValue) : displayValue;
   const numCompare = compareWith ? (typeof compareWith === 'string' ? parseFloat(compareWith) : compareWith) : null;
   
   let colorClass = 'text-neutral-200';
   
   if (type === 'actual' && numCompare !== null && !isNaN(numValue) && !isNaN(numCompare)) {
-    if (numValue > numCompare) colorClass = 'text-emerald-400';
+    if (numValue > numCompare) colorClass = 'text-white font-semibold';
     else if (numValue < numCompare) colorClass = 'text-red-400';
   }
   
@@ -448,7 +793,7 @@ const DataValue: React.FC<{
   
   return (
     <span className={`${colorClass} ${type === 'actual' ? 'font-semibold' : ''}`}>
-      {value}
+      {displayValue}
     </span>
   );
 };
@@ -525,96 +870,96 @@ const EconomicCalendarTable: React.FC<{
             </div>
             
             {/* Events table */}
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
-                  <th className="px-4 py-3 w-20">Time</th>
-                  <th className="px-4 py-3 w-24">Country</th>
-                  <th className="px-4 py-3 w-24">Impact</th>
-                  <th className="px-4 py-3">Event</th>
-                  <th className="px-4 py-3 w-24 text-right">Actual</th>
-                  <th className="px-4 py-3 w-24 text-right">Forecast</th>
-                  <th className="px-4 py-3 w-24 text-right">Previous</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dateEvents.map((event, index) => {
-                  const nextEvent = dateEvents[index + 1] || null;
-                  const showNowAfter = isToday && isShowingToday && shouldShowNowAfter(
-                    { date: event.date, time: event.time },
-                    nextEvent ? { date: nextEvent.date, time: nextEvent.time } : null,
-                    isToday
-                  );
-                  const isPast = isEventPast(event.date, event.time);
-                  
-                  return (
-                    <React.Fragment key={event.id}>
-                      <tr
-                        className={`
-                          border-b border-neutral-800/30 transition-colors
-                          ${event.isReleased || isPast
-                            ? 'bg-neutral-900/50 opacity-75' 
-                            : 'hover:bg-neutral-800/30'
-                          }
-                        `}
-                      >
-                        <td className="px-4 py-3 text-sm font-mono">
-                          <div className="flex items-center gap-2">
-                            <span className={isPast ? 'text-neutral-500' : 'text-neutral-300'}>
-                              {event.time || '—'}
-                            </span>
-                            {event.isReleased && (
-                              <CheckCircle2 size={12} className="text-emerald-500" />
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <CountryFlag countryCode={event.countryCode} size="md" />
-                            <span className="text-xs text-neutral-500">{event.currency}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {event.isHoliday ? (
-                            <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
-                              Holiday
-                            </span>
-                          ) : (
-                            <ImportanceStars level={event.importance} />
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-sm ${isPast ? 'text-neutral-400' : 'text-neutral-200'}`}>
-                              {event.event}
-                            </span>
-                            {event.isSpeech && (
-                              <Mic size={14} className="text-purple-400" />
-                            )}
-                            {event.isPreliminary && (
-                              <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
-                            )}
-                            {event.isRevised && (
-                              <span className="text-xs text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">R</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <DataValue value={event.actual} compareWith={event.forecast} type="actual" />
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <DataValue value={event.forecast} type="forecast" />
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm">
-                          <DataValue value={event.previous} type="previous" />
-                        </td>
-                      </tr>
-                      {showNowAfter && <NowIndicator />}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+            {(() => {
+              const nowIndex = isToday && isShowingToday ? getNowInsertIndex(dateEvents, isToday) : null;
+              return (
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+                      <th className="px-4 py-3 w-20">Time</th>
+                      <th className="px-4 py-3 w-24">Country</th>
+                      <th className="px-4 py-3 w-24">Impact</th>
+                      <th className="px-4 py-3">Event</th>
+                      <th className="px-4 py-3 w-24 text-right">Actual</th>
+                      <th className="px-4 py-3 w-24 text-right">Forecast</th>
+                      <th className="px-4 py-3 w-24 text-right">Previous</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dateEvents.map((event, index) => {
+                      const isPast = isEventPast(event.date, event.time);
+
+                      return (
+                        <React.Fragment key={event.id}>
+                          {nowIndex === index && <NowIndicator />}
+                          <tr
+                            className={`
+                              border-b border-neutral-800/30 transition-colors
+                              ${event.isReleased || isPast
+                                ? 'bg-neutral-900/50 opacity-75'
+                                : 'hover:bg-neutral-800/30'
+                              }
+                            `}
+                          >
+                            <td className="px-4 py-3 text-sm font-mono">
+                              <div className="flex items-center gap-2">
+                                <span className={isPast ? 'text-neutral-500' : 'text-neutral-300'}>
+                                  {event.time || '—'}
+                                </span>
+                                {event.isReleased && (
+                                  <CheckCircle2 size={12} className="text-amber-500/70" />
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <CountryFlag countryCode={event.countryCode} size="md" />
+                                <span className="text-xs text-neutral-500">{event.currency}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {event.isHoliday ? (
+                                <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                                  Holiday
+                                </span>
+                              ) : (
+                                <ImportanceStars level={event.importance} />
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-sm ${isPast ? 'text-neutral-400' : 'text-neutral-200'}`}>
+                                  {event.event}
+                                </span>
+                                {event.isSpeech && (
+                                  <Mic size={14} className="text-purple-400" />
+                                )}
+                                {event.isPreliminary && (
+                                  <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
+                                )}
+                                {event.isRevised && (
+                                  <span className="text-xs text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <DataValue value={event.actual} compareWith={event.forecast} type="actual" />
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <DataValue value={event.forecast} type="forecast" />
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm">
+                              <DataValue value={event.previous} type="previous" />
+                            </td>
+                          </tr>
+                          {nowIndex === dateEvents.length && index === dateEvents.length - 1 && <NowIndicator />}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
         );
       })}
@@ -975,11 +1320,11 @@ const Legend: React.FC = () => (
       <span>Preliminary</span>
     </div>
     <div className="flex items-center gap-2">
-      <span className="text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">R</span>
+      <span className="text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
       <span>Revised</span>
     </div>
     <div className="flex items-center gap-2">
-      <CheckCircle2 size={12} className="text-emerald-500" />
+      <CheckCircle2 size={12} className="text-amber-500/70" />
       <span>Released</span>
     </div>
     <div className="h-4 w-px bg-neutral-700" />
@@ -1025,8 +1370,8 @@ const EmptyState: React.FC<{ message?: string }> = ({ message = 'No events found
 
 export default function AllMarketsCalendar() {
   const [activeTab, setActiveTab] = useState<TabType>('economic');
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('today');
-  const [selectedCountry, setSelectedCountry] = useState('ALL');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('thisWeek');
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(DEFAULT_COUNTRY_CODES);
   const [showFilters, setShowFilters] = useState(false);
   const [importanceFilter, setImportanceFilter] = useState<Importance[]>([1, 2, 3]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1035,7 +1380,14 @@ export default function AllMarketsCalendar() {
   const { data, loading, error, refetch } = useCalendarData(
     activeTab,
     timeFilter,
-    selectedCountry,
+    selectedCountries,
+    importanceFilter,
+    searchQuery
+  );
+
+  const weeklyEventCount = useWeeklyEventCount(
+    activeTab,
+    selectedCountries,
     importanceFilter,
     searchQuery
   );
@@ -1046,7 +1398,7 @@ export default function AllMarketsCalendar() {
   }, []);
 
   const tabs = [
-    { id: 'economic' as TabType, label: 'Economic Calendar', icon: <Calendar size={16} />, count: data?.economic?.count },
+    { id: 'economic' as TabType, label: 'Economic Calendar', icon: <Calendar size={16} />, count: undefined },
     { id: 'holidays' as TabType, label: 'Holidays', icon: <Globe size={16} />, count: data?.holidays?.count },
     { id: 'earnings' as TabType, label: 'Earnings', icon: <TrendingUp size={16} />, count: data?.earnings?.count },
     { id: 'dividends' as TabType, label: 'Dividends', icon: <DollarSign size={16} />, count: data?.dividends?.count },
@@ -1062,6 +1414,15 @@ export default function AllMarketsCalendar() {
     { id: 'thisWeek' as TimeFilter, label: 'This Week' },
     { id: 'nextWeek' as TimeFilter, label: 'Next Week' },
   ];
+
+  const toggleCountry = (countryCode: string) => {
+    setSelectedCountries((current) => {
+      if (current.includes(countryCode)) {
+        return current.filter((code) => code !== countryCode);
+      }
+      return [...current, countryCode];
+    });
+  };
 
   return (
     <div className="min-h-screen bg-black">
@@ -1108,6 +1469,7 @@ export default function AllMarketsCalendar() {
                 active={timeFilter === filter.id}
                 onClick={() => setTimeFilter(filter.id)}
                 label={filter.label}
+                count={activeTab !== 'economic' && filter.id === 'thisWeek' ? weeklyEventCount : undefined}
               />
             ))}
           </div>
@@ -1137,23 +1499,13 @@ export default function AllMarketsCalendar() {
               )}
             </div>
 
-            <div className="relative flex items-center">
-              <div className="absolute left-3 pointer-events-none">
-                <CountryFlag countryCode={selectedCountry} size="sm" />
-              </div>
-              <select
-                value={selectedCountry}
-                onChange={(e) => setSelectedCountry(e.target.value)}
-                className="appearance-none pl-10 pr-10 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-              >
-                {COUNTRIES.map((country) => (
-                  <option key={country.code} value={country.code}>
-                    {country.flag} {country.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
-            </div>
+            <CountryFilterDropdown
+              countries={COUNTRIES}
+              selected={selectedCountries}
+              onToggle={toggleCountry}
+              onSelectAll={() => setSelectedCountries(COUNTRIES.map((c) => c.code))}
+              onClear={() => setSelectedCountries([])}
+            />
 
             <button
               onClick={() => refetch()}

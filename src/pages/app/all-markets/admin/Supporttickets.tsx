@@ -7,6 +7,7 @@
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import {
   MessageCircle,
   Clock,
@@ -32,7 +33,7 @@ import {
   Save,
   UserX,
   Target,
-Crown,
+  Crown,
   Sword,
   FileText,
   TrendingUp,
@@ -40,6 +41,7 @@ Crown,
   Download,
   Calendar,
   BarChart3,
+  Bot,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -48,6 +50,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import SupportAiDrafts from './SupportAiDrafts';
 
 // ==================== INTERFACES ====================
 
@@ -78,6 +81,9 @@ interface Ticket {
   resolved_at: string | null;
   last_customer_message_at: string | null;
   last_admin_message_at: string | null;
+  category?: string | null;
+  tags?: string[] | null;
+  metadata?: Record<string, any> | null;
 }
 
 interface SystemUpdateMetadata {
@@ -118,7 +124,7 @@ interface ChurnedUser {
   notes: string | null;
 }
 
-type TabType = 'support' | 'updates' | 'churned';
+type TabType = 'support' | 'ai_drafts' | 'updates' | 'churned';
 type TargetGroup = 'all' | 'trading_journal' | 'war_zone' | 'top_secret';
 
 const TARGET_GROUPS: { key: TargetGroup; label: string; icon: any; color: string }[] = [
@@ -146,6 +152,7 @@ export default function SupportTickets() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [response, setResponse] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('awaiting');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'Billing' | 'Bug' | 'Feature' | 'Frustrated' | 'Technical' | 'Question' | 'Feedback' | 'Other'>('all');
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [responding, setResponding] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
@@ -831,6 +838,31 @@ toast.success('Update deleted');
     return config[status as keyof typeof config] || config.open;
   }
 
+  type ProblemType = 'Billing' | 'Bug' | 'Feature' | 'Frustrated' | 'Technical' | 'Question' | 'Feedback' | 'Other';
+
+  function getTicketProblemType(t: Ticket): ProblemType {
+    const tags = Array.isArray(t.tags) ? t.tags : [];
+    if (tags.includes('billing') || t.category === 'payment') return 'Billing';
+    if (tags.includes('bug')) return 'Bug';
+    if (tags.includes('feature_request')) return 'Feature';
+    if (tags.includes('frustrated')) return 'Frustrated';
+    if (t.category === 'technical') return 'Technical';
+    if (t.category === 'question') return 'Question';
+    if (t.category === 'feedback') return 'Feedback';
+    return 'Other';
+  }
+
+  const PROBLEM_TYPE_STYLES: Record<ProblemType, string> = {
+    Billing:    'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    Bug:        'bg-red-500/15 text-red-300 border-red-500/30',
+    Feature:    'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    Frustrated: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+    Technical:  'bg-blue-500/15 text-blue-300 border-blue-500/30',
+    Question:   'bg-sky-500/15 text-sky-300 border-sky-500/30',
+    Feedback:   'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    Other:      'bg-gray-500/15 text-gray-300 border-gray-500/30',
+  };
+
   function getTypeConfig(type: SystemUpdate['type']) {
     const configs = {
       info: {
@@ -955,6 +987,18 @@ toast.success('Update deleted');
     all: ticketStats.total,
   };
 
+  // ==================== CATEGORY FILTER ====================
+
+  const categoryTypeCounts = tickets.reduce<Record<string, number>>((acc, t) => {
+    const pt = getTicketProblemType(t);
+    acc[pt] = (acc[pt] || 0) + 1;
+    return acc;
+  }, {});
+
+  const visibleTickets = categoryFilter === 'all'
+    ? tickets
+    : tickets.filter((t) => getTicketProblemType(t) === categoryFilter);
+
   // ==================== RENDER ====================
 
   return (
@@ -963,19 +1007,19 @@ toast.success('Update deleted');
       description="Manage support tickets, system updates, and user activity"
     >
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 mb-6 bg-[#111111] border border-gray-800 rounded-xl p-2 w-fit">
+      <div className="flex items-center gap-1.5 mb-6 bg-[#111111] border border-gray-800 rounded-xl p-1.5 w-fit">
         <button
           onClick={() => setActiveTab('support')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'support'
               ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
               : 'text-gray-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          <MessageCircle className="h-4 w-4" />
+          <MessageCircle className="h-3.5 w-3.5" />
           Support Tickets
           {awaitingCount > 0 && (
-            <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+            <span className={`ml-0.5 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center ${
               activeTab === 'support' ? 'bg-black/20' : 'bg-red-500 text-white animate-pulse'
             }`}>
               {awaitingCount}
@@ -983,17 +1027,28 @@ toast.success('Update deleted');
           )}
         </button>
         <button
+          onClick={() => setActiveTab('ai_drafts')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            activeTab === 'ai_drafts'
+              ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          AI Drafts
+        </button>
+        <button
           onClick={() => setActiveTab('updates')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'updates'
               ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
               : 'text-gray-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-3.5 w-3.5" />
           System Updates
-{(updateStats.active + reportStats.total) > 0 && (
-            <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+          {(updateStats.active + reportStats.total) > 0 && (
+            <span className={`ml-0.5 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center ${
               activeTab === 'updates' ? 'bg-black/20' : 'bg-blue-500/20 text-blue-400'
             }`}>
               {updateStats.active + reportStats.total}
@@ -1002,16 +1057,16 @@ toast.success('Update deleted');
         </button>
         <button
           onClick={() => setActiveTab('churned')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
             activeTab === 'churned'
               ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-black shadow-lg'
               : 'text-gray-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          <UserX className="h-4 w-4" />
+          <UserX className="h-3.5 w-3.5" />
           Churned Users
           {churnedStats.total > 0 && (
-            <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+            <span className={`ml-0.5 h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center ${
               activeTab === 'churned' ? 'bg-black/20' : 'bg-red-500/20 text-red-400'
             }`}>
               {churnedStats.total}
@@ -1020,134 +1075,149 @@ toast.success('Update deleted');
         </button>
       </div>
 
+      {/* ==================== AI DRAFTS TAB ==================== */}
+      {activeTab === 'ai_drafts' && (
+        <SupportAiDrafts embedded />
+      )}
+
       {/* ==================== SUPPORT TAB ==================== */}
       {activeTab === 'support' && (
         <>
           {/* Stats Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Total</p>
-                  <p className="text-2xl font-bold text-white">{ticketStats.total}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <MessageCircle className="h-6 w-6 text-blue-400" />
-                </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <MessageCircle className="h-4 w-4 text-blue-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Total</p>
               </div>
+              <p className="text-lg font-bold text-white">{ticketStats.total}</p>
             </div>
 
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Open</p>
-                  <p className="text-2xl font-bold text-white">{ticketStats.open}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-yellow-400" />
-                </div>
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Clock className="h-4 w-4 text-yellow-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Open</p>
               </div>
+              <p className="text-lg font-bold text-white">{ticketStats.open}</p>
             </div>
 
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Avg Response</p>
-                  <p className="text-2xl font-bold text-white">{ticketStats.avgResponseTime}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <Zap className="h-6 w-6 text-green-400" />
-                </div>
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Zap className="h-4 w-4 text-green-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Avg Response</p>
               </div>
+              <p className="text-lg font-bold text-white">{ticketStats.avgResponseTime}</p>
             </div>
 
-            <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Unread</p>
-                  <p className="text-2xl font-bold text-white">{unreadCount}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center">
-                  <AlertCircle className="h-6 w-6 text-red-400" />
-                </div>
+            <div className="bg-[#111111] border border-gray-800 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <p className="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Unread</p>
               </div>
+              <p className="text-lg font-bold text-white">{unreadCount}</p>
             </div>
 
-            <div className="bg-[#111111] border border-orange-500 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-orange-400 mb-1 font-semibold">Awaiting Response</p>
-                  <p className="text-2xl font-bold text-orange-400">{awaitingCount}</p>
-                </div>
-                <div className="h-12 w-12 rounded-full bg-orange-500/10 flex items-center justify-center animate-pulse">
-                  <AlertTriangle className="h-6 w-6 text-orange-400" />
-                </div>
+            <div className="bg-[#111111] border border-orange-500/60 rounded-lg p-3">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <AlertTriangle className="h-4 w-4 text-orange-400 animate-pulse" />
+                <p className="text-[10px] uppercase tracking-wide text-orange-400/80 font-medium">Awaiting</p>
               </div>
+              <p className="text-lg font-bold text-orange-400">{awaitingCount}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-400px)] min-h-[600px]">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-320px)] min-h-[580px]">
             {/* Conversations List */}
             <div className="lg:col-span-1 bg-[#111111] border border-gray-800 rounded-xl overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-gray-800 bg-zinc-900/50">
-                <div className="flex items-center justify-between mb-4">
+              <div className="p-3 border-b border-gray-800 bg-zinc-900/50">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
-                    <h2 className="text-lg font-bold text-white">Conversations</h2>
+                    <MessageCircle className="h-4 w-4 text-[#D4AF37]" />
+                    <h2 className="text-sm font-bold text-white">Conversations</h2>
                   </div>
                   {unreadCount > 0 && (
-                    <Badge className="bg-red-500 text-white text-xs px-2 py-0.5 animate-pulse">
+                    <Badge className="bg-red-500 text-white text-[10px] px-1.5 py-0 animate-pulse">
                       {unreadCount}
                     </Badge>
                   )}
                 </div>
 
-                {/* Filter Tabs */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* Segmented filter control */}
+                <div className="inline-flex bg-zinc-900/60 border border-gray-800 p-1 rounded-lg">
                   {[
-                    { key: 'awaiting', label: 'Awaiting Response', count: awaitingCount },
+                    { key: 'awaiting', label: 'Awaiting', count: awaitingCount },
                     { key: 'responded', label: 'Responded', count: filterCounts.responded },
                     { key: 'all', label: 'All', count: filterCounts.all },
-                  ].map((tab) => (
+                  ].map((seg) => (
                     <button
-                      key={tab.key}
-                      onClick={() => setStatusFilter(tab.key)}
-                      className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                        statusFilter === tab.key
-                          ? 'bg-[#D4AF37] text-black shadow-lg'
-                          : 'bg-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-700'
+                      key={seg.key}
+                      onClick={() => setStatusFilter(seg.key)}
+                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition-all ${
+                        statusFilter === seg.key
+                          ? 'bg-[#D4AF37] text-black shadow'
+                          : 'text-gray-400 hover:text-white'
                       }`}
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="font-bold text-base">{tab.count}</span>
-                        <span className="text-[10px] opacity-80 leading-tight">{tab.label}</span>
-                      </div>
+                      {seg.label}
+                      <span className={`ml-1.5 text-[10px] font-normal ${statusFilter === seg.key ? 'text-black/60' : 'text-gray-600'}`}>
+                        {seg.count}
+                      </span>
                     </button>
                   ))}
+                </div>
+
+                {/* Category Filter Chips */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <button
+                    onClick={() => setCategoryFilter('all')}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border font-medium transition-all ${
+                      categoryFilter === 'all'
+                        ? 'bg-zinc-700 text-white border-zinc-600 ring-1 ring-[#D4AF37]/40'
+                        : 'bg-zinc-800/60 text-gray-500 border-zinc-700/60 hover:text-white hover:bg-zinc-700/60'
+                    }`}
+                  >
+                    All ({tickets.length})
+                  </button>
+                  {(Object.entries(categoryTypeCounts) as [string, number][])
+                    .filter(([, count]) => count > 0)
+                    .map(([pt, count]) => (
+                      <button
+                        key={pt}
+                        onClick={() => setCategoryFilter(pt as typeof categoryFilter)}
+                        className={`text-[11px] px-2.5 py-1 rounded-full border font-medium transition-all ${
+                          categoryFilter === pt
+                            ? `${PROBLEM_TYPE_STYLES[pt as keyof typeof PROBLEM_TYPE_STYLES]} ring-1 ring-[#D4AF37]`
+                            : 'bg-zinc-800/60 text-gray-500 border-zinc-700/60 hover:text-white hover:bg-zinc-700/60'
+                        }`}
+                      >
+                        {pt} ({count})
+                      </button>
+                    ))}
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto">
                 {loadingTickets ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
+                  <div className="p-4">
+                    <SkeletonTable />
                   </div>
                 ) : tickets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400 p-4">
-                    <MessageCircle className="h-12 w-12 mb-3 opacity-30" />
-                    <p className="text-sm font-medium">No conversations</p>
-                    <p className="text-xs text-gray-500 mt-1">
+                  <div className="flex flex-col items-center justify-center py-10 text-gray-400 px-4">
+                    <MessageCircle className="h-10 w-10 mb-2 opacity-25" />
+                    <p className="text-xs font-medium text-gray-400">No conversations</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">
                       {statusFilter === 'awaiting' && 'All caught up!'}
                       {statusFilter === 'responded' && 'No pending responses'}
                       {statusFilter === 'all' && 'No conversations yet'}
                     </p>
                   </div>
                 ) : (
-                  tickets.map((ticket) => {
+                  visibleTickets.map((ticket) => {
                     const statusBadge = getStatusBadge(ticket.status);
                     const StatusIcon = statusBadge.icon;
                     const isUnread = !ticket.is_read;
                     const needsResponse = ticketNeedsResponse(ticket);
+                    const problemType = getTicketProblemType(ticket);
 
                     return (
                       <button
@@ -1160,7 +1230,7 @@ toast.success('Update deleted');
                         {isUnread && (
                           <div className="absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                         )}
-                        
+
                         {needsResponse && (
                           <div className="absolute left-2 top-2 w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
                         )}
@@ -1179,12 +1249,17 @@ toast.success('Update deleted');
                               <p className="text-xs text-gray-500 truncate">{ticket.user_email}</p>
                             </div>
                           </div>
-                          <Badge className={`${statusBadge.bg} ${statusBadge.text} text-[9px] px-1.5 py-0 h-5 flex-shrink-0`}>
-                            <StatusIcon className="h-2.5 w-2.5 mr-0.5" />
-                            {statusBadge.label}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <Badge className={`${statusBadge.bg} ${statusBadge.text} text-[9px] px-1.5 py-0 h-5`}>
+                              <StatusIcon className="h-2.5 w-2.5 mr-0.5" />
+                              {statusBadge.label}
+                            </Badge>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold ${PROBLEM_TYPE_STYLES[problemType]}`}>
+                              {problemType}
+                            </span>
+                          </div>
                         </div>
-                        
+
                         <p className="text-xs text-gray-400 mb-2 line-clamp-2 ml-4 leading-relaxed">
                           {ticket.subject}
                         </p>
@@ -1258,6 +1333,20 @@ toast.success('Update deleted');
                     <div className="mt-3 px-3 py-2 bg-zinc-800/50 rounded-lg border border-zinc-700">
                       <p className="text-xs text-gray-400 mb-0.5">Subject</p>
                       <p className="text-sm text-white font-medium">{selectedTicket.subject}</p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${PROBLEM_TYPE_STYLES[getTicketProblemType(selectedTicket)]}`}>
+                          {getTicketProblemType(selectedTicket)}
+                        </span>
+                        {selectedTicket.priority && selectedTicket.priority !== 'normal' && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
+                            selectedTicket.priority === 'high' || selectedTicket.priority === 'urgent'
+                              ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                              : 'bg-gray-500/15 text-gray-300 border-gray-500/30'
+                          }`}>
+                            {selectedTicket.priority} priority
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1364,13 +1453,11 @@ toast.success('Update deleted');
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center mb-4 shadow-inner">
-                    <MessageCircle className="h-12 w-12 opacity-30" />
-                  </div>
-                  <p className="text-lg font-semibold mb-2">No conversation selected</p>
-                  <p className="text-sm text-gray-500 text-center max-w-xs">
-                    Choose a conversation from the list to view and respond
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
+                  <MessageCircle className="h-10 w-10 opacity-20" />
+                  <p className="text-sm font-medium text-gray-500">No conversation selected</p>
+                  <p className="text-xs text-gray-600 text-center max-w-[200px] leading-relaxed">
+                    Pick a conversation from the list
                   </p>
                 </div>
               )}
@@ -1531,8 +1618,8 @@ toast.success('Update deleted');
           {/* Updates List */}
           <div className="bg-[#111111] border border-gray-800 rounded-xl overflow-hidden">
             {loadingUpdates ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
+              <div className="p-4">
+                <SkeletonTable />
               </div>
             ) : updates.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-400">
@@ -1902,8 +1989,8 @@ toast.success('Update deleted');
             </div>
 
             {loadingChurned ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
+              <div className="p-4">
+                <SkeletonTable />
               </div>
             ) : churnedUsers.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-gray-400">

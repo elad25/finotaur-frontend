@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliatePayoutsSkeletonPage } from '@/components/skeletons/AffiliatePayoutsSkeleton';
 
 // ============================================
 // TYPES
@@ -336,11 +338,7 @@ export default function AffiliatePayouts() {
   const canRequestPayout = balance.availableBalance >= MIN_PAYOUT_AMOUNT && balance.paypalEmail;
 
   if (loading && !affiliateId) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
-      </div>
-    );
+    return <AffiliatePayoutsSkeletonPage />;
   }
 
   // ============================================
@@ -545,9 +543,7 @@ export default function AffiliatePayouts() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#C9A646]"></div>
-          </div>
+          <SkeletonTable rows={6} cols={6} />
         ) : payouts.length === 0 ? (
           <div className="text-center py-16">
             <Wallet className="h-12 w-12 text-gray-600 mx-auto mb-3" />

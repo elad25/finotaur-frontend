@@ -5,7 +5,7 @@
 // Tokens-only: zero hardcoded hex colours.
 // ================================================
 
-import { TrendingUp, Award, Target, Zap, Quote, Star } from "lucide-react";
+import { Quote, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
 import { SectionShell } from "./_shared/SectionShell";
@@ -22,9 +22,6 @@ interface Testimonial {
   avatar: string;
   text: string;
   highlight: string;
-  metric?: string;
-  metricValue?: string;
-  icon?: React.ElementType;
 }
 
 // ---------------------------------------------------------------------------
@@ -38,9 +35,6 @@ const testimonials: Testimonial[] = [
     avatar: "JK",
     text: "The writing quality and depth of analysis here is something I haven't found anywhere else. It's like getting a CFA breakdown in every report. Finotaur changed how I approach markets completely.",
     highlight: "something I haven't found anywhere else",
-    metric: "Win Rate",
-    metricValue: "+31%",
-    icon: TrendingUp,
   },
   {
     id: 2,
@@ -49,9 +43,6 @@ const testimonials: Testimonial[] = [
     avatar: "RG",
     text: "As someone who traded blindly for years, Finotaur is like someone turned on the lights in a dark room. The AI insights plus War Zone every morning — I can't imagine trading without it now.",
     highlight: "turned on the lights in a dark room",
-    metric: "Monthly P&L",
-    metricValue: "+$5.8K",
-    icon: Target,
   },
   {
     id: 3,
@@ -60,20 +51,14 @@ const testimonials: Testimonial[] = [
     avatar: "AT",
     text: "I started with the 14-day free trial and canceled all my other subscriptions. The AI analyzer alone is worth 10x the price. TOP SECRET reports are institutional-grade. This is the real deal.",
     highlight: "canceled all my other subscriptions",
-    metric: "Consistency",
-    metricValue: "16 Green Weeks",
-    icon: Award,
   },
   {
     id: 4,
     name: "David Chen",
     role: "Funded Account Manager",
     avatar: "DC",
-    text: "Finotaur showed me I was overtrading Mondays by 3x. Fixed that one pattern and added $4,200 to my P&L in 30 days. The AI insights are legitimately game-changing.",
+    text: "Finotaur showed me I was overtrading Mondays by 3x. Fixing that one pattern reshaped how I trade. The AI insights are legitimately game-changing.",
     highlight: "legitimately game-changing",
-    metric: "P&L Increase",
-    metricValue: "+$4.2K",
-    icon: Zap,
   },
   {
     id: 5,
@@ -82,9 +67,6 @@ const testimonials: Testimonial[] = [
     avatar: "SM",
     text: "Finally someone who understands I don't need more data, I need conclusions. These briefings save me hours every day. The best investment I made this year.",
     highlight: "save me hours every day",
-    metric: "Time Saved",
-    metricValue: "3hrs/day",
-    icon: TrendingUp,
   },
   {
     id: 6,
@@ -93,9 +75,6 @@ const testimonials: Testimonial[] = [
     avatar: "MR",
     text: "I pay thousands per month for research subscriptions. Finotaur beats them all in value-for-money. The macro analysis here is better than anything I got from Bloomberg Terminal.",
     highlight: "beats them all in value-for-money",
-    metric: "ROI",
-    metricValue: "10x Value",
-    icon: Award,
   },
 ];
 
@@ -121,8 +100,6 @@ function highlightText(text: string, highlight: string): React.ReactNode {
 // TestimonialCard
 // ---------------------------------------------------------------------------
 function TestimonialCard({ t }: { t: Testimonial }) {
-  const Icon = t.icon;
-
   return (
     <div
       className={[
@@ -167,17 +144,6 @@ function TestimonialCard({ t }: { t: Testimonial }) {
       <p className="text-ink-secondary text-sm leading-relaxed mb-4">
         &ldquo;{highlightText(t.text, t.highlight)}&rdquo;
       </p>
-
-      {/* Metric badge */}
-      {t.metric && t.metricValue && (
-        <div className="flex items-center gap-3 mb-4 py-3 px-4 rounded-lg bg-gold-border border border-gold-muted">
-          {Icon && <Icon className="w-5 h-5 text-gold-primary" />}
-          <div>
-            <div className="text-[10px] text-ink-tertiary uppercase tracking-wider">{t.metric}</div>
-            <div className="text-lg font-bold text-gold-primary">{t.metricValue}</div>
-          </div>
-        </div>
-      )}
 
       {/* Author */}
       <div className="flex items-center gap-3">
@@ -236,11 +202,13 @@ const Testimonials = () => {
       <div className="text-center mb-14">
         <SectionEyebrow>From Our Members</SectionEyebrow>
         <SectionTitle gradient="split">
-          Real Traders.{" "}
-          <span className="text-gold-primary">Real Results.</span>
+          What Our Members Say
         </SectionTitle>
         <p className="text-lg text-ink-secondary max-w-2xl mx-auto mt-2">
           Join hundreds of traders who turned data into discipline — and discipline into consistency.
+        </p>
+        <p className="text-xs text-ink-tertiary max-w-xl mx-auto mt-3">
+          Illustrative testimonials. Individual results vary and are not a guarantee of future performance.
         </p>
       </div>
 
@@ -296,7 +264,7 @@ const Testimonials = () => {
             ))}
           </div>
           <div className="text-left ml-2">
-            <div className="text-ink-primary font-semibold text-sm">847+ Elite Traders</div>
+            <div className="text-ink-primary font-semibold text-sm">Join Our Growing Community</div>
             <div className="text-xs text-ink-tertiary">Trading smarter every day</div>
           </div>
         </div>

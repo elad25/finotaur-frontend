@@ -15,7 +15,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, RefreshCw, Loader2 } from 'lucide-react';
+import { Calendar, RefreshCw } from 'lucide-react';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiUpcomingEventsSkeletonPage } from '@/components/skeletons/AiUpcomingEventsSkeleton';
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Card } from '@/components/ds/Card';
@@ -61,11 +63,7 @@ export default function UpcomingEventsView() {
 
   // ─── Gating ────────────────────────────────────────────────────────────
   if (subLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-6 h-6 text-gold-primary animate-spin" />
-      </div>
-    );
+    return <AiUpcomingEventsSkeletonPage />;
   }
 
   if (!hasAccess) {

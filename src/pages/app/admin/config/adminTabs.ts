@@ -11,17 +11,17 @@
 import {
   LayoutDashboard,
   Users,
-  Activity,
   CreditCard,
   Mail,
-  Rocket,
   Handshake,
-  Sprout,
   Ticket,
-  Plug,
   Crown,
-  TrendingUp,
   Brain,
+  Search,
+  Sparkles,
+  MessageSquare,
+  Target,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -42,9 +42,18 @@ export interface AdminTab {
 
 export const ADMIN_TABS: AdminTab[] = [
   {
+    id: 'cockpit',
+    label: 'Founder Cockpit',
+    path: '/app/admin/cockpit',
+    icon: Target,
+    phase: 2,
+    enabled: true,
+    description: 'AI advisor + all accumulated business data in one place',
+  },
+  {
     id: 'overview',
     label: 'Overview',
-    path: '/app/admin',
+    path: '/app/admin/overview',
     icon: LayoutDashboard,
     phase: 0,
     enabled: true,
@@ -60,16 +69,8 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'User list, profiles, subscription state, ban / impersonate',
     mountedFrom: 'pages/app/journal/admin/Users.tsx',
   },
-  {
-    id: 'analytics',
-    label: 'Usage Analytics',
-    path: '/app/admin/analytics',
-    icon: Activity,
-    phase: 1,
-    enabled: true,
-    description: 'Activity heatmaps, top traders, feature usage',
-    mountedFrom: 'pages/app/journal/admin/Analytics.tsx',
-  },
+  // 'analytics' sidebar entry removed — Usage Analytics content folded into Overview.
+  // Route /app/admin/analytics still exists in AdminCRMShell.tsx for deep links.
   {
     id: 'ai-usage',
     label: 'AI Consumption',
@@ -78,6 +79,34 @@ export const ADMIN_TABS: AdminTab[] = [
     phase: 2,
     enabled: true,
     description: 'Per-user AI usage leaderboard + per-tier cost averages',
+  },
+  {
+    id: 'voice',
+    label: 'Customer Voice',
+    path: '/app/admin/voice',
+    icon: MessageSquare,
+    phase: 2,
+    enabled: true,
+    description: 'Product-feedback intelligence — requests, churn themes, bugs, pain points',
+  },
+  {
+    id: 'growth',
+    label: 'Growth',
+    path: '/app/admin/growth',
+    icon: TrendingUp,
+    phase: 2,
+    enabled: true,
+    description: 'Traffic, sources, funnel and signup attribution',
+  },
+  {
+    id: 'seo',
+    label: 'SEO',
+    path: '/app/admin/seo',
+    icon: Search,
+    phase: 5,
+    enabled: true,
+    description: 'Organic traffic analytics for /research/* pages',
+    planned: false,
   },
   {
     id: 'billing',
@@ -99,26 +128,8 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'Newsletter admin, subscriber management, broadcasts',
     mountedFrom: 'pages/app/journal/admin/NewsletterAdmin.tsx',
   },
-  {
-    id: 'leads',
-    label: 'Leads & Funnel',
-    path: '/app/admin/leads',
-    icon: Sprout,
-    phase: 2,
-    enabled: true,
-    description: 'Lead scoring, source attribution, conversion funnel',
-    planned: true,
-  },
-  {
-    id: 'onboarding',
-    label: 'Onboarding',
-    path: '/app/admin/onboarding',
-    icon: Rocket,
-    phase: 3,
-    enabled: true,
-    description: 'Activation milestones, time-to-value, funnel drop-off',
-    planned: true,
-  },
+  // 'leads' and 'onboarding' sidebar entries removed — empty SOON placeholders.
+  // Routes /app/admin/leads and /app/admin/onboarding still exist in AdminCRMShell.tsx.
   {
     id: 'affiliates',
     label: 'Affiliates',
@@ -139,16 +150,8 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'Tickets, AI drafts, knowledge base',
     mountedFrom: 'pages/app/all-markets/admin/Supporttickets.tsx',
   },
-  {
-    id: 'integrations',
-    label: 'Integrations',
-    path: '/app/admin/integrations',
-    icon: Plug,
-    phase: 5,
-    enabled: true,
-    description: 'Whop, Resend, Slack, Discord, WhatsApp',
-    planned: true,
-  },
+  // 'integrations' sidebar entry removed — empty SOON placeholder.
+  // Route /app/admin/integrations still exists in AdminCRMShell.tsx.
   {
     id: 'tools',
     label: 'Admin Tools',
@@ -161,14 +164,16 @@ export const ADMIN_TABS: AdminTab[] = [
     mountedFrom: 'pages/app/journal/admin/maintenance/page.tsx',
   },
   {
-    id: 'executive',
-    label: 'Executive Dashboard',
-    path: '/app/admin/executive',
-    icon: TrendingUp,
+    id: 'ai-command',
+    label: 'AI Command Center',
+    path: '/app/admin/ai',
+    icon: Sparkles,
     phase: 2,
     enabled: true,
-    description: 'Forecasting, anomaly detection, KPI alerts',
+    description: 'AI-generated growth & retention recommendations — approve, dismiss, or snooze',
   },
+  // 'executive' sidebar entry removed — forecast content folded into OverviewTab.
+  // Route /app/admin/executive still exists in AdminCRMShell.tsx for deep links.
 ];
 
 export function findTabByPath(pathname: string): AdminTab | undefined {
@@ -179,7 +184,6 @@ export function findTabByPath(pathname: string): AdminTab | undefined {
   // resolve to the most specific tab rather than the parent prefix.
   let best: AdminTab | undefined;
   for (const t of ADMIN_TABS) {
-    if (t.path === '/app/admin') continue;
     if (!pathname.startsWith(t.path)) continue;
     if (!best || t.path.length > best.path.length) best = t;
   }

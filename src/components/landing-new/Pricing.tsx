@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
 // PRICING — COMPACT — 4 Plans
-// Free | Core ($59) | Finotaur ($109 FEATURED) | Enterprise ($500)
+// Free | Core ($59) | Finotaur ($109 FEATURED) | Copilot ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -60,6 +60,7 @@ const plans: Plan[] = [
     description: "Full market intelligence tools",
     trialDays: 14,
     features: [
+      "📚 Full Finotaur Academy (300+ lessons)",
       "Stock Analyzer (5 analyses/day)",
       "Sector Analyzer (3 sectors/month)",
       "Flow Scanner",
@@ -102,23 +103,23 @@ const plans: Plan[] = [
   },
   {
     id: "enterprise",
-    name: "Enterprise",
-    monthlyPrice: "$500",
-    yearlyPrice: "$500",
-    yearlyMonthlyEquivalent: "$500",
-    description: "For serious operations",
+    name: "Copilot",
+    monthlyPrice: "$200",
+    yearlyPrice: "$2,000",
+    yearlyMonthlyEquivalent: "$167",
+    description: "Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.",
+    badge: "AI Portfolio Manager",
+    savings: "Save 17%",
     features: [
       "Everything in Finotaur, plus:",
-      "Unlimited Stock Analyses",
-      "My Portfolio (exclusive)",
-      "Dedicated account manager",
-      "Custom integrations",
-      "White-label options",
-      "Unlimited API access",
-      "Custom SLA",
-      "Team management",
+      "AI Portfolio Manager that invests & trades alongside you",
+      "Stop flying blind — 24/7 AI oversight of every position you hold",
+      "My Portfolio — live tracking & mark-to-market of your real book",
+      "Proactive AI risk detection & alerts on your holdings",
+      "Daily AI portfolio brief with actionable guidance",
+      "Priority support",
     ],
-    cta: "Contact Sales",
+    cta: "Get Copilot",
     featured: false,
   },
 ];
@@ -130,8 +131,7 @@ const Pricing = () => {
 
   const handlePlanClick = (planId: string) => {
     if (planId === "enterprise") {
-      window.location.href =
-        "mailto:enterprise@finotaur.com?subject=Enterprise Plan Inquiry";
+      navigate(`/auth/register?plan=enterprise&interval=${billingInterval}`);
       return;
     }
     if (planId === "free") {
@@ -143,8 +143,6 @@ const Pricing = () => {
 
   const getDisplayPrice = (plan: Plan) => {
     if (plan.isFree) return { price: "Free", period: "" };
-    if (plan.id === "enterprise")
-      return { price: plan.monthlyPrice, period: "/month" };
     if (billingInterval === "monthly")
       return { price: plan.monthlyPrice, period: "/month" };
     return {

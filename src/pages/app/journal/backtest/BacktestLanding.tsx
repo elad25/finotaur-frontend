@@ -1,12 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
-import { 
-  FlaskConical, TrendingUp, Target, Zap, Shield, Crown, 
+import {
+  FlaskConical, TrendingUp, Target, Zap, Shield, Crown,
   BarChart3, Brain, LineChart, Activity, CheckCircle2,
   Sparkles, Rocket, Lock, ArrowRight, Database, Code,
   PlayCircle, Layers, Settings
 } from 'lucide-react';
 import { useEffect } from 'react';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { JournalBacktestLandingSkeletonPage } from "@/components/skeletons/JournalBacktestLandingSkeleton";
 
 /**
  * 🎯 BACKTEST LANDING PAGE - Premium Feature Lock
@@ -28,11 +30,7 @@ export default function BacktestLanding() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
-      </div>
-    );
+    return <JournalBacktestLandingSkeletonPage />;
   }
 
   return (

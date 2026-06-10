@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { ChevronRight, RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PriceGate } from '@/components/compliance/PriceGate';
 
 // ============ TYPES ============
 interface Mover {
@@ -420,10 +421,15 @@ export default function Movers() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="py-4">
-        {ASSET_ORDER.map(assetType => renderAssetSection(assetType))}
-      </div>
+      {/* Content — raw Polygon price data; gated until licensed */}
+      <PriceGate
+        title="Market movers unavailable"
+        description="Top gainers and losers across asset classes will be available soon."
+      >
+        <div className="py-4">
+          {ASSET_ORDER.map(assetType => renderAssetSection(assetType))}
+        </div>
+      </PriceGate>
     </div>
   );
 }

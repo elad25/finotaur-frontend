@@ -11,13 +11,19 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || '';
-    
+    const accessToken = session?.access_token || '';
+
     console.log('[AI Copilot API] Auth header - userId:', userId ? userId.substring(0, 8) + '...' : 'MISSING');
-    
-    return {
+
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-user-id': userId,
     };
+    // The Anthropic chat endpoint (/api/ai/chat/stream-anthropic) authenticates via
+    // a Supabase Bearer JWT (requireAuthJWT), not the legacy x-user-id header.
+    // Send both so every AI endpoint authenticates correctly.
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+    return headers;
   } catch (error) {
     console.error('[AI Copilot API] Failed to get session:', error);
     return {
@@ -68,7 +74,11 @@ interface ChatResponse {
 
 interface StreamCallbacks {
   message: string;
+  /** Page-aware context (route + page-specific data) so FINO can ground its answer. */
+  context?: unknown;
   conversationId?: string | null;
+  /** User tier string from usage info — used for cost-safe endpoint routing. */
+  tier?: string;
   onConversation?: (id: string) => void;
   onChunk?: (chunk: string) => void;
   onSources?: (sources: any[]) => void;
@@ -136,6 +146,7 @@ export const aiCopilotApi = {
   async chatStream(options: StreamCallbacks): Promise<void> {
     const {
       message,
+      context,
       conversationId,
       onConversation,
       onChunk,
@@ -144,13 +155,11 @@ export const aiCopilotApi = {
       onError,
       signal,
     } = options;
-    
+
     const headers = await getAuthHeaders();
 
-    // Phase 5 N3 — flag-gated Anthropic chat path (no tools, prompt caching on system block).
-    // Default OFF; the legacy OpenAI orchestrator path (tools + RAG) remains the production behaviour.
-    const useAnthropic = import.meta.env.VITE_ENABLE_ANTHROPIC_AIASSISTANT === 'true';
-    const chatPath = useAnthropic ? '/api/ai/chat/stream-anthropic' : '/api/ai/chat/stream';
+    // All users use the enhanced Anthropic chat (page + journal aware); model tier is chosen server-side.
+    const chatPath = '/api/ai/chat/stream-anthropic';
 
     const response = await fetch(`${API_BASE}${chatPath}`, {
       method: 'POST',
@@ -158,6 +167,7 @@ export const aiCopilotApi = {
       body: JSON.stringify({
         message,
         conversationId,
+        pageContext: context ?? undefined,
       }),
       signal,
     });

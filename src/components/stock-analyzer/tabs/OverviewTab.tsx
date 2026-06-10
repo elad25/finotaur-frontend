@@ -22,7 +22,9 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { Skeleton } from '@/components/ds/Skeleton';
 import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
+import { FinoInsightCard } from '@/components/ai-insight/FinoInsightCard';
 import {
   Building2, Activity, FileText, Sparkles, BarChart3, Globe,
   Brain, Shield, AlertTriangle, Calendar,
@@ -861,9 +863,9 @@ const AISectionCard = memo(({ section, isExpanded, onToggle }: { section: AISect
       <div className={cn('overflow-hidden transition-all duration-300', isExpanded ? 'max-h-[2200px] opacity-100' : 'max-h-0 opacity-0')}>
         <div className="px-ds-5 pb-ds-5">
           {section.isLoading && (
-            <div className="flex items-center gap-ds-3 rounded-[12px] border border-gold-border/35 bg-gold-primary/[0.035] p-ds-4">
-              <div className="h-5 w-5 rounded-full border-2 border-gold-primary/25 border-t-gold-primary animate-spin" />
-              <span className="text-[13px] text-gold-primary/75">Analyzing with AI + real-time data...</span>
+            <div className="rounded-[12px] border border-gold-border/35 bg-gold-primary/[0.035] p-ds-4 space-y-ds-2">
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
             </div>
           )}
 
@@ -1155,6 +1157,9 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
   return (
     <StockTabErrorBoundary>
     <div className="space-y-ds-7">
+      {/* L1 ambient AI insight — from pre-generated backend card */}
+      <FinoInsightCard kind="stock" symbol={data.ticker} />
+
       {/* ========== INVESTMENT STORY — AI Enhanced ========== */}
       <Card highlight>
         <div className="relative p-ds-6 md:p-ds-7">
@@ -1175,10 +1180,7 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
           {/* Loading state */}
           {storyLoading && (
             <div className="mb-ds-5 space-y-ds-3">
-              <div className="mb-ds-2 flex items-center gap-ds-2">
-                <Loader2 className="w-4 h-4 text-[#C9A646] animate-spin" />
-                <span className="text-[13px] text-gold-primary/80">Analyzing fundamentals, financials & options flow...</span>
-              </div>
+              <Skeleton className="h-3 w-3/4 mb-ds-2" />
               {[...Array(4)].map((_, i) => (
                 <div key={i} className="h-3 animate-pulse rounded-[4px]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.035), rgba(255,255,255,0.075), rgba(255,255,255,0.035))', width: `${95 - i * 12}%`, animationDelay: `${i * 150}ms` }} />
               ))}

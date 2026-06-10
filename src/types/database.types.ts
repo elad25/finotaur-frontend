@@ -8,6 +8,8 @@ export interface Profile {
   id: string; // UUID from auth.users
   email: string;
   display_name?: string;
+  first_name?: string | null;
+  last_name?: string | null;
   avatar_url?: string;
   created_at: string;
   updated_at: string;
@@ -71,9 +73,24 @@ export interface Trade {
   outcome?: 'WIN' | 'LOSS' | 'BE' | 'OPEN'; // text - nullable
   pnl?: number; // numeric - nullable
   quality_tag?: string; // text - nullable
-  
+
   // Metrics (stored as JSONB)
   metrics?: TradeMetrics;
+
+  // Asset-class extension columns (nullable, added for options/crypto/forex support)
+  option_type?: 'CALL' | 'PUT'; // varchar - nullable (options only)
+  strike_price?: number; // numeric - nullable (options only)
+  expiration_date?: string; // date/timestamptz - nullable (options only)
+  leverage?: number; // numeric - nullable (crypto/forex — does NOT affect realized P&L)
+  position_type?: string; // varchar - nullable (e.g. 'spot', 'perp', 'margin')
+  liquidation_price?: number; // numeric - nullable (crypto leveraged positions)
+  funding_paid?: number; // numeric - nullable (crypto perpetual swap carry cost)
+  base_currency?: string; // varchar - nullable (forex: e.g. 'EUR')
+  quote_currency?: string; // varchar - nullable (forex: e.g. 'USD')
+  account_currency?: string; // varchar - nullable (account denomination, e.g. 'USD')
+  quote_rate?: number; // numeric - nullable (forex: quote-to-account conversion rate)
+  pip_size?: number; // numeric - nullable (forex: pip denomination, e.g. 0.0001)
+  lot_size?: number; // numeric - nullable (forex: units per lot, e.g. 100000)
 }
 
 export interface TradeMetrics {

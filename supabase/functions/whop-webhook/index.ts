@@ -46,7 +46,8 @@ const PLATFORM_PRODUCT_IDS = new Set([
   'prod_YAdXQrHtt72Gd',  // Platform Core Yearly - $590/year
   'prod_LtP5GbpPfp9bn',  // Finotaur Monthly - $109/month with 14-day trial
   'prod_CbWpZrn5P7wc9',  // Finotaur Yearly - $1090/year
-  'prod_CIKv0J5Rq6aFk',  // Platform Enterprise Monthly - $500/month
+  'prod_CIKv0J5Rq6aFk',  // Copilot Monthly - $200/month
+  'prod_9e5E84XpsrhWE',  // Copilot Yearly ($2,000/year)
 ]);
 
 // 🔥 v3.10.0: Top Secret Plan IDs - For identifying specific plans
@@ -68,7 +69,7 @@ function isPlatform(productId: string | undefined): boolean {
 function getPlatformPlanFromProduct(productId: string): string {
   if (productId === 'prod_HDYzeNp6WOJwh' || productId === 'prod_YAdXQrHtt72Gd') return 'platform_core';
   if (productId === 'prod_LtP5GbpPfp9bn' || productId === 'prod_CbWpZrn5P7wc9') return 'platform_finotaur';
-  if (productId === 'prod_CIKv0J5Rq6aFk') return 'platform_enterprise';
+  if (productId === 'prod_CIKv0J5Rq6aFk' || productId === 'prod_9e5E84XpsrhWE') return 'platform_enterprise';
   return 'platform_core'; // fallback
 }
 
@@ -96,6 +97,7 @@ const YEARLY_PLAN_IDS = new Set([
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year)
   'plan_M2zS1EoNXJF10',  // Finotaur Platform Yearly ($1090/year)
   'plan_6w5KTZsSGp7Ss',  // Platform Core Yearly ($590/year)
+  'plan_dfy2uADNyEExg',  // Copilot Yearly ($2,000/year)
 ]);
 
 function getBillingInterval(planId: string): 'monthly' | 'yearly' {

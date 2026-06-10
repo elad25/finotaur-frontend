@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { MacroSentimentSkeletonPage } from '@/components/skeletons/MacroSentimentSkeleton';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -603,8 +604,6 @@ const useMarketData = () => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60000);
-    return () => clearInterval(interval);
   }, [fetchData]);
 
   return { data, loading, error, refetch: fetchData };
@@ -616,38 +615,38 @@ const useMarketData = () => {
 
 const getRegimeColors = (regime: 'risk-on' | 'risk-off' | 'mixed') => {
   switch (regime) {
-    case 'risk-on': return { bg: '#0A2F1F', border: '#2D5A3D', text: '#4ADE80', glow: 'rgba(74, 222, 128, 0.2)' };
-    case 'risk-off': return { bg: '#2F0A0A', border: '#5A2D2D', text: '#F87171', glow: 'rgba(248, 113, 113, 0.2)' };
-    case 'mixed': return { bg: '#2F2A0A', border: '#5A4D2D', text: '#FBBF24', glow: 'rgba(251, 191, 36, 0.2)' };
+    case 'risk-on': return { bg: 'rgba(201, 166, 70, 0.08)', border: 'rgba(201, 166, 70, 0.35)', text: '#C9A646', glow: 'rgba(201, 166, 70, 0.12)' };
+    case 'risk-off': return { bg: 'rgba(226, 75, 74, 0.08)', border: 'rgba(226, 75, 74, 0.35)', text: '#E24B4A', glow: 'rgba(226, 75, 74, 0.12)' };
+    case 'mixed': return { bg: 'rgba(201, 166, 70, 0.05)', border: 'rgba(201, 166, 70, 0.2)', text: 'rgba(255,255,255,0.6)', glow: 'rgba(201, 166, 70, 0.08)' };
   }
 };
 
 const getStatusColor = (status: string): string => {
   const colors: Record<string, string> = {
-    'positive': '#4ADE80',
-    'neutral': '#94A3B8',
-    'warning': '#FBBF24',
-    'negative': '#F87171',
+    'positive': '#C9A646',
+    'neutral': 'rgba(255,255,255,0.42)',
+    'warning': 'rgba(201, 166, 70, 0.7)',
+    'negative': '#E24B4A',
   };
-  return colors[status] || '#94A3B8';
+  return colors[status] || 'rgba(255,255,255,0.42)';
 };
 
 const getScoreColor = (score: number): string => {
-  if (score >= 70) return '#4ADE80';
-  if (score >= 55) return '#FBBF24';
-  if (score >= 40) return '#94A3B8';
-  return '#F87171';
+  if (score >= 70) return '#C9A646';
+  if (score >= 55) return '#C9A646';
+  if (score >= 40) return 'rgba(255,255,255,0.42)';
+  return '#E24B4A';
 };
 
 const getSentimentColor = (regime: string): string => {
   const colors: Record<string, string> = {
-    'extreme-fear': '#F87171',
-    'fear': '#FB923C',
-    'neutral': '#94A3B8',
-    'greed': '#FBBF24',
-    'extreme-greed': '#4ADE80',
+    'extreme-fear': '#E24B4A',
+    'fear': '#E24B4A',
+    'neutral': 'rgba(255,255,255,0.42)',
+    'greed': '#C9A646',
+    'extreme-greed': '#C9A646',
   };
-  return colors[regime] || '#94A3B8';
+  return colors[regime] || 'rgba(255,255,255,0.42)';
 };
 
 const getTrendIcon = (trend: 'up' | 'down' | 'neutral'): string => {
@@ -656,9 +655,9 @@ const getTrendIcon = (trend: 'up' | 'down' | 'neutral'): string => {
 
 const getTrendColor = (trend: 'up' | 'down' | 'neutral', inverted = false): string => {
   if (inverted) {
-    return trend === 'up' ? '#F87171' : trend === 'down' ? '#4ADE80' : '#94A3B8';
+    return trend === 'up' ? '#E24B4A' : trend === 'down' ? '#C9A646' : 'rgba(255,255,255,0.42)';
   }
-  return trend === 'up' ? '#4ADE80' : trend === 'down' ? '#F87171' : '#94A3B8';
+  return trend === 'up' ? '#C9A646' : trend === 'down' ? '#E24B4A' : 'rgba(255,255,255,0.42)';
 };
 
 const getPercentileLabel = (percentile: number): string => {
@@ -685,13 +684,13 @@ const formatValue = (value: number, type: 'percent' | 'number' | 'currency' | 'r
 // ============================================================================
 
 // Sparkline Component
-const Sparkline: React.FC<{ data?: SparklineData; width?: number; height?: number; color?: string }> = ({ 
-  data, width = 50, height = 20, color 
+const Sparkline: React.FC<{ data?: SparklineData; width?: number; height?: number; color?: string }> = ({
+  data, width = 50, height = 20, color
 }) => {
   if (!data) return null;
-  
-  const { values, trend } = data;
-  const lineColor = color || (trend === 'up' ? '#4ADE80' : trend === 'down' ? '#F87171' : '#94A3B8');
+
+  const { values } = data;
+  const lineColor = color || '#C9A646';
   
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -796,7 +795,7 @@ const HeroSection: React.FC<{ data: MarketData }> = ({ data }) => {
         
         <div className="master-score-ring">
           <svg viewBox="0 0 100 100" className="score-ring-svg">
-            <circle cx="50" cy="50" r="45" fill="none" stroke="#1a1a1a" strokeWidth="6" />
+            <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
             <circle 
               cx="50" cy="50" r="45" 
               fill="none" 
@@ -811,7 +810,7 @@ const HeroSection: React.FC<{ data: MarketData }> = ({ data }) => {
           </svg>
           <div className="score-inner">
             <span className="score-number">{data.masterScore.value}</span>
-            <span className="score-change" style={{ color: data.masterScore.change >= 0 ? '#4ADE80' : '#F87171' }}>
+            <span className="score-change" style={{ color: data.masterScore.change >= 0 ? '#C9A646' : '#E24B4A' }}>
               {data.masterScore.change >= 0 ? '↑' : '↓'} {Math.abs(data.masterScore.change).toFixed(1)}
             </span>
           </div>
@@ -910,14 +909,14 @@ const FearGreedGauge: React.FC<{ value: number; regime: string }> = ({ value, re
         <svg viewBox="0 0 200 120" className="gauge-svg">
           <defs>
             <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#F87171" />
-              <stop offset="25%" stopColor="#FB923C" />
-              <stop offset="50%" stopColor="#94A3B8" />
-              <stop offset="75%" stopColor="#FBBF24" />
-              <stop offset="100%" stopColor="#4ADE80" />
+              <stop offset="0%" stopColor="#E24B4A" />
+              <stop offset="40%" stopColor="rgba(226,75,74,0.5)" />
+              <stop offset="50%" stopColor="rgba(255,255,255,0.25)" />
+              <stop offset="60%" stopColor="rgba(201,166,70,0.5)" />
+              <stop offset="100%" stopColor="#C9A646" />
             </linearGradient>
           </defs>
-          <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#1a1a1a" strokeWidth="12" strokeLinecap="round" />
+          <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" strokeLinecap="round" />
           <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGradient)" strokeWidth="10" strokeLinecap="round" />
           <g transform={`rotate(${rotation}, 100, 100)`}>
             <line x1="100" y1="100" x2="100" y2="35" stroke="#D4AF37" strokeWidth="3" strokeLinecap="round" />
@@ -939,7 +938,7 @@ const FactorBar: React.FC<{ label: string; value: number; tooltipKey?: string }>
     <div className="factor-bar">
       <div className="factor-label">{label}</div>
       <div className="factor-track">
-        <div className="factor-fill" style={{ width: `${value}%`, backgroundColor: value < 35 ? '#F87171' : value > 65 ? '#FBBF24' : '#94A3B8' }} />
+        <div className="factor-fill" style={{ width: `${value}%`, backgroundColor: value < 35 ? '#E24B4A' : value > 65 ? '#C9A646' : 'rgba(255,255,255,0.35)' }} />
       </div>
       <div className="factor-value">{value}</div>
     </div>
@@ -1074,7 +1073,7 @@ export default function MacroSentiment() {
     setExpandedPanels(prev => ({ ...prev, [panelId]: !prev[panelId] }));
   };
 
-  if (loading) return <div className="macro-sentiment-page"><LoadingSkeleton /></div>;
+  if (loading) return <MacroSentimentSkeletonPage />;
   if (error || !data) return (
     <div className="macro-sentiment-page">
       <div className="error-state">
@@ -1093,13 +1092,13 @@ export default function MacroSentiment() {
         /* ====== BASE ====== */
         .macro-sentiment-page {
           min-height: 100vh;
-          background: #050505;
-          color: #e5e5e5;
+          background: #0a0a0a;
+          color: rgba(255,255,255,0.87);
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
           padding: 20px 24px;
           position: relative;
         }
-        
+
         .macro-sentiment-page::before {
           content: '';
           position: absolute;
@@ -1118,36 +1117,36 @@ export default function MacroSentiment() {
           position: relative;
           z-index: 1;
         }
-        
+
         .header-left h1 {
           font-size: 22px;
           font-weight: 600;
-          color: #D4AF37;
+          color: #C9A646;
           margin: 0 0 4px 0;
         }
-        
+
         .header-meta {
           display: flex;
           align-items: center;
           gap: 16px;
           font-size: 11px;
-          color: #666;
+          color: rgba(255,255,255,0.38);
         }
-        
+
         .live-indicator {
           display: flex;
           align-items: center;
           gap: 6px;
         }
-        
+
         .live-dot {
           width: 6px;
           height: 6px;
-          background: #4ADE80;
+          background: #C9A646;
           border-radius: 50%;
           animation: pulse 2s infinite;
         }
-        
+
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.5; transform: scale(1.3); }
@@ -1156,13 +1155,11 @@ export default function MacroSentiment() {
         /* ====== MODE SELECTOR ====== */
         .mode-selector {
           display: flex;
-          gap: 4px;
-          background: #0a0a0a;
-          padding: 4px;
-          border-radius: 10px;
-          border: 1px solid #1a1a1a;
+          overflow: hidden;
+          border-radius: 6px;
+          border: 1px solid rgba(255,255,255,0.08);
         }
-        
+
         .mode-btn {
           display: flex;
           align-items: center;
@@ -1170,28 +1167,27 @@ export default function MacroSentiment() {
           padding: 8px 12px;
           border: none;
           background: transparent;
-          color: #666;
+          color: rgba(255,255,255,0.38);
           font-size: 11px;
-          border-radius: 8px;
           cursor: pointer;
           transition: all 0.2s;
         }
-        
-        .mode-btn:hover { color: #999; }
-        
+
+        .mode-btn:hover { color: rgba(255,255,255,0.6); }
+
         .mode-btn.active {
-          background: linear-gradient(135deg, #D4AF37 0%, #B8960B 100%);
-          color: #000;
+          background: rgba(201, 166, 70, 0.2);
+          color: #C9A646;
           font-weight: 500;
         }
-        
+
         .mode-icon { font-size: 12px; }
 
         /* ====== HERO SECTION ====== */
         .hero-section {
-          background: linear-gradient(135deg, #0a0a0a 0%, #0f0f0f 100%);
+          background: #111111;
           border: 1px solid;
-          border-radius: 20px;
+          border-radius: 12px;
           padding: 28px;
           margin-bottom: 24px;
           position: relative;
@@ -1207,21 +1203,22 @@ export default function MacroSentiment() {
         
         .regime-badge {
           padding: 14px 28px;
-          border: 2px solid;
-          border-radius: 14px;
+          border: 1px solid;
+          border-radius: 12px;
           text-align: center;
         }
-        
+
         .regime-label {
           display: block;
           font-size: 28px;
           font-weight: 700;
           letter-spacing: 2px;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .regime-confidence {
           font-size: 11px;
-          color: #888;
+          color: rgba(255,255,255,0.42);
           margin-top: 4px;
           display: block;
         }
@@ -1245,11 +1242,15 @@ export default function MacroSentiment() {
           font-weight: 700;
           color: #fff;
           display: block;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .score-change {
           font-size: 12px;
           font-weight: 500;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
         
         .score-sparkline {
@@ -1258,7 +1259,7 @@ export default function MacroSentiment() {
         
         .hero-reason {
           font-size: 15px;
-          color: #bbb;
+          color: rgba(255,255,255,0.6);
           line-height: 1.6;
           margin: 0;
         }
@@ -1267,10 +1268,10 @@ export default function MacroSentiment() {
         .ai-insights-section {
           margin-bottom: 24px;
         }
-        
+
         .section-title {
-          font-size: 12px;
-          color: #D4AF37;
+          font-size: 11px;
+          color: #C9A646;
           text-transform: uppercase;
           letter-spacing: 1.5px;
           margin-bottom: 16px;
@@ -1278,181 +1279,190 @@ export default function MacroSentiment() {
           align-items: center;
           gap: 8px;
         }
-        
+
         .title-icon { font-size: 14px; }
-        
+
         .insights-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 16px;
         }
-        
+
         .insight-card {
-          background: linear-gradient(135deg, #0a0a0a 0%, #0f0f0f 100%);
-          border: 1px solid #1a1a1a;
-          border-radius: 14px;
+          background: #111111;
+          border: 0.5px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
           padding: 18px;
+          transition: border-color 0.2s;
         }
-        
+
+        .insight-card:hover {
+          border-color: rgba(255,255,255,0.14);
+        }
+
         .insight-card.focus {
-          border-color: rgba(212, 175, 55, 0.3);
-          background: linear-gradient(135deg, #0a0a0a 0%, #12100a 100%);
+          border-color: rgba(201, 166, 70, 0.3);
         }
-        
+
         .insight-card.action {
-          border-color: rgba(74, 222, 128, 0.2);
+          border-color: rgba(201, 166, 70, 0.15);
         }
-        
+
         .insight-card.watch {
-          border-color: rgba(251, 191, 36, 0.2);
+          border-color: rgba(201, 166, 70, 0.15);
         }
-        
+
         .insight-label {
           font-size: 10px;
-          color: #D4AF37;
+          color: #C9A646;
           text-transform: uppercase;
           letter-spacing: 1px;
           margin-bottom: 12px;
           display: block;
         }
-        
+
         .insight-text {
           font-size: 13px;
-          color: #ccc;
+          color: rgba(255,255,255,0.6);
           line-height: 1.6;
           margin: 0;
         }
-        
+
         .actionable-text {
           font-size: 14px;
-          color: #fff;
+          color: rgba(255,255,255,0.87);
           line-height: 1.6;
           font-weight: 500;
           margin: 0;
         }
-        
+
         .watch-list {
           display: flex;
           flex-direction: column;
           gap: 8px;
         }
-        
+
         .watch-item {
           display: flex;
           align-items: flex-start;
           gap: 8px;
           font-size: 12px;
-          color: #999;
+          color: rgba(255,255,255,0.55);
           padding: 8px 10px;
-          background: rgba(0,0,0,0.3);
+          background: rgba(0,0,0,0.25);
           border-radius: 6px;
         }
-        
+
         .watch-bullet {
-          color: #FBBF24;
+          color: #C9A646;
           font-weight: 600;
         }
-        
+
         .scenarios-list {
           display: flex;
           flex-direction: column;
           gap: 10px;
         }
-        
+
         .scenario-item {
           padding: 10px 12px;
-          background: rgba(0,0,0,0.3);
+          background: rgba(0,0,0,0.25);
           border-radius: 8px;
-          border: 1px solid #1a1a1a;
+          border: 0.5px solid rgba(255,255,255,0.06);
         }
-        
+
         .scenario-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 6px;
         }
-        
+
         .scenario-prob {
           font-size: 18px;
           font-weight: 700;
           color: #fff;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .scenario-impact {
           font-size: 9px;
           font-weight: 600;
           letter-spacing: 0.5px;
+          text-transform: uppercase;
         }
-        
-        .scenario-impact.high { color: #F87171; }
-        .scenario-impact.medium { color: #FBBF24; }
-        .scenario-impact.low { color: #4ADE80; }
-        
+
+        .scenario-impact.high { color: #E24B4A; }
+        .scenario-impact.medium { color: rgba(201, 166, 70, 0.8); }
+        .scenario-impact.low { color: #C9A646; }
+
         .scenario-title {
           font-size: 12px;
           font-weight: 600;
-          color: #ddd;
+          color: rgba(255,255,255,0.87);
           margin-bottom: 4px;
         }
-        
+
         .scenario-desc {
           font-size: 11px;
-          color: #777;
+          color: rgba(255,255,255,0.42);
         }
 
         /* ====== NARRATIVE FLOW ====== */
         .narrative-flow {
-          background: linear-gradient(90deg, rgba(212, 175, 55, 0.08) 0%, rgba(212, 175, 55, 0.02) 100%);
-          border: 1px solid rgba(212, 175, 55, 0.15);
+          background: linear-gradient(90deg, rgba(201, 166, 70, 0.06) 0%, rgba(201, 166, 70, 0.02) 100%);
+          border: 0.5px solid rgba(201, 166, 70, 0.18);
           border-radius: 12px;
           padding: 16px 20px;
           margin-bottom: 24px;
         }
-        
+
         .narrative-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 12px;
         }
-        
+
         .narrative-label {
           font-size: 11px;
-          color: #D4AF37;
+          color: #C9A646;
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 1.5px;
         }
-        
+
         .narrative-bias {
           font-size: 10px;
           padding: 4px 12px;
-          border-radius: 10px;
+          border-radius: 6px;
           font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
-        
-        .narrative-bias.risk-on { background: #2D5A3D; color: #4ADE80; }
-        .narrative-bias.risk-off { background: #5A2D2D; color: #F87171; }
-        .narrative-bias.mixed { background: #5A4D2D; color: #FBBF24; }
-        
+
+        .narrative-bias.risk-on { background: rgba(201, 166, 70, 0.15); color: #C9A646; border: 0.5px solid rgba(201, 166, 70, 0.3); }
+        .narrative-bias.risk-off { background: rgba(226, 75, 74, 0.12); color: #E24B4A; border: 0.5px solid rgba(226, 75, 74, 0.3); }
+        .narrative-bias.mixed { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border: 0.5px solid rgba(255,255,255,0.1); }
+
         .narrative-steps {
           display: flex;
           align-items: center;
           flex-wrap: wrap;
           gap: 8px;
         }
-        
+
         .narrative-step {
           font-size: 13px;
-          color: #ccc;
+          color: rgba(255,255,255,0.7);
           padding: 6px 14px;
-          background: rgba(0,0,0,0.4);
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(0,0,0,0.3);
+          border-radius: 6px;
+          border: 0.5px solid rgba(255,255,255,0.06);
         }
-        
+
         .narrative-arrow {
-          color: #D4AF37;
+          color: #C9A646;
           font-size: 14px;
         }
 
@@ -1462,38 +1472,38 @@ export default function MacroSentiment() {
           flex-direction: column;
           gap: 20px;
         }
-        
+
         .panel-row {
           display: grid;
           gap: 20px;
         }
-        
+
         .headline-row { grid-template-columns: 1.4fr 1fr 1fr; }
         .health-row { grid-template-columns: 1fr 1fr 1fr; }
         .cross-asset-row { grid-template-columns: 1fr; }
-        
+
         .panel {
-          background: linear-gradient(135deg, #0a0a0a 0%, #0f0f0f 100%);
-          border: 1px solid #1a1a1a;
-          border-radius: 14px;
+          background: #111111;
+          border: 0.5px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
           padding: 18px;
           transition: all 0.3s ease;
         }
-        
+
         .panel:hover {
-          border-color: rgba(212, 175, 55, 0.25);
+          border-color: rgba(201, 166, 70, 0.25);
           box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         }
-        
+
         .panel-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           margin-bottom: 14px;
           padding-bottom: 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
         }
-        
+
         .header-left {
           display: flex;
           align-items: center;
@@ -1508,35 +1518,35 @@ export default function MacroSentiment() {
         }
         
         .panel-title {
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 600;
-          color: #D4AF37;
+          color: #C9A646;
           text-transform: uppercase;
-          letter-spacing: 0.8px;
+          letter-spacing: 1.5px;
           margin: 0;
         }
-        
+
         .header-right {
           display: flex;
           align-items: center;
           gap: 10px;
         }
-        
+
         .regime-label-badge {
           font-size: 10px;
-          padding: 4px 10px;
-          border-radius: 8px;
+          padding: 3px 10px;
+          border-radius: 6px;
           font-weight: 500;
-          border: 1px solid;
+          border: 0.5px solid;
         }
-        
+
         .expand-btn {
           width: 24px;
           height: 24px;
           border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.1);
+          border: 0.5px solid rgba(255,255,255,0.1);
           background: transparent;
-          color: #888;
+          color: rgba(255,255,255,0.42);
           cursor: pointer;
           font-size: 14px;
           display: flex;
@@ -1544,10 +1554,10 @@ export default function MacroSentiment() {
           justify-content: center;
           transition: all 0.2s;
         }
-        
+
         .expand-btn:hover {
-          border-color: #D4AF37;
-          color: #D4AF37;
+          border-color: #C9A646;
+          color: #C9A646;
         }
 
         /* ====== AI CLUSTER INSIGHT ====== */
@@ -1557,14 +1567,14 @@ export default function MacroSentiment() {
           gap: 8px;
           margin-top: 14px;
           padding: 12px;
-          background: rgba(212, 175, 55, 0.05);
-          border-left: 2px solid #D4AF37;
+          background: rgba(201, 166, 70, 0.04);
+          border-left: 1.5px solid rgba(201, 166, 70, 0.5);
           border-radius: 0 8px 8px 0;
           font-size: 11px;
-          color: #999;
+          color: rgba(255,255,255,0.5);
           line-height: 1.5;
         }
-        
+
         .ai-cluster-insight .insight-icon {
           font-size: 12px;
           flex-shrink: 0;
@@ -1577,17 +1587,17 @@ export default function MacroSentiment() {
           align-items: center;
           gap: 4px;
         }
-        
+
         .tooltip-icon {
           font-size: 10px;
-          color: #444;
+          color: rgba(255,255,255,0.25);
           cursor: help;
           opacity: 0;
           transition: opacity 0.2s;
         }
-        
+
         .tooltip-wrapper:hover .tooltip-icon { opacity: 1; }
-        
+
         .tooltip-content {
           position: absolute;
           bottom: calc(100% + 10px);
@@ -1595,32 +1605,32 @@ export default function MacroSentiment() {
           transform: translateX(-50%);
           width: 280px;
           background: #141414;
-          border: 1px solid rgba(212, 175, 55, 0.3);
+          border: 0.5px solid rgba(201, 166, 70, 0.3);
           border-radius: 10px;
           padding: 14px;
           z-index: 1000;
           box-shadow: 0 10px 40px rgba(0,0,0,0.6);
         }
-        
+
         .tooltip-title {
           font-size: 13px;
           font-weight: 600;
-          color: #D4AF37;
+          color: #C9A646;
           margin-bottom: 6px;
         }
-        
+
         .tooltip-description {
           font-size: 12px;
-          color: #ccc;
+          color: rgba(255,255,255,0.65);
           line-height: 1.4;
           margin-bottom: 8px;
         }
-        
+
         .tooltip-interpretation {
           font-size: 11px;
-          color: #888;
+          color: rgba(255,255,255,0.42);
           padding-top: 8px;
-          border-top: 1px solid rgba(255,255,255,0.06);
+          border-top: 0.5px solid rgba(255,255,255,0.06);
           font-style: italic;
         }
 
@@ -1631,19 +1641,21 @@ export default function MacroSentiment() {
           align-items: center;
           padding: 8px 0;
         }
-        
+
         .gauge-svg { width: 160px; height: 100px; }
-        
+
         .gauge-value { text-align: center; margin-top: 4px; }
-        
+
         .value-number {
           font-size: 38px;
           font-weight: 700;
-          color: #D4AF37;
+          color: #C9A646;
           display: block;
           line-height: 1;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .value-regime {
           font-size: 12px;
           font-weight: 600;
@@ -1660,40 +1672,42 @@ export default function MacroSentiment() {
           gap: 8px;
           margin-top: 14px;
           padding-top: 14px;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          border-top: 0.5px solid rgba(255, 255, 255, 0.05);
         }
-        
+
         .factor-bar {
           display: flex;
           align-items: center;
           gap: 8px;
         }
-        
+
         .factor-label {
           font-size: 10px;
-          color: #666;
+          color: rgba(255,255,255,0.38);
           width: 70px;
         }
-        
+
         .factor-track {
           flex: 1;
-          height: 4px;
-          background: #1a1a1a;
+          height: 3px;
+          background: rgba(255,255,255,0.06);
           border-radius: 2px;
           overflow: hidden;
         }
-        
+
         .factor-fill {
           height: 100%;
           border-radius: 2px;
           transition: width 0.5s ease;
         }
-        
+
         .factor-value {
           font-size: 10px;
-          color: #666;
+          color: rgba(255,255,255,0.38);
           width: 22px;
           text-align: right;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
 
         /* ====== METRIC CARDS ====== */
@@ -1701,72 +1715,76 @@ export default function MacroSentiment() {
           display: grid;
           gap: 10px;
         }
-        
+
         .metrics-2col { grid-template-columns: 1fr 1fr; }
         .metrics-1col { grid-template-columns: 1fr; }
-        
+
         .metric-card {
-          background: rgba(0, 0, 0, 0.3);
+          background: rgba(0, 0, 0, 0.2);
           border-radius: 10px;
           padding: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.04);
+          border: 0.5px solid rgba(255, 255, 255, 0.05);
           transition: all 0.2s;
         }
-        
+
         .metric-card:hover {
-          border-color: rgba(212, 175, 55, 0.2);
+          border-color: rgba(201, 166, 70, 0.2);
           transform: translateY(-1px);
         }
-        
+
         .metric-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 4px;
         }
-        
+
         .metric-title {
           font-size: 10px;
-          color: #888;
+          color: rgba(255,255,255,0.42);
           text-transform: uppercase;
-          letter-spacing: 0.5px;
+          letter-spacing: 1px;
         }
-        
+
         .metric-subtitle {
           font-size: 9px;
-          color: #555;
+          color: rgba(255,255,255,0.28);
           display: block;
           margin-bottom: 6px;
         }
-        
+
         .metric-body {
           display: flex;
           align-items: baseline;
           gap: 10px;
           margin-bottom: 8px;
         }
-        
+
         .metric-value {
-          font-size: 24px;
+          font-size: 22px;
           font-weight: 600;
-          color: #fff;
+          color: rgba(255,255,255,0.95);
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .metric-trend {
           font-size: 12px;
           font-weight: 500;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .percentile-bar { margin: 8px 0; }
-        
+
         .percentile-track {
-          height: 4px;
-          background: linear-gradient(90deg, #F87171 0%, #FBBF24 50%, #4ADE80 100%);
+          height: 3px;
+          background: linear-gradient(90deg, #E24B4A 0%, rgba(255,255,255,0.25) 50%, #C9A646 100%);
           border-radius: 2px;
           position: relative;
-          opacity: 0.25;
+          opacity: 0.3;
         }
-        
+
         .percentile-fill {
           position: absolute;
           left: 0;
@@ -1774,181 +1792,187 @@ export default function MacroSentiment() {
           height: 100%;
           background: transparent;
         }
-        
+
         .percentile-marker {
-          width: 3px;
-          height: 10px;
-          background: #fff;
+          width: 2px;
+          height: 9px;
+          background: rgba(255,255,255,0.9);
           border-radius: 2px;
           position: absolute;
           top: -3px;
           transform: translateX(-50%);
-          box-shadow: 0 0 8px rgba(255,255,255,0.4);
+          box-shadow: 0 0 6px rgba(255,255,255,0.35);
         }
-        
+
         .percentile-label {
           font-size: 10px;
-          color: #666;
+          color: rgba(255,255,255,0.35);
           margin-top: 4px;
           display: block;
         }
-        
+
         .metric-summary {
           font-size: 11px;
-          color: #666;
+          color: rgba(255,255,255,0.38);
           margin: 8px 0 0 0;
           line-height: 1.4;
         }
 
         /* ====== CROSS-ASSET ====== */
         .cross-asset-panel {
-          background: linear-gradient(135deg, #0a0a0a 0%, #0f0f0f 100%);
-          border: 1px solid #1a1a1a;
-          border-radius: 14px;
+          background: #111111;
+          border: 0.5px solid rgba(255,255,255,0.08);
+          border-radius: 12px;
           padding: 18px;
         }
-        
+
         .cross-asset-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 14px;
         }
-        
+
         .cross-asset-card {
-          background: rgba(0, 0, 0, 0.3);
-          border-radius: 12px;
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 10px;
           padding: 16px;
-          border: 1px solid rgba(255, 255, 255, 0.04);
+          border: 0.5px solid rgba(255, 255, 255, 0.05);
         }
-        
+
         .cross-asset-title {
-          font-size: 12px;
-          color: #D4AF37;
+          font-size: 11px;
+          color: #C9A646;
           margin: 0 0 14px 0;
           font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
         }
-        
+
         .cross-asset-items {
           display: flex;
           flex-direction: column;
           gap: 12px;
           margin-bottom: 14px;
         }
-        
+
         .cross-asset-item {
           display: flex;
           justify-content: space-between;
           align-items: center;
         }
-        
+
         .item-label {
           font-size: 11px;
-          color: #888;
+          color: rgba(255,255,255,0.45);
         }
-        
+
         .item-right {
           display: flex;
           align-items: center;
           gap: 10px;
         }
-        
+
         .item-value {
           font-size: 13px;
-          color: #fff;
+          color: rgba(255,255,255,0.87);
           font-weight: 500;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .item-trend {
           font-size: 11px;
           font-weight: 500;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
-        
+
         .cross-asset-conclusion {
           font-size: 11px;
           font-weight: 500;
           padding: 10px 12px;
-          border-radius: 8px;
+          border-radius: 6px;
           text-align: center;
         }
-        
-        .cross-asset-conclusion.risk-on { background: rgba(74, 222, 128, 0.1); color: #4ADE80; }
-        .cross-asset-conclusion.risk-off { background: rgba(248, 113, 113, 0.1); color: #F87171; }
-        .cross-asset-conclusion.mixed { background: rgba(148, 163, 184, 0.1); color: #94A3B8; }
+
+        .cross-asset-conclusion.risk-on { background: rgba(201, 166, 70, 0.1); color: #C9A646; border: 0.5px solid rgba(201, 166, 70, 0.2); }
+        .cross-asset-conclusion.risk-off { background: rgba(226, 75, 74, 0.08); color: #E24B4A; border: 0.5px solid rgba(226, 75, 74, 0.2); }
+        .cross-asset-conclusion.mixed { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5); border: 0.5px solid rgba(255,255,255,0.08); }
 
         /* ====== OVERALL CONCLUSION ====== */
         .overall-conclusion {
-          background: linear-gradient(135deg, rgba(212, 175, 55, 0.08) 0%, rgba(212, 175, 55, 0.03) 100%);
-          border: 1px solid rgba(212, 175, 55, 0.25);
-          border-radius: 14px;
+          background: linear-gradient(135deg, rgba(201, 166, 70, 0.06) 0%, rgba(201, 166, 70, 0.02) 100%);
+          border: 0.5px solid rgba(201, 166, 70, 0.25);
+          border-radius: 12px;
           padding: 22px 26px;
           margin-top: 24px;
         }
-        
+
         .conclusion-label {
           font-size: 10px;
-          color: #D4AF37;
+          color: #C9A646;
           text-transform: uppercase;
           letter-spacing: 1.5px;
           margin-bottom: 12px;
           display: block;
         }
-        
+
         .conclusion-text {
           font-size: 15px;
-          color: #ccc;
+          color: rgba(255,255,255,0.65);
           line-height: 1.7;
           margin: 0;
         }
 
         /* ====== LOADING & ERROR ====== */
         .loading-skeleton { padding: 24px; }
-        
+
         .skeleton-hero {
           height: 180px;
-          background: linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%);
+          background: linear-gradient(90deg, #161616 25%, #1e1e1e 50%, #161616 75%);
           background-size: 200% 100%;
           animation: shimmer 1.5s infinite;
-          border-radius: 20px;
+          border-radius: 12px;
           margin-bottom: 24px;
         }
-        
+
         .skeleton-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 20px;
         }
-        
+
         .skeleton-card {
           height: 220px;
-          background: linear-gradient(90deg, #1a1a1a 25%, #222 50%, #1a1a1a 75%);
+          background: linear-gradient(90deg, #161616 25%, #1e1e1e 50%, #161616 75%);
           background-size: 200% 100%;
           animation: shimmer 1.5s infinite;
-          border-radius: 14px;
+          border-radius: 12px;
         }
-        
+
         @keyframes shimmer {
           0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
         }
-        
+
         .error-state {
           text-align: center;
           padding: 80px 40px;
         }
-        
+
         .error-state h2 {
-          color: #F87171;
+          color: #E24B4A;
           margin-bottom: 10px;
         }
-        
+
         .error-state p {
-          color: #888;
+          color: rgba(255,255,255,0.42);
           margin-bottom: 20px;
         }
-        
+
         .retry-btn {
           padding: 12px 28px;
-          background: #D4AF37;
+          background: #C9A646;
           border: none;
           border-radius: 10px;
           color: #0a0a0a;
@@ -1956,7 +1980,7 @@ export default function MacroSentiment() {
           cursor: pointer;
           transition: transform 0.2s;
         }
-        
+
         .retry-btn:hover { transform: scale(1.05); }
 
         /* ====== ANIMATIONS ====== */

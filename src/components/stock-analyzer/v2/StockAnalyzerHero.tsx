@@ -1,5 +1,6 @@
 // src/components/stock-analyzer/v2/StockAnalyzerHero.tsx
-import { memo, useCallback, useState, type ReactNode } from 'react';
+import { memo, useCallback, useState, useEffect, useRef, type ReactNode } from 'react';
+import { ResponsiveContainer, LineChart, Line } from 'recharts';
 import { cn } from '@/lib/utils';
 import { Price, Change } from '@/components/ds/NumberDisplay';
 import type { StockData } from '@/types/stock-analyzer.types';
@@ -7,6 +8,207 @@ import { usePricePolling } from '@/hooks/usePricePolling';
 import type { QuoteUpdate } from '@/services/fetchQuoteOnly';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { Clock, RefreshCw, WifiOff } from 'lucide-react';
+
+// ─── Sparkline data shape ─────────────────────────────────────────────────────
+
+interface SparkPoint {
+  c: number;
+}
+
+// ─── Price fields derived from chart-bars (Yahoo-sourced, always legal) ───────
+
+interface ChartBarsDerivedPrice {
+  /** Latest bar's close — used as current price when Railway quote returns $0 */
+  price: number;
+  /** Previous DISTINCT trading day's close — for day-change calculation */
+  previousClose: number;
+  /** Absolute change: price − previousClose */
+  change: number;
+  /** Percentage change: change / previousClose × 100 */
+  changePercent: number;
+  /** 52-week high: max(bar.high) over the full 365-day window */
+  high52w: number;
+  /** 52-week low: min(bar.low) over the full 365-day window */
+  low52w: number;
+}
+
+// ─── useStockChartBars — fetch 1Y daily bars, derive price + sparkline ────────
+// Single fetch shared by both the sparkline chart and the price header.
+// Do NOT call this twice for the same ticker; the hook is designed to be called
+// once in StockAnalyzerHero and results passed down as props.
+
+type ChartBarsState =
+  | { status: 'loading' }
+  | { status: 'empty' }
+  | { status: 'ready'; points: SparkPoint[]; derived: ChartBarsDerivedPrice };
+
+function useStockChartBars(ticker: string): ChartBarsState {
+  const [state, setState] = useState<ChartBarsState>({ status: 'loading' });
+  // Track the last ticker we fetched so we reset on symbol change
+  const lastTicker = useRef<string>('');
+
+  useEffect(() => {
+    if (!ticker) {
+      setState({ status: 'empty' });
+      return;
+    }
+
+    // Reset to loading whenever the ticker changes
+    if (lastTicker.current !== ticker) {
+      lastTicker.current = ticker;
+      setState({ status: 'loading' });
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        if (!cancelled) setState({ status: 'empty' });
+        return;
+      }
+
+      // 1Y daily bars: from = 365 days ago, to = now (unix seconds)
+      const nowSec = Math.floor(Date.now() / 1000);
+      const fromSec = nowSec - 365 * 24 * 60 * 60;
+
+      const url =
+        `${SUPABASE_URL}/functions/v1/chart-bars` +
+        `?symbol=${encodeURIComponent(ticker)}` +
+        `&interval=1d` +
+        `&from=${fromSec}` +
+        `&to=${nowSec}`;
+
+      try {
+        const resp = await fetch(url, {
+          method: 'GET',
+          headers: { apikey: SUPABASE_ANON_KEY },
+        });
+
+        if (cancelled) return;
+
+        if (!resp.ok) {
+          setState({ status: 'empty' });
+          return;
+        }
+
+        const payload = (await resp.json()) as {
+          bars?: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>;
+        };
+        if (cancelled) return;
+
+        if (!Array.isArray(payload.bars) || payload.bars.length === 0) {
+          setState({ status: 'empty' });
+          return;
+        }
+
+        const raw = payload.bars;
+
+        // ── Derive price fields from bars ──────────────────────────────────
+        // Current price = latest bar's close
+        const latestBar = raw[raw.length - 1];
+        const price = latestBar.close;
+
+        // Previous close = second-to-last DISTINCT trading day's close.
+        // "Distinct" means a different calendar day (bars are daily, so
+        // raw[length-2] is always the prior trading day if it exists).
+        const previousClose = raw.length >= 2 ? raw[raw.length - 2].close : price;
+
+        const change = price - previousClose;
+        const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0;
+
+        // 52-week high/low — use the full bars window (already 365 days)
+        let high52w = -Infinity;
+        let low52w = Infinity;
+        for (const b of raw) {
+          if (b.high > high52w) high52w = b.high;
+          if (b.low < low52w) low52w = b.low;
+        }
+        if (high52w === -Infinity) high52w = price;
+        if (low52w === Infinity) low52w = price;
+
+        const derived: ChartBarsDerivedPrice = {
+          price,
+          previousClose,
+          change,
+          changePercent,
+          high52w,
+          low52w,
+        };
+
+        // ── Subsample to ≤60 points for the sparkline ─────────────────────
+        // recharts handles it fine but keeps render lean
+        const step = raw.length > 60 ? Math.ceil(raw.length / 60) : 1;
+        const points: SparkPoint[] = raw
+          .filter((_, i) => i % step === 0 || i === raw.length - 1)
+          .map((b) => ({ c: b.close }));
+
+        setState({ status: 'ready', points, derived });
+      } catch {
+        if (!cancelled) setState({ status: 'empty' });
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [ticker]);
+
+  return state;
+}
+
+// ─── HeroSparkline — compact gold line chart (156×88) ───────────────────────
+// Accepts pre-computed ChartBarsState so the bars are NOT fetched twice.
+
+function HeroSparkline({ barsState }: { barsState: ChartBarsState }) {
+  const sparkline = barsState;
+
+  // Loading state: subtle animated placeholder bar
+  if (sparkline.status === 'loading') {
+    return (
+      <div
+        className="h-full w-full flex items-end"
+        aria-hidden="true"
+      >
+        <div className="w-full h-0.5 rounded-full bg-white/10 animate-pulse" />
+      </div>
+    );
+  }
+
+  // Empty / error state: muted dash
+  if (sparkline.status === 'empty' || (sparkline.status === 'ready' && sparkline.points.length === 0)) {
+    return (
+      <div
+        className="h-full w-full flex items-center justify-center"
+        aria-hidden="true"
+      >
+        <span className="text-[10px] text-ink-muted/40 select-none">—</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full w-full" aria-hidden="true">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          data={sparkline.points}
+          margin={{ top: 4, right: 0, left: 0, bottom: 4 }}
+        >
+          <Line
+            type="monotone"
+            dataKey="c"
+            stroke="#C9A646"
+            strokeWidth={1.4}
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 function formatTimeRemaining(ms: number): string {
   if (ms <= 0) return 'refreshing...';
@@ -37,6 +239,25 @@ interface StockAnalyzerHeroProps {
 export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAnalyzerHeroProps) => {
   const [logoFailed, setLogoFailed] = useState(false);
   const [logoRetried, setLogoRetried] = useState(false);
+
+  // Logo from our self-hosted store: the `stock-logo` edge function lazily caches
+  // each ticker's logo into the `stock-logos` Supabase bucket (fetched once from a
+  // non-FMP source) and serves it from our own CDN thereafter. On error → initials.
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const logoSrc = data.logo
+    || (supabaseUrl ? `${supabaseUrl}/functions/v1/stock-logo?symbol=${encodeURIComponent(data.ticker)}` : null);
+
+  // ── Single chart-bars fetch shared by sparkline AND price header ─────────
+  // chart-bars is Yahoo-sourced via the edge function — always legal, always
+  // available even when the Railway quote-extended endpoint returns $0.
+  const barsState = useStockChartBars(data.ticker);
+
+  // Prefer chart-bars derived price when Railway returns $0 (gated/stale).
+  // Fall back to data.* only when bars are unavailable.
+  const hasBars = barsState.status === 'ready';
+  const displayPrice       = hasBars ? barsState.derived.price        : data.price;
+  const displayChange      = hasBars ? barsState.derived.change       : data.change;
+  const displayChangePct   = hasBars ? barsState.derived.changePercent : data.changePercent;
 
   const handlePriceUpdate = useCallback((update: QuoteUpdate) => {
     if (!onPriceUpdate) return;
@@ -82,9 +303,9 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
             boxShadow: '0 16px 36px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)',
           }}
         >
-          {data.logo && !logoFailed ? (
+          {logoSrc && !logoFailed ? (
             <img
-              src={logoRetried ? `${data.logo}?retry=1` : data.logo}
+              src={logoRetried ? `${logoSrc}?retry=1` : logoSrc}
               alt={data.ticker}
               loading="lazy"
               className="h-full w-full object-contain p-1"
@@ -128,6 +349,7 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
         </div>
       </div>
 
+      {/* Live price/change block — chart-bars + SEC fundamentals data, public */}
       <div className="flex flex-col items-start gap-ds-3 lg:items-end">
         <div className="flex items-center gap-ds-2">
           <span
@@ -150,25 +372,16 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
 
         <div className="flex items-end gap-ds-6">
           <div className="text-left lg:text-right">
-            <Price value={data.price} size="display" format="currency" />
+            <Price value={displayPrice} size="display" format="currency" />
             <div className="mt-ds-1 flex items-baseline gap-ds-2 font-mono text-[16px] tabular-nums lg:justify-end">
-              <Change value={data.change} format="plain" decimals={2} />
+              <Change value={displayChange} format="plain" decimals={2} />
               <span className="text-ink-tertiary">·</span>
-              <Change value={data.changePercent} format="percent" decimals={2} />
+              <Change value={displayChangePct} format="percent" decimals={2} />
             </div>
           </div>
-          <div className="hidden h-[88px] w-[156px] border-l border-white/[0.08] pl-ds-5 lg:block" aria-hidden="true">
-            <svg viewBox="0 0 156 88" className="h-full w-full overflow-visible">
-              <path
-                d="M2 68 L22 55 L35 58 L48 31 L62 39 L74 24 L88 29 L101 18 L116 42 L132 49 L152 34"
-                fill="none"
-                stroke="rgba(201,166,70,0.82)"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M2 78 H152" stroke="rgba(255,255,255,0.13)" strokeWidth="1" strokeDasharray="2 4" />
-            </svg>
+          <div className="hidden h-[88px] w-[156px] border-l border-white/[0.08] pl-ds-5 lg:block">
+            {/* barsState is shared — no second network call */}
+            <HeroSparkline barsState={barsState} />
           </div>
         </div>
 

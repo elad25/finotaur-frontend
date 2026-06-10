@@ -2,10 +2,14 @@
 // src/components/overview/PriceChart.tsx
 import React from "react";
 import { fetchJSON, getSymbolFromContext, PricePoint } from "./api";
+import { LicensedDataPlaceholder } from "@/components/markets/LicensedDataPlaceholder";
+import { AdminGateBadge } from "@/components/markets/AdminGateBadge";
+import { useMarketGate } from "@/hooks/useMarketGate";
 
 type Props = { symbol?: string; range?: "1D"|"1W"|"1M"|"6M"|"1Y"|"5Y" };
 
 const PriceChart: React.FC<Props> = ({ symbol, range="6M" }) => {
+  const { gated, isAdmin } = useMarketGate();
   const sym = (symbol || getSymbolFromContext()).toUpperCase();
   const [points, setPoints] = React.useState<PricePoint[]>([]);
 
@@ -16,6 +20,10 @@ const PriceChart: React.FC<Props> = ({ symbol, range="6M" }) => {
       .catch(() => {});
     return () => { mounted = false; };
   }, [sym, range]);
+
+  // Gate: raw Polygon price data — not licensed for redistribution.
+  // All hooks (useState, useEffect) have already been called above.
+  if (gated) return <LicensedDataPlaceholder minHeight={260} />;
 
   if (!points.length) return <div className="h-[260px]" />;
 
@@ -30,7 +38,8 @@ const PriceChart: React.FC<Props> = ({ symbol, range="6M" }) => {
   const d = points.map((p,i) => `${i?"L":"M"}${scaleX(p.t)},${scaleY(p.value ?? p.c ?? 0)}`).join(" ");
 
   return (
-    <div className="w-full overflow-hidden">
+    <div className="relative w-full overflow-hidden">
+      {isAdmin && <AdminGateBadge />}
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[260px]">
         <path d={d} fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       </svg>

@@ -20,6 +20,8 @@ import {
   Crown,
   AlertTriangle,
   CheckCircle2,
+  BarChart3,
+  Calendar,
 } from 'lucide-react';
 import {
   LineChart,
@@ -35,7 +37,7 @@ import {
   Legend,
 } from 'recharts';
 import { StatsCard } from '@/components/admin/StatsCard';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { SkeletonStatRow, SkeletonChart, SkeletonTable } from '@/components/ds/Skeleton';
 import {
   getAdminStats,
   getSubscriberStats,
@@ -43,6 +45,7 @@ import {
   getSubscriptionBreakdown,
 } from '@/services/adminService';
 import { CohortRetention } from './sections/CohortRetention';
+import { ExecutivePlaceholder } from './ExecutivePlaceholder';
 import type {
   AdminStats,
   SubscriberStats,
@@ -112,8 +115,10 @@ export function OverviewTab() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <LoadingSkeleton lines={12} />
+      <div className="p-6 space-y-6">
+        <SkeletonStatRow count={4} />
+        <SkeletonChart height="h-64" />
+        <SkeletonTable rows={6} cols={5} />
       </div>
     );
   }
@@ -418,6 +423,53 @@ export function OverviewTab() {
             )}
           </tbody>
         </table>
+      </section>
+
+      {/* Trading Activity — preserved from Usage Analytics (real data via admin_get_stats) */}
+      <section className="bg-[#111111] border border-gray-800 rounded-lg p-5">
+        <header className="flex items-center gap-2 mb-4">
+          <BarChart3 className="w-4 h-4 text-[#D4AF37]" />
+          <h3 className="text-white font-semibold">Trading Activity</h3>
+        </header>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            title="Total Trades"
+            value={stats.totalTrades.toLocaleString()}
+            subtitle="All-time"
+            icon={BarChart3}
+          />
+          <StatsCard
+            title="Trades This Week"
+            value={`+${stats.tradesThisWeek.toLocaleString()}`}
+            subtitle="Week to date"
+            changeType="positive"
+            icon={TrendingUp}
+          />
+          <StatsCard
+            title="Trades This Month"
+            value={stats.tradesThisMonth.toLocaleString()}
+            subtitle="Month to date"
+            icon={Calendar}
+          />
+          <StatsCard
+            title="Avg Trades / User"
+            value={stats.averageTradesPerUser.toFixed(1)}
+            subtitle="Per registered user"
+            icon={Users}
+          />
+        </div>
+      </section>
+
+      {/* Forecast — next 30 days (folded in from Executive Dashboard) */}
+      <section className="border border-gray-800 rounded-lg overflow-hidden">
+        <header className="px-5 py-3 border-b border-gray-800 bg-[#0E0E0E] flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-[#D4AF37]" />
+          <h3 className="text-white font-semibold">Forecast — next 30 days</h3>
+          <span className="text-[11px] text-gray-500 ml-1">
+            OLS projection on active users + MRR
+          </span>
+        </header>
+        <ExecutivePlaceholder embedded />
       </section>
     </div>
   );

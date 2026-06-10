@@ -22,6 +22,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { domains } from '@/constants/nav';
 import { ReactNode } from 'react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { SkeletonText } from '@/components/ds/Skeleton';
 
 interface DomainGuardProps {
   children: ReactNode;
@@ -43,8 +44,8 @@ export const DomainGuard = ({ children, domainId }: DomainGuardProps) => {
   // Show nothing while checking admin status
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]" />
+      <div className="min-h-[200px] p-6">
+        <SkeletonText lines={2} />
       </div>
     );
   }
@@ -93,8 +94,8 @@ export const BetaGuard = ({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]" />
+      <div className="min-h-[200px] p-6">
+        <SkeletonText lines={2} />
       </div>
     );
   }

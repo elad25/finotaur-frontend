@@ -1,26 +1,19 @@
 // src/components/routes/BacktestRoute.tsx
 // 🧪 BACKTEST PROTECTION - Checks if locked first
-import { memo, useEffect, useState, Suspense, ReactNode } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { memo, Suspense, ReactNode } from 'react';
 import { domains } from '@/constants/nav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useBacktestAccess } from '@/hooks/useBacktestAccess';
+import { useMentorView } from '@/contexts/MentorViewContext';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
-// Loading component
-const PageLoader = memo(() => (
-  <div className="flex items-center justify-center min-h-screen bg-background">
-    <div className="flex flex-col items-center gap-4">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      <p className="text-sm text-muted-foreground">Loading...</p>
-    </div>
-  </div>
-));
-PageLoader.displayName = 'PageLoader';
+// PageLoader imported from @/components/ds/Spinner
 
 // Suspense wrapper
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
-  <ErrorBoundary>
-    <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  <ErrorBoundary boundary="backtest">
+    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
   </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
@@ -119,35 +112,15 @@ const BacktestLanding = lazy(() => import('@/pages/app/journal/backtest/Backtest
 
 // 🧪 BACKTEST PROTECTION COMPONENT
 export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
-  const [accountType, setAccountType] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { hasAccess, isLoading } = useBacktestAccess();
+  const { isMentorView } = useMentorView();
+  const { hasBetaAccess, isAdmin, isLoading: isAdminLoading } = useAdminAuth();
 
-  // 🔒 Check if backtest domain is locked
+  // 🔒 Check if backtest domain is globally locked
   const isBacktestLocked = domains['journal-backtest']?.locked === true;
 
-  useEffect(() => {
-    async function checkAccess() {
-      if (!user?.id) {
-        setIsLoading(false);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('account_type')
-        .eq('id', user.id)
-        .single();
-
-      setAccountType(data?.account_type || 'trial');
-      setIsLoading(false);
-    }
-
-    checkAccess();
-  }, [user?.id]);
-
-  if (isLoading) {
-    return <PageLoader />;
+  if (isLoading || isAdminLoading) {
+    return <RouteSkeleton />;
   }
 
   // 🔒 If backtest is globally locked, show Coming Soon page
@@ -155,9 +128,24 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
     return <BacktestLockedPage />;
   }
 
-  if (accountType !== 'premium' && accountType !== 'admin') {
+  // 🔒 Direct-URL hardening: only beta/admin (or mentor view) may access.
+  // Regular tier-based hasAccess is no longer sufficient on its own —
+  // the Backtest sub-nav is locked: true, so non-beta/admin should always
+  // land on the landing page even if they navigate via URL.
+  if (!hasBetaAccess && !isAdmin && !isMentorView) {
     return (
-      <Suspense fallback={<PageLoader />}>
+      <Suspense fallback={<RouteSkeleton />}>
+        <BacktestLanding />
+      </Suspense>
+    );
+  }
+
+  // Mentor View: allow read-only entry regardless of the mentor's own tier,
+  // so a mentor can view their student's existing backtests (data is RLS-scoped
+  // to the student; run/save actions are hidden in mentor view).
+  if (!hasAccess && !isMentorView) {
+    return (
+      <Suspense fallback={<RouteSkeleton />}>
         <BacktestLanding />
       </Suspense>
     );

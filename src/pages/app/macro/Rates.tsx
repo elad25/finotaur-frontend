@@ -20,7 +20,6 @@ import {
   LineChart,
   ArrowRight,
   RefreshCw,
-  Loader2,
   Clock,
   AlertTriangle
 } from 'lucide-react';
@@ -37,6 +36,9 @@ import {
   Legend,
   ReferenceLine
 } from 'recharts';
+
+import { DataFreshness } from '@/components/macro/DataFreshness';
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 
 // ============================================================
 // TYPES
@@ -98,7 +100,13 @@ interface YieldData {
 // API HOOKS
 // ============================================================
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// VITE_API_URL is the server origin WITHOUT the /api prefix (e.g.
+// https://finotaur-server-production.up.railway.app). The rates routes are
+// mounted under /api, so we must append it. When unset (local dev), the Vite
+// proxy serves '/api' on the same origin.
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 function useRatesData() {
   const [data, setData] = useState<{
@@ -108,21 +116,23 @@ function useRatesData() {
   }>({ banks: [], differentials: [], globalMetrics: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const res = await fetch(`${API_BASE}/rates/central-banks`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      
+
       const json = await res.json();
       setData({
         banks: json.banks || [],
         differentials: json.differentials || [],
         globalMetrics: json.globalMetrics || null,
       });
+      setLastFetchedAt(new Date());
     } catch (e: any) {
       console.error('[rates] fetch error:', e);
       setError(e.message);
@@ -133,12 +143,9 @@ function useRatesData() {
 
   useEffect(() => {
     fetchData();
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
   }, []);
 
-  return { ...data, loading, error, refetch: fetchData };
+  return { ...data, loading, error, refetch: fetchData, lastFetchedAt };
 }
 
 function useYieldData(range = '1y') {
@@ -238,7 +245,7 @@ const KPICard = ({
     <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">{title}</p>
     {loading ? (
       <div className="h-8 flex items-center">
-        <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
+        <Skeleton className="h-7 w-24 rounded" />
       </div>
     ) : (
       <>
@@ -447,11 +454,7 @@ const YieldCurveChart = ({ yields }: { yields: YieldData[] }) => {
 // Current Yield Display
 const YieldDisplay = ({ yields, loading }: { yields: YieldData[]; loading: boolean }) => {
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
-      </div>
-    );
+    return <SkeletonStatRow count={4} />;
   }
 
   return (
@@ -481,7 +484,7 @@ const YieldDisplay = ({ yields, loading }: { yields: YieldData[]; loading: boole
 // ============================================================
 
 export default function MacroRates() {
-  const { banks, differentials, globalMetrics, loading, error, refetch } = useRatesData();
+  const { banks, differentials, globalMetrics, loading, error, refetch, lastFetchedAt } = useRatesData();
   const { yields, loading: yieldsLoading } = useYieldData('1y');
   const [activeTab, setActiveTab] = useState<'overview' | 'differentials' | 'forecast'>('overview');
   const [selectedBank, setSelectedBank] = useState<string | null>(null);
@@ -607,8 +610,8 @@ export default function MacroRates() {
               </div>
               
               {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <div className="p-4">
+                  <SkeletonTable rows={6} cols={8} />
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -803,8 +806,8 @@ export default function MacroRates() {
               </div>
               
               {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <div className="p-4">
+                  <SkeletonTable rows={6} cols={8} />
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -980,8 +983,8 @@ export default function MacroRates() {
               </div>
               
               {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <div className="p-4">
+                  <SkeletonTable rows={6} cols={8} />
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1079,7 +1082,7 @@ export default function MacroRates() {
               <div className="flex items-center gap-6 mt-4 pt-4 border-t border-zinc-700/50">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-zinc-500" />
-                  <span className="text-xs text-zinc-500">Updated: {new Date().toLocaleString()}</span>
+                  <DataFreshness asOf={lastFetchedAt} ttlHours={36} />
                 </div>
                 {banks.length > 0 && (
                   <div className="flex items-center gap-2">

@@ -99,6 +99,9 @@ export const DRAWING_COLORS = {
     textMuted: '#999999',
     background: '#1A1A1A',
     border: '#2A2A2A',
+    selected: '#FFD700',
+    locked: '#777777',
+    default: '#C9A646',
   },
   light: {
     primary: '#1976D2',
@@ -111,6 +114,9 @@ export const DRAWING_COLORS = {
     textMuted: '#666666',
     background: '#F5F5F5',
     border: '#E0E0E0',
+    selected: '#1565C0',
+    locked: '#999999',
+    default: '#1976D2',
   },
 } as const;
 

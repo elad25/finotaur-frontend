@@ -44,6 +44,8 @@ const footerLinks = {
     { label: "Features", href: "#features" },
     { label: "Pricing", href: "#pricing" },
     { label: "Journal", href: "/journal", isRoute: true },
+    { label: "Academy", href: "/academy", isRoute: true },
+    { label: "Stock Research", href: "/research", isRoute: true },
     { label: "FAQ", href: "/#faq", isRoute: true },
   ],
   company: [

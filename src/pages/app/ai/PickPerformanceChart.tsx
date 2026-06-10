@@ -26,7 +26,8 @@ import {
   ReferenceLine, ResponsiveContainer,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, Calendar, DollarSign, Target, AlertTriangle, Loader2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Calendar, DollarSign, Target, AlertTriangle } from 'lucide-react';
+import { SkeletonChart } from '@/components/ds/Skeleton';
 
 // ═══════════════════════════════════════════════
 // DESIGN TOKENS — Exact match from Top5.tsx / AdminTrackerView
@@ -192,30 +193,7 @@ const StatPill = ({ label, value, color, icon: Icon }: { label: string; value: s
 // LOADING SKELETON
 // ═══════════════════════════════════════════════
 
-const ChartSkeleton = () => (
-  <div style={{
-    height: '280px', borderRadius: '16px',
-    background: 'rgba(255,255,255,0.01)',
-    border: `1px solid ${GOLD.dim}0.06)`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    position: 'relative', overflow: 'hidden',
-  }}>
-    {/* Shimmer effect */}
-    <div style={{
-      position: 'absolute', inset: 0,
-      background: `linear-gradient(90deg, transparent 0%, ${GOLD.dim}0.03) 50%, transparent 100%)`,
-      animation: 'shimmer 2s infinite',
-    }} />
-    <div style={{ textAlign: 'center', zIndex: 1 }}>
-      <Loader2 style={{ width: 24, height: 24, color: `${GOLD.dim}0.3)`, animation: 'spin 1s linear infinite' }} />
-      <p style={{ fontSize: '10px', color: 'rgba(139,139,139,0.3)', marginTop: '8px' }}>Loading chart data...</p>
-    </div>
-    <style>{`
-      @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    `}</style>
-  </div>
-);
+const ChartSkeleton = () => <SkeletonChart height="h-[280px]" />;
 
 
 // ═══════════════════════════════════════════════

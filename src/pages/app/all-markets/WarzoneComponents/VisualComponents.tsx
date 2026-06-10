@@ -8,7 +8,7 @@
 // =====================================================
 
 import { memo, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 // ============================================
 // ICONS
@@ -238,13 +238,8 @@ export const GlowingBadge = memo(function GlowingBadge({ className }: { classNam
 // FULL PAGE LOADER
 // ============================================
 
-export const FullPageLoader = memo(function FullPageLoader({ text = 'Loading...' }: { text?: string }) {
-  return (
-    <div className="min-h-screen bg-[#0a0806] flex flex-col items-center justify-center">
-      <Loader2 className="w-14 h-14 animate-spin text-[#C9A646] mb-4" />
-      <p className="text-[#C9A646]/60">{text}</p>
-    </div>
-  );
+export const FullPageLoader = memo(function FullPageLoader({ text: _text = 'Loading...' }: { text?: string }) {
+  return <RouteSkeleton />;
 });
 
 // ============================================

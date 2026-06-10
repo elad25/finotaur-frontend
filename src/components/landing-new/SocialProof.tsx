@@ -14,6 +14,10 @@ import { SectionShell } from "./_shared/SectionShell";
 import { SectionEyebrow } from "./_shared/SectionEyebrow";
 import { cn } from "@/lib/utils";
 
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  'https://finotaur-server-production.up.railway.app';
+
 // ---------------------------------------------------------------------------
 // Stat definitions
 // ---------------------------------------------------------------------------
@@ -28,36 +32,60 @@ type StatDef = {
   label: string;
 };
 
-const STATS: StatDef[] = [
-  {
-    icon: Users,
-    target: 847,
-    suffix: "+",
-    format: "none",
-    label: "Active Traders",
-  },
-  {
-    icon: Cpu,
-    target: 50000,
-    suffix: "+",
-    format: "locale",
-    label: "AI Analyses Run",
-  },
-  {
-    icon: Star,
-    target: 4.9,
-    suffix: "/5",
-    format: "decimal1",
-    label: "User Rating",
-  },
-  {
-    icon: Swords,
-    target: 365,
-    suffix: "",
-    format: "none",
-    label: "Days of War Zone",
-  },
-];
+// Raw shape returned by GET /api/public/stats
+interface PublicStats {
+  activeTraders: number;
+  aiAnalysesRun: number;
+  warZoneDays: number;
+  userRating: number | null;
+}
+
+/** Build the visible stat array from fetched data, hiding zeros / nulls. */
+function buildStats(data: PublicStats): StatDef[] {
+  const result: StatDef[] = [];
+
+  if (data.warZoneDays >= 1) {
+    result.push({
+      icon: Swords,
+      target: data.warZoneDays,
+      suffix: "",
+      format: "none",
+      label: "Days of War Zone",
+    });
+  }
+
+  if (data.aiAnalysesRun >= 50) {
+    result.push({
+      icon: Cpu,
+      target: data.aiAnalysesRun,
+      suffix: "+",
+      format: "locale",
+      label: "AI Analyses Run",
+    });
+  }
+
+  if (data.activeTraders >= 25) {
+    result.push({
+      icon: Users,
+      target: data.activeTraders,
+      suffix: "+",
+      format: "none",
+      label: "Active Traders",
+    });
+  }
+
+  if (typeof data.userRating === "number" && data.userRating > 0) {
+    result.push({
+      icon: Star,
+      target: data.userRating,
+      suffix: "/5",
+      format: "decimal1",
+      label: "User Rating",
+    });
+  }
+
+  return result;
+}
 
 // ---------------------------------------------------------------------------
 // useCountUp — animates a number from 0 to target over `duration` ms
@@ -181,6 +209,40 @@ function AnimatedHairline({ active }: { active: boolean }) {
 const SocialProof = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const inView = useInView(containerRef, { once: true, margin: "-80px" });
+  const [stats, setStats] = useState<StatDef[] | null>(null);
+  // The stat band mounts only after the async fetch resolves, so the
+  // useInView observer can attach too late to ever fire. Force the reveal
+  // shortly after the cards mount so they never stay stuck at opacity 0.
+  const [ready, setReady] = useState(false);
+  const active = inView || ready;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/public/stats`)
+      .then((res) => {
+        if (!res.ok) throw new Error("stats fetch failed");
+        return res.json() as Promise<PublicStats>;
+      })
+      .then((data) => {
+        if (!cancelled) setStats(buildStats(data));
+      })
+      .catch(() => {
+        if (!cancelled) setStats([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Once the qualifying cards are in state, trigger the reveal animation
+  // even if the IntersectionObserver never reports the late-mounted node.
+  useEffect(() => {
+    if (stats && stats.length > 0) {
+      const t = setTimeout(() => setReady(true), 60);
+      return () => clearTimeout(t);
+    }
+  }, [stats]);
+
+  // Hide the entire band until we have data, and hide if no cards qualify
+  if (stats === null || stats.length === 0) return null;
 
   return (
     <SectionShell
@@ -201,7 +263,7 @@ const SocialProof = () => {
         />
 
         {/* TOP hairline rule */}
-        <AnimatedHairline active={inView} />
+        <AnimatedHairline active={active} />
 
         {/* Eyebrow */}
         <div className="py-4 md:py-6">
@@ -211,8 +273,8 @@ const SocialProof = () => {
         </div>
 
         {/* ── STAT ROW ── */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center">
-          {STATS.map((stat, index) => (
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center">
+          {stats.map((stat, index) => (
             <div key={stat.label} className="contents">
               {/* Horizontal separator between cells — mobile only */}
               {index > 0 && (
@@ -222,10 +284,10 @@ const SocialProof = () => {
                 />
               )}
 
-              <StatCell stat={stat} index={index} active={inView} />
+              <StatCell stat={stat} index={index} active={active} />
 
               {/* Vertical separator between cells — desktop only */}
-              {index < STATS.length - 1 && (
+              {index < stats.length - 1 && (
                 <div
                   className="hidden md:block w-px self-stretch bg-gradient-to-b from-transparent via-gold-eyebrow-hairline to-transparent opacity-50"
                   aria-hidden="true"
@@ -236,7 +298,7 @@ const SocialProof = () => {
         </div>
 
         {/* BOTTOM hairline rule */}
-        <AnimatedHairline active={inView} />
+        <AnimatedHairline active={active} />
       </div>
     </SectionShell>
   );

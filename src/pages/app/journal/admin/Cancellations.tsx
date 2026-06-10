@@ -22,6 +22,7 @@ import {
   Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Skeleton } from '@/components/ds/Skeleton';
 
 // ============================================
 // TYPES
@@ -887,9 +888,10 @@ export default function AdminChurnPage() {
               {/* Loading State */}
               {loading && feedbacks.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center">
-                    <div className="w-8 h-8 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin mx-auto mb-3" />
-                    <p className="text-zinc-500">Loading...</p>
+                  <td colSpan={7} className="p-4">
+                    <Skeleton className="h-8 w-full mb-2" />
+                    <Skeleton className="h-8 w-full mb-2" />
+                    <Skeleton className="h-8 w-full" />
                   </td>
                 </tr>
               )}

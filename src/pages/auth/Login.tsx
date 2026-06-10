@@ -14,7 +14,7 @@ import { SEO } from '@/components/seo/SEO';
 // Only allow redirects to internal /app/ paths (prevent open-redirect)
 function getSafeFrom(from: string | undefined): string {
   if (from && from.startsWith('/app/')) return from;
-  return '/app/top-secret';
+  return '/app/home';
 }
 
 export default function Login() {

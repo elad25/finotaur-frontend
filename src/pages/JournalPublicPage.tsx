@@ -358,7 +358,7 @@ const plans = [
   {
     id: "basic", name: "Basic", monthlyPrice: "$24.99", yearlyPrice: "$229", yearlyMonthlyEquivalent: "$19.08",
     description: "Essential tools + automatic broker sync", trialDays: 14,
-    features: ["14-day free trial", "Broker sync (12,000+ brokers) - Coming soon", "25 trades/month (manual + auto-sync)", "Full performance analytics", "Strategy builder & tracking", "Calendar & trading sessions", "Advanced statistics & metrics", "Equity curve & charts", "Trade screenshots & notes", "Email support"],
+    features: ["14-day free trial", "Broker sync (12,000+ brokers) - Coming soon", "25 trades/month (manual + auto-sync)", "📚 Full Finotaur Academy (300+ lessons)", "Full performance analytics", "Strategy builder & tracking", "Calendar & trading sessions", "Advanced statistics & metrics", "Equity curve & charts", "Trade screenshots & notes", "Email support"],
     cta: "Start 14-Day Free Trial", featured: false, savings: "Save 24%",
   },
   {

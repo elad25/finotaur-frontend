@@ -18,6 +18,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { SkeletonText, SkeletonStat } from '@/components/ds/Skeleton';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import {
   FileText,
   Users,
@@ -2043,10 +2045,7 @@ const LastSentStatus: React.FC<{ lastSent: LastSentInfo | null; isLoading: boole
   if (isLoading) {
     return (
       <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 p-4">
-        <div className="flex items-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
-          <span className="text-gray-500">Loading...</span>
-        </div>
+        <SkeletonText />
       </div>
     );
   }
@@ -2132,7 +2131,7 @@ const StatCard: React.FC<{
         <p className="text-gray-500 text-sm">{title}</p>
         {loading ? (
           <div className="h-9 flex items-center">
-            <Loader2 className="w-5 h-5 animate-spin text-gray-600" />
+            <SkeletonStat />
           </div>
         ) : (
           <p className={`text-3xl font-bold mt-1 ${valueColor}`}>{value}</p>
@@ -3863,27 +3862,19 @@ const getDownloadHandler = (reportId: string) => {
     return (
       <>
         <AdminViewToggle />
-        <Suspense fallback={
-          <div className="min-h-screen bg-[#080812] flex items-center justify-center">
-            <Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" />
-          </div>
-        }>
+        <Suspense fallback={<RouteSkeleton />}>
           <TopSecretLanding />
         </Suspense>
       </>
     );
   }
-  
+
   // Subscriber Preview - Show Top Secret Dashboard (active subscriber view)
   if (adminViewMode === 'subscriber') {
     return (
       <>
         <AdminViewToggle />
-        <Suspense fallback={
-          <div className="min-h-screen bg-[#080812] flex items-center justify-center">
-            <Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" />
-          </div>
-        }>
+        <Suspense fallback={<RouteSkeleton />}>
           <TopSecretDashboard />
         </Suspense>
       </>

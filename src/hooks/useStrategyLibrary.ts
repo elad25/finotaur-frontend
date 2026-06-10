@@ -10,9 +10,75 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import type { Strategy } from '@/types/backtest-strategy';
+import { makeEmptyStrategy, type Strategy } from '@/types/backtest-strategy';
 
 const STORAGE_KEY = 'finotaur.backtest.strategies.v1';
+// Seed flag — set once after first-time hydration so deleting all seeded
+// strategies doesn't trigger re-seeding on the next mount.
+const SEED_FLAG_KEY = 'finotaur.backtest.strategies.seeded.v1';
+
+// Two ship-with-the-product strategies. New users see these in the picker
+// immediately so the Strategy Builder integration isn't a dead end.
+// Keep aligned with the TEMPLATES array in Builder.tsx.
+function buildDefaultStrategies(): Strategy[] {
+  const now = Date.now();
+
+  const rsi = makeEmptyStrategy('RSI Oversold/Overbought');
+  rsi.notes = 'Buy when RSI < 30, close when RSI > 70.';
+  rsi.rules = [
+    {
+      id: `rule_${now}_rsi_a`,
+      action: 'OPEN_LONG',
+      size: 1,
+      when: {
+        left: { kind: 'indicator', ref: { type: 'RSI', period: 14 } },
+        operator: 'lt',
+        right: { kind: 'literal', value: 30 },
+      },
+      stopLossPct: 2,
+      takeProfitPct: 4,
+    },
+    {
+      id: `rule_${now}_rsi_b`,
+      action: 'CLOSE',
+      size: 0,
+      when: {
+        left: { kind: 'indicator', ref: { type: 'RSI', period: 14 } },
+        operator: 'gt',
+        right: { kind: 'literal', value: 70 },
+      },
+    },
+  ];
+
+  const sma = makeEmptyStrategy('SMA Cross (50)');
+  sma.notes = 'Buy when price crosses above SMA 50, close when it crosses below.';
+  sma.rules = [
+    {
+      id: `rule_${now}_sma_a`,
+      action: 'OPEN_LONG',
+      size: 1,
+      when: {
+        left: { kind: 'price', field: 'close' },
+        operator: 'crosses_above',
+        right: { kind: 'indicator', ref: { type: 'SMA', period: 50 } },
+      },
+      stopLossPct: 1.5,
+      takeProfitPct: 3,
+    },
+    {
+      id: `rule_${now}_sma_b`,
+      action: 'CLOSE',
+      size: 0,
+      when: {
+        left: { kind: 'price', field: 'close' },
+        operator: 'crosses_below',
+        right: { kind: 'indicator', ref: { type: 'SMA', period: 50 } },
+      },
+    },
+  ];
+
+  return [rsi, sma];
+}
 
 function readAll(): Strategy[] {
   if (typeof window === 'undefined') return [];
@@ -24,6 +90,24 @@ function readAll(): Strategy[] {
     return parsed as Strategy[];
   } catch {
     return [];
+  }
+}
+
+// First-time seed: if we've never written to STORAGE_KEY before AND it is
+// currently empty/missing, hydrate with the two default strategies so the
+// Chart strategy picker has real options out of the box.
+function readAllOrSeed(): Strategy[] {
+  if (typeof window === 'undefined') return [];
+  const existing = readAll();
+  if (existing.length > 0) return existing;
+  try {
+    if (window.localStorage.getItem(SEED_FLAG_KEY) === 'true') return existing;
+    const defaults = buildDefaultStrategies();
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults));
+    window.localStorage.setItem(SEED_FLAG_KEY, 'true');
+    return defaults;
+  } catch {
+    return existing;
   }
 }
 
@@ -46,7 +130,7 @@ export interface UseStrategyLibraryReturn {
 }
 
 export function useStrategyLibrary(): UseStrategyLibraryReturn {
-  const [strategies, setStrategies] = useState<Strategy[]>(() => readAll());
+  const [strategies, setStrategies] = useState<Strategy[]>(() => readAllOrSeed());
 
   // Cross-tab sync via the `storage` event so two open tabs stay in sync.
   useEffect(() => {

@@ -19,7 +19,6 @@ import { getSupabaseClient } from '@/services/api/supabaseClient';
 
 export type CancellationReason = {
   id: string;
-  label_he: string;
   label_en: string;
   sort_order: number;
 };

@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { buildReportFilename } from '@/lib/reportFilename';
  import {
   FileText,
   TrendingUp,
@@ -57,6 +58,7 @@ import { supabase } from '@/lib/supabase';
   ChevronUp,
   FlaskConical,
 } from 'lucide-react';
+import { SkeletonGrid } from '@/components/ds/Skeleton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth, isSameMonth, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
@@ -437,7 +439,7 @@ async function downloadReportPdf(report: Report): Promise<boolean> {
   const titleSlug = (report.ticker || report.title || 'Report')
     .replace(/[^a-zA-Z0-9]/g, '_')
     .substring(0, 30);
-  const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+  const filename = buildReportFilename(typeLabel, titleSlug, dateStr);
   
   // Helper to trigger browser download
   const triggerDownload = (blob: Blob, name: string): void => {
@@ -2281,9 +2283,7 @@ function processReports(publishedReports: any[]) {
               </div>
 
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-                </div>
+                <SkeletonGrid count={4} cols={2} cardLines={3} />
               ) : latestByType.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />

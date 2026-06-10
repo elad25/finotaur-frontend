@@ -3,6 +3,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createSearchParams, useNavigate } from 'react-router-dom';
 import { useTickerSuggest } from '@/hooks/useTickerSuggest';
+import { fetchETFList } from '@/services/etf-analyzer.api';
+import { routeForSuggest } from '@/lib/tickerRouting';
 
 type Props = { open: boolean; onClose: () => void };
 
@@ -32,10 +34,21 @@ export default function CommandPalette({ open, onClose }: Props) {
     if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose();
   }
 
-  function goSummary(sym: string) {
-    const search = createSearchParams({ symbol: sym.toUpperCase(), tab: 'overview' }).toString();
-    navigate({ pathname: '/app/all-markets/summary', search });
+  async function goSummary(sym: string) {
+    const upper = sym.toUpperCase();
     onClose();
+    // Determine assetType: use fetchETFList as the existing ETF-detection signal.
+    // If the symbol is confirmed as an ETF, pass 'etf'; otherwise pass undefined
+    // so routeForSuggest defaults to Stock Analyzer (replaces the old /all-markets/summary fallback).
+    let resolvedAssetType: 'etf' | undefined;
+    try {
+      const result = await fetchETFList({ search: upper, limit: 5 });
+      const isEtf = result.etfs.some((e) => e.ticker.toUpperCase() === upper);
+      if (isEtf) resolvedAssetType = 'etf';
+    } catch {
+      // fall through — resolvedAssetType stays undefined → stock-analyzer
+    }
+    navigate(routeForSuggest(upper, resolvedAssetType));
   }
   function goChart(sym: string) {
     const search = createSearchParams({ symbol: sym.toUpperCase() }).toString();

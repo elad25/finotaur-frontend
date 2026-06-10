@@ -140,7 +140,10 @@ const Button = React.forwardRef<HTMLButtonElement, DSButtonProps>(
     ref,
   ) => {
     const Comp = asChild ? Slot : "button";
-    const includeArrow = showArrow ?? variant === "gold";
+    // Auto-arrow is suppressed under `asChild` because Radix Slot requires
+    // exactly one React child; rendering `{false}` as a JSX sibling of
+    // `{children}` makes Slot count two children and throw.
+    const includeArrow = !asChild && (showArrow ?? variant === "gold");
 
     return (
       <Comp
@@ -148,8 +151,14 @@ const Button = React.forwardRef<HTMLButtonElement, DSButtonProps>(
         className={cn(dsButtonVariants({ variant, size, className }))}
         {...props}
       >
-        {children}
-        {includeArrow && <Arrow />}
+        {includeArrow ? (
+          <>
+            {children}
+            <Arrow />
+          </>
+        ) : (
+          children
+        )}
       </Comp>
     );
   },

@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle, BookOpen, ExternalLink } from 'lucide-react';
+import { SkeletonTable } from '@/components/ds/Skeleton';
 import {
   listPatterns,
   getAdminKey,
@@ -141,9 +142,7 @@ export default function PatternLibraryList() {
 
       {/* Table */}
       {loading && !patterns.length ? (
-        <div className="text-gray-400 text-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin inline" />
-        </div>
+        <SkeletonTable rows={6} cols={7} />
       ) : patterns.length === 0 ? (
         <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-12 text-center text-gray-400">
           No patterns yet. Analyze a ticker to add the first one.

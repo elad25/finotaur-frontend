@@ -1,5 +1,7 @@
 // src/pages/app/all-markets/Chart.tsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { SkeletonChart } from '@/components/ds/Skeleton';
+import { PriceGate } from '@/components/compliance/PriceGate';
 import {
   createChart,
   IChartApi,
@@ -2203,7 +2205,11 @@ export default function ChartPage() {
   const isPositive = lastPrice ? lastPrice.change >= 0 : true;
 
   return (
-    <div className="flex gap-4 w-full p-4 min-h-screen">
+    <PriceGate
+      title="Chart unavailable"
+      description="The candlestick chart and market data for this symbol will be available soon."
+    >
+    <div className="relative flex gap-4 w-full p-4 min-h-screen">
       {/* CHART SECTION */}
       <div className="flex-1 flex flex-col bg-[#131722] rounded-lg overflow-hidden border border-[#2a2e39]">
         {/* Header */}
@@ -2927,11 +2933,8 @@ export default function ChartPage() {
           )}
           
           {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/80 z-10">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-8 h-8 border-2 border-[#2962ff] border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-[#787b86] text-sm">Loading {symbol}...</span>
-              </div>
+            <div className="absolute inset-0 z-10">
+              <SkeletonChart />
             </div>
           )}
         </div>
@@ -2970,5 +2973,6 @@ export default function ChartPage() {
         </div>
       </div>
     </div>
+    </PriceGate>
   );
 }

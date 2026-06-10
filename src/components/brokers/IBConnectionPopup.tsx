@@ -5,7 +5,6 @@
 import { useState } from 'react';
 import {
   X,
-  Loader2,
   CheckCircle,
   AlertCircle,
   ExternalLink,
@@ -15,6 +14,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { SkeletonText } from '@/components/ds/Skeleton';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 
@@ -75,10 +75,11 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
       //    .upsert with onConflict='user_id,broker' fails (no matching constraint),
       //    and onConflict on the 3-col index would orphan rows once account_id is set.
       //    Robust pattern: UPDATE first; if 0 rows affected, INSERT.
+      // SECURITY: never persist IBRIT secrets as plaintext. The row stores only
+      // non-secret metadata; the token + query_id go to the edge fn (over TLS) which
+      // stores them in Supabase Vault and sets connection_data.vault_secret_id.
       const connectionData = {
         integration_type: 'ibrit',
-        token: token.trim(),
-        query_id: queryId.trim(),
         service_code: 'finotaur-ws',
       };
       const nowIso = new Date().toISOString();
@@ -121,7 +122,7 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
       const { data: sess } = await supabase.auth.getSession();
       const jwt = sess.session?.access_token;
       const { data: syncResult, error: syncErr } = await supabase.functions.invoke('interactive-brokers-sync', {
-        body: { userId: user.id, mode: 'manual' },
+        body: { userId: user.id, mode: 'manual', token: token.trim(), query_id: queryId.trim() },
         headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
       });
 
@@ -374,12 +375,8 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
   // ============================================================================
 
   const renderConnecting = () => (
-    <div className="py-12 flex flex-col items-center justify-center gap-6">
-      <Loader2 className="w-12 h-12 text-[#C9A646] animate-spin" />
-      <div className="text-center">
-        <p className="text-white font-semibold text-lg mb-2">Connecting to Interactive Brokers...</p>
-        <p className="text-zinc-400 text-sm">Validating your credentials</p>
-      </div>
+    <div className="py-8 space-y-4">
+      <SkeletonText lines={3} />
     </div>
   );
 

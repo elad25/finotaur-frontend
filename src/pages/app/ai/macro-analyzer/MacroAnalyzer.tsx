@@ -13,6 +13,8 @@ import React, {
 } from 'react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
+import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { AiMacroAnalyzerSkeletonPage } from '@/components/skeletons/AiMacroAnalyzerSkeleton';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
@@ -231,11 +233,7 @@ export default function MacroAnalyzer() {
   }, []);
 
   if (accessLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-gold-primary" />
-      </div>
-    );
+    return <AiMacroAnalyzerSkeletonPage />;
   }
 
   if (!access.hasAccess) {
@@ -252,7 +250,7 @@ export default function MacroAnalyzer() {
     );
   }
 
-  if (isLoading) return <LoadingSkeleton />;
+  if (isLoading) return <AiMacroAnalyzerSkeletonPage />;
 
   return (
     <ErrorBoundary boundary="macro-analyzer" fallback={<MacroErrorFallback />}>

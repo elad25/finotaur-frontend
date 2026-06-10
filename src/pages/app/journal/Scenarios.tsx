@@ -1,28 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { JournalScenariosSkeletonPage } from "@/components/skeletons/JournalScenariosSkeleton";
 import PageTitle from "@/components/PageTitle";
 import { Sun, Moon, Eye, Save, Sparkles, TrendingUp, TrendingDown, AlertTriangle, ChevronDown, Brain } from "lucide-react";
 import { getTrades } from "@/routes/journal";
-
-interface Scenario {
-  type: "bullish" | "bearish" | "neutral";
-  entryCondition: string;
-  plannedAction: string;
-  mentalState: number; // 1-5 scale
-  tags: string[];
-}
-
-interface DayScenario {
-  id: string;
-  date: string;
-  title: string;
-  description: string;
-  scenarios: {
-    bullish: Scenario;
-    bearish: Scenario;
-    neutral: Scenario;
-  };
-  gamePlanNotes: string;
-}
+import { useDayScenarios, useUpsertDayScenario, type DayScenario } from "@/hooks/useDayScenarios";
 
 interface Trade {
   id: string;
@@ -61,6 +42,14 @@ export default function JournalScenarios() {
     scenariosSavedThisWeek: 0,
     executionRate: 0,
   });
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // Supabase hooks
+  const { data: savedScenarios = [] } = useDayScenarios();
+  const upsertScenario = useUpsertDayScenario();
+
+  // One-time localStorage → Supabase migration guard
+  const migrationRanRef = useRef(false);
 
   // Available smart tags
   const availableTags = [
@@ -176,12 +165,8 @@ export default function JournalScenarios() {
 
     maxNegativeStreak = currentStreak;
 
-    // Calculate scenarios saved this week (from localStorage or API)
-    // For now, using a placeholder - you can implement actual storage
-    const scenariosSaved = parseInt(localStorage.getItem('scenariosSavedThisWeek') || '0');
-
     // Calculate execution rate (placeholder - would need scenario execution tracking)
-    const executionRate = 67; // You'd calculate this from actual scenario vs execution data
+    const executionRate = 67; // Would need execution tracking data
 
     setStats({
       totalTrades: total,
@@ -191,7 +176,7 @@ export default function JournalScenarios() {
       wins,
       losses,
       negativeStreak: maxNegativeStreak,
-      scenariosSavedThisWeek: scenariosSaved,
+      scenariosSavedThisWeek: 0, // overridden by derived value from hook below
       executionRate: executionRate,
     });
   }
@@ -240,7 +225,59 @@ export default function JournalScenarios() {
   const riskAssessment = getRiskAssessment();
   const smartInsight = getSmartInsight();
 
-  const updateScenario = (type: "bullish" | "bearish" | "neutral", field: string, value: any) => {
+  // Derive scenariosSavedThisWeek from Supabase data (replaces localStorage counter)
+  const scenariosSavedThisWeek = (() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - dayOfWeek);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+    return savedScenarios.filter(s => s.date >= startOfWeekStr).length;
+  })();
+
+  // One-time migration: localStorage savedScenarios → Supabase
+  useEffect(() => {
+    if (migrationRanRef.current) return;
+    migrationRanRef.current = true;
+
+    const raw = localStorage.getItem('savedScenarios');
+    if (!raw) return;
+
+    let parsed: DayScenario[] = [];
+    try {
+      parsed = JSON.parse(raw) as DayScenario[];
+    } catch {
+      // Corrupted localStorage data — just clear it
+      localStorage.removeItem('savedScenarios');
+      localStorage.removeItem('scenariosSavedThisWeek');
+      return;
+    }
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.removeItem('savedScenarios');
+      localStorage.removeItem('scenariosSavedThisWeek');
+      return;
+    }
+
+    // Upsert each entry sequentially; if any fail, log but continue
+    (async () => {
+      for (const entry of parsed) {
+        try {
+          await upsertScenario.mutateAsync(entry);
+        } catch (err) {
+          console.error('[Scenarios] migration upsert failed for date', entry.date, err);
+        }
+      }
+      localStorage.removeItem('savedScenarios');
+      localStorage.removeItem('scenariosSavedThisWeek');
+      console.log('[Scenarios] localStorage migration complete');
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateScenario = (type: "bullish" | "bearish" | "neutral", field: string, value: any /* dynamic field update */) => {
     setCurrentScenario(prev => ({
       ...prev,
       scenarios: {
@@ -261,25 +298,17 @@ export default function JournalScenarios() {
     updateScenario(type, "tags", newTags);
   };
 
-  const saveScenario = () => {
-    // Save to localStorage (or API)
-    const scenarios = JSON.parse(localStorage.getItem('savedScenarios') || '[]');
-    scenarios.push({
-      ...currentScenario,
-      id: Date.now().toString(),
-      savedAt: new Date().toISOString()
-    });
-    localStorage.setItem('savedScenarios', JSON.stringify(scenarios));
-
-    // Update weekly count
-    const currentCount = parseInt(localStorage.getItem('scenariosSavedThisWeek') || '0');
-    localStorage.setItem('scenariosSavedThisWeek', (currentCount + 1).toString());
-
-    console.log("Saving scenario:", currentScenario);
-    alert("Scenario saved successfully! 🎯");
-    
-    // Reload stats
-    loadTradeData();
+  const saveScenario = async () => {
+    setSaveStatus("saving");
+    try {
+      await upsertScenario.mutateAsync(currentScenario);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch (err) {
+      console.error("[Scenarios] save failed:", err);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
   };
 
   const generateAIInsights = () => {
@@ -299,14 +328,7 @@ export default function JournalScenarios() {
   const currentScenarioData = currentScenario.scenarios[activeTab];
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
-        <PageTitle title="Gameplan" subtitle="Plan your trading day ahead" />
-        <div className="flex items-center justify-center h-64">
-          <div className="text-zinc-500">Loading data...</div>
-        </div>
-      </div>
-    );
+    return <JournalScenariosSkeletonPage />;
   }
 
   return (
@@ -315,10 +337,19 @@ export default function JournalScenarios() {
         <PageTitle title="Gameplan" subtitle="Plan your trading day ahead" />
         <button
           onClick={saveScenario}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-zinc-900 font-medium hover:bg-[#B8941F] transition-all text-sm"
+          disabled={saveStatus === "saving"}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm disabled:opacity-60 ${
+            saveStatus === "saved"
+              ? "bg-green-600 text-white"
+              : saveStatus === "error"
+              ? "bg-red-600 text-white"
+              : "bg-[#D4AF37] text-zinc-900 hover:bg-[#B8941F]"
+          }`}
         >
           <Save className="w-4 h-4" />
-          <span>Save</span>
+          <span>
+            {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved!" : saveStatus === "error" ? "Failed" : "Save"}
+          </span>
         </button>
       </div>
 
@@ -350,7 +381,7 @@ export default function JournalScenarios() {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
           <div className="text-xs text-zinc-500 mb-1">Scenarios This Week</div>
-          <div className="text-xl font-bold text-[#D4AF37]">{stats.scenariosSavedThisWeek}</div>
+          <div className="text-xl font-bold text-[#D4AF37]">{scenariosSavedThisWeek}</div>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
           <div className="text-xs text-zinc-500 mb-1">Win Rate</div>
@@ -583,6 +614,33 @@ export default function JournalScenarios() {
                 <p><strong>Strong Performance:</strong> Excellent {stats.winRate}% win rate! Keep following your process and avoid overtrading.</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Past Scenarios — last 7 days, zero extra query cost */}
+      {savedScenarios.length > 0 && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+          <div className="flex items-center gap-2 p-4 border-b border-zinc-800/50">
+            <span className="text-base font-semibold text-zinc-300">Past Scenarios</span>
+            <span className="text-xs text-zinc-500">Last 7 saved</span>
+          </div>
+          <div className="divide-y divide-zinc-800/50">
+            {savedScenarios.slice(0, 7).map((scenario) => (
+              <button
+                key={scenario.id}
+                onClick={() => setCurrentScenario(scenario)}
+                className="w-full flex items-center justify-between p-3 hover:bg-zinc-800/30 transition-colors text-left"
+              >
+                <div>
+                  <div className="text-sm font-medium text-zinc-200">{scenario.title}</div>
+                  {scenario.description && (
+                    <div className="text-xs text-zinc-500 mt-0.5 line-clamp-1">{scenario.description}</div>
+                  )}
+                </div>
+                <div className="text-xs text-zinc-600 ml-3 shrink-0">{scenario.date}</div>
+              </button>
+            ))}
           </div>
         </div>
       )}

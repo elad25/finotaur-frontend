@@ -13,20 +13,20 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { SkeletonText } from '@/components/ds/Skeleton';
 import { authFetch } from '@/utils/authFetch';
 import {
   Scale, Info, Sparkles, TrendingUp, TrendingDown,
-  Shield, AlertTriangle, Loader2, RefreshCw,
+  Shield, AlertTriangle, RefreshCw,
   ChevronDown, ChevronUp, DollarSign, BarChart3,
   Activity, Zap, Target, Building2, Lock,
   ArrowUpRight, ArrowDownRight, Minus, Search,
 } from 'lucide-react';
+import { LockedOverlay } from '../LockedOverlay';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
-import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader, MetricBox } from '../ui';
 import { fmtPct, fmtBig, isValid, fmt } from '@/utils/stock-analyzer.utils';
-import { saveToServerCache } from '@/services/stock-analyzer.api';
 import { WhoShouldOwnThis } from './WhoShouldOwnThis';
 
 // =====================================================
@@ -34,6 +34,15 @@ import { WhoShouldOwnThis } from './WhoShouldOwnThis';
 // =====================================================
 
 const ANTHROPIC_VALUATION_ENABLED = import.meta.env.VITE_ENABLE_ANTHROPIC_VALUATION === 'true';
+
+// =====================================================
+// PROPRIETARY DATA FLAG
+// When false, skip forward-estimates / FMP fetches.
+// Forward P/E and PEG cells are replaced with a compact
+// locked badge; all free SEC/computable ratios remain.
+// Set VITE_ENABLE_PROPRIETARY_DATA=true to unlock.
+// =====================================================
+const PROPRIETARY_DATA_ENABLED = import.meta.env.VITE_ENABLE_PROPRIETARY_DATA === 'true';
 
 interface AnthropicValuationComp {
   ticker: string;
@@ -937,6 +946,9 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
   const tickerRef = useRef(data.ticker);
 
   const generate = useCallback(async (force = false) => {
+    // Do not fire any proprietary / AI fetches when the gate is off
+    if (!PROPRIETARY_DATA_ENABLED) return;
+
     const ticker = data.ticker;
 
     // 1. Local memory cache (instant)
@@ -1015,15 +1027,30 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
           <SectionHeader icon={Scale} title="Valuation Multiples" subtitle="Current trading multiples" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: 'P/E (TTM)', value: data.pe, suffix: 'x', benchmark: 22, benchLabel: 'S&P ~22x' },
-              { label: 'Forward P/E', value: data.forwardPe, suffix: 'x', benchmark: 20, benchLabel: 'Fwd ~20x' },
-              { label: 'PEG Ratio', value: data.pegRatio, suffix: 'x', benchmark: 1, benchLabel: 'Fair ≈ 1.0x' },
-              { label: 'P/S', value: data.ps, suffix: 'x', benchmark: 3, benchLabel: 'Median ~3x' },
-              { label: 'P/B', value: data.pb, suffix: 'x', benchmark: 3, benchLabel: 'Median ~3x' },
-              { label: 'EV/EBITDA', value: data.evEbitda, suffix: 'x', benchmark: 13, benchLabel: 'Median ~13x' },
-              { label: 'EV/Revenue', value: data.evRevenue, suffix: 'x', benchmark: 3, benchLabel: 'Median ~3x' },
-              { label: 'FCF Yield', value: data.fcfYield, suffix: '%', benchmark: 4, benchLabel: 'Good > 4%', invert: true },
+              { label: 'P/E (TTM)', value: data.pe, suffix: 'x', benchmark: 22, benchLabel: 'S&P ~22x', proprietary: false },
+              { label: 'Forward P/E', value: data.forwardPe, suffix: 'x', benchmark: 20, benchLabel: 'Fwd ~20x', proprietary: true },
+              { label: 'PEG Ratio', value: data.pegRatio, suffix: 'x', benchmark: 1, benchLabel: 'Fair ≈ 1.0x', proprietary: true },
+              { label: 'P/S', value: data.ps, suffix: 'x', benchmark: 3, benchLabel: 'Median ~3x', proprietary: false },
+              { label: 'P/B', value: data.pb, suffix: 'x', benchmark: 3, benchLabel: 'Median ~3x', proprietary: false },
+              { label: 'EV/EBITDA', value: data.evEbitda, suffix: 'x', benchmark: 13, benchLabel: 'Median ~13x', proprietary: false },
+              { label: 'EV/Revenue', value: data.evRevenue, suffix: 'x', benchmark: 3, benchLabel: 'Median ~3x', proprietary: false },
+              { label: 'FCF Yield', value: data.fcfYield, suffix: '%', benchmark: 4, benchLabel: 'Good > 4%', invert: true, proprietary: false },
             ].map((m) => {
+              // Forward P/E and PEG depend on forward estimates — show inline lock when flag is off
+              if (m.proprietary && !PROPRIETARY_DATA_ENABLED) {
+                return (
+                  <div key={m.label} className="p-3 rounded-xl relative overflow-hidden"
+                    style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.12)' }}>
+                    <p className="text-[10px] text-[#6B6B6B] mb-2">{m.label}</p>
+                    <div className="flex items-center gap-1.5">
+                      <Lock className="w-3 h-3 shrink-0" style={{ color: '#C9A646' }} />
+                      <span className="text-[10px] font-medium" style={{ color: 'rgba(201,166,70,0.7)' }}>
+                        Unlocking soon
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
               const valid = isValid(m.value);
               const val = m.value ?? 0;
               // @ts-ignore
@@ -1055,7 +1082,8 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
           <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[#C9A646] to-transparent" />
           <SectionHeader icon={Info} title="Quick Valuation Context" />
           <div className="space-y-3">
-            {isValid(data.pe) && isValid(data.forwardPe) && (
+            {/* Forward P/E comparison: show only when proprietary data is enabled */}
+            {PROPRIETARY_DATA_ENABLED && isValid(data.pe) && isValid(data.forwardPe) && (
               <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
                 <span className="text-sm text-[#8B8B8B]">P/E Trailing vs Forward</span>
                 <span className={cn("text-sm font-semibold",
@@ -1076,7 +1104,8 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
                 </span>
               </div>
             )}
-            {isValid(data.pegRatio) && (
+            {/* PEG Ratio: show only when proprietary data is enabled */}
+            {PROPRIETARY_DATA_ENABLED && isValid(data.pegRatio) && (
               <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
                 <span className="text-sm text-[#8B8B8B]">PEG Ratio (Growth-Adj. P/E)</span>
                 <span className={cn("text-sm font-semibold",
@@ -1118,10 +1147,7 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
 
       {isLoading && !aiData && (
         <div className="space-y-4">
-          <div className="flex items-center justify-center gap-3 py-3">
-            <div className="w-5 h-5 rounded-full border-2 border-[#C9A646]/30 border-t-[#C9A646] animate-spin" />
-            <span className="text-sm text-[#8B8B8B]">Running deep valuation models for {data.ticker}...</span>
-          </div>
+          <SkeletonText lines={2} className="py-3" />
           <ValuationSkeleton />
         </div>
       )}

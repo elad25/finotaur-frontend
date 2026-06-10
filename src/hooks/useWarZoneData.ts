@@ -14,6 +14,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useWarZoneStatus } from '@/hooks/useUserStatus';
+import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
+import { logger } from '@/lib/logger';
 
 // ============================================
 // TYPES
@@ -209,20 +211,33 @@ export function useWarZoneData(): UseWarZoneDataReturn {
       let currentIsTester = isTester;
       const user = userResult.data?.user;
       if (user?.id) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_tester, role, email')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile) {
-          currentIsTester = profile.is_tester || 
-                           profile.role === 'admin' || 
-                           profile.role === 'super_admin' ||
-                           profile.email === 'elad2550@gmail.com';
-          if (currentIsTester !== isTester) {
-            setIsTester(currentIsTester);
+        try {
+          const { data: profile } = await withTimeout(
+            supabase
+              .from('profiles')
+              .select('is_tester, role, email')
+              .eq('id', user.id)
+              .maybeSingle(),
+            TIMEOUTS.SUPABASE_QUERY,
+            'useWarZoneData.fetchTesterProfile'
+          );
+
+          if (profile) {
+            currentIsTester = profile.is_tester ||
+                             profile.role === 'admin' ||
+                             profile.role === 'super_admin' ||
+                             profile.email === 'elad2550@gmail.com';
+            if (currentIsTester !== isTester) {
+              setIsTester(currentIsTester);
+            }
           }
+        } catch (profileErr) {
+          if (profileErr instanceof TimeoutError) {
+            logger.error('useWarZoneData.fetchTesterProfile timed out', profileErr, { userId: user.id });
+          } else {
+            logger.error('useWarZoneData.fetchTesterProfile failed', profileErr, { userId: user.id });
+          }
+          // Non-fatal: isTester stays false, reports still load
         }
       }
       console.log('[WAR ZONE] 👤 Tester status:', currentIsTester);

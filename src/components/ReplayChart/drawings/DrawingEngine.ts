@@ -1,9 +1,9 @@
-// @ts-nocheck — OQ-69 cascade: Drawing shape type drift. Tracked.
-// drawings/DrawingEngine.ts - FIXED VERSION
+// drawings/DrawingEngine.ts
 // ✅ Fixed: colors.default → colors.primary
 // ✅ Fixed: lineStyle: 0 → lineStyle: 'solid'
+// ✅ Fixed: Drawing object now includes all required fields (tool, color, lineWidth, timestamp)
 
-import { Drawing, DrawingPoint, DrawingType, DrawingStyle, Theme } from '../types';
+import { Drawing, DrawingPoint, DrawingType, DrawingStyle, Theme, POINTS_REQUIRED } from '../types';
 import { DRAWING_COLORS } from '../constants';
 import {
   pointToLineDistance,
@@ -100,19 +100,28 @@ export class DrawingEngine {
 
     // 🔥 FIX: colors.default → colors.primary
     // 🔥 FIX: lineStyle: 0 → lineStyle: 'solid'
+    // 🔥 FIX: Added required Drawing fields: tool, color, lineWidth, timestamp
     this.activeDrawing = {
       id: this.generateId(),
       type: this.currentTool as DrawingType,
+      tool: this.currentTool as DrawingType,
       points: [point],
       style: {
         color: colors.primary,
         lineWidth: 2,
         lineStyle: 'solid',
       },
+      color: colors.primary,
+      lineWidth: 2,
       visible: true,
       locked: false,
+      timestamp: Date.now(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      // Anchored annotations default to bar-anchored placement.
+      ...(this.currentTool === 'anchored-text' || this.currentTool === 'anchored-note'
+        ? { anchor: 'bar' as const }
+        : {}),
     };
   }
 
@@ -123,49 +132,124 @@ export class DrawingEngine {
 
     switch (type) {
       case 'brush':
-        // For brush, keep adding points
+      case 'highlighter':
+        // Freehand tools: keep appending every move point.
         this.activeDrawing.points.push(point);
         break;
 
       case 'horizontal':
-        // Horizontal line only updates price
+        // Horizontal line only updates price; time is locked to the first click.
         this.activeDrawing.points = [
-          { time: this.activeDrawing.points[0].time, price: point.price }
+          { time: this.activeDrawing.points[0].time, price: point.price },
         ];
         break;
 
       case 'vertical':
-        // Vertical line only updates time
+        // Vertical line only updates time; price is locked to the first click.
         this.activeDrawing.points = [
-          { time: point.time, price: this.activeDrawing.points[0].price }
+          { time: point.time, price: this.activeDrawing.points[0].price },
         ];
         break;
 
-      default:
-        // For other tools, update the second point
-        if (this.activeDrawing.points.length === 1) {
+      default: {
+        // General N-point tools: the last slot is always the live "preview" point
+        // that tracks the cursor. If the array already has a preview slot (length ≥ 2
+        // for 2-point tools, or after commitPoint() added one for 3+-point tools),
+        // overwrite that last slot. If there is only the first committed anchor (just
+        // started), append so the renderer has two points to draw the rubber-band.
+        const required = POINTS_REQUIRED[type] ?? 2;
+        if (required === 0) {
+          // Should not reach here for non-freehand tools, but guard gracefully.
           this.activeDrawing.points.push(point);
-        } else {
-          this.activeDrawing.points[1] = point;
+          break;
         }
+        if (this.activeDrawing.points.length <= required) {
+          if (this.activeDrawing.points.length === 1) {
+            // First mouse-move after startDrawing: append the preview anchor so
+            // the renderer always has at least 2 points for a visible rubber-band.
+            this.activeDrawing.points.push(point);
+          } else {
+            // Subsequent moves while still collecting anchors: update the last
+            // (in-progress) preview slot in-place.
+            this.activeDrawing.points[this.activeDrawing.points.length - 1] = point;
+          }
+        }
+        // If points.length === required, all anchors are committed and finishDrawing()
+        // is about to be called by the click loop — nothing to update.
         break;
+      }
     }
 
     this.activeDrawing.updatedAt = Date.now();
+  }
+
+  /**
+   * Commit the current in-progress (last) point and append a new preview point
+   * for the next anchor. Called by the click loop when the user clicks mid-way
+   * through a 3+-point tool (e.g. triangle: click 1→2 commits p1, starts p2).
+   */
+  commitPoint(point: DrawingPoint): void {
+    if (!this.activeDrawing) return;
+    const { type } = this.activeDrawing;
+    const required = POINTS_REQUIRED[type] ?? 2;
+    if (required < 3) return; // Only relevant for 3+-point tools.
+
+    // Lock the current last point to the clicked position, then add a new preview.
+    const last = this.activeDrawing.points.length - 1;
+    this.activeDrawing.points[last] = point;
+    // Append a duplicate as the new in-progress preview anchor.
+    this.activeDrawing.points.push({ ...point });
+    this.activeDrawing.updatedAt = Date.now();
+  }
+
+  /**
+   * Create-or-replace the active drawing's points (component owns commit logic).
+   * The click handler calls this on every click so the engine always reflects
+   * the full committed-point list; finishDrawing() is called by the handler
+   * once pendingPoints.length reaches POINTS_REQUIRED.
+   */
+  setActivePoints(tool: DrawingType, points: DrawingPoint[]): void {
+    if (this.currentTool === 'cursor' || this.currentTool === 'cross') return;
+    const colors = this.theme === 'dark' ? DRAWING_COLORS.dark : DRAWING_COLORS.light;
+    if (!this.activeDrawing || this.activeDrawing.type !== tool) {
+      this.activeDrawing = {
+        id: this.generateId(),
+        type: tool,
+        tool,
+        points: [...points],
+        style: { color: colors.primary, lineWidth: 2, lineStyle: 'solid' },
+        color: colors.primary,
+        lineWidth: 2,
+        visible: true,
+        locked: false,
+        timestamp: Date.now(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        ...(tool === 'anchored-text' || tool === 'anchored-note'
+          ? { anchor: 'bar' as const }
+          : {}),
+      };
+    } else {
+      this.activeDrawing.points = [...points];
+      this.activeDrawing.updatedAt = Date.now();
+    }
   }
 
   finishDrawing(): Drawing | null {
     if (!this.activeDrawing) return null;
 
     const { type, points } = this.activeDrawing;
+    const required = POINTS_REQUIRED[type] ?? 2;
 
-    // Validate minimum points
-    if (type === 'brush' && points.length < 2) {
-      this.activeDrawing = null;
-      return null;
-    }
-
-    if (type !== 'brush' && type !== 'horizontal' && type !== 'vertical' && points.length < 2) {
+    // Validate minimum points using the POINTS_REQUIRED map.
+    if (required === 0) {
+      // Freehand tools (brush, highlighter) need at least 2 recorded positions.
+      if (points.length < 2) {
+        this.activeDrawing = null;
+        return null;
+      }
+    } else if (points.length < required) {
+      // Fixed-anchor tools must have all required anchor points committed.
       this.activeDrawing = null;
       return null;
     }
@@ -193,7 +277,11 @@ export class DrawingEngine {
   // SELECTION
   // ===================================
 
-  selectDrawing(point: Point, threshold: number = 10): Drawing | null {
+  selectDrawing(
+    point: Point,
+    threshold: number = 10,
+    toPixel?: (p: DrawingPoint) => { x: number; y: number } | null,
+  ): Drawing | null {
     // Find closest drawing to the point
     let closestDrawing: Drawing | null = null;
     let minDistance = threshold;
@@ -201,7 +289,7 @@ export class DrawingEngine {
     for (const drawing of this.getVisibleDrawings()) {
       if (drawing.locked) continue;
 
-      const distance = this.getDistanceToDrawing(drawing, point);
+      const distance = this.getDistanceToDrawing(drawing, point, toPixel);
       if (distance < minDistance) {
         minDistance = distance;
         closestDrawing = drawing;
@@ -312,12 +400,59 @@ export class DrawingEngine {
     this.drawings.forEach(d => (d.visible = !allHidden));
   }
 
+  /** Hide all drawings (set visible=false on every drawing). */
+  hideAll(): void {
+    this.drawings.forEach(d => (d.visible = false));
+  }
+
+  /** Lock all drawings (set locked=true on every drawing). */
+  lockAll(): void {
+    this.drawings.forEach(d => (d.locked = true));
+    // Deselect — locked drawings cannot be interacted with.
+    this.selectedDrawing = null;
+    this.drawings.forEach(d => (d.selected = false));
+  }
+
+  /** Delete all drawings and clear history entries for them. */
+  removeAll(): void {
+    const allDrawings = [...this.drawings];
+    allDrawings.forEach(drawing => {
+      this.addToHistory({ type: 'delete', drawing: { ...drawing } });
+    });
+    this.drawings = [];
+    this.selectedDrawing = null;
+    this.activeDrawing = null;
+  }
+
   updateDrawingStyle(id: string, style: Partial<DrawingStyle>): boolean {
     const drawing = this.drawings.find(d => d.id === id);
     if (!drawing) return false;
 
     const previousState = { ...drawing };
     drawing.style = { ...drawing.style, ...style };
+    drawing.updatedAt = Date.now();
+
+    this.addToHistory({
+      type: 'edit',
+      drawing: { ...drawing },
+      previousState,
+    });
+
+    return true;
+  }
+
+  /**
+   * Update top-level fields on a drawing (text, emoji, fontSize, fontWeight,
+   * textAlign, iconName, etc.). Style sub-fields go through updateDrawingStyle.
+   */
+  updateDrawingData(id: string, patch: Partial<Drawing>): boolean {
+    const drawing = this.drawings.find(d => d.id === id);
+    if (!drawing) return false;
+
+    const previousState = { ...drawing };
+    // Apply patch fields, excluding id/type/tool/points which must not change.
+    const { id: _id, type: _type, tool: _tool, points: _points, ...safePatch } = patch as Partial<Drawing> & { id?: string; type?: string; tool?: string; points?: unknown };
+    Object.assign(drawing, safePatch);
     drawing.updatedAt = Date.now();
 
     this.addToHistory({
@@ -402,8 +537,21 @@ export class DrawingEngine {
   // DISTANCE CALCULATIONS
   // ===================================
 
-  private getDistanceToDrawing(drawing: Drawing, point: Point): number {
-    const { type, points } = drawing;
+  private getDistanceToDrawing(
+    drawing: Drawing,
+    point: Point,
+    toPixel?: (p: DrawingPoint) => { x: number; y: number } | null,
+  ): number {
+    const { type } = drawing;
+    // If a pixel-space converter is provided, remap all drawing anchor points to
+    // pixel coordinates so distance math is in the same space as `point`.
+    const rawPoints = drawing.points;
+    const points: Array<{ time: number; price: number }> = toPixel
+      ? rawPoints.map((p) => {
+          const px = toPixel(p);
+          return px ? { time: px.x, price: px.y } : { time: p.time, price: p.price };
+        })
+      : rawPoints;
 
     switch (type) {
       case 'trendline':
@@ -464,10 +612,223 @@ export class DrawingEngine {
 
       case 'text':
       case 'note':
-      case 'measure':
+      case 'measure': {
         const dx = point.x - points[0].time;
         const dy = point.y - points[0].price;
         return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // Emoji / icon markers + 1-point annotation markers — Euclidean distance to anchor.
+      case 'emoji':
+      case 'sticker':
+      case 'icon':
+      case 'comment':
+      case 'price-label':
+      case 'signpost':
+      case 'flag':
+      case 'arrow-up':
+      case 'arrow-down':
+      case 'arrow-left':
+      case 'arrow-right': {
+        const dx = point.x - points[0].time;
+        const dy = point.y - points[0].price;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // callout: 2-point tool — minimum distance to either anchor.
+      case 'callout': {
+        let minCalloutDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minCalloutDist) minCalloutDist = dist;
+        }
+        return minCalloutDist;
+      }
+
+      // fibonacci: 2-point tool — distance to the segment between anchor points.
+      case 'fibonacci':
+        if (points.length < 2) return Infinity;
+        return pointToLineDistance(
+          point,
+          { x: points[0].time, y: points[0].price },
+          { x: points[1].time, y: points[1].price }
+        );
+
+      // New line-segment tools: reuse the existing line-distance helper.
+      case 'trend-angle':
+      case 'arrow':
+      case 'horizontal-ray':
+        if (points.length < 2) return Infinity;
+        return pointToLineDistance(
+          point,
+          { x: points[0].time, y: points[0].price },
+          { x: points[1].time, y: points[1].price }
+        );
+
+      // cross-line: distance to the closer of its horizontal or vertical axis.
+      case 'cross-line':
+        if (points.length < 1) return Infinity;
+        return Math.min(
+          Math.abs(point.y - points[0].price),
+          Math.abs(point.x - points[0].time)
+        );
+
+      // Position tools (3-point): min distance to any of the 3 anchors.
+      case 'long-position':
+      case 'short-position': {
+        let minPosDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minPosDist) minPosDist = dist;
+        }
+        return minPosDist;
+      }
+
+      // Range tools (2-point): min distance to either anchor.
+      case 'price-range':
+      case 'date-range':
+      case 'date-price-range': {
+        let minRangeDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minRangeDist) minRangeDist = dist;
+        }
+        return minRangeDist;
+      }
+
+      // 1-point anchored annotations: Euclidean distance to points[0].
+      case 'anchored-text':
+      case 'anchored-note':
+      case 'price-note':
+      case 'arrow-marker': {
+        const dx = point.x - points[0].time;
+        const dy = point.y - points[0].price;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // Multi-point extras (curves, forecast, projection, bars-pattern, ghost-feed):
+      // min distance to any anchor point.
+      case 'curve':
+      case 'double-curve':
+      case 'forecast':
+      case 'projection':
+      case 'bars-pattern':
+      case 'ghost-feed': {
+        let minExtraDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minExtraDist) minExtraDist = dist;
+        }
+        return minExtraDist;
+      }
+
+      // Multi-anchor tools: distance to nearest anchor point (acceptable for selection).
+      case 'parallel-channel':
+      case 'rotated-rectangle':
+      case 'triangle':
+      case 'arc':
+      case 'pitchfork':
+      case 'fibonacci-extension':
+      case 'ellipse': {
+        let minAnchorDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minAnchorDist) minAnchorDist = dist;
+        }
+        return minAnchorDist;
+      }
+
+      // highlighter: same as brush — distance to nearest segment.
+      case 'highlighter': {
+        let minSegDist = Infinity;
+        for (let i = 0; i < points.length - 1; i++) {
+          const dist = pointToLineDistance(
+            point,
+            { x: points[i].time, y: points[i].price },
+            { x: points[i + 1].time, y: points[i + 1].price }
+          );
+          minSegDist = Math.min(minSegDist, dist);
+        }
+        return minSegDist;
+      }
+
+      // gann-fan: distance to first anchor point (fan origin).
+      case 'gann-fan': {
+        if (points.length < 1) return Infinity;
+        const gdx = point.x - points[0].time;
+        const gdy = point.y - points[0].price;
+        return Math.sqrt(gdx * gdx + gdy * gdy);
+      }
+
+      // Advanced 2-pt fib/gann tools (P2): min distance to either anchor.
+      case 'fib-timezone':
+      case 'fib-circles':
+      case 'fib-speed-fan':
+      case 'fib-spiral':
+      case 'gann-box':
+      case 'gann-square':
+      case 'gann-square-fixed': {
+        let min2Dist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < min2Dist) min2Dist = dist;
+        }
+        return min2Dist;
+      }
+
+      // Advanced 3-pt fib/gann/pitchfork tools (P2): min distance to any of 3 anchors.
+      case 'fib-channel':
+      case 'fib-wedge':
+      case 'pitchfan':
+      case 'pitchfork-schiff':
+      case 'pitchfork-modified':
+      case 'pitchfork-inside': {
+        let min3Dist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < min3Dist) min3Dist = dist;
+        }
+        return min3Dist;
+      }
+
+      // Pattern tools (P6): min distance to any anchor point.
+      case 'xabcd':
+      case 'cypher':
+      case 'abcd':
+      case 'three-drives':
+      case 'head-shoulders':
+      case 'triangle-pattern':
+      case 'elliott-impulse':
+      case 'elliott-correction':
+      case 'elliott-triangle':
+      case 'elliott-wxy':
+      case 'elliott-wxyxz':
+      case 'cyclic-lines':
+      case 'time-cycles':
+      case 'sine-line': {
+        let minPatternDist = Infinity;
+        for (const p of points) {
+          const adx = point.x - p.time;
+          const ady = point.y - p.price;
+          const dist = Math.sqrt(adx * adx + ady * ady);
+          if (dist < minPatternDist) minPatternDist = dist;
+        }
+        return minPatternDist;
+      }
 
       default:
         return Infinity;

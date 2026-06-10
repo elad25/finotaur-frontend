@@ -1,17 +1,22 @@
 // src/providers/AuthProvider.tsx
 // 🔥 v2: REDUCED LOGGING - Only errors and critical events
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback, useMemo } from 'react';
-import { User } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { FEATURES } from '@/config/features';
+import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
+import { logger } from '@/lib/logger';
+import { setSentryUser } from '@/lib/sentry';
+import { track } from '@/lib/analytics';
+import { getFirstTouch } from '@/lib/analytics/attribution';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
 }
@@ -151,28 +156,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logOnce('auth-init', '[Auth] Initializing auth system...');
 
     const initializeAuth = async () => {
+      let session: Session | null = null;
+      let getSessionError: unknown = null;
       try {
         // 🔥 Removed log: '[Auth] Checking for existing session...'
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('[Auth] Session check error:', error);
-          setUser(null);
-          setIsLoading(false);
-          return;
+        const result = await withTimeout(
+          supabase.auth.getSession(),
+          TIMEOUTS.AUTH,
+          'AuthProvider.getSession'
+        );
+        session = result.data.session;
+        if (result.error) getSessionError = result.error;
+      } catch (err) {
+        getSessionError = err;
+        if (err instanceof TimeoutError) {
+          // P0.0 fix (OQ-93): on getSession timeout, try the lighter getUser()
+          // path before declaring no-session. getUser() reads from the local
+          // storage adapter without forcing a token refresh round-trip, so it
+          // recovers the user when the hang is in Supabase's internal refresh
+          // (hypothesis A) or in network preflight, while staying cheap when
+          // localStorage itself is the bottleneck (hypothesis B). withTimeout
+          // wraps it to honour ADL-040 (no unbounded promise on critical path).
+          logger.error('[Auth] getSession timeout — attempting getUser fallback', err);
+          try {
+            const fallback = await withTimeout(
+              supabase.auth.getUser(),
+              4000,
+              'AuthProvider.getUser.fallback'
+            );
+            if (fallback.data?.user && !fallback.error) {
+              // Synthesise a minimal Session from the cached user. The real
+              // Session (with access_token / refresh_token) will arrive via
+              // onAuthStateChange once Supabase's internal state settles —
+              // this just unblocks the initial render so the user isn't stuck
+              // on the login screen while the SDK recovers.
+              session = { user: fallback.data.user } as Session;
+              logger.info('[Auth] getUser fallback restored session for user', {
+                userId: fallback.data.user.id,
+              });
+            } else if (fallback.error) {
+              logger.error('[Auth] getUser fallback returned error', fallback.error);
+            }
+          } catch (fallbackErr) {
+            logger.error('[Auth] getUser fallback also failed', fallbackErr);
+          }
+        } else {
+          logger.error('[Auth] Session fetch failed', err);
+        }
+      } finally {
+        if (getSessionError && !(getSessionError instanceof TimeoutError)) {
+          console.error('[Auth] Session check error:', getSessionError);
         }
 
         if (session?.user) {
           logOnce('auth-session', '[Auth] ✅ Session found:', session.user.email);
           setUser(session.user);
+          logger.setContext({ userId: session.user.id, email: session.user.email });
+          setSentryUser({ id: session.user.id });
         } else {
           logOnce('auth-no-session', '[Auth] No session found');
           setUser(null);
         }
-      } catch (error) {
-        console.error('[Auth] Session initialization failed:', error);
-        setUser(null);
-      } finally {
+
         setIsLoading(false);
       }
     };
@@ -182,86 +227,122 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      logger.info('[Auth] state change', { event, hasSession: !!session, userId: session?.user?.id });
       // 🔥 Log each event type only once
       logOnce(`auth-event-${event}`, '[Auth] State change:', event);
-      
+
       setUser(session?.user ?? null);
-      
+
       if (isLoading) {
         setIsLoading(false);
       }
 
       if (event === 'SIGNED_IN' && session?.user) {
         const userId = session.user.id;
-        // 🔥 Log only once per user
+        // ── Critical path (synchronous-only) ──
+        // These must run before the next microtask so any downstream consumer
+        // of <AuthContext> (ProtectedRoute, useAuth, etc.) sees a coherent
+        // logged-in state on the very next render. Sub-millisecond cost.
+        logger.setContext({ userId: session.user.id, email: session.user.email });
+        setSentryUser({ id: session.user.id });
         logOnce(`auth-signin-${userId}`, '[Auth] User signed in:', session.user.email);
         localStorage.setItem('finotaur_user_id', userId);
+        sessionStorage.removeItem('imp_user_data'); // clear stale impersonation
 
-        // 🔥 CRITICAL FIX: Clear any old impersonation data on real login
-        sessionStorage.removeItem('imp_user_data');
-
-        if (FEATURES.AFFILIATE_TRACKING) {
-          const pendingAffiliateCode = localStorage.getItem('pending_affiliate_code');
-          if (pendingAffiliateCode) {
-            await processAffiliateCode(userId, pendingAffiliateCode);
-            localStorage.removeItem('pending_affiliate_code');
-          }
-        }
-
-        if (session.user.app_metadata.provider === 'google') {
-          const profileReady = await waitForProfile(userId);
-          if (!profileReady) {
-            console.warn(`[Auth] Profile not created within 2s for user ${userId}. Trigger may have failed.`);
-            toast.error(
-              'Account created, but profile setup is taking longer than usual. ' +
-              'Please refresh in a moment. If the problem persists, contact support.'
-            );
-          } else {
-            // First-sign-in gate: only populate user-specific fields when the
-            // profile is freshly minted (affiliate_code IS NULL means we have
-            // not run this block before). Returning users keep their data.
-            const { data: existingProfile } = await supabase
-              .from('profiles')
-              .select('affiliate_code, terms_accepted_at')
-              .eq('id', userId)
-              .maybeSingle();
-
-            if (existingProfile && !existingProfile.affiliate_code) {
-              const displayName =
-                session.user.user_metadata?.full_name ||
-                session.user.user_metadata?.name ||
-                session.user.email?.split('@')[0] ||
-                'User';
-              const affiliateCode = await generateAffiliateCode(displayName);
-
-              // Persist pre-OAuth terms acceptance (set by Register.tsx
-              // localStorage before redirect) if profile lacks them.
-              const pendingTermsAt = localStorage.getItem('pending_terms_accepted_at');
-              const pendingTermsVer = localStorage.getItem('pending_terms_version');
-              const termsFields =
-                !existingProfile.terms_accepted_at && pendingTermsAt && pendingTermsVer
-                  ? { terms_accepted_at: pendingTermsAt, terms_version: pendingTermsVer }
-                  : {};
-
-              const { error: updateError } = await supabase
-                .from('profiles')
-                .update({
-                  affiliate_code: affiliateCode,
-                  display_name: displayName,
-                  ...termsFields,
-                })
-                .eq('id', userId);
-
-              if (updateError) {
-                console.error('[Auth] First-sign-in profile UPDATE failed:', updateError);
-              } else {
-                localStorage.removeItem('pending_terms_accepted_at');
-                localStorage.removeItem('pending_terms_version');
+        // ── Deferred path (off critical path) ──
+        // P0.0 fix (OQ-93): the affiliate processing, waitForProfile (2 s poll),
+        // first-sign-in profile UPDATE and generateAffiliateCode (up to 10
+        // queries) used to run inline here. When TOKEN_REFRESHED races with
+        // the initial getSession() — common on returning users with a session
+        // older than the JWT TTL — this block could starve the event loop for
+        // seconds, contributing to AuthProvider.getSession TimeoutError events
+        // (Sentry MZ-2E). Wrapping in queueMicrotask lets the current
+        // onAuthStateChange callback resolve immediately and any pending
+        // getSession promise settle, while still running the work in this tick
+        // (no UI delay). ADL-040: SIGNED_IN handler must not block render.
+        queueMicrotask(async () => {
+          try {
+            if (FEATURES.AFFILIATE_TRACKING) {
+              const pendingAffiliateCode = localStorage.getItem('pending_affiliate_code');
+              if (pendingAffiliateCode) {
+                await processAffiliateCode(userId, pendingAffiliateCode);
+                localStorage.removeItem('pending_affiliate_code');
               }
             }
+
+            if (session.user.app_metadata.provider === 'google') {
+              const profileReady = await waitForProfile(userId);
+              if (!profileReady) {
+                console.warn(`[Auth] Profile not created within 2s for user ${userId}. Trigger may have failed.`);
+                toast.error(
+                  'Account created, but profile setup is taking longer than usual. ' +
+                  'Please refresh in a moment. If the problem persists, contact support.'
+                );
+              } else {
+                // First-sign-in gate: only populate user-specific fields when the
+                // profile is freshly minted (affiliate_code IS NULL means we have
+                // not run this block before). Returning users keep their data.
+                const { data: existingProfile } = await supabase
+                  .from('profiles')
+                  .select('affiliate_code, terms_accepted_at')
+                  .eq('id', userId)
+                  .maybeSingle();
+
+                if (existingProfile && !existingProfile.affiliate_code) {
+                  const meta = session.user.user_metadata ?? {};
+                  const fullName: string =
+                    meta.full_name ||
+                    meta.name ||
+                    session.user.email?.split('@')[0] ||
+                    'User';
+                  // Google provides given_name/family_name; fall back to splitting full name.
+                  const firstName: string = meta.given_name || fullName.split(' ')[0] || '';
+                  const lastName: string =
+                    meta.family_name || fullName.split(' ').slice(1).join(' ') || '';
+                  const displayName =
+                    [firstName, lastName].filter(Boolean).join(' ').trim() || fullName;
+                  const affiliateCode = await generateAffiliateCode(displayName);
+
+                  // Persist pre-OAuth terms acceptance (set by Register.tsx
+                  // localStorage before redirect) if profile lacks them.
+                  const pendingTermsAt = localStorage.getItem('pending_terms_accepted_at');
+                  const pendingTermsVer = localStorage.getItem('pending_terms_version');
+                  const termsFields =
+                    !existingProfile.terms_accepted_at && pendingTermsAt && pendingTermsVer
+                      ? { terms_accepted_at: pendingTermsAt, terms_version: pendingTermsVer }
+                      : {};
+
+                  const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({
+                      affiliate_code: affiliateCode,
+                      display_name: displayName,
+                      first_name: firstName || null,
+                      last_name: lastName || null,
+                      ...termsFields,
+                    })
+                    .eq('id', userId);
+
+                  if (updateError) {
+                    console.error('[Auth] First-sign-in profile UPDATE failed:', updateError);
+                  } else {
+                    localStorage.removeItem('pending_terms_accepted_at');
+                    localStorage.removeItem('pending_terms_version');
+                    // Fire-and-forget: attribute this OAuth signup to its first-touch source.
+                    track('signup', { method: 'oauth', ...getFirstTouch() });
+                  }
+                }
+              }
+            }
+          } catch (deferredErr) {
+            // Never let deferred work crash the auth flow — the user is
+            // already signed in by the time we get here. Log + move on.
+            logger.error('[Auth] Deferred SIGNED_IN work failed', deferredErr);
           }
-        }
+        });
       } else if (event === 'SIGNED_OUT') {
+        logger.clearContext();
+        setSentryUser(null);
         logOnce(`auth-signout-${Date.now()}`, '[Auth] User signed out');
         _authLoggedOnce.delete('auth-session');
         _authLoggedOnce.delete('auth-init');
@@ -315,7 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name: string) => {
+  const register = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
     try {
       // 🔥 FIX: Check if user already exists first
       const { data: existingUser } = await supabase
@@ -328,12 +409,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('This email is already registered. Please sign in instead.');
       }
 
+      const displayName = [firstName, lastName].filter(Boolean).join(' ').trim();
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            display_name: name,
+            display_name: displayName,
+            first_name: firstName || null,
+            last_name: lastName || null,
           },
         },
       });
@@ -341,7 +426,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Registration failed - no user returned');
 
-      const newAffiliateCode = await generateAffiliateCode(name);
+      const newAffiliateCode = await generateAffiliateCode(displayName);
 
       const profileReady = await waitForProfile(authData.user.id);
       if (!profileReady) {
@@ -434,9 +519,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   
-  if (context === undefined) {
+  // During the SEO prerender there is no AuthProvider (the prerender harness in
+  // entry-server.tsx is intentionally minimal). In the browser a missing
+  // provider is still a real bug, so keep throwing there; during SSR fall back
+  // to an unauthenticated context so downstream gates resolve to their most
+  // restrictive *public* state (e.g. PriceGate shows the licensed-data
+  // placeholder, never the raw data). All hooks below run unconditionally on
+  // both paths to satisfy the Rules of Hooks.
+  if (context === undefined && typeof window !== 'undefined') {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+  const safeContext: AuthContextType = context ?? {
+    user: null,
+    isLoading: false,
+    login: async () => {},
+    register: async () => {},
+    logout: async () => {},
+    signInWithGoogle: async () => {},
+  };
 
   // 🔥 CRITICAL FIX: Only check impersonation, don't create it
   const [impersonationData, setImpersonationData] = useState<{
@@ -447,7 +547,7 @@ export function useAuth() {
     try {
       const data = sessionStorage.getItem('imp_user_data');
       // 🔥 Only use if explicitly set AND we're not currently logging in
-      if (data && context.user) {
+      if (data && safeContext.user) {
         return JSON.parse(data);
       }
       return null;
@@ -487,7 +587,7 @@ export function useAuth() {
     // 1. impersonationData exists
     // 2. We have a real user (admin) logged in
     // 3. The impersonated ID is different from the real user ID
-    if (impersonationData && context.user && impersonationData.id !== context.user.id) {
+    if (impersonationData && safeContext.user && impersonationData.id !== safeContext.user.id) {
       // 🔥 Log only once per impersonation
       logOnce(`imp-effective-${impersonationData.id}`, '🎭 Using impersonated user:', impersonationData.id, impersonationData.email);
       
@@ -505,11 +605,11 @@ export function useAuth() {
     }
     
     // Otherwise, use the real logged-in user
-    return context.user;
-  }, [context.user, impersonationData]);
+    return safeContext.user;
+  }, [safeContext.user, impersonationData]);
 
   return {
-    ...context,
+    ...safeContext,
     user: effectiveUser,
   };
 }

@@ -1,34 +1,30 @@
 // src/components/TopNav.tsx
 // =====================================================
-// FINOTAUR TOP NAVIGATION - v3.0.0 (BETA ACCESS)
+// FINOTAUR TOP NAVIGATION - v4.0.0 (HAMBURGER NAV)
 // =====================================================
-// 
-// 🔥 v3.0.0 CHANGES:
-// - ADDED: Beta access system - admins can access locked domains
-// - ADDED: useAdminAuth hook for hasBetaAccess check
-// 
-// 🔥 v2.3.0 CHANGES:
-// - UNLOCKED: Settings menu item (now navigates to /app/settings)
-// 
-// 🔥 v2.2.0 CHANGES:
-// - LOCKED: Search functionality (Coming Soon)
-// - LOCKED: Upgrade menu item (Coming Soon)
-// 
-// 🔥 v2.0.2 CHANGES:
-// - FIXED: Logo now navigates to /app/top-secret
+//
+// 🔥 v4.0.0 CHANGES:
+// - REMOVED: horizontal product tabs (desktop + mobile scrollable strip)
+// - REMOVED: AssetSelector from top bar (moved into Markets SubNav)
+// - ADDED: ☰ hamburger button (opens ProductDrawer via ProductDrawerContext)
+// - EXPANDED: GlobalOmnibox takes more horizontal space
+//
+// Layout (left→right):
+//   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { Button as DSButton } from '@/components/ds/Button';
 import { useEffect, useState } from 'react';
-import { domains, domainOrder } from '@/constants/nav';
-import { useDomain } from '@/hooks/useDomain';
 import { useAuth } from '@/providers/AuthProvider';
-import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
+import { GlobalOmnibox } from '@/components/GlobalOmnibox';
+import { useFinoChat } from '@/contexts/FinoChatContext';
+import { useProductDrawer } from '@/contexts/ProductDrawerContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,288 +34,200 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// ✅ קומפוננטת החיפוש (disabled for now)
-// import QuickSearch from '@/components/Search/QuickSearch';
-
 export const TopNav = () => {
   const navigate = useNavigate();
-  const { domainId } = useDomain();
+  const location = useLocation();
   const { user } = useAuth();
-  const { hasBetaAccess, isAdmin } = useAdminAuth();  // 🔥 NEW: Beta access check
-  const [userInitials, setUserInitials] = useState('U');
+  const { hasBetaAccess } = useAdminAuth();
+  const { open: openFino } = useFinoChat();
+  const { toggle: toggleDrawer } = useProductDrawer();
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
-  // 🔒 Search is LOCKED - no keyboard shortcut
-  // useEffect(() => {
-  //   const handleKeyDown = (e: KeyboardEvent) => {
-  //     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-  //       e.preventDefault();
-  //       setSearchOpen(true);
-  //     }
-  //   };
-  //   window.addEventListener('keydown', handleKeyDown);
-  //   return () => window.removeEventListener('keydown', handleKeyDown);
-  // }, []);
-
-  // ✅ Get user initials and platform plan
+  // Get platform plan
   useEffect(() => {
     const fetchUserData = async () => {
       if (!user?.id) return;
 
       try {
-        // 🔥 FIXED: Changed first_name, last_name to display_name
         const { data } = await supabase
           .from('profiles')
-          .select('display_name, platform_plan')
+          .select('platform_plan')
           .eq('id', user.id)
           .maybeSingle();
 
         if (data) {
-          // Build initials from display_name
-          const displayName = data.display_name || '';
-          const nameParts = displayName.trim().split(' ');
-          
-          if (nameParts.length >= 2) {
-            // First letter of first name + first letter of last name
-            setUserInitials((nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase());
-          } else if (nameParts.length === 1 && nameParts[0]) {
-            // Just first letter of single name
-            setUserInitials(nameParts[0][0].toUpperCase());
-          } else if (user.email) {
-            // Fallback to email
-            setUserInitials(user.email[0].toUpperCase());
-          }
-          
-          // Platform plan
           setPlatformPlan(data.platform_plan);
-        } else if (user.email) {
-          setUserInitials(user.email[0].toUpperCase());
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
-        // Fallback to email initial
-        if (user.email) {
-          setUserInitials(user.email[0].toUpperCase());
-        }
       }
     };
 
     fetchUserData();
   }, [user]);
 
-  const handleTabClick = (id: string) => {
-    const domain = domains[id];
-
-    // 🔥 BETA ACCESS: Allow navigation to locked/beta domains for beta users only
-    if ((domain?.locked || domain?.beta) && !hasBetaAccess) {
-      return;
-    }
-    
-    if (domain?.defaultPath) {
-      navigate(domain.defaultPath);
-      return;
-    }
-    
-    if (domain?.subNav[0]) {
-      navigate(domain.subNav[0].path);
-    }
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
   };
 
-  // ✅ Get plan badge color
   const getPlanBadge = () => {
     if (!platformPlan || platformPlan === 'free') return null;
-    
+
     const colors: Record<string, string> = {
-      core: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
-      pro: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40',
+      core:       'bg-blue-500/20 text-blue-400 border-blue-500/40',
+      pro:        'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40',
       enterprise: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
     };
-    
+
     return colors[platformPlan] || null;
   };
 
   const planBadgeClass = getPlanBadge();
 
   return (
-    <div 
+    <div
       className="sticky top-0 z-[100] border-b"
-      style={{ 
+      style={{
         borderColor: 'rgba(255, 215, 0, 0.08)',
-        backgroundColor: '#0A0A0A'
+        backgroundColor: '#0A0A0A',
       }}
     >
-      <div className="flex h-16 items-center justify-between px-6 lg:px-10">
-        {/* Logo - 🔥 NOW NAVIGATES TO TOP SECRET */}
-        <div className="flex items-center gap-6 lg:gap-8">
+      {/*
+        3-column grid layout:
+          col 1 (1fr)  — left cluster: logo + hamburger, left-aligned
+          col 2 (auto) — center cluster: omnibox, truly centered in the viewport
+          col 3 (1fr)  — right cluster: Upgrade · Ask Fino · user menu, right-aligned
+
+        On < md screens the center column collapses to a compact search icon
+        (handled inside GlobalOmnibox via its own mobile overlay).
+      */}
+      <div className="grid h-16 items-center px-4 lg:px-6"
+        style={{ gridTemplateColumns: '1fr auto 1fr' }}
+      >
+
+        {/* ── LEFT: Logo + Hamburger ────────────────────────── */}
+        <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() => navigate('/app/top-secret')}
-            className="flex items-center cursor-pointer"
+            onClick={() => navigate('/app/home')}
+            className="flex items-center cursor-pointer flex-shrink-0"
             aria-label="FINOTAUR home"
           >
-            <Wordmark size="default" interactive />
+            <Wordmark size="nav" interactive />
           </button>
 
-          {/* Main Tabs - Desktop */}
-          <nav className="hidden items-center gap-0.5 lg:flex">
-            {domainOrder.map((id) => {
-              const domain = domains[id];
-              const isActive = domainId === id;
-              const isBetaDomain = domain?.beta === true;
-
-              // 🔥 BETA ACCESS: Override locked status for beta users
-              const locked = (domain?.locked || isBetaDomain) && !hasBetaAccess;
-
-              // 🔥 Hide beta domains from non-beta users entirely.
-              if (isBetaDomain && !hasBetaAccess) {
-                return null;
-              }
-
-              return (
-                <button
-                  key={id}
-                  onClick={() => handleTabClick(id)}
-                  disabled={locked}
-                  className={`group relative rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all duration-300 ${
-                    locked
-                      ? 'cursor-not-allowed opacity-40 text-[#A0A0A0] hover:bg-[#1A1A1A]/50'
-                      : isBetaDomain
-                      ? isActive
-                        ? 'bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
-                        : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
-                      : isActive
-                      ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
-                      : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
-                  }`}
-                  title={locked ? 'Beta access required' : isBetaDomain ? 'Beta Feature' : undefined}
-                  style={isActive && !locked ? { 
-                    borderBottom: isBetaDomain ? '2px solid #f97316' : '2px solid #C9A646' 
-                  } : {}}
-                >
-                  <span className="flex flex-col items-center gap-0.5 whitespace-nowrap">
-                    <span className="flex items-center gap-1">
-                      {domain.label}
-                      {isBetaDomain && (
-                        <span className="px-1 py-0.5 text-[8px] font-bold bg-orange-500/20 text-orange-400 rounded">
-                          BETA
-                        </span>
-                      )}
-                    </span>
-                    {locked && <Lock className="h-2.5 w-2.5 opacity-60" />}
-                  </span>
-                  
-                  {locked && (
-                    <span 
-                      className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
-                      style={{ 
-                        background: '#0A0A0A',
-                        border: '1px solid rgba(201,166,70,0.2)',
-                        color: '#A0A0A0'
-                      }}
-                    >
-                      Coming Soon
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+          <button
+            type="button"
+            onClick={toggleDrawer}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[#A0A0A0] transition-colors hover:bg-[#1A1A1A] hover:text-[#F4F4F4]"
+            aria-label="Open menu"
+            data-tour="menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* Right Side */}
-        <div className="flex items-center gap-3">
-          {/* ═══════════════════════════════════════════
-              🔒 SEARCH - LOCKED (Coming Soon) - Unless Beta
-          ═══════════════════════════════════════════ */}
-          <div className="relative hidden md:block group">
-            <Search className={`absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0] ${hasBetaAccess ? '' : 'opacity-40'}`} />
-            <Input
-              placeholder="Search..."
-              className={`w-40 lg:w-48 pl-8 pr-12 text-xs h-9 ${hasBetaAccess ? '' : 'cursor-not-allowed opacity-50'}`}
-              style={{
-                background: 'rgba(20,20,20,0.6)',
-                border: '1px solid rgba(255, 215, 0, 0.08)',
-                color: '#A0A0A0'
-              }}
-              readOnly={!hasBetaAccess}
-              disabled={!hasBetaAccess}
-            />
-            {/* Coming Soon indicator - Only show for non-beta users */}
-            {!hasBetaAccess && (
-              <span 
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#A0A0A0]/60 font-medium px-1.5 py-0.5 rounded border border-[#A0A0A0]/20 flex items-center gap-1"
-                style={{ background: 'rgba(30,30,30,0.8)' }}
-              >
-                <Lock className="w-2.5 h-2.5" />
-              </span>
-            )}
-            {/* Tooltip */}
-            {!hasBetaAccess && (
-              <span 
-                className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
-                style={{ 
-                  background: '#0A0A0A',
-                  border: '1px solid rgba(201,166,70,0.2)',
-                  color: '#A0A0A0'
-                }}
-              >
-                Coming Soon
-              </span>
-            )}
-          </div>
+        {/* ── CENTER: GlobalOmnibox — truly viewport-centered ── */}
+        <div className="flex items-center justify-center w-full max-w-xl lg:max-w-2xl px-3">
+          <GlobalOmnibox />
+        </div>
 
-          {/* Mobile Search Button - LOCKED unless beta 🔒 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`md:hidden hover:bg-[#1A1A1A] ${hasBetaAccess ? '' : 'opacity-40 cursor-not-allowed'}`}
-            disabled={!hasBetaAccess}
+        {/* ── RIGHT: Upgrade · Ask Fino · user menu ────────────── */}
+        <div className="flex items-center gap-2 justify-end flex-shrink-0">
+
+          {/* ✨ Upgrade CTA */}
+          <DSButton
+            variant="gold"
+            size="compact"
+            showArrow={false}
+            onClick={() => navigate('/app/plans')}
+            className="hidden lg:inline-flex"
           >
-            <Search className="h-5 w-5 text-[#A0A0A0]" />
-          </Button>
+            ✨ Upgrade
+          </DSButton>
 
-          {/* ═══════════════════════════════════════════
-              🔥 USER MENU - Settings UNLOCKED
-          ═══════════════════════════════════════════ */}
+          {/* Ask Fino — desktop */}
+          <button
+            type="button"
+            onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
+            className="hidden lg:flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-[#C9A646] transition-all duration-300 hover:bg-[#C9A646]/10 flex-shrink-0"
+            aria-label="Ask FINO AI"
+            data-tour="fino"
+          >
+            <video
+              src="/fino/fino-idle-long.mp4"
+              poster="/fino/fino-idle-long-poster.png"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-hidden="true"
+              className="h-9 w-9 object-contain"
+            />
+            <span>Ask Fino</span>
+          </button>
+
+          {/* Ask Fino — mobile icon */}
+          <button
+            type="button"
+            onClick={() => openFino({ path: location.pathname, label: 'Ask Fino' })}
+            className="lg:hidden flex items-center justify-center h-9 w-9 rounded-lg text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors flex-shrink-0"
+            aria-label="Ask FINO AI"
+          >
+            <video
+              src="/fino/fino-idle-long.mp4"
+              poster="/fino/fino-idle-long-poster.png"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-hidden="true"
+              className="h-9 w-9 object-contain"
+            />
+          </button>
+
+          {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 className="flex items-center gap-2 rounded-full hover:bg-[#1A1A1A] px-2 py-1"
               >
-                {/* User Avatar/Initials */}
-                <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
+                <div
+                  className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center ring-1 ring-white/20"
                   style={{
-                    background: hasBetaAccess 
-                      ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' 
-                      : 'linear-gradient(135deg, #C9A646 0%, #8B7355 100%)',
-                    color: '#000'
+                    background: 'linear-gradient(135deg, #5DBFEF 0%, #1B86CF 50%, #075A9C 100%)',
+                    color: '#fff',
+                    boxShadow:
+                      'inset 0 1px 1.5px rgba(255,255,255,0.45), 0 2px 10px rgba(20,120,200,0.45)',
                   }}
                 >
-                  {userInitials}
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    className="!w-9 !h-9"
+                  >
+                    <ellipse cx="12" cy="8.5" rx="4.1" ry="4.6" />
+                    <path d="M12 14c-5 0-9 3-9 6.7V22h18v-1.3c0-3.7-4-6.7-9-6.7z" />
+                  </svg>
                 </div>
-                
-                {/* Plan Badge (Desktop only) */}
+
                 {planBadgeClass && (
                   <span className={`hidden lg:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${planBadgeClass}`}>
                     <Crown className="w-3 h-3" />
-                    {platformPlan?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    {platformPlan?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   </span>
                 )}
-                
+
                 <ChevronDown className="w-4 h-4 text-[#A0A0A0]" />
               </Button>
             </DropdownMenuTrigger>
-<DropdownMenuContent 
-  align="end" 
-  className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20 z-[150]"
->
-              {/* User Info */}
+
+            <DropdownMenuContent
+              align="end"
+              className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20 z-[150]"
+            >
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium text-white truncate">
@@ -333,7 +241,7 @@ export const TopNav = () => {
                   ) : platformPlan && platformPlan !== 'free' ? (
                     <p className="text-xs text-[#C9A646] flex items-center gap-1">
                       <Crown className="w-3 h-3" />
-                      {platformPlan.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Plan
+                      {platformPlan.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Plan
                     </p>
                   ) : (
                     <p className="text-xs text-zinc-500">Free Plan</p>
@@ -343,17 +251,15 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* ✅ Upgrade - UNLOCKED */}
-              <DropdownMenuItem 
-                onClick={() => navigate('/app/all-markets/pricing')}
+              <DropdownMenuItem
+                onClick={() => navigate('/app/settings?tab=billing')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
                 <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
-                <span className="text-white">Upgrade</span>
+                <span className="text-white">Plans & Billing</span>
               </DropdownMenuItem>
 
-              {/* ✅ Settings - UNLOCKED */}
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => navigate('/app/settings')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
@@ -363,8 +269,7 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* Logout - Still Active */}
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={handleLogout}
                 className="cursor-pointer hover:bg-red-500/10 focus:bg-red-500/10 text-red-400"
               >
@@ -375,53 +280,6 @@ export const TopNav = () => {
           </DropdownMenu>
         </div>
       </div>
-
-      {/* Mobile Tabs - Scrollable */}
-      <div className="flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden scrollbar-hide">
-        {domainOrder.map((id) => {
-          const domain = domains[id];
-          const isActive = domainId === id;
-          const isBetaDomain = domain?.beta === true;
-
-          // 🔥 BETA ACCESS: Override locked status for beta users
-          const locked = (domain?.locked || isBetaDomain) && !hasBetaAccess;
-
-          // 🔥 Hide beta domains from non-beta users entirely.
-          if (isBetaDomain && !hasBetaAccess) {
-            return null;
-          }
-
-          return (
-            <button
-              key={id}
-              onClick={() => handleTabClick(id)}
-              disabled={locked}
-              className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-300 flex items-center gap-1.5 ${
-                locked
-                  ? 'cursor-not-allowed opacity-40 text-[#A0A0A0]'
-                  : isBetaDomain
-                  ? isActive
-                    ? 'bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
-                    : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
-                  : isActive
-                  ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
-                  : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
-              }`}
-            >
-              {domain.label}
-              {isBetaDomain && (
-                <span className="px-1 py-0.5 text-[8px] font-bold bg-orange-500/20 text-orange-400 rounded">
-                  BETA
-                </span>
-              )}
-              {locked && <Lock className="h-3 w-3 opacity-60" />}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 🔒 Search Modal - DISABLED */}
-      {/* <QuickSearch open={searchOpen} onClose={() => setSearchOpen(false)} /> */}
     </div>
   );
 };

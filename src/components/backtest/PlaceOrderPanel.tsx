@@ -1,531 +1,391 @@
-/**
- * PlaceOrderPanel — side-panel trading controls for BacktestChart.
- *
- * Phase 7 additions vs the old inline version:
- *   - Multi-leg take-profit UI (up to 3 legs). Default = single 100% leg
- *     ("+Add TP" reveals multi-leg mode). Each leg has price + size%.
- *   - Validates legs with validateTakeProfitLegs; shows inline error text.
- *   - R:R readout uses weighted-average TP target across legs.
- *   - Estimated fees line shown when commissionConfig has any non-zero field.
- *   - Passes `takeProfits` leg array into openPosition so the session picks
- *     up multi-leg TPs immediately.
- */
+// ==========================================
+// PLACE ORDER PANEL (Phase 2 — order parity)
+// ==========================================
+// 1:1 with the reference "PLACE ORDER" panel, in Finotaur gold-on-black.
+// Standard mode: manual position size + SL/TP.
+// Advanced mode: risk-based auto position sizing (% or $) against current/initial
+// balance, plus Market/Limit/Stop order kinds. Built on lib/backtest/orderEngine.
 
-import { useCallback, useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, X, Plus, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 import {
-  type TakeProfitLeg,
-  type CommissionConfig,
-  type PaperPosition,
-  type PaperSide,
-} from '@/hooks/useBacktestSession';
-import { validateTakeProfitLegs, applyCommission } from '@/lib/backtest/orderEngine';
+  calcPositionSize,
+  calcRewardRisk,
+  resolveRiskAmount,
+  validateOrderLevels,
+  type OrderKind,
+  type OrderSide,
+} from '@/lib/backtest/orderEngine';
 
-// ─── Props ────────────────────────────────────────────────────────
-
-export interface PlaceOrderPanelProps {
-  /** Currently open position (if any). */
-  activePosition: PaperPosition | undefined;
-  /** Size input from parent (contracts/shares). */
+export interface PlaceOrderSubmit {
+  side: OrderSide;
+  kind: OrderKind;
+  /** Price the order is anchored to (market price for market orders, else the limit/stop price). */
+  price: number;
   size: number;
-  onSizeChange: (size: number) => void;
-  /** SL price string from parent (allows empty). */
-  slInput: string;
-  onSlChange: (v: string) => void;
-  /** Single-TP input (used in simple mode and as backward-compat). */
-  tpInput: string;
-  onTpChange: (v: string) => void;
-  /** Current price for unrealized P&L display (string, allows empty). */
-  livePrice: string;
-  onLivePriceChange: (v: string) => void;
-  /** Called when user opens a position. Includes multi-leg TPs when active. */
-  onOpen: (side: PaperSide, takeProfits?: TakeProfitLeg[]) => void;
-  /** Called when user closes the active position. */
-  onClose: () => void;
-  /** Called to update SL on active position. */
-  onSetSL: (price: number) => void;
-  /** Called to update single TP on active position. */
-  onSetTP: (price: number) => void;
-  /** Session-level commission config — used for fee estimate display. */
-  commissionConfig: CommissionConfig;
-  /** Inline flash error (cleared by parent after 3s). */
-  tradeError: string | null;
-  /** Replay mode hint (right-click context menu tip). */
-  showReplayHint: boolean;
+  stopLoss: number | null;
+  takeProfit: number | null;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
-
-/** Generate a new TakeProfitLeg id. */
-function newLegId(): string {
-  return `tp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+export interface PlaceOrderDraft {
+  size: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
 }
 
-/**
- * Compute weighted-average TP price across legs for R:R display.
- * Returns null when there are no valid legs or no SL/entry.
- */
-function weightedAvgTp(legs: TakeProfitLeg[]): number | null {
-  const total = legs.reduce((sum, l) => sum + l.sizePercent, 0);
-  if (total <= 0) return null;
-  const wtSum = legs.reduce((sum, l) => sum + l.price * l.sizePercent, 0);
-  return wtSum / total;
+interface PlaceOrderPanelProps {
+  /** Live market price for the active symbol. */
+  marketPrice: number;
+  symbol: string;
+  /** Current account balance (initial ± realized P&L). */
+  currentBalance: number;
+  initialBalance: number;
+  contractMultiplier?: number;
+  onSubmit?: (order: PlaceOrderSubmit) => void;
+  /**
+   * Optional callback fired whenever the computed draft values change.
+   * Lets a parent read the live size/SL/TP without coupling to internal state.
+   * Purely additive — existing usage without this prop is unaffected.
+   */
+  onDraftChange?: (draft: PlaceOrderDraft) => void;
+  className?: string;
 }
 
-/**
- * Split sizePercent evenly across `count` legs (last gets the remainder
- * to ensure sum stays exactly 100).
- */
-function evenSplit(count: number): number[] {
-  if (count <= 0) return [];
-  const base = Math.floor(100 / count);
-  const rem = 100 - base * count;
-  return Array.from({ length: count }, (_, i) =>
-    i === count - 1 ? base + rem : base,
+type BalanceBasis = 'current' | 'initial';
+
+const num = (v: string) => (v === '' ? NaN : Number(v));
+
+export function PlaceOrderPanel({
+  marketPrice,
+  symbol,
+  currentBalance,
+  initialBalance,
+  contractMultiplier = 1,
+  onSubmit,
+  onDraftChange,
+  className,
+}: PlaceOrderPanelProps) {
+  const [advanced, setAdvanced] = useState(false);
+  const [kind, setKind] = useState<OrderKind>('market');
+  const [error, setError] = useState<string | null>(null);
+
+  // Standard-mode inputs
+  const [positionSize, setPositionSize] = useState('');
+  const [limitPrice, setLimitPrice] = useState('');
+
+  // Shared SL/TP
+  const [stopLoss, setStopLoss] = useState('');
+  const [takeProfit, setTakeProfit] = useState('');
+
+  // Advanced-mode inputs
+  const [balanceBasis, setBalanceBasis] = useState<BalanceBasis>('current');
+  const [riskMode, setRiskMode] = useState<'percent' | 'amount'>('percent');
+  const [riskValue, setRiskValue] = useState('1');
+
+  const entryPrice = useMemo(() => {
+    if (kind === 'market') return marketPrice;
+    const p = num(limitPrice);
+    return Number.isFinite(p) ? p : marketPrice;
+  }, [kind, limitPrice, marketPrice]);
+
+  const basisBalance = balanceBasis === 'current' ? currentBalance : initialBalance;
+
+  // Auto-computed size in advanced mode; manual otherwise.
+  const computedSize = useMemo(() => {
+    if (!advanced) {
+      const s = num(positionSize);
+      return Number.isFinite(s) ? s : 0;
+    }
+    const sl = num(stopLoss);
+    if (!Number.isFinite(sl)) return 0;
+    return calcPositionSize({
+      balance: basisBalance,
+      riskPercent: riskMode === 'percent' ? num(riskValue) : undefined,
+      riskAmount: riskMode === 'amount' ? num(riskValue) : undefined,
+      entryPrice,
+      stopLoss: sl,
+      contractMultiplier,
+    });
+  }, [advanced, positionSize, stopLoss, basisBalance, riskMode, riskValue, entryPrice, contractMultiplier]);
+
+  const riskAmountPreview = useMemo(
+    () =>
+      advanced
+        ? resolveRiskAmount({
+            balance: basisBalance,
+            riskPercent: riskMode === 'percent' ? num(riskValue) : undefined,
+            riskAmount: riskMode === 'amount' ? num(riskValue) : undefined,
+          })
+        : 0,
+    [advanced, basisBalance, riskMode, riskValue]
+  );
+
+  const rr = useMemo(() => {
+    const sl = num(stopLoss);
+    const tp = num(takeProfit);
+    if (!Number.isFinite(sl) || !Number.isFinite(tp) || !computedSize) {
+      return { reward: 0, risk: 0, rr: 0 };
+    }
+    // Side used only to keep reward/risk positive; ratio is side-agnostic here.
+    const side: OrderSide = tp >= entryPrice ? 'buy' : 'sell';
+    return calcRewardRisk(side, entryPrice, sl, tp, computedSize, contractMultiplier);
+  }, [stopLoss, takeProfit, computedSize, entryPrice, contractMultiplier]);
+
+  // Emit live draft values so a parent (e.g. BacktestChart) can read the current
+  // size/SL/TP without needing to own those inputs. Fires only when values change.
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const sl = num(stopLoss);
+    const tp = num(takeProfit);
+    onDraftChange({
+      size: computedSize,
+      stopLoss: Number.isFinite(sl) ? sl : null,
+      takeProfit: Number.isFinite(tp) ? tp : null,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedSize, stopLoss, takeProfit]);
+
+  const place = (side: OrderSide) => {
+    const sl = num(stopLoss);
+    const tp = num(takeProfit);
+    const slVal = Number.isFinite(sl) ? sl : null;
+    const tpVal = Number.isFinite(tp) ? tp : null;
+
+    const reason = validateOrderLevels(side, entryPrice, slVal, tpVal);
+    if (reason) {
+      // Surface inline; caller can also toast.
+      setError(reason);
+      return;
+    }
+    if (!computedSize || computedSize <= 0) {
+      setError('Position size must be greater than 0');
+      return;
+    }
+    setError(null);
+    onSubmit?.({ side, kind, price: entryPrice, size: computedSize, stopLoss: slVal, takeProfit: tpVal });
+  };
+
+  return (
+    <div
+      className={cn(
+        'w-full rounded-2xl border border-[#C9A646]/20 bg-[#0A0A0A]/95 backdrop-blur-sm p-4 text-white',
+        className
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-bold tracking-wide text-white">PLACE ORDER</h3>
+        <span className="text-[10px] text-gray-500">{symbol}</span>
+      </div>
+
+      {/* Advanced toggle */}
+      <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 mb-3">
+        <span className="text-xs text-gray-300">Advanced order</span>
+        <Switch
+          checked={advanced}
+          onCheckedChange={setAdvanced}
+          className="data-[state=checked]:bg-[#C9A646]"
+        />
+      </div>
+
+      {/* Order kind (advanced only) */}
+      {advanced && (
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/5 p-1 mb-3">
+          {(['market', 'limit', 'stop'] as OrderKind[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={cn(
+                'rounded-md py-1 text-xs font-medium capitalize transition-all',
+                kind === k ? 'bg-[#C9A646] text-black' : 'text-gray-400 hover:text-white'
+              )}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Limit/stop price (advanced + non-market) */}
+      {advanced && kind !== 'market' && (
+        <Field label={`${kind === 'limit' ? 'Limit' : 'Stop'} price`}>
+          <input
+            type="number"
+            value={limitPrice}
+            onChange={(e) => setLimitPrice(e.target.value)}
+            placeholder={marketPrice ? String(marketPrice) : '0'}
+            className={inputCls}
+          />
+        </Field>
+      )}
+
+      {/* Standard: manual position size */}
+      {!advanced && (
+        <Field label="Position size" suffix={symbol}>
+          <input
+            type="number"
+            value={positionSize}
+            onChange={(e) => setPositionSize(e.target.value)}
+            placeholder="0"
+            className={inputCls}
+          />
+        </Field>
+      )}
+
+      {/* Advanced: risk-based sizing */}
+      {advanced && (
+        <>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <button
+              type="button"
+              onClick={() => setBalanceBasis('current')}
+              className={cn(
+                'rounded-lg py-2 text-xs transition-all border',
+                balanceBasis === 'current'
+                  ? 'border-[#C9A646]/60 bg-[#C9A646]/10 text-[#C9A646]'
+                  : 'border-white/10 text-gray-400 hover:text-white'
+              )}
+            >
+              Current ${currentBalance.toLocaleString()}
+            </button>
+            <button
+              type="button"
+              onClick={() => setBalanceBasis('initial')}
+              className={cn(
+                'rounded-lg py-2 text-xs transition-all border',
+                balanceBasis === 'initial'
+                  ? 'border-[#C9A646]/60 bg-[#C9A646]/10 text-[#C9A646]'
+                  : 'border-white/10 text-gray-400 hover:text-white'
+              )}
+            >
+              Initial ${initialBalance.toLocaleString()}
+            </button>
+          </div>
+
+          <Field
+            label={`Max risk (${riskMode === 'percent' ? '%' : '$'})`}
+            action={
+              <button
+                type="button"
+                onClick={() => setRiskMode((m) => (m === 'percent' ? 'amount' : 'percent'))}
+                className="text-[10px] text-[#C9A646] hover:text-[#D4B55E]"
+              >
+                {riskMode === 'percent' ? 'Use $' : 'Use %'}
+              </button>
+            }
+          >
+            <input
+              type="number"
+              value={riskValue}
+              onChange={(e) => setRiskValue(e.target.value)}
+              placeholder={riskMode === 'percent' ? '1' : '100'}
+              className={inputCls}
+            />
+          </Field>
+          {riskAmountPreview > 0 && (
+            <p className="text-[10px] text-gray-500 -mt-1 mb-2">
+              Risking ${riskAmountPreview.toFixed(2)} → size {computedSize ? computedSize.toFixed(4) : '—'}
+            </p>
+          )}
+        </>
+      )}
+
+      {/* Market price (read-only) */}
+      <Field label="Market price" suffix="USD">
+        <div className="flex h-9 items-center text-sm text-gray-300 font-mono">
+          {marketPrice ? marketPrice.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
+        </div>
+      </Field>
+
+      {/* SL / TP */}
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Profit target">
+          <input
+            type="number"
+            value={takeProfit}
+            onChange={(e) => setTakeProfit(e.target.value)}
+            placeholder="0"
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Stop loss">
+          <input
+            type="number"
+            value={stopLoss}
+            onChange={(e) => setStopLoss(e.target.value)}
+            placeholder="0"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+
+      {/* Reward / Risk / Total */}
+      <div className="grid grid-cols-3 gap-2 my-3 text-center">
+        <div>
+          <p className="text-[10px] text-gray-500">Reward</p>
+          <p className="text-sm font-semibold text-emerald-400">
+            ${rr.reward.toFixed(2)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] text-gray-500">Risk</p>
+          <p className="text-sm font-semibold text-rose-400">${rr.risk.toFixed(2)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-gray-500">R:R</p>
+          <p className="text-sm font-semibold text-[#C9A646]">
+            {rr.rr ? `${rr.rr.toFixed(2)}` : '—'}
+          </p>
+        </div>
+      </div>
+
+      {error && <p className="text-[11px] text-rose-400 mb-2">{error}</p>}
+
+      {/* Buy / Sell */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => place('buy')}
+          className="rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-bold py-2.5 text-sm transition-colors"
+        >
+          Buy
+        </button>
+        <button
+          type="button"
+          onClick={() => place('sell')}
+          className="rounded-xl bg-rose-500/90 hover:bg-rose-500 text-white font-bold py-2.5 text-sm transition-colors"
+        >
+          Sell
+        </button>
+      </div>
+    </div>
   );
 }
 
-// ─── Component ───────────────────────────────────────────────────
+const inputCls =
+  'w-full h-9 rounded-md bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#C9A646]/40 focus:ring-1 focus:ring-[#C9A646]/30 font-mono';
 
-export function PlaceOrderPanel({
-  activePosition,
-  size,
-  onSizeChange,
-  slInput,
-  onSlChange,
-  tpInput,
-  onTpChange,
-  livePrice,
-  onLivePriceChange,
-  onOpen,
-  onClose,
-  onSetSL,
-  onSetTP,
-  commissionConfig,
-  tradeError,
-  showReplayHint,
-}: PlaceOrderPanelProps) {
-  // ── Multi-leg TP state ──────────────────────────────────────────
-  // `multiLegMode` = whether the "+Add TP" section is expanded.
-  // While collapsed, we use the single `tpInput` and open with 1 × 100% leg.
-  // While expanded, we manage `legs[]` locally and pass them to onOpen.
-  const [multiLegMode, setMultiLegMode] = useState(false);
-
-  const [legs, setLegs] = useState<TakeProfitLeg[]>(() => [
-    { id: newLegId(), price: 0, sizePercent: 100 },
-  ]);
-
-  // ── Derived ────────────────────────────────────────────────────
-
-  const entry = parseFloat(livePrice);
-  const sl = parseFloat(slInput);
-
-  // Validate legs (only when in multi-leg mode and something is filled in).
-  const legValidation = useMemo(() => {
-    if (!multiLegMode) return null;
-    // Only validate legs with non-zero prices (user may not have filled all).
-    const filledLegs = legs.filter((l) => l.price > 0);
-    if (filledLegs.length === 0) return null;
-    return validateTakeProfitLegs(filledLegs);
-  }, [multiLegMode, legs]);
-
-  const legError: string | null = legValidation && !legValidation.ok ? legValidation.reason : null;
-
-  // Weighted-avg TP target for R:R computation.
-  const effectiveTp = useMemo(() => {
-    if (multiLegMode) {
-      const filledLegs = legs.filter((l) => l.price > 0);
-      return weightedAvgTp(filledLegs);
-    }
-    const v = parseFloat(tpInput);
-    return v > 0 ? v : null;
-  }, [multiLegMode, legs, tpInput]);
-
-  // R:R ratio (risk in denominator; "1:X" format for display).
-  const rrRatio = useMemo(() => {
-    if (!entry || isNaN(entry) || entry <= 0) return null;
-    if (!sl || isNaN(sl) || sl <= 0) return null;
-    if (!effectiveTp) return null;
-    const risk = Math.abs(entry - sl);
-    const reward = Math.abs(effectiveTp - entry);
-    if (risk <= 0) return null;
-    return reward / risk;
-  }, [entry, sl, effectiveTp]);
-
-  // Estimated fee per SIDE (one entry fill).
-  const estimatedFeePerSide = useMemo(() => {
-    if (!entry || isNaN(entry) || entry <= 0 || size <= 0) return 0;
-    const feeConfig = commissionConfig;
-    if (feeConfig.commissionPerOrder === 0 && feeConfig.commissionPercent === 0) return 0;
-    return applyCommission(entry, size, feeConfig);
-  }, [entry, size, commissionConfig]);
-
-  // Unrealized P&L for open position.
-  const unrealizedPnl = useMemo(() => {
-    if (!activePosition) return null;
-    const exit = parseFloat(livePrice);
-    if (!exit || isNaN(exit)) return null;
-    const direction = activePosition.side === 'LONG' ? 1 : -1;
-    return (exit - activePosition.entryPrice) * direction * activePosition.size;
-  }, [activePosition, livePrice]);
-
-  // ── Multi-leg helpers ──────────────────────────────────────────
-
-  const handleAddLeg = useCallback(() => {
-    if (legs.length >= 3) return;
-    const newCount = legs.length + 1;
-    const splits = evenSplit(newCount);
-    setLegs((prev) =>
-      prev
-        .map((l, i) => ({ ...l, sizePercent: splits[i] ?? l.sizePercent }))
-        .concat([{ id: newLegId(), price: 0, sizePercent: splits[newCount - 1] }]),
-    );
-  }, [legs.length]);
-
-  const handleRemoveLeg = useCallback((legId: string) => {
-    setLegs((prev) => {
-      const next = prev.filter((l) => l.id !== legId);
-      if (next.length === 0) return prev; // keep at least 1
-      // Re-split evenly after removal.
-      const splits = evenSplit(next.length);
-      return next.map((l, i) => ({ ...l, sizePercent: splits[i] }));
-    });
-  }, []);
-
-  const handleLegPriceChange = useCallback((legId: string, raw: string) => {
-    const v = parseFloat(raw);
-    setLegs((prev) =>
-      prev.map((l) => (l.id === legId ? { ...l, price: isNaN(v) ? 0 : v } : l)),
-    );
-  }, []);
-
-  const handleLegSizeChange = useCallback((legId: string, raw: string) => {
-    const v = parseFloat(raw);
-    setLegs((prev) =>
-      prev.map((l) => (l.id === legId ? { ...l, sizePercent: isNaN(v) ? 0 : v } : l)),
-    );
-  }, []);
-
-  const handleEnterMultiLegMode = useCallback(() => {
-    // Pre-fill TP1 from the single tpInput if set.
-    const singleTp = parseFloat(tpInput);
-    setLegs([
-      {
-        id: newLegId(),
-        price: singleTp > 0 ? singleTp : 0,
-        sizePercent: 100,
-      },
-    ]);
-    setMultiLegMode(true);
-  }, [tpInput]);
-
-  const handleExitMultiLegMode = useCallback(() => {
-    setMultiLegMode(false);
-    // Preserve last TP1 price back into the simple input for the user.
-    const firstLeg = legs[0];
-    if (firstLeg && firstLeg.price > 0) {
-      onTpChange(firstLeg.price.toString());
-    }
-  }, [legs, onTpChange]);
-
-  // ── Open handler ───────────────────────────────────────────────
-
-  const handleOpen = useCallback((side: PaperSide) => {
-    if (multiLegMode) {
-      const filledLegs = legs.filter((l) => l.price > 0);
-      onOpen(side, filledLegs.length > 0 ? filledLegs : undefined);
-    } else {
-      onOpen(side);
-    }
-  }, [multiLegMode, legs, onOpen]);
-
-  // ── Render ────────────────────────────────────────────────────
-
+function Field({
+  label,
+  suffix,
+  action,
+  children,
+}: {
+  label: string;
+  suffix?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <>
-      {/* Current price */}
-      <label className="mb-3 block">
-        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Current price</span>
-        <input
-          type="number"
-          value={livePrice}
-          onChange={(e) => onLivePriceChange(e.target.value)}
-          placeholder="e.g. 20425.50"
-          step="0.01"
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
-        />
-      </label>
-
-      {/* Size */}
-      <label className="mb-3 block">
-        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Size (contracts)</span>
-        <input
-          type="number"
-          value={size}
-          onChange={(e) => onSizeChange(Math.max(0.01, Number(e.target.value)))}
-          min="0.01"
-          step="0.1"
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
-        />
-      </label>
-
-      {/* Stop loss */}
-      <label className="mb-3 block">
-        <span className="text-[10px] uppercase tracking-wider text-zinc-500">Stop loss</span>
-        <input
-          type="number"
-          value={slInput}
-          onChange={(e) => onSlChange(e.target.value)}
-          placeholder="optional"
-          step="0.01"
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none"
-        />
-      </label>
-
-      {/* Take profit — simple mode */}
-      {!multiLegMode && (
-        <div className="mb-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-500">Take profit</span>
-            <button
-              type="button"
-              onClick={handleEnterMultiLegMode}
-              className="flex items-center gap-0.5 text-[10px] text-[#C9A646]/70 hover:text-[#C9A646] transition-colors"
-            >
-              <Plus size={10} />
-              Add TP
-            </button>
-          </div>
-          <input
-            type="number"
-            value={tpInput}
-            onChange={(e) => onTpChange(e.target.value)}
-            placeholder="optional"
-            step="0.01"
-            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-          />
-        </div>
-      )}
-
-      {/* Take profit — multi-leg mode */}
-      {multiLegMode && (
-        <div className="mb-3 rounded-md border border-zinc-800 bg-zinc-900/40 p-2.5">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-              Take Profit Legs
-            </span>
-            <button
-              type="button"
-              onClick={handleExitMultiLegMode}
-              className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
-            >
-              ← Simple mode
-            </button>
-          </div>
-
-          <div className="space-y-1.5">
-            {legs.map((leg, idx) => (
-              <div key={leg.id} className="flex items-center gap-1.5">
-                <span className="w-6 shrink-0 text-center text-[10px] text-zinc-500">
-                  {idx + 1}
-                </span>
-                {/* Price */}
-                <input
-                  type="number"
-                  value={leg.price > 0 ? leg.price : ''}
-                  onChange={(e) => handleLegPriceChange(leg.id, e.target.value)}
-                  placeholder="Price"
-                  step="0.01"
-                  className="min-w-0 flex-1 rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-xs focus:border-emerald-500 focus:outline-none"
-                />
-                {/* Size % */}
-                <div className="relative w-16 shrink-0">
-                  <input
-                    type="number"
-                    value={leg.sizePercent}
-                    onChange={(e) => handleLegSizeChange(leg.id, e.target.value)}
-                    min="1"
-                    max="100"
-                    step="1"
-                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1.5 pr-5 text-xs focus:border-zinc-700 focus:outline-none"
-                  />
-                  <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-600">
-                    %
-                  </span>
-                </div>
-                {/* Remove (disabled for the last leg) */}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveLeg(leg.id)}
-                  disabled={legs.length <= 1}
-                  title="Remove leg"
-                  className="shrink-0 rounded p-1 text-zinc-600 transition-colors hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {legs.length < 3 && (
-            <button
-              type="button"
-              onClick={handleAddLeg}
-              className="mt-2 flex w-full items-center justify-center gap-1 rounded border border-dashed border-zinc-800 py-1.5 text-[10px] text-zinc-600 transition-colors hover:border-zinc-700 hover:text-zinc-400"
-            >
-              <Plus size={10} />
-              Add leg {legs.length + 1}
-            </button>
-          )}
-
-          {/* Leg validation error */}
-          {legError && (
-            <div className="mt-1.5 flex items-start gap-1.5 rounded border border-rose-800 bg-rose-950/40 px-2 py-1.5 text-[10px] text-rose-300">
-              <AlertCircle size={10} className="mt-0.5 shrink-0" />
-              {legError}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* R:R + fee readout */}
-      {(rrRatio != null || estimatedFeePerSide > 0) && (
-        <div className="mb-3 rounded-md border border-zinc-900 bg-zinc-900/30 px-2.5 py-2 text-[10px] text-zinc-500">
-          {rrRatio != null && (
-            <div className="flex justify-between">
-              <span>R:R (est.)</span>
-              <span className="font-semibold text-[#C9A646]">1:{rrRatio.toFixed(2)}</span>
-            </div>
-          )}
-          {estimatedFeePerSide > 0 && (
-            <div className="flex justify-between mt-0.5">
-              <span>Fees incl. (per side)</span>
-              <span className="text-zinc-400">${estimatedFeePerSide.toFixed(2)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* No active position — show open buttons */}
-      {!activePosition ? (
-        <div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleOpen('LONG')}
-              disabled={multiLegMode && legError != null}
-              className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-emerald-600 px-3 py-2 text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <div className="flex items-center gap-1.5">
-                <TrendingUp size={14} />
-                <span className="text-sm font-bold">BUY</span>
-              </div>
-              <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
-            </button>
-            <button
-              onClick={() => handleOpen('SHORT')}
-              disabled={multiLegMode && legError != null}
-              className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-rose-600 px-3 py-2 text-white transition-colors hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <div className="flex items-center gap-1.5">
-                <TrendingDown size={14} />
-                <span className="text-sm font-bold">SELL</span>
-              </div>
-              <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
-            </button>
-          </div>
-
-          {showReplayHint && (
-            <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
-              💡 Right-click on the chart to place LIMIT or STOP orders
-            </div>
-          )}
-
-          {tradeError && (
-            <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
-              <AlertCircle size={12} className="mt-0.5 shrink-0" />
-              <span>{tradeError}</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Active position — show position card + update SL/TP + close */
-        <div className="space-y-2">
-          <div className="rounded-md border border-[#C9A646]/30 bg-[#C9A646]/5 p-3">
-            <div className="flex items-center justify-between">
-              <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                activePosition.side === 'LONG'
-                  ? 'bg-emerald-600/20 text-emerald-400'
-                  : 'bg-rose-600/20 text-rose-400'
-              }`}>
-                {activePosition.side}
-              </span>
-              <span className="text-xs text-zinc-500">
-                {activePosition.size}× @ ${activePosition.entryPrice.toFixed(2)}
-              </span>
-            </div>
-            {unrealizedPnl != null && (
-              <div className="mt-2">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500">Unrealized</div>
-                <div className={`text-lg font-bold ${unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
-                </div>
-              </div>
-            )}
-            {/* Active TP legs display */}
-            {activePosition.takeProfits && activePosition.takeProfits.length > 0 && (
-              <div className="mt-2 space-y-0.5">
-                {activePosition.takeProfits.map((leg, idx) => (
-                  <div key={leg.id} className="flex items-center justify-between text-[10px]">
-                    <span className={`text-zinc-500 ${leg.filled ? 'line-through opacity-50' : ''}`}>
-                      TP{idx + 1} {leg.sizePercent}%
-                    </span>
-                    <span className={`font-mono ${leg.filled ? 'text-zinc-600' : 'text-emerald-500/70'}`}>
-                      ${leg.price.toFixed(2)} {leg.filled ? '✓' : ''}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* SL display */}
-            {activePosition.stopLoss && (
-              <div className="mt-1 flex justify-between text-[10px]">
-                <span className="text-zinc-500">SL</span>
-                <span className="font-mono text-rose-500/70">${activePosition.stopLoss.toFixed(2)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Quick set SL/TP from inputs */}
-          <div className="grid grid-cols-2 gap-2">
-            {slInput && (
-              <button
-                onClick={() => onSetSL(parseFloat(slInput))}
-                className="rounded-md border border-rose-700 bg-rose-950 px-2 py-1.5 text-[10px] font-semibold text-rose-400 hover:bg-rose-900"
-              >
-                Set SL
-              </button>
-            )}
-            {tpInput && !multiLegMode && (
-              <button
-                onClick={() => onSetTP(parseFloat(tpInput))}
-                className="rounded-md border border-emerald-700 bg-emerald-950 px-2 py-1.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-900"
-              >
-                Set TP
-              </button>
-            )}
-          </div>
-
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-[#C9A646] px-3 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-[#D4B55E]"
-          >
-            <X size={16} />
-            Close at ${livePrice || '—'}
-          </button>
-        </div>
-      )}
-    </>
+    <div className="mb-2">
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[11px] text-gray-400">{label}</label>
+        {action ?? (suffix && <span className="text-[10px] text-gray-600">{suffix}</span>)}
+      </div>
+      {children}
+    </div>
   );
 }
 

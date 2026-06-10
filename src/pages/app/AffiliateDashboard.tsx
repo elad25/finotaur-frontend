@@ -5,16 +5,15 @@
 // ============================================
 
 import { useState } from 'react';
-import { 
-  Gift, 
-  Users, 
-  DollarSign, 
-  TrendingUp, 
-  Copy, 
+import {
+  Gift,
+  Users,
+  DollarSign,
+  TrendingUp,
+  Copy,
   ExternalLink,
   MousePointer,
   UserCheck,
-  Loader2,
   Award,
   Clock,
   CheckCircle,
@@ -27,6 +26,8 @@ import {
   Info,
   AlertCircle
 } from 'lucide-react';
+import { Skeleton, SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
+import { AffiliateDashboardSkeletonPage } from '@/components/skeletons/AffiliateDashboardSkeleton';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { 
@@ -81,14 +82,7 @@ export default function AffiliateDashboard() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-[#D4AF37] animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading affiliate dashboard...</p>
-        </div>
-      </div>
-    );
+    return <AffiliateDashboardSkeletonPage />;
   }
 
   // Not an affiliate - Show application form
@@ -422,9 +416,7 @@ export default function AffiliateDashboard() {
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Your Referrals</h3>
             {referralsLoading ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto" />
-              </div>
+              <SkeletonTable rows={4} cols={3} />
             ) : referrals?.length === 0 ? (
               <div className="text-center py-12">
                 <Users className="w-12 h-12 text-gray-600 mx-auto mb-3" />
@@ -465,9 +457,7 @@ export default function AffiliateDashboard() {
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Commission History</h3>
             {commissionsLoading ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto" />
-              </div>
+              <SkeletonTable rows={5} cols={5} />
             ) : commissions?.length === 0 ? (
               <div className="text-center py-12">
                 <DollarSign className="w-12 h-12 text-gray-600 mx-auto mb-3" />
@@ -526,9 +516,7 @@ export default function AffiliateDashboard() {
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Payout History</h3>
             {payoutsLoading ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto" />
-              </div>
+              <SkeletonTable rows={3} cols={3} />
             ) : payouts?.length === 0 ? (
               <div className="text-center py-12">
                 <Wallet className="w-12 h-12 text-gray-600 mx-auto mb-3" />

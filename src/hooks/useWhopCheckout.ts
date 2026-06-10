@@ -349,6 +349,10 @@ const checkoutSession = await createCheckoutSession({
     initiateCheckout({ planName: 'platform_enterprise', billingInterval: 'monthly' });
   }, [initiateCheckout]);
 
+  const checkoutPlatformEnterpriseYearly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_enterprise', billingInterval: 'yearly' });
+  }, [initiateCheckout]);
+
   // Legacy aliases for backward compatibility
   const checkoutPlatformProMonthly = checkoutPlatformFinotaurMonthly;
   const checkoutPlatformProYearly = checkoutPlatformFinotaurYearly;
@@ -388,6 +392,7 @@ const checkoutSession = await createCheckoutSession({
     checkoutPlatformFinotaurMonthly,
     checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly,
+    checkoutPlatformEnterpriseYearly,
     // Legacy aliases
     checkoutPlatformProMonthly,
     checkoutPlatformProYearly,

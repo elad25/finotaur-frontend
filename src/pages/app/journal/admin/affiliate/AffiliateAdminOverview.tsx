@@ -13,13 +13,13 @@ import {
   UserCheck,
   Clock,
   Award,
-  Loader2,
   RefreshCw,
   Database,
   AlertTriangle
 } from 'lucide-react';
 import { useAffiliateAdminStats } from '@/features/affiliate/hooks/useAffiliateAdmin';
 import { TIER_INFO } from '@/features/affiliate/types/affiliate.types';
+import { SkeletonStatRow, SkeletonCard } from '@/components/ds/Skeleton';
 
 export default function AffiliateAdminOverview() {
   const { data: stats, isLoading, error, refetch, isRefetching } = useAffiliateAdminStats();
@@ -27,8 +27,9 @@ export default function AffiliateAdminOverview() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin" />
+      <div className="space-y-5 mt-4">
+        <SkeletonStatRow count={4} />
+        <SkeletonCard lines={3} />
       </div>
     );
   }

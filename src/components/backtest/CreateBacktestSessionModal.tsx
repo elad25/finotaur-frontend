@@ -1,208 +1,384 @@
-/**
- * CreateBacktestSessionModal — session initialization with execution settings.
- *
- * Presents a dialog for starting a new backtest session. The "Execution
- * settings" section (collapsed by default) exposes Commission per order ($),
- * Commission (%), and Slippage (%) — all defaulting to 0. On confirm, calls
- * `onConfirm` with the starting balance and commission config, so the parent
- * can call `setCommissionConfig` and `reset` in sequence.
- *
- * The modal does NOT call setCommissionConfig itself — the parent owns the
- * session hook and wires the callback. This keeps the modal pure/testable.
- *
- * Styling: inherits the dark premium terminal aesthetic of BacktestChart
- * (bg-zinc-950, border-zinc-800, gold accent #C9A646). Matches the overlay
- * z-index pattern used in the context menu (z-[120]).
- */
+// ==========================================
+// CREATE BACKTESTING SESSION MODAL (Phase 1)
+// ==========================================
+// 1:1 layout with the reference "Create new session" dialog, in Finotaur
+// gold-on-black. "Connect to playbook" → "Connect to strategy" (our Strategies).
 
-import { useCallback, useState } from 'react';
-import { ChevronDown, ChevronUp, X, Play } from 'lucide-react';
-import type { CommissionConfig } from '@/hooks/useBacktestSession';
+import { useState } from 'react';
+import { CalendarDays, Plus, Loader2 } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
 
-// ─── Props ────────────────────────────────────────────────────────
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-export interface CreateBacktestSessionModalProps {
-  /** Whether the modal is visible. */
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import {
+  useStrategiesOptimized,
+  useCreateStrategyOptimized,
+} from '@/hooks/useStrategies';
+import { useBacktestSessionStore } from '@/store/useBacktestSessionStore';
+import {
+  ASSET_TYPE_LABELS,
+  COMING_SOON_ASSETS,
+  type BacktestAssetType,
+  type BacktestSession,
+} from '@/types/backtestSession';
+import { SymbolAutocomplete } from './SymbolAutocomplete';
+import type { AssetClass } from './symbolUniverse';
+import { cn } from '@/lib/utils';
+
+const GOLD = '#C9A646';
+const ASSET_ORDER: BacktestAssetType[] = ['forex', 'stocks', 'crypto', 'futures'];
+
+interface CreateBacktestSessionModalProps {
   open: boolean;
-  /** Default starting balance pre-filled in the input. */
-  defaultBalance?: number;
-  /** Called when user confirms. Receives balance + commission config. */
-  onConfirm: (balance: number, commissionConfig: Partial<CommissionConfig>) => void;
-  /** Called when user cancels / closes the modal. */
-  onCancel: () => void;
+  onOpenChange: (open: boolean) => void;
+  /** Fired after a session is created and stored (already set active). */
+  onCreated: (session: BacktestSession) => void;
 }
 
-// ─── Component ───────────────────────────────────────────────────
+function toIsoDate(d: Date): string {
+  // yyyy-mm-dd in local time (avoids UTC off-by-one from toISOString).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatRangeLabel(range?: DateRange): string {
+  if (!range?.from) return 'Select date range';
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (!range.to) return fmt(range.from);
+  return `${fmt(range.from)} — ${fmt(range.to)}`;
+}
 
 export function CreateBacktestSessionModal({
   open,
-  defaultBalance = 10000,
-  onConfirm,
-  onCancel,
+  onOpenChange,
+  onCreated,
 }: CreateBacktestSessionModalProps) {
-  const [balance, setBalance] = useState(defaultBalance.toString());
-  const [showExecution, setShowExecution] = useState(false);
+  const { id: userId } = useEffectiveUser();
+  const { data: strategies = [], isLoading: strategiesLoading } = useStrategiesOptimized(userId);
+  const createStrategy = useCreateStrategyOptimized();
+  const createSession = useBacktestSessionStore((s) => s.createSession);
 
-  // Commission/slippage fields (all default to 0 = no cost model).
-  const [commissionPerOrder, setCommissionPerOrder] = useState('0');
-  const [commissionPercent, setCommissionPercent] = useState('0');
-  const [slippagePercent, setSlippagePercent] = useState('0');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [strategyId, setStrategyId] = useState<string>('');
+  const [assetType, setAssetType] = useState<BacktestAssetType>('forex');
+  const [symbol, setSymbol] = useState<string>('');
+  const [startBalance, setStartBalance] = useState<string>('');
+  const [range, setRange] = useState<DateRange | undefined>();
+  const [error, setError] = useState<string | null>(null);
 
-  const [balanceError, setBalanceError] = useState<string | null>(null);
+  // Inline "create new strategy" (mirrors reference "Create new playbook")
+  const [creatingStrategy, setCreatingStrategy] = useState(false);
+  const [newStrategyName, setNewStrategyName] = useState('');
 
-  const handleConfirm = useCallback(() => {
-    const bal = parseFloat(balance);
-    if (isNaN(bal) || bal <= 0) {
-      setBalanceError('Starting balance must be a positive number.');
+
+  const resetForm = () => {
+    setName('');
+    setDescription('');
+    setStrategyId('');
+    setAssetType('forex');
+    setSymbol('');
+    setStartBalance('');
+    setRange(undefined);
+    setError(null);
+    setCreatingStrategy(false);
+    setNewStrategyName('');
+  };
+
+  const handleClose = (next: boolean) => {
+    if (!next) resetForm();
+    onOpenChange(next);
+  };
+
+  const handleAssetChange = (next: BacktestAssetType) => {
+    if (COMING_SOON_ASSETS.includes(next)) return;
+    setAssetType(next);
+    setSymbol(''); // reset symbol when asset class changes
+  };
+
+  const handleCreateStrategy = async () => {
+    const trimmed = newStrategyName.trim();
+    if (!trimmed || !userId) return;
+    try {
+      const created = await createStrategy.mutateAsync({
+        user_id: userId,
+        name: trimmed,
+        description: '',
+        category: assetType,
+      });
+      if (created?.id) {
+        setStrategyId(created.id);
+      }
+      setCreatingStrategy(false);
+      setNewStrategyName('');
+    } catch {
+      // toast handled inside the mutation
+    }
+  };
+
+  const handleSubmit = () => {
+    setError(null);
+    if (!name.trim()) {
+      setError('Session name is required');
       return;
     }
-    setBalanceError(null);
+    if (!symbol) {
+      setError('Please select a symbol');
+      return;
+    }
+    const balance = Number(startBalance);
+    if (!balance || balance <= 0) {
+      setError('Enter a valid starting balance');
+      return;
+    }
+    if (!range?.from || !range?.to) {
+      setError('Please select a date range');
+      return;
+    }
 
-    const config: Partial<CommissionConfig> = {
-      commissionPerOrder: Math.max(0, parseFloat(commissionPerOrder) || 0),
-      commissionPercent: Math.max(0, parseFloat(commissionPercent) || 0),
-      slippagePercent: Math.max(0, parseFloat(slippagePercent) || 0),
-    };
+    const selectedStrategy = strategies.find((s: any) => s.id === strategyId);
+    const session = createSession({
+      name: name.trim(),
+      description: description.trim() || undefined,
+      strategyId: strategyId || null,
+      strategyName: selectedStrategy?.name ?? null,
+      assetType,
+      symbol,
+      timeframe: '1m',
+      startBalance: balance,
+      leverage: 1,
+      dateRange: { from: toIsoDate(range.from), to: toIsoDate(range.to) },
+    });
 
-    onConfirm(bal, config);
-  }, [balance, commissionPerOrder, commissionPercent, slippagePercent, onConfirm]);
-
-  if (!open) return null;
+    resetForm();
+    onOpenChange(false);
+    onCreated(session);
+  };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[110] bg-black/60"
-        onClick={onCancel}
-      />
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md border border-[#C9A646]/20 bg-[#0A0A0A] text-white p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-2">
+          <DialogTitle className="text-xl font-semibold text-white">Create new session</DialogTitle>
+        </DialogHeader>
 
-      {/* Dialog */}
-      <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-        <div className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-[#C9A646]">
-              New Backtest Session
-            </h2>
-            <button
-              onClick={onCancel}
-              className="rounded p-1 text-zinc-600 transition-colors hover:text-zinc-300"
-            >
-              <X size={16} />
-            </button>
+        <div className="px-6 pb-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Session name */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400">
+              Session name <span className="text-[#C9A646]">*</span>
+            </Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Opening Range Test"
+              className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40"
+            />
           </div>
 
-          {/* Body */}
-          <div className="space-y-4 px-5 py-4">
-            {/* Starting balance */}
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-zinc-500">
-                Starting balance ($)
-              </label>
-              <input
-                type="number"
-                value={balance}
-                onChange={(e) => { setBalance(e.target.value); setBalanceError(null); }}
-                min="1"
-                step="100"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
-              />
-              {balanceError && (
-                <p className="mt-1 text-[10px] text-rose-400">{balanceError}</p>
-              )}
-            </div>
+          {/* Description */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400">Description</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="We want to test the first 15 mins of each session"
+              rows={2}
+              className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 resize-none"
+            />
+          </div>
 
-            {/* Execution settings — collapsible advanced section */}
-            <div className="rounded-md border border-zinc-800">
+          {/* Connect to strategy */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-gray-400">Connect to strategy</Label>
               <button
                 type="button"
-                onClick={() => setShowExecution((v) => !v)}
-                className="flex w-full items-center justify-between px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 transition-colors hover:text-zinc-300"
+                onClick={() => setCreatingStrategy((v) => !v)}
+                className="text-xs text-[#C9A646] hover:text-[#D4B55E] transition-colors flex items-center gap-1"
               >
-                Execution settings
-                {showExecution ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <Plus className="h-3 w-3" /> Create new strategy
               </button>
+            </div>
 
-              {showExecution && (
-                <div className="space-y-3 border-t border-zinc-800 px-3 py-3">
-                  {/* Commission per order */}
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-zinc-500">
-                      Commission per order ($)
-                    </label>
-                    <input
-                      type="number"
-                      value={commissionPerOrder}
-                      onChange={(e) => setCommissionPerOrder(e.target.value)}
-                      min="0"
-                      step="0.01"
-                      className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm focus:border-zinc-700 focus:outline-none"
-                    />
-                    <p className="mt-0.5 text-[9px] text-zinc-600">
-                      Flat dollar fee charged per fill event (e.g. $2.50 per contract round-trip).
-                    </p>
-                  </div>
+            {creatingStrategy ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newStrategyName}
+                  onChange={(e) => setNewStrategyName(e.target.value)}
+                  placeholder="New strategy name"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCreateStrategy();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={handleCreateStrategy}
+                  disabled={!newStrategyName.trim() || createStrategy.isPending}
+                  className="bg-[#C9A646] hover:bg-[#D4B55E] text-black shrink-0"
+                >
+                  {createStrategy.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                </Button>
+              </div>
+            ) : (
+              <Select value={strategyId} onValueChange={setStrategyId}>
+                <SelectTrigger className="bg-white/5 border-white/10 text-white focus:ring-[#C9A646]/40">
+                  <SelectValue placeholder={strategiesLoading ? 'Loading…' : 'Select a strategy (optional)'} />
+                </SelectTrigger>
+                <SelectContent className="z-[10000] bg-[#0A0A0A] border-[#C9A646]/20 text-white">
+                  {strategies.length === 0 && (
+                    <div className="px-2 py-3 text-xs text-gray-500">No strategies yet — create one above.</div>
+                  )}
+                  {strategies.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id} className="focus:bg-[#C9A646]/10">
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
-                  {/* Commission % */}
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-zinc-500">
-                      Commission (%)
-                    </label>
-                    <input
-                      type="number"
-                      value={commissionPercent}
-                      onChange={(e) => setCommissionPercent(e.target.value)}
-                      min="0"
-                      step="0.001"
-                      className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm focus:border-zinc-700 focus:outline-none"
-                    />
-                    <p className="mt-0.5 text-[9px] text-zinc-600">
-                      Percentage of fill notional charged per fill (e.g. 0.1 = 0.1%). Stacks with flat fee.
-                    </p>
-                  </div>
-
-                  {/* Slippage % */}
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider text-zinc-500">
-                      Slippage (%)
-                    </label>
-                    <input
-                      type="number"
-                      value={slippagePercent}
-                      onChange={(e) => setSlippagePercent(e.target.value)}
-                      min="0"
-                      step="0.001"
-                      className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm focus:border-zinc-700 focus:outline-none"
-                    />
-                    <p className="mt-0.5 text-[9px] text-zinc-600">
-                      Applied to market and stop fills only; limit fills always execute at limit price.
-                    </p>
-                  </div>
-                </div>
-              )}
+          {/* Type tabs */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400">Type</Label>
+            <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/5 p-1">
+              {ASSET_ORDER.map((t) => {
+                const soon = COMING_SOON_ASSETS.includes(t);
+                const active = assetType === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    disabled={soon}
+                    onClick={() => handleAssetChange(t)}
+                    className={cn(
+                      'relative rounded-md py-1.5 text-xs font-medium transition-all',
+                      active
+                        ? 'bg-[#C9A646] text-black'
+                        : 'text-gray-400 hover:text-white',
+                      soon && 'opacity-40 cursor-not-allowed'
+                    )}
+                  >
+                    {ASSET_TYPE_LABELS[t]}
+                    {soon && (
+                      <span className="absolute -top-1.5 -right-1 text-[8px] text-[#C9A646]">soon</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex justify-end gap-2 border-t border-zinc-800 px-5 py-3">
-            <button
-              onClick={onCancel}
-              className="rounded-md border border-zinc-800 px-4 py-1.5 text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirm}
-              className="flex items-center gap-1.5 rounded-md bg-[#C9A646] px-4 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-[#D4B55E]"
-            >
-              <Play size={11} />
-              Start Session
-            </button>
+          {/* Symbol */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-400">Symbol</Label>
+            <SymbolAutocomplete
+              symbol={symbol}
+              assetClass={assetType as AssetClass}
+              filterToAssetClass
+              variant="field"
+              onSelect={setSymbol}
+            />
           </div>
+
+          {/* Start balance + Date range */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-400">
+                Start balance <span className="text-[#C9A646]">*</span>
+              </Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={startBalance}
+                  onChange={(e) => setStartBalance(e.target.value)}
+                  placeholder="10000"
+                  className="no-spinner pl-6 bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40"
+                />
+              </div>
+              <p className="text-[10px] text-gray-600">Leverage is 1:1</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-400">
+                Date range <span className="text-[#C9A646]">*</span>
+              </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full h-10 flex items-center gap-2 rounded-md bg-white/5 border border-white/10 px-3 text-left text-sm text-white hover:border-[#C9A646]/40 transition-colors"
+                  >
+                    <CalendarDays className="h-4 w-4 text-[#C9A646] shrink-0" />
+                    <span className={cn('truncate', !range?.from && 'text-gray-600')}>
+                      {formatRangeLabel(range)}
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="z-[10000] w-auto p-0 bg-[#0A0A0A] border-[#C9A646]/20" align="end">
+                  <Calendar
+                    mode="range"
+                    selected={range}
+                    onSelect={setRange}
+                    numberOfMonths={1}
+                    className="text-white"
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-[10px] text-gray-600">Start time is 12 am US/Eastern</p>
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-rose-400">{error}</p>}
         </div>
-      </div>
-    </>
+
+        {/* Footer */}
+        <div className="flex items-center gap-3 border-t border-white/10 px-6 py-4">
+          <Button
+            onClick={handleSubmit}
+            className="bg-[#C9A646] hover:bg-[#D4B55E] text-black font-semibold"
+            style={{ boxShadow: `0 8px 24px -8px ${GOLD}80` }}
+          >
+            Create session
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => handleClose(false)}
+            className="text-gray-400 hover:text-white hover:bg-white/5"
+          >
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
