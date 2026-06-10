@@ -25,6 +25,9 @@ interface UserActionsMenuProps {
   onActionComplete?: () => void;
 }
 
+// Send Email is pending backend integration — flip when implemented
+const SEND_EMAIL_ENABLED = false;
+
 export default function UserActionsMenu({ user, onActionComplete }: UserActionsMenuProps) {
   const navigate = useNavigate();
   const { startImpersonation } = useImpersonation();
@@ -116,7 +119,7 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
           <DropdownMenuSeparator className="bg-gray-800" />
           
           {/* Send Email is pending backend integration (SendGrid/SES) — hidden until implemented */}
-          {false && (
+          {SEND_EMAIL_ENABLED && (
             <DropdownMenuItem
               onClick={() => setShowSendEmail(true)}
               className="cursor-pointer hover:bg-[#1a1a1a] text-gray-300 hover:text-white"

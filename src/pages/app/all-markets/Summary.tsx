@@ -78,6 +78,9 @@ interface TabConfig {
   icon: React.ElementType;
 }
 
+// Placeholder sections hidden until their data pipelines are ready
+const PLACEHOLDER_SECTIONS_ENABLED = false;
+
 const TABS: TabConfig[] = [
   { key: "overview", label: "Overview", icon: PieChart },
   { key: "fundamentals", label: "Fundamentals", icon: BarChart3 },
@@ -1112,7 +1115,7 @@ export default function AllMarketsSummary() {
                 </CardTitle>
               </CardHeader>
               {/* Financial statements section — hidden until data pipeline is ready */}
-              {false && (
+              {PLACEHOLDER_SECTIONS_ENABLED && (
                 <CardContent className="py-8 text-center">
                   <div className="max-w-md mx-auto">
                     <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
@@ -1151,7 +1154,7 @@ export default function AllMarketsSummary() {
                 </CardTitle>
               </CardHeader>
               {/* News section — hidden until news pipeline is ready */}
-              {false && (
+              {PLACEHOLDER_SECTIONS_ENABLED && (
                 <CardContent className="py-8 text-center">
                   <div className="max-w-md mx-auto">
                     <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 flex items-center justify-center mx-auto mb-4">
