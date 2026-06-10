@@ -42,6 +42,7 @@ import { GDPRTools } from './tabs/tools/GDPRTools';
 import { AIUsageTab } from './tabs/AIUsageTab';
 import { AICommandCenterTab } from './tabs/AICommandCenterTab';
 import { CustomerVoiceTab } from './tabs/CustomerVoiceTab';
+import { FounderCockpitTab } from './tabs/FounderCockpitTab';
 import SeoAnalyticsPage from './SeoAnalyticsPage';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
@@ -172,6 +173,9 @@ export function AdminCRMShell() {
           <Route path="tools/health" element={<HealthRiskPanel />} />
           <Route path="tools/bulk" element={<BulkActions />} />
           <Route path="tools/gdpr" element={<GDPRTools />} />
+
+          {/* Founder Cockpit */}
+          <Route path="cockpit" element={<FounderCockpitTab />} />
 
           {/* Customer Voice */}
           <Route path="voice" element={<CustomerVoiceTab />} />

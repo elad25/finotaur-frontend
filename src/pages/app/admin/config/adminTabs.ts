@@ -25,6 +25,7 @@ import {
   Search,
   Sparkles,
   MessageSquare,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -44,6 +45,15 @@ export interface AdminTab {
 }
 
 export const ADMIN_TABS: AdminTab[] = [
+  {
+    id: 'cockpit',
+    label: 'Founder Cockpit',
+    path: '/app/admin/cockpit',
+    icon: Target,
+    phase: 2,
+    enabled: true,
+    description: 'AI advisor + all accumulated business data in one place',
+  },
   {
     id: 'overview',
     label: 'Overview',
