@@ -269,6 +269,39 @@ function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): st
   return idea.sector || 'MULTI-FACTOR';
 }
 
+// Compact-word map for common long sector names
+const COMPACT_WORD_MAP: Record<string, string> = {
+  SEMICONDUCTORS:          'SEMIS',
+  TECHNOLOGY:              'TECH',
+  FINANCIALS:              'FINANCE',
+  INDUSTRIALS:             'INDUSTRY',
+  COMMUNICATIONS:          'COMMS',
+  'CONSUMER DISCRETIONARY': 'CONSUMER',
+  'CONSUMER STAPLES':      'STAPLES',
+  'MULTI-FACTOR':          'MULTI',
+};
+
+/**
+ * Produce a SHORT tag (one word, uppercase, max ~14 chars) from a trade idea.
+ * Already-short tags (ISM, TACTICAL, WEEKLY) pass through unchanged.
+ * For sector strings like "TECHNOLOGY / SEMICONDUCTORS", takes the last segment.
+ * Applies compact-word substitutions for common long sector words.
+ */
+function toShortTag(idea: { source: TradeIdea['source']; sector?: string }): string {
+  const raw = sourceToTag(idea);
+  // Already short fixed labels — pass through
+  if (raw === 'ISM' || raw === 'TACTICAL' || raw === 'WEEKLY') return raw;
+  // Take the last "/" segment if present
+  const segments = raw.split('/');
+  const last = segments[segments.length - 1].trim().toUpperCase();
+  // Apply compact-word substitution (full string first, then single word)
+  if (COMPACT_WORD_MAP[last]) return COMPACT_WORD_MAP[last];
+  // Try single-word substitution on the first word of last segment
+  const firstWord = last.split(/\s+/)[0];
+  if (COMPACT_WORD_MAP[firstWord]) return COMPACT_WORD_MAP[firstWord];
+  return last;
+}
+
 /**
  * TopOpportunitiesPanel
  *
@@ -287,7 +320,7 @@ function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: s
           return {
             ticker:  opp.ticker,
             company: TICKER_TO_NAME[opp.ticker] ?? opp.ticker,
-            tag:     sourceToTag(idea),
+            tag:     toShortTag(idea),
             score:   opp.score,
           };
         })
@@ -299,6 +332,7 @@ function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: s
     </p>
   );
 
+  // Compact list card — used in non-fullWidth (sidebar/narrow) mode
   const itemCard = ({ ticker, company, tag, score }: typeof items[number]) => (
     <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
       <TickerLogo ticker={ticker} size={32} className="h-8 w-8 rounded-[3px]" />
@@ -306,21 +340,38 @@ function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: s
         <p className="text-sm font-semibold text-white">{ticker}</p>
         <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
       </div>
-      <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[9px] uppercase text-gold-primary">{tag}</span>
+      <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[9px] uppercase text-gold-primary truncate max-w-[80px]">{tag}</span>
       <div className="h-9 w-9 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-xs text-gold-primary">{score}</div>
+    </div>
+  );
+
+  // Full-width mini-card — vertical layout to prevent collision in the 4-column grid
+  const itemCardWide = ({ ticker, company, tag, score }: typeof items[number]) => (
+    <div key={ticker} className="flex flex-col gap-1.5 rounded-[6px] p-3 hover:bg-gold-primary/[0.045]">
+      {/* Row 1: logo + ticker + score circle pushed right */}
+      <div className="flex items-center gap-2">
+        <TickerLogo ticker={ticker} size={28} className="h-7 w-7 flex-none rounded-[3px]" />
+        <p className="flex-1 text-sm font-semibold text-white">{ticker}</p>
+        <div className="h-8 w-8 flex-none rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-xs text-gold-primary">{score}</div>
+      </div>
+      {/* Row 2: company name, single line truncated */}
+      <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
+      {/* Row 3: short tag chip */}
+      <span className="self-start rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-0.5 text-[9px] uppercase text-gold-primary truncate max-w-full">{tag}</span>
     </div>
   );
 
   if (fullWidth) {
     return (
       <PremiumFrame className={className ?? ''}>
-        <div className="p-5">
+        {/* pb-14 ensures the absolute "VIEW ALL" bar never overlaps the last card row */}
+        <div className="p-5 pb-14">
           <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
           {items.length === 0 ? (
             emptyNode
           ) : (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-              {items.map(itemCard)}
+              {items.map(itemCardWide)}
             </div>
           )}
         </div>
@@ -333,7 +384,8 @@ function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: s
 
   return (
     <PremiumFrame className={`min-h-[338px] ${className ?? ''}`}>
-      <div className="p-5">
+      {/* pb-14 ensures the absolute "VIEW ALL" bar never overlaps list items */}
+      <div className="p-5 pb-14">
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
           {items.length === 0 && emptyNode}
