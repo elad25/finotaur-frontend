@@ -11,16 +11,11 @@
 import {
   LayoutDashboard,
   Users,
-  Activity,
   CreditCard,
   Mail,
-  Rocket,
   Handshake,
-  Sprout,
   Ticket,
-  Plug,
   Crown,
-  TrendingUp,
   Brain,
   Search,
   Sparkles,
@@ -73,16 +68,8 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'User list, profiles, subscription state, ban / impersonate',
     mountedFrom: 'pages/app/journal/admin/Users.tsx',
   },
-  {
-    id: 'analytics',
-    label: 'Usage Analytics',
-    path: '/app/admin/analytics',
-    icon: Activity,
-    phase: 1,
-    enabled: true,
-    description: 'Activity heatmaps, top traders, feature usage',
-    mountedFrom: 'pages/app/journal/admin/Analytics.tsx',
-  },
+  // 'analytics' sidebar entry removed — Usage Analytics content folded into Overview.
+  // Route /app/admin/analytics still exists in AdminCRMShell.tsx for deep links.
   {
     id: 'ai-usage',
     label: 'AI Consumption',
@@ -131,26 +118,8 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'Newsletter admin, subscriber management, broadcasts',
     mountedFrom: 'pages/app/journal/admin/NewsletterAdmin.tsx',
   },
-  {
-    id: 'leads',
-    label: 'Leads & Funnel',
-    path: '/app/admin/leads',
-    icon: Sprout,
-    phase: 2,
-    enabled: true,
-    description: 'Lead scoring, source attribution, conversion funnel',
-    planned: true,
-  },
-  {
-    id: 'onboarding',
-    label: 'Onboarding',
-    path: '/app/admin/onboarding',
-    icon: Rocket,
-    phase: 3,
-    enabled: true,
-    description: 'Activation milestones, time-to-value, funnel drop-off',
-    planned: true,
-  },
+  // 'leads' and 'onboarding' sidebar entries removed — empty SOON placeholders.
+  // Routes /app/admin/leads and /app/admin/onboarding still exist in AdminCRMShell.tsx.
   {
     id: 'affiliates',
     label: 'Affiliates',
@@ -171,16 +140,8 @@ export const ADMIN_TABS: AdminTab[] = [
     description: 'Tickets, AI drafts, knowledge base',
     mountedFrom: 'pages/app/all-markets/admin/Supporttickets.tsx',
   },
-  {
-    id: 'integrations',
-    label: 'Integrations',
-    path: '/app/admin/integrations',
-    icon: Plug,
-    phase: 5,
-    enabled: true,
-    description: 'Whop, Resend, Slack, Discord, WhatsApp',
-    planned: true,
-  },
+  // 'integrations' sidebar entry removed — empty SOON placeholder.
+  // Route /app/admin/integrations still exists in AdminCRMShell.tsx.
   {
     id: 'tools',
     label: 'Admin Tools',
@@ -201,15 +162,8 @@ export const ADMIN_TABS: AdminTab[] = [
     enabled: true,
     description: 'AI-generated growth & retention recommendations — approve, dismiss, or snooze',
   },
-  {
-    id: 'executive',
-    label: 'Executive Dashboard',
-    path: '/app/admin/executive',
-    icon: TrendingUp,
-    phase: 2,
-    enabled: true,
-    description: 'Forecasting, anomaly detection, KPI alerts',
-  },
+  // 'executive' sidebar entry removed — forecast content folded into OverviewTab.
+  // Route /app/admin/executive still exists in AdminCRMShell.tsx for deep links.
 ];
 
 export function findTabByPath(pathname: string): AdminTab | undefined {
