@@ -87,28 +87,26 @@ export function FinotaurCopilotDashboard() {
 
   return (
     <ErrorBoundary boundary="ai-copilot">
-      <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
-        {/* ROW 1 — hero: big performance chart moved to top-left, AI core beside it */}
-        <div className="xl:col-span-8">
-          <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
+      <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
+        {/* ROW 1 — LEFT: portfolio value + its performance graph; CENTER: globe (unchanged); RIGHT: insights */}
+        <div className="xl:col-span-4 flex flex-col gap-3">
+          <PortfolioValuePanel range={range} snapshot={snapshot} />
+          <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} compact />
         </div>
         <AiBrainPanel className="xl:col-span-4" />
-
-        {/* ROW 2 — portfolio value (swapped down here), insights, opportunities */}
-        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} />
         <InsightsPanel className="xl:col-span-4" analysis={analysis} />
-        <div className="xl:col-span-4">
-          <TopOpportunitiesPanel />
-        </div>
 
         {/* Action Items strip */}
         <ActionItemsStrip analysis={analysis} />
 
-        {/* ROW 4 — image1: asset-class allocation + Portfolio/S&P/NASDAQ comparison, in the old big-chart slot */}
-        <AssetClassAllocationCard className="xl:col-span-6" snapshot={snapshot} />
-        <MarketComparisonChart className="xl:col-span-6" portfolioSeries={snapshot.series} range={range} onRangeChange={setRange} />
+        {/* ROW 3 — allocation | Portfolio/S&P/NASDAQ comparison | top opportunities */}
+        <AssetClassAllocationCard className="xl:col-span-4" snapshot={snapshot} />
+        <MarketComparisonChart className="xl:col-span-4" portfolioSeries={snapshot.series} range={range} onRangeChange={setRange} />
+        <div className="xl:col-span-4">
+          <TopOpportunitiesPanel />
+        </div>
 
-        {/* ROW 5 — existing trio */}
+        {/* ROW 4 — holdings | macro | risk */}
         <AllocationPanel className="xl:col-span-4" snapshot={snapshot} />
         <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} />
         <RiskAnalysisPanel className="xl:col-span-4" analysis={analysis} />

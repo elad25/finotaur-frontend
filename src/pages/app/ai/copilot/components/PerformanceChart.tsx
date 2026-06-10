@@ -9,6 +9,7 @@ interface Props {
   series: PerformancePoint[];
   range?: TimeRange;
   onRangeChange?: (r: TimeRange) => void;
+  compact?: boolean;
 }
 
 const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
@@ -19,7 +20,7 @@ const CHART_WIDTH = 760;
 const CHART_HEIGHT = 286;
 const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
 
-export function PerformanceChart({ series, range, onRangeChange }: Props) {
+export function PerformanceChart({ series, range, onRangeChange, compact }: Props) {
   const [mode, setMode] = useState<Mode>('dollar');
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -329,7 +330,7 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
         )}
         </div>
 
-        {rangeSummary && (
+        {!compact && rangeSummary && (
           <div className="-mt-2 mb-2 flex items-center justify-between px-4 text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">
             <span>
               {rangeSummary.first.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -343,7 +344,7 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
           </div>
         )}
 
-        <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
+        {!compact && <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
           {([
             [returnLabel, fmtPercent(metrics.returnRange, { signed: true }), 'text-gold-primary'],
             ['ALPHA', fmtPercent(metrics.alpha, { signed: true }), 'text-ink-tertiary'],
@@ -357,7 +358,7 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
               <p className={`mt-2 font-mono text-sm tabular-nums ${color}`}>{value}</p>
             </div>
           ))}
-        </div>
+        </div>}
       </div>
     </Card>
   );
