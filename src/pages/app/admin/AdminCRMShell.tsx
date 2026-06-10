@@ -101,9 +101,11 @@ export function AdminCRMShell() {
 
       <div className="flex-1 min-w-0">
         <Routes>
+          {/* Cockpit is the default landing — index redirects here */}
+          <Route index element={<Navigate to="cockpit" replace />} />
+
           {/* Overview (Phase 0 — custom built) */}
-          <Route index element={<OverviewTab />} />
-          <Route path="overview" element={<Navigate to="/app/admin" replace />} />
+          <Route path="overview" element={<OverviewTab />} />
 
           {/* Users & Profiles */}
           <Route path="users" element={<Lazy><Users /></Lazy>} />
@@ -186,7 +188,7 @@ export function AdminCRMShell() {
           {/* Executive Dashboard (planned) */}
           <Route path="executive" element={<ExecutivePlaceholder />} />
 
-          <Route path="*" element={<Navigate to="/app/admin" replace />} />
+          <Route path="*" element={<Navigate to="/app/admin/cockpit" replace />} />
         </Routes>
       </div>
     </div>

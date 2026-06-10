@@ -102,9 +102,18 @@ interface HistoryPoint {
   ai_cost_24h: string;
 }
 
+interface FounderRevenue {
+  mrr: number;
+  arr: number;
+  paying: number;
+  total_users_live: number;
+  active_users_live: number;
+}
+
 interface FounderIntel {
   snapshot_at: string | null;
   age_minutes: number | null;
+  revenue: FounderRevenue | null;
   metrics: FounderMetrics | null;
   voice: FounderVoice | null;
   brief: FounderBrief | null;
@@ -124,6 +133,10 @@ function shortDate(isoString: string): string {
   } catch {
     return isoString;
   }
+}
+
+function formatCurrency(n: number): string {
+  return `$${n.toLocaleString()}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,12 +163,12 @@ function BriefColumn({
       {items.length === 0 ? (
         <p className="text-xs text-gray-600">Nothing recorded.</p>
       ) : (
-        // Brief text is Hebrew (internal founder tool) — rendered RTL
-        <ul className="space-y-2" dir="rtl">
+        // Brief text is English — rendered LTR
+        <ul className="space-y-2" dir="ltr">
           {items.map((item, idx) => (
             <li
               key={idx}
-              className="text-sm text-gray-300 leading-snug pl-3 border-r-2"
+              className="text-sm text-gray-300 leading-snug pr-3 border-l-2"
               style={{ borderColor: `${iconColor}50` }}
             >
               {item}
@@ -237,7 +250,7 @@ export function FounderCockpitTab() {
     );
   }
 
-  const { snapshot_at, age_minutes, metrics, voice, brief, history } = data;
+  const { snapshot_at, age_minutes, revenue, metrics, voice, brief, history } = data;
 
   // Derived
   const totalPaying = metrics
@@ -294,23 +307,23 @@ export function FounderCockpitTab() {
           <h2 className="text-lg font-bold text-[#C9A646]">AI Advisor</h2>
         </div>
 
-        {/* Pulse sentence — Hebrew, RTL */}
+        {/* Pulse sentence — English, LTR */}
         <p
-          className="text-base text-gray-100 leading-relaxed border-l-0 border-r-4 border-[#C9A646]/60 pr-4 text-right"
-          dir="rtl"
+          className="text-base text-gray-100 leading-relaxed border-l-4 border-[#C9A646]/60 pl-4"
+          dir="ltr"
         >
           {brief.pulse}
         </p>
 
-        {/* Biggest risk — red callout, Hebrew */}
+        {/* Biggest risk — red callout, English */}
         <div className="bg-red-500/10 border border-red-500/25 rounded-lg px-4 py-3 flex items-start gap-3">
           <span className="text-base shrink-0">🔴</span>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-1">
               Biggest Risk
             </p>
-            {/* Hebrew content, RTL */}
-            <p className="text-sm text-gray-200 leading-snug text-right" dir="rtl">
+            {/* English content, LTR */}
+            <p className="text-sm text-gray-200 leading-snug" dir="ltr">
               {brief.biggest_risk}
             </p>
           </div>
@@ -340,7 +353,38 @@ export function FounderCockpitTab() {
       </section>
 
       {/* ================================================================
-          (b) GROWTH & REVENUE — stat tiles
+          (b1) REVENUE — MRR / ARR / Paying customers
+          ================================================================ */}
+      {revenue && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
+            Revenue
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatsCard
+              title="MRR"
+              value={formatCurrency(revenue.mrr)}
+              subtitle="Monthly Recurring Revenue"
+              icon={DollarSign}
+            />
+            <StatsCard
+              title="ARR"
+              value={formatCurrency(revenue.arr)}
+              subtitle="Annual Recurring Revenue"
+              icon={DollarSign}
+            />
+            <StatsCard
+              title="Paying Customers"
+              value={revenue.paying.toLocaleString()}
+              subtitle={`${revenue.active_users_live.toLocaleString()} active · ${revenue.total_users_live.toLocaleString()} total`}
+              icon={Crown}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ================================================================
+          (b2) GROWTH & REVENUE — stat tiles
           ================================================================ */}
       {metrics && (
         <section className="space-y-4">
