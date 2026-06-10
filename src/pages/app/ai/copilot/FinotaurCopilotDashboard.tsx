@@ -23,6 +23,10 @@ import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
+import { TopMoversPanel } from './components/TopMoversPanel';
+import { HoldingsOverviewPanel } from './components/HoldingsOverviewPanel';
+import { MarketOverviewPanel } from './components/MarketOverviewPanel';
+import { CuratedNewsPanel } from './components/CuratedNewsPanel';
 
 // Time-range list lives inside PortfolioValuePanel.
 
@@ -87,25 +91,37 @@ export function FinotaurCopilotDashboard() {
   return (
     <ErrorBoundary boundary="ai-copilot">
       <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
-        {/* ROW 1 — LEFT: portfolio value + its performance graph; CENTER: globe (unchanged); RIGHT: insights */}
-        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} onRangeChange={setRange} />
+
+        {/* ROW 1 — portfolio value | globe | insights */}
+        <PortfolioValuePanel
+          className="xl:col-span-4"
+          range={range}
+          snapshot={snapshot}
+          onRangeChange={setRange}
+        />
         <AiBrainPanel className="xl:col-span-4" />
         <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
-        {/* Action Items strip */}
+        {/* ROW 2 — allocation donut | performance comparison chart | top movers */}
+        <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-3" />
+        <MarketComparisonChart
+          className="xl:col-span-5"
+          portfolioSeries={snapshot.series}
+          range={range}
+          onRangeChange={setRange}
+        />
+        <TopMoversPanel snapshot={snapshot} className="xl:col-span-4" />
+
+        {/* ROW 3 — holdings overview | sector exposure | market overview | curated news */}
+        <HoldingsOverviewPanel snapshot={snapshot} className="xl:col-span-3" />
+        <SectorExposurePanel snapshot={snapshot} className="xl:col-span-3" />
+        <MarketOverviewPanel className="xl:col-span-3" />
+        <CuratedNewsPanel className="xl:col-span-3" />
+
+        {/* ROW 4 — action items strip + top opportunities full-width */}
         <ActionItemsStrip analysis={analysis} />
+        <TopOpportunitiesPanel fullWidth />
 
-        {/* ROW 3 — left col (allocation + opportunities) | comparison chart (wider) */}
-        <div className="xl:col-span-4 flex flex-col gap-3">
-          <AssetClassAllocationCard snapshot={snapshot} />
-          <TopOpportunitiesPanel />
-        </div>
-        <MarketComparisonChart className="xl:col-span-8" portfolioSeries={snapshot.series} range={range} onRangeChange={setRange} />
-
-        {/* ROW 4 — holdings | macro | risk */}
-        <AllocationPanel className="xl:col-span-4" snapshot={snapshot} />
-        <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} />
-        <RiskAnalysisPanel className="xl:col-span-4" analysis={analysis} />
       </div>
     </ErrorBoundary>
   );
@@ -264,21 +280,53 @@ const DRIVER_ICON_MAP: Record<RiskDriver['iconKey'], ElementType> = {
 };
 
 function InsightsPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
+  const { brief } = useSynthesisBrief();
+
   // Health = inverse of risk score. 100 = perfectly safe, 0 = max risk.
   const health = Math.max(0, 100 - analysis.score);
-  const healthLabel = analysis.level === 'Low' ? 'Strong' : analysis.level === 'Moderate' ? 'Balanced' : 'Concentrated';
+  const healthLabel =
+    analysis.level === 'Low' ? 'Excellent' :
+    analysis.level === 'Moderate' ? 'Balanced' :
+    'Concentrated';
   const healthDescription =
     analysis.level === 'Low' ? 'Portfolio is well balanced across exposures.' :
     analysis.level === 'Moderate' ? 'Some exposures elevated — monitor key drivers.' :
     'High concentration or leverage — consider rebalancing.';
 
-  // Top 3 drivers by progress, descending — most material risks first
-  const topDrivers = [...analysis.drivers].sort((a, b) => b.progress - a.progress).slice(0, 3);
+  // Top non-green risk drivers first (sorted by progress desc), then opportunity row fill
+  const nonGreenDrivers = [...analysis.drivers]
+    .filter((d) => d.tone !== 'green')
+    .sort((a, b) => b.progress - a.progress)
+    .slice(0, 3);
+
+  // If fewer than 3 risk rows, pull from top trade idea as opportunity filler
+  const topIdea = brief?.trade_ideas?.[0] ?? null;
+  const opportunityRow =
+    topIdea && nonGreenDrivers.length < 3
+      ? {
+          iconKey: 'equity' as const,
+          label: `Opportunity: ${topIdea.symbol ?? ''}`,
+          text: topIdea.sector ? `${topIdea.sector} — ${topIdea.source}` : topIdea.source,
+          tone: 'gold' as const,
+          href: '/app/ai/copilot/top-opportunities',
+        }
+      : null;
+
+  const allRows: Array<{
+    iconKey: RiskDriver['iconKey'];
+    label: string;
+    text: string;
+    tone: string;
+    href: string;
+  }> = [
+    ...nonGreenDrivers.map((d) => ({ iconKey: d.iconKey, label: d.label.toUpperCase(), text: d.text, tone: d.tone, href: '/copilot/risks' })),
+    ...(opportunityRow ? [opportunityRow] : []),
+  ].slice(0, 3);
 
   return (
     <PremiumFrame className={`min-h-[260px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="AI INSIGHTS" action="ANALYST" actionTo="/copilot/ai-analyst" />
+        <PanelHeader title="AI COPILOT INSIGHTS" action="ANALYST" actionTo="/copilot/ai-analyst" />
         <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
           <div className="relative h-24 w-24 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
             <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-2xl tabular-nums">
@@ -291,17 +339,30 @@ function InsightsPanel({ className, analysis }: { className?: string; analysis: 
             <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{healthDescription}</p>
           </div>
         </div>
-        {topDrivers.length === 0 ? (
+
+        {allRows.length === 0 ? (
           <p className="mt-4 text-xs text-ink-tertiary">Holdings will appear here once positions are loaded.</p>
         ) : (
-          topDrivers.map((d) => (
-            <InsightRow
-              key={d.label}
-              icon={DRIVER_ICON_MAP[d.iconKey]}
-              title={d.label.toUpperCase()}
-              text={d.text}
-            />
-          ))
+          allRows.map((row) => {
+            const Icon = DRIVER_ICON_MAP[row.iconKey];
+            return (
+              <div key={row.label} className="flex items-start gap-3 border-b border-gold-primary/10 py-3 last:border-b-0">
+                <div className="h-8 w-8 flex-none rounded-[6px] border border-gold-primary/20 bg-gold-primary/9 flex items-center justify-center text-gold-primary">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-gold-primary">{row.label}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-secondary">{row.text}</p>
+                </div>
+                <Link
+                  to={row.href}
+                  className="flex-none text-[9px] uppercase text-ink-tertiary hover:text-gold-primary transition-colors"
+                >
+                  View
+                </Link>
+              </div>
+            );
+          })
         )}
       </div>
     </PremiumFrame>
@@ -326,20 +387,6 @@ function PanelHeader({ title, action, actionTo }: { title: string; action?: stri
   );
 }
 
-function InsightRow({ icon: Icon, title, text }: { icon: ElementType; title: string; text: string }) {
-  return (
-    <div className="flex gap-3 border-b border-gold-primary/10 py-3 last:border-b-0">
-      <div className="h-8 w-8 rounded-[6px] border border-gold-primary/20 bg-gold-primary/9 flex items-center justify-center text-gold-primary">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div>
-        <p className="text-[11px] text-gold-primary">{title}</p>
-        <p className="mt-1 text-xs text-ink-secondary">{text}</p>
-      </div>
-    </div>
-  );
-}
-
 // Derive category chip label from TradeIdea source
 function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): string {
   if (idea.source === 'ism')       return 'ISM';
@@ -348,11 +395,15 @@ function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): st
   return idea.sector || 'MULTI-FACTOR';
 }
 
-function TopOpportunitiesPanel() {
+/**
+ * TopOpportunitiesPanel
+ *
+ * `fullWidth` = true  → ROW 4 horizontal grid card (xl:col-span-12)
+ * `fullWidth` = false (default) → compact vertical card used in empty-state branches
+ */
+function TopOpportunitiesPanel({ fullWidth = false }: { fullWidth?: boolean }) {
   const { brief } = useSynthesisBrief();
 
-  // Build display items from live synthesis-brief trade ideas only — no fallback,
-  // no fabricated tickers. Empty when the brief has no ideas yet.
   const items: Array<{ ticker: string; company: string; tag: string; score: number }> =
     brief?.trade_ideas?.length
       ? brief.trade_ideas.slice(0, 4).map((idea, i) => {
@@ -366,6 +417,48 @@ function TopOpportunitiesPanel() {
         })
       : [];
 
+  if (fullWidth) {
+    // ROW 4 — full-width horizontal grid
+    return (
+      <PremiumFrame className="xl:col-span-12 relative">
+        <div className="p-5">
+          <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
+          {items.length === 0 ? (
+            <p className="mt-4 py-6 text-center text-[11px] leading-relaxed text-ink-tertiary">
+              No live trade ideas right now.<br />New ideas appear here after the next AI brief.
+            </p>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {items.map(({ ticker, company, tag, score }) => (
+                <div
+                  key={ticker}
+                  className="flex items-center gap-3 rounded-[6px] border border-gold-primary/12 bg-black/30 px-3 py-3 hover:border-gold-primary/25 hover:bg-gold-primary/[0.04] transition"
+                >
+                  <TickerLogo ticker={ticker} size={36} className="h-9 w-9 flex-none rounded-[4px]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white">{ticker}</p>
+                    <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-0.5 text-[9px] uppercase text-gold-primary">{tag}</span>
+                    <div className="h-7 w-7 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-[10px] text-gold-primary">{score}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <Link
+          to="/app/ai/copilot/top-opportunities"
+          className="flex h-10 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.04] text-[11px] uppercase text-gold-primary hover:bg-gold-primary/[0.08] transition"
+        >
+          VIEW ALL OPPORTUNITIES <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </PremiumFrame>
+    );
+  }
+
+  // Compact vertical — used in not-connected / syncing empty-state branches
   return (
     <PremiumFrame className="min-h-[338px]">
       <div className="p-5">
@@ -380,7 +473,6 @@ function TopOpportunitiesPanel() {
             return (
               <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
                 <TickerLogo ticker={ticker} size={32} className="h-8 w-8 rounded-[3px]" />
-
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white">{ticker}</p>
                   <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
@@ -397,18 +489,6 @@ function TopOpportunitiesPanel() {
       </Link>
     </PremiumFrame>
   );
-}
-
-/** Map IB AssetClass codes to human-readable display labels for the allocation panel. */
-function bucketAssetClass(cls: string | undefined): string {
-  const c = (cls || '').toUpperCase();
-  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'EQUITIES';
-  if (c === 'OPT' || c === 'FOP' || c === 'OPTIONS') return 'OPTIONS';
-  if (c === 'FUT' || c === 'FUTURES') return 'FUTURES';
-  if (c === 'BOND' || c === 'BONDS') return 'BONDS';
-  if (c === 'CASH' || c === 'FOREX') return 'CASH';
-  if (c === 'CMDTY' || c === 'COMMODITIES') return 'COMMODITIES';
-  return 'OTHER';
 }
 
 // Palette for allocation donut / sector bars — gold variants + neutrals (design system ADL-020, no green).
@@ -435,66 +515,6 @@ function buildConicGradient(rows: Array<[string, number]>): string {
   return `conic-gradient(${stops.join(', ')})`;
 }
 
-function AllocationPanel({
-  className,
-  snapshot,
-}: {
-  className?: string;
-  snapshot: PortfolioSnapshot;
-}) {
-  const total = snapshot.totalValue || 1;
-  const groups = new Map<string, number>();
-  for (const h of snapshot.holdings) {
-    const label = bucketAssetClass(h.assetClass);
-    groups.set(label, (groups.get(label) || 0) + h.marketValue);
-  }
-  const rows: Array<[string, number]> = Array.from(groups.entries())
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, val]) => [label, (val / total) * 100]);
-
-  let totalDisplay: string;
-  if (snapshot.totalValue >= 1_000_000) {
-    totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
-  } else if (snapshot.totalValue >= 10_000) {
-    totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
-  } else {
-    totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
-  }
-
-  const conic = buildConicGradient(rows);
-
-  return (
-    <PremiumFrame className={`min-h-[210px] ${className}`}>
-      <div className="p-5">
-        <PanelHeader title="HOLDINGS" action="VIEW ALL" actionTo="/app/ai/copilot/holdings" />
-        {rows.length === 0 ? (
-          <p className="mt-4 text-xs text-ink-tertiary">
-            No positions to allocate yet — once your broker sync completes, your allocation will appear here.
-          </p>
-        ) : (
-          <div className="mt-4 flex items-center gap-5">
-            <div className="relative h-28 w-28 rounded-full p-4" style={{ background: conic }}>
-              <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
-                <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
-                <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
-              </div>
-            </div>
-            <div className="flex-1 space-y-2">
-              {rows.map(([label, pct], i) => (
-                <div key={label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]">
-                  <span className={`h-2 w-2 ${ALLOC_PALETTE[i % ALLOC_PALETTE.length].swatch}`} />
-                  <span className="text-ink-secondary">{label}</span>
-                  <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </PremiumFrame>
-  );
-}
-
 /**
  * Map IB AssetClass to a human-readable macro bucket. For now we group by asset
  * class because the IBRIT Activity report doesn't carry ticker→sector data; a
@@ -513,6 +533,10 @@ function bucketSector(cls: string | undefined): string {
   return 'Other';
 }
 
+/**
+ * SectorExposurePanel — restyled with bars list on the left + donut on the right.
+ * Title renamed to "SECTOR EXPOSURE"; VIEW ALL → /app/ai/copilot/macro.
+ */
 function SectorExposurePanel({
   className,
   snapshot,
@@ -530,158 +554,60 @@ function SectorExposurePanel({
     .sort((a, b) => b[1] - a[1])
     .map(([label, val]) => [label, (val / total) * 100]);
 
-  // Bars scale so the largest sector fills the available width; tiny allocations stay visible.
+  // Bars scale so the largest sector fills the available width
   const maxPct = Math.max(...sectors.map((s) => s[1]), 1);
+
+  // Donut
+  const conic = buildConicGradient(sectors);
+  const bucketCount = sectors.length;
 
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="MACRO" action="VIEW ALL" actionTo="/app/ai/copilot/macro" />
+        <PanelHeader title="SECTOR EXPOSURE" action="VIEW ALL" actionTo="/app/ai/copilot/macro" />
         {sectors.length === 0 ? (
           <p className="mt-4 text-xs text-ink-tertiary">
             No sector data yet — connect a broker and sync your holdings to see exposure.
           </p>
         ) : (
-          <div className="mt-4 space-y-3">
-            {sectors.map(([name, value]) => (
-              <div key={name} className="grid grid-cols-[1fr_130px_42px] items-center gap-3 text-[11px]">
-                <span className="text-ink-secondary truncate">{name}</span>
-                <div className="h-2 rounded-full bg-white/8 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
-                    style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
-                  />
+          <div className="mt-4 flex items-start gap-4">
+            {/* Bars list — left */}
+            <div className="flex-1 space-y-2.5">
+              {sectors.map(([name, value], i) => (
+                <div key={name} className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="inline-block h-1.5 w-1.5 rounded-[2px]"
+                        style={{ background: ALLOC_PALETTE[i % ALLOC_PALETTE.length].conic }}
+                      />
+                      <span className="text-ink-secondary">{name}</span>
+                    </div>
+                    <span className="font-mono text-ink-tertiary">{value.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
+                      style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <span className="font-mono text-ink-tertiary text-right">{value.toFixed(1)}%</span>
+              ))}
+            </div>
+
+            {/* Donut — right */}
+            <div
+              className="relative h-20 w-20 flex-none rounded-full p-2.5"
+              style={{ background: conic }}
+            >
+              <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#080704]">
+                <span className="font-mono text-sm text-gold-primary">{bucketCount}</span>
+                <span className="text-[8px] uppercase text-ink-tertiary">CLASSES</span>
               </div>
-            ))}
+            </div>
           </div>
         )}
       </div>
     </PremiumFrame>
-  );
-}
-
-function RiskAnalysisPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
-  return (
-    <PremiumFrame className={`min-h-[210px] ${className}`}>
-      <div className="p-5">
-        <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/copilot/risks" />
-        <div className="mt-4 grid grid-cols-[130px_1fr] gap-4 items-center">
-          <RiskManagementGoldMark score={analysis.score} />
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3 pb-2 border-b border-gold-primary/10 text-[11px]">
-              <span className="text-ink-tertiary">Overall</span>
-              <span className="font-mono text-gold-primary">{analysis.score}/100 · {analysis.level}</span>
-            </div>
-            {analysis.drivers.length === 0 ? (
-              <p className="text-[11px] text-ink-tertiary">No drivers computed yet.</p>
-            ) : (
-              analysis.drivers.map((d) => (
-                <div key={d.label} className="flex items-center justify-between gap-3 text-[11px]">
-                  <span className="text-ink-secondary">{d.label}</span>
-                  <span className={d.tone === 'red' ? 'text-num-negative' : d.tone === 'green' ? 'text-status-success' : 'text-gold-primary'}>{d.level}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </PremiumFrame>
-  );
-}
-
-function RiskManagementGoldMark({ score }: { score: number }) {
-  const totalTicks = 44;
-  // Fill reflects the real computed risk score (0–100), not a fixed value.
-  const fillFraction = Math.max(0, Math.min(1, score / 100));
-  const startDeg = -132;
-  const endDeg = 132;
-  const ticks = Array.from({ length: totalTicks }, (_, index) => {
-    const progress = index / (totalTicks - 1);
-    const deg = startDeg + (endDeg - startDeg) * progress;
-    const rad = ((deg - 90) * Math.PI) / 180;
-    const inner = 57;
-    const outer = index % 4 === 0 ? 72 : 68;
-    return {
-      x1: Math.cos(rad) * inner,
-      y1: Math.sin(rad) * inner,
-      x2: Math.cos(rad) * outer,
-      y2: Math.sin(rad) * outer,
-      bright: progress <= fillFraction,
-      width: index % 4 === 0 ? 2.1 : 1.35,
-    };
-  });
-
-  return (
-    <div className="relative h-32 w-32">
-      <div className="absolute inset-2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.18),rgba(201,166,70,0.05)_42%,transparent_68%)] blur-md" />
-      <svg viewBox="-100 -100 200 200" className="relative h-full w-full overflow-visible drop-shadow-[0_0_22px_rgba(201,166,70,0.26)]" aria-hidden="true">
-        <defs>
-          <linearGradient id="riskGoldArc" x1="0" y1="-1" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--gold-bright)" />
-            <stop offset="45%" stopColor="var(--gold-primary)" />
-            <stop offset="100%" stopColor="var(--gold-deep)" />
-          </linearGradient>
-          <linearGradient id="riskGoldText" x1="0" y1="-1" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--gold-bright)" />
-            <stop offset="60%" stopColor="var(--gold-primary)" />
-            <stop offset="100%" stopColor="var(--gold-deep)" />
-          </linearGradient>
-          <radialGradient id="riskGoldGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(244,217,123,0.46)" />
-            <stop offset="60%" stopColor="rgba(201,166,70,0.10)" />
-            <stop offset="100%" stopColor="rgba(201,166,70,0)" />
-          </radialGradient>
-        </defs>
-
-        <circle r="82" fill="url(#riskGoldGlow)" opacity="0.56" />
-        <circle r="88" fill="none" stroke="rgba(244,217,123,0.14)" strokeWidth="0.8" />
-        <g opacity="0.72">
-          <animateTransform attributeName="transform" type="scale" values="0.985;1.035;0.985" dur="4.2s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.48;0.78;0.48" dur="4.2s" repeatCount="indefinite" />
-          <circle
-            r="88"
-            fill="none"
-            stroke="url(#riskGoldArc)"
-            strokeWidth="1.15"
-            strokeLinecap="round"
-          />
-        </g>
-        <circle r="78" fill="none" stroke="url(#riskGoldArc)" strokeWidth="0.9" strokeDasharray="1 4" opacity="0.68" />
-        <circle r="54" fill="none" stroke="rgba(244,217,123,0.18)" strokeWidth="0.7" />
-
-        <g stroke="url(#riskGoldArc)" strokeLinecap="round">
-          {ticks.map((tick, index) => (
-            <line
-              key={index}
-              x1={tick.x1.toFixed(2)}
-              y1={tick.y1.toFixed(2)}
-              x2={tick.x2.toFixed(2)}
-              y2={tick.y2.toFixed(2)}
-              strokeWidth={tick.width}
-              opacity={tick.bright ? 0.95 : 0.25}
-            />
-          ))}
-        </g>
-
-        <g stroke="url(#riskGoldArc)" strokeLinecap="round" fill="none" opacity="0.7">
-          <path d="M -76 -20 A 78 78 0 0 0 -76 20" strokeWidth="1.4" />
-          <path d="M 76 -20 A 78 78 0 0 1 76 20" strokeWidth="1.4" />
-          <path d="M -60 -54 A 78 78 0 0 0 -50 -64" strokeWidth="1.1" />
-          <path d="M 60 -54 A 78 78 0 0 1 50 -64" strokeWidth="1.1" />
-          <path d="M -60 54 A 78 78 0 0 1 -50 64" strokeWidth="1.1" />
-          <path d="M 60 54 A 78 78 0 0 0 50 64" strokeWidth="1.1" />
-        </g>
-
-        <g fill="var(--gold-bright)" opacity="0.82">
-          <polygon points="0,-58 2.1,-55 0,-52 -2.1,-55" />
-          <polygon points="0,58 2.1,55 0,52 -2.1,55" />
-          <polygon points="-58,0 -55,2.1 -52,0 -55,-2.1" />
-          <polygon points="58,0 55,2.1 52,0 55,-2.1" />
-        </g>
-
-      </svg>
-    </div>
   );
 }
