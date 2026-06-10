@@ -3,7 +3,8 @@
 // User intent: CO PILOT opens in a separate browser tab so it feels like its
 // own product surface, while sharing auth + Supabase state via localStorage.
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
@@ -17,6 +18,17 @@ export const CopilotStandaloneLayout = () => {
     <PortfolioProvider>
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col bg-[#030302] text-ink-primary">
         <ImpersonationBanner />
+        {/* Back button lives in the empty top-left corner above the Sidebar
+            (Sidebar is fixed and starts at top-28). z-40 sits above the
+            Sidebar's z-30 so it's always reachable from any /copilot/* page. */}
+        <Link
+          to="/app/home"
+          aria-label="Back to FINOTAUR"
+          className="fixed left-3 top-3 z-40 inline-flex items-center gap-2 rounded-[8px] border border-gold-primary/25 bg-black/40 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-gold-primary backdrop-blur-sm transition hover:border-gold-primary/45 hover:bg-gold-primary/10 hover:text-gold-bright"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Link>
         <div className="flex flex-1">
           <Sidebar isOpen={sidebarOpen} collapseMode="collapsed-default" />
           <main className="flex-1 overflow-auto transition-[margin-left] duration-300 ease-in-out md:ml-[var(--finotaur-sidebar-width,14rem)]">
