@@ -1,27 +1,27 @@
 // src/pages/app/ai/copilot/components/AssetClassAllocationCard.tsx
 // =====================================================
-// ALLOCATION card — asset-class donut + legend.
-// Replicates the image1 ALLOCATION panel using the same
-// PremiumFrame + conic-gradient donut idiom as AllocationPanel
-// in FinotaurCopilotDashboard.tsx, but keyed on broader
-// asset-class buckets (ETF and Crypto are distinct here).
+// ALLOCATION card — asset-class donut with pointing slice labels.
+// Uses recharts PieChart + Pie (innerRadius = donut) with a custom
+// label renderer that draws a callout line + "ClassName N.N%".
 // Multi-colour palette overrides ADL-020 per explicit user request.
 // =====================================================
 
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import type { PieLabelRenderProps } from 'recharts';
 import { PremiumFrame } from '../brief/PremiumFrame';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 
 // ─── Palette — per-asset-class colours (user-approved override of ADL-020) ───
 
 const CLASS_COLOURS: Record<string, string> = {
-  Equities:    '#C9A646',            // gold — brand anchor
-  ETFs:        '#8A93A6',            // muted slate
-  Cash:        '#6E7F76',            // muted sage
-  Bonds:       '#7D6F8F',            // muted plum
-  Crypto:      '#A6826B',            // muted bronze
-  Options:     '#7A8A7A',            // muted moss
-  Futures:     '#7A7A8A',            // muted lavender-grey
-  Commodities: '#8A7A6B',            // muted sand
+  Equities:    '#C9A646',             // gold — brand anchor
+  ETFs:        '#8A93A6',             // muted slate
+  Cash:        '#6E7F76',             // muted sage
+  Bonds:       '#7D6F8F',             // muted plum
+  Crypto:      '#A6826B',             // muted bronze
+  Options:     '#7A8A7A',             // muted moss
+  Futures:     '#7A7A8A',             // muted lavender-grey
+  Commodities: '#8A7A6B',             // muted sand
   Other:       'rgba(255,255,255,0.22)',
 };
 
@@ -47,24 +47,116 @@ function bucketAssetClass(cls: string | undefined): string {
   return 'Other';
 }
 
-/** Build a CSS conic-gradient from (label, pct%) rows using per-label colours. */
-function buildConicGradient(rows: Array<[string, number]>): string {
-  if (rows.length === 0) return 'rgba(255,255,255,0.13)';
-  let cursor = 0;
-  const stops: string[] = [];
-  rows.forEach(([label, pct]) => {
-    const color = colourFor(label);
-    const start = cursor;
-    cursor += pct;
-    stops.push(`${color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`);
-  });
-  return `conic-gradient(${stops.join(', ')})`;
-}
-
 function formatTotal(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 10_000)    return `$${(value / 1_000).toFixed(1)}K`;
   return `$${value.toFixed(2)}`;
+}
+
+// ─── Custom label renderer ────────────────────────────────────────────────────
+
+/**
+ * Renders a short leader line from the slice midpoint to a callout text
+ * showing "ClassName N.N%". The line bends via two SVG line segments:
+ * outer ring → elbow → text anchor.
+ */
+function renderCustomLabel(props: PieLabelRenderProps) {
+  const {
+    cx, cy,
+    midAngle,
+    innerRadius,
+    outerRadius,
+    name,
+    percent,
+  } = props;
+
+  // recharts types innerRadius/outerRadius as number | string — narrow safely
+  const ir = typeof innerRadius === 'number' ? innerRadius : 0;
+  const or = typeof outerRadius === 'number' ? outerRadius : 0;
+  const cxN = typeof cx === 'number' ? cx : 0;
+  const cyN = typeof cy === 'number' ? cy : 0;
+
+  const RADIAN = Math.PI / 180;
+  const sin = Math.sin(-midAngle * RADIAN);
+  const cos = Math.cos(-midAngle * RADIAN);
+
+  // Point on the outer edge of the slice
+  const sx = cxN + (or + 2) * cos;
+  const sy = cyN + (or + 2) * sin;
+
+  // Elbow point
+  const mx = cxN + (or + 22) * cos;
+  const my = cyN + (or + 22) * sin;
+
+  // Horizontal end of the leader line
+  const ex = mx + (cos >= 0 ? 1 : -1) * 16;
+  const ey = my;
+
+  const textAnchor = cos >= 0 ? 'start' : 'end';
+  const pct = typeof percent === 'number' ? (percent * 100).toFixed(1) : '0.0';
+  const labelText = `${name as string} ${pct}%`;
+
+  // Skip rendering for tiny slivers (< 1%) to avoid label collision
+  if (typeof percent === 'number' && percent < 0.01) return null;
+
+  // For very small slices shorten the leader line
+  const leaderLen = or - ir;
+  const useShortLine = leaderLen < 8;
+
+  if (useShortLine) {
+    return (
+      <text
+        x={ex + (cos >= 0 ? 4 : -4)}
+        y={ey}
+        textAnchor={textAnchor}
+        dominantBaseline="central"
+        fill="rgba(255,255,255,0.72)"
+        fontSize={11}
+      >
+        {labelText}
+      </text>
+    );
+  }
+
+  return (
+    <g>
+      <path
+        d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`}
+        stroke="rgba(255,255,255,0.25)"
+        strokeWidth={1}
+        fill="none"
+      />
+      <circle cx={ex} cy={ey} r={2} fill="rgba(255,255,255,0.35)" stroke="none" />
+      <text
+        x={ex + (cos >= 0 ? 4 : -4)}
+        y={ey}
+        textAnchor={textAnchor}
+        dominantBaseline="central"
+        fill="rgba(255,255,255,0.72)"
+        fontSize={11}
+      >
+        {labelText}
+      </text>
+    </g>
+  );
+}
+
+// ─── Centered hole label (absolute overlay) ───────────────────────────────────
+
+interface HoleLabelProps {
+  totalDisplay: string;
+}
+
+function HoleLabel({ totalDisplay }: HoleLabelProps) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+      style={{ top: 0, left: 0, right: 0, bottom: 0 }}
+    >
+      <span className="font-mono text-sm leading-tight text-gold-primary">{totalDisplay}</span>
+      <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">TOTAL</span>
+    </div>
+  );
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -79,63 +171,62 @@ interface Props {
 export function AssetClassAllocationCard({ snapshot, className }: Props) {
   const total = snapshot.totalValue || 1;
 
-  // Aggregate holdings by asset-class bucket.
+  // Aggregate holdings by asset-class bucket — never exposes individual tickers.
   const groups = new Map<string, number>();
   for (const h of snapshot.holdings) {
     const label = bucketAssetClass(h.assetClass);
     groups.set(label, (groups.get(label) ?? 0) + h.marketValue);
   }
 
-  // Sort descending by value; compute percentages.
-  const rows: Array<[string, number]> = Array.from(groups.entries())
+  // Sort descending by value; compute percentages for recharts data array.
+  const chartData = Array.from(groups.entries())
     .sort((a, b) => b[1] - a[1])
-    .map(([label, val]) => [label, (val / total) * 100]);
+    .map(([name, value]) => ({ name, value: Math.max(value, 0), pct: (value / total) * 100 }));
 
-  const conic = buildConicGradient(rows);
   const totalDisplay = formatTotal(snapshot.totalValue);
 
   return (
-    <PremiumFrame className={`min-h-[260px] ${className ?? ''}`}>
+    <PremiumFrame className={`min-h-[300px] ${className ?? ''}`}>
       <div className="p-5">
         {/* Header */}
-        <div className="mb-4">
+        <div className="mb-3">
           <p className="text-[13px] uppercase text-gold-primary">ALLOCATION</p>
           <p className="text-[10px] uppercase tracking-[0.12em] text-ink-tertiary">by Asset Class</p>
         </div>
 
         {/* Content */}
-        {rows.length === 0 ? (
+        {chartData.length === 0 ? (
           <p className="mt-4 text-xs text-ink-tertiary">
             No positions to allocate yet.
           </p>
         ) : (
-          <div className="flex items-center gap-5">
-            {/* Legend — left column */}
-            <div className="flex-1 space-y-2">
-              {rows.map(([label, pct]) => (
-                <div
-                  key={label}
-                  className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]"
-                >
-                  <span
-                    className="h-2 w-2 rounded-[2px] inline-block flex-none"
-                    style={{ background: colourFor(label) }}
-                  />
-                  <span className="text-ink-secondary">{label}</span>
-                  <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Donut — right side */}
-            <div
-              className="relative h-32 w-32 flex-none rounded-full p-4"
-              style={{ background: conic }}
-            >
-              <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#080704]">
-                <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
-                <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
-              </div>
+          // Outer container: flex + justify-center so the chart sits in the middle
+          <div className="flex justify-center">
+            {/* Relative wrapper so the absolute HoleLabel overlay works */}
+            <div className="relative w-full" style={{ maxWidth: 480 }}>
+              <ResponsiveContainer width="100%" height={340}>
+                <PieChart margin={{ top: 24, right: 60, bottom: 24, left: 60 }}>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="48%"
+                    outerRadius="70%"
+                    strokeWidth={1}
+                    stroke="#070604"
+                    label={renderCustomLabel}
+                    labelLine={false}
+                    isAnimationActive={false}
+                  >
+                    {chartData.map((entry) => (
+                      <Cell key={entry.name} fill={colourFor(entry.name)} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <HoleLabel totalDisplay={totalDisplay} />
             </div>
           </div>
         )}
