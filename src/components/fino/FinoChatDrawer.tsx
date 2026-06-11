@@ -7,7 +7,7 @@
 // =====================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { X, Plus, Sparkles } from 'lucide-react';
+import { X, Plus, Sparkles, Sun, TrendingUp, BarChart3, Bitcoin, Shield, Building2, LineChart } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
@@ -16,9 +16,27 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
-import FinoBriefingCard from '@/components/fino/FinoBriefingCard';
 import FinoSessionReviewCard from '@/components/fino/FinoSessionReviewCard';
 import { FinoActionBar } from '@/components/fino/FinoActionBar';
+import type { LucideIcon } from 'lucide-react';
+
+// Suggestion chips shown in the FINO drawer's empty state.
+// Morning briefing chip is prepended so it surfaces first.
+const FINO_PROMPT_ROWS: { icon: LucideIcon; question: string }[][] = [
+  [
+    { icon: Sun, question: 'Give me today\'s morning briefing' },
+    { icon: TrendingUp, question: 'What are the latest trade ideas?' },
+    { icon: BarChart3, question: 'Which sectors should I favor this week?' },
+    { icon: Bitcoin, question: 'What is the current crypto regime?' },
+    { icon: Shield, question: 'What risks should I watch right now?' },
+  ],
+  [
+    { icon: Building2, question: 'Summarize the latest company analysis' },
+    { icon: LineChart, question: 'What is the macro outlook?' },
+    { icon: TrendingUp, question: 'Where is momentum improving?' },
+    { icon: Shield, question: 'What could invalidate this setup?' },
+  ],
+];
 
 // Human-readable label for the current route, so FINO knows which screen the
 // user is on. First matching pattern wins; falls back to the title-cased path.
@@ -159,9 +177,7 @@ function FinoChatPanel({
           {usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC') && (
             <UsageBanner usage={usage} />
           )}
-          {/* Morning Briefing card — sits above the chat thread, never throws */}
-          <FinoBriefingCard />
-          {/* Session Review card — sits below briefing, never throws */}
+          {/* Session Review card — sits above the chat thread, never throws */}
           <FinoSessionReviewCard />
           {/* Action approval bar — shown when the SSE stream emits a type:'action' event */}
           <FinoActionBar />
@@ -180,6 +196,7 @@ function FinoChatPanel({
               userTier={(usage?.user_tier as 'FREE' | 'BASIC' | 'PREMIUM') ?? 'FREE'}
               questionsUsed={usage?.questions_today}
               dailyLimit={usage?.daily_limit}
+              promptRows={FINO_PROMPT_ROWS}
             />
           </div>
         </>
