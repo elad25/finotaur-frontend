@@ -120,6 +120,47 @@ interface PaginatedMentions {
 type SortBy = 'mentioned_at' | 'return_30d_desc' | 'return_30d_asc' | 'alpha_90d_desc' | 'win_loss';
 
 // ---------------------------------------------------------------------------
+// Focus Stocks Tracking — types
+// ---------------------------------------------------------------------------
+
+interface FocusTrackingRow {
+  id: string;
+  report_date: string;
+  ticker: string;
+  company: string | null;
+  direction: 'LONG' | 'SHORT';
+  archetype: string | null;
+  archetype_label: string | null;
+  reason: string | null;
+  confluence: boolean | null;
+  entry_price: number | null;
+  weekly_target: number | null;
+  target_type: 'weekly_swing_high' | 'weekly_swing_low' | 'blue_sky' | 'unavailable' | null;
+  stop_price: number | null;
+  status: 'open' | 'target_hit' | 'stopped';
+  outcome_date: string | null;
+  outcome_price: number | null;
+  max_favorable_price: number | null;
+  max_adverse_price: number | null;
+  price_7d: number | null;
+  price_14d: number | null;
+  price_30d: number | null;
+  price_60d: number | null;
+  last_checked_at: string | null;
+  created_at: string;
+}
+
+type FocusStatusFilter = 'all' | 'open' | 'target_hit' | 'stopped';
+
+// Compute direction-aware return %: LONG = (p/entry-1)*100, SHORT = (1-p/entry)*100
+function focusReturn(price: number | null, entry: number | null, direction: 'LONG' | 'SHORT'): number | null {
+  if (price === null || entry === null || entry === 0) return null;
+  return direction === 'LONG'
+    ? round2((price / entry - 1) * 100)
+    : round2((1 - price / entry) * 100);
+}
+
+// ---------------------------------------------------------------------------
 // Aggregate helpers (used for client-side stats computation)
 // ---------------------------------------------------------------------------
 function mean(arr: number[]): number | null {
@@ -579,6 +620,9 @@ const WarZoneAdmin: React.FC = () => {
   // Auto-refresh
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
 
+  // Focus Stocks Tracking — status filter
+  const [focusStatusFilter, setFocusStatusFilter] = useState<FocusStatusFilter>('all');
+
   // Drilldown modal
   const [drilldownTicker, setDrilldownTicker] = useState<string | null>(null);
 
@@ -829,6 +873,79 @@ const WarZoneAdmin: React.FC = () => {
     staleTime: 60_000,
   });
 
+  // Query: Focus Stocks Tracking — direct Supabase PostgREST (same pattern as existing queries)
+  const {
+    data: focusData,
+    isLoading: focusLoading,
+    isError: focusError,
+    refetch: refetchFocus,
+  } = useQuery<FocusTrackingRow[]>({
+    queryKey: ['warzone-focus-tracking', focusStatusFilter],
+    queryFn: async (): Promise<FocusTrackingRow[]> => {
+      let q = supabase
+        .from('warzone_focus_tracking')
+        .select(
+          'id, report_date, ticker, company, direction, archetype, archetype_label, reason, confluence, entry_price, weekly_target, target_type, stop_price, status, outcome_date, outcome_price, max_favorable_price, max_adverse_price, price_7d, price_14d, price_30d, price_60d, last_checked_at, created_at',
+        )
+        .order('report_date', { ascending: false })
+        .range(0, 99); // cap at 100 rows
+
+      if (focusStatusFilter !== 'all') {
+        q = q.eq('status', focusStatusFilter);
+      }
+
+      const { data: rows, error } = await q;
+      if (error) throw new Error(error.message);
+      return (rows ?? []) as FocusTrackingRow[];
+    },
+    staleTime: 60_000,
+  });
+
+  const focusRows = focusData ?? [];
+
+  // Focus stats (computed client-side from full unfiltered data — use a separate full-set query for stats)
+  const {
+    data: focusAllData,
+  } = useQuery<FocusTrackingRow[]>({
+    queryKey: ['warzone-focus-tracking-all'],
+    queryFn: async (): Promise<FocusTrackingRow[]> => {
+      const { data: rows, error } = await supabase
+        .from('warzone_focus_tracking')
+        .select('id, report_date, ticker, direction, entry_price, price_30d, status, outcome_date')
+        .order('report_date', { ascending: false });
+      if (error) throw new Error(error.message);
+      return (rows ?? []) as FocusTrackingRow[];
+    },
+    staleTime: 60_000,
+  });
+
+  const focusAll = focusAllData ?? [];
+  const focusOpen = focusAll.filter((r) => r.status === 'open').length;
+  const focusClosed = focusAll.filter((r) => r.status !== 'open').length;
+  const focusHit = focusAll.filter((r) => r.status === 'target_hit').length;
+  const focusHitRate: number | null =
+    focusClosed > 0 ? round2((focusHit / focusClosed) * 100) : null;
+
+  const focusAvgReturn30d: number | null = (() => {
+    const vals = focusAll
+      .map((r) => focusReturn(r.price_30d, r.entry_price, r.direction))
+      .filter((v): v is number => v !== null);
+    return vals.length > 0 ? round2(mean(vals)) : null;
+  })();
+
+  const focusAvgDaysToOutcome: number | null = (() => {
+    const days = focusAll
+      .filter((r) => r.status !== 'open' && r.outcome_date && r.report_date)
+      .map((r) => {
+        const diff =
+          (new Date(r.outcome_date!).getTime() - new Date(r.report_date).getTime()) /
+          86_400_000;
+        return Math.round(diff);
+      })
+      .filter((d) => d >= 0);
+    return days.length > 0 ? round2(mean(days)) : null;
+  })();
+
   const mentions = mentionsData?.data ?? [];
   const totalMentions = mentionsData?.total ?? 0;
   const totalPages = Math.ceil(totalMentions / pageSize);
@@ -986,6 +1103,264 @@ const WarZoneAdmin: React.FC = () => {
             Refresh
           </Button>
         </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Section A — Focus Stocks Tracking                                   */}
+      {/* ------------------------------------------------------------------ */}
+      <div>
+        {/* Section header */}
+        <div className="mb-4">
+          <h2 className="text-h3 font-semibold text-gold-primary">Focus Stocks Tracking</h2>
+          <p className="text-small text-ink-tertiary mt-1">
+            Internal swing tracking — closes only on weekly target or 8% stop. Not customer-facing.
+          </p>
+        </div>
+
+        {/* Stats tiles row */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+          <StatTile
+            label="Open Positions"
+            value={focusAll.length === 0 && !focusAllData ? '—' : focusOpen.toLocaleString()}
+            icon={Target}
+            loading={!focusAllData && focusLoading}
+          />
+          <StatTile
+            label="Closed"
+            value={focusAll.length === 0 && !focusAllData ? '—' : focusClosed.toLocaleString()}
+            icon={Activity}
+            loading={!focusAllData && focusLoading}
+          />
+          <StatTile
+            label="Hit Rate"
+            value={
+              focusHitRate !== null
+                ? `${focusHitRate.toFixed(1)}%`
+                : '—'
+            }
+            icon={TrendingUp}
+            loading={!focusAllData && focusLoading}
+          />
+          <StatTile
+            label="Avg Return 30d"
+            value={
+              <span className={pctColorClass(focusAvgReturn30d)}>
+                {formatPct(focusAvgReturn30d)}
+              </span>
+            }
+            icon={BarChart3}
+            loading={!focusAllData && focusLoading}
+          />
+          <StatTile
+            label="Avg Days to Close"
+            value={
+              focusAvgDaysToOutcome !== null
+                ? `${focusAvgDaysToOutcome.toFixed(1)}d`
+                : '—'
+            }
+            icon={Zap}
+            loading={!focusAllData && focusLoading}
+          />
+        </div>
+
+        {/* Status filter */}
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <select
+            value={focusStatusFilter}
+            onChange={(e) => setFocusStatusFilter(e.target.value as FocusStatusFilter)}
+            className="bg-surface-1 border border-border-ds-default rounded-lg px-3 py-2 text-small text-ink-primary focus:outline-none focus:border-gold-primary transition-colors duration-base"
+          >
+            <option value="all">All Statuses</option>
+            <option value="open">Open</option>
+            <option value="target_hit">Target Hit</option>
+            <option value="stopped">Stopped</option>
+          </select>
+        </div>
+
+        {/* Main table */}
+        <Card padding="compact">
+          {focusError ? (
+            <div className="flex flex-col items-center gap-3 py-10 text-status-error">
+              <AlertCircle className="w-8 h-8" />
+              <p className="text-small">Failed to load focus tracking data.</p>
+              <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchFocus()}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-small border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-ds-default">
+                      {[
+                        'Ticker', 'Date', 'Dir', 'Archetype', 'Entry', 'Target', 'Stop',
+                        'Status', '+7d %', '+14d %', '+30d %', '+60d %', 'Max Fav', 'Max Adv',
+                      ].map((col) => (
+                        <th
+                          key={col}
+                          className="text-left px-3 py-3 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap text-ink-tertiary"
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {focusLoading
+                      ? Array.from({ length: 6 }).map((_, i) => (
+                          <tr key={i} className="border-b border-border-ds-subtle">
+                            {Array.from({ length: 14 }).map((__, j) => (
+                              <td key={j} className="px-3 py-3">
+                                <div
+                                  className="h-4 bg-surface-2 rounded animate-pulse"
+                                  style={{ width: `${50 + (j % 4) * 15}%` }}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      : focusRows.map((row) => {
+                          const ret7d = focusReturn(row.price_7d, row.entry_price, row.direction);
+                          const ret14d = focusReturn(row.price_14d, row.entry_price, row.direction);
+                          const ret30d = focusReturn(row.price_30d, row.entry_price, row.direction);
+                          const ret60d = focusReturn(row.price_60d, row.entry_price, row.direction);
+                          const maxFavPct = focusReturn(row.max_favorable_price, row.entry_price, row.direction);
+                          const maxAdvPct = focusReturn(row.max_adverse_price, row.entry_price, row.direction);
+
+                          const statusBadge = (() => {
+                            if (row.status === 'target_hit') {
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap bg-[#0d9488]/15 text-[#2dd4bf] border border-[#0d9488]/25" style={{ borderRadius: '4px' }}>
+                                  Target Hit
+                                </span>
+                              );
+                            }
+                            if (row.status === 'stopped') {
+                              return (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap bg-status-error/15 text-num-negative border border-status-error/25" style={{ borderRadius: '4px' }}>
+                                  Stopped
+                                </span>
+                              );
+                            }
+                            // open
+                            return (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap bg-gold-primary/15 text-gold-primary border border-gold-border" style={{ borderRadius: '4px' }}>
+                                Open
+                              </span>
+                            );
+                          })();
+
+                          const targetDisplay = (() => {
+                            if (row.target_type === 'blue_sky') {
+                              return <span className="text-gold-primary font-mono">Blue sky</span>;
+                            }
+                            if (row.weekly_target === null) return <span className="text-ink-muted">—</span>;
+                            return <span className="font-mono text-ink-secondary">{formatPrice(row.weekly_target)}</span>;
+                          })();
+
+                          return (
+                            <tr
+                              key={row.id}
+                              className="border-b border-border-ds-subtle/60 hover:bg-surface-2/50 transition-colors duration-fast"
+                            >
+                              {/* Ticker */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <span className="font-mono font-semibold text-gold-primary">
+                                  {row.ticker}
+                                </span>
+                                {row.company && (
+                                  <span className="block text-[11px] text-ink-muted leading-tight">{row.company}</span>
+                                )}
+                              </td>
+
+                              {/* Date */}
+                              <td className="px-3 py-3 whitespace-nowrap text-ink-tertiary">
+                                {formatDate(row.report_date)}
+                              </td>
+
+                              {/* Direction */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <span
+                                  className={`font-mono font-semibold text-small ${
+                                    row.direction === 'LONG' ? 'text-ink-primary' : 'text-num-negative'
+                                  }`}
+                                >
+                                  {row.direction}
+                                </span>
+                              </td>
+
+                              {/* Archetype */}
+                              <td className="px-3 py-3 whitespace-nowrap text-ink-secondary text-[11px]" title={row.archetype ?? undefined}>
+                                {row.archetype_label ?? row.archetype ?? <span className="text-ink-muted">—</span>}
+                              </td>
+
+                              {/* Entry */}
+                              <td className="px-3 py-3 font-mono text-ink-secondary whitespace-nowrap">
+                                {formatPrice(row.entry_price)}
+                              </td>
+
+                              {/* Target */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                {targetDisplay}
+                              </td>
+
+                              {/* Stop */}
+                              <td className="px-3 py-3 font-mono text-ink-secondary whitespace-nowrap">
+                                {formatPrice(row.stop_price)}
+                              </td>
+
+                              {/* Status */}
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                {statusBadge}
+                              </td>
+
+                              {/* +7d % */}
+                              <td className={`px-3 py-3 font-mono whitespace-nowrap ${pctColorClass(ret7d)}`}>
+                                {formatPct(ret7d)}
+                              </td>
+
+                              {/* +14d % */}
+                              <td className={`px-3 py-3 font-mono whitespace-nowrap ${pctColorClass(ret14d)}`}>
+                                {formatPct(ret14d)}
+                              </td>
+
+                              {/* +30d % */}
+                              <td className={`px-3 py-3 font-mono whitespace-nowrap ${pctColorClass(ret30d)}`}>
+                                {formatPct(ret30d)}
+                              </td>
+
+                              {/* +60d % */}
+                              <td className={`px-3 py-3 font-mono whitespace-nowrap ${pctColorClass(ret60d)}`}>
+                                {formatPct(ret60d)}
+                              </td>
+
+                              {/* Max Fav */}
+                              <td className={`px-3 py-3 font-mono whitespace-nowrap ${pctColorClass(maxFavPct)}`}>
+                                {formatPct(maxFavPct)}
+                              </td>
+
+                              {/* Max Adv */}
+                              <td className={`px-3 py-3 font-mono whitespace-nowrap ${pctColorClass(maxAdvPct)}`}>
+                                {formatPct(maxAdvPct)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Empty state */}
+              {!focusLoading && focusRows.length === 0 && (
+                <div className="flex flex-col items-center gap-3 py-12 text-ink-tertiary">
+                  <Target className="w-8 h-8 text-ink-muted" />
+                  <p className="text-small">No tracked positions yet — populated automatically by the daily report.</p>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
       </div>
 
       {/* ------------------------------------------------------------------ */}
