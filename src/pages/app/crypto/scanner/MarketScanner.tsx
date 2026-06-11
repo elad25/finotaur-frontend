@@ -198,8 +198,10 @@ interface WallSpec {
 }
 
 /**
- * Derive up to 5 bid + 5 ask wall specs from the raw order book.
- * Only levels within ±4% of mid are considered.
+ * Derive up to 6 bid + 6 ask wall specs from the raw order book.
+ * Levels within ±10% of mid are considered — wide on purpose, so large
+ * resting limit orders become visible long BEFORE price approaches them
+ * (Bookmap-style), not only when price gets close.
  * Noise gate: keep only bins whose notional ≥ max(p95 of nonzero bins, 30% of largest).
  */
 function computeWalls(
@@ -217,7 +219,7 @@ function computeWalls(
   const mid = bestBid === 0 ? bestAsk : bestAsk === Infinity ? bestBid : (bestBid + bestAsk) / 2;
 
   const binSize = computeWallBinSize(mid);
-  const rangePct = 0.04; // ±4% of mid
+  const rangePct = 0.10; // ±10% of mid — show distant walls before price reaches them
   const priceLow  = mid * (1 - rangePct);
   const priceHigh = mid * (1 + rangePct);
 
@@ -246,11 +248,11 @@ function computeWalls(
     const largest = sorted[sorted.length - 1];
     const threshold = Math.max(p95, largest * 0.30);
 
-    // Filter bins above threshold, then take top-5 by notional
+    // Filter bins above threshold, then take top-6 by notional
     const candidates = Array.from(bins.entries())
       .filter(([, n]) => n >= threshold)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+      .slice(0, 6);
 
     return candidates.map(([price, notional]) => ({
       id: `${side}-${price}`,
