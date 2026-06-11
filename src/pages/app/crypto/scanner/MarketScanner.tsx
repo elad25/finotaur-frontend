@@ -838,11 +838,23 @@ export default function MarketScanner() {
     setWsStatus('connecting');
   }, []);
 
-  // Derive chart time window from selected interval.
+  // Bump every 30s so the candle window keeps sliding forward — without
+  // this the klines are fetched ONCE at mount and the chart freezes at
+  // load time while the live walls keep moving (incident 2026-06-11:
+  // after an hour open, candles were an hour stale and walls looked
+  // "detached" to the right of them).
+  const [timeTick, setTimeTick] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setTimeTick(t => t + 1), 30_000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Derive chart time window from selected interval (slides with timeTick).
   const { from, to } = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     return { from: now - lookbackSeconds(selectedInterval), to: now };
-  }, [selectedInterval]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- timeTick intentionally drives recompute
+  }, [selectedInterval, timeTick]);
 
   // Close button: window.close() works for popup windows; history.back() is the
   // fallback for in-app navigation where window.close() is ignored by the browser.
