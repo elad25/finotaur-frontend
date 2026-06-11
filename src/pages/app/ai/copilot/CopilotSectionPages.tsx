@@ -33,7 +33,7 @@ import { usePortfolioData } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver, type TopExposure } from './utils/portfolioRisk';
-import { SectorCallsPanel } from './components/SectorCallsPanel';
+import { SectorOutlookPanel } from './components/SectorOutlookPanel';
 import { GlassCard } from '@/pages/app/crypto/_shared/GlassUI';
 import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -77,7 +77,7 @@ export function CopilotTopOpportunitiesPage() {
         />
 
         <OpportunityShowcase opportunities={opportunities} />
-        <SectorCallsPanel brief={brief} loading={briefLoading} />
+        <SectorOutlookPanel />
       </div>
     </CopilotPageShell>
   );
