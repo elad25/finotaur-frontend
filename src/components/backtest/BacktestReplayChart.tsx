@@ -1073,6 +1073,9 @@ export function BacktestReplayChart({
           color,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
+          // lineVisible:false — the HTML overlay draws the half-width dashed line;
+          // the native line is hidden but its axis label is preserved.
+          lineVisible: false,
           axisLabelVisible: true,
           title: '',
         });
@@ -1167,6 +1170,9 @@ export function BacktestReplayChart({
           color: opts.color,
           lineWidth: 2,
           lineStyle: opts.style,
+          // lineVisible:false — the HTML overlay (OrderLinesOverlay) draws the
+          // half-width line; native line is hidden but axis label is preserved.
+          lineVisible: false,
           axisLabelVisible: true,
           title: opts.title,
         });

@@ -9,7 +9,7 @@
 // sessions are unaffected. CommissionConfig is stored on the session and
 // threaded into useBacktestSession via setCommissionConfig on chart load.
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { CalendarDays, Plus, Loader2, ChevronDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
@@ -55,6 +55,10 @@ import {
 
 const GOLD = '#C9A646';
 const ASSET_ORDER: BacktestAssetType[] = ['forex', 'stocks', 'crypto', 'futures'];
+
+/** Prevent mouse-wheel from incrementing/decrementing a focused number input. */
+const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) =>
+  (e.target as HTMLInputElement).blur();
 
 interface CreateBacktestSessionModalProps {
   open: boolean;
@@ -369,6 +373,7 @@ export function CreateBacktestSessionModal({
                   min={0}
                   value={startBalance}
                   onChange={(e) => setStartBalance(e.target.value)}
+                  onWheel={blurOnWheel}
                   placeholder="10000"
                   className="no-spinner pl-6 bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40"
                 />
@@ -447,6 +452,7 @@ export function CreateBacktestSessionModal({
                       step={0.01}
                       value={commissionPerOrder}
                       onChange={(e) => setCommissionPerOrder(e.target.value)}
+                      onWheel={blurOnWheel}
                       placeholder="0"
                       className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 text-xs h-8"
                     />
@@ -460,6 +466,7 @@ export function CreateBacktestSessionModal({
                       step={0.01}
                       value={commissionPercent}
                       onChange={(e) => setCommissionPercent(e.target.value)}
+                      onWheel={blurOnWheel}
                       placeholder="0"
                       className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 text-xs h-8"
                     />
@@ -473,6 +480,7 @@ export function CreateBacktestSessionModal({
                       step={0.01}
                       value={slippagePercent}
                       onChange={(e) => setSlippagePercent(e.target.value)}
+                      onWheel={blurOnWheel}
                       placeholder="0"
                       className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 text-xs h-8"
                     />

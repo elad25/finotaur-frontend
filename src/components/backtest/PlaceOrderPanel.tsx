@@ -95,6 +95,10 @@ function weightedAvgTp(legs: TakeProfitLeg[]): number {
 
 const MAX_TP_LEGS = 3;
 
+/** Prevent mouse-wheel from incrementing/decrementing a focused number input. */
+const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) =>
+  (e.target as HTMLInputElement).blur();
+
 // ─── Component ──────────────────────────────────────────────────
 
 export function PlaceOrderPanel({
@@ -345,6 +349,7 @@ export function PlaceOrderPanel({
             type="number"
             value={limitPrice}
             onChange={(e) => setLimitPrice(e.target.value)}
+            onWheel={blurOnWheel}
             placeholder={marketPrice ? String(marketPrice) : '0'}
             className={inputCls}
           />
@@ -358,6 +363,7 @@ export function PlaceOrderPanel({
             type="number"
             value={positionSize}
             onChange={(e) => setPositionSize(e.target.value)}
+            onWheel={blurOnWheel}
             placeholder="1"
             min={1}
             className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
@@ -411,6 +417,7 @@ export function PlaceOrderPanel({
               type="number"
               value={riskValue}
               onChange={(e) => setRiskValue(e.target.value)}
+              onWheel={blurOnWheel}
               placeholder={riskMode === 'percent' ? '1' : '100'}
               className={inputCls}
             />
@@ -436,6 +443,7 @@ export function PlaceOrderPanel({
           type="number"
           value={stopLoss}
           onChange={(e) => setStopLoss(e.target.value)}
+          onWheel={blurOnWheel}
           placeholder="0"
           className={inputCls}
         />
@@ -477,6 +485,7 @@ export function PlaceOrderPanel({
             type="number"
             value={takeProfit}
             onChange={(e) => setTakeProfit(e.target.value)}
+            onWheel={blurOnWheel}
             placeholder="0"
             className={inputCls}
           />
@@ -491,6 +500,7 @@ export function PlaceOrderPanel({
                   type="number"
                   value={leg.price || ''}
                   onChange={(e) => handleLegPrice(leg.id, e.target.value)}
+                  onWheel={blurOnWheel}
                   placeholder="Price"
                   className={cn(inputCls, 'flex-1')}
                 />
@@ -498,6 +508,7 @@ export function PlaceOrderPanel({
                   type="number"
                   value={leg.sizePercent}
                   onChange={(e) => handleLegPercent(leg.id, e.target.value)}
+                  onWheel={blurOnWheel}
                   placeholder="100"
                   className={cn(inputCls, 'w-16 text-center')}
                 />
