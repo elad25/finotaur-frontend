@@ -1,9 +1,38 @@
 // utils/opportunityMapper.ts
-// Maps TradeIdea (from synthesis brief) → Opportunity (table row shape).
+// Maps TradeIdea (from synthesis brief) → Opportunity (showcase card shape).
 
 import type { TradeIdea, RankedTradeIdea } from '@/services/copilotSynthesisBriefApi';
 import type { PatternType } from '@/lib/patterns/types';
 import { toPatternType } from '@/lib/patterns/types';
+
+// ---------------------------------------------------------------------------
+// BullPoint / BearPoint — argument rows shown in the Why-Up / Why-Down cards.
+// ---------------------------------------------------------------------------
+
+export interface ArgPoint {
+  title: string;
+  detail: string;
+}
+
+// ---------------------------------------------------------------------------
+// CatalystDetailed — catalyst with optional impact badge.
+// ---------------------------------------------------------------------------
+
+export interface CatalystDetailed {
+  text: string;
+  impact?: 'High' | 'Medium' | 'Low';
+}
+
+// ---------------------------------------------------------------------------
+// Outlook distribution — donut segments in the AI Outlook card.
+// ---------------------------------------------------------------------------
+
+export interface OutlookData {
+  bullish: number;
+  neutral: number;
+  bearish: number;
+  summary: string;
+}
 
 // ---------------------------------------------------------------------------
 // Opportunity type — superset of the old hardcoded array shape.
@@ -33,6 +62,21 @@ export interface Opportunity {
   patternEvidence?: string;
   /** ONE sentence stating what would break the thesis. */
   invalidation?: string;
+  // ---------------------------------------------------------------------------
+  // Showcase extensions — derived from new TradeIdea fields or fallback logic.
+  // ---------------------------------------------------------------------------
+  /** Risk level. undefined → UI shows '—'. */
+  riskLevel?: 'Low' | 'Medium' | 'High';
+  /** Why-Up argument rows. Always at least one (Core Thesis fallback). */
+  bullPoints: ArgPoint[];
+  /** Why-Down argument rows. Empty if no downside scenario is published. */
+  bearPoints: ArgPoint[];
+  /** Outlook distribution + summary sentence. */
+  outlook: OutlookData;
+  /** Catalysts with optional impact classification. */
+  catalystsDetailed: CatalystDetailed[];
+  /** Related themes for theme chips. Empty → section hidden. */
+  themes: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +174,60 @@ export function ideaToOpportunity(
       ? idea.catalysts.slice(0, 3)
       : deriveCatalystsFromThesis(idea.thesis);
 
+  // ---------------------------------------------------------------------------
+  // Showcase fields — use server-authored values when available; fall back to
+  // derived values from the existing TradeIdea fields. Never invent numbers.
+  // ---------------------------------------------------------------------------
+
+  // Bull points: server array → fallback chain from existing fields
+  let bullPoints: ArgPoint[];
+  if (idea.bull_points && idea.bull_points.length > 0) {
+    bullPoints = idea.bull_points;
+  } else {
+    bullPoints = [{ title: 'Core Thesis', detail: idea.thesis }];
+    if (idea.pattern_evidence) {
+      bullPoints.push({ title: 'Pattern Evidence', detail: idea.pattern_evidence });
+    }
+    for (const c of catalysts) {
+      bullPoints.push({ title: 'Catalyst', detail: c });
+    }
+  }
+
+  // Bear points: server array → fallback to invalidation string
+  let bearPoints: ArgPoint[];
+  if (idea.bear_points && idea.bear_points.length > 0) {
+    bearPoints = idea.bear_points;
+  } else if (idea.invalidation) {
+    bearPoints = [{ title: 'Invalidation', detail: idea.invalidation }];
+  } else {
+    bearPoints = [];
+  }
+
+  // Outlook: server object → derive from conviction (until real outlook arrives)
+  let outlook: OutlookData;
+  if (idea.outlook) {
+    outlook = idea.outlook;
+  } else {
+    const ck = convictionKey as ConvictionKey;
+    const derived = ck === 'high'
+      ? { bullish: 70, neutral: 20, bearish: 10 }
+      : ck === 'low'
+      ? { bullish: 40, neutral: 35, bearish: 25 }
+      : { bullish: 55, neutral: 30, bearish: 15 }; // medium
+    outlook = {
+      ...derived,
+      summary: `AI conviction is ${idea.conviction} for ${idea.symbol} over the ${HORIZON_TO_TIMEFRAME[idea.time_horizon] ?? '1-4 Weeks'} timeframe.`,
+    };
+  }
+
+  // Catalysts detailed: server array → map from plain catalysts with impact undefined
+  let catalystsDetailed: CatalystDetailed[];
+  if (idea.catalysts_detailed && idea.catalysts_detailed.length > 0) {
+    catalystsDetailed = idea.catalysts_detailed;
+  } else {
+    catalystsDetailed = catalysts.map((text) => ({ text }));
+  }
+
   return {
     rank: idx + 1,
     ticker: idea.symbol,
@@ -150,5 +248,11 @@ export function ideaToOpportunity(
     patternType: toPatternType(idea.pattern_type),
     patternEvidence: idea.pattern_evidence ?? undefined,
     invalidation: idea.invalidation ?? undefined,
+    riskLevel: idea.risk_level ?? undefined,
+    bullPoints,
+    bearPoints,
+    outlook,
+    catalystsDetailed,
+    themes: idea.themes ?? [],
   };
 }

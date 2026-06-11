@@ -62,6 +62,22 @@ export interface TradeIdea {
   pattern_evidence?: string | null;
   /** ONE sentence stating the specific event that would break the thesis. */
   invalidation?: string | null;
+  // ---------------------------------------------------------------------------
+  // Extended fields — server will start emitting these on the next brief.
+  // All optional for backward compatibility with older briefs.
+  // ---------------------------------------------------------------------------
+  /** Categorical risk level for this idea. */
+  risk_level?: 'Low' | 'Medium' | 'High';
+  /** Bullish argument points. */
+  bull_points?: { title: string; detail: string }[];
+  /** Bearish / downside argument points. */
+  bear_points?: { title: string; detail: string }[];
+  /** AI outlook distribution (sum should be ~100). */
+  outlook?: { bullish: number; neutral: number; bearish: number; summary: string };
+  /** Catalysts with optional impact classification. */
+  catalysts_detailed?: { text: string; impact?: 'High' | 'Medium' | 'Low' }[];
+  /** Related investment/macro themes. */
+  themes?: string[];
 }
 
 export interface KeyRisk {
