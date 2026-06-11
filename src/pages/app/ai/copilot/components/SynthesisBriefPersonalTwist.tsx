@@ -79,16 +79,31 @@ function PersonalCommentaryCard({
         )}
       </div>
 
-      {/* Body */}
+      {/* Body — new briefs arrive as "• " bullet lines; older cached ones as paragraphs */}
       <div className="px-4 py-4">
-        {commentary.split('\n\n').map((paragraph, i) => (
-          <p
-            key={i}
-            className={`text-[12px] leading-[1.75] text-ink-secondary ${i > 0 ? 'mt-3' : ''}`}
-          >
-            {paragraph}
-          </p>
-        ))}
+        {commentary.includes('•') ? (
+          <ul className="space-y-2">
+            {commentary
+              .split('\n')
+              .map((line) => line.replace(/^\s*•\s*/, '').trim())
+              .filter(Boolean)
+              .map((line, i) => (
+                <li key={i} className="flex items-start gap-2 text-[12px] leading-[1.6] text-ink-secondary">
+                  <span className="mt-[5px] h-[5px] w-[5px] shrink-0 rounded-full bg-gold-primary/70" />
+                  <span>{line}</span>
+                </li>
+              ))}
+          </ul>
+        ) : (
+          commentary.split('\n\n').map((paragraph, i) => (
+            <p
+              key={i}
+              className={`text-[12px] leading-[1.75] text-ink-secondary ${i > 0 ? 'mt-3' : ''}`}
+            >
+              {paragraph}
+            </p>
+          ))
+        )}
       </div>
     </section>
   );
