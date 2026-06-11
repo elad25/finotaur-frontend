@@ -37,6 +37,16 @@ function logOnce(key: string, ...args: any[]) {
 }
 
 // ================================================
+// TIMEOUT-WARN RATE LIMITER
+// ================================================
+
+// Suppress duplicate "[Auth] getSession timeout — fallback succeeded" noise.
+// Log at most once every 5 minutes per page load (module-scoped — reset on
+// full page reload, not on React re-mount).
+let _lastTimeoutWarnAt = 0;
+const TIMEOUT_WARN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+// ================================================
 // HELPERS
 // ================================================
 
@@ -177,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // (hypothesis A) or in network preflight, while staying cheap when
           // localStorage itself is the bottleneck (hypothesis B). withTimeout
           // wraps it to honour ADL-040 (no unbounded promise on critical path).
-          logger.error('[Auth] getSession timeout — attempting getUser fallback', err);
+          const hasStoredSession = !!localStorage.getItem('finotaur-auth-token');
           try {
             const fallback = await withTimeout(
               supabase.auth.getUser(),
@@ -191,14 +201,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // this just unblocks the initial render so the user isn't stuck
               // on the login screen while the SDK recovers.
               session = { user: fallback.data.user } as Session;
-              logger.info('[Auth] getUser fallback restored session for user', {
-                userId: fallback.data.user.id,
-              });
+              // Rate-limited warn: only log once per 5 minutes to avoid
+              // spamming Sentry/console when auth lock contention is ongoing.
+              const now = Date.now();
+              if (now - _lastTimeoutWarnAt >= TIMEOUT_WARN_INTERVAL_MS) {
+                _lastTimeoutWarnAt = now;
+                logger.warn(
+                  '[Auth] getSession timeout — session served via getUser fallback ' +
+                  '(auth lock contention)',
+                  { hasStoredSession }
+                );
+              }
             } else if (fallback.error) {
-              logger.error('[Auth] getUser fallback returned error', fallback.error);
+              logger.error('[Auth] getSession timeout and getUser fallback failed', {
+                fallbackError: fallback.error,
+                hasStoredSession,
+              });
             }
           } catch (fallbackErr) {
-            logger.error('[Auth] getUser fallback also failed', fallbackErr);
+            logger.error('[Auth] getSession timeout and getUser fallback failed', {
+              fallbackErr,
+              hasStoredSession,
+            });
           }
         } else {
           logger.error('[Auth] Session fetch failed', err);
