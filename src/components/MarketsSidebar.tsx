@@ -61,13 +61,25 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
         const active = !blocked &&
           (location.pathname === route || location.pathname.startsWith(route + '/'));
 
+        const handleClick = () => {
+          if (blocked) return;
+          if (fn.newWindow) {
+            // Open in a named popup at full available screen size.
+            // Re-clicking focuses the existing window (same name = reuse).
+            window.open(
+              route,
+              'finotaur-market-scanner',
+              `popup=yes,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`,
+            );
+            return;
+          }
+          navigate(route);
+        };
+
         return (
           <button
             key={fn.id}
-            onClick={() => {
-              if (blocked) return;
-              navigate(route);
-            }}
+            onClick={handleClick}
             disabled={blocked}
             title={!isExpanded ? fn.label : undefined}
             className={cn(
