@@ -11,6 +11,21 @@
 
 import type { Holding } from '../hooks/usePortfolioMockData';
 
+// ─── Portfolio Health types ───────────────────────────────────────────────────
+
+export type HealthMetricKey = 'diversification' | 'risk' | 'macro' | 'cash';
+
+export interface HealthMetric {
+  key: HealthMetricKey;
+  label: string;
+  score: number; // 0-100, higher = better (health, not risk)
+}
+
+export interface PortfolioHealth {
+  overall: number; // 0-100
+  metrics: HealthMetric[];
+}
+
 export type RiskTone = 'red' | 'gold' | 'green';
 export type RiskLevel = 'High' | 'Medium' | 'Low';
 export type RiskIconKey = 'concentration' | 'equity' | 'options' | 'liquidity';
@@ -185,4 +200,158 @@ export function computeRiskAnalysis(holdings: Holding[], totalValue: number): Po
   const level: PortfolioRiskAnalysis['level'] = score >= 75 ? 'High' : score >= 45 ? 'Moderate' : 'Low';
 
   return { score, level, drivers, topExposures, summary: buildSummary(drivers) };
+}
+
+// ─── Shared internal percentages helper ──────────────────────────────────────
+
+/**
+ * Derive the core percentage breakdown shared by both computeRiskAnalysis
+ * and computePortfolioHealth. Extracted so the two functions stay in sync
+ * without duplicating the classification logic.
+ */
+function derivePortfolioPercentages(
+  holdings: Holding[],
+  totalValue: number,
+): {
+  equityPct: number;
+  optionPct: number;
+  cashPct: number;
+  top3Pct: number;
+  assetClassWeights: Map<string, number>;
+} {
+  let equityValue = 0;
+  let optionValue = 0;
+  let cashValue = 0;
+
+  // Asset-class weights for Macro Alignment (display-label bucketing matching
+  // AssetClassAllocationCard's bucketAssetClass, normalised to the non-cash total).
+  const assetClassWeights = new Map<string, number>();
+
+  for (const h of holdings) {
+    const cat = classifyAsset(h.assetClass);
+    if (cat === 'EQUITY') equityValue += Math.abs(h.marketValue);
+    else if (cat === 'OPTION') optionValue += Math.abs(h.marketValue);
+    else if (cat === 'CASH') cashValue += h.marketValue;
+
+    // Bucket into display labels used for entropy calculation.
+    const displayLabel = (() => {
+      const c = (h.assetClass ?? '').toUpperCase();
+      if (c === 'STK' || c === 'WAR') return 'Equities';
+      if (c === 'ETF')                return 'ETFs';
+      if (c === 'OPT' || c === 'FOP') return 'Options';
+      if (c === 'FUT')                return 'Futures';
+      if (c === 'BOND')               return 'Bonds';
+      if (c === 'CASH' || c === 'FOREX') return 'Cash';
+      if (c === 'CRYPTO' || c === 'COIN') return 'Crypto';
+      if (c === 'CMDTY')              return 'Commodities';
+      return 'Other';
+    })();
+    assetClassWeights.set(
+      displayLabel,
+      (assetClassWeights.get(displayLabel) ?? 0) + Math.abs(h.marketValue),
+    );
+  }
+
+  const equityPct = (equityValue / totalValue) * 100;
+  const optionPct = (optionValue / totalValue) * 100;
+  const cashPct   = (cashValue   / totalValue) * 100;
+
+  // Top-3 ticker concentration (excluding cash).
+  const sortedNonCash = [...holdings]
+    .filter((h) => classifyAsset(h.assetClass) !== 'CASH')
+    .sort((a, b) => Math.abs(b.marketValue) - Math.abs(a.marketValue));
+  const top3Pct = sortedNonCash
+    .slice(0, 3)
+    .reduce((sum, h) => sum + (Math.abs(h.marketValue) / totalValue) * 100, 0);
+
+  return { equityPct, optionPct, cashPct, top3Pct, assetClassWeights };
+}
+
+// ─── Portfolio Health ─────────────────────────────────────────────────────────
+
+/** Clamp a value to [0, 100] and round to nearest integer. */
+function clamp100(v: number): number {
+  return Math.round(Math.max(0, Math.min(100, v)));
+}
+
+/**
+ * Compute a Shannon entropy score (0-1) for the given weight distribution,
+ * normalised by ln(max(numClasses, 2)) so a single-class book → 0 and a
+ * perfectly-spread book → 1.
+ */
+function shannonEntropyScore(weights: Map<string, number>): number {
+  const total = Array.from(weights.values()).reduce((s, v) => s + v, 0);
+  if (total <= 0 || weights.size === 0) return 0;
+  let entropy = 0;
+  for (const v of weights.values()) {
+    if (v <= 0) continue;
+    const p = v / total;
+    entropy -= p * Math.log(p);
+  }
+  const maxEntropy = Math.log(Math.max(weights.size, 2));
+  return entropy / maxEntropy;
+}
+
+/**
+ * Compute a four-metric portfolio health score from live holdings.
+ *
+ * All scores are 0-100 where **higher = healthier** (inverse of risk score).
+ * Empty portfolio (no holdings or totalValue ≤ 0) returns overall 0 and
+ * all metrics at 0 — the component renders an empty state instead.
+ */
+export function computePortfolioHealth(
+  holdings: Holding[],
+  totalValue: number,
+): PortfolioHealth {
+  const empty: PortfolioHealth = {
+    overall: 0,
+    metrics: [
+      { key: 'diversification', label: 'Diversification',  score: 0 },
+      { key: 'risk',            label: 'Risk Exposure',    score: 0 },
+      { key: 'macro',           label: 'Macro Alignment',  score: 0 },
+      { key: 'cash',            label: 'Cash Efficiency',  score: 0 },
+    ],
+  };
+
+  if (!holdings.length || totalValue <= 0) return empty;
+
+  const { equityPct, optionPct, cashPct, top3Pct, assetClassWeights } =
+    derivePortfolioPercentages(holdings, totalValue);
+
+  // Diversification: 100 − top3Pct (lower concentration → healthier).
+  const diversification = clamp100(100 - top3Pct);
+
+  // Risk Exposure: 100 − min(100, equityPct*0.6 + optionPct*0.8)
+  //   Higher score = less risky book.
+  const riskRaw = Math.min(100, equityPct * 0.6 + optionPct * 0.8);
+  const riskExposure = clamp100(100 - riskRaw);
+
+  // Macro Alignment: Shannon entropy of asset-class weight distribution × 100.
+  const macroAlignment = clamp100(shannonEntropyScore(assetClassWeights) * 100);
+
+  // Cash Efficiency: banded score on cashPct.
+  //   5–20% band → 100 (sweet spot)
+  //   below 5%   → linear from 40 (at 0%) to 100 (at 5%)
+  //   above 20%  → linear from 100 (at 20%) to 0 (at 100%)
+  let cashEfficiency: number;
+  if (cashPct >= 5 && cashPct <= 20) {
+    cashEfficiency = 100;
+  } else if (cashPct < 5) {
+    cashEfficiency = 40 + (cashPct / 5) * 60; // 40 at 0%, 100 at 5%
+  } else {
+    cashEfficiency = Math.max(0, 100 - ((cashPct - 20) / 80) * 100); // 100 at 20%, 0 at 100%
+  }
+
+  const metrics: HealthMetric[] = [
+    { key: 'diversification', label: 'Diversification', score: diversification },
+    { key: 'risk',            label: 'Risk Exposure',   score: riskExposure    },
+    { key: 'macro',           label: 'Macro Alignment', score: macroAlignment  },
+    { key: 'cash',            label: 'Cash Efficiency', score: clamp100(cashEfficiency) },
+  ];
+
+  const overall = Math.round(
+    metrics.reduce((sum, m) => sum + m.score, 0) / metrics.length,
+  );
+
+  return { overall, metrics };
 }

@@ -1,15 +1,9 @@
 import { useState } from 'react';
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { SkeletonCard } from '@/components/ds/Skeleton';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Link } from 'react-router-dom';
-import {
-  ArrowRight,
-  Layers3,
-  ShieldCheck,
-  TrendingUp,
-  Zap,
-} from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { MarketComparisonChart } from './components/MarketComparisonChart';
 import { AssetClassAllocationCard } from './components/AssetClassAllocationCard';
 import { GlobeLoader } from './components/GlobeLoader';
@@ -21,8 +15,8 @@ import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { ideaToOpportunity, TICKER_TO_NAME } from './utils/opportunityMapper';
 import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
-import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
+import { PortfolioHealthPanel } from './components/PortfolioHealthPanel';
 
 // Time-range list lives inside PortfolioValuePanel.
 
@@ -81,14 +75,11 @@ export function FinotaurCopilotDashboard() {
     );
   }
 
-  // Connected — compute risk once and pass down
-  const analysis = computeRiskAnalysis(snapshot.holdings, snapshot.totalValue);
-
   return (
     <ErrorBoundary boundary="ai-copilot">
       <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
 
-        {/* ROW 1 — portfolio value | globe | insights */}
+        {/* ROW 1 — portfolio value | globe | portfolio health */}
         <PortfolioValuePanel
           className="xl:col-span-4"
           range={range}
@@ -96,7 +87,7 @@ export function FinotaurCopilotDashboard() {
           onRangeChange={setRange}
         />
         <AiBrainPanel className="xl:col-span-4" />
-        <InsightsPanel className="xl:col-span-4" analysis={analysis} />
+        <PortfolioHealthPanel className="xl:col-span-4" snapshot={snapshot} />
 
         {/* ROW 2 — allocation donut | performance comparison chart */}
         <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-6" />
@@ -142,104 +133,6 @@ function AiBrainPanel({ className }: { className?: string }) {
         </div>
       </div>
     </div>
-  );
-}
-
-// Map driver iconKey → Lucide icon. Aligned with portfolioRisk.ts's iconKey enum.
-const DRIVER_ICON_MAP: Record<RiskDriver['iconKey'], ElementType> = {
-  concentration: Layers3,
-  equity: TrendingUp,
-  options: Zap,
-  liquidity: ShieldCheck,
-};
-
-function InsightsPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
-  const { brief } = useSynthesisBrief();
-
-  // Health = inverse of risk score. 100 = perfectly safe, 0 = max risk.
-  const health = Math.max(0, 100 - analysis.score);
-  const healthLabel =
-    analysis.level === 'Low' ? 'Excellent' :
-    analysis.level === 'Moderate' ? 'Balanced' :
-    'Concentrated';
-  const healthDescription =
-    analysis.level === 'Low' ? 'Portfolio is well balanced across exposures.' :
-    analysis.level === 'Moderate' ? 'Some exposures elevated — monitor key drivers.' :
-    'High concentration or leverage — consider rebalancing.';
-
-  // Top non-green risk drivers first (sorted by progress desc), then opportunity row fill
-  const nonGreenDrivers = [...analysis.drivers]
-    .filter((d) => d.tone !== 'green')
-    .sort((a, b) => b.progress - a.progress)
-    .slice(0, 3);
-
-  // If fewer than 3 risk rows, pull from top trade idea as opportunity filler
-  const topIdea = brief?.trade_ideas?.[0] ?? null;
-  const opportunityRow =
-    topIdea && nonGreenDrivers.length < 3
-      ? {
-          iconKey: 'equity' as const,
-          label: `Opportunity: ${topIdea.symbol ?? ''}`,
-          text: topIdea.sector ? `${topIdea.sector} — ${topIdea.source}` : topIdea.source,
-          tone: 'gold' as const,
-          href: '/app/ai/copilot/top-opportunities',
-        }
-      : null;
-
-  const allRows: Array<{
-    iconKey: RiskDriver['iconKey'];
-    label: string;
-    text: string;
-    tone: string;
-    href: string;
-  }> = [
-    ...nonGreenDrivers.map((d) => ({ iconKey: d.iconKey, label: d.label.toUpperCase(), text: d.text, tone: d.tone, href: '/copilot/risks' })),
-    ...(opportunityRow ? [opportunityRow] : []),
-  ].slice(0, 3);
-
-  return (
-    <PremiumFrame className={`min-h-[380px] ${className}`}>
-      <div className="p-6">
-        <PanelHeader title="AI COPILOT INSIGHTS" action="ANALYST" actionTo="/copilot/ai-analyst" />
-        <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
-          <div className="relative h-32 w-32 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
-            <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-3xl tabular-nums">
-              <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">{health}%</span>
-            </div>
-          </div>
-          <div>
-            <p className="text-[10px] uppercase text-ink-tertiary">PORTFOLIO HEALTH</p>
-            <p className="mt-1 text-2xl text-gold-primary">{healthLabel}</p>
-            <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{healthDescription}</p>
-          </div>
-        </div>
-
-        {allRows.length === 0 ? (
-          <p className="mt-4 text-xs text-ink-tertiary">Holdings will appear here once positions are loaded.</p>
-        ) : (
-          allRows.map((row) => {
-            const Icon = DRIVER_ICON_MAP[row.iconKey];
-            return (
-              <div key={row.label} className="flex items-start gap-3 border-b border-gold-primary/10 py-3 last:border-b-0">
-                <div className="h-8 w-8 flex-none rounded-[6px] border border-gold-primary/20 bg-gold-primary/9 flex items-center justify-center text-gold-primary">
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-gold-primary">{row.label}</p>
-                  <p className="mt-0.5 text-[13px] text-ink-secondary">{row.text}</p>
-                </div>
-                <Link
-                  to={row.href}
-                  className="flex-none text-[9px] uppercase text-ink-tertiary hover:text-gold-primary transition-colors"
-                >
-                  View
-                </Link>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </PremiumFrame>
   );
 }
 
