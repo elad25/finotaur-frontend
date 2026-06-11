@@ -12,6 +12,7 @@ import { useBinanceOrderBook, type BookStatus } from './useBinanceOrderBook';
 import { FinotaurChart, type WallSegment } from '@/components/charting/FinotaurChart';
 import { pickDataSource } from '@/components/charting/dataSources';
 import type { Interval } from '@/components/charting/types';
+import { fetchWallsHistory } from '../_shared/api';
 
 // ── Coin config ───────────────────────────────────────────────────────────────
 
@@ -478,6 +479,102 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // WallSegment array passed to FinotaurChart — updated every tick.
   const [wallSegments, setWallSegments] = useState<WallSegment[]>([]);
 
+  // Bumped once after server history is seeded so the wall-tick effect fires
+  // immediately and renders history stripes without waiting up to 3 seconds.
+  const [seedVersion, setSeedVersion] = useState(0);
+
+  // ── Seed refs from server-side wall history on mount ────────────────────
+  // WorkstationInner remounts on every symbol change (via key= in the parent),
+  // so the effect naturally re-runs for the new symbol with clean refs.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchWallsHistory(symbol, 72, controller.signal).then(resp => {
+      const nowMs = Date.now();
+      const tracked = trackedWallsRef.current;
+      const dead    = deadWallsRef.current;
+
+      // Separate into alive vs. dead episodes from the server.
+      const aliveEps = resp.episodes.filter(ep => ep.active);
+      const deadEps  = resp.episodes.filter(ep => !ep.active);
+
+      // ── Seed alive episodes into trackedWallsRef ───────────────────────
+      for (const ep of aliveEps) {
+        const binSize  = computeWallBinSize(ep.price);
+        const binPrice = binFloor(ep.price, binSize);
+        const key      = `${ep.side}:${binPrice}`;
+
+        // Skip if the live tick loop already registered this wall (dedup).
+        if (tracked.has(key)) continue;
+
+        const bornAt = new Date(ep.firstSeenAt).getTime();
+        tracked.set(key, {
+          key,
+          side:        ep.side,
+          price:       binPrice,
+          binSize,
+          bornAt:      Number.isFinite(bornAt) ? bornAt : nowMs,
+          lastSeenAt:  nowMs,
+          maxNotional: ep.maxNotionalUsd,
+          missedTicks: 0,
+          deadAt:      null,
+        });
+      }
+
+      // ── Seed dead episodes into deadWallsRef (server first, then merge) ─
+      // Build a set of keys already present in the live dead list so we can
+      // skip exact duplicates (same side + binPrice bin).
+      const existingDeadKeys = new Set(dead.map(d => {
+        // Reconstruct the bin key from each stored entry's known fields.
+        return `${d.side}:${d.price}`;
+      }));
+
+      const serverDeads: TrackedWall[] = [];
+      for (const ep of deadEps) {
+        const binSize  = computeWallBinSize(ep.price);
+        const binPrice = binFloor(ep.price, binSize);
+        const dedupKey = `${ep.side}:${binPrice}`;
+
+        // Skip if a session-tracked dead wall already covers this bin.
+        if (existingDeadKeys.has(dedupKey)) continue;
+
+        const bornAt  = new Date(ep.firstSeenAt).getTime();
+        const deadAt  = new Date(ep.lastSeenAt).getTime();
+        serverDeads.push({
+          key:        `srv:${dedupKey}`,
+          side:       ep.side,
+          price:      binPrice,
+          binSize,
+          bornAt:     Number.isFinite(bornAt) ? bornAt : nowMs,
+          lastSeenAt: Number.isFinite(deadAt)  ? deadAt  : nowMs,
+          maxNotional: ep.maxNotionalUsd,
+          missedTicks: 0,
+          deadAt:     Number.isFinite(deadAt)  ? deadAt  : nowMs,
+        });
+      }
+
+      // Prepend server episodes (oldest history), then append session deads,
+      // keep newest WALL_DEAD_CAP entries by deadAt.
+      const merged = [...serverDeads, ...dead];
+      merged.sort((a, b) => (b.deadAt ?? 0) - (a.deadAt ?? 0));
+      const capped = merged.slice(0, WALL_DEAD_CAP);
+
+      // Replace dead list in-place (mutate the same array the tick loop uses).
+      dead.length = 0;
+      for (const entry of capped) dead.push(entry);
+
+      // Trigger the wall-tick effect to rebuild segments immediately.
+      setSeedVersion(v => v + 1);
+    }).catch(() => {
+      // History is enhancement-only — swallow errors silently.
+    });
+
+    return () => controller.abort();
+  // symbol is fixed per mount — eslint exhaustive-deps would only flag new
+  // stable refs (computeWallBinSize, binFloor are module-level, not hooks).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
   // Notify parent when WS status changes so the header pill stays in sync
   // without a second parallel WebSocket connection.
   useEffect(() => {
@@ -650,13 +747,17 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       setWallSegments(segments);
     };
 
-    // Run immediately, then on interval
+    // Run immediately, then on interval.
+    // seedVersion dependency: re-runs the effect (incl. the immediate tick())
+    // once after server history is seeded, so stripes appear without waiting
+    // up to WALL_INTERVAL_MS.
     tick();
     const id = setInterval(tick, WALL_INTERVAL_MS);
     return () => clearInterval(id);
-  // interval change: ivSec recalculates on next tick — no need to reset history
+  // interval change: ivSec recalculates on next tick — no need to reset history.
+  // seedVersion intentionally included so history renders immediately after seed.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hook, interval]);
+  }, [hook, interval, seedVersion]);
 
   const coinLabel = COINS.find(c => c.symbol === symbol)?.label ?? symbol;
 

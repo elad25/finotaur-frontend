@@ -89,3 +89,35 @@ export const whaleStreamUrl = (opts: { symbols?: string[]; minUsd?: number } = {
   if (opts.minUsd) p.set('minUsd', String(opts.minUsd));
   return api(`/api/crypto/whales/stream?${p.toString()}`);
 };
+
+// ── Wall History (server-side 72-hour collector) ──────────────
+export interface WallHistoryEpisode {
+  side: 'bid' | 'ask';
+  price: number;
+  maxNotionalUsd: number;
+  firstSeenAt: string; // ISO
+  lastSeenAt: string;  // ISO
+  active: boolean;
+}
+
+export interface WallHistoryResponse {
+  symbol: string;
+  hours: number;
+  episodes: WallHistoryEpisode[];
+}
+
+/**
+ * Fetch server-collected wall history for a symbol.
+ * Intentionally bypasses the shared SWR cache so AbortController
+ * signals are honoured (fetch() is called directly with the signal).
+ * Uses the api() base-path helper for consistency with other fetchers.
+ */
+export function fetchWallsHistory(
+  symbol: string,
+  hours = 72,
+  signal?: AbortSignal,
+): Promise<WallHistoryResponse> {
+  const url = api(`/api/crypto/whales/walls-history?symbol=${encodeURIComponent(symbol)}&hours=${hours}`);
+  return fetch(url, { signal })
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<WallHistoryResponse>; });
+}
