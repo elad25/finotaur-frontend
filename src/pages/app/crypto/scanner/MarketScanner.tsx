@@ -372,48 +372,48 @@ function alignToBar(t: number, ivSec: number): number {
 
 // Legend swatch colors (fixed — mid-opacity representative shade)
 const BID_COLOR  = 'rgba(34,197,94,0.55)';
-const ASK_COLOR  = 'rgba(201,166,70,0.75)';
+const ASK_COLOR  = 'rgba(220,38,38,0.65)';
 
 /**
- * Heat-ramp color helper — 3-tier palette keyed by side + size ratio.
+ * Heat-ramp color helper — 3-tier palette keyed by side + explicit tier.
  *
- * ASKS (gold family):
- *   ratio < 0.33  → dim gold
- *   0.33–0.66     → mid gold
- *   > 0.66        → intense near-white-gold
+ * ASKS (red family):
+ *   dim     → edge rgba(220,38,38,0.50),   fill rgba(220,38,38,0.16)
+ *   mid     → edge rgba(248,80,80,0.80),   fill rgba(220,38,38,0.32)
+ *   intense → edge rgba(255,140,140,0.95), fill rgba(248,90,90,0.50)
  *
  * BIDS (emerald family):
- *   ratio < 0.33  → dim emerald
- *   0.33–0.66     → mid emerald
- *   > 0.66        → intense near-white-green
+ *   dim     → edge rgba(34,197,94,0.45),   fill rgba(34,197,94,0.14)
+ *   mid     → edge rgba(52,211,123,0.75),  fill rgba(34,197,94,0.30)
+ *   intense → edge rgba(140,255,190,0.95), fill rgba(80,230,150,0.48)
  *
  * Dead walls: halve the fill alpha (cap 0.20), edge alpha 0.25.
  */
 function heatColors(
   side: 'bid' | 'ask',
-  ratio: number,
+  tier: 'dim' | 'mid' | 'intense',
   dead: boolean,
 ): { edge: string; fill: string } {
   let edge: string;
   let fill: string;
 
   if (side === 'ask') {
-    if (ratio > 0.66) {
-      edge = 'rgba(255,225,140,0.95)';
-      fill = 'rgba(230,200,110,0.48)';
-    } else if (ratio > 0.33) {
-      edge = 'rgba(217,182,90,0.75)';
-      fill = 'rgba(201,166,70,0.30)';
+    if (tier === 'intense') {
+      edge = 'rgba(255,140,140,0.95)';
+      fill = 'rgba(248,90,90,0.50)';
+    } else if (tier === 'mid') {
+      edge = 'rgba(248,80,80,0.80)';
+      fill = 'rgba(220,38,38,0.32)';
     } else {
-      edge = 'rgba(201,166,70,0.45)';
-      fill = 'rgba(201,166,70,0.14)';
+      edge = 'rgba(220,38,38,0.50)';
+      fill = 'rgba(220,38,38,0.16)';
     }
   } else {
-    // bid
-    if (ratio > 0.66) {
+    // bid — emerald family unchanged
+    if (tier === 'intense') {
       edge = 'rgba(140,255,190,0.95)';
       fill = 'rgba(80,230,150,0.48)';
-    } else if (ratio > 0.33) {
+    } else if (tier === 'mid') {
       edge = 'rgba(52,211,123,0.75)';
       fill = 'rgba(34,197,94,0.30)';
     } else {
@@ -567,16 +567,45 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       }
 
       // ── Build WallSegment[] ────────────────────────────────
-      // Compute max alive notional for proportional sizing.
+      // Tier assignment: per-side rank among currently alive walls.
+      // rank 0 → 'intense'; ranks 1-2 → 'mid'; rest → 'dim'.
+      // This prevents a distant mega-wall from washing out near walls.
       const aliveWalls = Array.from(tracked.values()).filter(e => e.deadAt === null);
-      const maxAlive   = aliveWalls.reduce((m, e) => Math.max(m, e.maxNotional), 0);
+
+      // Build rank maps per side (sorted desc by maxNotional).
+      function buildRankMap(side: 'bid' | 'ask'): Map<string, number> {
+        const sideSorted = aliveWalls
+          .filter(e => e.side === side)
+          .sort((a, b) => b.maxNotional - a.maxNotional);
+        const map = new Map<string, number>();
+        sideSorted.forEach((e, i) => map.set(e.key, i));
+        return map;
+      }
+      const bidRanks = buildRankMap('bid');
+      const askRanks = buildRankMap('ask');
+
+      function rankToTier(rank: number): 'dim' | 'mid' | 'intense' {
+        if (rank === 0) return 'intense';
+        if (rank <= 2)  return 'mid';
+        return 'dim';
+      }
+
+      // Max alive notional per side — used only for dead-wall tier assignment.
+      const maxAliveBid = aliveWalls
+        .filter(e => e.side === 'bid')
+        .reduce((m, e) => Math.max(m, e.maxNotional), 0);
+      const maxAliveAsk = aliveWalls
+        .filter(e => e.side === 'ask')
+        .reduce((m, e) => Math.max(m, e.maxNotional), 0);
 
       const segments: WallSegment[] = [];
 
       // Alive walls — rendered as colored Bookmap-style band stripes.
       for (const entry of aliveWalls) {
-        const ratio   = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
-        const { edge, fill } = heatColors(entry.side, ratio, false);
+        const rankMap = entry.side === 'bid' ? bidRanks : askRanks;
+        const rank    = rankMap.get(entry.key) ?? 99;
+        const tier    = rankToTier(rank);
+        const { edge, fill } = heatColors(entry.side, tier, false);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
         segments.push({
@@ -593,12 +622,15 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         });
       }
 
-      // Dead walls — same band geometry, dimmed one tier via heatColors(dead=true).
-      // Ratio is computed vs current alive max so the tier is consistent with
-      // what the wall looked like when it was alive.
+      // Dead walls — same band geometry, dimmed via heatColors(dead=true).
+      // Tier is derived from a ratio vs the current alive max for that side,
+      // so a dead wall's tier is contextually consistent with the live set.
       for (const entry of dead) {
-        const ratio = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
-        const { edge, fill } = heatColors(entry.side, ratio, true);
+        const maxAliveSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
+        const ratio = maxAliveSide > 0 ? entry.maxNotional / maxAliveSide : 0;
+        const tier: 'dim' | 'mid' | 'intense' =
+          ratio > 0.66 ? 'intense' : ratio > 0.33 ? 'mid' : 'dim';
+        const { edge, fill } = heatColors(entry.side, tier, true);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
         segments.push({
@@ -657,12 +689,12 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             className="inline-block h-[2px] w-4 rounded-full"
             style={{ background: BID_COLOR }}
           />
-          <span>bids</span>
+          <span>buy walls</span>
           <span
             className="inline-block h-[2px] w-4 rounded-full"
             style={{ background: ASK_COLOR }}
           />
-          <span>asks</span>
+          <span>sell walls</span>
           <span className="opacity-50">· walls + history</span>
         </span>
       </div>
