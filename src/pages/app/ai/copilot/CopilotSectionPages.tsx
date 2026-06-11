@@ -16,7 +16,6 @@ import {
   ArrowUp,
   BarChart3,
   Brain,
-  ChevronRight,
   Globe,
   Layers,
   MessageSquare,
@@ -28,12 +27,12 @@ import { CopilotChatPanel } from './components/CopilotChatPanel';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
 import { HoldingsTable } from './components/HoldingsTable';
 import { SynthesisBriefPersonalTwist } from './components/SynthesisBriefPersonalTwist';
+import { OpportunityShowcase } from './components/OpportunityShowcase';
 import { DailyBrief } from './DailyBrief';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver, type TopExposure } from './utils/portfolioRisk';
-import { TickerLogo } from './components/TickerLogo';
 import { SectorCallsPanel } from './components/SectorCallsPanel';
 import { GlassCard } from '@/pages/app/crypto/_shared/GlassUI';
 import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
@@ -77,156 +76,10 @@ export function CopilotTopOpportunitiesPage() {
           degenerate={personal?.degenerate}
         />
 
-        <section className="overflow-hidden rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1260px] border-separate border-spacing-0 text-left">
-              <thead>
-                <tr className="h-10 bg-[#060606]">
-                  {['RANK', 'OPPORTUNITY', 'AI SCORE', 'THESIS', 'UPSIDE POTENTIAL', 'CONFIDENCE', 'TIMEFRAME', 'KEY CATALYSTS', ''].map((heading) => (
-                    <th key={heading} className="border-b border-gold-primary/12 px-2 text-[9px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {opportunities.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-4 py-14 text-center text-[12px] leading-relaxed text-ink-tertiary">
-                      No live opportunities right now. AI-ranked ideas appear here after the next brief.
-                    </td>
-                  </tr>
-                ) : (
-                  opportunities.map((opportunity) => (
-                    <OpportunityTableRow key={opportunity.ticker} opportunity={opportunity} />
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <OpportunityShowcase opportunities={opportunities} />
         <SectorCallsPanel brief={brief} loading={briefLoading} />
       </div>
     </CopilotPageShell>
-  );
-}
-
-// Dot color for time horizon
-const HORIZON_DOT: Record<string, string> = {
-  short:  'bg-[#4ade80]',   // green
-  medium: 'bg-[#f59e0b]',   // amber
-  long:   'bg-[#6366f1]',   // indigo
-};
-
-function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
-  const horizonDot = opportunity.timeHorizon ? HORIZON_DOT[opportunity.timeHorizon] : undefined;
-
-  return (
-    <tr className="group min-h-[88px] bg-[#050505] align-middle">
-      <td className="border-b border-gold-primary/10 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gold-primary/65 bg-[radial-gradient(circle_at_50%_42%,rgba(201,166,70,0.16),rgba(201,166,70,0.04)_52%,transparent_74%)] font-mono text-sm font-semibold text-gold-primary shadow-[0_0_18px_rgba(201,166,70,0.12),inset_0_0_12px_rgba(201,166,70,0.08)]">
-          {opportunity.rank}
-        </div>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-[4px] border border-white/8 bg-[#0b0b0b] shadow-[inset_0_0_18px_rgba(255,255,255,0.02)]">
-            <TickerLogo ticker={opportunity.ticker} size={28} className="h-7 w-7" />
-
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className="font-mono text-base font-semibold leading-tight text-ink-primary">{opportunity.ticker}</p>
-              {opportunity.source === 'ism' && (
-                <span className="inline-flex items-center rounded-[4px] bg-[#c9a646]/15 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.06em] text-[#f4d97b]">
-                  ISM
-                </span>
-              )}
-            </div>
-            <p className="mt-1 max-w-[170px] truncate text-[11px] font-medium text-ink-secondary">{opportunity.name}</p>
-            <span className="mt-1.5 inline-flex rounded-[4px] bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-ink-tertiary">{opportunity.sector}</span>
-          </div>
-        </div>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <ScoreRing score={opportunity.score} />
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <p className="line-clamp-2 max-w-[230px] text-sm text-ink-secondary" title={opportunity.thesis}>{opportunity.thesis}</p>
-        {opportunity.whyForYou && (
-          <p className="line-clamp-1 mt-1 max-w-[230px] text-[11px] italic text-gold-primary/70">
-            Why for you: {opportunity.whyForYou}
-          </p>
-        )}
-        {opportunity.patternEvidence && (
-          <details className="mt-1.5 max-w-[230px] text-[10px] leading-[1.45]">
-            <summary className="cursor-pointer text-gold-primary/70 hover:text-gold-primary transition">
-              Why this pattern?
-            </summary>
-            <div className="mt-1 ps-2 border-s border-gold-primary/20">
-              <p className="text-ink-secondary">{opportunity.patternEvidence}</p>
-              {opportunity.invalidation && (
-                <p className="mt-1 text-ink-tertiary">
-                  <strong className="text-ink-secondary">Invalidation:</strong>{' '}
-                  {opportunity.invalidation}
-                </p>
-              )}
-            </div>
-          </details>
-        )}
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <p className="font-mono text-xl font-semibold text-[#64f56a]">{opportunity.upside}</p>
-        <p className="mt-1.5 font-mono text-xs text-ink-secondary">{opportunity.price}</p>
-        <p className="mt-0.5 text-[11px] text-ink-tertiary">Current: {opportunity.current}</p>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <div className="flex gap-1">
-          {Array.from({ length: 5 }, (_, index) => (
-            <span key={index} className={`h-5 w-2.5 rounded-[2px] ${index < opportunity.bars ? 'bg-[#31bd72]' : 'bg-white/[0.07]'}`} />
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-ink-secondary">{opportunity.confidence}</p>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <div className="flex items-center gap-1.5">
-          {horizonDot && <span className={`h-2 w-2 flex-none rounded-full ${horizonDot}`} />}
-          <p className="text-xs text-ink-primary">{opportunity.timeframe}</p>
-        </div>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <ul className="space-y-1 text-[11px] text-ink-secondary">
-          {opportunity.catalysts.map((catalyst) => (
-            <li key={catalyst}>{`\u2022 ${catalyst}`}</li>
-          ))}
-        </ul>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        {/* View Analysis → Stock Analyzer with ticker pre-filled. Add-to-Watchlist
-            removed until a real watchlist service is wired (was non-functional). */}
-        <Link
-          to={`/app/ai/stock-analyzer?ticker=${encodeURIComponent(opportunity.ticker)}`}
-          className="flex h-8 w-[150px] items-center justify-between rounded-[6px] border border-gold-primary/18 bg-gold-primary/[0.075] px-3 text-[11px] font-semibold text-gold-primary hover:bg-gold-primary/[0.12] transition"
-        >
-          View Analysis
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Link>
-      </td>
-    </tr>
-  );
-}
-
-function ScoreRing({ score }: { score: number }) {
-  return (
-    <div className="relative flex h-[58px] w-[58px] items-center justify-center">
-      <div
-        className="absolute inset-0 rounded-full p-[5px] shadow-[0_0_16px_rgba(91,245,92,0.12)]"
-        style={{ background: `conic-gradient(#5feb64 0 ${score * 3.6}deg, rgba(201,166,70,0.35) ${score * 3.6}deg 360deg)` }}
-      >
-        <div className="h-full w-full rounded-full bg-[#070707]" />
-      </div>
-      <span className="relative font-mono text-lg font-bold text-[#bff26f]">{score}</span>
-    </div>
   );
 }
 
