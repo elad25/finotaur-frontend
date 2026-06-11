@@ -584,14 +584,16 @@ export function BacktestChart({
 
   // Replay: each bar revealed by the playback cursor.
   //   Phase 4: check SL/TP for any active position; auto-close on hit.
-  //   Phase 6: check pending order triggers (LIMIT/STOP); auto-fill on hit
-  //            ONLY when no position is open (single-position invariant).
+  //   Phase 6: check pending order triggers (LIMIT/STOP); auto-fill on hit.
+  //            Netting (scale-in / reduce / flip) is handled by the reducer,
+  //            so pending fills are processed whether a position is open or not.
   // Same-bar-as-entry skip mirrors runStrategy.ts to avoid phantom stopouts
   // on the entry bar.
   const handleReplayBarReveal = useCallback((bar: Bar) => {
-    // Phase 6: pending order fills come FIRST. If a fill happens, the new
-    // position is the entry bar — same-bar skip prevents same-bar SL/TP.
-    if (!state.activePosition && state.pendingOrders.length > 0) {
+    // Phase 6: pending order fills come FIRST (before SL/TP checks).
+    // The reducer's FILL_PENDING → OPEN netting handles all cases:
+    //   same-side pending → scale-in; opposite-side pending → reduce/close/flip.
+    if (state.pendingOrders.length > 0) {
       for (const order of state.pendingOrders) {
         let triggered = false;
         let fillPrice = order.triggerPrice;
@@ -610,7 +612,8 @@ export function BacktestChart({
         }
         if (triggered) {
           fillPendingOrder(order.id, fillPrice, bar.time as number);
-          return; // single-position invariant — skip SL/TP this bar
+          // Known limitation: at most ONE pending order fills per revealed bar; if several trigger in the same bar, the rest fill on subsequent bars (intra-bar ordering is unknowable — conservative).
+          return;
         }
       }
     }
@@ -695,11 +698,8 @@ export function BacktestChart({
 
   // Click-to-place LIMIT: the trader arms a mode, then clicks a price level.
   // Below current price → BUY LIMIT (buy the dip); above → SELL LIMIT (sell the rip).
+  // Pending orders are allowed alongside an open position — netting handles fills.
   const handlePlaceLimitAtPrice = useCallback((price: number, currentPrice: number) => {
-    if (state.activePosition) {
-      flashTradeError('Position already open — close it or wait for SL/TP.');
-      return;
-    }
     const side: PaperSide = price <= currentPrice ? 'LONG' : 'SHORT';
     addPendingOrder({
       side,
@@ -713,7 +713,7 @@ export function BacktestChart({
     });
     // Auto-disarm after placing so the next click is a normal bar-click.
     setPlaceArmed(false);
-  }, [state.activePosition, addPendingOrder, orderDraft, size, activeStrategyId, flashTradeError]);
+  }, [addPendingOrder, orderDraft, size, activeStrategyId]);
 
   // Stats breakdown by strategy — only show panel when ≥1 trade has been
   // tagged with a (non-manual) strategy id, so live-only sessions stay clean.
@@ -832,11 +832,9 @@ export function BacktestChart({
 
   // ─── PlaceOrderPanel adapter ──────────────────────────────────
   // Translates PlaceOrderPanel's submit payload into useBacktestSession actions.
+  // Market orders always go through; netting (scale-in / reduce / flip) is
+  // handled entirely in the reducer's OPEN case — no guard needed here.
   const handlePanelSubmit = useCallback((order: PlaceOrderSubmit) => {
-    if (state.activePosition) {
-      flashTradeError('Position already open — close it or wait for SL/TP.');
-      return;
-    }
     const time = (currentBarRef.current?.time as number) ?? Math.floor(Date.now() / 1000);
     const sl = order.stopLoss ?? undefined;
     const tp = order.takeProfit ?? undefined;
@@ -865,7 +863,7 @@ export function BacktestChart({
         time,
       });
     }
-  }, [state.activePosition, openPosition, addPendingOrder, activeStrategyId, flashTradeError]);
+  }, [openPosition, addPendingOrder, activeStrategyId]);
 
   // ─── Save-to-journal handler ──────────────────────────────────
   const handleSaveToJournal = useCallback(async () => {

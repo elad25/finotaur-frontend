@@ -112,8 +112,8 @@ export function PlaceOrderPanel({
   const [kind, setKind] = useState<OrderKind>('market');
   const [error, setError] = useState<string | null>(null);
 
-  // Standard-mode inputs
-  const [positionSize, setPositionSize] = useState('');
+  // Standard-mode inputs — default size 1 (minimum valid entry).
+  const [positionSize, setPositionSize] = useState('1');
   const [limitPrice, setLimitPrice] = useState('');
 
   // Shared SL / single TP
@@ -289,6 +289,11 @@ export function PlaceOrderPanel({
       takeProfit: tpVal,
       takeProfits: multiLegMode && legs.length > 0 ? legs : undefined,
     });
+    // Reset position size to default 1 after each submission so the next
+    // order starts from a clean, valid value rather than the previous entry.
+    if (!advanced) {
+      setPositionSize('1');
+    }
   };
 
   return (
@@ -353,8 +358,9 @@ export function PlaceOrderPanel({
             type="number"
             value={positionSize}
             onChange={(e) => setPositionSize(e.target.value)}
-            placeholder="0"
-            className={inputCls}
+            placeholder="1"
+            min={1}
+            className={`${inputCls} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
           />
         </Field>
       )}

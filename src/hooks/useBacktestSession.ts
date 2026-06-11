@@ -50,7 +50,7 @@ export interface PaperPosition {
   entryTime: number;          // unix seconds (matches FinotaurChart UTCTimestamp)
   entryPrice: number;
   size: number;               // contracts / shares / units — CURRENT remaining size
-  /** Original fill size at entry (before any partial closes). */
+  /** Total entered quantity across ALL entry fills (scale-ins accumulate; partial closes do NOT reduce it). Basis for TP-leg sizePercent. */
   originalSize?: number;
   stopLoss?: number;
   takeProfit?: number;        // legacy single TP price (kept for backward compat)
@@ -255,6 +255,13 @@ const EMPTY_STATS: SessionStats = {
 
 // ─── Helpers ────────────────────────────────────────────────────
 
+/** Total capital deployed across all entry fills (Σ price×qty of entry-kind fills). */
+const totalEntryNotional = (fills: FillRecord[] | undefined, fallback: number): number => {
+  const entries = (fills ?? []).filter((f) => f.kind === 'entry');
+  if (entries.length === 0) return fallback;
+  return entries.reduce((acc, f) => acc + f.price * f.qty, 0);
+};
+
 /**
  * Net PnL for a closed position.
  * Phase 7: if fills are present, sum their netPnl (fee-adjusted) for the final
@@ -376,13 +383,12 @@ export function computeStats(closed: PaperPosition[], startingBalance: number): 
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case 'OPEN': {
-      if (state.activePosition) return state;
       const { side, price, time, size, stopLoss, takeProfit, takeProfits, strategyId, entryOrderType } = action.payload;
       const orderType = entryOrderType ?? 'MARKET';
 
       // Apply slippage to entry fill price.
       const fillPrice = applySlippage(price, side, true, orderType, state.commissionConfig);
-      // Entry fee: charged once at entry. Recorded as an entry FillRecord with netPnl = -entryFee.
+      // Entry fee: charged once at this fill. Recorded as an entry FillRecord with netPnl = -entryFee.
       const entryFee = applyCommission(fillPrice, size, state.commissionConfig);
       const entryFill: FillRecord = {
         kind: 'entry',
@@ -394,23 +400,159 @@ function reducer(state: SessionState, action: Action): SessionState {
         time,
       };
 
-      const newPos: PaperPosition = {
-        id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
-        side,
-        entryTime: time,
-        entryPrice: fillPrice,
-        size,
-        originalSize: size,
-        stopLoss,
-        takeProfit,
-        takeProfits: takeProfits ?? [],
-        strategyId: strategyId ?? null,
-        entryOrderType: orderType,
-        feesPaid: entryFee,
-        grossPnl: 0,
-        fills: [entryFill],
+      // ─── Netting decision table ──────────────────────────────────
+      // Case A: No open position → open fresh.
+      if (!state.activePosition) {
+        const newPos: PaperPosition = {
+          id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
+          side,
+          entryTime: time,
+          entryPrice: fillPrice,
+          size,
+          originalSize: size,
+          stopLoss,
+          takeProfit,
+          takeProfits: takeProfits ?? [],
+          strategyId: strategyId ?? null,
+          entryOrderType: orderType,
+          feesPaid: entryFee,
+          grossPnl: 0,
+          fills: [entryFill],
+        };
+        return { ...state, activePosition: newPos };
+      }
+
+      const pos = state.activePosition;
+
+      // Case B: Same direction → SCALE-IN (weighted-average entry).
+      if (pos.side === side) {
+        const oldSize = pos.size;
+        const newSize = oldSize + size;
+        const newOriginalSize = (pos.originalSize ?? oldSize) + size;
+        // Average-cost method: the blended entry price of CURRENT holdings weights the
+        // existing avg by the REMAINING size (shares already exited no longer affect
+        // the average), matching standard broker avg-cost accounting.
+        const newEntryPrice = (pos.entryPrice * oldSize + fillPrice * size) / newSize;
+        const newFeesPaid = (pos.feesPaid ?? 0) + entryFee;
+        const newFills = [...(pos.fills ?? []), entryFill];
+        // If the panel supplied SL/TP values (non-zero), update them; otherwise keep existing.
+        const newStopLoss = (stopLoss != null && stopLoss > 0) ? stopLoss : pos.stopLoss;
+        const newTakeProfit = (takeProfit != null && takeProfit > 0) ? takeProfit : pos.takeProfit;
+        const newTakeProfits = (takeProfits && takeProfits.length > 0) ? takeProfits : pos.takeProfits;
+        return {
+          ...state,
+          activePosition: {
+            ...pos,
+            entryPrice: newEntryPrice,
+            size: newSize,
+            originalSize: newOriginalSize,
+            stopLoss: newStopLoss,
+            takeProfit: newTakeProfit,
+            takeProfits: newTakeProfits,
+            feesPaid: newFeesPaid,
+            fills: newFills,
+          },
+        };
+      }
+
+      // Case C: Opposite direction → REDUCE / CLOSE / FLIP.
+      // Realize PnL on min(qty, remaining size) at fillPrice vs current weighted-avg entry.
+      const closeQty = Math.min(size, pos.size);
+      const direction = pos.side === 'LONG' ? 1 : -1;
+      const grossPnlOnClose = (fillPrice - pos.entryPrice) * direction * closeQty;
+      const exitFee = applyCommission(fillPrice, closeQty, state.commissionConfig);
+      const exitFill: FillRecord = {
+        kind: 'partial_exit',
+        price: fillPrice,
+        qty: closeQty,
+        grossPnl: grossPnlOnClose,
+        fees: exitFee,
+        netPnl: grossPnlOnClose - exitFee,
+        time,
+        reason: 'manual',
       };
-      return { ...state, activePosition: newPos };
+      const remainingSize = pos.size - closeQty;
+
+      if (remainingSize <= EPSILON) {
+        // Full close (and possibly flip if size > pos.size).
+        const allCloseFills = [...(pos.fills ?? []), { ...exitFill, kind: 'final_exit' as FillRecord['kind'] }];
+        const pnl = allCloseFills.reduce((acc, f) => acc + f.netPnl, 0);
+        const grossPnl = allCloseFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
+        const totalFeesPaid = (pos.feesPaid ?? 0) + exitFee;
+        const pnlPercent = pos.entryPrice > 0
+          ? (pnl / totalEntryNotional(allCloseFills, pos.entryPrice * (pos.originalSize ?? pos.size))) * 100
+          : 0;
+        const closedPos: PaperPosition = {
+          ...pos,
+          exitTime: time,
+          exitPrice: fillPrice,
+          pnl,
+          pnlPercent,
+          exitReason: 'manual',
+          grossPnl,
+          feesPaid: totalFeesPaid,
+          fills: allCloseFills,
+        };
+        const closedPositions = [...state.closedPositions, closedPos];
+
+        const flipQty = size - closeQty;
+        if (flipQty > EPSILON) {
+          // Flip: open new opposite position with remainder qty (fresh fills array).
+          // Re-compute entry fee for the flip qty only (not the full order size).
+          const flipEntryFee = applyCommission(fillPrice, flipQty, state.commissionConfig);
+          const flipEntryFill: FillRecord = {
+            kind: 'entry',
+            price: fillPrice,
+            qty: flipQty,
+            grossPnl: 0,
+            fees: flipEntryFee,
+            netPnl: -flipEntryFee,
+            time,
+          };
+          const newPos: PaperPosition = {
+            id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
+            side,
+            entryTime: time,
+            entryPrice: fillPrice,
+            size: flipQty,
+            originalSize: flipQty,
+            stopLoss,
+            takeProfit,
+            takeProfits: takeProfits ?? [],
+            strategyId: strategyId ?? null,
+            entryOrderType: orderType,
+            feesPaid: flipEntryFee,
+            grossPnl: 0,
+            fills: [flipEntryFill],
+          };
+          return {
+            ...state,
+            activePosition: newPos,
+            closedPositions,
+            stats: computeStats(closedPositions, state.startingBalance),
+          };
+        }
+
+        // Exact close (no flip).
+        return {
+          ...state,
+          activePosition: undefined,
+          closedPositions,
+          stats: computeStats(closedPositions, state.startingBalance),
+        };
+      }
+
+      // Partial reduce: some size remains on the original side.
+      const newFeesPaidOnReduce = (pos.feesPaid ?? 0) + exitFee;
+      return {
+        ...state,
+        activePosition: {
+          ...pos,
+          size: remainingSize,
+          feesPaid: newFeesPaidOnReduce,
+          fills: [...(pos.fills ?? []), exitFill],
+        },
+      };
     }
 
     case 'CLOSE': {
@@ -431,9 +573,9 @@ function reducer(state: SessionState, action: Action): SessionState {
       // Accumulate gross across ALL exit fills (matches PARTIAL_CLOSE / FILL_TP_LEG pattern).
       const grossPnl = allFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
       const totalFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
-      // Use original notional as denominator (matches PARTIAL_CLOSE / FLATTEN / REVERSE / FILL_TP_LEG).
+      // Use total entry notional as denominator (Σ entry-fill price×qty — handles scale-ins correctly).
       const pnlPercent = pos.entryPrice > 0 && (pos.originalSize ?? pos.size) > 0
-        ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100
+        ? (pnl / totalEntryNotional(allFills, pos.entryPrice * (pos.originalSize ?? pos.size))) * 100
         : 0;
 
       const closed: PaperPosition = {
@@ -552,58 +694,36 @@ function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case 'FILL_PENDING': {
-      // Single-position invariant: if a position is already open, drop the
-      // order without filling (it would be safer to keep it, but for
-      // Phase 6 MVP we silently cancel — caller decides via gate before
-      // dispatching).
-      if (state.activePosition) {
-        return {
-          ...state,
-          pendingOrders: state.pendingOrders.filter((o) => o.id !== action.payload.orderId),
-        };
-      }
+      // Pending order fill: route through the same netting logic as OPEN so
+      // an opposite-side pending order correctly exits/reduces/flips an open
+      // position (fixes the reported bug where a SELL limit placed while LONG
+      // was silently discarded instead of closing the position).
       const order = state.pendingOrders.find((o) => o.id === action.payload.orderId);
       if (!order) return state;
 
-      const fillPrice = applySlippage(
-        action.payload.fillPrice,
-        order.side,
-        true,
-        order.type,
-        state.commissionConfig,
-      );
-      const entryFee = applyCommission(fillPrice, order.size, state.commissionConfig);
-      const entryFill: FillRecord = {
-        kind: 'entry',
-        price: fillPrice,
-        qty: order.size,
-        grossPnl: 0,
-        fees: entryFee,
-        netPnl: -entryFee,
-        time: action.payload.fillTime,
-      };
+      // Remove this order from the pending list before delegating to OPEN logic.
+      const remainingOrders = state.pendingOrders.filter((o) => o.id !== order.id);
 
-      const newPos: PaperPosition = {
-        id: `pos_${action.payload.fillTime}_${Math.random().toString(36).slice(2, 8)}`,
-        side: order.side,
-        entryTime: action.payload.fillTime,
-        entryPrice: fillPrice,
-        size: order.size,
-        originalSize: order.size,
-        stopLoss: order.stopLoss,
-        takeProfit: order.takeProfit,
-        takeProfits: [],
-        strategyId: order.strategyId ?? null,
-        entryOrderType: order.type,
-        feesPaid: entryFee,
-        grossPnl: 0,
-        fills: [entryFill],
-      };
-      return {
-        ...state,
-        activePosition: newPos,
-        pendingOrders: state.pendingOrders.filter((o) => o.id !== order.id),
-      };
+      // Dispatch an OPEN action into a transient state with the order removed.
+      // This re-uses the full netting (scale-in / reduce / flip) already
+      // implemented in the OPEN case. Slippage for LIMIT fills is exact (no
+      // additional slippage on top of the trigger price); STOP fills carry
+      // slippage per the order's type — both are handled inside OPEN's
+      // applySlippage call using order.type.
+      const transient: SessionState = { ...state, pendingOrders: remainingOrders };
+      return reducer(transient, {
+        type: 'OPEN',
+        payload: {
+          side: order.side,
+          price: action.payload.fillPrice,
+          time: action.payload.fillTime,
+          size: order.size,
+          stopLoss: order.stopLoss,
+          takeProfit: order.takeProfit,
+          strategyId: order.strategyId,
+          entryOrderType: order.type,
+        },
+      });
     }
 
     // ─── Phase 7: multi-leg TP management ───────────────────────
@@ -665,7 +785,7 @@ function reducer(state: SessionState, action: Action): SessionState {
       if (newSize <= EPSILON) {
         const pnl = newFills.reduce((acc, f) => acc + f.netPnl, 0);
         const grossPnl = newFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
-        const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
+        const pnlPercent = pos.entryPrice > 0 ? (pnl / totalEntryNotional(newFills, pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
         const closed: PaperPosition = {
           ...pos,
           size: 0,
@@ -719,10 +839,9 @@ function reducer(state: SessionState, action: Action): SessionState {
       const exitFill = buildExitFill('final_exit', fillPrice, pos.size, pos, 'flatten', state.commissionConfig, time);
       const allFills = [...(pos.fills ?? []), exitFill];
       const pnl = allFills.reduce((acc, f) => acc + f.netPnl, 0);
-      const direction = pos.side === 'LONG' ? 1 : -1;
-      const grossPnl = (fillPrice - pos.entryPrice) * direction * pos.size;
+      const grossPnl = allFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
       const totalFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
-      const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
+      const pnlPercent = pos.entryPrice > 0 ? (pnl / totalEntryNotional(allFills, pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
 
       const closed: PaperPosition = {
         ...pos,
@@ -757,10 +876,9 @@ function reducer(state: SessionState, action: Action): SessionState {
       const exitFill = buildExitFill('final_exit', closeFill, pos.size, pos, 'reverse', state.commissionConfig, time);
       const allCloseFills = [...(pos.fills ?? []), exitFill];
       const pnl = allCloseFills.reduce((acc, f) => acc + f.netPnl, 0);
-      const direction = pos.side === 'LONG' ? 1 : -1;
-      const grossPnl = (closeFill - pos.entryPrice) * direction * pos.size;
+      const grossPnl = allCloseFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
       const totalFeesPaid = (pos.feesPaid ?? 0) + exitFill.fees;
-      const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
+      const pnlPercent = pos.entryPrice > 0 ? (pnl / totalEntryNotional(allCloseFills, pos.entryPrice * (pos.originalSize ?? pos.size))) * 100 : 0;
 
       const closedPos: PaperPosition = {
         ...pos,
@@ -867,7 +985,7 @@ function reducer(state: SessionState, action: Action): SessionState {
       if (newSize <= EPSILON) {
         const pnl = newFills.reduce((acc, f) => acc + f.netPnl, 0);
         const totalGrossPnl = newFills.filter((f) => f.kind !== 'entry').reduce((acc, f) => acc + f.grossPnl, 0);
-        const pnlPercent = pos.entryPrice > 0 ? (pnl / (pos.entryPrice * originalSize)) * 100 : 0;
+        const pnlPercent = pos.entryPrice > 0 ? (pnl / totalEntryNotional(newFills, pos.entryPrice * originalSize)) * 100 : 0;
         const closed: PaperPosition = {
           ...pos,
           size: 0,
