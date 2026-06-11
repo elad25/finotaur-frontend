@@ -13,16 +13,19 @@ import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 
 // ─── Palette — per-asset-class colours (user-approved override of ADL-020) ───
 
+// Six solid-but-colourful base colours (per Elad 2026-06-11: blue, green,
+// red + three more — colourful, not grey) covering all asset classes;
+// Futures/Commodities use darker shades of the blue/orange bases.
 const CLASS_COLOURS: Record<string, string> = {
   Equities:    '#C9A646',             // gold — brand anchor
-  ETFs:        '#8A93A6',             // muted slate
-  Cash:        '#6E7F76',             // muted sage
-  Bonds:       '#7D6F8F',             // muted plum
-  Crypto:      '#A6826B',             // muted bronze
-  Options:     '#7A8A7A',             // muted moss
-  Futures:     '#7A7A8A',             // muted lavender-grey
-  Commodities: '#8A7A6B',             // muted sand
-  Other:       'rgba(255,255,255,0.22)',
+  ETFs:        '#4F7FCC',             // solid blue
+  Cash:        '#4F9D6B',             // solid green
+  Options:     '#C25450',             // solid red
+  Bonds:       '#7E6BB8',             // solid purple
+  Crypto:      '#D08A4A',             // solid orange
+  Futures:     '#3A5F99',             // deep blue (blue-family shade)
+  Commodities: '#A66A33',             // deep amber (orange-family shade)
+  Other:       'rgba(255,255,255,0.30)',
 };
 
 const colourFor = (label: string): string =>
