@@ -345,9 +345,14 @@ function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: s
     </div>
   );
 
-  // Full-width mini-card — vertical layout to prevent collision in the 4-column grid
+  // Full-width mini-card — gold-framed card per stock (vertical layout, 4-column grid)
   const itemCardWide = ({ ticker, company, tag, score }: typeof items[number]) => (
-    <div key={ticker} className="flex flex-col gap-1.5 rounded-[6px] p-3 hover:bg-gold-primary/[0.045]">
+    <div
+      key={ticker}
+      className="relative flex flex-col gap-1.5 overflow-hidden rounded-[7px] border border-gold-primary/24 bg-gold-primary/[0.05] p-4 shadow-[0_0_22px_rgba(201,166,70,0.10)] transition hover:border-gold-primary/45 hover:bg-gold-primary/[0.09]"
+    >
+      {/* Gold top hairline, matching PremiumFrame */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/60 to-transparent" />
       {/* Row 1: logo + ticker + score circle pushed right */}
       <div className="flex items-center gap-2">
         <TickerLogo ticker={ticker} size={28} className="h-7 w-7 flex-none rounded-[3px]" />
