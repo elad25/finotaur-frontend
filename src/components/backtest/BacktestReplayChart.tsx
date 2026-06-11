@@ -1043,21 +1043,74 @@ export function BacktestReplayChart({
               return (
                 <div
                   key={o.id}
-                  className="group pointer-events-auto absolute flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow"
+                  className="group pointer-events-auto absolute flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow cursor-grab active:cursor-grabbing"
                   style={{
                     top: y - 10,
                     right: axisW + 4,
                     backgroundColor: pillColor,
                     color: '#fff',
+                    userSelect: 'none',
+                  }}
+                  onPointerDown={(e) => {
+                    // Pill drag — move the pending order's trigger price.
+                    // Only active in cursor mode (same gate as OrderLinesOverlay).
+                    // Propagation is stopped so the chart underneath does not pan.
+                    if (currentTool !== 'cursor' || !onUpdatePendingPrice) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const pillEl = e.currentTarget;
+                    pillEl.setPointerCapture(e.pointerId);
+                    // Store start state in closure-local refs so we can update
+                    // position without React state (avoids a re-render loop).
+                    let latestPrice = o.triggerPrice;
+
+                    const handleMove = (ev: PointerEvent) => {
+                      if (!seriesRef.current || !containerRef.current) return;
+                      const rect = containerRef.current.getBoundingClientRect();
+                      const localY = ev.clientY - rect.top;
+                      const raw = seriesRef.current.coordinateToPrice(localY);
+                      if (raw == null || !Number.isFinite(raw)) return;
+                      latestPrice = raw;
+                      // Visual feedback: move the pill to follow the pointer.
+                      pillEl.style.top = `${localY - 10}px`;
+                    };
+
+                    const cleanup = () => {
+                      pillEl.removeEventListener('pointermove', handleMove);
+                      pillEl.removeEventListener('pointerup', handleUp);
+                      pillEl.removeEventListener('pointercancel', handleCancel);
+                      // Reset visual position — overlayTick re-render will
+                      // recompute the correct pixel coord from the new price.
+                      pillEl.style.top = '';
+                    };
+
+                    const handleUp = (ev: PointerEvent) => {
+                      pillEl.releasePointerCapture(ev.pointerId);
+                      cleanup();
+                      onUpdatePendingPrice(o.id, latestPrice);
+                    };
+
+                    // Browser-cancelled gesture: clean up without committing a price.
+                    const handleCancel = () => cleanup();
+
+                    pillEl.addEventListener('pointermove', handleMove);
+                    pillEl.addEventListener('pointerup', handleUp);
+                    pillEl.addEventListener('pointercancel', handleCancel);
                   }}
                 >
-                  {/* ✕ cancel button — hidden until the pill is hovered, then
-                      becomes visible and clickable on the LEFT side of the label. */}
+                  {/* ✕ cancel button — always pointer-receptive (visibility
+                      toggled via opacity only); pointerdown stops propagation
+                      so it never accidentally starts a pill drag. */}
                   <button
                     type="button"
-                    className="pointer-events-none -ml-0.5 rounded opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-black/25"
+                    className="-ml-0.5 rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/25"
+                    style={{ pointerEvents: 'auto' }}
                     title="Cancel order"
                     aria-label="Cancel order"
+                    onPointerDown={(e) => {
+                      // Prevent the pill's onPointerDown (drag) from firing.
+                      e.stopPropagation();
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
