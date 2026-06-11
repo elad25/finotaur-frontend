@@ -472,12 +472,23 @@ export interface WallSegment {
   startTime: number;
   /**
    * Wall death time in unix SECONDS, or null if still alive.
-   * null → the segment will be extended to the latest loaded bar's time each render.
+   * null → the segment will be extended to the latest loaded bar's time each render,
+   * then 2 bars beyond the live edge so a freshly-born wall is immediately visible.
    * Set value → segment is frozen at that time (dead wall).
    */
   endTime: number | null;
-  /** RGBA color string (e.g. 'rgba(34,197,94,0.55)'). */
+  /**
+   * Top-edge / outline color (RGBA string, e.g. 'rgba(34,197,94,0.9)').
+   * Used as the baseline series topLineColor.
+   */
   color: string;
+  /**
+   * Fill color for the band area between price and price+bandHeight.
+   * RGBA string — caller controls alpha (alive ~0.18-0.60, dead ~cap 0.22).
+   */
+  fillColor: string;
+  /** Height of the band in price units. Typically one bin size. */
+  bandHeight: number;
   lineWidth: 1 | 2 | 3 | 4;
   /**
    * Price-axis label. Set for alive walls to show size + birth time.
@@ -619,16 +630,17 @@ export function FinotaurChart({
    */
   const overlayPriceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   /**
-   * Active wall-segment line series keyed by WallSegment.id.
-   * Each entry is a dedicated ISeriesApi<'Line'> spanning startTime→endTime.
-   * Diff on every wallSegments prop change: update endTime/title if changed,
-   * remove ids no longer present, add new ids. Cleared on chart unmount.
+   * Active wall-segment baseline series keyed by WallSegment.id.
+   * Each entry is a dedicated ISeriesApi<'Baseline'> spanning startTime→endTime,
+   * rendering as a filled horizontal band (Bookmap-style stripe) rather than a
+   * thin 1-4 px line. Diff on every wallSegments prop change: update endTime/title
+   * if changed, remove ids no longer present, add new ids. Cleared on chart unmount.
    *
    * Also tracks the last-rendered endTime and title per id so we can skip
    * no-op re-renders.
    */
   const wallSegmentSeriesRef = useRef<
-    Map<string, { series: ISeriesApi<'Line'>; endTime: number | null; title: string | undefined }>
+    Map<string, { series: ISeriesApi<'Baseline'>; endTime: number | null; title: string | undefined }>
   >(new Map());
 
   const [loading, setLoading] = useState(true);
@@ -972,9 +984,13 @@ export function FinotaurChart({
   }, [priceLines]);
 
   // ─── Apply wall segments (time-aware liquidity history) ────────
-  // Each segment is a dedicated line series spanning [startTime, endTime].
-  // Alive walls (endTime=null) are extended to the newest bar's time each tick.
-  // Dead walls are frozen; segments where clamped start >= end are skipped.
+  // Each segment is a dedicated BASELINE series spanning [startTime, endTime],
+  // rendering as a filled horizontal BAND of height bandHeight price units —
+  // a Bookmap-style stripe occupying the bin [price, price+bandHeight].
+  // Alive walls (endTime=null) are extended 2 bars PAST the live edge so a
+  // freshly-born wall is immediately visible as a stripe poking beyond the candle.
+  // Dead walls are frozen at their endTime.
+  // Segments where clamped start >= end are skipped.
   // No-op when `wallSegments` is absent — zero impact on backtest/journal callers.
   useEffect(() => {
     const chart = chartRef.current;
@@ -1004,8 +1020,15 @@ export function FinotaurChart({
 
     // ── Add or update segments ─────────────────────────────────
     for (const [id, seg] of nextMap.entries()) {
-      // Resolve effective end time: alive walls reach the last bar.
-      const resolvedEnd = seg.endTime !== null ? seg.endTime : (lastBarTime ?? seg.startTime);
+      // Resolve effective end time:
+      //   Dead walls → frozen at their endTime.
+      //   Alive walls → extend 2 bars past the live edge (Bookmap-style: the
+      //   stripe pokes beyond the newest candle so it's immediately visible).
+      const resolvedEnd = seg.endTime !== null
+        ? seg.endTime
+        : lastBarTime !== null && barSpacing !== null
+          ? lastBarTime + 2 * barSpacing
+          : (lastBarTime ?? seg.startTime);
 
       // Clamp start to the first bar (can't render before loaded history).
       let clampedStart = firstBarTime !== null
@@ -1032,13 +1055,23 @@ export function FinotaurChart({
       }
 
       const existing = activeMap.get(id);
+      // The band top = price + bandHeight (the constant horizontal datum for the baseline series).
+      const bandTop = seg.price + seg.bandHeight;
 
       if (!existing) {
-        // ── Create new line series ─────────────────────────────
-        const lineSeries = chart.addLineSeries({
-          color: seg.color,
-          lineWidth: seg.lineWidth,
-          lineStyle: LineStyle.Solid,
+        // ── Create new baseline series (fills the band [price, price+bandHeight]) ─
+        // baseValue.price = band bottom (seg.price).
+        // data value = band top (seg.price + bandHeight) — the area ABOVE baseValue fills.
+        // Top fill = colored stripe; bottom fill = transparent (nothing below baseValue).
+        const baselineSeries = chart.addBaselineSeries({
+          baseValue: { type: 'price', price: seg.price },
+          topLineColor:    seg.color,
+          topFillColor1:   seg.fillColor,
+          topFillColor2:   seg.fillColor,
+          bottomLineColor: 'rgba(0,0,0,0)',
+          bottomFillColor1:'rgba(0,0,0,0)',
+          bottomFillColor2:'rgba(0,0,0,0)',
+          lineWidth: 1,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
           lastValueVisible: !!seg.title,
@@ -1046,12 +1079,12 @@ export function FinotaurChart({
           // Use the right price scale (same pane as candles).
           priceScaleId: 'right',
         });
-        lineSeries.setData([
-          { time: clampedStart as UTCTimestamp, value: seg.price },
-          { time: resolvedEnd as UTCTimestamp,  value: seg.price },
+        baselineSeries.setData([
+          { time: clampedStart as UTCTimestamp, value: bandTop },
+          { time: resolvedEnd   as UTCTimestamp, value: bandTop },
         ]);
         activeMap.set(id, {
-          series: lineSeries,
+          series: baselineSeries,
           // Store the RESOLVED end (seg.endTime stays null for alive walls)
           // so live segments keep extending as new bars arrive.
           endTime: resolvedEnd,
@@ -1064,8 +1097,8 @@ export function FinotaurChart({
 
         if (endChanged) {
           existing.series.setData([
-            { time: clampedStart as UTCTimestamp, value: seg.price },
-            { time: resolvedEnd as UTCTimestamp,  value: seg.price },
+            { time: clampedStart as UTCTimestamp, value: bandTop },
+            { time: resolvedEnd   as UTCTimestamp, value: bandTop },
           ]);
           existing.endTime = resolvedEnd;
         }

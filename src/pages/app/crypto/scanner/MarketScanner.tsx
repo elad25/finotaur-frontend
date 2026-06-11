@@ -195,6 +195,8 @@ interface WallSpec {
   price: number;   // binFloor-rounded price
   notional: number;
   side: 'bid' | 'ask';
+  /** Bin size (price units) used to floor this entry — captured at detection time. */
+  binSize: number;
 }
 
 /**
@@ -301,6 +303,7 @@ function computeWalls(
       price,
       notional,
       side,
+      binSize,
     }));
   }
 
@@ -379,6 +382,8 @@ interface TrackedWall {
   key: string;
   side: 'bid' | 'ask';
   price: number;
+  /** Bin size (price units) captured at birth from computeWallBinSize(mid). */
+  binSize: number;
   bornAt: number;       // wall-clock ms
   lastSeenAt: number;   // wall-clock ms
   maxNotional: number;
@@ -441,11 +446,12 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           entry.maxNotional = Math.max(entry.maxNotional, w.notional);
           entry.missedTicks = 0;
         } else if (!entry) {
-          // New wall
+          // New wall — capture binSize at birth
           tracked.set(key, {
             key,
             side:        w.side,
             price:       w.price,
+            binSize:     w.binSize,
             bornAt:      nowMs,
             lastSeenAt:  nowMs,
             maxNotional: w.notional,
@@ -461,6 +467,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             key:         freshKey,
             side:        w.side,
             price:       w.price,
+            binSize:     w.binSize,
             bornAt:      nowMs,
             lastSeenAt:  nowMs,
             maxNotional: w.notional,
@@ -504,40 +511,46 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
       const segments: WallSegment[] = [];
 
-      // Alive walls
+      // Alive walls — rendered as colored Bookmap-style band stripes.
       for (const entry of aliveWalls) {
-        const ratio = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
-        const rgb   = entry.side === 'bid' ? BID_RGB : ASK_RGB;
-        const alpha = Math.min(0.9, 0.35 + 0.55 * ratio);
-        const lineWidth: 1 | 2 | 3 | 4 =
-          ratio >= 0.66 ? 4 : ratio >= 0.40 ? 3 : ratio >= 0.20 ? 2 : 1;
+        const ratio     = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
+        const rgb       = entry.side === 'bid' ? BID_RGB : ASK_RGB;
+        // Edge/outline color: hue at high alpha (~0.9) — gives a crisp top line.
+        const edgeAlpha = 0.9;
+        // Fill alpha: proportional to wall size; range 0.18–0.60.
+        const fillAlpha = Math.min(0.60, 0.18 + 0.42 * ratio);
 
         segments.push({
-          id:        entry.key,
-          price:     entry.price,
-          startTime: alignToBar(Math.floor(entry.bornAt / 1000), ivSec),
-          endTime:   null, // alive → extends to newest bar
-          color:     `rgba(${rgb},${alpha.toFixed(2)})`,
-          lineWidth,
-          title:     `${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}`,
+          id:         entry.key,
+          price:      entry.price,
+          bandHeight: entry.binSize, // band occupies [price, price+binSize]
+          startTime:  alignToBar(Math.floor(entry.bornAt / 1000), ivSec),
+          endTime:    null, // alive → FinotaurChart extends 2 bars past live edge
+          color:      `rgba(${rgb},${edgeAlpha.toFixed(2)})`,
+          fillColor:  `rgba(${rgb},${fillAlpha.toFixed(2)})`,
+          lineWidth:  1,
+          title:      `${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}`,
         });
       }
 
-      // Dead walls (dimmed, no axis label)
+      // Dead walls — same band geometry, dimmed fill, no axis label.
       for (const entry of dead) {
-        const rgb       = entry.side === 'bid' ? BID_RGB : ASK_RGB;
-        // Dead: same hue, alpha × 0.4, cap 0.35, lineWidth max 2, no title
-        const aliveAlpha = Math.min(0.9, 0.35 + 0.55 * 1); // treat as if ratio=1 for hue
-        const deadAlpha  = Math.min(0.35, aliveAlpha * 0.4);
+        const rgb = entry.side === 'bid' ? BID_RGB : ASK_RGB;
+        // Dead: fill alpha × 0.4, cap 0.22; edge alpha 0.25; no title.
+        const aliveFillAlpha = Math.min(0.60, 0.18 + 0.42 * 1); // treat ratio=1 for hue base
+        const deadFillAlpha  = Math.min(0.22, aliveFillAlpha * 0.4);
+        const deadEdgeAlpha  = 0.25;
 
         segments.push({
-          id:        `dead:${entry.key}`,
-          price:     entry.price,
-          startTime: alignToBar(Math.floor(entry.bornAt  / 1000), ivSec),
-          endTime:   alignToBar(Math.floor((entry.deadAt ?? 0) / 1000), ivSec),
-          color:     `rgba(${rgb},${deadAlpha.toFixed(2)})`,
-          lineWidth: Math.min(2, 2) as 1 | 2, // cap at 2 for dead walls
-          title:     undefined, // no axis label for dead walls
+          id:         `dead:${entry.key}`,
+          price:      entry.price,
+          bandHeight: entry.binSize,
+          startTime:  alignToBar(Math.floor(entry.bornAt  / 1000), ivSec),
+          endTime:    alignToBar(Math.floor((entry.deadAt ?? 0) / 1000), ivSec),
+          color:      `rgba(${rgb},${deadEdgeAlpha.toFixed(2)})`,
+          fillColor:  `rgba(${rgb},${deadFillAlpha.toFixed(2)})`,
+          lineWidth:  1,
+          title:      undefined, // no axis label for dead walls
         });
       }
 
