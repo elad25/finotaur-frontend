@@ -15,6 +15,8 @@ import {
   type BriefMarketPulse,
   type BriefKeyEvent,
   type BriefSectorWatch,
+  type BriefPersonalWatchlistItem,
+  type BriefPortfolioPosition,
 } from '@/services/aiCopilotApi';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -113,6 +115,32 @@ function KeyEventRow({ event }: { event: BriefKeyEvent }) {
       <span className="text-ink-tertiary tabular-nums">{event.time}</span>
       <span className="text-ink-secondary">{event.name}</span>
     </li>
+  );
+}
+
+function WatchlistChip({ item }: { item: BriefPersonalWatchlistItem }) {
+  const cls = item.changePct > 0 ? 'text-emerald-400' : item.changePct < 0 ? 'text-red-400' : 'text-ink-secondary';
+  const sign = item.changePct > 0 ? '+' : '';
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-[#C9A646]/15 bg-[#C9A646]/5 px-2 py-0.5 text-[10px] leading-none">
+      <span className="text-ink-secondary font-medium">{item.symbol}</span>
+      <span className={`font-semibold ${cls}`}>{sign}{item.changePct.toFixed(2)}%</span>
+    </span>
+  );
+}
+
+function PortfolioPositionsRow({ positions, totalValue }: { positions: BriefPortfolioPosition[]; totalValue?: number }) {
+  const displayPositions = positions.slice(0, 5);
+  const positionText = displayPositions.map((p) => `${p.symbol}×${p.qty}`).join(' · ');
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11px] text-ink-secondary leading-snug">{positionText}</span>
+      {totalValue !== undefined && (
+        <span className="flex-shrink-0 text-[11px] text-ink-tertiary tabular-nums">
+          ${totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -305,6 +333,33 @@ export default function FinoBriefingCard() {
                       Sector Watch
                     </p>
                     <SectorWatchColumns sectors={brief.sector_watch} />
+                  </div>
+                )}
+
+                {/* Your Watchlist (optional — absent for payloads without personal data) */}
+                {brief.personal?.watchlist && brief.personal.watchlist.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[#C9A646]/70">
+                      Your Watchlist
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {brief.personal.watchlist.map((item) => (
+                        <WatchlistChip key={item.symbol} item={item} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Your Positions (optional — absent for payloads without portfolio data) */}
+                {brief.portfolio?.positions && brief.portfolio.positions.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[#C9A646]/70">
+                      Your Positions
+                    </p>
+                    <PortfolioPositionsRow
+                      positions={brief.portfolio.positions}
+                      totalValue={brief.portfolio.totalValue}
+                    />
                   </div>
                 )}
 
