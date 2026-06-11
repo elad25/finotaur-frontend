@@ -109,14 +109,16 @@ export function PageLoader({ text = "Loading...", timedOut = false, className }:
   if (timedOut) {
     return (
       <div className={cn("flex min-h-screen items-center justify-center bg-[#0A0A0A]", className)}>
-        <div className="flex flex-col items-center gap-4">
-          <p className="text-sm text-zinc-400">Taking longer than expected...</p>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <p className="text-sm text-zinc-300">This is taking longer than expected.</p>
           <button
             onClick={() => window.location.reload()}
-            className="rounded border border-zinc-600 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-400 hover:text-white"
+            className="rounded px-5 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ backgroundColor: '#C9A646', color: '#0A0A0A' }}
           >
-            Refresh
+            Reload
           </button>
+          <p className="text-xs text-zinc-500">Contact support if this persists.</p>
         </div>
       </div>
     );

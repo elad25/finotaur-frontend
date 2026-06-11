@@ -1,5 +1,6 @@
 // src/pages/app/all-markets/Overview.tsx
 import { api } from '@/lib/apiBase';
+import { fetchWithTimeout } from '@/lib/api';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { SkeletonChart } from '@/components/ds/Skeleton';
 import { useMarketStatus } from '@/lib/marketStatus';
@@ -1566,10 +1567,10 @@ export default function AllMarketsOverview() {
     
     const fetchAllData = async () => {
       try {
-        // Main market data - includes calendar and earnings from Finnhub/FRED
-        const marketRes = await fetch(api('/api/fetch-market-data'));
-        const market = marketRes.ok ? await marketRes.json() : null;
-        
+        // Main market data — 12s timeout so a slow backend ends loading state
+        // instead of spinning forever. fetchWithTimeout returns null on error/timeout.
+        const market = await fetchWithTimeout(api('/api/fetch-market-data'), { timeout: 12000 });
+
         console.log('[Overview] Market data received:', {
           hasHeatmap: !!market?.heatmapData,
           heatmapCount: market?.heatmapData?.count || 0,
@@ -1578,11 +1579,11 @@ export default function AllMarketsOverview() {
           hasEarnings: !!market?.earnings,
           earningsCount: market?.earnings?.length || 0,
         });
-        
+
         // Try to get calendar from dedicated endpoints if not in main response
         let calData = market?.calendar || [];
         let earnData = market?.earnings || [];
-        
+
         // If no calendar data, try alternate endpoints
         if (calData.length === 0) {
           const calendarEndpoints = [
@@ -1590,25 +1591,20 @@ export default function AllMarketsOverview() {
             '/api/calendar/economic?dateFilter=thisWeek',
             '/api/all-markets/events?tab=economic&dateFilter=thisWeek',
           ];
-          
+
           for (const endpoint of calendarEndpoints) {
-            try {
-              const res = await fetch(api(endpoint));
-              if (res.ok) {
-                const data = await res.json();
-                const events = data?.events || data?.economic || (Array.isArray(data) ? data : []);
-                if (events.length > 0) {
-                  console.log('[Overview] Found calendar data from:', endpoint);
-                  calData = events;
-                  break;
-                }
+            const data = await fetchWithTimeout(api(endpoint), { timeout: 8000 });
+            if (data) {
+              const events = data?.events || data?.economic || (Array.isArray(data) ? data : []);
+              if (events.length > 0) {
+                console.log('[Overview] Found calendar data from:', endpoint);
+                calData = events;
+                break;
               }
-            } catch (e) {
-              // Try next endpoint
             }
           }
         }
-        
+
         if (ok) {
           setMarketData(market);
           setCalendarData(calData);
@@ -1617,6 +1613,7 @@ export default function AllMarketsOverview() {
       } catch (err) {
         console.error('[Overview] Fetch error:', err);
       } finally {
+        // Always end loading — even on timeout/error — so widgets show empty state
         if (ok) setLoading(false);
       }
     };
