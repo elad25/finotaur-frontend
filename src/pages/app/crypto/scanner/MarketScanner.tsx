@@ -231,7 +231,7 @@ function computeWalls(
   const mid = bestBid === 0 ? bestAsk : bestAsk === Infinity ? bestBid : (bestBid + bestAsk) / 2;
 
   const binSize = computeWallBinSize(mid);
-  const rangePct = 0.10; // ±10% of mid — show distant walls before price reaches them
+  const rangePct = 0.25; // ±25% of mid — deep walls (e.g. BTC 50K when price is 62K)
   const priceLow  = mid * (1 - rangePct);
   const priceHigh = mid * (1 + rangePct);
 
@@ -252,7 +252,7 @@ function computeWalls(
 
   // Band constants
   const NEAR_MAX_DIST_PCT = 0.025; // |price - mid| / mid ≤ 2.5%  → NEAR
-  const FAR_MAX_DIST_PCT  = 0.10;  // 2.5% < dist ≤ 10%           → FAR
+  const FAR_MAX_DIST_PCT  = 0.25;  // 2.5% < dist ≤ 25%           → FAR (deep walls: 50K on BTC @62K)
   const NEAR_PCTL         = 0.90;  // p90 of NEAR nonzero bins
   const NEAR_FRAC_MAX     = 0.25;  // 25% of largest NEAR bin
   const NEAR_TOP_N        = 4;

@@ -33,7 +33,10 @@ export interface OrderBookHandle {
 
 const WS_BASE = 'wss://stream.binance.com:9443/stream';
 const REST_BASE = 'https://api.binance.com/api/v3/depth';
-const SNAPSHOT_LIMIT = 1000;
+// 5000 = Binance max; deep snapshot so far walls (e.g. BTC bids at -20%)
+// exist in the local book from the first second, not only after their
+// levels happen to change and arrive via the diff stream.
+const SNAPSHOT_LIMIT = 5000;
 const TRADE_RING_SIZE = 500;
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAYS = [1_000, 3_000, 8_000]; // ms, backoff
