@@ -34,15 +34,15 @@ interface Props {
   data: CatalystDeckResponse;
 }
 
-const SKIP_REASON_HEBREW: Record<string, string> = {
-  no_catalyst_events_in_window: 'אין catalysts ב-24 השעות האחרונות',
-  no_high_conviction_picks: 'נמצאו catalysts, אבל אף אחד לא עבר את סף ה-conviction (85)',
+const SKIP_REASON_LABELS: Record<string, string> = {
+  no_catalyst_events_in_window: 'No catalysts in the last 24 hours',
+  no_high_conviction_picks: 'Catalysts found, but none passed the conviction threshold (85)',
 };
 
 export default function CatalystDeckView({ data }: Props) {
   const isEmpty = !data.picks || data.picks.length === 0;
   const skipMsg = data.skipReason
-    ? SKIP_REASON_HEBREW[data.skipReason] || data.skipReason
+    ? SKIP_REASON_LABELS[data.skipReason] || data.skipReason
     : null;
   const fetchedDate = new Date(data.meta.fetchedAt);
 
