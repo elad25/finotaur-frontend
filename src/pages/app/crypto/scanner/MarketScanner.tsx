@@ -198,11 +198,20 @@ interface WallSpec {
 }
 
 /**
- * Derive up to 6 bid + 6 ask wall specs from the raw order book.
- * Levels within ±10% of mid are considered — wide on purpose, so large
- * resting limit orders become visible long BEFORE price approaches them
- * (Bookmap-style), not only when price gets close.
- * Noise gate: keep only bins whose notional ≥ max(p95 of nonzero bins, 30% of largest).
+ * Derive up to 7 bid + 7 ask wall specs from the raw order book using
+ * two independent selection bands per side:
+ *
+ * NEAR band  |dist| ≤ 2.5% of mid  → p90 / 25%-of-max threshold, top 4
+ * FAR  band  2.5% < |dist| ≤ 10%   → p95 / 30%-of-max threshold, top 3
+ *
+ * Two-band approach prevents distant mega-walls (e.g. BTC $13-22 M at
+ * 57-60 K) from raising the single threshold so high that every near-
+ * price wall ($1-3 M at ±0.5%) gets culled — which caused a blank order
+ * book on zoom-in (Bookmap-style view).
+ *
+ * Aggregation into bins (same binSize) and WallSpec shape are unchanged.
+ * Downstream size-ratio rendering (lineWidth/alpha vs max notional) is
+ * also unchanged — far mega-walls still render thicker/brighter.
  */
 function computeWalls(
   bids: Map<number, number>,
@@ -238,21 +247,50 @@ function computeWalls(
     askBins.set(bin, (askBins.get(bin) ?? 0) + qty * price);
   }
 
-  function selectWalls(bins: Map<number, number>, side: 'bid' | 'ask'): WallSpec[] {
-    const nonzero = Array.from(bins.values()).filter(v => v > 0);
-    if (nonzero.length === 0) return [];
+  // Band constants
+  const NEAR_MAX_DIST_PCT = 0.025; // |price - mid| / mid ≤ 2.5%  → NEAR
+  const FAR_MAX_DIST_PCT  = 0.10;  // 2.5% < dist ≤ 10%           → FAR
+  const NEAR_PCTL         = 0.90;  // p90 of NEAR nonzero bins
+  const NEAR_FRAC_MAX     = 0.25;  // 25% of largest NEAR bin
+  const NEAR_TOP_N        = 4;
+  const FAR_PCTL          = 0.95;  // p95 of FAR nonzero bins
+  const FAR_FRAC_MAX      = 0.30;  // 30% of largest FAR bin
+  const FAR_TOP_N         = 3;
 
-    const sorted = [...nonzero].sort((a, b) => a - b);
-    const p95idx = Math.floor(sorted.length * 0.95);
-    const p95    = sorted[Math.min(p95idx, sorted.length - 1)];
+  /**
+   * Select up to topN walls from bins whose bin-centre distance from mid
+   * falls within [minDistPct, maxDistPct) of mid.
+   * Threshold = max(pctl of nonzero values, fracOfMax × largest value).
+   * Returns empty array if the band contains no nonzero bins.
+   */
+  function selectBand(
+    bins: Map<number, number>,
+    side: 'bid' | 'ask',
+    minDistPct: number,
+    maxDistPct: number,
+    pctl: number,
+    fracOfMax: number,
+    topN: number,
+  ): WallSpec[] {
+    // Collect bins that fall inside this distance band
+    const bandEntries = Array.from(bins.entries()).filter(([binPrice]) => {
+      const dist = Math.abs(binPrice - mid) / mid;
+      return dist >= minDistPct && dist < maxDistPct;
+    });
+
+    const nonzeroVals = bandEntries.map(([, n]) => n).filter(v => v > 0);
+    if (nonzeroVals.length === 0) return [];
+
+    const sorted  = [...nonzeroVals].sort((a, b) => a - b);
+    const pctlIdx = Math.floor(sorted.length * pctl);
+    const pctlVal = sorted[Math.min(pctlIdx, sorted.length - 1)];
     const largest = sorted[sorted.length - 1];
-    const threshold = Math.max(p95, largest * 0.30);
+    const threshold = Math.max(pctlVal, largest * fracOfMax);
 
-    // Filter bins above threshold, then take top-6 by notional
-    const candidates = Array.from(bins.entries())
+    const candidates = bandEntries
       .filter(([, n]) => n >= threshold)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
+      .slice(0, topN);
 
     return candidates.map(([price, notional]) => ({
       id: `${side}-${price}`,
@@ -260,6 +298,13 @@ function computeWalls(
       notional,
       side,
     }));
+  }
+
+  function selectWalls(bins: Map<number, number>, side: 'bid' | 'ask'): WallSpec[] {
+    return [
+      ...selectBand(bins, side, 0,                 NEAR_MAX_DIST_PCT, NEAR_PCTL, NEAR_FRAC_MAX, NEAR_TOP_N),
+      ...selectBand(bins, side, NEAR_MAX_DIST_PCT,  FAR_MAX_DIST_PCT,  FAR_PCTL,  FAR_FRAC_MAX,  FAR_TOP_N),
+    ];
   }
 
   return [...selectWalls(bidBins, 'bid'), ...selectWalls(askBins, 'ask')];
