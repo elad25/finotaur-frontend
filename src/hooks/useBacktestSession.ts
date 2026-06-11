@@ -64,6 +64,9 @@ export interface PaperPosition {
   // immediately at user's clicked price. 'LIMIT' / 'STOP' = filled from a
   // pending order whose trigger price was touched by a later bar.
   entryOrderType?: 'MARKET' | 'LIMIT' | 'STOP';
+  /** True when the position was closed by an opposite-direction order (market or pending)
+   *  — counted in stats even without SL/TP config. */
+  closedViaOrder?: boolean;
   // Phase 7: fee audit trail
   /** Total fees paid so far on this position (entry fee + exit fees). */
   feesPaid?: number;
@@ -307,9 +310,16 @@ function buildExitFill(
 }
 
 export function computeStats(closed: PaperPosition[], startingBalance: number): SessionStats {
-  // #6: headline stats reflect only configured trades (a defined SL and/or TP).
-  // Purely discretionary trades (neither SL nor TP) are excluded from the metrics.
-  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null || (p.takeProfits && p.takeProfits.length > 0));
+  // #6: headline stats reflect only configured trades (a defined SL and/or TP)
+  // OR trades closed by an opposite-direction order (closedViaOrder = true).
+  // Purely discretionary trades (neither SL nor TP, no netting close) are excluded.
+  const configured = closed.filter(
+    (p) =>
+      p.stopLoss != null ||
+      p.takeProfit != null ||
+      (p.takeProfits && p.takeProfits.length > 0) ||
+      p.closedViaOrder === true,
+  );
   if (configured.length === 0) return EMPTY_STATS;
 
   let winners = 0;
@@ -482,16 +492,21 @@ function reducer(state: SessionState, action: Action): SessionState {
         const pnlPercent = pos.entryPrice > 0
           ? (pnl / totalEntryNotional(allCloseFills, pos.entryPrice * (pos.originalSize ?? pos.size))) * 100
           : 0;
+
+        // Mark the sealed position as closed by an opposite-direction order so
+        // computeStats counts it in headline stats even when no SL/TP was configured.
         const closedPos: PaperPosition = {
           ...pos,
           exitTime: time,
           exitPrice: fillPrice,
+          size: closeQty,
           pnl,
           pnlPercent,
           exitReason: 'manual',
           grossPnl,
           feesPaid: totalFeesPaid,
           fills: allCloseFills,
+          closedViaOrder: true,
         };
         const closedPositions = [...state.closedPositions, closedPos];
 
@@ -588,6 +603,8 @@ function reducer(state: SessionState, action: Action): SessionState {
         grossPnl,
         feesPaid: totalFeesPaid,
         fills: allFills,
+        // Explicit user close counts in stats even without SL/TP config.
+        ...(reason === 'manual' ? { closedViaOrder: true } : {}),
       };
       const closedPositions = [...state.closedPositions, closed];
       return {
@@ -797,6 +814,8 @@ function reducer(state: SessionState, action: Action): SessionState {
           grossPnl,
           feesPaid: newFeesPaid,
           fills: newFills,
+          // Explicit user close counts in stats even without SL/TP config.
+          closedViaOrder: true,
         };
         const closedPositions = [...state.closedPositions, closed];
         return {
@@ -855,6 +874,8 @@ function reducer(state: SessionState, action: Action): SessionState {
         fills: allFills,
         // Cancel all TP legs — position is flat.
         takeProfits: (pos.takeProfits ?? []).map((l) => ({ ...l, filled: true })),
+        // Explicit user close counts in stats even without SL/TP config.
+        closedViaOrder: true,
       };
       const closedPositions = [...state.closedPositions, closed];
       return {
@@ -890,6 +911,8 @@ function reducer(state: SessionState, action: Action): SessionState {
         grossPnl,
         feesPaid: totalFeesPaid,
         fills: allCloseFills,
+        // Explicit user close counts in stats even without SL/TP config.
+        closedViaOrder: true,
       };
 
       // Open opposite position at market with slippage.
@@ -1077,7 +1100,13 @@ export function computeStatsByStrategy(
   startingBalance: number,
 ): Map<string, SessionStats> {
   const buckets = new Map<string, PaperPosition[]>();
-  const configured = closed.filter((p) => p.stopLoss != null || p.takeProfit != null || (p.takeProfits && p.takeProfits.length > 0));
+  const configured = closed.filter(
+    (p) =>
+      p.stopLoss != null ||
+      p.takeProfit != null ||
+      (p.takeProfits && p.takeProfits.length > 0) ||
+      p.closedViaOrder === true,
+  );
   for (const p of configured) {
     const key = p.strategyId || 'manual';
     const arr = buckets.get(key);
