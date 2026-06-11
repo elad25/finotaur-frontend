@@ -203,17 +203,17 @@ export function AssetClassAllocationCard({ snapshot, className }: Props) {
           // Outer container: flex + justify-center so the chart sits in the middle
           <div className="flex justify-center">
             {/* Relative wrapper so the absolute HoleLabel overlay works */}
-            <div className="relative w-full" style={{ maxWidth: 420 }}>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart margin={{ top: 30, right: 60, bottom: 30, left: 60 }}>
+            <div className="relative w-full" style={{ maxWidth: 480 }}>
+              <ResponsiveContainer width="100%" height={340}>
+                <PieChart margin={{ top: 24, right: 60, bottom: 24, left: 60 }}>
                   <Pie
                     data={chartData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius="34%"
-                    outerRadius="52%"
+                    innerRadius="48%"
+                    outerRadius="70%"
                     strokeWidth={1}
                     stroke="#070604"
                     label={renderCustomLabel}
