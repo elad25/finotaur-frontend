@@ -214,11 +214,11 @@ function CarouselCard({ opp, selected, onClick }: CarouselCardProps) {
       className={[
         'relative flex min-w-[148px] flex-shrink-0 cursor-pointer items-center gap-2.5 rounded-[8px] border p-3 text-left transition-all',
         selected
-          ? 'border-gold-primary/60 bg-gold-primary/[0.06] shadow-[0_0_16px_rgba(201,166,70,0.12)]'
-          : 'border-white/8 bg-[#0a0a0a] hover:border-white/16',
+          ? 'border-gold-primary/70 bg-gradient-to-b from-gold-primary/[0.16] to-gold-primary/[0.05] shadow-[0_0_18px_rgba(201,166,70,0.22)]'
+          : 'border-gold-primary/25 bg-gradient-to-b from-gold-primary/[0.07] to-[#0a0a0a] hover:border-gold-primary/50 hover:shadow-[0_0_12px_rgba(201,166,70,0.12)]',
       ].join(' ')}
     >
-      <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[4px] border border-white/8 bg-[#0d0d0d]">
+      <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[4px] border border-gold-primary/20 bg-[#0d0d0d]">
         <TickerLogo ticker={opp.ticker} size={24} />
       </div>
       <div className="min-w-0 flex-1">
@@ -239,11 +239,11 @@ function MiniScoreRing({ score, size }: { score: number; size: number }) {
       style={{
         width: size,
         height: size,
-        background: `conic-gradient(#4ade80 0 ${deg}deg, rgba(255,255,255,0.08) ${deg}deg 360deg)`,
+        background: `conic-gradient(#16a34a 0 ${deg}deg, rgba(255,255,255,0.08) ${deg}deg 360deg)`,
       }}
     >
       <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0a0a0a]">
-        <span className="font-mono text-[10px] font-bold text-[#bff26f]">{score}</span>
+        <span className="font-mono text-[10px] font-bold text-[#22c55e]">{score}</span>
       </div>
     </div>
   );
@@ -267,18 +267,18 @@ function ScoreRingLarge({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2.5">
       <div
-        className="relative flex-none rounded-full p-[5px] shadow-[0_0_20px_rgba(74,222,128,0.18)]"
+        className="relative flex-none rounded-full p-[5px] shadow-[0_0_20px_rgba(22,163,74,0.20)]"
         style={{
           width: 64,
           height: 64,
-          background: `conic-gradient(#4ade80 0 ${deg}deg, rgba(255,255,255,0.08) ${deg}deg 360deg)`,
+          background: `conic-gradient(#16a34a 0 ${deg}deg, rgba(255,255,255,0.08) ${deg}deg 360deg)`,
         }}
       >
         <div className="flex h-full w-full items-center justify-center rounded-full bg-[#070707]">
-          <span className="font-mono text-xl font-bold text-[#bff26f]">{score}</span>
+          <span className="font-mono text-xl font-bold text-[#22c55e]">{score}</span>
         </div>
       </div>
-      <p className="text-[12px] font-medium text-[#4ade80]">{SCORE_LABEL(score)}</p>
+      <p className="text-[12px] font-medium text-[#22c55e]">{SCORE_LABEL(score)}</p>
     </div>
   );
 }
