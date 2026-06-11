@@ -2,53 +2,69 @@
 // SUPABASE CLIENT - Database & Storage
 // ============================================================================
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// Import + re-export the canonical singleton so this module no longer creates
+// a second GoTrueClient. A second client at module scope competes for the same
+// navigator.locks web lock used by supabase-js v2 session management, causing
+// AuthProvider.getSession() to time out under multi-tab or cold-start load
+// (OQ-93 / auth-getsession-timeout incident). All callers that previously
+// received this module's own `supabase` now transparently get the singleton.
+import { supabase } from '@/lib/supabase';
+export { supabase };
 
 // SECURITY: Only expose the service-role key in local development.
 // In production the variable must not be set; if it is, we silently ignore it
 // so it never ends up in the browser bundle.
 const isDev = import.meta.env.DEV;
-
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Admin client (Service Role - bypasses RLS) — DEV only.
-// In production this is always null; admin operations must go through
-// server-side Edge Functions that hold the key server-side.
-export const supabaseAdmin = (isDev && supabaseServiceRoleKey)
-  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+// Lazy: created only on first call to getSupabaseClient(true) so that the
+// mere import of this module never spins up a second GoTrueClient on the
+// navigator.locks contention path. In production this is always null.
+let _supabaseAdminInstance: SupabaseClient | null = null;
+
+function _getAdminClient(): SupabaseClient | null {
+  if (!isDev || !supabaseServiceRoleKey) return null;
+  if (!_supabaseAdminInstance) {
+    _supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
         detectSessionInUrl: false,
+        // Distinct storageKey prevents any accidental collision with the
+        // canonical client's 'finotaur-auth-token' web lock / localStorage key.
+        storageKey: 'finotaur-admin-dev-token',
       },
       db: {
         schema: 'public',
       },
-    })
-  : null;
-
-if (isDev) {
-  if (supabaseAdmin) {
-    console.log('✅ Admin client initialized (DEV only)');
-  } else {
-    console.warn('⚠️ Admin client not available (missing service role key)');
+    });
+    console.log('✅ Admin client initialized (DEV only, lazy)');
   }
+  return _supabaseAdminInstance;
 }
 
+// supabaseAdmin is no longer exported from this module — no external callers
+// import it from here (they all use @/lib/supabaseAdmin directly). It remains
+// an internal implementation detail of getSupabaseClient().
+
 /**
- * 🔥 Get the appropriate Supabase client based on impersonation status
+ * Get the appropriate Supabase client based on impersonation status.
+ * Returns the canonical singleton for normal use; returns the lazy-created
+ * admin client only in DEV when isImpersonating=true and the service-role key
+ * is present.
  */
 export function getSupabaseClient(isImpersonating: boolean = false) {
-  if (isImpersonating && supabaseAdmin) {
-    console.log('🔓 Using ADMIN client (bypassing RLS)');
-    return supabaseAdmin;
+  if (isImpersonating) {
+    const adminClient = _getAdminClient();
+    if (adminClient) {
+      console.log('🔓 Using ADMIN client (bypassing RLS)');
+      return adminClient;
+    }
   }
-  
+
   console.log('🔒 Using REGULAR client (with RLS)');
   return supabase;
 }
