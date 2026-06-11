@@ -256,6 +256,10 @@ function computeWalls(
   const FAR_PCTL          = 0.95;  // p95 of FAR nonzero bins
   const FAR_FRAC_MAX      = 0.30;  // 30% of largest FAR bin
   const FAR_TOP_N         = 3;
+  // Absolute floor: when a band empties out (e.g. mega-walls get pulled),
+  // its relative thresholds collapse and dust orders ($407) slip through.
+  // No wall below this notional is ever shown, on any coin.
+  const MIN_WALL_NOTIONAL_USD = 150_000;
 
   /**
    * Select up to topN walls from bins whose bin-centre distance from mid
@@ -285,7 +289,7 @@ function computeWalls(
     const pctlIdx = Math.floor(sorted.length * pctl);
     const pctlVal = sorted[Math.min(pctlIdx, sorted.length - 1)];
     const largest = sorted[sorted.length - 1];
-    const threshold = Math.max(pctlVal, largest * fracOfMax);
+    const threshold = Math.max(pctlVal, largest * fracOfMax, MIN_WALL_NOTIONAL_USD);
 
     const candidates = bandEntries
       .filter(([, n]) => n >= threshold)
