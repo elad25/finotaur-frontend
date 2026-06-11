@@ -397,6 +397,26 @@ export interface BriefSectorWatch {
   changePct: number;
 }
 
+export interface BriefPersonalWatchlistItem {
+  symbol: string;
+  price: number;
+  changePct: number;
+}
+
+export interface BriefPortfolioPosition {
+  symbol: string;
+  qty: number;
+}
+
+export interface BriefPersonal {
+  watchlist: BriefPersonalWatchlistItem[];
+}
+
+export interface BriefPortfolio {
+  totalValue?: number;
+  positions: BriefPortfolioPosition[];
+}
+
 export interface BriefContent {
   headline: string;
   summary: string;
@@ -404,6 +424,8 @@ export interface BriefContent {
   key_events: BriefKeyEvent[];
   sector_watch: BriefSectorWatch[];
   deep_note?: string;
+  personal?: BriefPersonal;
+  portfolio?: BriefPortfolio;
 }
 
 export type FinoBriefingResult =
