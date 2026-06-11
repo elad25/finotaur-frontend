@@ -688,7 +688,13 @@ export function OpportunityShowcase({ opportunities }: Props) {
       }
     },
   });
-  const analysisHref = routeForSuggest(primarySymbol, assetType ?? 'unknown');
+  // The suggest universe is missing some funds entirely (e.g. sector SPDRs like
+  // XLE return {"items":[]}), so when the backend has no answer, fall back to a
+  // name heuristic. Backend verdicts still win when present.
+  const looksLikeFund = /\b(etf|spdr|ishares|vanguard|invesco|fund|trust)\b/i.test(opp?.name ?? '');
+  const resolvedAssetType =
+    assetType && assetType !== 'unknown' ? assetType : looksLikeFund ? 'etf' : 'unknown';
+  const analysisHref = routeForSuggest(primarySymbol, resolvedAssetType);
 
   // Batch-fetch quotes for all opportunity tickers (single query key = all tickers)
   const allTickers = opportunities.map((o) => o.ticker);
