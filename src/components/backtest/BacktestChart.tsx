@@ -1238,7 +1238,9 @@ export function BacktestChart({
                     </span>
                   </div>
                   <div>
-                    <span className="text-gray-500">Entry</span>
+                    <span className="text-gray-500">
+                      {(state.activePosition.fills ?? []).filter((f) => f.kind === 'entry').length > 1 ? 'Avg Entry' : 'Entry'}
+                    </span>
                     <span className="ml-2 font-mono text-white">${state.activePosition.entryPrice.toFixed(2)}</span>
                   </div>
                   {state.activePosition.stopLoss != null && (
