@@ -79,21 +79,36 @@ function PersonalCommentaryCard({
         )}
       </div>
 
-      {/* Body — new briefs arrive as "• " bullet lines; older cached ones as paragraphs */}
+      {/* Body — new format: one short lead paragraph + "• " bullet lines.
+          Plain lines render as paragraphs, bullet lines as the list; older
+          cached paragraph-only commentary therefore still renders fine. */}
       <div className="px-4 py-4">
         {commentary.includes('•') ? (
-          <ul className="space-y-2">
+          <>
             {commentary
               .split('\n')
-              .map((line) => line.replace(/^\s*•\s*/, '').trim())
-              .filter(Boolean)
-              .map((line, i) => (
-                <li key={i} className="flex items-start gap-2 text-[12px] leading-[1.6] text-ink-secondary">
-                  <span className="mt-[5px] h-[5px] w-[5px] shrink-0 rounded-full bg-gold-primary/70" />
-                  <span>{line}</span>
-                </li>
+              .map((line) => line.trim())
+              .filter((line) => line && !line.startsWith('•'))
+              .map((para, i) => (
+                <p key={`p-${i}`} className={`text-[12px] leading-[1.7] text-ink-secondary ${i > 0 ? 'mt-2' : ''}`}>
+                  {para}
+                </p>
               ))}
-          </ul>
+            <ul className="mt-3 space-y-2">
+              {commentary
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => line.startsWith('•'))
+                .map((line) => line.replace(/^•\s*/, ''))
+                .filter(Boolean)
+                .map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[12px] leading-[1.6] text-ink-secondary">
+                    <span className="mt-[5px] h-[5px] w-[5px] shrink-0 rounded-full bg-gold-primary/70" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+            </ul>
+          </>
         ) : (
           commentary.split('\n\n').map((paragraph, i) => (
             <p
