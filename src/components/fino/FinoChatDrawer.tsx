@@ -17,6 +17,7 @@ import { useFinoChat } from '@/contexts/FinoChatContext';
 import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
 import FinoBriefingCard from '@/components/fino/FinoBriefingCard';
+import FinoSessionReviewCard from '@/components/fino/FinoSessionReviewCard';
 
 // Human-readable label for the current route, so FINO knows which screen the
 // user is on. First matching pattern wins; falls back to the title-cased path.
@@ -159,6 +160,8 @@ function FinoChatPanel({
           )}
           {/* Morning Briefing card — sits above the chat thread, never throws */}
           <FinoBriefingCard />
+          {/* Session Review card — sits below briefing, never throws */}
+          <FinoSessionReviewCard />
           <div className="flex min-h-0 flex-1 flex-col">
             <ChatInterface
               messages={messages}

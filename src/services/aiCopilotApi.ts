@@ -446,3 +446,54 @@ export async function fetchFinoBriefing(): Promise<FinoBriefingResult> {
 }
 
 export default aiCopilotApi;
+
+// ---------------------------------------------------------------
+// FINO Session Review types + fetch
+// ---------------------------------------------------------------
+
+export interface SessionReviewStats {
+  trades: number;
+  wins: number;
+  losses: number;
+  netPnl: number;
+  best?: { symbol: string; pnl: number };
+  worst?: { symbol: string; pnl: number };
+}
+
+export type FinoSessionReviewResult =
+  | { status: 'locked' }
+  | { status: 'ready'; date: string; review: string; stats: SessionReviewStats }
+  | { status: 'none' };
+
+/**
+ * Fetch the FINO Session Review for today.
+ * - 200 { locked: true }   → { status: 'locked' }
+ * - 200 { locked: false }  → { status: 'ready', date, review, stats }
+ * - 404                    → { status: 'none' }
+ * - other errors           → throw
+ */
+export async function fetchFinoSessionReview(): Promise<FinoSessionReviewResult> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/api/ai/fino/session-review`, { headers });
+
+  if (response.status === 404) {
+    return { status: 'none' };
+  }
+
+  if (!response.ok) {
+    throw new Error(`Session review fetch failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (data.locked === true) {
+    return { status: 'locked' };
+  }
+
+  return {
+    status: 'ready',
+    date: data.date,
+    review: data.review,
+    stats: data.stats,
+  };
+}
