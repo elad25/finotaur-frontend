@@ -443,7 +443,7 @@ export interface OverlayPriceLine {
   price: number;
   title: string;
   color: string;
-  lineWidth?: 1 | 2;
+  lineWidth?: 1 | 2 | 3 | 4;
   /** lightweight-charts LineStyle enum value. 0=Solid, 2=Dashed (default). */
   lineStyle?: number;
 }
