@@ -68,6 +68,8 @@ export type MarketFunction =
   | 'derivatives'
   | 'defi-tvl'
   | 'stablecoins'
+  | 'block-trades'
+  | 'market-scanner'
   // Futures-specific
   | 'open-interests'
   | 'futures-contracts'
@@ -78,6 +80,11 @@ export type MarketFunction =
   | 'correlation'
   | 'pairs'
   | 'rates'
+  | 'forex-heatmap'
+  | 'forex-macro-cockpit'
+  | 'forex-cb-watch'
+  | 'forex-cot'
+  | 'forex-tools'
   // Commodities-specific
   | 'commodities-markets'
   | 'commodities-macro'
@@ -132,6 +139,12 @@ export interface MarketFunctionMeta {
   locked?: boolean;
   /** Marks this item as compliance price-gated (Polygon redistribution license not held). */
   priceGated?: boolean;
+  /**
+   * When true, clicking this item in the sidebar opens its route in a named popup
+   * window (full available screen size) instead of navigating in-app.
+   * Re-clicking focuses/reuses the same named window.
+   */
+  newWindow?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +332,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       crypto: '/app/crypto/scanner',
     },
+    newWindow: true,
   },
 
   // ── Futures-specific ──────────────────────────────────────────────────────
