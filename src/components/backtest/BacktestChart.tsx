@@ -689,6 +689,9 @@ export function BacktestChart({
   // come from the PlaceOrderPanel draft (orderDraft), falling back to the legacy
   // input state so existing behaviour is preserved when the panel has no values.
   const handlePlacePendingOrder = useCallback((side: PaperSide, type: PendingOrderType, info: ContextMenuPriceInfo) => {
+    // BT_DEBUG (temporary — strip before merge)
+    if (typeof window !== 'undefined' && window.__BT_DEBUG) window.__BT_DEBUG.addPendingCount += 1;
+    // END BT_DEBUG
     addPendingOrder({
       side,
       type,
@@ -707,6 +710,9 @@ export function BacktestChart({
   // Pending orders are allowed alongside an open position — netting handles fills.
   const handlePlaceLimitAtPrice = useCallback((price: number, currentPrice: number) => {
     const side: PaperSide = price <= currentPrice ? 'LONG' : 'SHORT';
+    // BT_DEBUG (temporary — strip before merge)
+    if (typeof window !== 'undefined' && window.__BT_DEBUG) window.__BT_DEBUG.addPendingCount += 1;
+    // END BT_DEBUG
     addPendingOrder({
       side,
       type: 'LIMIT',
@@ -865,6 +871,9 @@ export function BacktestChart({
         strategyId: activeStrategyId,
       });
     } else {
+      // BT_DEBUG (temporary — strip before merge)
+      if (typeof window !== 'undefined' && window.__BT_DEBUG) window.__BT_DEBUG.addPendingCount += 1;
+      // END BT_DEBUG
       addPendingOrder({
         side,
         type: order.kind === 'limit' ? 'LIMIT' : 'STOP',
