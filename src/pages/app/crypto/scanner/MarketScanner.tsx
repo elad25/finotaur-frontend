@@ -160,7 +160,7 @@ function TimeframePills({
   );
 }
 
-// ── Wall computation helpers ───────────────────────────────────────────────────
+// ── Wall computation helpers ──────────────────────────────────────────────────
 // Copied (not imported) from BookmapChart to keep BookmapChart.tsx untouched.
 
 /** Round a price DOWN to the nearest bin boundary. */
@@ -370,12 +370,74 @@ function alignToBar(t: number, ivSec: number): number {
   return Math.floor(t / ivSec) * ivSec;
 }
 
-// Base RGB components — alpha is computed per-wall from size ratio
-const BID_RGB = '34,197,94';   // emerald-500
-const ASK_RGB = '201,166,70';  // brand gold
 // Legend swatch colors (fixed — mid-opacity representative shade)
-const BID_COLOR  = `rgba(${BID_RGB},0.55)`;
-const ASK_COLOR  = `rgba(${ASK_RGB},0.75)`;
+const BID_COLOR  = 'rgba(34,197,94,0.55)';
+const ASK_COLOR  = 'rgba(201,166,70,0.75)';
+
+/**
+ * Heat-ramp color helper — 3-tier palette keyed by side + size ratio.
+ *
+ * ASKS (gold family):
+ *   ratio < 0.33  → dim gold
+ *   0.33–0.66     → mid gold
+ *   > 0.66        → intense near-white-gold
+ *
+ * BIDS (emerald family):
+ *   ratio < 0.33  → dim emerald
+ *   0.33–0.66     → mid emerald
+ *   > 0.66        → intense near-white-green
+ *
+ * Dead walls: halve the fill alpha (cap 0.20), edge alpha 0.25.
+ */
+function heatColors(
+  side: 'bid' | 'ask',
+  ratio: number,
+  dead: boolean,
+): { edge: string; fill: string } {
+  let edge: string;
+  let fill: string;
+
+  if (side === 'ask') {
+    if (ratio > 0.66) {
+      edge = 'rgba(255,225,140,0.95)';
+      fill = 'rgba(230,200,110,0.48)';
+    } else if (ratio > 0.33) {
+      edge = 'rgba(217,182,90,0.75)';
+      fill = 'rgba(201,166,70,0.30)';
+    } else {
+      edge = 'rgba(201,166,70,0.45)';
+      fill = 'rgba(201,166,70,0.14)';
+    }
+  } else {
+    // bid
+    if (ratio > 0.66) {
+      edge = 'rgba(140,255,190,0.95)';
+      fill = 'rgba(80,230,150,0.48)';
+    } else if (ratio > 0.33) {
+      edge = 'rgba(52,211,123,0.75)';
+      fill = 'rgba(34,197,94,0.30)';
+    } else {
+      edge = 'rgba(34,197,94,0.45)';
+      fill = 'rgba(34,197,94,0.14)';
+    }
+  }
+
+  if (dead) {
+    // Parse fill alpha and halve it (cap 0.20); fix edge to 0.25.
+    // We reconstruct via a known-format regex rather than re-parsing rgba strings.
+    const fillMatch = fill.match(/rgba\(([^,]+),([^,]+),([^,]+),([\d.]+)\)/);
+    if (fillMatch) {
+      const deadFillAlpha = Math.min(0.20, parseFloat(fillMatch[4]) / 2);
+      fill = `rgba(${fillMatch[1]},${fillMatch[2]},${fillMatch[3]},${deadFillAlpha.toFixed(2)})`;
+    }
+    const edgeMatch = edge.match(/rgba\(([^,]+),([^,]+),([^,]+),[\d.]+\)/);
+    if (edgeMatch) {
+      edge = `rgba(${edgeMatch[1]},${edgeMatch[2]},${edgeMatch[3]},0.25)`;
+    }
+  }
+
+  return { edge, fill };
+}
 
 /** Tracked wall entry — lives in the useRef Map keyed by `${side}:${binPrice}`. */
 interface TrackedWall {
@@ -513,12 +575,9 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
       // Alive walls — rendered as colored Bookmap-style band stripes.
       for (const entry of aliveWalls) {
-        const ratio     = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
-        const rgb       = entry.side === 'bid' ? BID_RGB : ASK_RGB;
-        // Edge/outline color: hue at high alpha (~0.9) — gives a crisp top line.
-        const edgeAlpha = 0.9;
-        // Fill alpha: proportional to wall size; range 0.18–0.60.
-        const fillAlpha = Math.min(0.60, 0.18 + 0.42 * ratio);
+        const ratio   = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
+        const { edge, fill } = heatColors(entry.side, ratio, false);
+        const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
         segments.push({
           id:         entry.key,
@@ -526,20 +585,21 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           bandHeight: entry.binSize, // band occupies [price, price+binSize]
           startTime:  alignToBar(Math.floor(entry.bornAt / 1000), ivSec),
           endTime:    null, // alive → FinotaurChart extends 2 bars past live edge
-          color:      `rgba(${rgb},${edgeAlpha.toFixed(2)})`,
-          fillColor:  `rgba(${rgb},${fillAlpha.toFixed(2)})`,
+          color:      edge,
+          fillColor:  fill,
           lineWidth:  1,
-          title:      `${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}`,
+          // No axis label — tooltip replaces it.
+          tooltip:    `${sideLabel} ${formatNotional(entry.maxNotional)} · since ${formatHHMM(entry.bornAt)}`,
         });
       }
 
-      // Dead walls — same band geometry, dimmed fill, no axis label.
+      // Dead walls — same band geometry, dimmed one tier via heatColors(dead=true).
+      // Ratio is computed vs current alive max so the tier is consistent with
+      // what the wall looked like when it was alive.
       for (const entry of dead) {
-        const rgb = entry.side === 'bid' ? BID_RGB : ASK_RGB;
-        // Dead: fill alpha × 0.4, cap 0.22; edge alpha 0.25; no title.
-        const aliveFillAlpha = Math.min(0.60, 0.18 + 0.42 * 1); // treat ratio=1 for hue base
-        const deadFillAlpha  = Math.min(0.22, aliveFillAlpha * 0.4);
-        const deadEdgeAlpha  = 0.25;
+        const ratio = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
+        const { edge, fill } = heatColors(entry.side, ratio, true);
+        const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
         segments.push({
           id:         `dead:${entry.key}`,
@@ -547,10 +607,11 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           bandHeight: entry.binSize,
           startTime:  alignToBar(Math.floor(entry.bornAt  / 1000), ivSec),
           endTime:    alignToBar(Math.floor((entry.deadAt ?? 0) / 1000), ivSec),
-          color:      `rgba(${rgb},${deadEdgeAlpha.toFixed(2)})`,
-          fillColor:  `rgba(${rgb},${deadFillAlpha.toFixed(2)})`,
+          color:      edge,
+          fillColor:  fill,
           lineWidth:  1,
-          title:      undefined, // no axis label for dead walls
+          // No axis label — tooltip replaces it.
+          tooltip:    `${sideLabel} ${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}–${formatHHMM(entry.deadAt ?? 0)}`,
         });
       }
 

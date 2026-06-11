@@ -491,10 +491,16 @@ export interface WallSegment {
   bandHeight: number;
   lineWidth: 1 | 2 | 3 | 4;
   /**
-   * Price-axis label. Set for alive walls to show size + birth time.
-   * Omit (undefined or empty) for dead walls to keep the axis uncluttered.
+   * Price-axis label. Kept for interface compatibility but no longer used for
+   * axis rendering — axis labels are permanently suppressed to avoid stacking.
+   * @deprecated pass `tooltip` instead for hover text
    */
   title?: string;
+  /**
+   * Text shown in the hover tooltip when the user mouses over the wall stripe.
+   * Format examples: 'BID $8.2M · since 14:32' (alive) or 'ASK $8.2M · 14:32–14:51' (dead).
+   */
+  tooltip?: string;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -640,7 +646,15 @@ export function FinotaurChart({
    * no-op re-renders.
    */
   const wallSegmentSeriesRef = useRef<
-    Map<string, { series: ISeriesApi<'Baseline'>; endTime: number | null; title: string | undefined }>
+    Map<string, {
+      series: ISeriesApi<'Baseline'>;
+      endTime: number | null;
+      title: string | undefined;
+      tooltip: string | undefined;
+      /** Rendered time span [clampedStart, resolvedEnd] in unix seconds — used for hover hit-test. */
+      renderedStart: number;
+      renderedEnd: number;
+    }>
   >(new Map());
 
   const [loading, setLoading] = useState(true);
@@ -651,6 +665,22 @@ export function FinotaurChart({
    * the chart viewport changes (pan / zoom / resize). Increment to reposition.
    */
   const [overlayTick, setOverlayTick] = useState(0);
+
+  /**
+   * Wall hover tooltip state. When the crosshair moves over a wall stripe,
+   * this holds the tooltip text + pixel position. null = hidden.
+   * Position/text are mutated directly via the ref to avoid per-frame setState
+   * storms; only segment-identity changes trigger a setState.
+   */
+  const [wallTooltip, setWallTooltip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  /** Tracks which segment id is currently shown in the tooltip to batch updates. */
+  const wallTooltipIdRef = useRef<string | null>(null);
+  /** Direct ref to the tooltip DOM node — x/y are mutated via style for perf. */
+  const wallTooltipDivRef = useRef<HTMLDivElement | null>(null);
 
   // ─── Mount / unmount the chart ──────────────────────────────
   useEffect(() => {
@@ -757,6 +787,101 @@ export function FinotaurChart({
     };
     // Re-subscribe whenever the chart is remounted (theme change rebuilds chartRef).
   }, [barCount]); // barCount > 0 guarantees chart+series are initialized
+
+  // ─── Wall hover tooltip — subscribe to crosshairMove ───────
+  // Shows a floating tooltip when the crosshair enters a wall stripe.
+  // Uses direct DOM mutation for x/y position to avoid per-frame setState;
+  // only the matched segment identity triggers a React state update (text change).
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candleSeries = seriesRef.current;
+    if (!chart || !candleSeries || !wallSegments || wallSegments.length === 0) return;
+
+    const handler = (param: { point?: { x: number; y: number }; time?: unknown }) => {
+      const tooltipDiv = wallTooltipDivRef.current;
+
+      if (!param.point) {
+        // Crosshair left the chart area — hide tooltip
+        if (wallTooltipIdRef.current !== null) {
+          wallTooltipIdRef.current = null;
+          setWallTooltip(null);
+        }
+        return;
+      }
+
+      // Convert y coordinate → price
+      const price = candleSeries.coordinateToPrice(param.point.y);
+      if (price === null) {
+        if (wallTooltipIdRef.current !== null) {
+          wallTooltipIdRef.current = null;
+          setWallTooltip(null);
+        }
+        return;
+      }
+
+      // Hit-test wall segments: find first segment where price falls in [seg.price, seg.price+bandHeight]
+      // and the crosshair time (if available) falls within the rendered span.
+      const activeMap = wallSegmentSeriesRef.current;
+      let matchedId: string | null = null;
+      let matchedTooltip: string | undefined;
+
+      for (const [id, entry] of activeMap.entries()) {
+        // Find the WallSegment spec for this entry to get price + bandHeight
+        const seg = (wallSegments ?? []).find(s => s.id === id || `dead:${s.id}` === id);
+        if (!seg) continue;
+
+        // Price-band hit test
+        if (price < seg.price || price > seg.price + seg.bandHeight) continue;
+
+        // Time-range hit test (if time available from crosshair)
+        if (param.time !== undefined) {
+          const t = param.time as number;
+          if (t < entry.renderedStart || t > entry.renderedEnd) continue;
+        }
+
+        matchedId = id;
+        matchedTooltip = entry.tooltip;
+        break;
+      }
+
+      if (matchedId === null || !matchedTooltip) {
+        // No hit — hide tooltip
+        if (wallTooltipIdRef.current !== null) {
+          wallTooltipIdRef.current = null;
+          setWallTooltip(null);
+        }
+        return;
+      }
+
+      // Compute position — clamp to container bounds (assume 12px margin)
+      const container = containerRef.current;
+      const maxX = container ? container.clientWidth - 160 : param.point.x + 14;
+      const maxY = container ? container.clientHeight - 40 : param.point.y;
+      const tooltipX = Math.min(param.point.x + 14, maxX);
+      const tooltipY = Math.max(param.point.y - 10, 8);
+      const clampedY = Math.min(tooltipY, maxY);
+
+      if (matchedId === wallTooltipIdRef.current) {
+        // Same segment — update position only via direct DOM mutation (no re-render)
+        if (tooltipDiv) {
+          tooltipDiv.style.left = `${tooltipX}px`;
+          tooltipDiv.style.top = `${clampedY}px`;
+        }
+        return;
+      }
+
+      // New segment — update state (triggers render with new text)
+      wallTooltipIdRef.current = matchedId;
+      setWallTooltip({ text: matchedTooltip, x: tooltipX, y: clampedY });
+    };
+
+    chart.subscribeCrosshairMove(handler);
+    return () => {
+      try { chart.unsubscribeCrosshairMove(handler); } catch { /* chart may be gone */ }
+    };
+  // Re-subscribe when chart mounts or wallSegments list changes (new ids / tooltips).
+  // barCount ensures the candle series is ready before we subscribe.
+  }, [barCount, wallSegments]);
 
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
@@ -1035,11 +1160,25 @@ export function FinotaurChart({
         ? Math.max(seg.startTime, firstBarTime)
         : seg.startTime;
 
-      // A wall born inside the current (still-forming) bar collapses to a
-      // single point — render it as a minimum one-bar segment at the right
-      // edge instead of hiding it.
-      if (clampedStart >= resolvedEnd && barSpacing !== null) {
-        clampedStart = resolvedEnd - barSpacing;
+      // Enforce a minimum visible span of 3 bars so walls are clearly visible
+      // on larger timeframes (1h / 1D) even when born just moments ago.
+      // This applies to both alive and dead walls.
+      if (barSpacing !== null) {
+        const minSpan = 3 * barSpacing;
+        if (resolvedEnd - clampedStart < minSpan) {
+          // Push start back to satisfy the 3-bar minimum.
+          const candidate = resolvedEnd - minSpan;
+          // Don't go before the first loaded bar.
+          clampedStart = firstBarTime !== null ? Math.max(candidate, firstBarTime) : candidate;
+          // Final guard: if clamping to firstBarTime still collapses the span,
+          // fall back to a single-bar span at the right edge.
+          if (clampedStart >= resolvedEnd && barSpacing !== null) {
+            clampedStart = resolvedEnd - barSpacing;
+          }
+        }
+      } else if (clampedStart >= resolvedEnd) {
+        // No barSpacing yet (single loaded bar) — keep the legacy 1-bar fallback.
+        clampedStart = resolvedEnd - (firstBarTime !== null ? 1 : 0);
       }
 
       // Skip segments that still degenerate (single loaded bar, etc.) —
@@ -1074,8 +1213,9 @@ export function FinotaurChart({
           lineWidth: 1,
           priceLineVisible: false,
           crosshairMarkerVisible: false,
-          lastValueVisible: !!seg.title,
-          title: seg.title ?? '',
+          // Axis labels permanently off — tooltip replaces axis pills.
+          lastValueVisible: false,
+          title: '',
           // Use the right price scale (same pane as candles).
           priceScaleId: 'right',
         });
@@ -1089,27 +1229,35 @@ export function FinotaurChart({
           // so live segments keep extending as new bars arrive.
           endTime: resolvedEnd,
           title: seg.title,
+          tooltip: seg.tooltip,
+          renderedStart: clampedStart,
+          renderedEnd:   resolvedEnd,
         });
       } else {
-        // ── Update if the resolved end or title changed ─────────
-        const endChanged   = existing.endTime !== resolvedEnd;
-        const titleChanged = existing.title   !== seg.title;
+        // ── Update if the resolved end or tooltip changed ───────
+        const endChanged     = existing.endTime  !== resolvedEnd;
+        const tooltipChanged = existing.tooltip  !== seg.tooltip;
 
         if (endChanged) {
           existing.series.setData([
             { time: clampedStart as UTCTimestamp, value: bandTop },
             { time: resolvedEnd   as UTCTimestamp, value: bandTop },
           ]);
-          existing.endTime = resolvedEnd;
+          existing.endTime      = resolvedEnd;
+          existing.renderedStart = clampedStart;
+          existing.renderedEnd   = resolvedEnd;
         }
 
-        if (titleChanged) {
-          existing.series.applyOptions({
-            lastValueVisible: !!seg.title,
-            title: seg.title ?? '',
-          });
-          existing.title = seg.title;
+        if (tooltipChanged) {
+          existing.tooltip = seg.tooltip;
         }
+
+        // Ensure axis labels stay off even if options were overwritten externally.
+        if (endChanged || tooltipChanged) {
+          existing.series.applyOptions({ lastValueVisible: false, title: '' });
+        }
+        // Keep title field in sync for internal ref tracking (though not rendered).
+        existing.title = seg.title;
       }
     }
   // barCount triggers re-evaluation after bars load (lastBarTime shifts).
@@ -1212,6 +1360,22 @@ export function FinotaurChart({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Wall hover tooltip — floats near the cursor over a wall stripe */}
+      {wallTooltip && (
+        <div
+          ref={wallTooltipDivRef}
+          className="pointer-events-none absolute z-30 select-none whitespace-nowrap rounded px-2 py-1 text-xs text-white"
+          style={{
+            left: wallTooltip.x,
+            top: wallTooltip.y,
+            background: 'rgba(8,8,10,0.95)',
+            border: '1px solid rgba(201,166,70,0.35)',
+          }}
+        >
+          {wallTooltip.text}
         </div>
       )}
 
