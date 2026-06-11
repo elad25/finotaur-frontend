@@ -33,6 +33,8 @@ import type { Opportunity, ArgPoint, CatalystDetailed } from '../utils/opportuni
 import { fetchCompareBars } from '@/services/etf-analyzer.api';
 import type { EtfBarsRange } from '@/services/etf-analyzer.api';
 import { useMarketStatus } from '@/lib/marketStatus';
+import { routeForSuggest } from '@/lib/tickerRouting';
+import type { SuggestItem } from '@/components/Search/useSymbolSuggest';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -448,14 +450,22 @@ interface ArgCardProps {
   emptyText: string;
   icons: LucideIcon[];
   iconToneClass: string;
+  /** Optional highlighted intro strip (e.g. "Why it's on the list" + the idea thesis). */
+  lead?: { label: string; text: string };
 }
 
-function ArgCard({ title, toneClass, borderClass, bgClass, points, emptyText, icons, iconToneClass }: ArgCardProps) {
+function ArgCard({ title, toneClass, borderClass, bgClass, points, emptyText, icons, iconToneClass, lead }: ArgCardProps) {
   return (
     <div className={`rounded-[8px] border ${borderClass} ${bgClass} p-4`}>
       <p className={`mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] ${toneClass}`}>
         {title}
       </p>
+      {lead && lead.text ? (
+        <div className="mb-3 rounded-[6px] border border-gold-primary/20 bg-gold-primary/[0.06] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gold-primary">{lead.label}</p>
+          <p className="mt-1 text-[11px] leading-[1.5] text-ink-secondary">{lead.text}</p>
+        </div>
+      ) : null}
       {points.length === 0 ? (
         <p className="text-[11px] italic text-ink-tertiary">{emptyText}</p>
       ) : (
@@ -657,6 +667,29 @@ export function OpportunityShowcase({ opportunities }: Props) {
 
   const opp = opportunities.find((o) => o.ticker === selectedTicker) ?? opportunities[0];
 
+  // Resolve the selected symbol's asset type via the backend (the same source
+  // GlobalOmnibox trusts) so "View Full Analysis" routes ETFs to the ETF
+  // overview instead of Stock Analyzer. Multi-leg tickers ("MON / CF") use
+  // their first symbol.
+  const primarySymbol = (opp?.ticker ?? '').split('/')[0].trim().toUpperCase();
+  const { data: assetType } = useQuery<SuggestItem['assetType']>({
+    queryKey: ['opp-asset-type', primarySymbol],
+    enabled: !!primarySymbol,
+    staleTime: Infinity,
+    queryFn: async () => {
+      try {
+        const r = await fetch(`/api/symbols/suggest?q=${encodeURIComponent(primarySymbol)}`, { credentials: 'include' });
+        if (!r.ok) return 'unknown';
+        const j: { items?: SuggestItem[] } = await r.json();
+        const exact = (j.items ?? []).find((it) => (it.symbol ?? '').toUpperCase() === primarySymbol);
+        return exact?.assetType ?? 'unknown';
+      } catch {
+        return 'unknown';
+      }
+    },
+  });
+  const analysisHref = routeForSuggest(primarySymbol, assetType ?? 'unknown');
+
   // Batch-fetch quotes for all opportunity tickers (single query key = all tickers)
   const allTickers = opportunities.map((o) => o.ticker);
   const { data: quoteMap = {} } = useQuery<Record<string, { price: number | null; ch: number | null; chp: number | null }>>({
@@ -743,7 +776,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
         </div>
         {/* View Analysis link — no fake watchlist button (see note above) */}
         <Link
-          to={`/app/ai/stock-analyzer?ticker=${encodeURIComponent(opp.ticker)}`}
+          to={analysisHref}
           className="flex h-9 items-center gap-2 rounded-[6px] border border-gold-primary/20 bg-gold-primary/[0.075] px-4 text-[12px] font-semibold text-gold-primary hover:bg-gold-primary/[0.12] transition"
         >
           View Full Analysis
@@ -869,6 +902,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
           emptyText="No bullish thesis published for this idea yet."
           icons={BULL_ICONS}
           iconToneClass="bg-emerald-500/[0.08] text-emerald-400"
+          lead={{ label: "Why it's on the list", text: opp.thesis }}
         />
 
         {/* D4. Why This Stock Can Go Down */}
