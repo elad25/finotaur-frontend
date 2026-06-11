@@ -337,7 +337,7 @@ function PortfolioAreaChart({ series, hideValues }: { series: PerformancePoint[]
             </p>
             <p className="font-mono font-semibold text-gold-primary whitespace-nowrap">
               {hideValues
-                ? '$ ****'
+                ? '$ **********'
                 : `$${hovered.point.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
           </div>
@@ -401,8 +401,8 @@ export function PortfolioValuePanel({ className, range, snapshot, onRangeChange 
 
         {/* Headline value */}
         {hideValues ? (
-          <p className="mt-4 font-mono text-[48px] font-normal leading-none text-gold-primary/80 tracking-wider">
-            $ ****
+          <p className="mt-4 whitespace-nowrap font-mono text-[36px] font-normal leading-none tracking-tight text-gold-primary/80">
+            $ **********
           </p>
         ) : (
           <Price
@@ -421,7 +421,7 @@ export function PortfolioValuePanel({ className, range, snapshot, onRangeChange 
               </p>
               <Change value={snapshot.changePercent} />
               {hideValues ? (
-                <span className="font-mono text-sm text-ink-secondary">****</span>
+                <span className="font-mono text-sm text-ink-secondary">**********</span>
               ) : (
                 <Change value={snapshot.changeAbs} format="currency" />
               )}
