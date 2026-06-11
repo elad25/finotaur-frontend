@@ -13,12 +13,13 @@ import type { HealthMetric } from '../utils/portfolioRisk';
 
 // ─── SVG gauge constants ──────────────────────────────────────────────────────
 
-/** Gauge spans 240° centred on the bottom (from 210° to −30° clockwise). */
+/** Gauge spans 240°, opening at the BOTTOM — in SVG y-down coords θ=150° is the
+ *  bottom-left end, sweeping clockwise through the top (θ=270°) to θ=390° (bottom-right). */
 const GAUGE_ANGLE = 240; // degrees
-const GAUGE_RADIUS = 72; // px — controls the arc ring radius
-const STROKE_W = 14;     // px — arc stroke width
+const GAUGE_RADIUS = 64; // px — controls the arc ring radius
+const STROKE_W = 13;     // px — arc stroke width
 const CX = 100;          // SVG viewBox centre X
-const CY = 100;          // SVG viewBox centre Y (arc midpoint, not geometric centre)
+const CY = 85;           // SVG viewBox centre Y (arc midpoint, not geometric centre)
 
 /** Convert polar angle (degrees, 0 = 3 o'clock, positive = clockwise) to SVG [x, y]. */
 function polar(angleDeg: number, r: number): [number, number] {
@@ -46,10 +47,10 @@ function arcPath(startDeg: number, endDeg: number, r: number): string {
 /** Total arc circumference for dash calculations. */
 const FULL_CIRC = (GAUGE_ANGLE / 360) * 2 * Math.PI * GAUGE_RADIUS;
 
-// The gauge arc starts at 210° (lower-left, 7 o'clock position) and sweeps
-// clockwise 240° to −30° (= 330°, lower-right, 5 o'clock position).
-const START_DEG = 210;
-const END_DEG   = START_DEG + GAUGE_ANGLE; // 450 = wraps to 90 but SVG handles it
+// The gauge arc starts at 150° (bottom-left end, in SVG y-down coords) and sweeps
+// clockwise 240° to 390° (= bottom-right end, passing through the top at 270°).
+const START_DEG = 150;
+const END_DEG   = START_DEG + GAUGE_ANGLE; // 390
 
 // Static gradient id — one instance per page, no Math.random.
 const GRAD_ID   = 'phg-gold-grad';
@@ -93,11 +94,11 @@ function HealthGauge({ overall }: GaugeProps) {
   const [lx1, ly1] = polar(END_DEG,   GAUGE_RADIUS);
 
   return (
-    // viewBox is 200×120 — the arc sits in the upper portion; centre text below.
+    // viewBox is 200×150 — the arc sits in the upper portion; centre text below.
     <svg
-      viewBox="0 0 200 120"
-      width="200"
-      height="120"
+      viewBox="0 0 200 150"
+      width="220"
+      height="165"
       aria-hidden="true"
       style={{ overflow: 'visible' }}
     >
@@ -151,7 +152,7 @@ function HealthGauge({ overall }: GaugeProps) {
           <circle
             cx={dotX}
             cy={dotY}
-            r={7}
+            r={6.5}
             fill="#F4D97B"
             filter={`url(#${GLOW_ID})`}
           />
@@ -159,31 +160,13 @@ function HealthGauge({ overall }: GaugeProps) {
       )}
 
       {/* Arc-end labels */}
-      <text x={lx0 - 6} y={ly0 + 14} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.38)">0</text>
-      <text x={lx1 + 6} y={ly1 + 14} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.38)">100</text>
+      <text x={lx0} y={ly0 + 18} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.38)">0</text>
+      <text x={lx1} y={ly1 + 18} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.38)">100</text>
 
       {/* Center score text */}
-      <text
-        x={CX}
-        y={CY - 4}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={28}
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-        fontWeight="600"
-        fill="rgba(255,255,255,0.92)"
-      >
-        {overall}
-      </text>
-      <text
-        x={CX + 18}
-        y={CY + 18}
-        textAnchor="start"
-        fontSize={11}
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-        fill="rgba(255,255,255,0.40)"
-      >
-        /100
+      <text x={CX} y={CY + 10} textAnchor="middle" fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace">
+        <tspan fontSize={30} fontWeight={600} fill="rgba(255,255,255,0.92)">{overall}</tspan>
+        <tspan fontSize={12} fill="rgba(255,255,255,0.40)">/100</tspan>
       </text>
     </svg>
   );
@@ -201,7 +184,7 @@ function MetricRow({ metric }: { metric: HealthMetric }) {
       aria-valuenow={score}
       aria-valuemin={0}
       aria-valuemax={100}
-      className="flex items-center gap-0"
+      className="flex items-center"
     >
       {/* Label */}
       <span className="w-[118px] shrink-0 text-[12px] text-ink-secondary">{label}</span>
@@ -228,7 +211,7 @@ function MetricRow({ metric }: { metric: HealthMetric }) {
 
       {/* Value chip */}
       <span
-        className="min-w-[34px] text-center text-[12px] font-mono tabular-nums text-ink-primary bg-white/[0.06] rounded-[5px] px-1.5 py-0.5"
+        className="min-w-[38px] text-center text-[12px] font-mono tabular-nums text-ink-primary bg-white/[0.06] rounded-[5px] px-1.5 py-0.5"
       >
         {score}
       </span>
@@ -267,7 +250,7 @@ export function PortfolioHealthPanel({ snapshot, className }: Props) {
             </div>
 
             {/* Metric rows */}
-            <div className="mt-5 flex flex-col gap-[10px]">
+            <div className="mt-5 flex flex-col gap-[14px]">
               {health.metrics.map((m) => (
                 <MetricRow key={m.key} metric={m} />
               ))}
