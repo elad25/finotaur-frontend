@@ -36,8 +36,10 @@ import {
   createChart,
   ColorType,
   CrosshairMode,
+  LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
   type DeepPartial,
   type ChartOptions,
   type UTCTimestamp,
@@ -427,6 +429,26 @@ function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Overlay price lines (e.g. order-book walls)
+// ═══════════════════════════════════════════════════════════════
+/**
+ * Describes a single price-level line rendered on the main candle series.
+ * Applied via `series.createPriceLine` / `series.removePriceLine`.
+ * The `id` field is used to diff the set on prop changes — callers must
+ * provide stable, unique ids so only changed lines are recreated.
+ */
+export interface OverlayPriceLine {
+  /** Stable unique key — used for diffing (add/remove only what changed). */
+  id: string;
+  price: number;
+  title: string;
+  color: string;
+  lineWidth?: 1 | 2 | 3 | 4;
+  /** lightweight-charts LineStyle enum value. 0=Solid, 2=Dashed (default). */
+  lineStyle?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Marker icon overlay type
 // ═══════════════════════════════════════════════════════════════
 /**
@@ -496,6 +518,13 @@ export interface FinotaurChartProps {
    * entire fetched data window.
    */
   focusRange?: { from: number; to: number };
+  /**
+   * Optional overlay price lines drawn on the candle series (e.g. order-book walls).
+   * Diffed by `id` on every update — only changed lines are recreated, avoiding flicker.
+   * When absent or empty the feature is a complete no-op; backtest/journal callers
+   * are unaffected.
+   */
+  priceLines?: OverlayPriceLine[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -514,6 +543,7 @@ export function FinotaurChart({
   height = 600,
   onError,
   focusRange,
+  priceLines,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -532,6 +562,13 @@ export function FinotaurChart({
   );
   /** Which subpane price scales have been styled (borderColor etc.) at least once. */
   const scalesConfiguredRef = useRef<Set<string>>(new Set());
+  /**
+   * Active overlay price lines keyed by OverlayPriceLine.id.
+   * On each prop update we diff against this map: remove stale lines,
+   * create new ones. Never accumulates unboundedly — cleaned up on unmount
+   * via the chart.remove() call which destroys all series (and their lines).
+   */
+  const overlayPriceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -579,6 +616,9 @@ export function FinotaurChart({
       // next mount re-creates them from scratch.
       indicatorSeriesRef.current.clear();
       scalesConfiguredRef.current.clear();
+      // Overlay price lines are destroyed with the chart — clear the map so
+      // the next mount does not try to remove already-gone line handles.
+      overlayPriceLinesRef.current.clear();
     };
     // Re-create when theme changes — full remount swaps the candle palette,
     // background, grid, crosshair, and all subpane scale colors atomically.
@@ -831,6 +871,41 @@ export function FinotaurChart({
       });
     }
   }, [indicators, barCount, theme]); // barCount → recompute after fresh data load; theme → re-style scales on switch
+
+  // ─── Apply overlay price lines (order-book walls etc.) ─────
+  // Diffed by id: remove lines not in the new set, create lines not yet tracked.
+  // No-op when `priceLines` is absent — zero impact on backtest/journal callers.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    const nextLines = priceLines ?? [];
+    const nextMap = new Map<string, OverlayPriceLine>(nextLines.map(l => [l.id, l]));
+    const activeMap = overlayPriceLinesRef.current;
+
+    // Remove lines no longer in the prop
+    for (const [id, line] of Array.from(activeMap.entries())) {
+      if (!nextMap.has(id)) {
+        try { series.removePriceLine(line); } catch { /* series already gone */ }
+        activeMap.delete(id);
+      }
+    }
+
+    // Add new lines (skip ids already tracked — they're stable)
+    for (const [id, spec] of nextMap.entries()) {
+      if (!activeMap.has(id)) {
+        const line = series.createPriceLine({
+          price: spec.price,
+          color: spec.color,
+          lineWidth: spec.lineWidth ?? 1,
+          lineStyle: spec.lineStyle ?? LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: spec.title,
+        });
+        activeMap.set(id, line);
+      }
+    }
+  }, [priceLines]);
 
   // ─── Render ─────────────────────────────────────────────────
   return (

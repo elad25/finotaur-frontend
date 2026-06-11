@@ -64,13 +64,8 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
         const handleClick = () => {
           if (blocked) return;
           if (fn.newWindow) {
-            // Open in a named popup at full available screen size.
-            // Re-clicking focuses the existing window (same name = reuse).
-            window.open(
-              route,
-              'finotaur-market-scanner',
-              `popup=yes,width=${screen.availWidth},height=${screen.availHeight},left=0,top=0`,
-            );
+            // Open in a new browser tab (the page renders as a fullscreen workstation).
+            window.open(route, '_blank');
             return;
           }
           navigate(route);

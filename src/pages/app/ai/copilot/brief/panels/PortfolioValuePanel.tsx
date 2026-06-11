@@ -13,11 +13,12 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import type { ReactNode, MouseEvent } from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Change, Price } from '@/components/ds/NumberDisplay';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { robustExtent, clampToRange } from '@/lib/portfolio/metrics';
 import { cn } from '@/lib/utils';
+import { useValuePrivacy } from '../../hooks/useValuePrivacy';
 import type { TimeRange, PerformancePoint } from '../../hooks/usePortfolioData';
 import type { PortfolioDataResult } from '../../hooks/usePortfolioData';
 
@@ -124,8 +125,9 @@ function formatHoverDate(dateStr: string): string {
  * points are available.
  *
  * Hover: vertical crosshair + gold dot + tooltip (date + $value).
+ * When `hideValues` is true the tooltip $ amount is masked as "****".
  */
-function PortfolioAreaChart({ series }: { series: PerformancePoint[] }) {
+function PortfolioAreaChart({ series, hideValues }: { series: PerformancePoint[]; hideValues: boolean }) {
   const recent = series.length > 120 ? series.slice(-120) : series;
 
   // Hover state: index of the nearest data point, or null when not hovering.
@@ -334,7 +336,9 @@ function PortfolioAreaChart({ series }: { series: PerformancePoint[] }) {
               {formatHoverDate(hovered.point.date)}
             </p>
             <p className="font-mono font-semibold text-gold-primary whitespace-nowrap">
-              ${hovered.point.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {hideValues
+                ? '$ ****'
+                : `$${hovered.point.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
           </div>
         </div>
@@ -365,6 +369,8 @@ export interface PortfolioValuePanelProps {
  * optional range-selector row.
  */
 export function PortfolioValuePanel({ className, range, snapshot, onRangeChange }: PortfolioValuePanelProps) {
+  const [hideValues, toggleHideValues] = useValuePrivacy();
+
   // Range label: "1M RETURN", "YTD RETURN", etc. (not "ALL TIME RETURN").
   const rangeLabel = `${range} RETURN`;
 
@@ -376,7 +382,16 @@ export function PortfolioValuePanel({ className, range, snapshot, onRangeChange 
         {/* Header row: label + eye icon */}
         <div className="flex items-center justify-between">
           <p className="text-eyebrow uppercase text-ink-tertiary">TOTAL PORTFOLIO VALUE</p>
-          <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
+          <button
+            type="button"
+            onClick={toggleHideValues}
+            title={hideValues ? 'Show values' : 'Hide values'}
+            className="rounded p-0.5 text-ink-tertiary transition-colors hover:text-gold-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gold-primary/50"
+          >
+            {hideValues
+              ? <EyeOff className="h-3.5 w-3.5" />
+              : <Eye className="h-3.5 w-3.5" />}
+          </button>
         </div>
 
         {/* Freshness badge */}
@@ -385,20 +400,32 @@ export function PortfolioValuePanel({ className, range, snapshot, onRangeChange 
         </div>
 
         {/* Headline value */}
-        <Price
-          value={snapshot.totalValue}
-          size="display"
-          className="mt-4 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
-        />
+        {hideValues ? (
+          <p className="mt-4 font-mono text-[48px] font-normal leading-none text-gold-primary/80 tracking-wider">
+            $ ****
+          </p>
+        ) : (
+          <Price
+            value={snapshot.totalValue}
+            size="display"
+            className="mt-4 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
+          />
+        )}
 
-        {/* Range return stat (full-width, no sparkline column) */}
+        {/* Range return — single inline row: caption | % | $ (masked when hidden) */}
         <div className="mt-6">
           {hasHistoricalSeries ? (
-            <Stat
-              label={rangeLabel}
-              value={<Change value={snapshot.changePercent} />}
-              sub={<Change value={snapshot.changeAbs} format="currency" />}
-            />
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">
+                {rangeLabel}
+              </p>
+              <Change value={snapshot.changePercent} />
+              {hideValues ? (
+                <span className="font-mono text-sm text-ink-secondary">****</span>
+              ) : (
+                <Change value={snapshot.changeAbs} format="currency" />
+              )}
+            </div>
           ) : (
             <div>
               <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">
@@ -413,7 +440,7 @@ export function PortfolioValuePanel({ className, range, snapshot, onRangeChange 
 
         {/* Full-width area chart */}
         <div className="mt-5">
-          <PortfolioAreaChart series={snapshot.series} />
+          <PortfolioAreaChart series={snapshot.series} hideValues={hideValues} />
         </div>
 
         {/* Range selector tabs — only when a handler is provided */}

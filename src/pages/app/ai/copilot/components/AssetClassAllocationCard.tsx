@@ -9,6 +9,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import type { PieLabelRenderProps } from 'recharts';
 import { PremiumFrame } from '../brief/PremiumFrame';
+import { useValuePrivacy } from '../hooks/useValuePrivacy';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
 
 // ─── Palette — per-asset-class colours (user-approved override of ADL-020) ───
@@ -148,15 +149,18 @@ function renderCustomLabel(props: PieLabelRenderProps) {
 
 interface HoleLabelProps {
   totalDisplay: string;
+  hideValues: boolean;
 }
 
-function HoleLabel({ totalDisplay }: HoleLabelProps) {
+function HoleLabel({ totalDisplay, hideValues }: HoleLabelProps) {
   return (
     <div
       className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
       style={{ top: 0, left: 0, right: 0, bottom: 0 }}
     >
-      <span className="font-mono text-sm leading-tight text-gold-primary">{totalDisplay}</span>
+      <span className="font-mono text-sm leading-tight text-gold-primary">
+        {hideValues ? '****' : totalDisplay}
+      </span>
       <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">TOTAL</span>
     </div>
   );
@@ -172,6 +176,7 @@ interface Props {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AssetClassAllocationCard({ snapshot, className }: Props) {
+  const [hideValues] = useValuePrivacy();
   const total = snapshot.totalValue || 1;
 
   // Aggregate holdings by asset-class bucket — never exposes individual tickers.
@@ -229,7 +234,7 @@ export function AssetClassAllocationCard({ snapshot, className }: Props) {
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
-              <HoleLabel totalDisplay={totalDisplay} />
+              <HoleLabel totalDisplay={totalDisplay} hideValues={hideValues} />
             </div>
           </div>
         )}

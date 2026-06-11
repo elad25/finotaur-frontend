@@ -6,11 +6,10 @@
 // Bottom ~45%: BookmapChart (live order-book liquidity heatmap).
 // Slim header: coin pills, timeframe pills, LIVE status, close button.
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { X, RefreshCw } from 'lucide-react';
 import { useBinanceOrderBook, type BookStatus } from './useBinanceOrderBook';
-import { BookmapChart } from './BookmapChart';
-import { FinotaurChart } from '@/components/charting/FinotaurChart';
+import { FinotaurChart, type OverlayPriceLine } from '@/components/charting/FinotaurChart';
 import { pickDataSource } from '@/components/charting/dataSources';
 import type { Interval } from '@/components/charting/types';
 
@@ -161,33 +160,114 @@ function TimeframePills({
   );
 }
 
-function HeatLegend() {
-  return (
-    <div className="flex items-center gap-4 flex-wrap text-[11px] text-white/40 px-3 pb-2">
-      <div className="flex items-center gap-2">
-        <div
-          className="h-3 w-24 rounded-sm"
-          style={{
-            background:
-              'linear-gradient(to right, #080604, #281806, #6e3c08, #b4821e, #C9A646, #e6d28c, #fff8dc)',
-          }}
-        />
-        <span>Liquidity depth</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: 'rgba(52,211,153,0.8)' }} />
-        <span>Market buys</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: 'rgba(248,113,113,0.8)' }} />
-        <span>Market sells</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="inline-block h-[1px] w-6 bg-white/80" />
-        <span>Last price</span>
-      </div>
-    </div>
-  );
+// ── Wall computation helpers ───────────────────────────────────────────────────
+// Copied (not imported) from BookmapChart to keep BookmapChart.tsx untouched.
+
+/** Round a price DOWN to the nearest bin boundary. */
+function binFloor(price: number, binSize: number): number {
+  return Math.floor(price / binSize) * binSize;
+}
+
+/**
+ * Compute a readable bin size ≈ mid * 0.0005, rounded to a clean 1/2/5 × 10^n tick.
+ * Slightly coarser than the heatmap's 0.0002 so wall lines don't crowd each other.
+ */
+function computeWallBinSize(mid: number): number {
+  const raw = mid * 0.0005;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const ratio = raw / mag;
+  if (ratio < 1.5) return mag;
+  if (ratio < 3.5) return 2 * mag;
+  if (ratio < 7.5) return 5 * mag;
+  return 10 * mag;
+}
+
+/** Format a USD notional for the price-line title label: '$8.2M', '$640K', '$12.3K'. */
+function formatNotional(usd: number): string {
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
+  if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(1)}K`;
+  return `$${usd.toFixed(0)}`;
+}
+
+/** Round to N significant digits (for stability comparison). */
+function roundSig(n: number, sig: number): number {
+  if (n === 0) return 0;
+  const d = Math.ceil(Math.log10(Math.abs(n)));
+  const factor = Math.pow(10, sig - d);
+  return Math.round(n * factor) / factor;
+}
+
+interface WallSpec {
+  id: string;
+  price: number;   // binFloor-rounded price
+  notional: number;
+  side: 'bid' | 'ask';
+}
+
+/**
+ * Derive up to 5 bid + 5 ask wall specs from the raw order book.
+ * Only levels within ±4% of mid are considered.
+ * Noise gate: keep only bins whose notional ≥ max(p95 of nonzero bins, 30% of largest).
+ */
+function computeWalls(
+  bids: Map<number, number>,
+  asks: Map<number, number>,
+): WallSpec[] {
+  if (bids.size === 0 && asks.size === 0) return [];
+
+  // Determine mid price
+  let bestBid = 0;
+  let bestAsk = Infinity;
+  for (const p of bids.keys()) if (p > bestBid) bestBid = p;
+  for (const p of asks.keys()) if (p < bestAsk) bestAsk = p;
+  if (bestBid === 0 && bestAsk === Infinity) return [];
+  const mid = bestBid === 0 ? bestAsk : bestAsk === Infinity ? bestBid : (bestBid + bestAsk) / 2;
+
+  const binSize = computeWallBinSize(mid);
+  const rangePct = 0.04; // ±4% of mid
+  const priceLow  = mid * (1 - rangePct);
+  const priceHigh = mid * (1 + rangePct);
+
+  // Aggregate each side into bins within range
+  const bidBins = new Map<number, number>();
+  const askBins = new Map<number, number>();
+
+  for (const [price, qty] of bids) {
+    if (price < priceLow || price > priceHigh) continue;
+    const bin = binFloor(price, binSize);
+    bidBins.set(bin, (bidBins.get(bin) ?? 0) + qty * price);
+  }
+  for (const [price, qty] of asks) {
+    if (price < priceLow || price > priceHigh) continue;
+    const bin = binFloor(price, binSize);
+    askBins.set(bin, (askBins.get(bin) ?? 0) + qty * price);
+  }
+
+  function selectWalls(bins: Map<number, number>, side: 'bid' | 'ask'): WallSpec[] {
+    const nonzero = Array.from(bins.values()).filter(v => v > 0);
+    if (nonzero.length === 0) return [];
+
+    const sorted = [...nonzero].sort((a, b) => a - b);
+    const p95idx = Math.floor(sorted.length * 0.95);
+    const p95    = sorted[Math.min(p95idx, sorted.length - 1)];
+    const largest = sorted[sorted.length - 1];
+    const threshold = Math.max(p95, largest * 0.30);
+
+    // Filter bins above threshold, then take top-5 by notional
+    const candidates = Array.from(bins.entries())
+      .filter(([, n]) => n >= threshold)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    return candidates.map(([price, notional]) => ({
+      id: `${side}-${price}`,
+      price,
+      notional,
+      side,
+    }));
+  }
+
+  return [...selectWalls(bidBins, 'bid'), ...selectWalls(askBins, 'ask')];
 }
 
 // ── Error banner ──────────────────────────────────────────────────────────────
@@ -213,8 +293,17 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-// ── Inner workstation card — holds WS hook + both charts ─────────────────────
+// ── Inner workstation card — holds WS hook + single chart with wall overlays ──
 // Separate component so the `key` prop can force a full remount on symbol change.
+
+const WALL_INTERVAL_MS = 3_000; // recompute walls every 3 seconds
+
+// Base RGB components — alpha is computed per-wall from size ratio
+const BID_RGB = '34,197,94';   // emerald-500
+const ASK_RGB = '201,166,70';  // brand gold
+// Legend swatch colors (fixed — mid-opacity representative shade)
+const BID_COLOR  = `rgba(${BID_RGB},0.55)`;
+const ASK_COLOR  = `rgba(${ASK_RGB},0.75)`;
 
 interface WorkstationInnerProps {
   symbol: string;
@@ -228,11 +317,75 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   const hook = useBinanceOrderBook(symbol);
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
+  // Overlay price-line specs — updated every 3 s, diffed inside FinotaurChart.
+  const [wallLines, setWallLines] = useState<OverlayPriceLine[]>([]);
+  // Stability ref: previous wall set so we can skip setState when nothing changed.
+  const prevWallsRef = useRef<WallSpec[]>([]);
+
   // Notify parent when WS status changes so the header pill stays in sync
   // without a second parallel WebSocket connection.
   useEffect(() => {
     onStatusChange?.(hook.status);
   }, [hook.status, onStatusChange]);
+
+  // Compute walls every WALL_INTERVAL_MS from the live order book.
+  useEffect(() => {
+    const tick = () => {
+      const { bids, asks } = hook.getBook();
+      const next = computeWalls(bids, asks);
+
+      // Stability check: compare ids + rounded notionals to avoid flicker every tick.
+      const prev = prevWallsRef.current;
+      const changed =
+        next.length !== prev.length ||
+        next.some((w, i) => {
+          const p = prev[i];
+          return !p || w.id !== p.id || roundSig(w.notional, 2) !== roundSig(p.notional, 2);
+        });
+
+      if (!changed) return;
+      prevWallsRef.current = next;
+
+      // Size-proportional rendering: scale line weight and opacity against the
+      // single largest wall across BOTH sides so a huge ask wall is visually
+      // dominant over small bid walls, not just within its own side.
+      const maxNotional = Math.max(0, ...next.map(w => w.notional));
+
+      const lines: OverlayPriceLine[] = next.map(w => {
+        const isBid  = w.side === 'bid';
+        const rgb    = isBid ? BID_RGB : ASK_RGB;
+        const ratio  = maxNotional > 0 ? w.notional / maxNotional : 0;
+
+        // lineWidth: 4 steps by ratio
+        const lineWidth: 1 | 2 | 3 | 4 =
+          ratio >= 0.66 ? 4 :
+          ratio >= 0.40 ? 3 :
+          ratio >= 0.20 ? 2 : 1;
+
+        // Opacity: linear ramp 0.35 → 0.90 capped
+        const alpha = Math.min(0.9, 0.35 + 0.55 * ratio);
+
+        // lineStyle: solid for stronger walls, dashed for minor walls
+        const lineStyle = ratio >= 0.40 ? 0 : 2; // 0=Solid, 2=Dashed
+
+        return {
+          id: w.id,
+          price: w.price,
+          title: formatNotional(w.notional),
+          color: `rgba(${rgb},${alpha.toFixed(2)})`,
+          lineWidth,
+          lineStyle,
+        };
+      });
+
+      setWallLines(lines);
+    };
+
+    // Run immediately, then on interval
+    tick();
+    const id = setInterval(tick, WALL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [hook]);
 
   const coinLabel = COINS.find(c => c.symbol === symbol)?.label ?? symbol;
 
@@ -246,53 +399,47 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden min-h-0">
-      {/* TOP ~55%: candlestick chart */}
-      <div className="flex flex-col" style={{ flex: '0 0 55%', minHeight: 0 }}>
-        {/* Chart sub-header: coin/price info */}
-        <div className="flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800/60">
-          <span className="text-xs font-semibold text-white/70">
-            {coinLabel} / USDT
+      {/* Chart sub-header: coin/price info + wall legend */}
+      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800/60 flex-shrink-0">
+        <span className="text-xs font-semibold text-white/70">
+          {coinLabel} / USDT
+        </span>
+        {hook.lastPrice !== null && (
+          <span className="font-mono text-[#C9A646] text-sm font-semibold">
+            ${hook.lastPrice.toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </span>
-          {hook.lastPrice !== null && (
-            <span className="font-mono text-[#C9A646] text-sm font-semibold">
-              ${hook.lastPrice.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
-          )}
-        </div>
-        {/* FinotaurChart fills the remaining height of its container */}
-        <div className="flex-1 min-h-0">
-          <FinotaurChart
-            symbol={symbol}
-            interval={interval}
-            from={from}
-            to={to}
-            dataSource={dataSource}
-            theme="dark"
-            height="100%"
+        )}
+        {/* Minimal wall legend */}
+        <span className="ml-auto flex items-center gap-2 text-[10px] text-white/25 select-none">
+          <span
+            className="inline-block h-[2px] w-4 rounded-full"
+            style={{ background: BID_COLOR }}
           />
-        </div>
+          <span>bids</span>
+          <span
+            className="inline-block h-[2px] w-4 rounded-full"
+            style={{ background: ASK_COLOR }}
+          />
+          <span>asks</span>
+          <span className="opacity-50">· walls live</span>
+        </span>
       </div>
 
-      {/* Thin divider */}
-      <div className="h-px bg-zinc-800 flex-shrink-0" />
-
-      {/* BOTTOM ~45%: Bookmap heatmap */}
-      <div className="flex flex-col" style={{ flex: '0 0 45%', minHeight: 0 }}>
-        <div className="flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800/60">
-          <span className="text-xs font-semibold text-white/40 uppercase tracking-wider">
-            Order Book · Liquidity Heatmap
-          </span>
-          <span className="text-[11px] text-white/25">
-            Order book snapshot every 1s · 15 min history
-          </span>
-        </div>
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <BookmapChart hook={hook} symbol={symbol} />
-        </div>
-        <HeatLegend />
+      {/* FinotaurChart fills the full remaining body height */}
+      <div className="flex-1 min-h-0">
+        <FinotaurChart
+          symbol={symbol}
+          interval={interval}
+          from={from}
+          to={to}
+          dataSource={dataSource}
+          theme="dark"
+          height="100%"
+          priceLines={wallLines}
+        />
       </div>
     </div>
   );
