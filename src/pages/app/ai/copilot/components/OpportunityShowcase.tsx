@@ -132,21 +132,23 @@ interface QuoteEntry {
 async function fetchBatchQuotes(symbols: string[]): Promise<Record<string, QuoteEntry>> {
   if (!symbols.length) return {};
   try {
-    const r = await fetch('/api/quotes?symbols=' + symbols.map(encodeURIComponent).join(','));
+    // /api/quotes is behind priceGate (403 price_data_gated for customers);
+    // watchlist-quotes is the ungated Yahoo v8 path for customer surfaces.
+    const r = await fetch(
+      '/api/market-data/watchlist-quotes?symbols=' + symbols.map(encodeURIComponent).join(',')
+    );
     if (!r.ok) return {};
     const data: unknown = await r.json();
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
-    const src = data as Record<string, Partial<QuoteEntry>>;
+    const quotes = (data as { quotes?: unknown })?.quotes;
+    if (!Array.isArray(quotes)) return {};
     const map: Record<string, QuoteEntry> = {};
-    for (const sym of symbols) {
-      const q = src[sym.toUpperCase()] ?? src[sym];
-      if (q && typeof q === 'object') {
-        map[sym.toUpperCase()] = {
-          price: typeof q.price === 'number' ? q.price : null,
-          ch: typeof q.ch === 'number' ? q.ch : null,
-          chp: typeof q.chp === 'number' ? q.chp : null,
-        };
-      }
+    for (const q of quotes as Array<{ symbol?: string; price?: number | null; change?: number | null; changePercent?: number | null }>) {
+      if (!q?.symbol) continue;
+      map[q.symbol.toUpperCase()] = {
+        price: typeof q.price === 'number' ? q.price : null,
+        ch: typeof q.change === 'number' ? q.change : null,
+        chp: typeof q.changePercent === 'number' ? q.changePercent : null,
+      };
     }
     return map;
   } catch {
