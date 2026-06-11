@@ -376,4 +376,73 @@ export const aiCopilotApi = {
   },
 };
 
+// ---------------------------------------------------------------
+// FINO Morning Briefing types + fetch
+// ---------------------------------------------------------------
+
+export interface BriefMarketPulse {
+  label: string;
+  value: string | number;
+  change: string | number;
+}
+
+export interface BriefKeyEvent {
+  time: string;
+  name: string;
+  importance: 'high' | 'medium' | 'low';
+}
+
+export interface BriefSectorWatch {
+  name: string;
+  changePct: number;
+}
+
+export interface BriefContent {
+  headline: string;
+  summary: string;
+  market_pulse: BriefMarketPulse[];
+  key_events: BriefKeyEvent[];
+  sector_watch: BriefSectorWatch[];
+  deep_note?: string;
+}
+
+export type FinoBriefingResult =
+  | { status: 'locked'; reason: string }
+  | { status: 'ready'; tier: 'core' | 'finotaur'; date: string; generatedAt: string; brief: BriefContent }
+  | { status: 'not_ready' };
+
+/**
+ * Fetch the FINO Morning Briefing for today.
+ * - 200 locked     → { status: 'locked', reason }
+ * - 200 unlocked   → { status: 'ready', ... }
+ * - 404 not ready  → { status: 'not_ready' }
+ * - other errors   → throw
+ */
+export async function fetchFinoBriefing(): Promise<FinoBriefingResult> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE}/api/ai/fino/briefing`, { headers });
+
+  if (response.status === 404) {
+    return { status: 'not_ready' };
+  }
+
+  if (!response.ok) {
+    throw new Error(`Briefing fetch failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (data.locked === true) {
+    return { status: 'locked', reason: data.reason ?? 'free_tier' };
+  }
+
+  return {
+    status: 'ready',
+    tier: data.tier,
+    date: data.date,
+    generatedAt: data.generatedAt,
+    brief: data.brief,
+  };
+}
+
 export default aiCopilotApi;
