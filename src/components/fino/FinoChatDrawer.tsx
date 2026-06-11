@@ -197,6 +197,7 @@ function FinoChatPanel({
               questionsUsed={usage?.questions_today}
               dailyLimit={usage?.daily_limit}
               promptRows={FINO_PROMPT_ROWS}
+              promptPlacement="aboveInput"
             />
           </div>
         </>

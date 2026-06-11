@@ -41,6 +41,11 @@ interface ChatInterfaceProps {
   promptRows?: PromptChip[][];
   placeholder?: string;
   disclaimer?: string;
+  /** Controls where suggestion chips appear.
+   *  'center'     — default: marquee rows in the empty-state area (existing behavior).
+   *  'aboveInput' — compact pill bubbles placed directly above the input bar;
+   *                 chips vanish once the conversation has messages. */
+  promptPlacement?: 'center' | 'aboveInput';
 }
 
 interface PromptChip {
@@ -80,6 +85,7 @@ export const ChatInterface = memo(function ChatInterface({
   promptRows = PROMPT_ROWS,
   placeholder = 'Ask about market analysis, trade ideas, reports...',
   disclaimer = 'AI responses are based on FINOTAUR reports. Not financial advice.',
+  promptPlacement = 'center',
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -147,6 +153,7 @@ export const ChatInterface = memo(function ChatInterface({
             description={emptyDescription}
             promptRows={promptRows}
             onSelectQuestion={handleSuggestedQuestion}
+            hideChips={promptPlacement === 'aboveInput'}
           />
         ) : (
           <div className="w-full space-y-6">
@@ -208,6 +215,26 @@ export const ChatInterface = memo(function ChatInterface({
         questionsUsed={questionsUsed}
         dailyLimit={dailyLimit}
       />
+
+      {/* Above-input chip bubbles — only when promptPlacement === 'aboveInput' and conversation is empty */}
+      {promptPlacement === 'aboveInput' && showEmptyState && (
+        <div className="flex flex-wrap gap-1.5 px-3 pb-2">
+          {promptRows.flat().slice(0, 6).map((chip) => {
+            const Icon = chip.icon;
+            return (
+              <button
+                key={chip.question}
+                type="button"
+                onClick={() => handleSuggestedQuestion(chip.question)}
+                className="flex items-center gap-1 rounded-full border border-[#C9A646]/20 bg-[#C9A646]/5 px-2.5 py-1 text-[11px] text-ink-secondary transition-colors hover:bg-[#C9A646]/10 hover:text-ink-primary"
+              >
+                <Icon className="h-3 w-3 shrink-0" />
+                {chip.question}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="border-t border-border-ds-subtle bg-surface-base p-4">
@@ -287,11 +314,14 @@ function EmptyState({
   description,
   promptRows,
   onSelectQuestion,
+  hideChips = false,
 }: {
   title: React.ReactNode;
   description: string;
   promptRows: PromptChip[][];
   onSelectQuestion: (question: string) => void;
+  /** When true, the marquee chip rows are suppressed (chips rendered elsewhere). */
+  hideChips?: boolean;
 }) {
   return (
     <motion.div
@@ -305,7 +335,9 @@ function EmptyState({
       <p className="max-w-sm text-center text-sm leading-relaxed text-ink-secondary">
         {description}
       </p>
-      <PromptMarquee promptRows={promptRows} onSelectQuestion={onSelectQuestion} />
+      {!hideChips && (
+        <PromptMarquee promptRows={promptRows} onSelectQuestion={onSelectQuestion} />
+      )}
     </motion.div>
   );
 }
