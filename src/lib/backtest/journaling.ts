@@ -123,6 +123,34 @@ export function weightedAvgExitPrice(fills: FillRecord[]): number | null {
 }
 
 /**
+ * Quantity-weighted average entry price across all entry fills.
+ * Returns null when there are no entry fills (e.g. legacy positions without fills).
+ */
+export function weightedAvgEntryPrice(fills: FillRecord[]): number | null {
+  const entries = fills.filter((f) => f.kind === 'entry');
+  if (entries.length === 0) return null;
+
+  const totalQty = entries.reduce((acc, f) => acc + f.qty, 0);
+  if (totalQty <= 0) return null;
+
+  const weightedSum = entries.reduce((acc, f) => acc + f.price * f.qty, 0);
+  return weightedSum / totalQty;
+}
+
+/**
+ * Build a human-readable entries line for the trade notes.
+ * Only emitted when there are ≥2 entry fills (scale-in trades).
+ *
+ * Example output: "Entries: 1 @ 205.35, 2 @ 206.10"
+ */
+export function buildEntriesNote(fills: FillRecord[]): string {
+  const entries = fills.filter((f) => f.kind === 'entry');
+  if (entries.length < 2) return '';
+  const parts = entries.map((f) => `${f.qty} @ ${f.price.toFixed(2)}`);
+  return `Entries: ${parts.join(', ')}`;
+}
+
+/**
  * Build a human-readable exits line for the trade notes.
  *
  * Example output: "Exits: TP1 50% @ 123.45, TP2 50% @ 125.00"
@@ -151,11 +179,17 @@ export function buildExitsNote(fills: FillRecord[]): string {
 }
 
 /**
- * Combine exits note + fees line into the final `notes` string.
+ * Combine entries note (multi-entry only) + exits note + fees line into the
+ * final `notes` string.
+ *
+ * Example (scale-in trade):
+ *   "Backtest session \"S1\" | Entries: 1 @ 205.35, 2 @ 206.10 | Exits: TP1 50% @ 208.00, TP2 50% @ 210.00 | Fees: $0.40"
  */
 export function buildNotes(fills: FillRecord[], feesPaid: number, sessionName?: string): string {
   const parts: string[] = [];
   if (sessionName) parts.push(`Backtest session "${sessionName}"`);
+  const entriesNote = buildEntriesNote(fills);
+  if (entriesNote) parts.push(entriesNote);
   const exitsNote = buildExitsNote(fills);
   if (exitsNote) parts.push(exitsNote);
   if (feesPaid > 0) parts.push(`Fees: $${feesPaid.toFixed(2)}`);
@@ -182,6 +216,15 @@ export function buildJournalPayload(
     ? (weightedAvgExitPrice(fills) ?? pos.exitPrice)
     : pos.exitPrice;
 
+  // Weighted-average entry price from entry fills (multi-entry scale-in positions).
+  // Falls back to pos.entryPrice (already the weighted avg maintained by the reducer).
+  const entryPx = fills.length > 0
+    ? (weightedAvgEntryPrice(fills) ?? pos.entryPrice)
+    : pos.entryPrice;
+
+  // quantity = total entered size (originalSize accumulates all scale-in entries).
+  const quantity = pos.originalSize ?? pos.size;
+
   const pnl = pos.pnl ?? null;
   const outcome: JournalTradePayload['outcome'] =
     pnl == null ? 'OPEN' : pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE';
@@ -192,8 +235,8 @@ export function buildJournalPayload(
     user_id: userId,
     symbol: session.symbol ?? '',
     side: pos.side,
-    quantity: pos.originalSize ?? pos.size,
-    entry_price: pos.entryPrice,
+    quantity,
+    entry_price: entryPx,
     stop_price: pos.stopLoss ?? null,
     take_profit_price: pos.takeProfit ?? null,
     exit_price: exitPx,
