@@ -137,7 +137,7 @@ function ScoreBar({ score }: { score: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="font-mono text-[11px] text-ink-primary">{score}</span>
+      <span className="font-mono text-[11px] text-[#d4d4d8]">{score}</span>
     </div>
   );
 }
@@ -217,7 +217,7 @@ function SectorRowCard({
 
         {/* Symbol + name */}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="font-mono text-[13px] font-semibold text-ink-primary">
+          <span className="font-mono text-[13px] font-semibold text-[#d4d4d8]">
             {item.sector_id}
           </span>
           <span className="text-[11px] text-ink-secondary">{item.sector_name}</span>
