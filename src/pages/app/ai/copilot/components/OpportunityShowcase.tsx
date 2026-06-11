@@ -224,7 +224,7 @@ function CarouselCard({ opp, selected, onClick }: CarouselCardProps) {
         <TickerLogo ticker={opp.ticker} size={24} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-mono text-[13px] font-semibold leading-tight text-ink-primary">{opp.ticker}</p>
+        <p className="font-mono text-[13px] font-semibold leading-tight text-[#d4d4d8]">{opp.ticker}</p>
         <p className="mt-0.5 truncate text-[10px] text-ink-tertiary">{opp.name}</p>
       </div>
       {/* Mini score ring */}
@@ -429,7 +429,7 @@ function KeyMetricsCard({ ticker, barsRange }: KeyMetricsProps) {
         {rows.map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between gap-2">
             <span className="text-[11px] text-ink-tertiary">{label}</span>
-            <span className="font-mono text-[12px] text-ink-primary">{value}</span>
+            <span className="font-mono text-[12px] text-[#d4d4d8]">{value}</span>
           </div>
         ))}
       </div>
@@ -478,7 +478,7 @@ function ArgCard({ title, toneClass, borderClass, bgClass, points, emptyText, ic
                   <Icon className="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12px] font-semibold leading-tight text-ink-primary">{pt.title}</p>
+                  <p className="text-[12px] font-semibold leading-tight text-[#d4d4d8]">{pt.title}</p>
                   <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-secondary">{pt.detail}</p>
                 </div>
               </li>
@@ -717,7 +717,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
     return (
       <div className="flex min-h-[240px] items-center justify-center rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-8 text-center">
         <div>
-          <p className="text-[14px] font-medium text-ink-primary">No live opportunities right now.</p>
+          <p className="text-[14px] font-medium text-[#d4d4d8]">No live opportunities right now.</p>
           <p className="mt-1 text-[12px] text-ink-tertiary">
             AI-ranked ideas appear here after the next brief.
           </p>
@@ -754,7 +754,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
           <button
             type="button"
             onClick={scrollRight}
-            className="absolute right-0 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-full bg-[#141414] border border-white/12 text-ink-tertiary hover:text-ink-primary transition-colors shadow"
+            className="absolute right-0 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-full bg-[#141414] border border-white/12 text-ink-tertiary hover:text-[#d4d4d8] transition-colors shadow"
             aria-label="Scroll right"
           >
             <ChevronRight className="h-4 w-4" />
@@ -763,13 +763,13 @@ export function OpportunityShowcase({ opportunities }: Props) {
       </div>
 
       {/* ── B. Detail Header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-gold-primary/14 bg-[#070605]/95 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-gold-primary/40 bg-gradient-to-b from-gold-primary/[0.10] to-[#070605] shadow-[0_0_18px_rgba(201,166,70,0.10)] px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-[6px] border border-white/8 bg-[#0d0d0d]">
             <TickerLogo ticker={opp.ticker} size={32} />
           </div>
           <div>
-            <h2 className="font-mono text-2xl font-semibold leading-tight text-ink-primary">
+            <h2 className="font-mono text-2xl font-semibold leading-tight text-[#d4d4d8]">
               {opp.ticker}
             </h2>
             <p className="text-[12px] text-ink-secondary">{opp.name}</p>
@@ -791,7 +791,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
       </div>
 
       {/* ── C. Stats Band ── */}
-      <div className="overflow-hidden rounded-[8px] border border-gold-primary/14 bg-[#070605]/95">
+      <div className="overflow-hidden rounded-[8px] border border-gold-primary/40 bg-gradient-to-b from-gold-primary/[0.08] to-[#070605] shadow-[0_0_18px_rgba(201,166,70,0.08)]">
         <div className="grid grid-cols-2 divide-x divide-gold-primary/10 sm:grid-cols-5">
           {/* 1. AI Score */}
           <StatCell label="AI Score">
@@ -817,13 +817,13 @@ export function OpportunityShowcase({ opportunities }: Props) {
               {opp.timeHorizon && (
                 <span className={`h-2 w-2 flex-none rounded-full ${HORIZON_DOT[opp.timeHorizon] ?? 'bg-white/40'}`} />
               )}
-              <p className="text-[13px] text-ink-primary">{opp.timeframe}</p>
+              <p className="text-[13px] text-[#d4d4d8]">{opp.timeframe}</p>
             </div>
           </StatCell>
 
           {/* 4. Confidence */}
           <StatCell label="Confidence">
-            <p className="text-[13px] font-medium text-ink-primary">{opp.confidence}</p>
+            <p className="text-[13px] font-medium text-[#d4d4d8]">{opp.confidence}</p>
           </StatCell>
 
           {/* 5. Risk Level */}
@@ -832,7 +832,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
               {opp.riskLevel && (
                 <span className={`h-2 w-2 flex-none rounded-full ${RISK_DOT[opp.riskLevel]}`} />
               )}
-              <p className="text-[13px] text-ink-primary">{opp.riskLevel ?? '—'}</p>
+              <p className="text-[13px] text-[#d4d4d8]">{opp.riskLevel ?? '—'}</p>
             </div>
           </StatCell>
         </div>
@@ -850,7 +850,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
 
             {/* Price headline */}
             <div className="flex items-baseline gap-2">
-              <span className="font-mono text-2xl font-semibold text-ink-primary">
+              <span className="font-mono text-2xl font-semibold text-[#d4d4d8]">
                 {fmtPrice(quote?.price)}
               </span>
               {quote?.chp != null && (
@@ -885,7 +885,7 @@ export function OpportunityShowcase({ opportunities }: Props) {
                     'rounded-[4px] px-2 py-0.5 text-[10px] transition',
                     chartRange === r
                       ? 'bg-gold-primary/20 text-gold-primary'
-                      : 'text-ink-tertiary hover:text-ink-primary',
+                      : 'text-ink-tertiary hover:text-[#d4d4d8]',
                   ].join(' ')}
                 >
                   {r}
