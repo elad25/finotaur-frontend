@@ -1218,6 +1218,12 @@ export function FinotaurChart({
           title: '',
           // Use the right price scale (same pane as candles).
           priceScaleId: 'right',
+          // Exclude wall series from price-axis autoscaling so deep walls
+          // (e.g. a bid at -70% of mid) never squash the candle chart.
+          // The axis fits candles only; walls become visible when the user
+          // manually scales/zooms the price axis.
+          // autoscaleInfoProvider is part of SeriesOptionsCommon in lw-charts v4.
+          autoscaleInfoProvider: () => null,
         });
         baselineSeries.setData([
           { time: clampedStart as UTCTimestamp, value: bandTop },

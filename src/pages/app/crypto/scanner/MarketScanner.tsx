@@ -201,15 +201,20 @@ interface WallSpec {
 }
 
 /**
- * Derive up to 7 bid + 7 ask wall specs from the raw order book using
+ * Derive up to 9 bid + 9 ask wall specs from the raw order book using
  * two independent selection bands per side:
  *
- * NEAR band  |dist| ≤ 2.5% of mid  → p90 / 25%-of-max threshold, top 4
- * FAR  band  2.5% < |dist| ≤ 10%   → p95 / 30%-of-max threshold, top 3
+ * NEAR band  |dist| ≤ 2.5% of mid       → p90 / 25%-of-max threshold, top 4
+ * FAR  band  2.5% < |dist| < Infinity    → p95 / 30%-of-max threshold, top 5
  *
- * Two-band approach prevents distant mega-walls (e.g. BTC $13-22 M at
- * 57-60 K) from raising the single threshold so high that every near-
- * price wall ($1-3 M at ±0.5%) gets culled — which caused a blank order
+ * The FAR band has NO upper distance limit — every order at any depth is
+ * aggregated into bins and eligible for selection. This gives full-book
+ * awareness: a mega-wall 70% away is captured. The wall series are
+ * excluded from price-axis autoscaling (autoscaleInfoProvider: () => null
+ * in FinotaurChart) so deep walls never squash the candle chart.
+ *
+ * Two-band approach prevents distant mega-walls from raising the threshold
+ * so high that near-price walls get culled — which caused a blank order
  * book on zoom-in (Bookmap-style view).
  *
  * Aggregation into bins (same binSize) and WallSpec shape are unchanged.
@@ -231,34 +236,30 @@ function computeWalls(
   const mid = bestBid === 0 ? bestAsk : bestAsk === Infinity ? bestBid : (bestBid + bestAsk) / 2;
 
   const binSize = computeWallBinSize(mid);
-  const rangePct = 0.25; // ±25% of mid — deep walls (e.g. BTC 50K when price is 62K)
-  const priceLow  = mid * (1 - rangePct);
-  const priceHigh = mid * (1 + rangePct);
 
-  // Aggregate each side into bins within range
+  // Aggregate ALL levels of both sides into bins — no price range filter.
+  // Full-book scan: every resting order at any depth is captured.
   const bidBins = new Map<number, number>();
   const askBins = new Map<number, number>();
 
   for (const [price, qty] of bids) {
-    if (price < priceLow || price > priceHigh) continue;
     const bin = binFloor(price, binSize);
     bidBins.set(bin, (bidBins.get(bin) ?? 0) + qty * price);
   }
   for (const [price, qty] of asks) {
-    if (price < priceLow || price > priceHigh) continue;
     const bin = binFloor(price, binSize);
     askBins.set(bin, (askBins.get(bin) ?? 0) + qty * price);
   }
 
   // Band constants
-  const NEAR_MAX_DIST_PCT = 0.025; // |price - mid| / mid ≤ 2.5%  → NEAR
-  const FAR_MAX_DIST_PCT  = 0.25;  // 2.5% < dist ≤ 25%           → FAR (deep walls: 50K on BTC @62K)
+  const NEAR_MAX_DIST_PCT = 0.025;             // |price - mid| / mid ≤ 2.5%  → NEAR
+  const FAR_MAX_DIST_PCT  = Number.POSITIVE_INFINITY; // no upper limit       → FAR (full book)
   const NEAR_PCTL         = 0.90;  // p90 of NEAR nonzero bins
   const NEAR_FRAC_MAX     = 0.25;  // 25% of largest NEAR bin
   const NEAR_TOP_N        = 4;
   const FAR_PCTL          = 0.95;  // p95 of FAR nonzero bins
   const FAR_FRAC_MAX      = 0.30;  // 30% of largest FAR bin
-  const FAR_TOP_N         = 3;
+  const FAR_TOP_N         = 5;     // wider depth → show top 5 instead of 3
   // Absolute floor: when a band empties out (e.g. mega-walls get pulled),
   // its relative thresholds collapse and dust orders ($407) slip through.
   // No wall below this notional is ever shown, on any coin.
