@@ -449,6 +449,44 @@ export interface OverlayPriceLine {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Wall segments — time-aware liquidity history overlays
+// ═══════════════════════════════════════════════════════════════
+/**
+ * A horizontal segment rendered as a lightweight-charts line series spanning
+ * a specific time range at a fixed price level.
+ *
+ * Alive walls (endTime = null) extend to the newest bar's time each refresh.
+ * Dead walls (endTime set) are frozen from birth to death and remain dimmed.
+ *
+ * Time alignment: caller is responsible for rounding startTime/endTime DOWN
+ * to the current bar interval boundary so segments snap to candle edges.
+ * If startTime >= endTime after clamping, the segment is silently skipped
+ * (lightweight-charts line series requires strictly ascending times).
+ */
+export interface WallSegment {
+  /** Stable unique key — used for add/remove diffing. Must be unique across alive + dead sets. */
+  id: string;
+  /** Price level for the horizontal segment (pre-rounded to bin boundary by caller). */
+  price: number;
+  /** Wall birth time in unix SECONDS. Caller rounds down to bar boundary. */
+  startTime: number;
+  /**
+   * Wall death time in unix SECONDS, or null if still alive.
+   * null → the segment will be extended to the latest loaded bar's time each render.
+   * Set value → segment is frozen at that time (dead wall).
+   */
+  endTime: number | null;
+  /** RGBA color string (e.g. 'rgba(34,197,94,0.55)'). */
+  color: string;
+  lineWidth: 1 | 2 | 3 | 4;
+  /**
+   * Price-axis label. Set for alive walls to show size + birth time.
+   * Omit (undefined or empty) for dead walls to keep the axis uncluttered.
+   */
+  title?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Marker icon overlay type
 // ═══════════════════════════════════════════════════════════════
 /**
@@ -525,6 +563,16 @@ export interface FinotaurChartProps {
    * are unaffected.
    */
   priceLines?: OverlayPriceLine[];
+  /**
+   * Optional time-aware wall segments rendered as lightweight-charts line series.
+   * Each segment is a horizontal line from startTime to endTime (or to the newest bar
+   * if endTime is null — alive wall). Dead walls (endTime set) are frozen and dimmed.
+   *
+   * Diffed by id + endTime + title: segments whose endTime or title change are
+   * updated via setData / applyOptions; ids no longer present are removed.
+   * No-op when absent — zero impact on backtest/journal callers.
+   */
+  wallSegments?: WallSegment[];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -544,6 +592,7 @@ export function FinotaurChart({
   onError,
   focusRange,
   priceLines,
+  wallSegments,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -569,6 +618,18 @@ export function FinotaurChart({
    * via the chart.remove() call which destroys all series (and their lines).
    */
   const overlayPriceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  /**
+   * Active wall-segment line series keyed by WallSegment.id.
+   * Each entry is a dedicated ISeriesApi<'Line'> spanning startTime→endTime.
+   * Diff on every wallSegments prop change: update endTime/title if changed,
+   * remove ids no longer present, add new ids. Cleared on chart unmount.
+   *
+   * Also tracks the last-rendered endTime and title per id so we can skip
+   * no-op re-renders.
+   */
+  const wallSegmentSeriesRef = useRef<
+    Map<string, { series: ISeriesApi<'Line'>; endTime: number | null; title: string | undefined }>
+  >(new Map());
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -619,6 +680,9 @@ export function FinotaurChart({
       // Overlay price lines are destroyed with the chart — clear the map so
       // the next mount does not try to remove already-gone line handles.
       overlayPriceLinesRef.current.clear();
+      // Wall segment series belong to the destroyed chart — clear so the next
+      // mount starts fresh without stale series handles.
+      wallSegmentSeriesRef.current.clear();
     };
     // Re-create when theme changes — full remount swaps the candle palette,
     // background, grid, crosshair, and all subpane scale colors atomically.
@@ -906,6 +970,106 @@ export function FinotaurChart({
       }
     }
   }, [priceLines]);
+
+  // ─── Apply wall segments (time-aware liquidity history) ────────
+  // Each segment is a dedicated line series spanning [startTime, endTime].
+  // Alive walls (endTime=null) are extended to the newest bar's time each tick.
+  // Dead walls are frozen; segments where clamped start >= end are skipped.
+  // No-op when `wallSegments` is absent — zero impact on backtest/journal callers.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const segments = wallSegments ?? [];
+    const nextMap = new Map<string, WallSegment>(segments.map(s => [s.id, s]));
+    const activeMap = wallSegmentSeriesRef.current;
+
+    // Determine the time bounds of loaded bars for clamping.
+    const bars = barsRef.current;
+    if (segments.length === 0 && activeMap.size === 0) return; // fast-path: nothing to do
+
+    const firstBarTime = bars.length > 0 ? (bars[0].time as unknown as number) : null;
+    const lastBarTime  = bars.length > 0 ? (bars[bars.length - 1].time as unknown as number) : null;
+
+    // ── Remove series no longer in the prop ───────────────────
+    for (const [id, entry] of Array.from(activeMap.entries())) {
+      if (!nextMap.has(id)) {
+        try { chart.removeSeries(entry.series); } catch { /* chart may be gone */ }
+        activeMap.delete(id);
+      }
+    }
+
+    // ── Add or update segments ─────────────────────────────────
+    for (const [id, seg] of nextMap.entries()) {
+      // Resolve effective end time: alive walls reach the last bar.
+      const resolvedEnd = seg.endTime !== null ? seg.endTime : (lastBarTime ?? seg.startTime);
+
+      // Clamp start to the first bar (can't render before loaded history).
+      const clampedStart = firstBarTime !== null
+        ? Math.max(seg.startTime, firstBarTime)
+        : seg.startTime;
+
+      // Skip degenerate segments — single-point lines are invisible and
+      // lightweight-charts requires strictly ascending times in setData.
+      if (clampedStart >= resolvedEnd) {
+        // Remove the series if it was previously rendered.
+        const existing = activeMap.get(id);
+        if (existing) {
+          try { chart.removeSeries(existing.series); } catch { /* gone */ }
+          activeMap.delete(id);
+        }
+        continue;
+      }
+
+      const existing = activeMap.get(id);
+
+      if (!existing) {
+        // ── Create new line series ─────────────────────────────
+        const lineSeries = chart.addLineSeries({
+          color: seg.color,
+          lineWidth: seg.lineWidth,
+          lineStyle: LineStyle.Solid,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+          lastValueVisible: !!seg.title,
+          title: seg.title ?? '',
+          // Use the right price scale (same pane as candles).
+          priceScaleId: 'right',
+        });
+        lineSeries.setData([
+          { time: clampedStart as UTCTimestamp, value: seg.price },
+          { time: resolvedEnd as UTCTimestamp,  value: seg.price },
+        ]);
+        activeMap.set(id, {
+          series: lineSeries,
+          endTime: seg.endTime,
+          title: seg.title,
+        });
+      } else {
+        // ── Update if endTime or title changed ─────────────────
+        const endChanged   = existing.endTime !== seg.endTime;
+        const titleChanged = existing.title   !== seg.title;
+
+        if (endChanged) {
+          existing.series.setData([
+            { time: clampedStart as UTCTimestamp, value: seg.price },
+            { time: resolvedEnd as UTCTimestamp,  value: seg.price },
+          ]);
+          existing.endTime = seg.endTime;
+        }
+
+        if (titleChanged) {
+          existing.series.applyOptions({
+            lastValueVisible: !!seg.title,
+            title: seg.title ?? '',
+          });
+          existing.title = seg.title;
+        }
+      }
+    }
+  // barCount triggers re-evaluation after bars load (lastBarTime shifts).
+  // wallSegments triggers on every scanner tick.
+  }, [wallSegments, barCount]);
 
   // ─── Render ─────────────────────────────────────────────────
   return (

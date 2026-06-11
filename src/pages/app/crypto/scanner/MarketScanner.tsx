@@ -9,7 +9,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { X, RefreshCw } from 'lucide-react';
 import { useBinanceOrderBook, type BookStatus } from './useBinanceOrderBook';
-import { FinotaurChart, type OverlayPriceLine } from '@/components/charting/FinotaurChart';
+import { FinotaurChart, type WallSegment } from '@/components/charting/FinotaurChart';
 import { pickDataSource } from '@/components/charting/dataSources';
 import type { Interval } from '@/components/charting/types';
 
@@ -189,13 +189,6 @@ function formatNotional(usd: number): string {
   return `$${usd.toFixed(0)}`;
 }
 
-/** Round to N significant digits (for stability comparison). */
-function roundSig(n: number, sig: number): number {
-  if (n === 0) return 0;
-  const d = Math.ceil(Math.log10(Math.abs(n)));
-  const factor = Math.pow(10, sig - d);
-  return Math.round(n * factor) / factor;
-}
 
 interface WallSpec {
   id: string;
@@ -295,8 +288,33 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
 
 // ── Inner workstation card — holds WS hook + single chart with wall overlays ──
 // Separate component so the `key` prop can force a full remount on symbol change.
+// Symbol change via key= causes a full remount, which resets all tracking refs
+// to their initial empty state automatically — no explicit reset needed.
 
 const WALL_INTERVAL_MS = 3_000; // recompute walls every 3 seconds
+
+// Wall lifecycle constants
+const WALL_MISS_TICKS_UNTIL_DEAD = 2;   // ticks without detection before marking dead
+const WALL_MIN_LIFETIME_MS       = 45_000; // walls alive < 45s are dropped on death (noise)
+const WALL_DEAD_CAP              = 40;  // max stored dead walls (oldest evicted by deadAt)
+
+// Bar-interval size in seconds — used to align wall times to candle boundaries.
+function intervalSeconds(iv: Interval): number {
+  switch (iv) {
+    case '1m':  return 60;
+    case '5m':  return 5 * 60;
+    case '15m': return 15 * 60;
+    case '1h':  return 60 * 60;
+    case '4h':  return 4 * 60 * 60;
+    case '1d':  return 24 * 60 * 60;
+    default:    return 60;
+  }
+}
+
+/** Round a unix-seconds timestamp DOWN to the nearest bar boundary. */
+function alignToBar(t: number, ivSec: number): number {
+  return Math.floor(t / ivSec) * ivSec;
+}
 
 // Base RGB components — alpha is computed per-wall from size ratio
 const BID_RGB = '34,197,94';   // emerald-500
@@ -304,6 +322,24 @@ const ASK_RGB = '201,166,70';  // brand gold
 // Legend swatch colors (fixed — mid-opacity representative shade)
 const BID_COLOR  = `rgba(${BID_RGB},0.55)`;
 const ASK_COLOR  = `rgba(${ASK_RGB},0.75)`;
+
+/** Tracked wall entry — lives in the useRef Map keyed by `${side}:${binPrice}`. */
+interface TrackedWall {
+  key: string;
+  side: 'bid' | 'ask';
+  price: number;
+  bornAt: number;       // wall-clock ms
+  lastSeenAt: number;   // wall-clock ms
+  maxNotional: number;
+  missedTicks: number;
+  deadAt: number | null; // wall-clock ms, null = alive
+}
+
+/** Format HH:MM local time from a wall-clock ms timestamp. */
+function formatHHMM(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}
 
 interface WorkstationInnerProps {
   symbol: string;
@@ -317,10 +353,12 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   const hook = useBinanceOrderBook(symbol);
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
-  // Overlay price-line specs — updated every 3 s, diffed inside FinotaurChart.
-  const [wallLines, setWallLines] = useState<OverlayPriceLine[]>([]);
-  // Stability ref: previous wall set so we can skip setState when nothing changed.
-  const prevWallsRef = useRef<WallSpec[]>([]);
+  // Wall lifecycle tracking — persists across ticks, reset on remount (symbol change).
+  const trackedWallsRef = useRef<Map<string, TrackedWall>>(new Map());
+  const deadWallsRef    = useRef<TrackedWall[]>([]);
+
+  // WallSegment array passed to FinotaurChart — updated every tick.
+  const [wallSegments, setWallSegments] = useState<WallSegment[]>([]);
 
   // Notify parent when WS status changes so the header pill stays in sync
   // without a second parallel WebSocket connection.
@@ -328,64 +366,140 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
     onStatusChange?.(hook.status);
   }, [hook.status, onStatusChange]);
 
-  // Compute walls every WALL_INTERVAL_MS from the live order book.
+  // Compute + track walls every WALL_INTERVAL_MS.
   useEffect(() => {
+    const ivSec = intervalSeconds(interval);
+
     const tick = () => {
       const { bids, asks } = hook.getBook();
-      const next = computeWalls(bids, asks);
+      const detected = computeWalls(bids, asks);
+      const nowMs    = Date.now();
 
-      // Stability check: compare ids + rounded notionals to avoid flicker every tick.
-      const prev = prevWallsRef.current;
-      const changed =
-        next.length !== prev.length ||
-        next.some((w, i) => {
-          const p = prev[i];
-          return !p || w.id !== p.id || roundSig(w.notional, 2) !== roundSig(p.notional, 2);
-        });
+      const tracked  = trackedWallsRef.current;
+      const dead     = deadWallsRef.current;
 
-      if (!changed) return;
-      prevWallsRef.current = next;
+      // ── Update existing / register new walls ───────────────
+      const detectedKeys = new Set<string>();
+      for (const w of detected) {
+        const key = `${w.side}:${w.price}`;
+        detectedKeys.add(key);
+        const entry = tracked.get(key);
+        if (entry && entry.deadAt === null) {
+          // Alive and still detected: refresh
+          entry.lastSeenAt  = nowMs;
+          entry.maxNotional = Math.max(entry.maxNotional, w.notional);
+          entry.missedTicks = 0;
+        } else if (!entry) {
+          // New wall
+          tracked.set(key, {
+            key,
+            side:        w.side,
+            price:       w.price,
+            bornAt:      nowMs,
+            lastSeenAt:  nowMs,
+            maxNotional: w.notional,
+            missedTicks: 0,
+            deadAt:      null,
+          });
+        }
+        // If entry exists but deadAt is set, a revived wall at the same price
+        // is treated as a new wall — leave the dead entry for history, create fresh.
+        else if (entry.deadAt !== null) {
+          const freshKey = `${w.side}:${w.price}:${nowMs}`;
+          tracked.set(freshKey, {
+            key:         freshKey,
+            side:        w.side,
+            price:       w.price,
+            bornAt:      nowMs,
+            lastSeenAt:  nowMs,
+            maxNotional: w.notional,
+            missedTicks: 0,
+            deadAt:      null,
+          });
+        }
+      }
 
-      // Size-proportional rendering: scale line weight and opacity against the
-      // single largest wall across BOTH sides so a huge ask wall is visually
-      // dominant over small bid walls, not just within its own side.
-      const maxNotional = Math.max(0, ...next.map(w => w.notional));
+      // ── Age out walls not detected this tick ───────────────
+      for (const entry of Array.from(tracked.values())) {
+        if (entry.deadAt !== null) continue; // already dead
+        if (detectedKeys.has(entry.key)) continue; // seen this tick
 
-      const lines: OverlayPriceLine[] = next.map(w => {
-        const isBid  = w.side === 'bid';
-        const rgb    = isBid ? BID_RGB : ASK_RGB;
-        const ratio  = maxNotional > 0 ? w.notional / maxNotional : 0;
+        entry.missedTicks++;
+        if (entry.missedTicks >= WALL_MISS_TICKS_UNTIL_DEAD) {
+          entry.deadAt = nowMs;
 
-        // lineWidth: 4 steps by ratio
-        const lineWidth: 1 | 2 | 3 | 4 =
-          ratio >= 0.66 ? 4 :
-          ratio >= 0.40 ? 3 :
-          ratio >= 0.20 ? 2 : 1;
+          const lifetime = nowMs - entry.bornAt;
+          if (lifetime < WALL_MIN_LIFETIME_MS) {
+            // Too short-lived — discard as noise
+            tracked.delete(entry.key);
+          } else {
+            // Promote to dead list
+            dead.push(entry);
+            tracked.delete(entry.key);
 
-        // Opacity: linear ramp 0.35 → 0.90 capped
+            // Cap dead list: evict oldest by deadAt
+            if (dead.length > WALL_DEAD_CAP) {
+              dead.sort((a, b) => (a.deadAt ?? 0) - (b.deadAt ?? 0));
+              dead.splice(0, dead.length - WALL_DEAD_CAP);
+            }
+          }
+        }
+      }
+
+      // ── Build WallSegment[] ────────────────────────────────
+      // Compute max alive notional for proportional sizing.
+      const aliveWalls = Array.from(tracked.values()).filter(e => e.deadAt === null);
+      const maxAlive   = aliveWalls.reduce((m, e) => Math.max(m, e.maxNotional), 0);
+
+      const segments: WallSegment[] = [];
+
+      // Alive walls
+      for (const entry of aliveWalls) {
+        const ratio = maxAlive > 0 ? entry.maxNotional / maxAlive : 0;
+        const rgb   = entry.side === 'bid' ? BID_RGB : ASK_RGB;
         const alpha = Math.min(0.9, 0.35 + 0.55 * ratio);
+        const lineWidth: 1 | 2 | 3 | 4 =
+          ratio >= 0.66 ? 4 : ratio >= 0.40 ? 3 : ratio >= 0.20 ? 2 : 1;
 
-        // lineStyle: solid for stronger walls, dashed for minor walls
-        const lineStyle = ratio >= 0.40 ? 0 : 2; // 0=Solid, 2=Dashed
-
-        return {
-          id: w.id,
-          price: w.price,
-          title: formatNotional(w.notional),
-          color: `rgba(${rgb},${alpha.toFixed(2)})`,
+        segments.push({
+          id:        entry.key,
+          price:     entry.price,
+          startTime: alignToBar(Math.floor(entry.bornAt / 1000), ivSec),
+          endTime:   null, // alive → extends to newest bar
+          color:     `rgba(${rgb},${alpha.toFixed(2)})`,
           lineWidth,
-          lineStyle,
-        };
-      });
+          title:     `${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}`,
+        });
+      }
 
-      setWallLines(lines);
+      // Dead walls (dimmed, no axis label)
+      for (const entry of dead) {
+        const rgb       = entry.side === 'bid' ? BID_RGB : ASK_RGB;
+        // Dead: same hue, alpha × 0.4, cap 0.35, lineWidth max 2, no title
+        const aliveAlpha = Math.min(0.9, 0.35 + 0.55 * 1); // treat as if ratio=1 for hue
+        const deadAlpha  = Math.min(0.35, aliveAlpha * 0.4);
+
+        segments.push({
+          id:        `dead:${entry.key}`,
+          price:     entry.price,
+          startTime: alignToBar(Math.floor(entry.bornAt  / 1000), ivSec),
+          endTime:   alignToBar(Math.floor((entry.deadAt ?? 0) / 1000), ivSec),
+          color:     `rgba(${rgb},${deadAlpha.toFixed(2)})`,
+          lineWidth: Math.min(2, 2) as 1 | 2, // cap at 2 for dead walls
+          title:     undefined, // no axis label for dead walls
+        });
+      }
+
+      setWallSegments(segments);
     };
 
     // Run immediately, then on interval
     tick();
     const id = setInterval(tick, WALL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [hook]);
+  // interval change: ivSec recalculates on next tick — no need to reset history
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hook, interval]);
 
   const coinLabel = COINS.find(c => c.symbol === symbol)?.label ?? symbol;
 
@@ -424,7 +538,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             style={{ background: ASK_COLOR }}
           />
           <span>asks</span>
-          <span className="opacity-50">· walls live</span>
+          <span className="opacity-50">· walls + history</span>
         </span>
       </div>
 
@@ -438,7 +552,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           dataSource={dataSource}
           theme="dark"
           height="100%"
-          priceLines={wallLines}
+          wallSegments={wallSegments}
         />
       </div>
     </div>
