@@ -48,16 +48,20 @@ const TIMEFRAMES: TFOption[] = [
   { value: '1d',  label: '1D'  },
 ];
 
-// Lookback window (seconds) per interval — kept under Binance's 1000-bar cap.
+// Lookback window (seconds) per interval. Binance klines with startTime
+// returns the FIRST 1000 bars after `from`, so the window MUST stay under
+// the 1000-bar cap or the chart shows stale history instead of the present.
+const BARS_LOOKBACK = 600;
+
 function lookbackSeconds(interval: Interval): number {
   switch (interval) {
-    case '1m':  return  7 * 24 * 60 * 60;   // 7 days
-    case '5m':  return 30 * 24 * 60 * 60;   // 30 days
-    case '15m': return 60 * 24 * 60 * 60;   // 60 days
-    case '1h':  return 90 * 24 * 60 * 60;   // 90 days
-    case '4h':  return 180 * 24 * 60 * 60;  // 180 days
-    case '1d':  return 2 * 365 * 24 * 60 * 60; // 2 years
-    default:    return 30 * 24 * 60 * 60;
+    case '1m':  return BARS_LOOKBACK * 60;
+    case '5m':  return BARS_LOOKBACK * 5 * 60;
+    case '15m': return BARS_LOOKBACK * 15 * 60;
+    case '1h':  return BARS_LOOKBACK * 60 * 60;
+    case '4h':  return BARS_LOOKBACK * 4 * 60 * 60;
+    case '1d':  return BARS_LOOKBACK * 24 * 60 * 60;
+    default:    return BARS_LOOKBACK * 5 * 60;
   }
 }
 
