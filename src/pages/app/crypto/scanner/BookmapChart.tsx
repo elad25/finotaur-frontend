@@ -29,7 +29,6 @@ const CANVAS_HEIGHT = 520;
 const COLUMN_RING_SIZE = 900;      // 900 × 1s = 15 min history
 const SAMPLE_INTERVAL_MS = 1_000;  // snapshot book every 1s
 const PRICE_RANGE_PCT = 0.020;     // ±2% around mid (widened to reveal walls)
-const PRICE_SMOOTHING = 0.05;      // lerp factor for mid-price tracking
 const MAX_TRADE_RADIUS = 12;       // px cap for trade circles
 
 // Gamma applied after log compression — higher = darker weak cells.
@@ -147,8 +146,9 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
   const colHeadRef = useRef<number>(0);   // write index (for ring)
   const colCountRef = useRef<number>(0);  // total columns ever pushed
 
-  // Smoothed mid-price for the camera
-  const smoothMidRef = useRef<number | null>(null);
+  // Camera mid-price: smoothed toward latest column's mid each render frame.
+  // Stored as a ref so it survives re-renders without triggering them.
+  const cameraMidRef = useRef<number | null>(null);
 
   // Accumulated trades (for rendering circles; drained per-render)
   const pendingTradesRef = useRef<Trade[]>([]);
@@ -185,13 +185,6 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
         : bestAsk === Infinity
         ? bestBid
         : (bestBid + bestAsk) / 2;
-
-    // Smooth camera
-    if (smoothMidRef.current === null) {
-      smoothMidRef.current = mid;
-    } else {
-      smoothMidRef.current = lerp(smoothMidRef.current, mid, PRICE_SMOOTHING);
-    }
 
     const binSize = computeBinSize(mid);
     const halfRange = mid * PRICE_RANGE_PCT;
@@ -263,8 +256,13 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
   const scheduleRender = useCallback(() => {
     if (rafRef.current !== null) return; // already scheduled
     rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
-      render();
+      try {
+        render();
+      } finally {
+        // Always clear the handle so the next scheduleRender() can proceed,
+        // even if render() threw — prevents the RAF loop from wedging.
+        rafRef.current = null;
+      }
     });
   }, []); // render is stable (defined below with useCallback)
 
@@ -288,8 +286,14 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Use setTransform instead of save/scale so the DPR transform never
+    // accumulates across frames (safe even if a previous render threw without
+    // reaching ctx.restore()). We still save/restore around the render body
+    // for clipping/shadow state, but the transform is always set absolutely.
     ctx.save();
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    try {
 
     // Layout constants
     const PRICE_AXIS_W = 68;  // px for price labels on the right
@@ -304,17 +308,50 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
     const ring = columnsRef.current;
     const totalCols = ring.length;
 
-    if (totalCols === 0 || smoothMidRef.current === null) {
+    if (totalCols === 0) {
       // Empty state hint
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.font = '13px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText('Building liquidity map…', cssW / 2, cssH / 2);
-      ctx.restore();
       return;
     }
 
-    const mid = smoothMidRef.current;
+    // ── Camera mid-price (Fix #3) ─────────────────────────────────────
+    // Drive cameraMid from the latest column's actual mid price.
+    // Smooth with lerp(α=0.15) so the camera glides rather than snapping.
+    // Additionally clamp so the latest price always stays in the middle 60%
+    // of the visible range — if it escapes, snap cameraMid toward it.
+    const latestCol = ring[ring.length === COLUMN_RING_SIZE
+      ? (colHeadRef.current - 1 + COLUMN_RING_SIZE) % COLUMN_RING_SIZE
+      : ring.length - 1];
+    const latestMid = latestCol?.mid ?? null;
+
+    if (latestMid === null) {
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.font = '13px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('Building liquidity map…', cssW / 2, cssH / 2);
+      return;
+    }
+
+    if (cameraMidRef.current === null) {
+      cameraMidRef.current = latestMid;
+    } else {
+      // Lerp toward latest mid
+      cameraMidRef.current = lerp(cameraMidRef.current, latestMid, 0.15);
+      // Clamp: ensure latestMid stays in middle 60% of the ±2% visible range.
+      // Middle 60% = cameraMid ± 0.6 * halfRange.  If latestMid escapes,
+      // snap cameraMid to place it exactly at the boundary.
+      const clampHalf = cameraMidRef.current * PRICE_RANGE_PCT * 0.6;
+      if (latestMid < cameraMidRef.current - clampHalf) {
+        cameraMidRef.current = latestMid + clampHalf;
+      } else if (latestMid > cameraMidRef.current + clampHalf) {
+        cameraMidRef.current = latestMid - clampHalf;
+      }
+    }
+
+    const mid = cameraMidRef.current;
     const halfRange = mid * PRICE_RANGE_PCT;
     const priceLow = mid - halfRange;
     const priceHigh = mid + halfRange;
@@ -520,20 +557,26 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
     }
 
     // ── Time axis labels ────────────────────────────────────────────────
+    // Fix #1: timeLabelCount = floor(len/30).  When len < 30 this is 0,
+    // making i/timeLabelCount = i/0 = NaN → orderedCols[NaN] = undefined →
+    // `.timestamp` throws. Guard: only enter the loop when count >= 1.
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
     ctx.font = '10px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
     if (orderedCols.length > 1) {
-      const timeLabelCount = Math.min(6, Math.floor(orderedCols.length / 30));
-      for (let i = 0; i <= timeLabelCount; i++) {
-        const ci = Math.floor((i / timeLabelCount) * (orderedCols.length - 1));
-        const col = orderedCols[ci];
-        const x = ci * colW;
-        const d = new Date(col.timestamp);
-        const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        ctx.fillText(label, x, plotH + 4);
+      const timeLabelCount = Math.floor(orderedCols.length / 30);
+      if (timeLabelCount >= 1) {
+        for (let i = 0; i <= timeLabelCount; i++) {
+          const ci = Math.floor((i / timeLabelCount) * (orderedCols.length - 1));
+          const col = orderedCols[ci];
+          if (!col) continue; // defensive: should not happen, but guard anyway
+          const x = ci * colW;
+          const d = new Date(col.timestamp);
+          const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          ctx.fillText(label, x, plotH + 4);
+        }
       }
     }
 
@@ -546,7 +589,11 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
       ctx.fillText('Building liquidity map…', plotW / 2, plotH / 2);
     }
 
-    ctx.restore();
+    } finally {
+      // Fix #2: always restore so the transform stack never accumulates,
+      // even when an earlier statement in the render body threw.
+      ctx.restore();
+    }
   }, [hook]);
 
   // ── Effects ───────────────────────────────────────────────────────────
@@ -558,7 +605,7 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
       columnsRef.current = [];
       colHeadRef.current = 0;
       colCountRef.current = 0;
-      smoothMidRef.current = null;
+      cameraMidRef.current = null;
       pendingTradesRef.current = [];
       p95Ref.current = 1;
     }
