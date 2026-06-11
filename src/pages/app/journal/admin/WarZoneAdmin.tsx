@@ -1253,7 +1253,13 @@ const WarZoneAdmin: React.FC = () => {
 
                           const targetDisplay = (() => {
                             if (row.target_type === 'blue_sky') {
-                              return <span className="text-gold-primary font-mono">Blue sky</span>;
+                              // Blue sky: internal 20% target stored in weekly_target (never customer-facing)
+                              return (
+                                <span className="text-gold-primary font-mono whitespace-nowrap">
+                                  {row.weekly_target !== null ? `${formatPrice(row.weekly_target)} ` : ''}
+                                  <span className="text-[10px] uppercase tracking-wide opacity-80">Blue sky +20%</span>
+                                </span>
+                              );
                             }
                             if (row.weekly_target === null) return <span className="text-ink-muted">—</span>;
                             return <span className="font-mono text-ink-secondary">{formatPrice(row.weekly_target)}</span>;
