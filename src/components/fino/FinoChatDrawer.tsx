@@ -16,6 +16,7 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
+import FinoBriefingCard from '@/components/fino/FinoBriefingCard';
 
 // Human-readable label for the current route, so FINO knows which screen the
 // user is on. First matching pattern wins; falls back to the title-cased path.
@@ -156,6 +157,8 @@ function FinoChatPanel({
           {usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC') && (
             <UsageBanner usage={usage} />
           )}
+          {/* Morning Briefing card — sits above the chat thread, never throws */}
+          <FinoBriefingCard />
           <div className="flex min-h-0 flex-1 flex-col">
             <ChatInterface
               messages={messages}
