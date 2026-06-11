@@ -11,8 +11,8 @@
  *  - LIVE dot shows "as of HH:MM" when quotes are fresh; "Delayed" or "Market closed" otherwise.
  */
 
-import { useMemo } from 'react';
-import type { ReactNode } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import type { ReactNode, MouseEvent } from 'react';
 import { Eye } from 'lucide-react';
 import { Change, Price } from '@/components/ds/NumberDisplay';
 import { useMarketStatus } from '@/lib/marketStatus';
@@ -105,13 +105,31 @@ const AREA_W = 320;
 const AREA_H = 150;
 const AREA_PAD = { top: 8, right: 4, bottom: 20, left: 4 };
 
+/** Format a date string to "Jun 10, 2026" for the hover tooltip. */
+function formatHoverDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
 /**
  * Full-width gold area chart rendered from the portfolio performance series.
  * Shows up to the last ~120 data points; falls back to a placeholder if <2
  * points are available.
+ *
+ * Hover: vertical crosshair + gold dot + tooltip (date + $value).
  */
 function PortfolioAreaChart({ series }: { series: PerformancePoint[] }) {
   const recent = series.length > 120 ? series.slice(-120) : series;
+
+  // Hover state: index of the nearest data point, or null when not hovering.
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const chart = useMemo(() => {
     if (recent.length < 2) return null;
@@ -155,8 +173,29 @@ function PortfolioAreaChart({ series }: { series: PerformancePoint[] }) {
       return { label, x, anchor };
     });
 
-    return { linePath, areaPath, dateLabels };
+    return { linePath, areaPath, dateLabels, coords };
   }, [recent]);
+
+  // Map a mouse event on the SVG to the nearest data-point index by x.
+  const handleMouseMove = useCallback(
+    (e: MouseEvent<SVGSVGElement>) => {
+      if (!chart) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      // Map client x → viewBox x coordinate.
+      const svgX = ((e.clientX - rect.left) / rect.width) * AREA_W;
+      // Find the index whose x coord is closest to svgX.
+      let nearest = 0;
+      let minDist = Infinity;
+      chart.coords.forEach(([cx], i) => {
+        const d = Math.abs(cx - svgX);
+        if (d < minDist) { minDist = d; nearest = i; }
+      });
+      setHoveredIdx(nearest);
+    },
+    [chart],
+  );
+
+  const handleMouseLeave = useCallback(() => setHoveredIdx(null), []);
 
   if (!chart) {
     return (
@@ -169,68 +208,138 @@ function PortfolioAreaChart({ series }: { series: PerformancePoint[] }) {
   // Horizontal gridlines (4 lines at 0%, 33%, 67%, 100% of inner height)
   const gridRatios = [0, 1 / 3, 2 / 3, 1];
 
+  // Hovered point geometry (in SVG viewBox coords + as % for tooltip positioning).
+  const hovered =
+    hoveredIdx !== null
+      ? {
+          x: chart.coords[hoveredIdx][0],
+          y: chart.coords[hoveredIdx][1],
+          // Fraction along the x-axis (0–1) for tooltip flip logic.
+          xFrac: chart.coords[hoveredIdx][0] / AREA_W,
+          point: recent[hoveredIdx],
+        }
+      : null;
+
   return (
-    <svg
-      viewBox={`0 0 ${AREA_W} ${AREA_H}`}
-      className="h-[150px] w-full"
-      role="img"
-      aria-label="Portfolio performance area chart"
-    >
-      <defs>
-        <linearGradient id="pvAreaFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="#F4D97B" stopOpacity="0.50" />
-          <stop offset="30%"  stopColor="#E8C96A" stopOpacity="0.25" />
-          <stop offset="70%"  stopColor="#C9A646" stopOpacity="0.08" />
-          <stop offset="100%" stopColor="#C9A646" stopOpacity="0.01" />
-        </linearGradient>
-        <linearGradient id="pvAreaLine" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stopColor="#B8911F" />
-          <stop offset="42%"  stopColor="#F4D97B" />
-          <stop offset="100%" stopColor="#D4B04E" />
-        </linearGradient>
-      </defs>
+    // Wrapper needs `relative` so the absolutely-positioned tooltip is contained.
+    <div className="relative h-[150px] w-full">
+      <svg
+        viewBox={`0 0 ${AREA_W} ${AREA_H}`}
+        className="h-full w-full"
+        role="img"
+        aria-label="Portfolio performance area chart"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        style={{ cursor: hovered ? 'crosshair' : 'default' }}
+      >
+        <defs>
+          <linearGradient id="pvAreaFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor="#F4D97B" stopOpacity="0.50" />
+            <stop offset="30%"  stopColor="#E8C96A" stopOpacity="0.25" />
+            <stop offset="70%"  stopColor="#C9A646" stopOpacity="0.08" />
+            <stop offset="100%" stopColor="#C9A646" stopOpacity="0.01" />
+          </linearGradient>
+          <linearGradient id="pvAreaLine" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"   stopColor="#B8911F" />
+            <stop offset="42%"  stopColor="#F4D97B" />
+            <stop offset="100%" stopColor="#D4B04E" />
+          </linearGradient>
+        </defs>
 
-      {/* Horizontal gridlines */}
-      {gridRatios.map((ratio) => {
-        const y = AREA_PAD.top + ratio * (AREA_H - AREA_PAD.top - AREA_PAD.bottom);
-        return (
-          <line
-            key={`g-${ratio}`}
-            x1={AREA_PAD.left}
-            x2={AREA_W - AREA_PAD.right}
-            y1={y}
-            y2={y}
-            stroke="rgba(201,166,70,0.08)"
-            strokeDasharray="4 6"
-          />
-        );
-      })}
+        {/* Horizontal gridlines */}
+        {gridRatios.map((ratio) => {
+          const y = AREA_PAD.top + ratio * (AREA_H - AREA_PAD.top - AREA_PAD.bottom);
+          return (
+            <line
+              key={`g-${ratio}`}
+              x1={AREA_PAD.left}
+              x2={AREA_W - AREA_PAD.right}
+              y1={y}
+              y2={y}
+              stroke="rgba(201,166,70,0.08)"
+              strokeDasharray="4 6"
+            />
+          );
+        })}
 
-      {/* Area fill + stroke line */}
-      <path d={chart.areaPath} fill="url(#pvAreaFill)" />
-      <path
-        d={chart.linePath}
-        fill="none"
-        stroke="url(#pvAreaLine)"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+        {/* Area fill + stroke line */}
+        <path d={chart.areaPath} fill="url(#pvAreaFill)" />
+        <path
+          d={chart.linePath}
+          fill="none"
+          stroke="url(#pvAreaLine)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
 
-      {/* X-axis date labels */}
-      {chart.dateLabels.map(({ label, x, anchor }) => (
-        <text
-          key={label}
-          x={x}
-          y={AREA_H - AREA_PAD.bottom + 14}
-          textAnchor={anchor}
-          fill="rgba(255,255,255,0.38)"
-          fontSize="9"
+        {/* X-axis date labels */}
+        {chart.dateLabels.map(({ label, x, anchor }) => (
+          <text
+            key={label}
+            x={x}
+            y={AREA_H - AREA_PAD.bottom + 14}
+            textAnchor={anchor}
+            fill="rgba(255,255,255,0.38)"
+            fontSize="9"
+          >
+            {label}
+          </text>
+        ))}
+
+        {/* Hover overlay: crosshair + gold dot */}
+        {hovered && (
+          <>
+            {/* Vertical crosshair line */}
+            <line
+              x1={hovered.x}
+              x2={hovered.x}
+              y1={AREA_PAD.top}
+              y2={AREA_H - AREA_PAD.bottom}
+              stroke="rgba(255,255,255,0.18)"
+              strokeWidth="1"
+              strokeDasharray="3 3"
+            />
+            {/* Gold dot at the data point */}
+            <circle
+              cx={hovered.x}
+              cy={hovered.y}
+              r="4"
+              fill="#C9A646"
+              stroke="#F4D97B"
+              strokeWidth="1.5"
+            />
+          </>
+        )}
+      </svg>
+
+      {/* Tooltip — absolutely positioned over the wrapper div */}
+      {hovered && (
+        <div
+          className="pointer-events-none absolute top-0 z-10"
+          style={{
+            // x: place left of crosshair when in right 40% of chart, else right of it.
+            left: hovered.xFrac > 0.6
+              ? `${(hovered.x / AREA_W) * 100}%`
+              : `${(hovered.x / AREA_W) * 100}%`,
+            transform: hovered.xFrac > 0.6
+              ? 'translateX(calc(-100% - 8px))'
+              : 'translateX(8px)',
+            // y: align tooltip vertically near the dot, clamped so it never clips top.
+            top: `${Math.max(0, (hovered.y / AREA_H) * 100 - 10)}%`,
+          }}
         >
-          {label}
-        </text>
-      ))}
-    </svg>
+          <div className="rounded-[8px] border border-border-ds-subtle bg-surface-1 px-3 py-2 text-[12px] shadow-lg space-y-0.5">
+            <p className="text-ink-tertiary whitespace-nowrap">
+              {formatHoverDate(hovered.point.date)}
+            </p>
+            <p className="font-mono font-semibold text-gold-primary whitespace-nowrap">
+              ${hovered.point.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
