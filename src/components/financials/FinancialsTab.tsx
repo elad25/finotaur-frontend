@@ -33,9 +33,9 @@ function useSymbolFromURL() {
 }
 
 const statementLabels: Record<Statement, string> = {
-  income: "דוח רווח והפסד",
-  balance: "מאזן",
-  cashflow: "תזרים מזומנים",
+  income: "Income Statement",
+  balance: "Balance Sheet",
+  cashflow: "Cash Flow",
 };
 
 export default function FinancialsTab() {
@@ -126,18 +126,18 @@ export default function FinancialsTab() {
               "px-3 py-1.5 rounded-full text-sm transition " +
               (tf === "Quarterly" ? "bg-yellow-600/30 text-yellow-100" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700")
             }
-          >רבעוני</button>
+          >Quarterly</button>
           <button
             onClick={() => setTF("Annual")}
             className={
               "px-3 py-1.5 rounded-full text-sm transition " +
               (tf === "Annual" ? "bg-yellow-600/30 text-yellow-100" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700")
             }
-          >שנתי</button>
+          >Annual</button>
 
           <div className="w-px h-5 bg-zinc-700 mx-1" />
           <button onClick={onExportCSV} className="px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm">
-            הורדה CSV
+            Download CSV
           </button>
           <button onClick={onPrintPDF} className="px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm">
             PDF/Print
@@ -153,8 +153,8 @@ export default function FinancialsTab() {
       )}
 
       {/* Error / Loading */}
-      {error && <div className="text-red-400 text-sm">שגיאה: {error}</div>}
-      {loading && <div className="text-zinc-400 text-sm">טוען נתונים…</div>}
+      {error && <div className="text-red-400 text-sm">Error: {error}</div>}
+      {loading && <div className="text-zinc-400 text-sm">Loading data…</div>}
 
       {/* Compact table with sparkline */}
       {!loading && !error && blocks.length > 0 && (
@@ -164,7 +164,7 @@ export default function FinancialsTab() {
       {/* Footer link */}
       <div className="pt-2">
         <a href={`/app/filings?symbol=${encodeURIComponent(symbol)}`} className="text-yellow-400 hover:text-yellow-300 text-sm">
-          צפייה בכל הדוחות (SEC) ←
+          View all filings (SEC) →
         </a>
       </div>
     </div>

@@ -287,13 +287,13 @@ function TradeIdeaRow({ idea, rank, whyForYou }: { idea: TradeIdea; rank: number
         {idea.pattern_evidence && (
           <details className="mt-1.5 max-w-[320px] text-[10px] leading-[1.45]">
             <summary className="cursor-pointer text-gold-primary/70 hover:text-gold-primary transition">
-              למה הפטרן הזה? (Why this pattern?)
+              Why this pattern?
             </summary>
             <div className="mt-1 ps-2 border-s border-gold-primary/20">
               <p className="text-ink-secondary">{idea.pattern_evidence}</p>
               {idea.invalidation && (
                 <p className="mt-1 text-ink-tertiary">
-                  <strong className="text-ink-secondary">תנאי שלילה / Invalidation:</strong>{' '}
+                  <strong className="text-ink-secondary">Invalidation:</strong>{' '}
                   {idea.invalidation}
                 </p>
               )}

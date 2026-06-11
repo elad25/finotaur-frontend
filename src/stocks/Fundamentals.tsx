@@ -6,9 +6,9 @@ const fetcher = (u:string)=> fetch(u).then(r=>r.json());
 
 export default function Fundamentals({ symbol, tf='TTM', periods=10 }:{symbol:string; tf?:TF; periods?:5|10}){
   const { data, error, isLoading } = useSWR(`/api/fundamentals/all?symbol=${symbol}&tf=${tf}&periods=${periods}`, fetcher, { dedupingInterval: 60000 });
-  if (error) return <div className="text-red-400">שגיאה בטעינת נתונים</div>;
+  if (error) return <div className="text-red-400">Failed to load data</div>;
 
-  const dbg = data ? `kpis: ${Object.keys(data?.kpis || {}).length}  trends: ${Object.keys(data?.trends || {}).length}  valuation.multiples: ${Object.keys(data?.valuation?.multiples || {}).length}  peers: ${data?.peers?.tickers?.length||0}  health: ${data?.health?'yes':'no'}  context: ${data?.context?'yes':'no'}` : 'טוען...';
+  const dbg = data ? `kpis: ${Object.keys(data?.kpis || {}).length}  trends: ${Object.keys(data?.trends || {}).length}  valuation.multiples: ${Object.keys(data?.valuation?.multiples || {}).length}  peers: ${data?.peers?.tickers?.length||0}  health: ${data?.health?'yes':'no'}  context: ${data?.context?'yes':'no'}` : 'Loading...';
 
   return (
     <div className="space-y-6">
@@ -71,7 +71,7 @@ function Trends({data, loading}:{data:any; loading:boolean}){
   const t = data?.trends ?? {};
   return (
     <div className="p-4 rounded-2xl bg-neutral-900/60 border border-neutral-800">
-      <div className="text-sm text-neutral-300 mb-2">מגמות פיננסיות (דמו טקסטואלי)</div>
+      <div className="text-sm text-neutral-300 mb-2">Financial trends (text demo)</div>
       <div className="text-xs text-neutral-500">Periods: {t?.periods?.length || 0}</div>
       <div className="text-xs text-neutral-500">Revenue pts: {t?.revenue?.length || 0} • Net: {t?.netIncome?.length || 0}</div>
       <div className="text-xs text-neutral-500">Margins pts: {t?.grossMarginPct?.length || 0}/{t?.operMarginPct?.length || 0}</div>
@@ -91,7 +91,7 @@ function Valuation({data, loading}:{data:any; loading:boolean}){
   );
   return (
     <div className="rounded-2xl bg-neutral-900/60 border border-neutral-800 overflow-hidden">
-      <div className="p-3 text-neutral-400 text-xs">מכפילים</div>
+      <div className="p-3 text-neutral-400 text-xs">Multiples</div>
       <Row label="P/E (TTM)" value={m.peTTM} />
       <Row label="Forward P/E" value={m.peForward} />
       <Row label="PEG" value={m.peg} />
@@ -113,7 +113,7 @@ function Health({data, loading}:{data:any; loading:boolean}){
   );
   return (
     <div className="rounded-2xl bg-neutral-900/60 border border-neutral-800 overflow-hidden">
-      <div className="p-3 text-neutral-400 text-xs">מדדי בריאות</div>
+      <div className="p-3 text-neutral-400 text-xs">Health metrics</div>
       <Row label="Altman Z" value={h.altmanZ} />
       <Row label="Piotroski F" value={h.piotroskiF} />
       <Row label="Interest Coverage" value={h.interestCoverage} />
@@ -126,7 +126,7 @@ function Peers({data, loading}:{data:any; loading:boolean}){
   const peers = data?.peers ?? { tickers: [] };
   return (
     <div className="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-4">
-      <div className="text-neutral-300 text-sm mb-2">השוואת עמיתים (SIC)</div>
+      <div className="text-neutral-300 text-sm mb-2">Peer comparison (SIC)</div>
       <div className="text-xs text-neutral-500">{peers.tickers?.join(', ') || '—'}</div>
     </div>
   );
@@ -136,7 +136,7 @@ function Context({data}:{data:any}){
   const c = data?.context ?? {};
   return (
     <div className="text-xs text-neutral-500">
-      {c.company || '—'} • מגזר: {c.sector || '—'} • תעשייה: {c.industry || '—'} • SIC: {c.sic || '—'}
+      {c.company || '—'} • Sector: {c.sector || '—'} • Industry: {c.industry || '—'} • SIC: {c.sic || '—'}
     </div>
   );
 }

@@ -139,10 +139,10 @@ export function MultipleExits({
       <div className="flex items-center justify-between">
         <Label className="text-xs text-zinc-400 flex items-center gap-2">
           <Calculator className="w-4 h-4" />
-          יציאות (Partial Exits)
+          Partial Exits
         </Label>
         <div className="text-xs text-zinc-500">
-          נותר: <span className="text-yellow-400 font-medium">{formatNumber(remainingQuantity, 2)}</span>
+          Remaining: <span className="text-yellow-400 font-medium">{formatNumber(remainingQuantity, 2)}</span>
           <span className="text-zinc-600 mx-1">|</span>
           {formatNumber(remainingPercentage, 0)}%
         </div>
@@ -158,7 +158,7 @@ export function MultipleExits({
             {/* Exit Header */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-zinc-400">
-                יציאה #{index + 1}
+                Exit #{index + 1}
                 {exit.percentage && exit.percentage > 0 && (
                   <span className="ml-2 text-yellow-400">
                     ({formatNumber(exit.percentage, 0)}%)
@@ -200,7 +200,7 @@ export function MultipleExits({
             {/* Quantity & Price Inputs */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-[10px] text-zinc-500 mb-1 block">כמות</Label>
+                <Label className="text-[10px] text-zinc-500 mb-1 block">Quantity</Label>
                 <Input
                   type="number"
                   step="any"
@@ -216,7 +216,7 @@ export function MultipleExits({
               </div>
               
               <div>
-                <Label className="text-[10px] text-zinc-500 mb-1 block">מחיר יציאה</Label>
+                <Label className="text-[10px] text-zinc-500 mb-1 block">Exit price</Label>
                 <Input
                   type="number"
                   step="any"
@@ -239,7 +239,7 @@ export function MultipleExits({
                   ? 'bg-emerald-500/10 border border-emerald-500/20' 
                   : 'bg-red-500/10 border border-red-500/20'
               }`}>
-                <span className="text-xs text-zinc-400">P&L יציאה זו:</span>
+                <span className="text-xs text-zinc-400">P&L this exit:</span>
                 <span className={`text-sm font-bold ${
                   (exit.pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
                 }`}>
@@ -259,7 +259,7 @@ export function MultipleExits({
           className="w-full py-3 rounded-xl border-2 border-dashed border-zinc-700 hover:border-yellow-500/40 text-zinc-400 hover:text-yellow-400 transition-all flex items-center justify-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          <span className="text-sm">הוסף יציאה נוספת</span>
+          <span className="text-sm">Add another exit</span>
         </button>
       )}
 
@@ -268,24 +268,24 @@ export function MultipleExits({
         <div className="mt-6 bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-xl p-5 border border-yellow-200/20">
           <h4 className="text-xs font-medium text-yellow-400 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Calculator className="w-4 h-4" />
-            סיכום יציאות
+            Exits summary
           </h4>
           
           <div className="grid grid-cols-3 gap-4">
             {/* Total Exited */}
             <div className="text-center p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
-              <div className="text-[10px] text-zinc-500 mb-1">יצאו מהפוזיציה</div>
+              <div className="text-[10px] text-zinc-500 mb-1">Exited from position</div>
               <div className="text-lg font-bold text-white">
                 {formatNumber(exitedQuantity, 2)}
               </div>
               <div className="text-[10px] text-zinc-600">
-                {formatNumber((exitedQuantity / totalQuantity) * 100, 0)}% מהכמות
+                {formatNumber((exitedQuantity / totalQuantity) * 100, 0)}% of quantity
               </div>
             </div>
 
             {/* Weighted Average Price */}
             <div className="text-center p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
-              <div className="text-[10px] text-zinc-500 mb-1">מחיר ממוצע משוקלל</div>
+              <div className="text-[10px] text-zinc-500 mb-1">Weighted average price</div>
               <div className="text-lg font-bold text-yellow-400">
                 ${formatNumber(weightedAveragePrice, 4)}
               </div>
@@ -293,7 +293,7 @@ export function MultipleExits({
                 {side === 'LONG' 
                   ? weightedAveragePrice > entryPrice ? '↑' : '↓'
                   : weightedAveragePrice < entryPrice ? '↑' : '↓'
-                } מהכניסה
+                } from entry
               </div>
             </div>
 
@@ -303,7 +303,7 @@ export function MultipleExits({
                 ? 'bg-emerald-500/10 border-emerald-500/30' 
                 : 'bg-red-500/10 border-red-500/30'
             }`}>
-              <div className="text-[10px] text-zinc-500 mb-1">P&L כולל</div>
+              <div className="text-[10px] text-zinc-500 mb-1">Total P&L</div>
               <div className={`text-lg font-bold ${
                 totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'
               }`}>
@@ -312,7 +312,7 @@ export function MultipleExits({
               <div className={`text-[10px] ${
                 totalPnL >= 0 ? 'text-emerald-500' : 'text-red-500'
               }`}>
-                {totalPnL >= 0 ? 'רווח' : 'הפסד'}
+                {totalPnL >= 0 ? 'Profit' : 'Loss'}
               </div>
             </div>
           </div>
@@ -323,7 +323,7 @@ export function MultipleExits({
               <div className="flex items-center gap-2 text-yellow-400 text-xs">
                 <TrendingUp className="w-4 h-4" />
                 <span>
-                  פוזיציה פתוחה: <span className="font-bold">{formatNumber(remainingQuantity, 2)}</span> נותרו
+                  Open position: <span className="font-bold">{formatNumber(remainingQuantity, 2)}</span> remaining
                   ({formatNumber(remainingPercentage, 0)}%)
                 </span>
               </div>
