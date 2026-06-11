@@ -51,7 +51,7 @@ function PersonalCommentaryCard({
   if (expiresAt) {
     try {
       const refreshed = new Date(new Date(expiresAt).getTime() - 24 * 60 * 60 * 1000);
-      refreshedLabel = refreshed.toLocaleString(undefined, {
+      refreshedLabel = refreshed.toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
