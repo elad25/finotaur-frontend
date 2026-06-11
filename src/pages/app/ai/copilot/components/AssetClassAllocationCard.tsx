@@ -159,7 +159,7 @@ function HoleLabel({ totalDisplay, hideValues }: HoleLabelProps) {
       style={{ top: 0, left: 0, right: 0, bottom: 0 }}
     >
       <span className="font-mono text-sm leading-tight text-gold-primary">
-        {hideValues ? '****' : totalDisplay}
+        {hideValues ? '**********' : totalDisplay}
       </span>
       <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">TOTAL</span>
     </div>

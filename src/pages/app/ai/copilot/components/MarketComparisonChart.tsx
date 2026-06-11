@@ -217,7 +217,7 @@ export function MarketComparisonChart({
             <p className={cn('mt-1 font-mono text-base tabular-nums', returnColour)}>
               {hideValues ? (
                 <>
-                  <span>****</span>
+                  <span>**********</span>
                   {' '}
                   <span className="text-sm">
                     ({totalReturn.changePct >= 0 ? '+' : ''}
