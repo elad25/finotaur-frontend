@@ -323,8 +323,11 @@ export const domains: Record<string, Domain> = {
     locked: false,
     beta: false,
     subNav: [
-      { label: 'Overview', path: '/app/futures/overview' },
-      { label: 'Contracts', path: '/app/futures/contracts' },
+      { label: 'Overview',     path: '/app/futures/overview' },
+      { label: 'Contracts',    path: '/app/futures/contracts' },
+      { label: 'Curves',       path: '/app/futures/curves' },
+      { label: 'Positioning',  path: '/app/futures/positioning' },
+      { label: 'Calculators',  path: '/app/futures/tools' },
     ],
     sidebar: [
       { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
