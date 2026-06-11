@@ -599,9 +599,15 @@ export function BacktestChart({
         let fillPrice = order.triggerPrice;
         if (order.type === 'LIMIT') {
           if (order.side === 'LONG' && bar.low <= order.triggerPrice) {
-            triggered = true; fillPrice = order.triggerPrice;
+            // Limit-or-better: BUY LIMIT fills at min(triggerPrice, bar.open) so a
+            // gap-down open (or a bar that opened well below the limit) doesn't produce
+            // a fill price that is WORSE than the current market (the original bug where
+            // a LONG LIMIT at 202.72 with market at 200.09 filled at 202.72 instead of
+            // 200.09). bar.open is always available on a revealed bar.
+            triggered = true; fillPrice = Math.min(order.triggerPrice, bar.open);
           } else if (order.side === 'SHORT' && bar.high >= order.triggerPrice) {
-            triggered = true; fillPrice = order.triggerPrice;
+            // SELL LIMIT fills at max(triggerPrice, bar.open) — seller gets limit or better.
+            triggered = true; fillPrice = Math.max(order.triggerPrice, bar.open);
           }
         } else { // STOP
           if (order.side === 'LONG' && bar.high >= order.triggerPrice) {
@@ -840,6 +846,13 @@ export function BacktestChart({
     const tp = order.takeProfit ?? undefined;
     const side: PaperSide = order.side === 'buy' ? 'LONG' : 'SHORT';
     if (order.kind === 'market') {
+      // Guard: order.price is the panel's marketPrice prop (= currentBarRef.current?.close).
+      // If no bar has been revealed yet, marketPrice is 0 — block the order rather than
+      // silently opening at $0 (or falling through to a different price source).
+      if (!order.price || order.price <= 0) {
+        flashTradeError('No bar data yet — step the replay forward first.');
+        return;
+      }
       openPosition({
         side,
         price: order.price,
@@ -863,7 +876,7 @@ export function BacktestChart({
         time,
       });
     }
-  }, [openPosition, addPendingOrder, activeStrategyId]);
+  }, [openPosition, addPendingOrder, activeStrategyId, flashTradeError]);
 
   // ─── Save-to-journal handler ──────────────────────────────────
   const handleSaveToJournal = useCallback(async () => {
