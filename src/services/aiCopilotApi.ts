@@ -183,21 +183,40 @@ export const aiCopilotApi = {
                 case 'conversation':
                   if (onConversation) onConversation(data.id);
                   break;
-                  
+
                 case 'chunk':
                   if (onChunk) onChunk(data.content);
                   break;
-                  
+
                 case 'sources':
                   if (onSources) onSources(data.sources);
                   break;
-                  
+
                 case 'done':
                   if (onComplete) onComplete(data);
                   break;
-                  
+
                 case 'error':
                   if (onError) onError(data.message);
+                  break;
+
+                case 'action':
+                  // Dispatch a DOM event so FinoActionBar can show an approval UI
+                  // without threading new props through the chat component tree.
+                  window.dispatchEvent(
+                    new CustomEvent('fino:action', {
+                      detail: {
+                        action: data.action as string,
+                        count: data.count as number,
+                        label: data.label as string,
+                      },
+                    }),
+                  );
+                  break;
+
+                default:
+                  // Unknown event types are silently ignored — future server additions
+                  // must not crash existing clients.
                   break;
               }
             } catch (e) {
@@ -315,6 +334,41 @@ export const aiCopilotApi = {
     };
   },
   
+  /**
+   * Approve a FINO action suggested during a chat response.
+   * Currently supports: 'auto_tag_history'
+   *
+   * Returns { tagged: number } on 200, throws on non-2xx.
+   * A 403 with { error: 'upgrade_required' } is re-thrown as-is so callers
+   * can display a tier-gated message rather than a generic error.
+   */
+  async approveFinoAction(action: string): Promise<{ tagged: number }> {
+    const headers = await getAuthHeaders();
+
+    const endpointMap: Record<string, string> = {
+      auto_tag_history: '/api/ai/fino/actions/auto-tag-history',
+    };
+
+    const path = endpointMap[action];
+    if (!path) throw new Error(`Unknown FINO action: ${action}`);
+
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers,
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(
+        body.error === 'upgrade_required'
+          ? 'upgrade_required'
+          : body.message || body.error || `Action failed (${response.status})`,
+      );
+    }
+
+    return response.json() as Promise<{ tagged: number }>;
+  },
+
   /**
    * Submit feedback for a message
    */
