@@ -205,9 +205,9 @@ interface WallSpec {
 }
 
 /**
- * Derive up to 4 bid + 4 ask wall specs from the raw order book.
+ * Derive up to 5 bid + 5 ask wall specs from the raw order book.
  * Only levels within ±4% of mid are considered.
- * Noise gate: keep only bins whose notional ≥ max(p90 of nonzero bins, 25% of largest).
+ * Noise gate: keep only bins whose notional ≥ max(p95 of nonzero bins, 30% of largest).
  */
 function computeWalls(
   bids: Map<number, number>,
@@ -248,16 +248,16 @@ function computeWalls(
     if (nonzero.length === 0) return [];
 
     const sorted = [...nonzero].sort((a, b) => a - b);
-    const p90idx = Math.floor(sorted.length * 0.9);
-    const p90    = sorted[Math.min(p90idx, sorted.length - 1)];
+    const p95idx = Math.floor(sorted.length * 0.95);
+    const p95    = sorted[Math.min(p95idx, sorted.length - 1)];
     const largest = sorted[sorted.length - 1];
-    const threshold = Math.max(p90, largest * 0.25);
+    const threshold = Math.max(p95, largest * 0.30);
 
-    // Filter bins above threshold, then take top-4 by notional
+    // Filter bins above threshold, then take top-5 by notional
     const candidates = Array.from(bins.entries())
       .filter(([, n]) => n >= threshold)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
+      .slice(0, 5);
 
     return candidates.map(([price, notional]) => ({
       id: `${side}-${price}`,
@@ -298,9 +298,12 @@ function ErrorBanner({ onRetry }: { onRetry: () => void }) {
 
 const WALL_INTERVAL_MS = 3_000; // recompute walls every 3 seconds
 
-// Bid walls: subtle emerald; ask walls: brand gold
-const BID_COLOR  = 'rgba(34,197,94,0.55)';
-const ASK_COLOR  = 'rgba(201,166,70,0.75)';
+// Base RGB components — alpha is computed per-wall from size ratio
+const BID_RGB = '34,197,94';   // emerald-500
+const ASK_RGB = '201,166,70';  // brand gold
+// Legend swatch colors (fixed — mid-opacity representative shade)
+const BID_COLOR  = `rgba(${BID_RGB},0.55)`;
+const ASK_COLOR  = `rgba(${ASK_RGB},0.75)`;
 
 interface WorkstationInnerProps {
   symbol: string;
@@ -343,29 +346,35 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       if (!changed) return;
       prevWallsRef.current = next;
 
-      // Determine the largest bid and largest ask by notional.
-      const maxBidNotional = Math.max(
-        0,
-        ...next.filter(w => w.side === 'bid').map(w => w.notional),
-      );
-      const maxAskNotional = Math.max(
-        0,
-        ...next.filter(w => w.side === 'ask').map(w => w.notional),
-      );
+      // Size-proportional rendering: scale line weight and opacity against the
+      // single largest wall across BOTH sides so a huge ask wall is visually
+      // dominant over small bid walls, not just within its own side.
+      const maxNotional = Math.max(0, ...next.map(w => w.notional));
 
       const lines: OverlayPriceLine[] = next.map(w => {
         const isBid  = w.side === 'bid';
-        const isLargest = isBid
-          ? w.notional === maxBidNotional
-          : w.notional === maxAskNotional;
+        const rgb    = isBid ? BID_RGB : ASK_RGB;
+        const ratio  = maxNotional > 0 ? w.notional / maxNotional : 0;
+
+        // lineWidth: 4 steps by ratio
+        const lineWidth: 1 | 2 | 3 | 4 =
+          ratio >= 0.66 ? 4 :
+          ratio >= 0.40 ? 3 :
+          ratio >= 0.20 ? 2 : 1;
+
+        // Opacity: linear ramp 0.35 → 0.90 capped
+        const alpha = Math.min(0.9, 0.35 + 0.55 * ratio);
+
+        // lineStyle: solid for stronger walls, dashed for minor walls
+        const lineStyle = ratio >= 0.40 ? 0 : 2; // 0=Solid, 2=Dashed
+
         return {
           id: w.id,
           price: w.price,
           title: formatNotional(w.notional),
-          color: isBid ? BID_COLOR : ASK_COLOR,
-          lineWidth: isLargest ? 2 : 1,
-          // Largest wall on each side is solid (0); others are dashed (2)
-          lineStyle: isLargest ? 0 : 2,
+          color: `rgba(${rgb},${alpha.toFixed(2)})`,
+          lineWidth,
+          lineStyle,
         };
       });
 
