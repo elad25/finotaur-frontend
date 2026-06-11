@@ -502,33 +502,43 @@ const normalizeDate = (dateStr: string): string => {
   return dateStr.split(' ')[0].split('T')[0];
 };
 
-// Check if event is in the past
+// Event times from the server are US Eastern Time (ET) strings; compare against ET "now".
+const getNowET = (): { date: string; time: string } => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date());
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}`,
+  };
+};
+
+// Check if event is in the past (event times are ET strings — compare against ET now)
 const isEventPast = (date: string, time: string): boolean => {
-  const now = new Date();
-  const eventDate = new Date(normalizeDate(date) + 'T00:00:00');
-  
-  if (time) {
-    const [hours, minutes] = time.split(':').map(Number);
-    eventDate.setHours(hours || 0, minutes || 0, 0, 0);
-  }
-  
-  return eventDate < now;
+  const nowET = getNowET();
+  const eventDate = normalizeDate(date);
+  const eventTime = time || '00:00';
+  return eventDate < nowET.date || (eventDate === nowET.date && eventTime <= nowET.time);
 };
 
 // Index among a day's TIME-SORTED events where the NOW line belongs:
 // before the first event still in the future; events.length if all are past.
 // Returns null when this isn't today.
+// Event times are ET strings — compare against ET now (string compare works: both zero-padded).
 const getNowInsertIndex = (
   events: { date: string; time: string }[],
   isToday: boolean
 ): number | null => {
   if (!isToday) return null;
-  const now = new Date();
+  const nowET = getNowET();
   for (let i = 0; i < events.length; i++) {
-    const t = new Date(normalizeDate(events[i].date) + 'T00:00:00');
-    const [h, m] = (events[i].time || '00:00').split(':').map(Number);
-    t.setHours(h || 0, m || 0, 0, 0);
-    if (t > now) return i;
+    const eventDate = normalizeDate(events[i].date);
+    const eventTime = events[i].time || '00:00';
+    const isFuture = eventDate > nowET.date || (eventDate === nowET.date && eventTime > nowET.time);
+    if (isFuture) return i;
   }
   return events.length;
 };
@@ -549,11 +559,9 @@ const ImportanceStars: React.FC<{ level: Importance }> = ({ level }) => (
   </div>
 );
 
-// 🔥 NOW INDICATOR LINE — gold line marking the current moment in the day's timeline
+// 🔥 NOW INDICATOR LINE — gold line marking the current moment in the day's timeline (ET)
 const NowIndicator: React.FC = () => {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
+  const time = getNowET().time;
   return (
     <tr aria-label="current time">
       <td colSpan={7} className="px-0 py-0">
@@ -561,7 +569,7 @@ const NowIndicator: React.FC = () => {
           <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-lg shadow-amber-500/50" />
           <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold font-mono shadow-md shadow-amber-500/40">
             <span className="w-1.5 h-1.5 rounded-full bg-black/70 animate-pulse" />
-            NOW {hh}:{mm}
+            NOW {time} ET
           </span>
         </div>
       </td>
@@ -802,12 +810,10 @@ const DataValue: React.FC<{
 const EconomicCalendarTable: React.FC<{
   events: EconomicEvent[];
   loading: boolean;
-  timeFilter: TimeFilter;
-}> = ({ events, loading, timeFilter }) => {
+}> = ({ events, loading }) => {
   if (loading) return <TableSkeleton />;
 
-  const today = new Date().toISOString().split('T')[0];
-  const isShowingToday = timeFilter === 'today' || timeFilter === 'thisWeek';
+  const today = getNowET().date;
 
   // ✅ FIXED: Properly group events by normalized date
   const groupedEvents: Record<string, EconomicEvent[]> = {};
@@ -871,7 +877,7 @@ const EconomicCalendarTable: React.FC<{
             
             {/* Events table */}
             {(() => {
-              const nowIndex = isToday && isShowingToday ? getNowInsertIndex(dateEvents, isToday) : null;
+              const nowIndex = isToday ? getNowInsertIndex(dateEvents, isToday) : null;
               return (
                 <table className="w-full">
                   <thead>
@@ -1582,10 +1588,9 @@ export default function AllMarketsCalendar() {
           {activeTab === 'economic' && (
             <>
               {data?.economic?.events?.length ? (
-                <EconomicCalendarTable 
-                  events={data.economic.events} 
+                <EconomicCalendarTable
+                  events={data.economic.events}
                   loading={loading}
-                  timeFilter={timeFilter}
                 />
               ) : loading ? (
                 <TableSkeleton />
