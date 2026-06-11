@@ -20,6 +20,7 @@ import {
 import { Card } from '@/components/ds/Card';
 import { cn } from '@/lib/utils';
 import { useBenchmarkSeries } from '../hooks/useBenchmarkSeries';
+import { useValuePrivacy } from '../hooks/useValuePrivacy';
 import type { PerformancePoint, TimeRange } from '../hooks/usePortfolioData';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -122,6 +123,7 @@ export function MarketComparisonChart({
   onRangeChange,
   className,
 }: Props) {
+  const [hideValues] = useValuePrivacy();
   const { sp500, nasdaq } = useBenchmarkSeries(range);
 
   // Normalise each series independently to %-return from first point.
@@ -213,13 +215,26 @@ export function MarketComparisonChart({
           <h2 className="text-[13px] font-normal uppercase text-gold-primary">PERFORMANCE</h2>
           {totalReturn && (
             <p className={cn('mt-1 font-mono text-base tabular-nums', returnColour)}>
-              {totalReturn.changeAbs >= 0 ? '+' : '−'}
-              {formatDollar(Math.abs(totalReturn.changeAbs))}
-              {' '}
-              <span className="text-sm">
-                ({totalReturn.changePct >= 0 ? '+' : ''}
-                {totalReturn.changePct.toFixed(2)}%)
-              </span>
+              {hideValues ? (
+                <>
+                  <span>****</span>
+                  {' '}
+                  <span className="text-sm">
+                    ({totalReturn.changePct >= 0 ? '+' : ''}
+                    {totalReturn.changePct.toFixed(2)}%)
+                  </span>
+                </>
+              ) : (
+                <>
+                  {totalReturn.changeAbs >= 0 ? '+' : '−'}
+                  {formatDollar(Math.abs(totalReturn.changeAbs))}
+                  {' '}
+                  <span className="text-sm">
+                    ({totalReturn.changePct >= 0 ? '+' : ''}
+                    {totalReturn.changePct.toFixed(2)}%)
+                  </span>
+                </>
+              )}
             </p>
           )}
           {rangePills}
