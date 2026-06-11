@@ -1,13 +1,11 @@
 // src/pages/app/ai/copilot/components/AssetClassAllocationCard.tsx
 // =====================================================
-// ALLOCATION card — asset-class donut with pointing slice labels.
-// Uses recharts PieChart + Pie (innerRadius = donut) with a custom
-// label renderer that draws a callout line + "ClassName N.N%".
+// ALLOCATION card — asset-class donut with a left-side vertical legend.
+// Uses recharts PieChart + Pie (thick donut, no floating labels).
 // Multi-colour palette overrides ADL-020 per explicit user request.
 // =====================================================
 
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import type { PieLabelRenderProps } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { PremiumFrame } from '../brief/PremiumFrame';
 import { useValuePrivacy } from '../hooks/useValuePrivacy';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
@@ -57,91 +55,35 @@ function formatTotal(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-// ─── Custom label renderer ────────────────────────────────────────────────────
+function formatDollarFull(value: number): string {
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
-/**
- * Renders a short leader line from the slice midpoint to a callout text
- * showing "ClassName N.N%". The line bends via two SVG line segments:
- * outer ring → elbow → text anchor.
- */
-function renderCustomLabel(props: PieLabelRenderProps) {
-  const {
-    cx, cy,
-    midAngle,
-    innerRadius,
-    outerRadius,
-    name,
-    percent,
-  } = props;
+// ─── Recharts Tooltip ─────────────────────────────────────────────────────────
 
-  // recharts types innerRadius/outerRadius as number | string — narrow safely
-  const ir = typeof innerRadius === 'number' ? innerRadius : 0;
-  const or = typeof outerRadius === 'number' ? outerRadius : 0;
-  const cxN = typeof cx === 'number' ? cx : 0;
-  const cyN = typeof cy === 'number' ? cy : 0;
+interface PieTooltipPayloadItem {
+  name: string;
+  value: number;
+  payload: { name: string; value: number; pct: number };
+}
 
-  const RADIAN = Math.PI / 180;
-  const sin = Math.sin(-midAngle * RADIAN);
-  const cos = Math.cos(-midAngle * RADIAN);
+interface PieTooltipProps {
+  active?: boolean;
+  payload?: PieTooltipPayloadItem[];
+  hideValues: boolean;
+}
 
-  // Point on the outer edge of the slice
-  const sx = cxN + (or + 2) * cos;
-  const sy = cyN + (or + 2) * sin;
-
-  // Elbow point
-  const mx = cxN + (or + 22) * cos;
-  const my = cyN + (or + 22) * sin;
-
-  // Horizontal end of the leader line
-  const ex = mx + (cos >= 0 ? 1 : -1) * 16;
-  const ey = my;
-
-  const textAnchor = cos >= 0 ? 'start' : 'end';
-  const pct = typeof percent === 'number' ? (percent * 100).toFixed(1) : '0.0';
-  const labelText = `${name as string} ${pct}%`;
-
-  // Skip rendering for tiny slivers (< 1%) to avoid label collision
-  if (typeof percent === 'number' && percent < 0.01) return null;
-
-  // For very small slices shorten the leader line
-  const leaderLen = or - ir;
-  const useShortLine = leaderLen < 8;
-
-  if (useShortLine) {
-    return (
-      <text
-        x={ex + (cos >= 0 ? 4 : -4)}
-        y={ey}
-        textAnchor={textAnchor}
-        dominantBaseline="central"
-        fill="rgba(255,255,255,0.72)"
-        fontSize={11}
-      >
-        {labelText}
-      </text>
-    );
-  }
-
+function AllocationTooltip({ active, payload, hideValues }: PieTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
   return (
-    <g>
-      <path
-        d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`}
-        stroke="rgba(255,255,255,0.25)"
-        strokeWidth={1}
-        fill="none"
-      />
-      <circle cx={ex} cy={ey} r={2} fill="rgba(255,255,255,0.35)" stroke="none" />
-      <text
-        x={ex + (cos >= 0 ? 4 : -4)}
-        y={ey}
-        textAnchor={textAnchor}
-        dominantBaseline="central"
-        fill="rgba(255,255,255,0.72)"
-        fontSize={11}
-      >
-        {labelText}
-      </text>
-    </g>
+    <div className="rounded-[8px] border border-border-ds-subtle bg-surface-1 px-3 py-2 text-[12px] shadow-lg space-y-0.5">
+      <p className="font-medium text-ink-primary">{item.name}</p>
+      <p className="text-ink-secondary">
+        {hideValues ? '**********' : formatDollarFull(item.value)}
+      </p>
+      <p className="text-ink-tertiary">{item.payload.pct.toFixed(1)}%</p>
+    </div>
   );
 }
 
@@ -156,13 +98,41 @@ function HoleLabel({ totalDisplay, hideValues }: HoleLabelProps) {
   return (
     <div
       className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
-      style={{ top: 0, left: 0, right: 0, bottom: 0 }}
     >
       <span className="font-mono text-sm leading-tight text-gold-primary">
         {hideValues ? '**********' : totalDisplay}
       </span>
       <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">TOTAL</span>
     </div>
+  );
+}
+
+// ─── Vertical legend ─────────────────────────────────────────────────────────
+
+interface LegendItem {
+  name: string;
+  pct: number;
+  colour: string;
+}
+
+function VerticalLegend({ items }: { items: LegendItem[] }) {
+  return (
+    <ul className="flex shrink-0 flex-col gap-3 min-w-[96px]">
+      {items.map((item) => (
+        <li key={item.name} className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="inline-block rounded-[2px]"
+              style={{ width: 9, height: 9, background: item.colour, flexShrink: 0 }}
+            />
+            <span className="text-[12px] text-ink-secondary">{item.name}</span>
+          </div>
+          <span className="pl-[13.5px] text-[11px] font-bold text-ink-primary">
+            {item.pct.toFixed(1)}%
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -191,13 +161,19 @@ export function AssetClassAllocationCard({ snapshot, className }: Props) {
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({ name, value: Math.max(value, 0), pct: (value / total) * 100 }));
 
+  const legendItems: LegendItem[] = chartData.map((d) => ({
+    name: d.name,
+    pct: d.pct,
+    colour: colourFor(d.name),
+  }));
+
   const totalDisplay = formatTotal(snapshot.totalValue);
 
   return (
     <PremiumFrame className={`min-h-[300px] ${className ?? ''}`}>
       <div className="p-5">
         {/* Header */}
-        <div className="mb-3">
+        <div className="mb-4">
           <p className="text-[13px] uppercase text-gold-primary">ALLOCATION</p>
           <p className="text-[10px] uppercase tracking-[0.12em] text-ink-tertiary">by Asset Class</p>
         </div>
@@ -208,23 +184,27 @@ export function AssetClassAllocationCard({ snapshot, className }: Props) {
             No positions to allocate yet.
           </p>
         ) : (
-          // Outer container: flex + justify-center so the chart sits in the middle
-          <div className="flex justify-center">
-            {/* Relative wrapper so the absolute HoleLabel overlay works */}
-            <div className="relative w-full" style={{ maxWidth: 480 }}>
-              <ResponsiveContainer width="100%" height={340}>
-                <PieChart margin={{ top: 24, right: 60, bottom: 24, left: 60 }}>
+          <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+            {/* Left: vertical legend */}
+            <VerticalLegend items={legendItems} />
+
+            {/* Right: thick donut */}
+            <div className="relative flex-1" style={{ minWidth: 160, maxWidth: 260, aspectRatio: '1 / 1' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
                   <Pie
                     data={chartData}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius="48%"
-                    outerRadius="70%"
-                    strokeWidth={1}
-                    stroke="#070604"
-                    label={renderCustomLabel}
+                    innerRadius="60%"
+                    outerRadius="92%"
+                    paddingAngle={3}
+                    cornerRadius={6}
+                    strokeWidth={0}
+                    stroke="transparent"
+                    label={false}
                     labelLine={false}
                     isAnimationActive={false}
                   >
@@ -232,6 +212,20 @@ export function AssetClassAllocationCard({ snapshot, className }: Props) {
                       <Cell key={entry.name} fill={colourFor(entry.name)} />
                     ))}
                   </Pie>
+                  <Tooltip
+                    content={
+                      // recharts Tooltip passes active/payload as props — we bridge hideValues in via closure
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- recharts content prop is loosely typed
+                      (props: any) => (
+                        <AllocationTooltip
+                          active={props.active as boolean | undefined}
+                          payload={props.payload as PieTooltipPayloadItem[] | undefined}
+                          hideValues={hideValues}
+                        />
+                      )
+                    }
+                    cursor={false}
+                  />
                 </PieChart>
               </ResponsiveContainer>
               <HoleLabel totalDisplay={totalDisplay} hideValues={hideValues} />
