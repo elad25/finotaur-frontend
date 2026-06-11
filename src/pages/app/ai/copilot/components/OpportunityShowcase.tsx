@@ -502,7 +502,7 @@ function OutlookDonut({ bullish, neutral, bearish }: OutlookDonutProps) {
         width: 80,
         height: 80,
         background: `conic-gradient(
-          #4ade80 0 ${bullDeg}deg,
+          #16a34a 0 ${bullDeg}deg,
           #f59e0b ${bullDeg}deg ${bullDeg + neutDeg}deg,
           #e24b4a ${bullDeg + neutDeg}deg 360deg
         )`,
@@ -510,12 +510,12 @@ function OutlookDonut({ bullish, neutral, bearish }: OutlookDonutProps) {
     >
       {/* Donut hole */}
       <div
-        className="absolute inset-0 m-auto rounded-full bg-[#080808]"
-        style={{ width: 52, height: 52, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#080808]"
+        style={{ width: 52, height: 52 }}
       />
       {/* Center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-mono text-[13px] font-bold text-[#4ade80]">{bullish}%</span>
+        <span className="font-mono text-[13px] font-bold text-[#16a34a]">{bullish}%</span>
         <span className="text-[8px] text-ink-tertiary">Bullish</span>
       </div>
     </div>
@@ -545,7 +545,7 @@ function RightColumn({ opp }: RightColumnProps) {
           <div className="space-y-1.5">
             {(
               [
-                { label: 'Bullish', value: bullish, color: 'bg-[#4ade80]', text: 'text-[#4ade80]' },
+                { label: 'Bullish', value: bullish, color: 'bg-[#16a34a]', text: 'text-[#16a34a]' },
                 { label: 'Neutral', value: neutral, color: 'bg-[#f59e0b]', text: 'text-[#f59e0b]' },
                 { label: 'Bearish', value: bearish, color: 'bg-red-500', text: 'text-red-400' },
               ] as const
