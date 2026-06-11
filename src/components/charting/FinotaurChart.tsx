@@ -990,6 +990,9 @@ export function FinotaurChart({
 
     const firstBarTime = bars.length > 0 ? (bars[0].time as unknown as number) : null;
     const lastBarTime  = bars.length > 0 ? (bars[bars.length - 1].time as unknown as number) : null;
+    const barSpacing   = bars.length > 1
+      ? (bars[bars.length - 1].time as unknown as number) - (bars[bars.length - 2].time as unknown as number)
+      : null;
 
     // ── Remove series no longer in the prop ───────────────────
     for (const [id, entry] of Array.from(activeMap.entries())) {
@@ -1005,13 +1008,20 @@ export function FinotaurChart({
       const resolvedEnd = seg.endTime !== null ? seg.endTime : (lastBarTime ?? seg.startTime);
 
       // Clamp start to the first bar (can't render before loaded history).
-      const clampedStart = firstBarTime !== null
+      let clampedStart = firstBarTime !== null
         ? Math.max(seg.startTime, firstBarTime)
         : seg.startTime;
 
-      // Skip degenerate segments — single-point lines are invisible and
+      // A wall born inside the current (still-forming) bar collapses to a
+      // single point — render it as a minimum one-bar segment at the right
+      // edge instead of hiding it.
+      if (clampedStart >= resolvedEnd && barSpacing !== null) {
+        clampedStart = resolvedEnd - barSpacing;
+      }
+
+      // Skip segments that still degenerate (single loaded bar, etc.) —
       // lightweight-charts requires strictly ascending times in setData.
-      if (clampedStart >= resolvedEnd) {
+      if (clampedStart >= resolvedEnd || (firstBarTime !== null && clampedStart < firstBarTime)) {
         // Remove the series if it was previously rendered.
         const existing = activeMap.get(id);
         if (existing) {
@@ -1042,12 +1052,14 @@ export function FinotaurChart({
         ]);
         activeMap.set(id, {
           series: lineSeries,
-          endTime: seg.endTime,
+          // Store the RESOLVED end (seg.endTime stays null for alive walls)
+          // so live segments keep extending as new bars arrive.
+          endTime: resolvedEnd,
           title: seg.title,
         });
       } else {
-        // ── Update if endTime or title changed ─────────────────
-        const endChanged   = existing.endTime !== seg.endTime;
+        // ── Update if the resolved end or title changed ─────────
+        const endChanged   = existing.endTime !== resolvedEnd;
         const titleChanged = existing.title   !== seg.title;
 
         if (endChanged) {
@@ -1055,7 +1067,7 @@ export function FinotaurChart({
             { time: clampedStart as UTCTimestamp, value: seg.price },
             { time: resolvedEnd as UTCTimestamp,  value: seg.price },
           ]);
-          existing.endTime = seg.endTime;
+          existing.endTime = resolvedEnd;
         }
 
         if (titleChanged) {
