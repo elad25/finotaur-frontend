@@ -463,7 +463,13 @@ export async function fetchFinoBriefing(): Promise<FinoBriefingResult> {
     tier: data.tier,
     date: data.date,
     generatedAt: data.generatedAt,
-    brief: data.brief,
+    // Server returns personal/portfolio as TOP-LEVEL siblings of brief —
+    // normalize them into BriefContent so the card reads one shape.
+    brief: {
+      ...data.brief,
+      personal: data.personal ?? data.brief?.personal,
+      portfolio: data.portfolio ?? data.brief?.portfolio,
+    },
   };
 }
 
