@@ -380,7 +380,7 @@ function TopOpportunitiesPanel({ className, fullWidth = false }: { className?: s
             </div>
           )}
         </div>
-        <Link to="/app/ai/copilot/top-opportunities" className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.055] text-[11px] uppercase text-gold-primary">
+        <Link to="/app/ai/copilot/top-opportunities" className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/30 bg-gold-primary/15 text-[11px] uppercase text-gold-bright transition-colors hover:bg-gold-primary/25 hover:text-white">
           VIEW ALL OPPORTUNITIES <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </PremiumFrame>
