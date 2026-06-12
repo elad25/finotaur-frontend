@@ -1,0 +1,601 @@
+// src/components/charting/DepthMatrixLayer.tsx
+//
+// Canvas overlay that renders a scrolling [time × price] depth matrix heatmap
+// on top of FinotaurChart's lightweight-charts canvas.
+//
+// Design (mirrors WallHeatLayer conventions):
+//   - Absolutely-positioned canvas (pointer-events: none).
+//   - Offscreen canvas for the matrix (1 pixel = 1 cell).
+//   - Offscreen repaints ONLY when: new column arrives, normalization changes,
+//     or resolution tier flips. Per-frame work = ONE ctx.drawImage() with an
+//     affine mapping derived from timeToCoordinate / priceToCoordinate.
+//   - Per-frame coordinate fingerprint (same pattern as WallHeatLayer) to
+//     detect price-axis rescale which fires no lw-charts v4 subscription.
+//   - try/finally with setTransform reset — mid-frame throw cannot corrupt
+//     the transform stack.
+//   - Clips drawing at timeScale().width() so nothing paints over the price axis.
+//   - imageSmoothingEnabled = false (pixel-sharp cells).
+//   - Cells with q===0 → transparent. Gap columns (flags bit0) → transparent.
+//
+// Color mapping (exact spec):
+//   STOPS: [0.00 → navy] [0.25 → blue] [0.50 → cyan] [0.75 → yellow] [1.00 → white]
+//   vHi  = p99 of visible q values (NOT max — one iceberg must not flatten field)
+//   vLo  = slider percentile (p50..p95, default ~p70)
+//   t    = (q/1000 - vLo) / (vHi - vLo), gamma 0.65
+//   q===0 → transparent; t≤0 → faint context (lut[0] + alpha 0x20)
+//
+// Floor filter: bins with decoded USD < floorUsd are treated as q=0.
+//   USD = expm1(q / 1000). A bin passes iff expm1(q/1000) >= floorUsd
+//   i.e. q >= round(log1p(floorUsd) * 1000).
+
+import { useEffect, useRef } from 'react';
+import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
+import { qToUsd } from '@/pages/app/crypto/scanner/useDepthSlices';
+
+// ── Color LUT ─────────────────────────────────────────────────────────────────
+
+const STOPS: Array<[number, [number, number, number]]> = [
+  [0.00, [5,   10,  20 ]],
+  [0.25, [10,  42,  107]],
+  [0.50, [0,   179, 200]],
+  [0.75, [255, 216, 61 ]],
+  [1.00, [255, 255, 255]],
+];
+
+/** Precomputed 256-entry RGBA Uint32 LUT (ABGR in little-endian Uint32). */
+function buildLUT(): Uint32Array {
+  const lut = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    let r = 0, g = 0, b = 0;
+    for (let s = 1; s < STOPS.length; s++) {
+      const [t0, c0] = STOPS[s - 1];
+      const [t1, c1] = STOPS[s];
+      if (t >= t0 && t <= t1) {
+        const frac = (t - t0) / (t1 - t0);
+        r = Math.round(c0[0] + (c1[0] - c0[0]) * frac);
+        g = Math.round(c0[1] + (c1[1] - c0[1]) * frac);
+        b = Math.round(c0[2] + (c1[2] - c0[2]) * frac);
+        break;
+      }
+    }
+    // Pack as ABGR (ImageData is RGBA in memory, but Uint32 on little-endian
+    // hosts reads as ABGR where A is the most-significant byte stored last).
+    lut[i] = (0xff << 24) | (b << 16) | (g << 8) | r;
+  }
+  return lut;
+}
+
+const LUT: Uint32Array = buildLUT();
+
+// Faint context color for cells below vLo (alpha 0x20 = 32/255 ≈ 12.5%).
+// navy at 12.5% opacity → ABGR = (0x20 << 24) | (20 << 16) | (10 << 8) | 5
+const FAINT_COLOR = (0x20 << 24) | (20 << 16) | (10 << 8) | 5;
+
+// ── Histogram-based percentile (O(n), no sort) ───────────────────────────────
+
+/** Compute a percentile over uint16 values using a 65536-bin histogram. */
+function percentile65536(qValues: Uint16Array, pct: number): number {
+  if (qValues.length === 0) return 0;
+  const hist = new Uint32Array(65536);
+  for (let i = 0; i < qValues.length; i++) hist[qValues[i]]++;
+
+  const target = Math.ceil(qValues.length * pct);
+  let cum = 0;
+  for (let q = 0; q < 65536; q++) {
+    cum += hist[q];
+    if (cum >= target) return q;
+  }
+  return 65535;
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+export interface DepthMatrixLayerProps {
+  chart: IChartApi;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  series: ISeriesApi<any>;
+  columns: DecodedColumn[];
+  binSize: number;
+  /** Container CSS width in px */
+  width: number;
+  /** Container CSS height in px */
+  height: number;
+  /** Slider 0..1 → maps to p50..p95 floor percentile. Default: ~0.4 → p70 */
+  sensitivitySlider?: number;
+  /** Absolute notional floor in USD — bins below are treated as q=0 */
+  floorUsd?: number;
+  /** Current candle interval in milliseconds — used to map column→px width */
+  candleIntervalMs: number;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function DepthMatrixLayer({
+  chart,
+  series,
+  columns,
+  binSize,
+  width,
+  height,
+  sensitivitySlider = 0.4,
+  floorUsd = 1_000,
+  candleIntervalMs,
+}: DepthMatrixLayerProps) {
+  const canvasRef          = useRef<HTMLCanvasElement>(null);
+  const offscreenRef       = useRef<OffscreenCanvas | null>(null);
+  const offscreenCtxRef    = useRef<OffscreenCanvasRenderingContext2D | null>(null);
+
+  const rafRef             = useRef<number | null>(null);
+  const dirtyRef           = useRef<boolean>(true);
+  const lastFingerprintRef = useRef<string>('');
+
+  // Track what's painted on the offscreen to avoid redundant repaints.
+  const offscreenVersionRef  = useRef<number>(0);
+  const paintedVersionRef    = useRef<number>(-1);
+
+  // Normalization params — recomputed on visible window change or slider move.
+  const vLoRef = useRef<number>(0);
+  const vHiRef = useRef<number>(1);
+
+  // Debounce recolor to rAF while slider drags.
+  const sliderRafRef = useRef<number | null>(null);
+
+  // Keep latest props in refs.
+  const columnsRef         = useRef<DecodedColumn[]>(columns);
+  const binSizeRef         = useRef<number>(binSize);
+  const widthRef           = useRef<number>(width);
+  const heightRef          = useRef<number>(height);
+  const floorUsdRef        = useRef<number>(floorUsd);
+  const sensitivityRef     = useRef<number>(sensitivitySlider);
+  const candleIntervalRef  = useRef<number>(candleIntervalMs);
+
+  columnsRef.current        = columns;
+  binSizeRef.current        = binSize;
+  widthRef.current          = width;
+  heightRef.current         = height;
+  floorUsdRef.current       = floorUsd;
+  sensitivityRef.current    = sensitivitySlider;
+  candleIntervalRef.current = candleIntervalMs;
+
+  // ── Normalization ─────────────────────────────────────────────────────────
+
+  function recomputeNorm(
+    cols: DecodedColumn[],
+    chart2: IChartApi,
+    curBinSize: number,
+    floor: number,
+    slider: number,
+  ) {
+    // Only look at visible columns.
+    const vis = chart2.timeScale().getVisibleRange();
+    const fromSec = vis ? (vis.from as unknown as number) : -Infinity;
+    const toSec   = vis ? (vis.to   as unknown as number) : Infinity;
+
+    // Compute floor q threshold
+    const floorQ = Math.round(Math.log1p(floor) * 1000);
+
+    // Collect all q values in the visible window for both sides.
+    const qList: number[] = [];
+    for (const col of cols) {
+      const colSec = col.t / 1000;
+      if (colSec < fromSec - 120 || colSec > toSec + 120) continue; // ±2 min slack
+      if (col.binSize !== curBinSize) continue; // rebucketed columns may differ temporarily
+      for (const r of col.bids) {
+        if (r.q >= floorQ && r.q > 0) qList.push(r.q);
+      }
+      for (const r of col.asks) {
+        if (r.q >= floorQ && r.q > 0) qList.push(r.q);
+      }
+    }
+
+    if (qList.length < 2) {
+      vLoRef.current = 0;
+      vHiRef.current = 1;
+      return;
+    }
+
+    const arr = new Uint16Array(qList.length);
+    for (let i = 0; i < qList.length; i++) arr[i] = Math.min(65535, qList[i]);
+
+    // vHi = p99 (clamp ice-bergs)
+    const rawHi = percentile65536(arr, 0.99);
+    // vLo = slider [0..1] → p50..p95
+    const loPercentile = 0.50 + slider * 0.45;
+    const rawLo = percentile65536(arr, loPercentile);
+
+    // Decode to USD for the threshold comparison (actual normalization is in q-space).
+    vHiRef.current = rawHi > 0 ? qToUsd(rawHi) : 1;
+    vLoRef.current = qToUsd(rawLo);
+
+    if (vHiRef.current <= vLoRef.current) {
+      vHiRef.current = vLoRef.current + 1;
+    }
+  }
+
+  // ── Offscreen repaint ─────────────────────────────────────────────────────
+  // Paints the entire matrix to the offscreen canvas.
+  // Called only when columns change or normalization changes.
+
+  function repaintOffscreen(
+    cols: DecodedColumn[],
+    curBinSize: number,
+    floor: number,
+    vLo: number,
+    vHi: number,
+    chartInst: IChartApi,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    seriesInst: ISeriesApi<any>,
+  ) {
+    if (cols.length === 0) return;
+
+    // ── Determine grid extents ────────────────────────────────────────────
+    // Price range: min/max bin price across all columns.
+    let priceMin = Infinity;
+    let priceMax = -Infinity;
+    for (const col of cols) {
+      for (const r of col.bids) {
+        if (r.price < priceMin) priceMin = r.price;
+        if (r.price + curBinSize > priceMax) priceMax = r.price + curBinSize;
+      }
+      for (const r of col.asks) {
+        if (r.price < priceMin) priceMin = r.price;
+        if (r.price + curBinSize > priceMax) priceMax = r.price + curBinSize;
+      }
+    }
+    if (!isFinite(priceMin) || !isFinite(priceMax)) return;
+
+    const numCols = cols.length;
+    // Number of price rows
+    const numRows = Math.round((priceMax - priceMin) / curBinSize) + 1;
+    if (numCols <= 0 || numRows <= 0) return;
+
+    // Resize offscreen if needed
+    const needed_w = numCols;
+    const needed_h = numRows;
+    if (
+      !offscreenRef.current ||
+      offscreenRef.current.width !== needed_w ||
+      offscreenRef.current.height !== needed_h
+    ) {
+      try {
+        offscreenRef.current = new OffscreenCanvas(needed_w, needed_h);
+        offscreenCtxRef.current = offscreenRef.current.getContext('2d', { alpha: true })!;
+      } catch {
+        return;
+      }
+    }
+
+    const octx = offscreenCtxRef.current;
+    if (!octx) return;
+
+    // Clear
+    octx.clearRect(0, 0, needed_w, needed_h);
+
+    const imgData = octx.createImageData(needed_w, needed_h);
+    const buf = new Uint32Array(imgData.data.buffer);
+
+    const floorQ = Math.round(Math.log1p(floor) * 1000);
+    const dVLo = vLo;
+    const dVHi = vHi;
+    const dRange = dVHi - dVLo;
+
+    // Helper: map a q value to a canvas pixel color.
+    function qToColor(q: number): number {
+      if (q === 0 || q < floorQ) return 0; // transparent
+
+      const usd = qToUsd(q);
+      if (usd < floor) return 0;
+
+      let t = (usd - dVLo) / dRange;
+      if (t <= 0) return FAINT_COLOR; // below vLo → faint context
+      if (t > 1) t = 1;
+
+      // gamma compression (0.65) to pop low-intensity cells
+      const gamma = Math.pow(t, 0.65);
+      const idx = Math.min(255, (gamma * 255) | 0);
+      return LUT[idx];
+    }
+
+    // Fill cells
+    for (let ci = 0; ci < cols.length; ci++) {
+      const col = cols[ci];
+      if (col.flags & 1) continue; // gap column — leave transparent
+
+      // Build a map from binFloor(price) → q for bids + asks combined.
+      // Bids go on one side, asks on another, but for the heatmap we render
+      // them all together by price level (Bookmap style).
+      const cellMap = new Map<number, number>(); // price → q
+
+      for (const r of col.bids) {
+        const existing = cellMap.get(r.price) ?? 0;
+        cellMap.set(r.price, Math.max(existing, r.q));
+      }
+      for (const r of col.asks) {
+        const existing = cellMap.get(r.price) ?? 0;
+        cellMap.set(r.price, Math.max(existing, r.q));
+      }
+
+      for (const [price, q] of cellMap) {
+        const color = qToColor(q);
+        if (color === 0) continue;
+
+        // Row index: 0 = priceMin, increasing upward in price but canvas Y increases downward.
+        // We flip: rowIdx 0 = top of canvas = highest price.
+        const priceRow = Math.round((price - priceMin) / curBinSize);
+        // Canvas row 0 = highest price (numRows - 1 - priceRow)
+        const canvasRow = numRows - 1 - priceRow;
+        if (canvasRow < 0 || canvasRow >= numRows) continue;
+
+        const pixelIdx = canvasRow * numCols + ci;
+        buf[pixelIdx] = color;
+      }
+    }
+
+    octx.putImageData(imgData, 0, 0);
+
+    // Annotate with what price range and column array this represents
+    // (stored so the per-frame compositor can compute the affine mapping).
+    (offscreenRef.current as unknown as Record<string, unknown>)._meta = {
+      priceMin,
+      priceMax,
+      numCols,
+      numRows,
+      cols,
+      curBinSize,
+    };
+  }
+
+  // Fallback bar spacing used when only 1 column is loaded (can't infer from 2 pts).
+  // Approximated from chart pane width / number of candles that fit at current interval.
+  const barSpacingRef = useRef<number>(8);
+
+  // ── RAF draw loop ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const chartInstance  = chart;
+    const seriesInstance = series;
+    let running = true;
+
+    function drawFrame() {
+      if (!running) return;
+      rafRef.current = requestAnimationFrame(drawFrame);
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const cssW = widthRef.current;
+      const cssH = heightRef.current;
+      if (cssW <= 0 || cssH <= 0) return;
+
+      // ── Per-frame fingerprint (same pattern as WallHeatLayer) ────────────
+      const rawPaneW = chartInstance.timeScale().width();
+      const paneW = (typeof rawPaneW === 'number' && rawPaneW > 0) ? rawPaneW : cssW;
+
+      const logRange = chartInstance.timeScale().getVisibleLogicalRange();
+      const fpFrom = logRange ? logRange.from : NaN;
+      const fpTo   = logRange ? logRange.to   : NaN;
+
+      // Sentinel probe: use the midpoint of current columns' price range.
+      const cols = columnsRef.current;
+      let sentinelPrice = 0;
+      if (cols.length > 0) {
+        // Find a representative price from the first non-empty column.
+        for (const col of cols) {
+          if (col.bids.length > 0) { sentinelPrice = col.bids[0].price; break; }
+          if (col.asks.length > 0) { sentinelPrice = col.asks[0].price; break; }
+        }
+      }
+      const fpY = sentinelPrice > 0
+        ? (seriesInstance.priceToCoordinate(sentinelPrice) ?? NaN)
+        : NaN;
+
+      const fingerprint = `${paneW}|${cssW}|${cssH}|${fpFrom}|${fpTo}|${fpY}`;
+      const fingerprintChanged = fingerprint !== lastFingerprintRef.current;
+
+      // ── Decide if offscreen needs repaint ──────────────────────────────
+      const needsRepaint = offscreenVersionRef.current !== paintedVersionRef.current;
+
+      if (!dirtyRef.current && !fingerprintChanged && !needsRepaint) return;
+      dirtyRef.current = false;
+
+      if (needsRepaint || fingerprintChanged) {
+        // Recompute norm when viewport changes
+        recomputeNorm(
+          columnsRef.current,
+          chartInstance,
+          binSizeRef.current,
+          floorUsdRef.current,
+          sensitivityRef.current,
+        );
+      }
+
+      if (needsRepaint) {
+        repaintOffscreen(
+          columnsRef.current,
+          binSizeRef.current,
+          floorUsdRef.current,
+          vLoRef.current,
+          vHiRef.current,
+          chartInstance,
+          seriesInstance,
+        );
+        paintedVersionRef.current = offscreenVersionRef.current;
+      }
+
+      const offscreen = offscreenRef.current;
+      if (!offscreen) return;
+
+      const meta = (offscreen as unknown as Record<string, unknown>)._meta as {
+        priceMin: number;
+        priceMax: number;
+        numCols: number;
+        numRows: number;
+        cols: DecodedColumn[];
+        curBinSize: number;
+      } | undefined;
+      if (!meta || meta.numCols === 0 || meta.numRows === 0) return;
+
+      // Resize display canvas
+      const dpr = window.devicePixelRatio || 1;
+      const pixW = Math.round(cssW * dpr);
+      const pixH = Math.round(cssH * dpr);
+      if (canvas.width !== pixW || canvas.height !== pixH) {
+        canvas.width  = pixW;
+        canvas.height = pixH;
+        canvas.style.width  = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      try {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssW, cssH);
+
+        if (meta.cols.length === 0) return;
+
+        // ── Compute affine mapping from offscreen to canvas ───────────────
+        // We need to map each column's time → x coordinate and each price row → y.
+        // Both axes are linear in lw-charts v4.
+
+        // Time axis: map column index to x coordinate.
+        // We use the first and last column's t to establish the linear mapping.
+        const firstCol = meta.cols[0];
+        const lastCol  = meta.cols[meta.cols.length - 1];
+
+        const firstX = chartInstance.timeScale().timeToCoordinate(
+          Math.round(firstCol.t / 1000) as UTCTimestamp,
+        );
+        const lastX = chartInstance.timeScale().timeToCoordinate(
+          Math.round(lastCol.t / 1000) as UTCTimestamp,
+        );
+
+        if (firstX === null || lastX === null) return;
+
+        const x0 = firstX as number; // canvas x of first column center
+        const xN = lastX  as number; // canvas x of last column center
+
+        // Update bar spacing estimate each frame for single-column fallback.
+        {
+          const paneW2 = chartInstance.timeScale().width();
+          const ivMs = candleIntervalRef.current;
+          if (typeof paneW2 === 'number' && paneW2 > 0 && ivMs > 0) {
+            // Estimate: visible window is ~lookback seconds wide.
+            // Use the visible logical range instead if available.
+            const lr = chartInstance.timeScale().getVisibleLogicalRange();
+            if (lr) {
+              const visibleBars = lr.to - lr.from;
+              if (visibleBars > 0) {
+                // slice interval / candle interval = slices per candle
+                // approximated as 5s / ivMs for 5s-res, or 1:1 for 1m
+                barSpacingRef.current = paneW2 / visibleBars;
+              }
+            }
+          }
+        }
+
+        // Column width in canvas px
+        const colWidthPx = meta.numCols > 1
+          ? (xN - x0) / (meta.numCols - 1)
+          : barSpacingRef.current;
+
+        // Left edge of first column, right edge of last.
+        const drawLeft  = Math.max(0,    x0 - colWidthPx * 0.5);
+        const drawRight = Math.min(paneW, xN + colWidthPx * 0.5);
+
+        if (drawRight <= drawLeft) return;
+
+        // Price axis: map priceMin → bottom, priceMax → top in canvas space.
+        const yAtPriceMax = seriesInstance.priceToCoordinate(meta.priceMax);
+        const yAtPriceMin = seriesInstance.priceToCoordinate(meta.priceMin);
+
+        if (yAtPriceMax === null || yAtPriceMin === null) return;
+
+        const drawTop    = yAtPriceMax as number;
+        const drawBottom = yAtPriceMin as number;
+
+        if (drawBottom <= drawTop) return;
+
+        const drawW = drawRight - drawLeft;
+        const drawH = drawBottom - drawTop;
+
+        // ── Draw offscreen → canvas (single blit) ───────────────────────
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          offscreen,
+          0, 0, meta.numCols, meta.numRows, // source rect (entire offscreen)
+          drawLeft, drawTop, drawW, drawH,  // destination rect
+        );
+
+      } finally {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+      }
+
+      lastFingerprintRef.current = fingerprint;
+    }
+
+    rafRef.current = requestAnimationFrame(drawFrame);
+
+    return () => {
+      running = false;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chart, series]);
+
+  // ── Subscriptions that mark dirty ─────────────────────────────────────────
+  useEffect(() => {
+    const timeScale = chart.timeScale();
+    const markDirty = () => { dirtyRef.current = true; };
+    timeScale.subscribeVisibleLogicalRangeChange(markDirty);
+    timeScale.subscribeVisibleTimeRangeChange(markDirty);
+    const interval = setInterval(markDirty, 500);
+    return () => {
+      try { timeScale.unsubscribeVisibleLogicalRangeChange(markDirty); } catch { /* chart gone */ }
+      try { timeScale.unsubscribeVisibleTimeRangeChange(markDirty); }   catch { /* chart gone */ }
+      clearInterval(interval);
+    };
+  }, [chart]);
+
+  // Mark dirty on size change
+  useEffect(() => {
+    dirtyRef.current = true;
+  }, [width, height]);
+
+  // ── Trigger offscreen repaint on column/normalization changes ─────────────
+  useEffect(() => {
+    // Debounce via rAF for slider drags
+    if (sliderRafRef.current !== null) cancelAnimationFrame(sliderRafRef.current);
+    sliderRafRef.current = requestAnimationFrame(() => {
+      offscreenVersionRef.current++;
+      dirtyRef.current = true;
+    });
+  }, [columns, binSize, sensitivitySlider, floorUsd]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position:      'absolute',
+        top:           0,
+        left:          0,
+        width:         `${width}px`,
+        height:        `${height}px`,
+        pointerEvents: 'none',
+        // Behind candles (z-index 5) and below WallHeatLayer (z-index 10).
+        zIndex:        5,
+      }}
+      aria-hidden="true"
+    />
+  );
+}
+
+export default DepthMatrixLayer;
