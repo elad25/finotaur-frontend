@@ -1484,19 +1484,10 @@ export default function AllMarketsCalendar() {
       <div className="relative max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg">
-                  <Calendar className="text-black" size={24} />
-                </div>
-                <span>
-                  <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Markets</span>{' '}
-                  <span className="text-ink-primary">Calendar</span>
-                </span>
-              </h1>
-            </div>
-          </div>
+          <h1 className="text-3xl font-bold mb-2 text-center">
+            <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Markets</span>{' '}
+            <span className="text-ink-primary">Calendar</span>
+          </h1>
         </div>
 
         {/* Main Tabs */}
