@@ -32,6 +32,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
+import { WallHeatLayer } from '@/pages/app/crypto/scanner/WallHeatLayer';
 import {
   createChart,
   ColorType,
@@ -590,6 +591,14 @@ export interface FinotaurChartProps {
    * No-op when absent — zero impact on backtest/journal callers.
    */
   wallSegments?: WallSegment[];
+  /**
+   * How wall segments are rendered.
+   * - 'series' (default): the existing Baseline series approach — zero behavior change
+   *   for all existing callers (backtest, journal, any caller that doesn't pass this prop).
+   * - 'heatmap': renders an absolutely-positioned canvas overlay (WallHeatLayer) instead
+   *   of creating Baseline series. Used by MarketScanner v9 for full-book rendering.
+   */
+  wallRenderMode?: 'series' | 'heatmap';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -610,6 +619,7 @@ export function FinotaurChart({
   focusRange,
   priceLines,
   wallSegments,
+  wallRenderMode = 'series',
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -660,6 +670,11 @@ export function FinotaurChart({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [barCount, setBarCount] = useState(0);
+  /**
+   * Container pixel dimensions — tracked so WallHeatLayer can resize its canvas.
+   * Only populated when wallRenderMode === 'heatmap'.
+   */
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   /**
    * Bumping counter that triggers a re-render of the icon overlay whenever
    * the chart viewport changes (pan / zoom / resize). Increment to reposition.
@@ -740,11 +755,15 @@ export function FinotaurChart({
       const { width: w, height: h } = entry.contentRect;
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: Math.floor(w), height: Math.floor(h) });
+        // Also track size for WallHeatLayer when in heatmap mode.
+        if (wallRenderMode === 'heatmap') {
+          setContainerSize({ w: Math.floor(w), h: Math.floor(h) });
+        }
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [wallRenderMode]);
 
   // ─── Overlay reposition: subscribe to pan/zoom + resize ────
   // Fires setOverlayTick (bumping counter) whenever the visible time range
@@ -821,27 +840,44 @@ export function FinotaurChart({
 
       // Hit-test wall segments: find first segment where price falls in [seg.price, seg.price+bandHeight]
       // and the crosshair time (if available) falls within the rendered span.
-      const activeMap = wallSegmentSeriesRef.current;
       let matchedId: string | null = null;
       let matchedTooltip: string | undefined;
 
-      for (const [id, entry] of activeMap.entries()) {
-        // Find the WallSegment spec for this entry to get price + bandHeight
-        const seg = (wallSegments ?? []).find(s => s.id === id || `dead:${s.id}` === id);
-        if (!seg) continue;
-
-        // Price-band hit test
-        if (price < seg.price || price > seg.price + seg.bandHeight) continue;
-
-        // Time-range hit test (if time available from crosshair)
-        if (param.time !== undefined) {
-          const t = param.time as number;
-          if (t < entry.renderedStart || t > entry.renderedEnd) continue;
+      if (wallRenderMode === 'heatmap') {
+        // In heatmap mode the Baseline series map is empty; hit-test directly
+        // against wallSegments data. Time range: [startTime, endTime ?? +∞].
+        for (const seg of (wallSegments ?? [])) {
+          if (price < seg.price || price > seg.price + seg.bandHeight) continue;
+          if (param.time !== undefined) {
+            const t = param.time as number;
+            const tEnd = seg.endTime ?? Number.POSITIVE_INFINITY;
+            if (t < seg.startTime || t > tEnd) continue;
+          }
+          matchedId    = seg.id;
+          matchedTooltip = seg.tooltip;
+          break;
         }
+      } else {
+        // 'series' mode: use the Baseline series map which carries renderedStart/renderedEnd.
+        const activeMap = wallSegmentSeriesRef.current;
+        for (const [id, entry] of activeMap.entries()) {
+          // Find the WallSegment spec for this entry to get price + bandHeight
+          const seg = (wallSegments ?? []).find(s => s.id === id || `dead:${s.id}` === id);
+          if (!seg) continue;
 
-        matchedId = id;
-        matchedTooltip = entry.tooltip;
-        break;
+          // Price-band hit test
+          if (price < seg.price || price > seg.price + seg.bandHeight) continue;
+
+          // Time-range hit test (if time available from crosshair)
+          if (param.time !== undefined) {
+            const t = param.time as number;
+            if (t < entry.renderedStart || t > entry.renderedEnd) continue;
+          }
+
+          matchedId = id;
+          matchedTooltip = entry.tooltip;
+          break;
+        }
       }
 
       if (matchedId === null || !matchedTooltip) {
@@ -881,7 +917,8 @@ export function FinotaurChart({
     };
   // Re-subscribe when chart mounts or wallSegments list changes (new ids / tooltips).
   // barCount ensures the candle series is ready before we subscribe.
-  }, [barCount, wallSegments]);
+  // wallRenderMode: changes the hit-test branch in the handler.
+  }, [barCount, wallSegments, wallRenderMode]);
 
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
@@ -1117,9 +1154,20 @@ export function FinotaurChart({
   // Dead walls are frozen at their endTime.
   // Segments where clamped start >= end are skipped.
   // No-op when `wallSegments` is absent — zero impact on backtest/journal callers.
+  // When wallRenderMode === 'heatmap', this entire effect is bypassed — rendering
+  // is handled by WallHeatLayer canvas overlay instead.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
+    // In heatmap mode: skip Baseline series creation; clean up any pre-existing
+    // series so switching modes doesn't leave stale series behind.
+    if (wallRenderMode === 'heatmap') {
+      for (const [id, entry] of Array.from(wallSegmentSeriesRef.current.entries())) {
+        try { chart.removeSeries(entry.series); } catch { /* chart may be gone */ }
+        wallSegmentSeriesRef.current.delete(id);
+      }
+      return;
+    }
 
     const segments = wallSegments ?? [];
     const nextMap = new Map<string, WallSegment>(segments.map(s => [s.id, s]));
@@ -1268,7 +1316,8 @@ export function FinotaurChart({
     }
   // barCount triggers re-evaluation after bars load (lastBarTime shifts).
   // wallSegments triggers on every scanner tick.
-  }, [wallSegments, barCount]);
+  // wallRenderMode: switching modes cleans up Baseline series or re-creates them.
+  }, [wallSegments, barCount, wallRenderMode]);
 
   // ─── Render ─────────────────────────────────────────────────
   return (
@@ -1287,6 +1336,21 @@ export function FinotaurChart({
 
       {/* Chart canvas mount */}
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Wall heatmap canvas overlay — only in heatmap mode.
+          Sits above lw-charts canvas but below the marker icons overlay.
+          Rendered once chart and candle series are ready (barCount > 0). */}
+      {wallRenderMode === 'heatmap' &&
+       chartRef.current && seriesRef.current &&
+       wallSegments && wallSegments.length > 0 && (
+        <WallHeatLayer
+          chart={chartRef.current}
+          series={seriesRef.current}
+          segments={wallSegments}
+          width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
+          height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+        />
+      )}
 
       {/* Icon-in-circle overlay — ArrowUp / ArrowDown markers positioned via
           pixel coordinates from the chart API. pointer-events:none so the overlay
