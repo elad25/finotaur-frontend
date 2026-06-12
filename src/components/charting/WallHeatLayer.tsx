@@ -48,9 +48,13 @@ export function WallHeatLayer({
   width,
   height,
 }: WallHeatLayerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef    = useRef<number | null>(null);
-  const dirtyRef  = useRef<boolean>(true);
+  const canvasRef            = useRef<HTMLCanvasElement>(null);
+  const rafRef               = useRef<number | null>(null);
+  const dirtyRef             = useRef<boolean>(true);
+  // Per-frame coordinate fingerprint: lets us detect price-axis rescale
+  // (drag / autoscale) which fires no lw-charts subscription in v4.
+  // Compared cheaply each frame; redraw whenever it changes even if dirtyRef is false.
+  const lastFingerprintRef   = useRef<string>('');
 
   // Keep latest props in refs so the RAF loop always reads the newest values
   // without re-registering subscriptions every render.
@@ -76,15 +80,47 @@ export function WallHeatLayer({
       if (!running) return;
       rafRef.current = requestAnimationFrame(drawFrame);
 
-      if (!dirtyRef.current) return;
-      dirtyRef.current = false;
-
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const cssW = widthRef.current;
       const cssH = heightRef.current;
       if (cssW <= 0 || cssH <= 0) return;
+
+      // ── Per-frame coordinate fingerprint ────────────────────────────────────
+      // Detects price-axis rescale (user drag or autoscale) which fires no
+      // lw-charts v4 subscription. Computed every frame; cost is ~5 property
+      // reads + 2 priceToCoordinate calls + a short string concat — negligible.
+      const rawPaneWFp = chartInstance.timeScale().width();
+      const paneWFp = (typeof rawPaneWFp === 'number' && rawPaneWFp > 0) ? rawPaneWFp : cssW;
+      const logRange = chartInstance.timeScale().getVisibleLogicalRange();
+      const fpFrom   = logRange ? logRange.from : NaN;
+      const fpTo     = logRange ? logRange.to   : NaN;
+
+      // Two sentinel price probes — pick min/max of current segments.
+      // When empty, use 0/1 as stable sentinels (they'll yield null → NaN).
+      const segsForFp = segmentsRef.current;
+      let sentinelMin = 0;
+      let sentinelMax = 1;
+      if (segsForFp.length > 0) {
+        sentinelMin = segsForFp[0].price;
+        sentinelMax = segsForFp[0].price;
+        for (let i = 1; i < segsForFp.length; i++) {
+          const p = segsForFp[i].price;
+          if (p < sentinelMin) sentinelMin = p;
+          if (p > sentinelMax) sentinelMax = p;
+        }
+      }
+      const fpYMin = seriesInstance.priceToCoordinate(sentinelMin) ?? NaN;
+      const fpYMax = seriesInstance.priceToCoordinate(sentinelMax) ?? NaN;
+
+      const fingerprint = `${paneWFp}|${cssW}|${cssH}|${fpFrom}|${fpTo}|${fpYMin}|${fpYMax}`;
+
+      const fingerprintChanged = fingerprint !== lastFingerprintRef.current;
+      if (!dirtyRef.current && !fingerprintChanged) return;
+
+      // Consume dirty flag; fingerprint is stored after draw succeeds (below).
+      dirtyRef.current = false;
 
       const dpr = window.devicePixelRatio || 1;
       const pixW = Math.round(cssW * dpr);
@@ -218,6 +254,10 @@ export function WallHeatLayer({
         // context in a broken state that would corrupt the next frame.
         ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
+
+      // Commit fingerprint only after a successful draw so a thrown frame
+      // doesn't permanently suppress redraws for an unchanged fingerprint.
+      lastFingerprintRef.current = fingerprint;
     }
 
     // Start the RAF loop immediately.
@@ -245,9 +285,10 @@ export function WallHeatLayer({
     timeScale.subscribeVisibleLogicalRangeChange(markDirty);
     timeScale.subscribeVisibleTimeRangeChange(markDirty);
 
-    // Safety-net: the price autoscale (price-axis re-range after new data arrives)
-    // has no direct subscription API in lw-charts v4. Poll at 500ms so walls
-    // stay aligned after the price scale shifts.
+    // Safety-net: kept alongside the per-frame fingerprint as a defence-in-depth
+    // backstop. The fingerprint already catches price-axis rescale frame-by-frame,
+    // but the interval handles any edge cases where lw-charts defers a coordinate
+    // update to a micro-task after the RAF tick (observed rarely on autoscale settle).
     const safetyInterval = setInterval(markDirty, 500);
 
     return () => {
