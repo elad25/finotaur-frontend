@@ -502,6 +502,12 @@ export interface WallSegment {
    * Format examples: 'BID $8.2M · since 14:32' (alive) or 'ASK $8.2M · 14:32–14:51' (dead).
    */
   tooltip?: string;
+  /**
+   * Size intensity in [0, 1] — log-compressed notional ratio used to drive
+   * proportional line thickness in heatmap render mode.
+   * 0 = weakest, 1 = strongest wall on this side.
+   */
+  intensity?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════

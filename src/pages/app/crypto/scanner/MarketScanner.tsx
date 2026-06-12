@@ -342,14 +342,22 @@ const ASK_COLOR  = 'rgba(220,38,38,0.65)';
  *   fillAlpha = 0.06 + 0.50 * curve
  *   edgeAlpha = 0.20 + 0.75 * curve
  */
+/**
+ * Log-compressed intensity curve in [0, 1].
+ * Shared between heatColors (alpha/hue) and WallSegment.intensity (thickness).
+ */
+function computeCurve(ratio: number): number {
+  const t = Math.log1p(9 * ratio) / Math.log1p(10);
+  return Math.pow(t, 1.35);
+}
+
 function heatColors(
   side: 'bid' | 'ask',
   ratio: number,   // notional / per-side max, [0,1]
   dead: boolean,
 ): { edge: string; fill: string } {
   // Log compression + mild gamma so weak walls stay subtle.
-  const t     = Math.log1p(9 * ratio) / Math.log1p(10);
-  const curve = Math.pow(t, 1.35);
+  const curve = computeCurve(ratio);
 
   let fillAlpha = 0.06 + 0.50 * curve;
   let edgeAlpha = 0.20 + 0.75 * curve;
@@ -454,8 +462,18 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       const dead    = deadWallsRef.current;
 
       // Separate into alive vs. dead episodes from the server.
-      const aliveEps = resp.episodes.filter(ep => ep.active);
-      const deadEps  = resp.episodes.filter(ep => !ep.active);
+      // Fix 3a: a server episode is only seeded as alive if it is both
+      // ep.active AND was last seen within the past 2 minutes. Episodes
+      // that are stale-active (worker hiccup / level left the depth view)
+      // go through the dead path so they don't render as full-width lines.
+      const SEED_FRESHNESS_MS = 120_000;
+      const aliveEps = resp.episodes.filter(ep =>
+        ep.active && (nowMs - new Date(ep.lastSeenAt).getTime()) < SEED_FRESHNESS_MS,
+      );
+      const deadEps = resp.episodes.filter(ep =>
+        !ep.active ||
+        (ep.active && (nowMs - new Date(ep.lastSeenAt).getTime()) >= SEED_FRESHNESS_MS),
+      );
 
       // ── Seed alive episodes into trackedWallsRef ───────────────────────
       for (const ep of aliveEps) {
@@ -498,19 +516,26 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         // Skip if a session-tracked dead wall already covers this bin.
         if (existingDeadKeys.has(dedupKey)) continue;
 
-        const bornAt  = new Date(ep.firstSeenAt).getTime();
-        const deadAt  = new Date(ep.lastSeenAt).getTime();
+        const bornAt = new Date(ep.firstSeenAt).getTime();
+        // Fix 3a (dead path for stale-active): use lastSeenAt as the death time
+        // so the dead stripe spans only the actual observed lifetime.
+        const lastSeen = new Date(ep.lastSeenAt).getTime();
+        const resolvedDeadAt = Number.isFinite(lastSeen) ? lastSeen : nowMs;
+        const resolvedBornAt = Number.isFinite(bornAt) ? bornAt : nowMs;
+        // Guard: deadAt must be >= bornAt.
+        const clampedDeadAt = Math.max(resolvedDeadAt, resolvedBornAt);
+
         serverDeads.push({
           key:        `srv:${dedupKey}`,
           detectKey:  dedupKey,
           side:       ep.side,
           price:      binPrice,
           binSize,
-          bornAt:     Number.isFinite(bornAt) ? bornAt : nowMs,
-          lastSeenAt: Number.isFinite(deadAt)  ? deadAt  : nowMs,
+          bornAt:     resolvedBornAt,
+          lastSeenAt: resolvedDeadAt,
           maxNotional: ep.maxNotionalUsd,
           missedTicks: 0,
-          deadAt:     Number.isFinite(deadAt)  ? deadAt  : nowMs,
+          deadAt:     clampedDeadAt,
         });
       }
 
@@ -623,9 +648,14 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
         entry.missedTicks++;
         if (entry.missedTicks >= WALL_MISS_TICKS_UNTIL_DEAD) {
-          entry.deadAt = nowMs;
+          // Fix 3b: backdate deadAt to lastSeenAt so seeded-alive walls that were
+          // never confirmed by the live book don't get a "now" death stamp and
+          // therefore don't render a near-full-width dead stripe all session.
+          // Guard: deadAt must be >= bornAt.
+          const backdatedDead = Math.max(entry.lastSeenAt, entry.bornAt);
+          entry.deadAt = backdatedDead;
 
-          const lifetime = nowMs - entry.bornAt;
+          const lifetime = backdatedDead - entry.bornAt;
           if (lifetime < WALL_MIN_LIFETIME_MS) {
             // Too short-lived — discard as noise
             tracked.delete(entry.key);
@@ -665,6 +695,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
         const maxSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
         const ratio   = entry.maxNotional / maxSide;
+        const curve   = computeCurve(ratio);
         const { edge, fill } = heatColors(entry.side, ratio, false);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
@@ -677,6 +708,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           color:      edge,
           fillColor:  fill,
           lineWidth:  1,
+          intensity:  curve,
           tooltip:    `${sideLabel} ${formatNotional(entry.maxNotional)} · since ${formatHHMM(entry.bornAt)}`,
         });
       }
@@ -687,6 +719,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
         const maxSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
         const ratio   = entry.maxNotional / maxSide;
+        const curve   = computeCurve(ratio);
         const { edge, fill } = heatColors(entry.side, ratio, true);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
@@ -699,6 +732,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           color:      edge,
           fillColor:  fill,
           lineWidth:  1,
+          intensity:  curve,
           tooltip:    `${sideLabel} ${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}–${formatHHMM(entry.deadAt ?? 0)}`,
         });
       }

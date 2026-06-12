@@ -112,35 +112,37 @@ export function WallHeatLayer({
         const segs = segmentsRef.current;
         if (segs.length === 0) return;
 
+        // ── Fix 1: use data-pane width, not full container width ──────────
+        // timeScale().width() returns the pixel width of the data pane,
+        // excluding the right price-axis area. Guard against 0/undefined.
+        const rawPaneW = chartInstance.timeScale().width();
+        const paneW = (typeof rawPaneW === 'number' && rawPaneW > 0) ? rawPaneW : cssW;
+
         // Get the visible time range (used to clamp off-screen segment coordinates).
         const visRange = chartInstance.timeScale().getVisibleRange();
 
         for (const seg of segs) {
           // ── Price → Y coordinates ──────────────────────────────────────────
           // Higher price = lower Y number in canvas space.
-          const yAtBandTop = seriesInstance.priceToCoordinate(seg.price + seg.bandHeight);
+          // For thickness mode we only need the price-level Y (yAtBandBot).
           const yAtBandBot = seriesInstance.priceToCoordinate(seg.price);
+          if (yAtBandBot === null) continue;
+          const priceLevelY = yAtBandBot as number;
 
-          if (yAtBandTop === null || yAtBandBot === null) continue;
+          // ── Fix 2: intensity-driven thickness centered on price level ─────
+          // thicknessPx ∈ [1, 12] based on seg.intensity (0..1).
+          const thicknessPx = 1 + Math.round((seg.intensity ?? 0.3) * 11);
+          const halfThick   = thicknessPx / 2;
 
-          // Normalize so rawTop < rawBot regardless of axis orientation.
-          const rawTop = Math.min(yAtBandTop as number, yAtBandBot as number);
-          const rawBot = Math.max(yAtBandTop as number, yAtBandBot as number);
+          // Band top/bot for culling check (centered on priceLevelY).
+          const bandTop = priceLevelY - halfThick;
+          const bandBot = priceLevelY + halfThick;
 
           // Cull segments entirely outside the vertical viewport.
-          if (rawBot < 0 || rawTop > cssH) continue;
+          if (bandBot < 0 || bandTop > cssH) continue;
 
-          // Enforce minimum 2px band height (expand symmetrically so the center
-          // stays at the same canvas position).
-          let bandTop = rawTop;
-          let bandBot = rawBot;
-          const naturalH = bandBot - bandTop;
-          if (naturalH < 2) {
-            const pad = (2 - naturalH) / 2;
-            bandTop -= pad;
-            bandBot += pad;
-          }
-          const drawH = Math.max(2, bandBot - bandTop);
+          // drawH is the full thickness (no min-2px expansion — thickness already driven by intensity).
+          const drawH = thicknessPx;
 
           // ── Time → X coordinates ───────────────────────────────────────────
           // startTime: try timeToCoordinate; clamp to left edge if wall started
@@ -163,11 +165,11 @@ export function WallHeatLayer({
             continue;
           }
 
-          // endTime: alive walls extend to canvas right edge.
+          // endTime: alive walls extend to the data-pane right edge (Fix 1).
           let xEnd: number;
           if (seg.endTime === null) {
-            // Alive wall — draw to the right edge of the canvas.
-            xEnd = cssW;
+            // Alive wall — draw to the right edge of the data pane (not cssW).
+            xEnd = paneW;
           } else {
             const rawXEnd = chartInstance.timeScale().timeToCoordinate(
               seg.endTime as UTCTimestamp,
@@ -181,28 +183,27 @@ export function WallHeatLayer({
               // Dead wall entirely to the left of the visible range — cull.
               continue;
             } else {
-              // Dead wall end is off the right side of the canvas → clamp.
-              xEnd = cssW;
+              // Dead wall end is off the right side — clamp to pane edge (Fix 1).
+              xEnd = paneW;
             }
           }
 
-          // Cull segments with no visible horizontal span.
-          if (xEnd <= 0 || xStart >= cssW) continue;
+          // Cull segments with no visible horizontal span (Fix 1: use paneW).
+          if (xEnd <= 0 || xStart >= paneW) continue;
 
-          // Clip to canvas bounds.
+          // Clip to pane bounds (Fix 1: clamp right edge to paneW).
           const drawX = Math.max(0, xStart);
-          const drawW = Math.max(0, Math.min(cssW, xEnd) - drawX);
+          const drawW = Math.max(0, Math.min(paneW, xEnd) - drawX);
           if (drawW <= 0) continue;
 
-          // ── Draw fill rect ─────────────────────────────────────────────────
+          // ── Draw fill rect centered on price level ─────────────────────────
           ctx.fillStyle = seg.fillColor;
           ctx.fillRect(drawX, bandTop, drawW, drawH);
 
-          // ── Draw 1px edge line at the wall's price level ───────────────────
-          // The "price level" is seg.price — the bottom of the band — which maps
-          // to the larger Y in canvas space (yAtBandBot). Clamp to visible area.
+          // ── Draw 1px brighter edge line at the wall's price level ──────────
+          // Centered on priceLevelY (the seg.price coordinate).
           const edgeY = Math.round(
-            Math.min(cssH - 1, Math.max(0, yAtBandBot as number)),
+            Math.min(cssH - 1, Math.max(0, priceLevelY)),
           );
           ctx.strokeStyle = seg.color;
           ctx.lineWidth   = 1;
