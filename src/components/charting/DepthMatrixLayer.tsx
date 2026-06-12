@@ -11,6 +11,8 @@
 //     affine mapping derived from timeToCoordinate / priceToCoordinate.
 //   - Per-frame coordinate fingerprint (same pattern as WallHeatLayer) to
 //     detect price-axis rescale which fires no lw-charts v4 subscription.
+//   - clearRect runs on EVERY frame unconditionally (before the early-return
+//     guard) so stale pixels never survive across frames during kinetic zoom.
 //   - try/finally with setTransform reset — mid-frame throw cannot corrupt
 //     the transform stack.
 //   - Clips drawing at timeScale().width() so nothing paints over the price axis.
@@ -20,13 +22,21 @@
 // Color mapping (exact spec):
 //   STOPS: [0.00 → navy] [0.18 → blue] [0.40 → cyan] [0.65 → yellow] [0.88+ → white]
 //   vHi  = p99 of visible q values (NOT max — one iceberg must not flatten field)
-//   vLo  = slider percentile (p50..p95, default ~p70)
+//   vLo  = p70 fixed floor percentile (was slider-driven, now fixed since size
+//          filtering is the user control instead of sensitivity)
 //   t    = (q/1000 - vLo) / (vHi - vLo), gamma 0.50
 //   q===0 → transparent; t≤0 → faint context (lut[0] + alpha 0x40)
 //
 // Floor filter: bins with decoded USD < floorUsd are treated as q=0.
 //   USD = expm1(q / 1000). A bin passes iff expm1(q/1000) >= floorUsd
 //   i.e. q >= round(log1p(floorUsd) * 1000).
+//
+// Size filter (replaces sensitivity slider):
+//   sizeFilterPct: 0 (All) | 1 | 5 | 10 | 25 — percent of the p99 cell.
+//   Reference = vHi (the p99 USD value of the visible window).
+//   qCut = round(log1p(sizeFilterPct/100 * expm1(qP99/1000)) * 1000)
+//   With sizeFilterPct=0 (All): no additional cut — same as current behavior.
+//   With sizeFilterPct>0: bins below qCut are fully transparent (not faint).
 
 import { useEffect, useRef } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
@@ -102,8 +112,13 @@ export interface DepthMatrixLayerProps {
   width: number;
   /** Container CSS height in px */
   height: number;
-  /** Slider 0..1 → maps to p50..p95 floor percentile. Default: ~0.4 → p70 */
-  sensitivitySlider?: number;
+  /**
+   * Relative size filter: percent of the p99 (reference) cell.
+   * 0 = All (no size cut, current behavior).
+   * 1 | 5 | 10 | 25 = only bins whose decoded USD >= pct/100 * referenceUsd are shown.
+   * Default: 5.
+   */
+  sizeFilterPct?: 0 | 1 | 5 | 10 | 25;
   /** Absolute notional floor in USD — bins below are treated as q=0 */
   floorUsd?: number;
   /** Current candle interval in milliseconds — used to map column→px width */
@@ -119,7 +134,7 @@ export function DepthMatrixLayer({
   binSize,
   width,
   height,
-  sensitivitySlider = 0.4,
+  sizeFilterPct = 5,
   floorUsd = 1_000,
   candleIntervalMs,
 }: DepthMatrixLayerProps) {
@@ -148,7 +163,7 @@ export function DepthMatrixLayer({
   const widthRef           = useRef<number>(width);
   const heightRef          = useRef<number>(height);
   const floorUsdRef        = useRef<number>(floorUsd);
-  const sensitivityRef     = useRef<number>(sensitivitySlider);
+  const sizeFilterRef      = useRef<number>(sizeFilterPct);
   const candleIntervalRef  = useRef<number>(candleIntervalMs);
 
   columnsRef.current        = columns;
@@ -156,7 +171,7 @@ export function DepthMatrixLayer({
   widthRef.current          = width;
   heightRef.current         = height;
   floorUsdRef.current       = floorUsd;
-  sensitivityRef.current    = sensitivitySlider;
+  sizeFilterRef.current     = sizeFilterPct;
   candleIntervalRef.current = candleIntervalMs;
 
   // ── Normalization ─────────────────────────────────────────────────────────
@@ -166,7 +181,6 @@ export function DepthMatrixLayer({
     chart2: IChartApi,
     curBinSize: number,
     floor: number,
-    slider: number,
   ) {
     // Only look at visible columns.
     const vis = chart2.timeScale().getVisibleRange();
@@ -199,11 +213,10 @@ export function DepthMatrixLayer({
     const arr = new Uint16Array(qList.length);
     for (let i = 0; i < qList.length; i++) arr[i] = Math.min(65535, qList[i]);
 
-    // vHi = p99 (clamp ice-bergs)
+    // vHi = p99 (clamp ice-bergs) — also used as the size-filter reference.
     const rawHi = percentile65536(arr, 0.99);
-    // vLo = slider [0..1] → p50..p95
-    const loPercentile = 0.50 + slider * 0.45;
-    const rawLo = percentile65536(arr, loPercentile);
+    // vLo = fixed p70 (previously driven by slider; size filter is the new user control).
+    const rawLo = percentile65536(arr, 0.70);
 
     // Decode to USD for the threshold comparison (actual normalization is in q-space).
     vHiRef.current = rawHi > 0 ? qToUsd(rawHi) : 1;
@@ -224,6 +237,7 @@ export function DepthMatrixLayer({
     floor: number,
     vLo: number,
     vHi: number,
+    sizePct: number,   // 0 | 1 | 5 | 10 | 25 — percent of vHi reference
     chartInst: IChartApi,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     seriesInst: ISeriesApi<any>,
@@ -281,9 +295,22 @@ export function DepthMatrixLayer({
     const dVHi = vHi;
     const dRange = dVHi - dVLo;
 
+    // Size filter cut: qCut is the minimum q a bin must reach to be rendered
+    // when sizePct > 0. Reference = vHi (the p99 USD wall in the visible window).
+    // Formula: qCut = round(log1p(sizePct/100 * expm1(qP99/1000)) * 1000)
+    // where expm1(qP99/1000) = vHi (already decoded).
+    // With sizePct === 0 (All): qCut = 0 → no additional filtering.
+    const qCut = sizePct > 0
+      ? Math.round(Math.log1p((sizePct / 100) * vHi) * 1000)
+      : 0;
+
     // Helper: map a q value to a canvas pixel color.
     function qToColor(q: number): number {
       if (q === 0 || q < floorQ) return 0; // transparent
+
+      // Size filter: fully hide sub-threshold bins (not even faint context)
+      // when a ≥N% tier is active.
+      if (qCut > 0 && q < qCut) return 0;
 
       const usd = qToUsd(q);
       if (usd < floor) return 0;
@@ -380,6 +407,30 @@ export function DepthMatrixLayer({
       const cssH = heightRef.current;
       if (cssW <= 0 || cssH <= 0) return;
 
+      // ── DPR / resize: keep backing store in sync every frame ─────────────
+      // Must happen before clearRect so clearing uses the correct pixel dimensions.
+      const dpr = window.devicePixelRatio || 1;
+      const pixW = Math.round(cssW * dpr);
+      const pixH = Math.round(cssH * dpr);
+      if (canvas.width !== pixW || canvas.height !== pixH) {
+        canvas.width  = pixW;
+        canvas.height = pixH;
+        canvas.style.width  = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // ── clearRect EVERY frame, unconditionally ────────────────────────────
+      // Stale pixels from the previous frame MUST NOT survive across any frame,
+      // including frames skipped by the dirty-check below. Without this, kinetic
+      // zoom leaves ghosted/smeared cells because the early-return below would
+      // skip both the repaint and the blit, leaving old content on the canvas.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
       // ── Per-frame fingerprint (same pattern as WallHeatLayer) ────────────
       const rawPaneW = chartInstance.timeScale().width();
       const paneW = (typeof rawPaneW === 'number' && rawPaneW > 0) ? rawPaneW : cssW;
@@ -412,13 +463,14 @@ export function DepthMatrixLayer({
       dirtyRef.current = false;
 
       if (needsRepaint || fingerprintChanged) {
-        // Recompute norm when viewport changes
+        // Recompute norm when viewport or data changes.
+        // pxPerSec and priceToCoordinate anchors are resolved fresh every frame
+        // (below) — do NOT cache them across frames; they lag during kinetic zoom.
         recomputeNorm(
           columnsRef.current,
           chartInstance,
           binSizeRef.current,
           floorUsdRef.current,
-          sensitivityRef.current,
         );
       }
 
@@ -429,6 +481,7 @@ export function DepthMatrixLayer({
           floorUsdRef.current,
           vLoRef.current,
           vHiRef.current,
+          sizeFilterRef.current,
           chartInstance,
           seriesInstance,
         );
@@ -448,23 +501,9 @@ export function DepthMatrixLayer({
       } | undefined;
       if (!meta || meta.numCols === 0 || meta.numRows === 0) return;
 
-      // Resize display canvas
-      const dpr = window.devicePixelRatio || 1;
-      const pixW = Math.round(cssW * dpr);
-      const pixH = Math.round(cssH * dpr);
-      if (canvas.width !== pixW || canvas.height !== pixH) {
-        canvas.width  = pixW;
-        canvas.height = pixH;
-        canvas.style.width  = `${cssW}px`;
-        canvas.style.height = `${cssH}px`;
-      }
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
       try {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, cssW, cssH);
+        ctx.imageSmoothingEnabled = false;
 
         if (meta.cols.length === 0) return;
 
@@ -564,7 +603,6 @@ export function DepthMatrixLayer({
         const drawH = drawBottom - drawTop;
 
         // ── Draw offscreen → canvas (single blit) ───────────────────────
-        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
           offscreen,
           0, 0, meta.numCols, meta.numRows, // source rect (entire offscreen)
@@ -618,7 +656,7 @@ export function DepthMatrixLayer({
       offscreenVersionRef.current++;
       dirtyRef.current = true;
     });
-  }, [columns, binSize, sensitivitySlider, floorUsd]);
+  }, [columns, binSize, sizeFilterPct, floorUsd]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (

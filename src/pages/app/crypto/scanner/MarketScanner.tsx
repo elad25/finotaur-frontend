@@ -476,8 +476,9 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // Tracking always uses TRACK_FLOOR_USD ($100K) so history isn't lost on filter change.
   const [floorUsd, setFloorUsd] = useState<number>(FLOOR_DEFAULT);
 
-  // Depth matrix sensitivity slider: 0..1 → p50..p95 floor percentile.
-  const [sensitivity, setSensitivity] = useState<number>(0.4);
+  // Depth matrix size filter: percent of the p99 reference cell.
+  // 0 = All, 1 | 5 | 10 | 25 = only bins >= N% of the largest wall in view.
+  const [sizeFilterPct, setSizeFilterPct] = useState<0 | 1 | 5 | 10 | 25>(5);
 
   // Depth matrix slices — drives DepthMatrixLayer.
   // fromMs/toMs are the same chart window as from/to (in ms).
@@ -899,20 +900,34 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           })}
         </div>
 
-        {/* Sensitivity slider for depth matrix */}
-        <div className="flex items-center gap-1.5 select-none">
-          <span className="text-[10px] text-white/30">Depth</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={Math.round(sensitivity * 100)}
-            onChange={e => setSensitivity(Number(e.target.value) / 100)}
-            className="w-16 h-1 accent-[#C9A646] cursor-pointer"
-            aria-label="Depth matrix sensitivity"
-            title="Depth matrix sensitivity — lower shows more detail, higher focuses on large orders"
-          />
+        {/* Size filter segmented control for depth matrix */}
+        <div className="flex items-center gap-1 select-none">
+          <span className="text-[10px] text-white/30 mr-0.5">Size</span>
+          {([
+            { label: 'All', value: 0  as const },
+            { label: '≥1%', value: 1  as const },
+            { label: '≥5%', value: 5  as const },
+            { label: '≥10%', value: 10 as const },
+            { label: '≥25%', value: 25 as const },
+          ] as const).map(opt => {
+            const isActive = opt.value === sizeFilterPct;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setSizeFilterPct(opt.value)}
+                className={[
+                  'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
+                  isActive
+                    ? 'text-[#C9A646]'
+                    : 'text-white/40 hover:text-white/60',
+                ].join(' ')}
+                style={isActive ? { color: '#C9A646' } : undefined}
+                title={opt.value === 0 ? 'Show all orders' : `Show orders ≥ ${opt.value}% of the largest visible wall`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Minimal wall legend */}
@@ -948,7 +963,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           wallRenderMode="matrix"
           depthMatrixColumns={depthMatrix.columns}
           depthMatrixBinSize={depthMatrix.binSize}
-          depthMatrixSensitivity={sensitivity}
+          depthMatrixSizeFilterPct={sizeFilterPct}
           depthMatrixFloorUsd={floorUsd}
           depthMatrixCandleIntervalMs={intervalMs(interval)}
         />

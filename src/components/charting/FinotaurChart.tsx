@@ -616,8 +616,8 @@ export interface FinotaurChartProps {
   depthMatrixColumns?: DecodedColumn[];
   /** Dominant bin size for the depth matrix grid (wallRenderMode='matrix' only). */
   depthMatrixBinSize?: number;
-  /** Sensitivity slider 0..1 → maps to p50..p95 floor percentile (matrix mode). */
-  depthMatrixSensitivity?: number;
+  /** Relative size filter for the depth matrix (matrix mode). 0=All, 1|5|10|25 = ≥N% of p99 reference. Default: 5. */
+  depthMatrixSizeFilterPct?: 0 | 1 | 5 | 10 | 25;
   /** Absolute notional floor USD — bins below treated as q=0 (matrix mode). */
   depthMatrixFloorUsd?: number;
   /** Current candle interval in ms — used to map column→px width (matrix mode). */
@@ -645,7 +645,7 @@ export function FinotaurChart({
   wallRenderMode = 'series',
   depthMatrixColumns,
   depthMatrixBinSize = 1,
-  depthMatrixSensitivity = 0.4,
+  depthMatrixSizeFilterPct = 5,
   depthMatrixFloorUsd = 1_000,
   depthMatrixCandleIntervalMs = 60_000,
 }: FinotaurChartProps) {
@@ -1410,7 +1410,7 @@ export function FinotaurChart({
           binSize={depthMatrixBinSize}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
-          sensitivitySlider={depthMatrixSensitivity}
+          sizeFilterPct={depthMatrixSizeFilterPct}
           floorUsd={depthMatrixFloorUsd}
           candleIntervalMs={depthMatrixCandleIntervalMs}
         />
