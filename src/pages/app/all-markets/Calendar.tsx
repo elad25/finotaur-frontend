@@ -642,9 +642,9 @@ const CountryFilterDropdown: React.FC<{
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-3 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-300 hover:border-amber-500/50 transition-colors"
+        className="flex items-center gap-2 px-3 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-200 hover:border-amber-500/50 transition-colors"
       >
-        <Globe size={14} className="text-neutral-400" />
+        <Globe size={14} className="text-neutral-200" />
         <span>Country</span>
         {selected.length > 0 && (
           <span className="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full">
@@ -653,7 +653,7 @@ const CountryFilterDropdown: React.FC<{
         )}
         <ChevronDown
           size={14}
-          className={`text-neutral-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`text-neutral-200 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -754,7 +754,7 @@ const TimeFilterButton: React.FC<{
       flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
       ${active
         ? 'bg-amber-500 text-black font-semibold'
-        : 'text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/50'
+        : 'text-neutral-200 hover:text-amber-400 hover:bg-neutral-800/50'
       }
     `}
   >
@@ -914,7 +914,7 @@ const EconomicCalendarTable: React.FC<{
             {/* Events table */}
             <table className="w-full">
               <thead>
-                <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+                <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
                   <th className="px-4 py-3 w-28">Time ({offsetLabel})</th>
                   <th className="px-4 py-3 w-24">Country</th>
                   <th className="px-4 py-3 w-24">Impact</th>
@@ -1014,7 +1014,7 @@ const HolidaysTable: React.FC<{ holidays: HolidayEvent[]; loading: boolean }> = 
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+          <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
             <th className="px-4 py-3 w-20">Flag</th>
             <th className="px-4 py-3">Country</th>
             <th className="px-4 py-3">Holiday</th>
@@ -1056,7 +1056,7 @@ const EarningsTable: React.FC<{ earnings: EarningsEvent[]; loading: boolean }> =
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+          <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
             <th className="px-4 py-3 w-20">Time</th>
             <th className="px-4 py-3">Company</th>
             <th className="px-4 py-3">Date</th>
@@ -1122,7 +1122,7 @@ const DividendsTable: React.FC<{ dividends: DividendEvent[]; loading: boolean }>
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+          <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
             <th className="px-4 py-3">Company</th>
             <th className="px-4 py-3">Ex-Date</th>
             <th className="px-4 py-3">Pay Date</th>
@@ -1167,7 +1167,7 @@ const SplitsTable: React.FC<{ splits: SplitEvent[]; loading: boolean }> = ({ spl
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+          <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
             <th className="px-4 py-3">Company</th>
             <th className="px-4 py-3">Date</th>
             <th className="px-4 py-3">Ratio</th>
@@ -1214,7 +1214,7 @@ const IPOTable: React.FC<{ ipos: IPOEvent[]; loading: boolean }> = ({ ipos, load
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+          <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
             <th className="px-4 py-3">Company</th>
             <th className="px-4 py-3">Date</th>
             <th className="px-4 py-3">Exchange</th>
@@ -1294,7 +1294,7 @@ const ExpirationTable: React.FC<{ expirations: ExpirationEvent[]; loading: boole
           </div>
           <table className="w-full">
             <thead>
-              <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+              <tr className="text-left text-xs text-neutral-300 uppercase tracking-wider border-b border-neutral-800/50">
                 <th className="px-4 py-3 w-32">Type</th>
                 <th className="px-4 py-3 w-24">Symbol</th>
                 <th className="px-4 py-3">Description</th>
@@ -1527,22 +1527,22 @@ export default function AllMarketsCalendar() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-sm text-neutral-400 bg-neutral-900/80 px-3 py-2 rounded-lg border border-neutral-800">
+            <div className="flex items-center gap-2 text-sm text-neutral-200 bg-neutral-900/80 px-3 py-2 rounded-lg border border-neutral-800">
               <Clock size={14} className="text-amber-500" />
               <span className="text-amber-400 font-mono font-semibold">
                 {formatTime(currentTime)}
               </span>
-              <span className="text-neutral-500">({getTimezone()})</span>
+              <span className="text-neutral-300">({getTimezone()})</span>
             </div>
 
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-300" />
               <input
                 type="text"
                 placeholder="Search events..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-amber-500/50 w-48"
+                className="pl-10 pr-4 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg text-sm text-neutral-200 placeholder-neutral-400 focus:outline-none focus:border-amber-500/50 w-48"
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300">
@@ -1562,11 +1562,11 @@ export default function AllMarketsCalendar() {
             {/* Timezone selector — visible on economic tab */}
             {activeTab === 'economic' && (
               <div className="flex items-center gap-2 px-3 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg hover:border-amber-500/50 transition-colors">
-                <Globe size={14} className="text-neutral-400 flex-shrink-0" />
+                <Globe size={14} className="text-neutral-200 flex-shrink-0" />
                 <select
                   value={displayTzId}
                   onChange={(e) => handleTzChange(e.target.value as TzOptionId)}
-                  className="bg-transparent text-sm text-neutral-300 focus:outline-none cursor-pointer appearance-none pr-1"
+                  className="bg-transparent text-sm text-neutral-200 focus:outline-none cursor-pointer appearance-none pr-1"
                   aria-label="Display timezone"
                 >
                   {TZ_OPTIONS.map((opt) => {
@@ -1585,7 +1585,7 @@ export default function AllMarketsCalendar() {
             <button
               onClick={() => refetch()}
               disabled={loading}
-              className="p-2 text-neutral-400 hover:text-amber-400 bg-neutral-900/80 border border-neutral-800 rounded-lg transition-colors disabled:opacity-50"
+              className="p-2 text-neutral-200 hover:text-amber-400 bg-neutral-900/80 border border-neutral-800 rounded-lg transition-colors disabled:opacity-50"
             >
               <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -1596,7 +1596,7 @@ export default function AllMarketsCalendar() {
                 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border
                 ${showFilters 
                   ? 'bg-amber-500 text-black border-amber-500' 
-                  : 'bg-neutral-900/80 text-neutral-400 hover:text-amber-400 border-neutral-800 hover:border-amber-500/50'
+                  : 'bg-neutral-900/80 text-neutral-200 hover:text-amber-400 border-neutral-800 hover:border-amber-500/50'
                 }
               `}
             >
