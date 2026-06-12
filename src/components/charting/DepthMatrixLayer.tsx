@@ -11,8 +11,13 @@
 //     affine mapping derived from timeToCoordinate / priceToCoordinate.
 //   - Per-frame coordinate fingerprint (same pattern as WallHeatLayer) to
 //     detect price-axis rescale which fires no lw-charts v4 subscription.
-//   - clearRect runs on EVERY frame unconditionally (before the early-return
-//     guard) so stale pixels never survive across frames during kinetic zoom.
+//   - rAF callback is structured in 4 steps every frame:
+//       1. DPR/resize of visible canvas.
+//       2. Conditional: offscreen rasterization (only when data/norm changed).
+//       3. Recompute x/y affine mapping fresh (bar-snapped anchors + pxPerSec).
+//       4. clearRect the visible canvas + ctx.drawImage(offscreen, ...) — ALWAYS,
+//          no early-return allowed between clear and blit.
+//     The dirty/fingerprint check gates ONLY step 2 — never steps 3+4.
 //   - try/finally with setTransform reset — mid-frame throw cannot corrupt
 //     the transform stack.
 //   - Clips drawing at timeScale().width() so nothing paints over the price axis.
@@ -407,7 +412,7 @@ export function DepthMatrixLayer({
       const cssH = heightRef.current;
       if (cssW <= 0 || cssH <= 0) return;
 
-      // ── DPR / resize: keep backing store in sync every frame ─────────────
+      // ── Step 1: DPR / resize — keep backing store in sync every frame ────
       // Must happen before clearRect so clearing uses the correct pixel dimensions.
       const dpr = window.devicePixelRatio || 1;
       const pixW = Math.round(cssW * dpr);
@@ -422,16 +427,8 @@ export function DepthMatrixLayer({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // ── clearRect EVERY frame, unconditionally ────────────────────────────
-      // Stale pixels from the previous frame MUST NOT survive across any frame,
-      // including frames skipped by the dirty-check below. Without this, kinetic
-      // zoom leaves ghosted/smeared cells because the early-return below would
-      // skip both the repaint and the blit, leaving old content on the canvas.
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-      // ── Per-frame fingerprint (same pattern as WallHeatLayer) ────────────
+      // ── Step 2: Decide if offscreen needs repaint (ONLY gate this) ───────
+      // Per-frame fingerprint (same pattern as WallHeatLayer).
       const rawPaneW = chartInstance.timeScale().width();
       const paneW = (typeof rawPaneW === 'number' && rawPaneW > 0) ? rawPaneW : cssW;
 
@@ -456,38 +453,44 @@ export function DepthMatrixLayer({
       const fingerprint = `${paneW}|${cssW}|${cssH}|${fpFrom}|${fpTo}|${fpY}`;
       const fingerprintChanged = fingerprint !== lastFingerprintRef.current;
 
-      // ── Decide if offscreen needs repaint ──────────────────────────────
       const needsRepaint = offscreenVersionRef.current !== paintedVersionRef.current;
 
-      if (!dirtyRef.current && !fingerprintChanged && !needsRepaint) return;
-      dirtyRef.current = false;
+      // The dirty/fingerprint check gates ONLY the expensive offscreen rasterization.
+      // It must NEVER gate the clear+blit below — those run every frame unconditionally.
+      if (dirtyRef.current || fingerprintChanged || needsRepaint) {
+        dirtyRef.current = false;
 
-      if (needsRepaint || fingerprintChanged) {
-        // Recompute norm when viewport or data changes.
-        // pxPerSec and priceToCoordinate anchors are resolved fresh every frame
-        // (below) — do NOT cache them across frames; they lag during kinetic zoom.
-        recomputeNorm(
-          columnsRef.current,
-          chartInstance,
-          binSizeRef.current,
-          floorUsdRef.current,
-        );
+        if (needsRepaint || fingerprintChanged) {
+          // Recompute norm when viewport or data changes.
+          // pxPerSec and priceToCoordinate anchors are resolved fresh every frame
+          // (below) — do NOT cache them across frames; they lag during kinetic zoom.
+          recomputeNorm(
+            columnsRef.current,
+            chartInstance,
+            binSizeRef.current,
+            floorUsdRef.current,
+          );
+        }
+
+        if (needsRepaint) {
+          repaintOffscreen(
+            columnsRef.current,
+            binSizeRef.current,
+            floorUsdRef.current,
+            vLoRef.current,
+            vHiRef.current,
+            sizeFilterRef.current,
+            chartInstance,
+            seriesInstance,
+          );
+          paintedVersionRef.current = offscreenVersionRef.current;
+        }
       }
 
-      if (needsRepaint) {
-        repaintOffscreen(
-          columnsRef.current,
-          binSizeRef.current,
-          floorUsdRef.current,
-          vLoRef.current,
-          vHiRef.current,
-          sizeFilterRef.current,
-          chartInstance,
-          seriesInstance,
-        );
-        paintedVersionRef.current = offscreenVersionRef.current;
-      }
-
+      // ── Steps 3+4: ALWAYS recompute mapping and blit — every single frame ─
+      // Per-frame cost: one drawImage + two coordinate lookups. Trivially cheap.
+      // Skipping this is what caused the blank canvas: clearRect ran, then the
+      // old early-return fired before drawImage, leaving 0% painted pixels.
       const offscreen = offscreenRef.current;
       if (!offscreen) return;
 
@@ -503,6 +506,11 @@ export function DepthMatrixLayer({
 
       try {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // ── Step 4a: clear the visible canvas every frame ─────────────────
+        // Must run unconditionally, ALWAYS before drawImage. This is the correct
+        // location (after offscreen rasterization, before blit) so there is no
+        // code path that clears without subsequently drawing.
+        ctx.clearRect(0, 0, cssW, cssH);
         ctx.imageSmoothingEnabled = false;
 
         if (meta.cols.length === 0) return;
