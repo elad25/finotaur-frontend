@@ -462,8 +462,13 @@ export function MarketComparisonChart({
               );
             })()}
 
-            {/* Y-axis right-side tick labels */}
-            {portfolioChart && portfolioChart.ticks.map(({ value, y }) => (
+            {/* Y-axis right-side tick labels — ticks within the badge zone are
+                skipped so the gold latest-value badge never overlaps a label */}
+            {portfolioChart && portfolioChart.ticks.filter(({ y }) => {
+              if (portfolioChart.coords.length === 0) return true;
+              const [, lastY] = portfolioChart.coords[portfolioChart.coords.length - 1];
+              return Math.abs(y - lastY) > 14;
+            }).map(({ value, y }) => (
               <text
                 key={`yt-${value.toFixed(0)}`}
                 x={CHART_W - PAD.right + 8}
