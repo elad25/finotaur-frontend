@@ -273,14 +273,14 @@ export function MarketComparisonChart({
 
   // ── Range tabs ────────────────────────────────────────────────────────────
   const rangeTabs = (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0.5 shrink-0">
       {RANGES.map((r) => (
         <button
           key={r}
           type="button"
           onClick={() => onRangeChange?.(r)}
           className={cn(
-            'rounded-[5px] px-2 py-0.5 text-[12px] font-medium transition-colors',
+            'rounded-[5px] px-1.5 py-0.5 text-[10px] font-medium transition-colors',
             range === r
               ? 'bg-white/[0.08] text-ink-primary'
               : 'text-ink-tertiary hover:text-ink-secondary',
@@ -292,30 +292,30 @@ export function MarketComparisonChart({
     </div>
   );
 
-  // ── Inline legend (left of header row) ───────────────────────────────────
+  // ── Inline legend (left of header sub-row) ────────────────────────────────
   const legendRow = (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-3 whitespace-nowrap">
       {/* Portfolio */}
       <div className="flex items-center gap-1.5">
-        <svg width="16" height="2" viewBox="0 0 16 2" aria-hidden="true">
-          <line x1="0" y1="1" x2="16" y2="1" stroke={GOLD_LINE} strokeWidth="2" />
+        <svg width="14" height="2" viewBox="0 0 14 2" aria-hidden="true">
+          <line x1="0" y1="1" x2="14" y2="1" stroke={GOLD_LINE} strokeWidth="2" />
         </svg>
-        <span className="text-[12px] font-medium" style={{ color: GOLD_LINE }}>
+        <span className="text-[11px] font-medium" style={{ color: GOLD_LINE }}>
           Portfolio
         </span>
       </div>
       {/* S&P 500 — only shown when data present */}
       {hasSpData && (
         <div className="flex items-center gap-1.5">
-          <svg width="16" height="2" viewBox="0 0 16 2" aria-hidden="true">
+          <svg width="14" height="2" viewBox="0 0 14 2" aria-hidden="true">
             <line
-              x1="0" y1="1" x2="16" y2="1"
+              x1="0" y1="1" x2="14" y2="1"
               stroke={SP_LINE}
               strokeWidth="1.8"
               strokeDasharray="4 2"
             />
           </svg>
-          <span className="text-[12px] font-medium" style={{ color: SP_LINE }}>
+          <span className="text-[11px] font-medium whitespace-nowrap" style={{ color: SP_LINE }}>
             S&amp;P 500
           </span>
         </div>
@@ -330,7 +330,12 @@ export function MarketComparisonChart({
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
         <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(135deg,rgba(244,217,123,0.065),transparent_32%,rgba(201,166,70,0.025))]" />
         <div className="relative p-5">
-          <div className="flex items-center justify-between">
+          {/* Row 1: eyebrow */}
+          <p className="text-[10px] uppercase tracking-[0.13em] font-semibold text-gold-primary mb-2">
+            PORTFOLIO PERFORMANCE
+          </p>
+          {/* Row 2: legend + tabs, wrapping on narrow widths */}
+          <div className="flex flex-wrap items-center justify-between gap-y-1.5 mb-4">
             {legendRow}
             {rangeTabs}
           </div>
@@ -370,8 +375,12 @@ export function MarketComparisonChart({
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
       <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(135deg,rgba(244,217,123,0.065),transparent_32%,rgba(201,166,70,0.025))]" />
       <div className="relative p-5">
-        {/* Header row: legend left, tabs right */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Row 1: eyebrow title */}
+        <p className="text-[10px] uppercase tracking-[0.13em] font-semibold text-gold-primary mb-2">
+          PORTFOLIO PERFORMANCE
+        </p>
+        {/* Row 2: legend left, tabs right — wraps on narrow widths */}
+        <div className="flex flex-wrap items-center justify-between gap-y-1.5 mb-4">
           {legendRow}
           {rangeTabs}
         </div>

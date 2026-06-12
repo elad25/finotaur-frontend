@@ -48,56 +48,58 @@ export function TopHoldingsCard({ snapshot, className }: Props) {
   const isEmpty = snapshot.holdings.length === 0;
 
   return (
-    <PremiumFrame className={`flex flex-col min-h-[280px] ${className ?? ''}`}>
+    <PremiumFrame className={`flex flex-col h-full min-h-[280px] ${className ?? ''}`}>
       {/* pb-14 reserves space for footer */}
       <div className="flex flex-col flex-1 p-5 pb-14">
-        {/* Header */}
+        {/* Header pinned at top */}
         <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
           TOP HOLDINGS
         </p>
 
-        {/* Rows */}
-        <div className="mt-4 flex flex-col gap-2">
-          {isEmpty ? (
-            <p className="text-[11px] text-ink-tertiary py-4 text-center">
-              No holdings to display.
-            </p>
-          ) : (
-            <>
-              {top5.map((h) => {
-                const weight = (Math.abs(h.marketValue) / total) * 100;
-                return (
-                  <div
-                    key={h.symbol}
-                    className="flex items-center gap-2 rounded-[6px] px-2 py-1.5 hover:bg-gold-primary/[0.04]"
-                  >
-                    <TickerLogo ticker={h.symbol} size={26} className="h-[26px] w-[26px] flex-none rounded-[3px]" />
+        {/* Vertically centered content */}
+        <div className="flex flex-1 flex-col justify-center">
+          <div className="flex flex-col gap-2">
+            {isEmpty ? (
+              <p className="text-[11px] text-ink-tertiary py-4 text-center">
+                No holdings to display.
+              </p>
+            ) : (
+              <>
+                {top5.map((h) => {
+                  const weight = (Math.abs(h.marketValue) / total) * 100;
+                  return (
+                    <div
+                      key={h.symbol}
+                      className="flex items-center gap-2 rounded-[6px] px-2 py-1.5 hover:bg-gold-primary/[0.04]"
+                    >
+                      <TickerLogo ticker={h.symbol} size={26} className="h-[26px] w-[26px] flex-none rounded-[3px]" />
+                      <span className="flex-1 text-sm font-semibold text-white truncate min-w-0">
+                        {h.symbol}
+                      </span>
+                      <span className="text-[12px] text-ink-tertiary tabular-nums">
+                        {hideValues ? '**' : fmtPct(weight)}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* CASH row — shown when cash > 0 */}
+                {cashValue > 0 && (
+                  <div className="flex items-center gap-2 rounded-[6px] px-2 py-1.5 hover:bg-gold-primary/[0.04]">
+                    <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[3px] bg-[#4F9D6B]/20">
+                      <DollarSign className="h-3.5 w-3.5 text-[#4F9D6B]" />
+                    </span>
                     <span className="flex-1 text-sm font-semibold text-white truncate min-w-0">
-                      {h.symbol}
+                      CASH
                     </span>
                     <span className="text-[12px] text-ink-tertiary tabular-nums">
-                      {hideValues ? '**' : fmtPct(weight)}
+                      {hideValues ? '**' : fmtPct((cashValue / total) * 100)}
                     </span>
                   </div>
-                );
-              })}
-
-              {/* CASH row — shown when cash > 0 */}
-              {cashValue > 0 && (
-                <div className="flex items-center gap-2 rounded-[6px] px-2 py-1.5 hover:bg-gold-primary/[0.04]">
-                  <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-[3px] bg-[#4F9D6B]/20">
-                    <DollarSign className="h-3.5 w-3.5 text-[#4F9D6B]" />
-                  </span>
-                  <span className="flex-1 text-sm font-semibold text-white truncate min-w-0">
-                    CASH
-                  </span>
-                  <span className="text-[12px] text-ink-tertiary tabular-nums">
-                    {hideValues ? '**' : fmtPct((cashValue / total) * 100)}
-                  </span>
-                </div>
-              )}
-            </>
-          )}
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
