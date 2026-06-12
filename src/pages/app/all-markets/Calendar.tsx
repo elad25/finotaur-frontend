@@ -129,6 +129,31 @@ interface CalendarData {
 }
 
 // ============================================
+// TIMEZONE OPTIONS
+// ============================================
+
+const TZ_OPTIONS = [
+  { id: 'local', label: 'My Time', tz: '' },
+  { id: 'new-york', label: 'New York', tz: 'America/New_York' },
+  { id: 'utc', label: 'UTC', tz: 'Etc/UTC' },
+  { id: 'london', label: 'London', tz: 'Europe/London' },
+  { id: 'frankfurt', label: 'Frankfurt', tz: 'Europe/Berlin' },
+  { id: 'tel-aviv', label: 'Tel Aviv', tz: 'Asia/Jerusalem' },
+  { id: 'dubai', label: 'Dubai', tz: 'Asia/Dubai' },
+  { id: 'singapore', label: 'Singapore', tz: 'Asia/Singapore' },
+  { id: 'tokyo', label: 'Tokyo', tz: 'Asia/Tokyo' },
+  { id: 'sydney', label: 'Sydney', tz: 'Australia/Sydney' },
+] as const;
+
+type TzOptionId = (typeof TZ_OPTIONS)[number]['id'];
+
+const resolveTzId = (id: TzOptionId): string => {
+  const opt = TZ_OPTIONS.find((o) => o.id === id);
+  if (!opt) return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return opt.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+};
+
+// ============================================
 // API CONFIGURATION
 // ============================================
 
@@ -502,45 +527,36 @@ const normalizeDate = (dateStr: string): string => {
   return dateStr.split(' ')[0].split('T')[0];
 };
 
-// Event times from the server are US Eastern Time (ET) strings; compare against ET "now".
-const getNowET = (): { date: string; time: string } => {
+// Wall-clock parts of a UTC instant in a given IANA timezone.
+const instantToParts = (d: Date, tz: string): { date: string; time: string } => {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date());
+  }).formatToParts(d);
   const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
-  return {
-    date: `${get('year')}-${get('month')}-${get('day')}`,
-    time: `${get('hour') === '24' ? '00' : get('hour')}:${get('minute')}`,
-  };
+  const hour = get('hour') === '24' ? '00' : get('hour');
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${hour}:${get('minute')}` };
 };
 
-// Check if event is in the past (event times are ET strings — compare against ET now)
-const isEventPast = (date: string, time: string): boolean => {
-  const nowET = getNowET();
-  const eventDate = normalizeDate(date);
-  const eventTime = time || '00:00';
-  return eventDate < nowET.date || (eventDate === nowET.date && eventTime <= nowET.time);
-};
-
-// Index among a day's TIME-SORTED events where the NOW line belongs:
-// before the first event still in the future; events.length if all are past.
-// Returns null when this isn't today.
-// Event times are ET strings — compare against ET now (string compare works: both zero-padded).
-const getNowInsertIndex = (
-  events: { date: string; time: string }[],
-  isToday: boolean
-): number | null => {
-  if (!isToday) return null;
-  const nowET = getNowET();
-  for (let i = 0; i < events.length; i++) {
-    const eventDate = normalizeDate(events[i].date);
-    const eventTime = events[i].time || '00:00';
-    const isFuture = eventDate > nowET.date || (eventDate === nowET.date && eventTime > nowET.time);
-    if (isFuture) return i;
+// Convert an ET wall time (event date+time from the server) to a UTC instant, DST-aware.
+const etToInstant = (dateStr: string, timeStr: string): Date => {
+  const wall = `${normalizeDate(dateStr)}T${timeStr || '00:00'}:00`;
+  let guess = new Date(`${wall}Z`);
+  // Two-pass correction: read the guess back in ET and shift by the wall-clock delta.
+  for (let i = 0; i < 2; i++) {
+    const p = instantToParts(guess, 'America/New_York');
+    const seen = new Date(`${p.date}T${p.time}:00Z`).getTime();
+    const want = new Date(`${wall}Z`).getTime();
+    guess = new Date(guess.getTime() + (want - seen));
   }
-  return events.length;
+  return guess;
+};
+
+// Short GMT offset label for a timezone, e.g. "GMT+3", "GMT-4".
+const tzOffsetLabel = (tz: string): string => {
+  const part = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+    .formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value ?? '';
+  return part || 'GMT';
 };
 
 // ============================================
@@ -553,15 +569,15 @@ const ImportanceStars: React.FC<{ level: Importance }> = ({ level }) => (
       <Star
         key={i}
         size={12}
-        className={i <= level ? 'fill-amber-500 text-amber-500' : 'text-neutral-700'}
+        className={i <= level ? 'fill-yellow-400 text-yellow-400' : 'text-neutral-600'}
       />
     ))}
   </div>
 );
 
-// 🔥 NOW INDICATOR LINE — gold line marking the current moment in the day's timeline (ET)
-const NowIndicator: React.FC = () => {
-  const time = getNowET().time;
+// 🔥 NOW INDICATOR LINE — gold line marking the current moment in the day's timeline
+const NowIndicator: React.FC<{ displayTz: string }> = ({ displayTz }) => {
+  const time = instantToParts(new Date(), displayTz).time;
   return (
     <tr aria-label="current time">
       <td colSpan={7} className="px-0 py-0">
@@ -569,7 +585,7 @@ const NowIndicator: React.FC = () => {
           <div className="w-full h-0.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 shadow-lg shadow-amber-500/50" />
           <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold font-mono shadow-md shadow-amber-500/40">
             <span className="w-1.5 h-1.5 rounded-full bg-black/70 animate-pulse" />
-            NOW {time} ET
+            NOW {time} {tzOffsetLabel(displayTz)}
           </span>
         </div>
       </td>
@@ -587,7 +603,7 @@ const CountryFlag: React.FC<{ countryCode: string; size?: 'sm' | 'md' | 'lg' }> 
       srcSet={`https://flagcdn.com/w80/${code}.png 2x`}
       alt={countryCode}
       loading="lazy"
-      className={`${dims[size]} object-cover rounded-[2px] ring-1 ring-white/10 inline-block`}
+      className={`${dims[size]} object-cover rounded-[2px] ring-1 ring-white/10 inline-block saturate-150 contrast-110`}
       onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
     />
   );
@@ -796,8 +812,8 @@ const DataValue: React.FC<{
     else if (numValue < numCompare) colorClass = 'text-red-400';
   }
   
-  if (type === 'forecast') colorClass = 'text-neutral-400';
-  if (type === 'previous') colorClass = 'text-neutral-500';
+  if (type === 'forecast') colorClass = 'text-neutral-300';
+  if (type === 'previous') colorClass = 'text-neutral-400';
   
   return (
     <span className={`${colorClass} ${type === 'actual' ? 'font-semibold' : ''}`}>
@@ -806,35 +822,41 @@ const DataValue: React.FC<{
   );
 };
 
-// ✅ FIXED: Economic Calendar Table - Proper date grouping
+// Economic Calendar Table — timezone-aware
 const EconomicCalendarTable: React.FC<{
   events: EconomicEvent[];
   loading: boolean;
-}> = ({ events, loading }) => {
+  displayTz: string;
+}> = ({ events, loading, displayTz }) => {
+  // Pre-compute instants + display parts once per event (not in render loops).
+  // Hook must be called unconditionally — early returns come after.
+  const enriched = useMemo(() => events.map((event) => {
+    const instant = etToInstant(event.date, event.time);
+    const disp = instantToParts(instant, displayTz);
+    return { event, instant, disp };
+  }), [events, displayTz]);
+
   if (loading) return <TableSkeleton />;
 
-  const today = getNowET().date;
+  const today = instantToParts(new Date(), displayTz).date;
+  const offsetLabel = tzOffsetLabel(displayTz);
 
-  // ✅ FIXED: Properly group events by normalized date
-  const groupedEvents: Record<string, EconomicEvent[]> = {};
-  
-  events.forEach(event => {
-    const date = normalizeDate(event.date);
-    if (!date) return;
-    
-    if (!groupedEvents[date]) {
-      groupedEvents[date] = [];
-    }
-    groupedEvents[date].push(event);
-  });
+  // Group by display date
+  const groupedMap = new Map<string, typeof enriched>();
+  for (const item of enriched) {
+    const { disp } = item;
+    if (!disp.date) continue;
+    if (!groupedMap.has(disp.date)) groupedMap.set(disp.date, []);
+    groupedMap.get(disp.date)!.push(item);
+  }
 
-  // Sort events within each day by time
-  Object.keys(groupedEvents).forEach(date => {
-    groupedEvents[date].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-  });
+  // Sort events within each group by instant epoch
+  for (const items of groupedMap.values()) {
+    items.sort((a, b) => a.instant.getTime() - b.instant.getTime());
+  }
 
   // Sort dates
-  const sortedDates = Object.keys(groupedEvents).sort();
+  const sortedDates = Array.from(groupedMap.keys()).sort();
 
   if (sortedDates.length === 0) {
     return (
@@ -846,19 +868,33 @@ const EconomicCalendarTable: React.FC<{
     );
   }
 
+  const now = Date.now();
+
   return (
     <div className="overflow-x-auto">
       {sortedDates.map((date) => {
-        const dateEvents = groupedEvents[date];
+        const dateItems = groupedMap.get(date)!;
         const isToday = date === today;
-        
+
+        // Index where NOW line belongs: before the first future event
+        let nowIndex: number | null = null;
+        if (isToday) {
+          nowIndex = dateItems.length; // default: after all events
+          for (let i = 0; i < dateItems.length; i++) {
+            if (dateItems[i].instant.getTime() > now) {
+              nowIndex = i;
+              break;
+            }
+          }
+        }
+
         return (
           <div key={date}>
-            {/* ✅ Single date header per date */}
+            {/* Date header */}
             <div className={`
               px-4 py-3 border-b sticky top-0 backdrop-blur-sm flex items-center justify-between
-              ${isToday 
-                ? 'bg-amber-500/10 border-amber-500/30' 
+              ${isToday
+                ? 'bg-amber-500/10 border-amber-500/30'
                 : 'bg-neutral-900/80 border-amber-500/20'
               }
             `}>
@@ -872,100 +908,97 @@ const EconomicCalendarTable: React.FC<{
                   </span>
                 )}
               </div>
-              <span className="text-xs text-neutral-500">{dateEvents.length} events</span>
+              <span className="text-xs text-neutral-500">{dateItems.length} events</span>
             </div>
-            
-            {/* Events table */}
-            {(() => {
-              const nowIndex = isToday ? getNowInsertIndex(dateEvents, isToday) : null;
-              return (
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
-                      <th className="px-4 py-3 w-20">Time</th>
-                      <th className="px-4 py-3 w-24">Country</th>
-                      <th className="px-4 py-3 w-24">Impact</th>
-                      <th className="px-4 py-3">Event</th>
-                      <th className="px-4 py-3 w-24 text-right">Actual</th>
-                      <th className="px-4 py-3 w-24 text-right">Forecast</th>
-                      <th className="px-4 py-3 w-24 text-right">Previous</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dateEvents.map((event, index) => {
-                      const isPast = isEventPast(event.date, event.time);
 
-                      return (
-                        <React.Fragment key={event.id}>
-                          {nowIndex === index && <NowIndicator />}
-                          <tr
-                            className={`
-                              border-b border-neutral-800/30 transition-colors
-                              ${event.isReleased || isPast
-                                ? 'bg-neutral-900/50 opacity-75'
-                                : 'hover:bg-neutral-800/30'
-                              }
-                            `}
-                          >
-                            <td className="px-4 py-3 text-sm font-mono">
-                              <div className="flex items-center gap-2">
-                                <span className={isPast ? 'text-neutral-500' : 'text-neutral-300'}>
-                                  {event.time || '—'}
-                                </span>
-                                {event.isReleased && (
-                                  <CheckCircle2 size={12} className="text-amber-500/70" />
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <CountryFlag countryCode={event.countryCode} size="md" />
-                                <span className="text-xs text-neutral-500">{event.currency}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              {event.isHoliday ? (
-                                <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
-                                  Holiday
-                                </span>
-                              ) : (
-                                <ImportanceStars level={event.importance} />
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`text-sm ${isPast ? 'text-neutral-400' : 'text-neutral-200'}`}>
-                                  {event.event}
-                                </span>
-                                {event.isSpeech && (
-                                  <Mic size={14} className="text-purple-400" />
-                                )}
-                                {event.isPreliminary && (
-                                  <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
-                                )}
-                                {event.isRevised && (
-                                  <span className="text-xs text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm">
-                              <DataValue value={event.actual} compareWith={event.forecast} type="actual" />
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm">
-                              <DataValue value={event.forecast} type="forecast" />
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm">
-                              <DataValue value={event.previous} type="previous" />
-                            </td>
-                          </tr>
-                          {nowIndex === dateEvents.length && index === dateEvents.length - 1 && <NowIndicator />}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              );
-            })()}
+            {/* Events table */}
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs text-neutral-500 uppercase tracking-wider border-b border-neutral-800/50">
+                  <th className="px-4 py-3 w-28">Time ({offsetLabel})</th>
+                  <th className="px-4 py-3 w-24">Country</th>
+                  <th className="px-4 py-3 w-24">Impact</th>
+                  <th className="px-4 py-3">Event</th>
+                  <th className="px-4 py-3 w-24 text-right">Actual</th>
+                  <th className="px-4 py-3 w-24 text-right">Forecast</th>
+                  <th className="px-4 py-3 w-24 text-right">Previous</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dateItems.map(({ event, instant, disp }, index) => {
+                  const isPast = instant.getTime() < now;
+
+                  return (
+                    <React.Fragment key={event.id}>
+                      {nowIndex === index && <NowIndicator displayTz={displayTz} />}
+                      <tr
+                        className={`
+                          border-b border-neutral-800/30 transition-colors
+                          ${event.isReleased || isPast
+                            ? 'bg-neutral-900/50'
+                            : 'hover:bg-neutral-800/30'
+                          }
+                        `}
+                      >
+                        <td className="px-4 py-3 text-sm font-mono">
+                          <div className="flex items-center gap-2">
+                            <span className={isPast ? 'text-neutral-400' : 'text-neutral-300'}>
+                              {event.time ? disp.time : '—'}
+                            </span>
+                            {event.isReleased && (
+                              <CheckCircle2 size={12} className="text-amber-500/70" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <CountryFlag countryCode={event.countryCode} size="md" />
+                            <span className="text-xs text-neutral-500">{event.currency}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {event.isHoliday ? (
+                            <span className="text-xs font-medium text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                              Holiday
+                            </span>
+                          ) : (
+                            <ImportanceStars level={event.importance} />
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-sm ${isPast ? 'text-neutral-300' : 'text-neutral-100'}`}>
+                              {event.event}
+                            </span>
+                            {event.isSpeech && (
+                              <Mic size={14} className="text-purple-400" />
+                            )}
+                            {event.isPreliminary && (
+                              <span className="text-xs text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded border border-blue-400/20">P</span>
+                            )}
+                            {event.isRevised && (
+                              <span className="text-xs text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-500/20">R</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          <DataValue value={event.actual} compareWith={event.forecast} type="actual" />
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          <DataValue value={event.forecast} type="forecast" />
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          <DataValue value={event.previous} type="previous" />
+                        </td>
+                      </tr>
+                      {nowIndex === dateItems.length && index === dateItems.length - 1 && (
+                        <NowIndicator displayTz={displayTz} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         );
       })}
@@ -1340,16 +1373,16 @@ const Legend: React.FC = () => (
     </div>
     <div className="flex items-center gap-2">
       <div className="flex">
-        <Star size={12} className="fill-amber-500 text-amber-500" />
-        <Star size={12} className="fill-amber-500 text-amber-500" />
+        <Star size={12} className="fill-yellow-400 text-yellow-400" />
+        <Star size={12} className="fill-yellow-400 text-yellow-400" />
       </div>
       <span>Medium</span>
     </div>
     <div className="flex items-center gap-2">
       <div className="flex">
-        <Star size={12} className="fill-amber-500 text-amber-500" />
-        <Star size={12} className="fill-amber-500 text-amber-500" />
-        <Star size={12} className="fill-amber-500 text-amber-500" />
+        <Star size={12} className="fill-yellow-400 text-yellow-400" />
+        <Star size={12} className="fill-yellow-400 text-yellow-400" />
+        <Star size={12} className="fill-yellow-400 text-yellow-400" />
       </div>
       <span>High</span>
     </div>
@@ -1382,6 +1415,19 @@ export default function AllMarketsCalendar() {
   const [importanceFilter, setImportanceFilter] = useState<Importance[]>([1, 2, 3]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Timezone selector — persisted across page reloads
+  const [displayTzId, setDisplayTzId] = useState<TzOptionId>(() => {
+    const stored = localStorage.getItem('calendar_display_tz');
+    const valid = TZ_OPTIONS.find((o) => o.id === stored);
+    return valid ? valid.id : 'local';
+  });
+  const displayTz = resolveTzId(displayTzId);
+
+  const handleTzChange = (id: TzOptionId) => {
+    setDisplayTzId(id);
+    localStorage.setItem('calendar_display_tz', id);
+  };
 
   const { data, loading, error, refetch } = useCalendarData(
     activeTab,
@@ -1513,6 +1559,29 @@ export default function AllMarketsCalendar() {
               onClear={() => setSelectedCountries([])}
             />
 
+            {/* Timezone selector — visible on economic tab */}
+            {activeTab === 'economic' && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-neutral-900/80 border border-neutral-800 rounded-lg hover:border-amber-500/50 transition-colors">
+                <Globe size={14} className="text-neutral-400 flex-shrink-0" />
+                <select
+                  value={displayTzId}
+                  onChange={(e) => handleTzChange(e.target.value as TzOptionId)}
+                  className="bg-transparent text-sm text-neutral-300 focus:outline-none cursor-pointer appearance-none pr-1"
+                  aria-label="Display timezone"
+                >
+                  {TZ_OPTIONS.map((opt) => {
+                    const tz = opt.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    const offset = tzOffsetLabel(tz);
+                    return (
+                      <option key={opt.id} value={opt.id} className="bg-neutral-900 text-neutral-200">
+                        {opt.label} ({offset})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
             <button
               onClick={() => refetch()}
               disabled={loading}
@@ -1591,6 +1660,7 @@ export default function AllMarketsCalendar() {
                 <EconomicCalendarTable
                   events={data.economic.events}
                   loading={loading}
+                  displayTz={displayTz}
                 />
               ) : loading ? (
                 <TableSkeleton />
