@@ -200,30 +200,19 @@ interface WallSpec {
   binSize: number;
 }
 
+// Performance cap: max tracked alive bins per side per tick.
+// Far above what's visible on screen; prevents pathological growth.
+const MAX_ALIVE_BINS_PER_SIDE = 600;
+
 /**
- * Derive up to 9 bid + 9 ask wall specs from the raw order book using
- * two independent selection bands per side:
- *
- * NEAR band  |dist| ≤ 2.5% of mid       → p90 / 25%-of-max threshold, top 4
- * FAR  band  2.5% < |dist| < Infinity    → p95 / 30%-of-max threshold, top 5
- *
- * The FAR band has NO upper distance limit — every order at any depth is
- * aggregated into bins and eligible for selection. This gives full-book
- * awareness: a mega-wall 70% away is captured. The wall series are
- * excluded from price-axis autoscaling (autoscaleInfoProvider: () => null
- * in FinotaurChart) so deep walls never squash the candle chart.
- *
- * Two-band approach prevents distant mega-walls from raising the threshold
- * so high that near-price walls get culled — which caused a blank order
- * book on zoom-in (Bookmap-style view).
- *
- * Aggregation into bins (same binSize) and WallSpec shape are unchanged.
- * Downstream size-ratio rendering (lineWidth/alpha vs max notional) is
- * also unchanged — far mega-walls still render thicker/brighter.
+ * Aggregate ALL levels of both sides into bins and return every bin whose
+ * notional >= floorUsd. No band-selection, no top-N cap — the full book.
+ * binFloor / computeWallBinSize math is unchanged from the previous version.
  */
 function computeWalls(
   bids: Map<number, number>,
   asks: Map<number, number>,
+  floorUsd: number,
 ): WallSpec[] {
   if (bids.size === 0 && asks.size === 0) return [];
 
@@ -237,8 +226,7 @@ function computeWalls(
 
   const binSize = computeWallBinSize(mid);
 
-  // Aggregate ALL levels of both sides into bins — no price range filter.
-  // Full-book scan: every resting order at any depth is captured.
+  // Aggregate ALL levels of both sides into bins — full-book scan.
   const bidBins = new Map<number, number>();
   const askBins = new Map<number, number>();
 
@@ -251,72 +239,22 @@ function computeWalls(
     askBins.set(bin, (askBins.get(bin) ?? 0) + qty * price);
   }
 
-  // Band constants
-  const NEAR_MAX_DIST_PCT = 0.025;             // |price - mid| / mid ≤ 2.5%  → NEAR
-  const FAR_MAX_DIST_PCT  = Number.POSITIVE_INFINITY; // no upper limit       → FAR (full book)
-  const NEAR_PCTL         = 0.90;  // p90 of NEAR nonzero bins
-  const NEAR_FRAC_MAX     = 0.25;  // 25% of largest NEAR bin
-  const NEAR_TOP_N        = 4;
-  const FAR_PCTL          = 0.95;  // p95 of FAR nonzero bins
-  const FAR_FRAC_MAX      = 0.30;  // 30% of largest FAR bin
-  const FAR_TOP_N         = 5;     // wider depth → show top 5 instead of 3
-  // Absolute floor: when a band empties out (e.g. mega-walls get pulled),
-  // its relative thresholds collapse and dust orders ($407) slip through.
-  // No wall below this notional is ever shown, on any coin.
-  const MIN_WALL_NOTIONAL_USD = 150_000;
-
-  /**
-   * Select up to topN walls from bins whose bin-centre distance from mid
-   * falls within [minDistPct, maxDistPct) of mid.
-   * Threshold = max(pctl of nonzero values, fracOfMax × largest value).
-   * Returns empty array if the band contains no nonzero bins.
-   */
-  function selectBand(
-    bins: Map<number, number>,
-    side: 'bid' | 'ask',
-    minDistPct: number,
-    maxDistPct: number,
-    pctl: number,
-    fracOfMax: number,
-    topN: number,
-  ): WallSpec[] {
-    // Collect bins that fall inside this distance band
-    const bandEntries = Array.from(bins.entries()).filter(([binPrice]) => {
-      const dist = Math.abs(binPrice - mid) / mid;
-      return dist >= minDistPct && dist < maxDistPct;
-    });
-
-    const nonzeroVals = bandEntries.map(([, n]) => n).filter(v => v > 0);
-    if (nonzeroVals.length === 0) return [];
-
-    const sorted  = [...nonzeroVals].sort((a, b) => a - b);
-    const pctlIdx = Math.floor(sorted.length * pctl);
-    const pctlVal = sorted[Math.min(pctlIdx, sorted.length - 1)];
-    const largest = sorted[sorted.length - 1];
-    const threshold = Math.max(pctlVal, largest * fracOfMax, MIN_WALL_NOTIONAL_USD);
-
-    const candidates = bandEntries
-      .filter(([, n]) => n >= threshold)
+  function selectAll(bins: Map<number, number>, side: 'bid' | 'ask'): WallSpec[] {
+    // Filter by floor, then sort desc by notional, cap at performance limit.
+    return Array.from(bins.entries())
+      .filter(([, n]) => n >= floorUsd)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, topN);
-
-    return candidates.map(([price, notional]) => ({
-      id: `${side}-${price}`,
-      price,
-      notional,
-      side,
-      binSize,
-    }));
+      .slice(0, MAX_ALIVE_BINS_PER_SIDE)
+      .map(([price, notional]) => ({
+        id: `${side}-${price}`,
+        price,
+        notional,
+        side,
+        binSize,
+      }));
   }
 
-  function selectWalls(bins: Map<number, number>, side: 'bid' | 'ask'): WallSpec[] {
-    return [
-      ...selectBand(bins, side, 0,                 NEAR_MAX_DIST_PCT, NEAR_PCTL, NEAR_FRAC_MAX, NEAR_TOP_N),
-      ...selectBand(bins, side, NEAR_MAX_DIST_PCT,  FAR_MAX_DIST_PCT,  FAR_PCTL,  FAR_FRAC_MAX,  FAR_TOP_N),
-    ];
-  }
-
-  return [...selectWalls(bidBins, 'bid'), ...selectWalls(askBins, 'ask')];
+  return [...selectAll(bidBins, 'bid'), ...selectAll(askBins, 'ask')];
 }
 
 // ── Error banner ──────────────────────────────────────────────────────────────
@@ -352,7 +290,19 @@ const WALL_INTERVAL_MS = 3_000; // recompute walls every 3 seconds
 // Wall lifecycle constants
 const WALL_MISS_TICKS_UNTIL_DEAD = 2;   // ticks without detection before marking dead
 const WALL_MIN_LIFETIME_MS       = 45_000; // walls alive < 45s are dropped on death (noise)
-const WALL_DEAD_CAP              = 40;  // max stored dead walls (oldest evicted by deadAt)
+const WALL_DEAD_CAP              = 400; // max stored dead walls (oldest evicted by deadAt)
+
+// Floor filter options: notional USD — all bins ≥ $1K are TRACKED (so
+// raising the floor doesn't corrupt history), but only bins ≥ floorUsd
+// are EMITTED as visible segments.
+const FLOOR_OPTIONS = [
+  { label: 'All',  value: 1_000 },
+  { label: '$10K', value: 10_000 },
+  { label: '$150K',value: 150_000 },
+  { label: '$500K',value: 500_000 },
+] as const;
+const FLOOR_DEFAULT = 10_000; // $10K default
+const TRACK_FLOOR   = 1_000;  // always track ≥ $1K regardless of display floor
 
 // Bar-interval size in seconds — used to align wall times to candle boundaries.
 function intervalSeconds(iv: Interval): number {
@@ -377,73 +327,75 @@ const BID_COLOR  = 'rgba(34,197,94,0.55)';
 const ASK_COLOR  = 'rgba(220,38,38,0.65)';
 
 /**
- * Heat-ramp color helper — 3-tier palette keyed by side + explicit tier.
+ * Continuous-intensity color helper.
  *
- * ASKS (red family):
- *   dim     → edge rgba(220,38,38,0.50),   fill rgba(220,38,38,0.16)
- *   mid     → edge rgba(248,80,80,0.80),   fill rgba(220,38,38,0.32)
- *   intense → edge rgba(255,140,140,0.95), fill rgba(248,90,90,0.50)
+ * ratio: notional / per-side-alive-max, in [0, 1].
+ * dead:  apply dead-wall dimming (fill capped at 0.20, edge alpha 0.25).
  *
- * BIDS (emerald family):
- *   dim     → edge rgba(34,197,94,0.45),   fill rgba(34,197,94,0.14)
- *   mid     → edge rgba(52,211,123,0.75),  fill rgba(34,197,94,0.30)
- *   intense → edge rgba(140,255,190,0.95), fill rgba(80,230,150,0.48)
+ * Color hues:
+ *   Bids (emerald): fill rgb(34,197,94)  → rgb(80,230,150) at full intensity
+ *                   edge rgb(34,197,94)  → rgb(140,255,190)
+ *   Asks (red):     fill rgb(220,38,38)  → rgb(248,90,90)
+ *                   edge rgb(220,38,38)  → rgb(255,140,140)
  *
- * Dead walls: halve the fill alpha (cap 0.20), edge alpha 0.25.
+ * Alpha ramps (alive):
+ *   fillAlpha = 0.06 + 0.50 * curve
+ *   edgeAlpha = 0.20 + 0.75 * curve
  */
 function heatColors(
   side: 'bid' | 'ask',
-  tier: 'dim' | 'mid' | 'intense',
+  ratio: number,   // notional / per-side max, [0,1]
   dead: boolean,
 ): { edge: string; fill: string } {
-  let edge: string;
-  let fill: string;
+  // Log compression + mild gamma so weak walls stay subtle.
+  const t     = Math.log1p(9 * ratio) / Math.log1p(10);
+  const curve = Math.pow(t, 1.35);
 
-  if (side === 'ask') {
-    if (tier === 'intense') {
-      edge = 'rgba(255,140,140,0.95)';
-      fill = 'rgba(248,90,90,0.50)';
-    } else if (tier === 'mid') {
-      edge = 'rgba(248,80,80,0.80)';
-      fill = 'rgba(220,38,38,0.32)';
-    } else {
-      edge = 'rgba(220,38,38,0.50)';
-      fill = 'rgba(220,38,38,0.16)';
-    }
-  } else {
-    // bid — emerald family unchanged
-    if (tier === 'intense') {
-      edge = 'rgba(140,255,190,0.95)';
-      fill = 'rgba(80,230,150,0.48)';
-    } else if (tier === 'mid') {
-      edge = 'rgba(52,211,123,0.75)';
-      fill = 'rgba(34,197,94,0.30)';
-    } else {
-      edge = 'rgba(34,197,94,0.45)';
-      fill = 'rgba(34,197,94,0.14)';
-    }
-  }
+  let fillAlpha = 0.06 + 0.50 * curve;
+  let edgeAlpha = 0.20 + 0.75 * curve;
 
   if (dead) {
-    // Parse fill alpha and halve it (cap 0.20); fix edge to 0.25.
-    // We reconstruct via a known-format regex rather than re-parsing rgba strings.
-    const fillMatch = fill.match(/rgba\(([^,]+),([^,]+),([^,]+),([\d.]+)\)/);
-    if (fillMatch) {
-      const deadFillAlpha = Math.min(0.20, parseFloat(fillMatch[4]) / 2);
-      fill = `rgba(${fillMatch[1]},${fillMatch[2]},${fillMatch[3]},${deadFillAlpha.toFixed(2)})`;
-    }
-    const edgeMatch = edge.match(/rgba\(([^,]+),([^,]+),([^,]+),[\d.]+\)/);
-    if (edgeMatch) {
-      edge = `rgba(${edgeMatch[1]},${edgeMatch[2]},${edgeMatch[3]},0.25)`;
-    }
+    fillAlpha = Math.min(0.20, fillAlpha / 2);
+    edgeAlpha = 0.25;
   }
 
-  return { edge, fill };
+  let fillR: number, fillG: number, fillB: number;
+  let edgeR: number, edgeG: number, edgeB: number;
+
+  if (side === 'bid') {
+    // Emerald: dim (34,197,94) → intense (80,230,150)
+    fillR = Math.round(34  + curve * (80  - 34));
+    fillG = Math.round(197 + curve * (230 - 197));
+    fillB = Math.round(94  + curve * (150 - 94));
+    // Edge dim (34,197,94) → intense (140,255,190)
+    edgeR = Math.round(34  + curve * (140 - 34));
+    edgeG = Math.round(197 + curve * (255 - 197));
+    edgeB = Math.round(94  + curve * (190 - 94));
+  } else {
+    // Red: dim (220,38,38) → intense (248,90,90)
+    fillR = Math.round(220 + curve * (248 - 220));
+    fillG = Math.round(38  + curve * (90  - 38));
+    fillB = Math.round(38  + curve * (90  - 38));
+    // Edge dim (220,38,38) → intense (255,140,140)
+    edgeR = Math.round(220 + curve * (255 - 220));
+    edgeG = Math.round(38  + curve * (140 - 38));
+    edgeB = Math.round(38  + curve * (140 - 38));
+  }
+
+  const fa = fillAlpha.toFixed(3);
+  const ea = edgeAlpha.toFixed(3);
+  return {
+    fill: `rgba(${fillR},${fillG},${fillB},${fa})`,
+    edge: `rgba(${edgeR},${edgeG},${edgeB},${ea})`,
+  };
 }
 
 /** Tracked wall entry — lives in the useRef Map keyed by `${side}:${binPrice}`. */
 interface TrackedWall {
   key: string;
+  /** Stable detection key `${side}:${price}` — used for present/absent checks
+   *  even when the map key carries a revival timestamp suffix. */
+  detectKey: string;
   side: 'bid' | 'ask';
   price: number;
   /** Bin size (price units) captured at birth from computeWallBinSize(mid). */
@@ -484,13 +436,19 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // immediately and renders history stripes without waiting up to 3 seconds.
   const [seedVersion, setSeedVersion] = useState(0);
 
+  // Floor filter: segments with notional < floorUsd are hidden (not emitted).
+  // Tracking always uses TRACK_FLOOR ($1K) so history isn't lost on filter change.
+  const [floorUsd, setFloorUsd] = useState<number>(FLOOR_DEFAULT);
+
   // ── Seed refs from server-side wall history on mount ────────────────────
   // WorkstationInner remounts on every symbol change (via key= in the parent),
   // so the effect naturally re-runs for the new symbol with clean refs.
   useEffect(() => {
     const controller = new AbortController();
+    let cancelled = false;
 
     fetchWallsHistory(symbol, 72, controller.signal).then(resp => {
+      if (cancelled) return;
       const nowMs = Date.now();
       const tracked = trackedWallsRef.current;
       const dead    = deadWallsRef.current;
@@ -511,6 +469,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         const bornAt = new Date(ep.firstSeenAt).getTime();
         tracked.set(key, {
           key,
+          detectKey:   key,
           side:        ep.side,
           price:       binPrice,
           binSize,
@@ -543,6 +502,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         const deadAt  = new Date(ep.lastSeenAt).getTime();
         serverDeads.push({
           key:        `srv:${dedupKey}`,
+          detectKey:  dedupKey,
           side:       ep.side,
           price:      binPrice,
           binSize,
@@ -570,7 +530,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       // History is enhancement-only — swallow errors silently.
     });
 
-    return () => controller.abort();
+    return () => { cancelled = true; controller.abort(); };
   // symbol is fixed per mount — eslint exhaustive-deps would only flag new
   // stable refs (computeWallBinSize, binFloor are module-level, not hooks).
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -588,7 +548,8 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
     const tick = () => {
       const { bids, asks } = hook.getBook();
-      const detected = computeWalls(bids, asks);
+      // Track everything ≥ TRACK_FLOOR ($1K). Display is filtered later by floorUsd.
+      const detected = computeWalls(bids, asks, TRACK_FLOOR);
       const nowMs    = Date.now();
 
       const tracked  = trackedWallsRef.current;
@@ -609,6 +570,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           // New wall — capture binSize at birth
           tracked.set(key, {
             key,
+            detectKey:   key,
             side:        w.side,
             price:       w.price,
             binSize:     w.binSize,
@@ -619,12 +581,29 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             deadAt:      null,
           });
         }
-        // If entry exists but deadAt is set, a revived wall at the same price
-        // is treated as a new wall — leave the dead entry for history, create fresh.
+        // If entry exists but deadAt is set, the wall has revived. Promote the
+        // old dead entry into deadWallsRef (same rules as a normal death: respect
+        // min-lifetime and WALL_DEAD_CAP), remove it from trackedWallsRef, then
+        // insert a fresh entry so the aging loop can match it via detectKey.
         else if (entry.deadAt !== null) {
+          // Move old dead entry to the dead list (if old enough to keep).
+          const oldLifetime = (entry.deadAt ?? nowMs) - entry.bornAt;
+          if (oldLifetime >= WALL_MIN_LIFETIME_MS) {
+            dead.push(entry);
+            if (dead.length > WALL_DEAD_CAP) {
+              dead.sort((a, b) => (a.deadAt ?? 0) - (b.deadAt ?? 0));
+              dead.splice(0, dead.length - WALL_DEAD_CAP);
+            }
+          }
+          tracked.delete(key);
+
+          // Insert fresh alive entry with a timestamp-suffixed map key so the
+          // old entry's map slot is truly replaced, but detectKey stays as
+          // `${side}:${price}` so the aging loop can match it against detectedKeys.
           const freshKey = `${w.side}:${w.price}:${nowMs}`;
           tracked.set(freshKey, {
             key:         freshKey,
+            detectKey:   key,
             side:        w.side,
             price:       w.price,
             binSize:     w.binSize,
@@ -640,7 +619,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       // ── Age out walls not detected this tick ───────────────
       for (const entry of Array.from(tracked.values())) {
         if (entry.deadAt !== null) continue; // already dead
-        if (detectedKeys.has(entry.key)) continue; // seen this tick
+        if (detectedKeys.has(entry.detectKey)) continue; // seen this tick
 
         entry.missedTicks++;
         if (entry.missedTicks >= WALL_MISS_TICKS_UNTIL_DEAD) {
@@ -665,45 +644,28 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       }
 
       // ── Build WallSegment[] ────────────────────────────────
-      // Tier assignment: per-side rank among currently alive walls.
-      // rank 0 → 'intense'; ranks 1-2 → 'mid'; rest → 'dim'.
-      // This prevents a distant mega-wall from washing out near walls.
+      // Continuous intensity: ratio vs per-side alive max. Dead walls use
+      // the same max so their dimming is contextually consistent.
       const aliveWalls = Array.from(tracked.values()).filter(e => e.deadAt === null);
 
-      // Build rank maps per side (sorted desc by maxNotional).
-      function buildRankMap(side: 'bid' | 'ask'): Map<string, number> {
-        const sideSorted = aliveWalls
-          .filter(e => e.side === side)
-          .sort((a, b) => b.maxNotional - a.maxNotional);
-        const map = new Map<string, number>();
-        sideSorted.forEach((e, i) => map.set(e.key, i));
-        return map;
-      }
-      const bidRanks = buildRankMap('bid');
-      const askRanks = buildRankMap('ask');
-
-      function rankToTier(rank: number): 'dim' | 'mid' | 'intense' {
-        if (rank === 0) return 'intense';
-        if (rank <= 2)  return 'mid';
-        return 'dim';
-      }
-
-      // Max alive notional per side — used only for dead-wall tier assignment.
+      // Max alive notional per side (fallback 1 to avoid /0).
       const maxAliveBid = aliveWalls
         .filter(e => e.side === 'bid')
-        .reduce((m, e) => Math.max(m, e.maxNotional), 0);
+        .reduce((m, e) => Math.max(m, e.maxNotional), 1);
       const maxAliveAsk = aliveWalls
         .filter(e => e.side === 'ask')
-        .reduce((m, e) => Math.max(m, e.maxNotional), 0);
+        .reduce((m, e) => Math.max(m, e.maxNotional), 1);
 
       const segments: WallSegment[] = [];
 
-      // Alive walls — rendered as colored Bookmap-style band stripes.
+      // Alive walls — filter by display floor; history is tracked regardless.
       for (const entry of aliveWalls) {
-        const rankMap = entry.side === 'bid' ? bidRanks : askRanks;
-        const rank    = rankMap.get(entry.key) ?? 99;
-        const tier    = rankToTier(rank);
-        const { edge, fill } = heatColors(entry.side, tier, false);
+        // Display floor: suppress entries below current floor (but keep tracking them).
+        if (entry.maxNotional < floorUsd) continue;
+
+        const maxSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
+        const ratio   = entry.maxNotional / maxSide;
+        const { edge, fill } = heatColors(entry.side, ratio, false);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
         segments.push({
@@ -715,20 +677,17 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           color:      edge,
           fillColor:  fill,
           lineWidth:  1,
-          // No axis label — tooltip replaces it.
           tooltip:    `${sideLabel} ${formatNotional(entry.maxNotional)} · since ${formatHHMM(entry.bornAt)}`,
         });
       }
 
-      // Dead walls — same band geometry, dimmed via heatColors(dead=true).
-      // Tier is derived from a ratio vs the current alive max for that side,
-      // so a dead wall's tier is contextually consistent with the live set.
+      // Dead walls — apply display floor; continuous intensity vs alive max.
       for (const entry of dead) {
-        const maxAliveSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
-        const ratio = maxAliveSide > 0 ? entry.maxNotional / maxAliveSide : 0;
-        const tier: 'dim' | 'mid' | 'intense' =
-          ratio > 0.66 ? 'intense' : ratio > 0.33 ? 'mid' : 'dim';
-        const { edge, fill } = heatColors(entry.side, tier, true);
+        if (entry.maxNotional < floorUsd) continue;
+
+        const maxSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
+        const ratio   = entry.maxNotional / maxSide;
+        const { edge, fill } = heatColors(entry.side, ratio, true);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
 
         segments.push({
@@ -740,7 +699,6 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           color:      edge,
           fillColor:  fill,
           lineWidth:  1,
-          // No axis label — tooltip replaces it.
           tooltip:    `${sideLabel} ${formatNotional(entry.maxNotional)} · ${formatHHMM(entry.bornAt)}–${formatHHMM(entry.deadAt ?? 0)}`,
         });
       }
@@ -752,13 +710,16 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
     // seedVersion dependency: re-runs the effect (incl. the immediate tick())
     // once after server history is seeded, so stripes appear without waiting
     // up to WALL_INTERVAL_MS.
+    // floorUsd: changing the floor re-runs so the new filter applies immediately.
     tick();
     const id = setInterval(tick, WALL_INTERVAL_MS);
     return () => clearInterval(id);
   // interval change: ivSec recalculates on next tick — no need to reset history.
   // seedVersion intentionally included so history renders immediately after seed.
+  // hook.getBook (stable useCallback) — NOT the hook object, whose identity
+  // changes every render (lastPrice state) and restarted the interval ~1/sec.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hook, interval, seedVersion]);
+  }, [hook.getBook, interval, seedVersion, floorUsd]);
 
   const coinLabel = COINS.find(c => c.symbol === symbol)?.label ?? symbol;
 
@@ -772,7 +733,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden min-h-0">
-      {/* Chart sub-header: coin/price info + wall legend */}
+      {/* Chart sub-header: coin/price info + floor filter + wall legend */}
       <div className="flex items-center gap-3 px-3 py-1.5 border-b border-zinc-800/60 flex-shrink-0">
         <span className="text-xs font-semibold text-white/70">
           {coinLabel} / USDT
@@ -785,6 +746,29 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             })}
           </span>
         )}
+
+        {/* Floor filter segmented control */}
+        <div className="flex items-center gap-0.5">
+          {FLOOR_OPTIONS.map(opt => {
+            const isActive = opt.value === floorUsd;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setFloorUsd(opt.value)}
+                className={[
+                  'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
+                  isActive
+                    ? 'text-[#C9A646]'
+                    : 'text-white/40 hover:text-white/60',
+                ].join(' ')}
+                style={isActive ? { color: '#C9A646' } : undefined}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Minimal wall legend */}
         <span className="ml-auto flex items-center gap-2 text-[10px] text-white/25 select-none">
           <span
@@ -812,6 +796,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           theme="dark"
           height="100%"
           wallSegments={wallSegments}
+          wallRenderMode="heatmap"
         />
       </div>
     </div>
