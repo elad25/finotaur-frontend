@@ -33,6 +33,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
+import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
+import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import {
   createChart,
   ColorType,
@@ -603,8 +605,23 @@ export interface FinotaurChartProps {
    *   for all existing callers (backtest, journal, any caller that doesn't pass this prop).
    * - 'heatmap': renders an absolutely-positioned canvas overlay (WallHeatLayer) instead
    *   of creating Baseline series. Used by MarketScanner v9 for full-book rendering.
+   * - 'matrix': renders the DepthMatrixLayer time×price heatmap BEHIND candles.
+   *   Requires depthMatrixColumns + depthMatrixBinSize to be provided.
    */
-  wallRenderMode?: 'series' | 'heatmap';
+  wallRenderMode?: 'series' | 'heatmap' | 'matrix';
+  /**
+   * Decoded depth-slice columns for DepthMatrixLayer (wallRenderMode='matrix' only).
+   * No-op when wallRenderMode !== 'matrix'.
+   */
+  depthMatrixColumns?: DecodedColumn[];
+  /** Dominant bin size for the depth matrix grid (wallRenderMode='matrix' only). */
+  depthMatrixBinSize?: number;
+  /** Sensitivity slider 0..1 → maps to p50..p95 floor percentile (matrix mode). */
+  depthMatrixSensitivity?: number;
+  /** Absolute notional floor USD — bins below treated as q=0 (matrix mode). */
+  depthMatrixFloorUsd?: number;
+  /** Current candle interval in ms — used to map column→px width (matrix mode). */
+  depthMatrixCandleIntervalMs?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -626,6 +643,11 @@ export function FinotaurChart({
   priceLines,
   wallSegments,
   wallRenderMode = 'series',
+  depthMatrixColumns,
+  depthMatrixBinSize = 1,
+  depthMatrixSensitivity = 0.4,
+  depthMatrixFloorUsd = 1_000,
+  depthMatrixCandleIntervalMs = 60_000,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -761,8 +783,8 @@ export function FinotaurChart({
       const { width: w, height: h } = entry.contentRect;
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: Math.floor(w), height: Math.floor(h) });
-        // Also track size for WallHeatLayer when in heatmap mode.
-        if (wallRenderMode === 'heatmap') {
+        // Also track size for WallHeatLayer (heatmap) and DepthMatrixLayer (matrix).
+        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix') {
           setContainerSize({ w: Math.floor(w), h: Math.floor(h) });
         }
       }
@@ -771,7 +793,7 @@ export function FinotaurChart({
 
     // Seed initial size synchronously — ResizeObserver only fires on *changes*,
     // so if bars load before the first resize the layer would get 0×0 forever.
-    if (wallRenderMode === 'heatmap') {
+    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix') {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (w > 0 && h > 0) setContainerSize({ w, h });
@@ -858,8 +880,8 @@ export function FinotaurChart({
       let matchedId: string | null = null;
       let matchedTooltip: string | undefined;
 
-      if (wallRenderMode === 'heatmap') {
-        // In heatmap mode the Baseline series map is empty; hit-test directly
+      if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix') {
+        // In heatmap/matrix mode the Baseline series map is empty; hit-test directly
         // against wallSegments data.
         // Both alive and dead walls span seg.startTime → seg.endTime (or +∞ for alive).
         for (const seg of (wallSegments ?? [])) {
@@ -1180,9 +1202,9 @@ export function FinotaurChart({
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    // In heatmap mode: skip Baseline series creation; clean up any pre-existing
-    // series so switching modes doesn't leave stale series behind.
-    if (wallRenderMode === 'heatmap') {
+    // In heatmap or matrix mode: skip Baseline series creation; clean up any
+    // pre-existing series so switching modes doesn't leave stale series behind.
+    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix') {
       for (const [id, entry] of Array.from(wallSegmentSeriesRef.current.entries())) {
         try { chart.removeSeries(entry.series); } catch { /* chart may be gone */ }
         wallSegmentSeriesRef.current.delete(id);
@@ -1371,6 +1393,26 @@ export function FinotaurChart({
           segments={wallSegments ?? []}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+        />
+      )}
+
+      {/* Depth matrix heatmap canvas — only in matrix mode.
+          Rendered BEHIND candles (z-index 5 vs candle canvas z-index auto/0 — the
+          chart canvas is positioned after containerRef so it paints on top).
+          Mounted once chart + series are ready so coordinate APIs are available. */}
+      {wallRenderMode === 'matrix' &&
+       chartRef.current && seriesRef.current &&
+       barCount > 0 && (
+        <DepthMatrixLayer
+          chart={chartRef.current}
+          series={seriesRef.current}
+          columns={depthMatrixColumns ?? []}
+          binSize={depthMatrixBinSize}
+          width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
+          height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+          sensitivitySlider={depthMatrixSensitivity}
+          floorUsd={depthMatrixFloorUsd}
+          candleIntervalMs={depthMatrixCandleIntervalMs}
         />
       )}
 

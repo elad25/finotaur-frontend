@@ -13,6 +13,7 @@ import { FinotaurChart, type WallSegment } from '@/components/charting/FinotaurC
 import { pickDataSource } from '@/components/charting/dataSources';
 import type { Interval } from '@/components/charting/types';
 import { fetchWallsHistory } from '../_shared/api';
+import { useDepthSlices } from './useDepthSlices';
 
 // ── Coin config ───────────────────────────────────────────────────────────────
 
@@ -433,6 +434,19 @@ function formatHHMM(ms: number): string {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 }
 
+// Candle interval in ms — needed by DepthMatrixLayer to compute column widths.
+function intervalMs(iv: Interval): number {
+  switch (iv) {
+    case '1m':  return 60_000;
+    case '5m':  return 5 * 60_000;
+    case '15m': return 15 * 60_000;
+    case '1h':  return 60 * 60_000;
+    case '4h':  return 4 * 60 * 60_000;
+    case '1d':  return 24 * 60 * 60_000;
+    default:    return 60_000;
+  }
+}
+
 interface WorkstationInnerProps {
   symbol: string;
   interval: Interval;
@@ -459,6 +473,25 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // Floor filter: segments with notional < floorUsd are hidden (not emitted).
   // Tracking always uses TRACK_FLOOR_USD ($100K) so history isn't lost on filter change.
   const [floorUsd, setFloorUsd] = useState<number>(FLOOR_DEFAULT);
+
+  // Depth matrix sensitivity slider: 0..1 → p50..p95 floor percentile.
+  const [sensitivity, setSensitivity] = useState<number>(0.4);
+
+  // Depth matrix slices — drives DepthMatrixLayer.
+  // fromMs/toMs are the same chart window as from/to (in ms).
+  // barSpacingPx: approximate, derived from a typical chart width ÷ bars.
+  // Resolution tier is determined internally by useDepthSlices.
+  const APPROX_BAR_SPACING_PX = 8; // conservative default; DepthMatrixLayer handles zoom
+  const depthMatrix = useDepthSlices({
+    symbol,
+    fromMs: from * 1000,
+    toMs:   to   * 1000,
+    barSpacingPx:     APPROX_BAR_SPACING_PX,
+    candleIntervalMs: intervalMs(interval),
+    getBook:  hook.getBook,
+    floorUsd,
+    isLive: hook.status === 'live',
+  });
 
   // ── Seed refs from server-side wall history on mount ────────────────────
   // WorkstationInner remounts on every symbol change (via key= in the parent),
@@ -864,6 +897,22 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           })}
         </div>
 
+        {/* Sensitivity slider for depth matrix */}
+        <div className="flex items-center gap-1.5 select-none">
+          <span className="text-[10px] text-white/30">Depth</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(sensitivity * 100)}
+            onChange={e => setSensitivity(Number(e.target.value) / 100)}
+            className="w-16 h-1 accent-[#C9A646] cursor-pointer"
+            aria-label="Depth matrix sensitivity"
+            title="Depth matrix sensitivity — lower shows more detail, higher focuses on large orders"
+          />
+        </div>
+
         {/* Minimal wall legend */}
         <span className="ml-auto flex items-center gap-2 text-[10px] text-white/25 select-none">
           <span
@@ -880,7 +929,10 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         </span>
       </div>
 
-      {/* FinotaurChart fills the full remaining body height */}
+      {/* FinotaurChart fills the full remaining body height.
+          wallRenderMode='matrix': DepthMatrixLayer renders BEHIND candles (z-index 5);
+          WallHeatLayer (the alive/dead wall stripes) is intentionally kept by passing
+          wallSegments — the matrix and the wall layer coexist at different z-indices. */}
       <div className="flex-1 min-h-0">
         <FinotaurChart
           symbol={symbol}
@@ -891,7 +943,12 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           theme="dark"
           height="100%"
           wallSegments={wallSegments}
-          wallRenderMode="heatmap"
+          wallRenderMode="matrix"
+          depthMatrixColumns={depthMatrix.columns}
+          depthMatrixBinSize={depthMatrix.binSize}
+          depthMatrixSensitivity={sensitivity}
+          depthMatrixFloorUsd={floorUsd}
+          depthMatrixCandleIntervalMs={intervalMs(interval)}
         />
       </div>
     </div>
