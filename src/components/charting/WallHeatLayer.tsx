@@ -37,14 +37,6 @@ export interface WallHeatLayerProps {
   width: number;
   /** Container CSS height in px (from ResizeObserver in FinotaurChart). */
   height: number;
-  /**
-   * UTCTimestamp (seconds) of the last loaded candle — the "live edge".
-   * When provided, alive wall segments (endTime === null) are drawn ONLY to
-   * the right of this position (from xLive to the pane right edge), giving the
-   * Bookmap "current book ladder" appearance instead of a stripe across history.
-   * null until candle data has loaded.
-   */
-  liveTime?: number | null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -55,7 +47,6 @@ export function WallHeatLayer({
   segments,
   width,
   height,
-  liveTime = null,
 }: WallHeatLayerProps) {
   const canvasRef            = useRef<HTMLCanvasElement>(null);
   const rafRef               = useRef<number | null>(null);
@@ -70,13 +61,11 @@ export function WallHeatLayer({
   const segmentsRef = useRef<WallSegment[]>(segments);
   const widthRef    = useRef<number>(width);
   const heightRef   = useRef<number>(height);
-  const liveTimeRef = useRef<number | null>(liveTime);
 
   // Update refs on every render (no subscription re-registration needed).
   segmentsRef.current = segments;
   widthRef.current    = width;
   heightRef.current   = height;
-  liveTimeRef.current = liveTime;
 
   // ── RAF draw loop ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -192,32 +181,11 @@ export function WallHeatLayer({
           const drawH = thicknessPx;
 
           // ── Time → X coordinates ───────────────────────────────────────────
+          // Both alive and dead walls use seg.startTime as the left edge so
+          // the stripe shows how long the order has been sitting (born → now/dead).
           let xStart: number;
 
-          if (seg.endTime === null) {
-            // ── ALIVE wall: render ONLY to the right of the live edge ──────────
-            // This is the "current book ladder" — shows what's in the book NOW,
-            // not a stripe painted across historical candles.
-            const lt = liveTimeRef.current;
-            if (lt === null) {
-              // Live edge not yet known (bars still loading) — cull for now.
-              continue;
-            }
-            const rawXLive = chartInstance.timeScale().timeToCoordinate(
-              lt as UTCTimestamp,
-            );
-            if (rawXLive !== null) {
-              xStart = rawXLive as number;
-            } else if (visRange !== null && lt > (visRange.to as unknown as number)) {
-              // Live edge is off-screen right — cull (user scrolled far left into history).
-              continue;
-            } else {
-              // Live edge is off-screen left (user scrolled right past live bar) —
-              // ladder fills from the left canvas edge.
-              xStart = 0;
-            }
-          } else {
-            // ── DEAD wall: use historical bornAt as startTime ──────────────────
+          {
             const rawXStart = chartInstance.timeScale().timeToCoordinate(
               seg.startTime as UTCTimestamp,
             );
@@ -346,10 +314,10 @@ export function WallHeatLayer({
     };
   }, [chart]);
 
-  // Mark dirty whenever segments, container dimensions, or live edge changes.
+  // Mark dirty whenever segments or container dimensions change.
   useEffect(() => {
     dirtyRef.current = true;
-  }, [segments, width, height, liveTime]);
+  }, [segments, width, height]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

@@ -292,17 +292,17 @@ const WALL_MISS_TICKS_UNTIL_DEAD = 2;   // ticks without detection before markin
 const WALL_MIN_LIFETIME_MS       = 45_000; // walls alive < 45s are dropped on death (noise)
 const WALL_DEAD_CAP              = 400; // max stored dead walls (oldest evicted by deadAt)
 
-// Floor filter options: notional USD — all bins ≥ $1K are TRACKED (so
-// raising the floor doesn't corrupt history), but only bins ≥ floorUsd
+// Floor filter options: notional USD — all bins ≥ TRACK_FLOOR_USD are TRACKED
+// (so raising the display floor doesn't corrupt history), but only bins ≥ floorUsd
 // are EMITTED as visible segments.
 const FLOOR_OPTIONS = [
-  { label: 'All',  value: 1_000 },
-  { label: '$10K', value: 10_000 },
-  { label: '$150K',value: 150_000 },
-  { label: '$500K',value: 500_000 },
+  { label: '$150K', value: 150_000 },
+  { label: '$500K', value: 500_000 },
+  { label: '$1M',   value: 1_000_000 },
+  { label: '$5M',   value: 5_000_000 },
 ] as const;
-const FLOOR_DEFAULT = 10_000; // $10K default
-const TRACK_FLOOR   = 1_000;  // always track ≥ $1K regardless of display floor
+const FLOOR_DEFAULT    = 500_000;   // $500K default
+const TRACK_FLOOR_USD  = 100_000;   // track ≥ $100K — kills small-order noise at the source
 
 // Bar-interval size in seconds — used to align wall times to candle boundaries.
 function intervalSeconds(iv: Interval): number {
@@ -457,7 +457,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   const [seedVersion, setSeedVersion] = useState(0);
 
   // Floor filter: segments with notional < floorUsd are hidden (not emitted).
-  // Tracking always uses TRACK_FLOOR ($1K) so history isn't lost on filter change.
+  // Tracking always uses TRACK_FLOOR_USD ($100K) so history isn't lost on filter change.
   const [floorUsd, setFloorUsd] = useState<number>(FLOOR_DEFAULT);
 
   // ── Seed refs from server-side wall history on mount ────────────────────
@@ -585,8 +585,8 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
     const tick = () => {
       const { bids, asks } = hook.getBook();
-      // Track everything ≥ TRACK_FLOOR ($1K). Display is filtered later by floorUsd.
-      const detected = computeWalls(bids, asks, TRACK_FLOOR);
+      // Track everything ≥ TRACK_FLOOR_USD ($100K). Display is filtered later by floorUsd.
+      const detected = computeWalls(bids, asks, TRACK_FLOOR_USD);
       const nowMs    = Date.now();
 
       const tracked  = trackedWallsRef.current;

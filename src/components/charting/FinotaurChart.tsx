@@ -673,17 +673,6 @@ export function FinotaurChart({
     }>
   >(new Map());
 
-  /**
-   * Last loaded bar time in UTCTimestamp seconds. Updated whenever candle data
-   * is set. Used to position alive wall stripes right of the live edge in heatmap mode.
-   */
-  const lastBarTimeRef = useRef<number | null>(null);
-  /**
-   * React state mirror of lastBarTimeRef — triggers a re-render of WallHeatLayer
-   * whenever the live edge advances so alive walls reposition immediately.
-   */
-  const [lastBarTime, setLastBarTime] = useState<number | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [barCount, setBarCount] = useState(0);
@@ -872,18 +861,14 @@ export function FinotaurChart({
       if (wallRenderMode === 'heatmap') {
         // In heatmap mode the Baseline series map is empty; hit-test directly
         // against wallSegments data.
-        // Alive walls (endTime === null) render only RIGHT of the live edge, so
-        // the hover region starts at liveTime (not seg.startTime).
-        // Dead walls retain their bornAt→deadAt span.
-        const liveEdge = lastBarTimeRef.current;
+        // Both alive and dead walls span seg.startTime → seg.endTime (or +∞ for alive).
         for (const seg of (wallSegments ?? [])) {
           if (price < seg.price || price > seg.price + seg.bandHeight) continue;
           if (param.time !== undefined) {
             const t = param.time as number;
             if (seg.endTime === null) {
-              // Alive: hover region is [liveEdge ?? seg.startTime, +∞)
-              const tStart = liveEdge ?? seg.startTime;
-              if (t < tStart) continue;
+              // Alive: hover region is [seg.startTime, +∞)
+              if (t < seg.startTime) continue;
             } else {
               // Dead: hover region is [seg.startTime, seg.endTime]
               if (t < seg.startTime || t > seg.endTime) continue;
@@ -968,12 +953,6 @@ export function FinotaurChart({
         if (cancelled || !seriesRef.current) return;
         seriesRef.current.setData(bars);
         barsRef.current = bars;
-        // Track the live edge for heatmap alive-wall positioning.
-        const lbt = bars.length > 0
-          ? (bars[bars.length - 1].time as unknown as number)
-          : null;
-        lastBarTimeRef.current = lbt;
-        if (wallRenderMode === 'heatmap') setLastBarTime(lbt);
         setBarCount(bars.length);
         if (bars.length > 0) {
           if (focusRange) {
@@ -1392,7 +1371,6 @@ export function FinotaurChart({
           segments={wallSegments ?? []}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
-          liveTime={lastBarTime}
         />
       )}
 
