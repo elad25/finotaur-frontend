@@ -653,6 +653,43 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         }
       }
 
+      // ── Price-cross kill: walls consumed by price movement ────
+      // Compute current mid from the same book data fetched above.
+      let pcBestBid = 0;
+      let pcBestAsk = Infinity;
+      for (const p of bids.keys()) if (p > pcBestBid) pcBestBid = p;
+      for (const p of asks.keys()) if (p < pcBestAsk) pcBestAsk = p;
+      const hasBothSides = pcBestBid > 0 && pcBestAsk < Infinity;
+      if (hasBothSides) {
+        const mid = (pcBestBid + pcBestAsk) / 2;
+        for (const entry of Array.from(tracked.values())) {
+          if (entry.deadAt !== null) continue; // already dead
+          // Bid wall penetrated when price fell through its bin floor.
+          // Ask wall penetrated when price rose through its bin top.
+          const isCrossed =
+            entry.side === 'bid'
+              ? mid < entry.price
+              : mid > entry.price + entry.binSize;
+          if (!isCrossed) continue;
+
+          // Kill immediately: deadAt = now (the candle that crossed it).
+          entry.deadAt = nowMs;
+          const lifetime = nowMs - entry.bornAt;
+          if (lifetime < WALL_MIN_LIFETIME_MS) {
+            // Too short-lived (noise) — discard silently.
+            tracked.delete(entry.key);
+          } else {
+            // Promote to dead list so a historical stripe remains visible.
+            dead.push(entry);
+            tracked.delete(entry.key);
+            if (dead.length > WALL_DEAD_CAP) {
+              dead.sort((a, b) => (a.deadAt ?? 0) - (b.deadAt ?? 0));
+              dead.splice(0, dead.length - WALL_DEAD_CAP);
+            }
+          }
+        }
+      }
+
       // ── Age out walls not detected this tick ───────────────
       for (const entry of Array.from(tracked.values())) {
         if (entry.deadAt !== null) continue; // already dead
