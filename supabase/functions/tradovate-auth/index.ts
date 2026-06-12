@@ -754,6 +754,11 @@ Deno.serve(async (req: Request) => {
       connected_at:     new Date().toISOString(),
       error_count:      0,
       last_error:       null,
+      // Mark username/password logins as 'legacy' so the refresh cron
+      // (.neq('auth_method','oauth') filter) keeps their tokens alive.
+      // Without this an existing oauth row updated by a re-login would
+      // keep auth_method='oauth' and never sync via the legacy cron path.
+      auth_method:      'legacy',
       // Merge with existing jsonb so future feature-added keys aren't wiped on re-auth.
       // Vault flow: vault_secret_id is the lookup; the actual token bytes live in Vault.
       // The dedicated bytea columns (access_token_encrypted, refresh_token_encrypted) belong
