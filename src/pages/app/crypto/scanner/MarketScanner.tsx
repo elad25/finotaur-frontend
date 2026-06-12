@@ -296,7 +296,9 @@ const WALL_DEAD_CAP              = 400; // max stored dead walls (oldest evicted
 // Floor filter options: notional USD — all bins ≥ TRACK_FLOOR_USD are TRACKED
 // (so raising the display floor doesn't corrupt history), but only bins ≥ floorUsd
 // are EMITTED as visible segments.
+// "All" = $1K floor so the fine heatmap texture is visible (per spec).
 const FLOOR_OPTIONS = [
+  { label: 'All',   value: 1_000 },
   { label: '$150K', value: 150_000 },
   { label: '$500K', value: 500_000 },
   { label: '$1M',   value: 1_000_000 },

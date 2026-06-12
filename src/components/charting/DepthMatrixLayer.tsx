@@ -460,42 +460,72 @@ export function DepthMatrixLayer({
         // ── Compute affine mapping from offscreen to canvas ───────────────
         // We need to map each column's time → x coordinate and each price row → y.
         // Both axes are linear in lw-charts v4.
+        //
+        // Problem: timeToCoordinate() returns null for any time that is NOT an
+        // existing series bar (e.g. 5s/1m depth-slice buckets vs 5m/1h candles).
+        // Fix: resolve a reference bar time that IS in the candle series, compute
+        // px-per-second from TWO resolved bar coordinates, then extrapolate any
+        // arbitrary column time linearly. This avoids calling timeToCoordinate
+        // with non-bar times entirely.
 
-        // Time axis: map column index to x coordinate.
-        // We use the first and last column's t to establish the linear mapping.
+        // Time axis: bar-snapped reference anchor + linear extrapolation.
+        const ivMs  = candleIntervalRef.current;
+        const ivSec = ivMs > 0 ? ivMs / 1000 : 60;
+
+        // Find the visible range midpoint as a starting candidate for the
+        // reference bar.  Fall back to the first column's time if no range.
+        const visRange = chartInstance.timeScale().getVisibleRange();
+        const midSec   = visRange
+          ? Math.floor(((visRange.from as unknown as number) + (visRange.to as unknown as number)) / 2)
+          : Math.round(meta.cols[Math.floor(meta.cols.length / 2)].t / 1000);
+
+        // Snap candidate DOWN to the nearest candle boundary.
+        const snapDown = (t: number) => Math.floor(t / ivSec) * ivSec;
+
+        // Resolve a bar coordinate by stepping left/right up to 10 times
+        // (handles sparse charts where some candles are missing).
+        function resolveBarX(startSec: number, stepSec: number): { tSec: number; x: number } | null {
+          for (let i = 0; i < 10; i++) {
+            const t = (snapDown(startSec) + i * stepSec) as UTCTimestamp;
+            const x = chartInstance.timeScale().timeToCoordinate(t);
+            if (x !== null) return { tSec: t as unknown as number, x: x as number };
+          }
+          return null;
+        }
+
+        const ref1 = resolveBarX(midSec, -ivSec); // step left
+        if (ref1 === null) return; // no bar in visible range at all
+
+        const ref2 = resolveBarX(ref1.tSec + ivSec, ivSec); // one bar right of ref1
+        if (ref2 === null) return; // need two bars to compute scale
+
+        // px-per-second derived from the actual distance between two resolved bars.
+        // Do NOT use options().barSpacing — it can lag during kinetic zoom.
+        const actualPxPerBar = ref2.x - ref1.x;
+        const pxPerSec       = ivSec > 0 ? actualPxPerBar / ivSec : 1;
+
+        // Update barSpacingRef each frame (single-column fallback + external readers).
+        if (Math.abs(actualPxPerBar) > 0) {
+          barSpacingRef.current = Math.abs(actualPxPerBar);
+        } else {
+          // Estimate from logical range when bars are too close to differentiate.
+          const lr = chartInstance.timeScale().getVisibleLogicalRange();
+          const paneW2 = chartInstance.timeScale().width();
+          if (lr && typeof paneW2 === 'number' && paneW2 > 0) {
+            const visibleBars = lr.to - lr.from;
+            if (visibleBars > 0) barSpacingRef.current = paneW2 / visibleBars;
+          }
+        }
+
+        // Map any column time (in ms) to canvas x via linear extrapolation from ref1.
+        const colToX = (tMs: number): number =>
+          ref1.x + (tMs / 1000 - ref1.tSec) * pxPerSec;
+
         const firstCol = meta.cols[0];
         const lastCol  = meta.cols[meta.cols.length - 1];
 
-        const firstX = chartInstance.timeScale().timeToCoordinate(
-          Math.round(firstCol.t / 1000) as UTCTimestamp,
-        );
-        const lastX = chartInstance.timeScale().timeToCoordinate(
-          Math.round(lastCol.t / 1000) as UTCTimestamp,
-        );
-
-        if (firstX === null || lastX === null) return;
-
-        const x0 = firstX as number; // canvas x of first column center
-        const xN = lastX  as number; // canvas x of last column center
-
-        // Update bar spacing estimate each frame for single-column fallback.
-        {
-          const paneW2 = chartInstance.timeScale().width();
-          const ivMs = candleIntervalRef.current;
-          if (typeof paneW2 === 'number' && paneW2 > 0 && ivMs > 0) {
-            // Estimate: visible window is ~lookback seconds wide.
-            // Use the visible logical range instead if available.
-            const lr = chartInstance.timeScale().getVisibleLogicalRange();
-            if (lr) {
-              const visibleBars = lr.to - lr.from;
-              if (visibleBars > 0) {
-                // slice interval / candle interval = slices per candle
-                // approximated as 5s / ivMs for 5s-res, or 1:1 for 1m
-                barSpacingRef.current = paneW2 / visibleBars;
-              }
-            }
-          }
-        }
+        const x0 = colToX(firstCol.t); // canvas x of first column center
+        const xN = colToX(lastCol.t);  // canvas x of last column center
 
         // Column width in canvas px
         const colWidthPx = meta.numCols > 1
