@@ -742,3 +742,9 @@ nav[class*="flex-col"] button.active {
    SPA-fallback HTML response was cached under the text/css Accept variant of the
    previous hash. This rule exists only to change the bundle hash → new asset URL. */
 :root { --cf-cache-bust: 20260611; }
+
+/* COPILOT AI Advices pull-tab glow pulse */
+@keyframes ai-tab-pulse {
+  0%, 100% { box-shadow: -6px 0 24px rgba(0,0,0,0.55), -2px 0 8px rgba(244,217,123,0.10); }
+  50%      { box-shadow: -6px 0 24px rgba(0,0,0,0.55), -2px 0 14px rgba(244,217,123,0.30); }
+}
