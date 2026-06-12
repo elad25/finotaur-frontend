@@ -89,20 +89,23 @@ export function SectorExposureCard({ snapshot, className }: Props) {
   const isEmpty = chartData.length === 0;
 
   return (
-    <PremiumFrame className={`flex flex-col min-h-[280px] ${className ?? ''}`}>
+    <PremiumFrame className={`flex flex-col h-full min-h-[280px] ${className ?? ''}`}>
       {/* pb-14 reserves space for footer */}
       <div className="flex flex-col flex-1 p-5 pb-14">
-        {/* Header */}
+        {/* Header pinned at top */}
         <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
           SECTOR EXPOSURE
         </p>
 
         {isEmpty ? (
-          <p className="mt-4 text-[11px] text-ink-tertiary text-center py-4">
-            No positions to display.
-          </p>
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-[11px] text-ink-tertiary text-center py-4">
+              No positions to display.
+            </p>
+          </div>
         ) : (
-          <div className="mt-4 flex items-center gap-4">
+          <div className="flex flex-1 items-center">
+          <div className="flex w-full items-center gap-4">
             {/* Donut */}
             <div
               className="relative flex-none"
@@ -166,6 +169,7 @@ export function SectorExposureCard({ snapshot, className }: Props) {
                 </li>
               ))}
             </ul>
+          </div>
           </div>
         )}
       </div>

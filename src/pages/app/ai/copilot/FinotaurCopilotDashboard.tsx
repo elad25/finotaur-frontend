@@ -137,8 +137,8 @@ export function FinotaurCopilotDashboard() {
             </ErrorBoundary>
           </div>
 
-          {/* ROW 3 — Performance (5/12) | Holdings (3/12) | Sector (4/12) */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+          {/* ROW 3 — Performance (5/12) | Holdings (3/12) | Sector (4/12) — equal heights */}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch [&>*]:h-full">
             <ErrorBoundary boundary="copilot-performance">
               <MarketComparisonChart
                 className="xl:col-span-5"

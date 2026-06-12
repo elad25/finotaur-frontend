@@ -27,7 +27,6 @@ import {
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { FinotaurCopilotDashboard } from './copilot/FinotaurCopilotDashboard';
-import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { AiMyPortfolioSkeletonPage } from '@/components/skeletons/AiMyPortfolioSkeleton';
 
 type CopilotPreviewMode = 'landing' | 'subscriber' | 'admin';
@@ -91,7 +90,8 @@ function CopilotViewToggle({
   ];
 
   return (
-    <div className="fixed right-4 top-28 z-50 flex items-center gap-1 rounded-xl border border-gold-primary/45 bg-black/90 p-1 shadow-[0_18px_45px_rgba(0,0,0,0.45),0_0_24px_rgba(201,166,70,0.16)] backdrop-blur-md">
+    <div className="flex justify-end px-5 pt-3 pb-0">
+    <div className="flex items-center gap-1 rounded-xl border border-gold-primary/45 bg-black/90 p-1 shadow-[0_18px_45px_rgba(0,0,0,0.45),0_0_24px_rgba(201,166,70,0.16)] backdrop-blur-md">
       {options.map(({ id, label, icon: Icon }) => {
         const active = mode === id;
         return (
@@ -110,6 +110,7 @@ function CopilotViewToggle({
           </button>
         );
       })}
+    </div>
     </div>
   );
 }
