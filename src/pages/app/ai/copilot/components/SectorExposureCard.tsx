@@ -1,0 +1,182 @@
+// src/pages/app/ai/copilot/components/SectorExposureCard.tsx
+// =====================================================
+// SECTOR EXPOSURE card — donut chart grouping holdings by assetClass.
+// Follows the same pattern as AssetClassAllocationCard (Recharts PieChart).
+// Center label: "100%" + "ALLOCATED".
+// Right-side legend with coloured dots.
+// =====================================================
+
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { PremiumFrame } from '../brief/PremiumFrame';
+import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
+
+// ─── Palette — reuse AssetClassAllocationCard colours ─────────────────────────
+
+const CLASS_COLOURS: Record<string, string> = {
+  Equities:    '#C9A646',
+  ETFs:        '#4F7FCC',
+  Cash:        '#4F9D6B',
+  Options:     '#C25450',
+  Bonds:       '#7E6BB8',
+  Crypto:      '#D08A4A',
+  Futures:     '#3A5F99',
+  Commodities: '#A66A33',
+  Other:       'rgba(255,255,255,0.30)',
+};
+
+const colourFor = (label: string): string =>
+  CLASS_COLOURS[label] ?? 'rgba(255,255,255,0.28)';
+
+// ─── Map assetClass codes to display labels (same as AssetClassAllocationCard) ─
+
+function bucketAssetClass(cls: string | undefined): string {
+  const c = (cls ?? '').toUpperCase();
+  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'Equities';
+  if (c === 'ETF')                                      return 'ETFs';
+  if (c === 'OPT' || c === 'FOP' || c === 'OPTIONS')   return 'Options';
+  if (c === 'FUT' || c === 'FUTURES')                   return 'Futures';
+  if (c === 'BOND' || c === 'BONDS')                    return 'Bonds';
+  if (c === 'CASH' || c === 'FOREX')                    return 'Cash';
+  if (c === 'CRYPTO' || c === 'COIN')                   return 'Crypto';
+  if (c === 'CMDTY' || c === 'COMMODITIES')             return 'Commodities';
+  return 'Other';
+}
+
+// ─── Recharts Tooltip ─────────────────────────────────────────────────────────
+
+interface PiePayloadItem {
+  name: string;
+  value: number;
+  payload: { name: string; value: number; pct: number };
+}
+
+function SectorTooltip({ active, payload }: { active?: boolean; payload?: PiePayloadItem[] }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  return (
+    <div className="rounded-[8px] border border-border-ds-subtle bg-surface-1 px-3 py-2 text-[12px] shadow-lg space-y-0.5">
+      <p className="font-medium text-ink-primary">{item.name}</p>
+      <p className="text-ink-tertiary">{item.payload.pct.toFixed(1)}%</p>
+    </div>
+  );
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+interface Props {
+  snapshot: PortfolioSnapshot;
+  className?: string;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export function SectorExposureCard({ snapshot, className }: Props) {
+  const total = snapshot.totalValue || 1;
+
+  // Aggregate by asset-class bucket.
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketAssetClass(h.assetClass);
+    groups.set(label, (groups.get(label) ?? 0) + Math.max(h.marketValue, 0));
+  }
+
+  const chartData = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value]) => ({ name, value, pct: (value / total) * 100 }));
+
+  const isEmpty = chartData.length === 0;
+
+  return (
+    <PremiumFrame className={`flex flex-col min-h-[280px] ${className ?? ''}`}>
+      {/* pb-14 reserves space for footer */}
+      <div className="flex flex-col flex-1 p-5 pb-14">
+        {/* Header */}
+        <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
+          SECTOR EXPOSURE
+        </p>
+
+        {isEmpty ? (
+          <p className="mt-4 text-[11px] text-ink-tertiary text-center py-4">
+            No positions to display.
+          </p>
+        ) : (
+          <div className="mt-4 flex items-center gap-4">
+            {/* Donut */}
+            <div
+              className="relative flex-none"
+              style={{ width: 120, height: 120 }}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="62%"
+                    outerRadius="90%"
+                    paddingAngle={2}
+                    cornerRadius={4}
+                    strokeWidth={0}
+                    stroke="transparent"
+                    label={false}
+                    labelLine={false}
+                    isAnimationActive={false}
+                  >
+                    {chartData.map((entry) => (
+                      <Cell key={entry.name} fill={colourFor(entry.name)} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    content={(props: any) => (
+                      <SectorTooltip
+                        active={props.active as boolean | undefined}
+                        payload={props.payload as PiePayloadItem[] | undefined}
+                      />
+                    )}
+                    cursor={false}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center label */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="font-mono text-sm font-semibold leading-tight text-white">100%</span>
+                <span className="text-[8px] uppercase tracking-[0.1em] text-ink-tertiary">ALLOCATED</span>
+              </div>
+            </div>
+
+            {/* Legend */}
+            <ul className="flex flex-col gap-2 min-w-0 flex-1">
+              {chartData.slice(0, 5).map((item) => (
+                <li key={item.name} className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className="inline-block rounded-[2px] flex-none"
+                    style={{ width: 8, height: 8, background: colourFor(item.name) }}
+                  />
+                  <span className="text-[11px] text-ink-secondary truncate flex-1 min-w-0">
+                    {item.name}
+                  </span>
+                  <span className="text-[11px] font-semibold text-ink-primary tabular-nums flex-none">
+                    {item.pct.toFixed(0)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <Link
+        to="/copilot/ai-analyst"
+        className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.055] text-[11px] uppercase text-gold-primary transition-colors hover:bg-gold-primary/15"
+      >
+        View Full Breakdown <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </PremiumFrame>
+  );
+}
