@@ -18,11 +18,11 @@
 //   - Cells with q===0 → transparent. Gap columns (flags bit0) → transparent.
 //
 // Color mapping (exact spec):
-//   STOPS: [0.00 → navy] [0.25 → blue] [0.50 → cyan] [0.75 → yellow] [1.00 → white]
+//   STOPS: [0.00 → navy] [0.18 → blue] [0.40 → cyan] [0.65 → yellow] [0.88+ → white]
 //   vHi  = p99 of visible q values (NOT max — one iceberg must not flatten field)
 //   vLo  = slider percentile (p50..p95, default ~p70)
-//   t    = (q/1000 - vLo) / (vHi - vLo), gamma 0.65
-//   q===0 → transparent; t≤0 → faint context (lut[0] + alpha 0x20)
+//   t    = (q/1000 - vLo) / (vHi - vLo), gamma 0.50
+//   q===0 → transparent; t≤0 → faint context (lut[0] + alpha 0x40)
 //
 // Floor filter: bins with decoded USD < floorUsd are treated as q=0.
 //   USD = expm1(q / 1000). A bin passes iff expm1(q/1000) >= floorUsd
@@ -36,11 +36,11 @@ import { qToUsd } from '@/pages/app/crypto/scanner/useDepthSlices';
 // ── Color LUT ─────────────────────────────────────────────────────────────────
 
 const STOPS: Array<[number, [number, number, number]]> = [
-  [0.00, [5,   10,  20 ]],
-  [0.25, [10,  42,  107]],
-  [0.50, [0,   179, 200]],
-  [0.75, [255, 216, 61 ]],
-  [1.00, [255, 255, 255]],
+  [0.00, [10,  20,  45 ]],  // slightly lifted navy (not near-black)
+  [0.18, [20,  70,  160]],  // blue — ramp starts earlier
+  [0.40, [0,   200, 220]],  // cyan — medium walls reach here
+  [0.65, [255, 216, 61 ]],  // yellow — large walls
+  [0.88, [255, 255, 255]],  // white-hot — top of ramp
 ];
 
 /** Precomputed 256-entry RGBA Uint32 LUT (ABGR in little-endian Uint32). */
@@ -69,9 +69,9 @@ function buildLUT(): Uint32Array {
 
 const LUT: Uint32Array = buildLUT();
 
-// Faint context color for cells below vLo (alpha 0x20 = 32/255 ≈ 12.5%).
-// navy at 12.5% opacity → ABGR = (0x20 << 24) | (20 << 16) | (10 << 8) | 5
-const FAINT_COLOR = (0x20 << 24) | (20 << 16) | (10 << 8) | 5;
+// Faint context color for cells below vLo (alpha 0x40 = 64/255 ≈ 25%).
+// navy at 25% opacity → ABGR = (0x40 << 24) | (45 << 16) | (20 << 8) | 10
+const FAINT_COLOR = (0x40 << 24) | (45 << 16) | (20 << 8) | 10;
 
 // ── Histogram-based percentile (O(n), no sort) ───────────────────────────────
 
@@ -292,10 +292,21 @@ export function DepthMatrixLayer({
       if (t <= 0) return FAINT_COLOR; // below vLo → faint context
       if (t > 1) t = 1;
 
-      // gamma compression (0.65) to pop low-intensity cells
-      const gamma = Math.pow(t, 0.65);
+      // gamma compression (0.50) — stronger mid-lift, cells pop earlier
+      const gamma = Math.pow(t, 0.50);
       const idx = Math.min(255, (gamma * 255) | 0);
-      return LUT[idx];
+      // Ensure above-threshold cells are fully opaque for t≥0.35; floor ~0xB0 below.
+      const lutColor = LUT[idx];
+      if (t >= 0.35) {
+        // Force full opacity (LUT already encodes 0xff alpha, but be explicit)
+        return (lutColor & 0x00ffffff) | (0xff << 24);
+      }
+      // Low end of ramp (0 < t < 0.35): ensure alpha ≥ 0xB0
+      const existingAlpha = (lutColor >>> 24) & 0xff;
+      if (existingAlpha < 0xb0) {
+        return (lutColor & 0x00ffffff) | (0xb0 << 24);
+      }
+      return lutColor;
     }
 
     // Fill cells
