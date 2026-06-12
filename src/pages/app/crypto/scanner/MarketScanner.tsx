@@ -343,58 +343,70 @@ const ASK_COLOR  = 'rgba(220,38,38,0.65)';
  *   edgeAlpha = 0.20 + 0.75 * curve
  */
 /**
- * Log-compressed intensity curve in [0, 1].
- * Shared between heatColors (alpha/hue) and WallSegment.intensity (thickness).
+ * Change B: power-curve intensity — big walls pop, dust is crushed.
+ * Replaces old log1p + ^1.35 curve.
  */
 function computeCurve(ratio: number): number {
-  const t = Math.log1p(9 * ratio) / Math.log1p(10);
-  return Math.pow(t, 1.35);
+  return Math.pow(Math.min(1, Math.max(0, ratio)), 0.7);
 }
 
+/** Linear interpolate between two RGB triples. */
+function lerpRGB(
+  a: [number, number, number],
+  b: [number, number, number],
+  t: number,
+): [number, number, number] {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ];
+}
+
+/**
+ * Change B: 3-anchor color ramp — dim background → full hue → near-white hot.
+ *
+ * asks (sell): (120,20,20) → (220,38,38) → (255,195,175)
+ * bids (buy):  (8,60,30)   → (34,197,94) → (190,255,220)
+ *
+ * fill alpha: 0.05 + 0.65*w
+ * edge alpha: 0.25 + 0.70*w  (ramp w bumped +0.15 so edge is always hotter)
+ * dead walls: fill alpha halved capped at 0.20, edge alpha 0.25, no glow.
+ */
 function heatColors(
   side: 'bid' | 'ask',
-  ratio: number,   // notional / per-side max, [0,1]
+  ratio: number,   // notional / per-side p95, [0,1]
   dead: boolean,
 ): { edge: string; fill: string } {
-  // Log compression + mild gamma so weak walls stay subtle.
-  const curve = computeCurve(ratio);
+  const w = computeCurve(ratio); // Change B: use new curve
 
-  let fillAlpha = 0.06 + 0.50 * curve;
-  let edgeAlpha = 0.20 + 0.75 * curve;
+  // 3-anchor anchors per side
+  const anchor1: [number, number, number] = side === 'bid' ? [8,   60,  30 ] : [120, 20,  20 ];
+  const anchor2: [number, number, number] = side === 'bid' ? [34,  197, 94 ] : [220, 38,  38 ];
+  const anchor3: [number, number, number] = side === 'bid' ? [190, 255, 220] : [255, 195, 175];
+
+  // Fill ramp: lerp a1→a2 for w<0.5, a2→a3 for w>=0.5
+  const fillRGB = w < 0.5
+    ? lerpRGB(anchor1, anchor2, w * 2)
+    : lerpRGB(anchor2, anchor3, (w - 0.5) * 2);
+
+  // Edge ramp: same but shifted +0.15 so it's always one stop hotter than fill
+  const ew = Math.min(1, w + 0.15);
+  const edgeRGB = ew < 0.5
+    ? lerpRGB(anchor1, anchor2, ew * 2)
+    : lerpRGB(anchor2, anchor3, (ew - 0.5) * 2);
+
+  let fillAlpha = 0.05 + 0.65 * w;
+  let edgeAlpha = 0.25 + 0.70 * w;
 
   if (dead) {
     fillAlpha = Math.min(0.20, fillAlpha / 2);
     edgeAlpha = 0.25;
   }
 
-  let fillR: number, fillG: number, fillB: number;
-  let edgeR: number, edgeG: number, edgeB: number;
-
-  if (side === 'bid') {
-    // Emerald: dim (34,197,94) → intense (80,230,150)
-    fillR = Math.round(34  + curve * (80  - 34));
-    fillG = Math.round(197 + curve * (230 - 197));
-    fillB = Math.round(94  + curve * (150 - 94));
-    // Edge dim (34,197,94) → intense (140,255,190)
-    edgeR = Math.round(34  + curve * (140 - 34));
-    edgeG = Math.round(197 + curve * (255 - 197));
-    edgeB = Math.round(94  + curve * (190 - 94));
-  } else {
-    // Red: dim (220,38,38) → intense (248,90,90)
-    fillR = Math.round(220 + curve * (248 - 220));
-    fillG = Math.round(38  + curve * (90  - 38));
-    fillB = Math.round(38  + curve * (90  - 38));
-    // Edge dim (220,38,38) → intense (255,140,140)
-    edgeR = Math.round(220 + curve * (255 - 220));
-    edgeG = Math.round(38  + curve * (140 - 38));
-    edgeB = Math.round(38  + curve * (140 - 38));
-  }
-
-  const fa = fillAlpha.toFixed(3);
-  const ea = edgeAlpha.toFixed(3);
   return {
-    fill: `rgba(${fillR},${fillG},${fillB},${fa})`,
-    edge: `rgba(${edgeR},${edgeG},${edgeB},${ea})`,
+    fill: `rgba(${fillRGB[0]},${fillRGB[1]},${fillRGB[2]},${fillAlpha.toFixed(3)})`,
+    edge: `rgba(${edgeRGB[0]},${edgeRGB[1]},${edgeRGB[2]},${edgeAlpha.toFixed(3)})`,
   };
 }
 
@@ -678,13 +690,23 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       // the same max so their dimming is contextually consistent.
       const aliveWalls = Array.from(tracked.values()).filter(e => e.deadAt === null);
 
-      // Max alive notional per side (fallback 1 to avoid /0).
-      const maxAliveBid = aliveWalls
-        .filter(e => e.side === 'bid')
-        .reduce((m, e) => Math.max(m, e.maxNotional), 1);
-      const maxAliveAsk = aliveWalls
-        .filter(e => e.side === 'ask')
-        .reduce((m, e) => Math.max(m, e.maxNotional), 1);
+      // Change A: 95th-percentile alive notional per side so several top walls
+      // saturate together rather than only the single largest approaching 1.
+      // Fallback to max when fewer than 5 alive walls on a side; fallback to 1
+      // when the side is empty (avoids /0).
+      function sideP95(side: 'bid' | 'ask'): number {
+        const vals = aliveWalls
+          .filter(e => e.side === side)
+          .map(e => e.maxNotional)
+          .sort((a, b) => a - b);
+        if (vals.length === 0) return 1;
+        if (vals.length < 5)   return vals[vals.length - 1]; // fallback: max
+        const idx = Math.floor(vals.length * 0.95);
+        return vals[Math.min(idx, vals.length - 1)];
+      }
+
+      const maxAliveBid = sideP95('bid');
+      const maxAliveAsk = sideP95('ask');
 
       const segments: WallSegment[] = [];
 
@@ -694,7 +716,8 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         if (entry.maxNotional < floorUsd) continue;
 
         const maxSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
-        const ratio   = entry.maxNotional / maxSide;
+        // Change A: ratio capped at 1 so above-p95 walls all saturate.
+        const ratio   = Math.min(1, entry.maxNotional / maxSide);
         const curve   = computeCurve(ratio);
         const { edge, fill } = heatColors(entry.side, ratio, false);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
@@ -713,12 +736,13 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         });
       }
 
-      // Dead walls — apply display floor; continuous intensity vs alive max.
+      // Dead walls — apply display floor; continuous intensity vs alive p95.
       for (const entry of dead) {
         if (entry.maxNotional < floorUsd) continue;
 
         const maxSide = entry.side === 'bid' ? maxAliveBid : maxAliveAsk;
-        const ratio   = entry.maxNotional / maxSide;
+        // Change A: same p95 reference as alive walls; cap at 1.
+        const ratio   = Math.min(1, entry.maxNotional / maxSide);
         const curve   = computeCurve(ratio);
         const { edge, fill } = heatColors(entry.side, ratio, true);
         const sideLabel = entry.side === 'bid' ? 'BID' : 'ASK';
