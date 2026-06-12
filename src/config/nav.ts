@@ -5,7 +5,8 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves, Calculator
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves, Calculator,
+  Landmark,
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -47,6 +48,7 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/stocks/screener', icon: Search },
+      { label: 'Insiders', path: '/app/stocks/insiders', icon: Landmark },
       { label: 'Earnings Calendar', path: '/app/stocks/earnings', icon: Calendar },
       { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
       { label: 'News', path: '/app/stocks/news', icon: Newspaper },
