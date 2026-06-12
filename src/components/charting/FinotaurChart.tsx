@@ -860,13 +860,19 @@ export function FinotaurChart({
 
       if (wallRenderMode === 'heatmap') {
         // In heatmap mode the Baseline series map is empty; hit-test directly
-        // against wallSegments data. Time range: [startTime, endTime ?? +∞].
+        // against wallSegments data.
+        // Both alive and dead walls span seg.startTime → seg.endTime (or +∞ for alive).
         for (const seg of (wallSegments ?? [])) {
           if (price < seg.price || price > seg.price + seg.bandHeight) continue;
           if (param.time !== undefined) {
             const t = param.time as number;
-            const tEnd = seg.endTime ?? Number.POSITIVE_INFINITY;
-            if (t < seg.startTime || t > tEnd) continue;
+            if (seg.endTime === null) {
+              // Alive: hover region is [seg.startTime, +∞)
+              if (t < seg.startTime) continue;
+            } else {
+              // Dead: hover region is [seg.startTime, seg.endTime]
+              if (t < seg.startTime || t > seg.endTime) continue;
+            }
           }
           matchedId    = seg.id;
           matchedTooltip = seg.tooltip;

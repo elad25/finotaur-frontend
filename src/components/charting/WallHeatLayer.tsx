@@ -165,9 +165,9 @@ export function WallHeatLayer({
           if (yAtBandBot === null) continue;
           const priceLevelY = yAtBandBot as number;
 
-          // ── Fix 2: intensity-driven thickness centered on price level ─────
-          // thicknessPx ∈ [1, 12] based on seg.intensity (0..1).
-          const thicknessPx = 1 + Math.round((seg.intensity ?? 0.3) * 11);
+          // ── Change C: intensity-driven thickness centered on price level ────
+          // thicknessPx ∈ [1, 14] based on seg.intensity (0..1).
+          const thicknessPx = 1 + Math.round((seg.intensity ?? 0.25) * 13);
           const halfThick   = thicknessPx / 2;
 
           // Band top/bot for culling check (centered on priceLevelY).
@@ -181,24 +181,26 @@ export function WallHeatLayer({
           const drawH = thicknessPx;
 
           // ── Time → X coordinates ───────────────────────────────────────────
-          // startTime: try timeToCoordinate; clamp to left edge if wall started
-          // before the visible window; skip otherwise (null for unknown reason).
+          // Both alive and dead walls use seg.startTime as the left edge so
+          // the stripe shows how long the order has been sitting (born → now/dead).
           let xStart: number;
-          const rawXStart = chartInstance.timeScale().timeToCoordinate(
-            seg.startTime as UTCTimestamp,
-          );
 
-          if (rawXStart !== null) {
-            xStart = rawXStart as number;
-          } else if (
-            visRange !== null &&
-            seg.startTime < (visRange.from as unknown as number)
-          ) {
-            // Wall started before the visible window → clamp to left canvas edge.
-            xStart = 0;
-          } else {
-            // Wall is beyond the right edge or coordinate is genuinely unavailable.
-            continue;
+          {
+            const rawXStart = chartInstance.timeScale().timeToCoordinate(
+              seg.startTime as UTCTimestamp,
+            );
+            if (rawXStart !== null) {
+              xStart = rawXStart as number;
+            } else if (
+              visRange !== null &&
+              seg.startTime < (visRange.from as unknown as number)
+            ) {
+              // Wall started before the visible window → clamp to left canvas edge.
+              xStart = 0;
+            } else {
+              // Wall is beyond the right edge or coordinate is genuinely unavailable.
+              continue;
+            }
           }
 
           // endTime: alive walls extend to the data-pane right edge (Fix 1).
@@ -233,8 +235,19 @@ export function WallHeatLayer({
           if (drawW <= 0) continue;
 
           // ── Draw fill rect centered on price level ─────────────────────────
+          // Change C: glow for hot alive walls (intensity >= 0.65, endTime === null).
+          const isHotAlive = seg.endTime === null && (seg.intensity ?? 0) >= 0.65;
+          if (isHotAlive) {
+            ctx.shadowColor = seg.color;
+            ctx.shadowBlur  = 4 + 8 * (seg.intensity ?? 0);
+          }
           ctx.fillStyle = seg.fillColor;
           ctx.fillRect(drawX, bandTop, drawW, drawH);
+          if (isHotAlive) {
+            // Reset immediately — never leak shadow state to the next segment.
+            ctx.shadowBlur  = 0;
+            ctx.shadowColor = 'transparent';
+          }
 
           // ── Draw 1px brighter edge line at the wall's price level ──────────
           // Centered on priceLevelY (the seg.price coordinate).
@@ -253,6 +266,9 @@ export function WallHeatLayer({
         // Reset the transform to identity so any throw above cannot leave the
         // context in a broken state that would corrupt the next frame.
         ctx.setTransform(1, 0, 0, 1, 0, 0);
+        // Change C: also reset shadow state in case a throw occurred mid-glow.
+        ctx.shadowBlur  = 0;
+        ctx.shadowColor = 'transparent';
       }
 
       // Commit fingerprint only after a successful draw so a thrown frame
