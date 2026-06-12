@@ -282,6 +282,8 @@ const StocksUpgrades = lazy(() => import("@/pages/app/stocks/Upgrades"));
 const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
 const StocksSentiment = lazy(() => import("@/pages/app/stocks/Sentiment"));
 const StocksInsider   = lazy(() => import("@/pages/app/stocks/Insider"));
+const StocksInsiders  = lazy(() => import("@/pages/app/stocks/Insiders"));
+const StocksInsidersManager = lazy(() => import("@/pages/app/stocks/InsidersManager"));
 const StocksReports = lazy(() => import("@/pages/app/stocks/Reports"));
 
 // Crypto — 7 Consolidated Pages
@@ -560,6 +562,8 @@ function AppContent() {
           <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><StocksValuation /></LockedRoute>} />
           <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
           <Route path="stocks/insider"  element={<LockedRoute domainId="stocks"><StocksInsider  /></LockedRoute>} />
+          <Route path="stocks/insiders" element={<LockedRoute domainId="stocks"><StocksInsiders /></LockedRoute>} />
+          <Route path="stocks/insiders/:slug" element={<LockedRoute domainId="stocks"><StocksInsidersManager /></LockedRoute>} />
           <Route path="stocks/reports" element={<LockedRoute domainId="stocks"><StocksReports /></LockedRoute>} />
           {/* stocks/watchlists now redirects to the real Watch List page under all-markets */}
           <Route path="stocks/watchlists" element={<Navigate to="/app/all-markets/watchlist" replace />} />
