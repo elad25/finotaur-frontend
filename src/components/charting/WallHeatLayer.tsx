@@ -1,4 +1,4 @@
-// src/pages/app/crypto/scanner/WallHeatLayer.tsx
+// src/components/charting/WallHeatLayer.tsx
 //
 // Absolutely-positioned canvas overlay that renders WallSegment[] as a
 // Bookmap-style heatmap on top of FinotaurChart's lightweight-charts canvas.

@@ -393,6 +393,9 @@ function heatColors(
 /** Tracked wall entry — lives in the useRef Map keyed by `${side}:${binPrice}`. */
 interface TrackedWall {
   key: string;
+  /** Stable detection key `${side}:${price}` — used for present/absent checks
+   *  even when the map key carries a revival timestamp suffix. */
+  detectKey: string;
   side: 'bid' | 'ask';
   price: number;
   /** Bin size (price units) captured at birth from computeWallBinSize(mid). */
@@ -442,8 +445,10 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // so the effect naturally re-runs for the new symbol with clean refs.
   useEffect(() => {
     const controller = new AbortController();
+    let cancelled = false;
 
     fetchWallsHistory(symbol, 72, controller.signal).then(resp => {
+      if (cancelled) return;
       const nowMs = Date.now();
       const tracked = trackedWallsRef.current;
       const dead    = deadWallsRef.current;
@@ -464,6 +469,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         const bornAt = new Date(ep.firstSeenAt).getTime();
         tracked.set(key, {
           key,
+          detectKey:   key,
           side:        ep.side,
           price:       binPrice,
           binSize,
@@ -496,6 +502,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         const deadAt  = new Date(ep.lastSeenAt).getTime();
         serverDeads.push({
           key:        `srv:${dedupKey}`,
+          detectKey:  dedupKey,
           side:       ep.side,
           price:      binPrice,
           binSize,
@@ -523,7 +530,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       // History is enhancement-only — swallow errors silently.
     });
 
-    return () => controller.abort();
+    return () => { cancelled = true; controller.abort(); };
   // symbol is fixed per mount — eslint exhaustive-deps would only flag new
   // stable refs (computeWallBinSize, binFloor are module-level, not hooks).
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -563,6 +570,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           // New wall — capture binSize at birth
           tracked.set(key, {
             key,
+            detectKey:   key,
             side:        w.side,
             price:       w.price,
             binSize:     w.binSize,
@@ -573,12 +581,29 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             deadAt:      null,
           });
         }
-        // If entry exists but deadAt is set, a revived wall at the same price
-        // is treated as a new wall — leave the dead entry for history, create fresh.
+        // If entry exists but deadAt is set, the wall has revived. Promote the
+        // old dead entry into deadWallsRef (same rules as a normal death: respect
+        // min-lifetime and WALL_DEAD_CAP), remove it from trackedWallsRef, then
+        // insert a fresh entry so the aging loop can match it via detectKey.
         else if (entry.deadAt !== null) {
+          // Move old dead entry to the dead list (if old enough to keep).
+          const oldLifetime = (entry.deadAt ?? nowMs) - entry.bornAt;
+          if (oldLifetime >= WALL_MIN_LIFETIME_MS) {
+            dead.push(entry);
+            if (dead.length > WALL_DEAD_CAP) {
+              dead.sort((a, b) => (a.deadAt ?? 0) - (b.deadAt ?? 0));
+              dead.splice(0, dead.length - WALL_DEAD_CAP);
+            }
+          }
+          tracked.delete(key);
+
+          // Insert fresh alive entry with a timestamp-suffixed map key so the
+          // old entry's map slot is truly replaced, but detectKey stays as
+          // `${side}:${price}` so the aging loop can match it against detectedKeys.
           const freshKey = `${w.side}:${w.price}:${nowMs}`;
           tracked.set(freshKey, {
             key:         freshKey,
+            detectKey:   key,
             side:        w.side,
             price:       w.price,
             binSize:     w.binSize,
@@ -594,7 +619,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
       // ── Age out walls not detected this tick ───────────────
       for (const entry of Array.from(tracked.values())) {
         if (entry.deadAt !== null) continue; // already dead
-        if (detectedKeys.has(entry.key)) continue; // seen this tick
+        if (detectedKeys.has(entry.detectKey)) continue; // seen this tick
 
         entry.missedTicks++;
         if (entry.missedTicks >= WALL_MISS_TICKS_UNTIL_DEAD) {
@@ -691,8 +716,10 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
     return () => clearInterval(id);
   // interval change: ivSec recalculates on next tick — no need to reset history.
   // seedVersion intentionally included so history renders immediately after seed.
+  // hook.getBook (stable useCallback) — NOT the hook object, whose identity
+  // changes every render (lastPrice state) and restarted the interval ~1/sec.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hook, interval, seedVersion, floorUsd]);
+  }, [hook.getBook, interval, seedVersion, floorUsd]);
 
   const coinLabel = COINS.find(c => c.symbol === symbol)?.label ?? symbol;
 

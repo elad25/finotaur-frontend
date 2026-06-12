@@ -32,7 +32,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
-import { WallHeatLayer } from '@/pages/app/crypto/scanner/WallHeatLayer';
+import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import {
   createChart,
   ColorType,
@@ -762,6 +762,15 @@ export function FinotaurChart({
       }
     });
     ro.observe(el);
+
+    // Seed initial size synchronously — ResizeObserver only fires on *changes*,
+    // so if bars load before the first resize the layer would get 0×0 forever.
+    if (wallRenderMode === 'heatmap') {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0 && h > 0) setContainerSize({ w, h });
+    }
+
     return () => ro.disconnect();
   }, [wallRenderMode]);
 
@@ -1338,15 +1347,16 @@ export function FinotaurChart({
       <div ref={containerRef} className="absolute inset-0" />
 
       {/* Wall heatmap canvas overlay — only in heatmap mode.
-          Sits above lw-charts canvas but below the marker icons overlay.
-          Rendered once chart and candle series are ready (barCount > 0). */}
+          Mounted unconditionally once the chart + series are ready (barCount > 0)
+          so subscriptions + the 500ms safety timer are registered exactly once.
+          WallHeatLayer no-ops internally when segments is empty. */}
       {wallRenderMode === 'heatmap' &&
        chartRef.current && seriesRef.current &&
-       wallSegments && wallSegments.length > 0 && (
+       barCount > 0 && (
         <WallHeatLayer
           chart={chartRef.current}
           series={seriesRef.current}
-          segments={wallSegments}
+          segments={wallSegments ?? []}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
         />
