@@ -195,13 +195,16 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
     <motion.div
       initial={{ opacity: 0, y: -18 }}
       animate={{ opacity: 1, y: 0 }}
-      className="mb-7 text-center"
+      className="relative mb-7 text-center"
     >
-      <h1 className="font-sans text-[44px] font-semibold leading-[0.98] tracking-[0] text-ink-primary md:text-[66px]">
-        Sector Analyzer
+      <div className="sector-orb absolute left-1/2 top-[-58px] h-[178px] w-[178px] -translate-x-1/2 rounded-full opacity-30" />
+      <div className="absolute left-1/2 top-[-4px] h-24 w-[560px] max-w-[70vw] -translate-x-1/2 rounded-full bg-gold-primary/7 blur-[82px]" />
+      <h1 className="relative font-sans text-[46px] font-bold leading-none md:text-[62px]">
+        <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Sector</span>{' '}
+        <span className="text-ink-primary">Analyzer</span>
       </h1>
-      <p className="mt-ds-4 text-[17px] font-normal leading-[1.7] text-ink-secondary">
-        Institutional-grade sector deep dive and AI-narrated analysis.
+      <p className="relative mt-4 text-[9px] font-medium uppercase tracking-[0.46em] text-ink-tertiary">
+        Institutional-grade sector deep dive
       </p>
     </motion.div>
 
@@ -302,6 +305,14 @@ function SectorAnalyzerContent() {
             from { transform: translate3d(-24px, 0, 0); opacity: 0.18; }
             50% { opacity: 0.34; }
             to { transform: translate3d(24px, -6px, 0); opacity: 0.18; }
+          }
+          .sector-orb {
+            background:
+              radial-gradient(circle at 50% 45%, rgba(232,199,102,0.13), transparent 39%),
+              radial-gradient(circle at 50% 50%, rgba(32,54,70,0.34), transparent 68%);
+            box-shadow: inset 0 0 72px rgba(201,166,70,0.055), 0 0 84px rgba(201,166,70,0.055);
+            mask-image: radial-gradient(circle, black 0 55%, transparent 74%);
+            animation: sectorAmbient 12s ease-in-out infinite;
           }
           .sector-analysis-luxury {
             position: relative;
