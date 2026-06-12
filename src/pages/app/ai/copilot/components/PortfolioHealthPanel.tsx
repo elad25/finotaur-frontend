@@ -53,8 +53,9 @@ const START_DEG = 150;
 const END_DEG   = START_DEG + GAUGE_ANGLE; // 390
 
 // Static gradient id — one instance per page, no Math.random.
-const GRAD_ID   = 'phg-gold-grad';
-const GLOW_ID   = 'phg-glow-filter';
+const GRAD_ID      = 'phg-gold-grad';
+const GLOW_ID      = 'phg-glow-filter';
+const ARC_GLOW_ID  = 'phg-arc-glow';
 
 // ─── Animated gauge arc component ────────────────────────────────────────────
 
@@ -114,13 +115,37 @@ function HealthGauge({ overall }: GaugeProps) {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
+        <filter id={ARC_GLOW_ID} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" />
+        </filter>
       </defs>
+
+      {/* Outer hairline halo ring — delicate gold frame */}
+      <path
+        d={arcPath(START_DEG, END_DEG, GAUGE_RADIUS + 13)}
+        fill="none"
+        stroke="rgba(201,166,70,0.16)"
+        strokeWidth={1}
+        strokeLinecap="round"
+      />
+
+      {/* Under-glow ambient — static, behind track */}
+      <path
+        d={fillPath}
+        fill="none"
+        stroke="#C9A646"
+        strokeWidth={STROKE_W}
+        strokeLinecap="round"
+        strokeDasharray={`${(overall / 100) * FULL_CIRC} ${FULL_CIRC}`}
+        opacity={0.3}
+        filter={`url(#${ARC_GLOW_ID})`}
+      />
 
       {/* Track arc */}
       <path
         d={trackPath}
         fill="none"
-        stroke="rgba(255,255,255,0.08)"
+        stroke="rgba(255,255,255,0.07)"
         strokeWidth={STROKE_W}
         strokeLinecap="round"
       />
@@ -160,13 +185,41 @@ function HealthGauge({ overall }: GaugeProps) {
       )}
 
       {/* Arc-end labels */}
-      <text x={lx0} y={ly0 + 18} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.38)">0</text>
-      <text x={lx1} y={ly1 + 18} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.38)">100</text>
+      <text
+        x={lx0}
+        y={ly0 + 18}
+        textAnchor="middle"
+        fontFamily="Inter, system-ui, sans-serif"
+        fontSize={9}
+        letterSpacing={1}
+        fill="rgba(255,255,255,0.32)"
+      >0</text>
+      <text
+        x={lx1}
+        y={ly1 + 18}
+        textAnchor="middle"
+        fontFamily="Inter, system-ui, sans-serif"
+        fontSize={9}
+        letterSpacing={1}
+        fill="rgba(255,255,255,0.32)"
+      >100</text>
 
       {/* Center score text */}
-      <text x={CX} y={CY + 10} textAnchor="middle" fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace">
-        <tspan fontSize={30} fontWeight={600} fill="rgba(255,255,255,0.92)">{overall}</tspan>
-        <tspan fontSize={12} fill="rgba(255,255,255,0.40)">/100</tspan>
+      <text
+        x={CX}
+        y={CY + 10}
+        textAnchor="middle"
+        fontFamily="Inter, system-ui, sans-serif"
+        style={{ fontVariantNumeric: 'tabular-nums' }}
+      >
+        <tspan fontSize={33} fontWeight={300} fill="rgba(255,255,255,0.95)">{overall}</tspan>
+        <tspan
+          fontSize={11}
+          fontWeight={400}
+          fill="rgba(201,166,70,0.6)"
+          dx={3}
+          style={{ letterSpacing: 0.5 }}
+        >/100</tspan>
       </text>
     </svg>
   );
@@ -187,7 +240,7 @@ function MetricRow({ metric }: { metric: HealthMetric }) {
       className="flex items-center"
     >
       {/* Label */}
-      <span className="w-[118px] shrink-0 text-[12px] text-ink-secondary">{label}</span>
+      <span className="w-[118px] shrink-0 text-[12px] tracking-[0.02em] text-ink-secondary">{label}</span>
 
       {/* Slider track */}
       <div className="relative mx-3 flex-1 h-[5px] rounded-full bg-white/[0.08]">
@@ -196,12 +249,12 @@ function MetricRow({ metric }: { metric: HealthMetric }) {
           className="absolute left-0 top-0 h-full rounded-full"
           style={{
             width: `${score}%`,
-            background: 'linear-gradient(90deg, #F4D97B 0%, #C9A646 100%)',
+            background: 'linear-gradient(90deg, #E8C766 0%, #C9A646 100%)',
           }}
         />
         {/* Knob at fill end */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border border-gold-primary/40 shadow-[0_0_6px_rgba(244,217,123,0.55)]"
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border border-[#F4D97B]/50 shadow-[0_0_8px_rgba(244,217,123,0.7)]"
           style={{
             left: `calc(${score}% - 6px)`,
             background: '#F4D97B',
@@ -211,7 +264,7 @@ function MetricRow({ metric }: { metric: HealthMetric }) {
 
       {/* Value chip */}
       <span
-        className="min-w-[38px] text-center text-[12px] font-mono tabular-nums text-ink-primary bg-white/[0.06] rounded-[5px] px-1.5 py-0.5"
+        className="min-w-[38px] text-center text-[12px] font-sans tabular-nums text-ink-primary bg-gold-primary/[0.07] border border-gold-primary/20 rounded-[6px] px-1.5 py-0.5"
       >
         {score}
       </span>
@@ -234,7 +287,7 @@ export function PortfolioHealthPanel({ snapshot, className }: Props) {
     <PremiumFrame className={`min-h-[380px] ${className ?? ''}`}>
       <div className="p-6">
         {/* Header */}
-        <p className="text-[13px] uppercase text-gold-primary">PORTFOLIO HEALTH</p>
+        <p className="text-[13px] uppercase tracking-[0.08em] text-gold-primary">PORTFOLIO HEALTH</p>
 
         {isEmpty ? (
           <div className="flex min-h-[300px] items-center justify-center">
