@@ -71,6 +71,10 @@ export const ProtectedAppLayout = () => {
   // when US equities are closed. Auto-hides during regular session.
   const showMarketStatus = location.pathname.startsWith('/app/ai/');
 
+  // Journal pages manage their own page container (max-w + px) — adding the
+  // global sidebar gap there would double-pad them.
+  const isJournalRoute = location.pathname.startsWith('/app/journal');
+
   if (hideChrome) {
     // Standalone surface — only the impersonation banner is preserved so an
     // admin in an impersonation session still sees the warning. Everything
@@ -105,7 +109,8 @@ export const ProtectedAppLayout = () => {
           <main
             className={cn(
               'flex-1 overflow-auto transition-[margin-left] duration-300 ease-in-out',
-              !hideSidebar && 'md:ml-[var(--finotaur-sidebar-width,14rem)]'
+              !hideSidebar && 'md:ml-[var(--finotaur-sidebar-width,14rem)]',
+              !hideSidebar && !isJournalRoute && 'md:pl-4'
             )}
           >
             <div className={hideSidebar ? "p-0" : "w-full"}>

@@ -1,5 +1,4 @@
 import { Card } from '@/components/ui/card';
-import { useDomain } from '@/hooks/useDomain';
 
 interface PageTemplateProps {
   title: string;
@@ -8,15 +7,8 @@ interface PageTemplateProps {
 }
 
 export const PageTemplate = ({ title, description, children }: PageTemplateProps) => {
-  const { activeDomain } = useDomain();
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Breadcrumb */}
-      <div className="text-sm text-muted-foreground">
-        {activeDomain.label} / {title}
-      </div>
-
       {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold">{title}</h1>
