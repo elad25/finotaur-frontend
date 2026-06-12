@@ -90,9 +90,9 @@ export function FinotaurCopilotDashboard() {
         <PortfolioHealthPanel className="xl:col-span-4" snapshot={snapshot} />
 
         {/* ROW 2 — allocation donut | performance comparison chart */}
-        <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-6" />
+        <AssetClassAllocationCard snapshot={snapshot} className="xl:col-span-4" />
         <MarketComparisonChart
-          className="xl:col-span-6"
+          className="xl:col-span-8"
           portfolioSeries={snapshot.series}
           range={range}
           onRangeChange={setRange}
