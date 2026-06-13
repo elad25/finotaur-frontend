@@ -143,6 +143,9 @@ function FinoChatPanel({
   // Screenshot → trade extraction state
   const [extractionState, setExtractionState] = useState<ExtractionState>({ phase: 'idle' });
 
+  // Imperative ref populated by ChatInterface — lets us open the file picker from here.
+  const filePickerTriggerRef = useRef<(() => void) | null>(null);
+
   // Auto-submit the initial query once per unique query string.
   // Guards against double-send (StrictMode double-mount) via lastSentRef.
   const lastSentRef = useRef<string | null>(null);
@@ -174,6 +177,19 @@ function FinoChatPanel({
 
   const resetExtraction = useCallback(() => {
     setExtractionState({ phase: 'idle' });
+  }, []);
+
+  // Listen for action events emitted by the SSE stream (via aiCopilotApi case 'action').
+  // When the backend requests a screenshot upload, open the existing file picker.
+  useEffect(() => {
+    const handleFinoAction = (e: Event) => {
+      const detail = (e as CustomEvent<{ action: string }>).detail;
+      if (detail?.action === 'screenshot_trade') {
+        filePickerTriggerRef.current?.();
+      }
+    };
+    window.addEventListener('fino:action', handleFinoAction);
+    return () => window.removeEventListener('fino:action', handleFinoAction);
   }, []);
 
   const iconBtn =
@@ -262,6 +278,7 @@ function FinoChatPanel({
               promptRows={FINO_PROMPT_ROWS}
               promptPlacement="aboveInput"
               onImageSelected={handleImageSelected}
+              openFilePickerRef={filePickerTriggerRef}
             />
           </div>
         </>

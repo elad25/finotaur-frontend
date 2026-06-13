@@ -81,6 +81,8 @@ interface StreamCallbacks {
   onSources?: (sources: any[]) => void;
   onComplete?: (data: any) => void;
   onError?: (error: string) => void;
+  /** Called when the server emits a type:'action' SSE event. */
+  onAction?: (action: { action: string; label?: string; count?: number }) => void;
   signal?: AbortSignal;
 }
 
@@ -150,6 +152,7 @@ export const aiCopilotApi = {
       onSources,
       onComplete,
       onError,
+      onAction,
       signal,
     } = options;
 
@@ -232,6 +235,12 @@ export const aiCopilotApi = {
                       },
                     }),
                   );
+                  // Also call the optional callback so direct callers can react.
+                  onAction?.({
+                    action: data.action as string,
+                    label: data.label as string | undefined,
+                    count: data.count as number | undefined,
+                  });
                   break;
 
                 default:

@@ -53,6 +53,13 @@ interface ChatInterfaceProps {
    * When absent, no upload affordance is rendered (backward compatible).
    */
   onImageSelected?: (file: File) => void;
+  /**
+   * Optional mutable ref that receives a function to programmatically open the
+   * hidden file picker (same as clicking the 📎 button). Set by ChatInterface
+   * on mount; callers can invoke `ref.current?.()` to trigger file selection.
+   * Only populated when `onImageSelected` is also provided.
+   */
+  openFilePickerRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 interface PromptChip {
@@ -94,6 +101,7 @@ export const ChatInterface = memo(function ChatInterface({
   disclaimer = 'AI responses are based on FINOTAUR reports. Not financial advice.',
   promptPlacement = 'center',
   onImageSelected,
+  openFilePickerRef,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -113,7 +121,18 @@ export const ChatInterface = memo(function ChatInterface({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-  
+
+  // Expose an imperative trigger so parent components can open the file picker
+  // programmatically (e.g. when the backend emits a screenshot_trade action).
+  useEffect(() => {
+    if (openFilePickerRef && onImageSelected) {
+      openFilePickerRef.current = () => fileInputRef.current?.click();
+      return () => {
+        openFilePickerRef.current = null;
+      };
+    }
+  }, [openFilePickerRef, onImageSelected]);
+
   const handleSend = async () => {
     const message = input.trim();
     if (!message || isLoading) return;
