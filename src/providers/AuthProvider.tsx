@@ -11,6 +11,7 @@ import { logger } from '@/lib/logger';
 import { setSentryUser } from '@/lib/sentry';
 import { track } from '@/lib/analytics';
 import { getFirstTouch } from '@/lib/analytics/attribution';
+import { fireWelcomeEmail } from '@/services/welcomeEmailService';
 
 interface AuthContextType {
   user: User | null;
@@ -354,6 +355,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     localStorage.removeItem('pending_terms_version');
                     // Fire-and-forget: attribute this OAuth signup to its first-touch source.
                     track('signup', { method: 'oauth', ...getFirstTouch() });
+                    // Fire-and-forget: trigger welcome email immediately (cron is the backstop).
+                    void fireWelcomeEmail();
                   }
                 }
               }
@@ -466,6 +469,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             affiliate_code: newAffiliateCode,
           })
           .eq('id', authData.user.id);
+
+        // Fire-and-forget: trigger welcome email immediately (cron is the backstop).
+        void fireWelcomeEmail();
       }
 
       // 🔥 Removed log: '[Auth] Registration successful'
