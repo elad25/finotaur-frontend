@@ -20,7 +20,9 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
 } from 'react';
-import { X, Plus } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { X, Plus, Sparkles } from 'lucide-react';
+import { useFinoChat, useRegisterFinoContext } from '@/contexts/FinoChatContext';
 import {
   ResponsiveContainer,
   LineChart,
@@ -292,11 +294,47 @@ interface TableRow {
   label: string;
   getValue: (ticker: string) => string;
   getColor?: (ticker: string) => string;
+  /** Direction for winner highlight: 'high' = higher wins, 'low' = lower wins, null = no highlight */
+  better: 'high' | 'low' | null;
+  /** Extract the raw numeric value for winner comparison (null = not participates) */
+  getNumeric: (ticker: string) => number | null;
 }
 
 interface RowGroup {
   heading: string;
   rows: TableRow[];
+}
+
+/**
+ * Given a metric row and the list of loaded series, return the set of ticker
+ * symbols that "win" that metric (may be >1 on a tie). Returns an empty set
+ * when: fewer than 2 non-null values exist, or `better` is null.
+ */
+function computeWinners(
+  row: TableRow,
+  tickers: string[],
+  fundLoading: Record<string, boolean>,
+): Set<string> {
+  if (row.better === null) return new Set();
+
+  // Collect valid (non-loading, non-null) numeric values
+  const pairs: { ticker: string; val: number }[] = [];
+  for (const t of tickers) {
+    if (fundLoading[t]) continue; // still loading — skip
+    const v = row.getNumeric(t);
+    if (v == null || !Number.isFinite(v)) continue;
+    // For LOWER-is-better metrics, reject non-positive values (e.g. negative P/E)
+    if (row.better === 'low' && v <= 0) continue;
+    pairs.push({ ticker: t, val: v });
+  }
+
+  if (pairs.length < 2) return new Set();
+
+  const best = row.better === 'high'
+    ? Math.max(...pairs.map((p) => p.val))
+    : Math.min(...pairs.map((p) => p.val));
+
+  return new Set(pairs.filter((p) => p.val === best).map((p) => p.ticker));
 }
 
 function FundamentalsTable({
@@ -306,6 +344,9 @@ function FundamentalsTable({
   quotes,
   range,
 }: FundamentalsTableProps) {
+  const location = useLocation();
+  const { open: openFino } = useFinoChat();
+
   // Helper: returns '…' while fundamentals are loading, or the formatted value.
   function cell(ticker: string, getFn: (f: StockFundamentals | null) => string): string {
     if (fundLoading[ticker]) return '…';
@@ -322,6 +363,10 @@ function FundamentalsTable({
     return ((last - first) / first) * 100;
   }
 
+  const tickers = series.map((s) => s.ticker);
+  // Tickers with fundamentals fully loaded (not still loading)
+  const loadedTickers = tickers.filter((t) => !fundLoading[t]);
+
   const groups: RowGroup[] = [
     {
       heading: 'PERFORMANCE & PRICE',
@@ -329,6 +374,8 @@ function FundamentalsTable({
         {
           label: 'Last Price',
           getValue: (t) => fmtPrice(quotes[t]?.price),
+          better: null,
+          getNumeric: () => null,
         },
         {
           label: '1D Change',
@@ -341,6 +388,11 @@ function FundamentalsTable({
             const pct = quotes[t]?.changePercent;
             if (pct == null) return '';
             return pct >= 0 ? 'text-[#4AD295]' : 'text-[#E24B4A]';
+          },
+          better: 'high',
+          getNumeric: (t) => {
+            const v = quotes[t]?.changePercent;
+            return v != null && Number.isFinite(v) ? v : null;
           },
         },
         {
@@ -355,18 +407,26 @@ function FundamentalsTable({
             if (r == null) return '';
             return r >= 0 ? 'text-[#4AD295]' : 'text-[#E24B4A]';
           },
+          better: 'high',
+          getNumeric: (t) => rangeReturnNum(t),
         },
         {
           label: '52W High',
           getValue: (t) => fmtPrice(quotes[t]?.high52w),
+          better: null,
+          getNumeric: () => null,
         },
         {
           label: '52W Low',
           getValue: (t) => fmtPrice(quotes[t]?.low52w),
+          better: null,
+          getNumeric: () => null,
         },
         {
           label: 'Volume',
           getValue: (t) => fmtInt(quotes[t]?.volume),
+          better: null,
+          getNumeric: () => null,
         },
       ],
     },
@@ -376,22 +436,48 @@ function FundamentalsTable({
         {
           label: 'Market Cap',
           getValue: (t) => cell(t, (f) => fmtCurrencyCompact(f?.marketCap)),
+          better: null,
+          getNumeric: () => null,
         },
         {
           label: 'P/E',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.pe)),
+          better: 'low',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.pe;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'P/S',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.ps)),
+          better: 'low',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.ps;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'P/B',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.pb)),
+          better: 'low',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.pb;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'EV/EBITDA',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.evEbitda)),
+          better: 'low',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.evEbitda;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
       ],
     },
@@ -401,22 +487,52 @@ function FundamentalsTable({
         {
           label: 'Gross Margin',
           getValue: (t) => cell(t, (f) => fmtPct(f?.grossMargin)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.grossMargin;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'Operating Margin',
           getValue: (t) => cell(t, (f) => fmtPct(f?.operatingMargin)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.operatingMargin;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'Net Margin',
           getValue: (t) => cell(t, (f) => fmtPct(f?.netMargin)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.netMargin;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'ROE',
           getValue: (t) => cell(t, (f) => fmtPct(f?.roe)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.roe;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'ROA',
           getValue: (t) => cell(t, (f) => fmtPct(f?.roa)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.roa;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
       ],
     },
@@ -426,14 +542,32 @@ function FundamentalsTable({
         {
           label: 'Debt / Equity',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.debtToEquity)),
+          better: 'low',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.debtToEquity;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'Current Ratio',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.currentRatio)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.currentRatio;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'Altman-Z',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.altmanZ)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.altmanZ;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'Piotroski-F',
@@ -441,6 +575,12 @@ function FundamentalsTable({
             if (f?.piotroskiF == null) return '—';
             return String(Math.round(f.piotroskiF));
           }),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.piotroskiF;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
       ],
     },
@@ -450,10 +590,22 @@ function FundamentalsTable({
         {
           label: 'Revenue (TTM)',
           getValue: (t) => cell(t, (f) => fmtCurrencyCompact(f?.revenueTTM)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.revenueTTM;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
         {
           label: 'Net Income (TTM)',
           getValue: (t) => cell(t, (f) => fmtCurrencyCompact(f?.netIncomeTTM)),
+          better: 'high',
+          getNumeric: (t) => {
+            if (fundLoading[t]) return null;
+            const v = fundamentals[t]?.netIncomeTTM;
+            return v != null && Number.isFinite(v) ? v : null;
+          },
         },
       ],
     },
@@ -463,17 +615,97 @@ function FundamentalsTable({
         {
           label: 'Sector',
           getValue: (t) => cell(t, (f) => f?.sector ?? '—'),
+          better: null,
+          getNumeric: () => null,
         },
       ],
     },
   ];
 
+  // ── Ask Fino handler ────────────────────────────────────────────────────────
+  const canAskFino = loadedTickers.length >= 2;
+
+  function handleAskFino() {
+    const fmt = (v: number | null | undefined, fn: (x: number) => string): string =>
+      v != null && Number.isFinite(v) ? fn(v) : '—';
+
+    const lines = loadedTickers.map((t) => {
+      const f = fundamentals[t] ?? null;
+      const q = quotes[t];
+      return [
+        `${t}:`,
+        `Price ${fmt(q?.price, (v) => `$${v.toFixed(2)}`)}`,
+        `1D ${fmt(q?.changePercent, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`)}`,
+        `MktCap ${fmt(f?.marketCap, fmtCurrencyCompact)}`,
+        `P/E ${fmt(f?.pe, (v) => v.toFixed(2))}`,
+        `P/S ${fmt(f?.ps, (v) => v.toFixed(2))}`,
+        `P/B ${fmt(f?.pb, (v) => v.toFixed(2))}`,
+        `EV/EBITDA ${fmt(f?.evEbitda, (v) => v.toFixed(2))}`,
+        `GrossM ${fmt(f?.grossMargin, (v) => `${v.toFixed(1)}%`)}`,
+        `OpM ${fmt(f?.operatingMargin, (v) => `${v.toFixed(1)}%`)}`,
+        `NetM ${fmt(f?.netMargin, (v) => `${v.toFixed(1)}%`)}`,
+        `ROE ${fmt(f?.roe, (v) => `${v.toFixed(1)}%`)}`,
+        `ROA ${fmt(f?.roa, (v) => `${v.toFixed(1)}%`)}`,
+        `D/E ${fmt(f?.debtToEquity, (v) => v.toFixed(2))}`,
+        `CurrentRatio ${fmt(f?.currentRatio, (v) => v.toFixed(2))}`,
+        `AltmanZ ${fmt(f?.altmanZ, (v) => v.toFixed(2))}`,
+        `PiotroskiF ${f?.piotroskiF != null ? Math.round(f.piotroskiF) : '—'}`,
+        `Revenue ${fmt(f?.revenueTTM, fmtCurrencyCompact)}`,
+        `NetIncome ${fmt(f?.netIncomeTTM, fmtCurrencyCompact)}`,
+        `Sector ${f?.sector ?? '—'}`,
+      ].join(', ');
+    });
+
+    const query = [
+      `Deep fundamental comparison of ${loadedTickers.join(', ')}. Data:`,
+      ...lines,
+      '',
+      'Provide a rigorous analyst breakdown:',
+      '(1) Valuation — who is cheapest/most expensive on P/E, P/S, P/B, EV/EBITDA and why;',
+      '(2) Profitability & quality — gross margin, operating margin, net margin, ROE, ROA;',
+      '(3) Financial health — leverage (D/E), liquidity (current ratio), Altman-Z, Piotroski-F score;',
+      '(4) Scale & growth — revenue, net income;',
+      '(5) For EACH company: key strengths, key weaknesses, main risks;',
+      '(6) Bottom line — which is the highest-quality business, which is the most attractively valued, and the key trade-offs. Be specific and cite the numbers.',
+    ].join('\n');
+
+    openFino({ path: location.pathname, label: 'Compare Stocks', query });
+  }
+
+  // Register comparison data as Fino page context while this table is mounted
+  useRegisterFinoContext(
+    loadedTickers.length >= 2
+      ? {
+          kind: 'fundamentals-comparison',
+          tickers: loadedTickers,
+          metrics: Object.fromEntries(
+            loadedTickers.map((t) => [t, { fundamentals: fundamentals[t], quote: quotes[t] }]),
+          ),
+        }
+      : null,
+  );
+
   return (
     <Card padding="default">
-      <div className="mb-ds-4">
+      {/* Header row: title on left, Ask Fino button on right */}
+      <div className="flex items-center justify-between mb-ds-4">
         <span className="text-[11px] text-ink-tertiary uppercase tracking-wider">
           Fundamentals Comparison
         </span>
+        {canAskFino && (
+          <button
+            type="button"
+            onClick={handleAskFino}
+            className="flex items-center gap-1.5 rounded-[8px] px-ds-3 py-1.5 text-xs font-semibold text-ink-on-gold transition-opacity hover:opacity-90 active:opacity-75"
+            style={{
+              background: 'var(--gradient-gold)',
+              boxShadow: 'var(--glow-gold-resting)',
+            }}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Ask Fino
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto">
@@ -513,32 +745,42 @@ function FundamentalsTable({
                   </td>
                 </tr>
 
-                {group.rows.map((row) => (
-                  <tr
-                    key={`${group.heading}-${row.label}`}
-                    className="border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2/40 transition-colors"
-                  >
-                    <td className="py-ds-2 pr-ds-4 text-xs text-ink-secondary whitespace-nowrap">
-                      {row.label}
-                    </td>
-                    {series.map((s) => {
-                      const val   = row.getValue(s.ticker);
-                      const color = row.getColor?.(s.ticker) ?? '';
-                      return (
-                        <td
-                          key={s.ticker}
-                          className={`py-ds-2 px-ds-3 text-center font-data tabular-nums text-xs ${
-                            val === '…'
-                              ? 'text-ink-tertiary'
-                              : color || 'text-ink-primary'
-                          }`}
-                        >
-                          {val}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                {group.rows.map((row) => {
+                  const winners = computeWinners(row, tickers, fundLoading);
+                  return (
+                    <tr
+                      key={`${group.heading}-${row.label}`}
+                      className="border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2/40 transition-colors"
+                    >
+                      <td className="py-ds-2 pr-ds-4 text-xs text-ink-secondary whitespace-nowrap">
+                        {row.label}
+                      </td>
+                      {series.map((s) => {
+                        const val      = row.getValue(s.ticker);
+                        const color    = row.getColor?.(s.ticker) ?? '';
+                        const isWinner = winners.has(s.ticker);
+                        return (
+                          <td
+                            key={s.ticker}
+                            className={`py-ds-2 px-ds-3 text-center font-data tabular-nums text-xs ${
+                              val === '…'
+                                ? 'text-ink-tertiary'
+                                : color || 'text-ink-primary'
+                            }`}
+                          >
+                            {isWinner ? (
+                              <span className="inline-block rounded-md ring-1 ring-[#C9A646]/55 px-1.5 py-0.5">
+                                {val}
+                              </span>
+                            ) : (
+                              val
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
               </>
             ))}
           </tbody>
