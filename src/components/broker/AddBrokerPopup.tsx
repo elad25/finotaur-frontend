@@ -387,13 +387,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               )}
             </div>
 
-            {/* OAuth description for Tradovate and NinjaTrader */}
-            {usesTradovateAuth && (
-              <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
-                Log in securely on {isNinjaTrader ? 'NinjaTrader' : 'Tradovate'} via OAuth. Prop-firm accounts (Apex, Topstep, MFFU) connect through the same OAuth path — the backend auto-detects your account type.
-              </div>
-            )}
-
             {selectedBroker === 'interactive_brokers' && (
               <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
                 Click Connect to authenticate with Interactive Brokers via OAuth. You will be redirected to IBKR and brought back here.
