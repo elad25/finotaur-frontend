@@ -35,7 +35,7 @@ function AiBrainPanel({ className }: { className?: string }) {
         <div className="absolute top-4 h-[324px] w-[94%] max-w-[464px] border border-gold-primary/10 [clip-path:polygon(10%_0,90%_0,100%_16%,100%_80%,88%_100%,12%_100%,0_80%,0_16%)]" />
         <div className="absolute left-1/2 top-[140px] h-[300px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.24),rgba(201,166,70,0.08)_38%,transparent_68%)] blur-xl" />
         <div className="absolute left-1/2 top-[0px] -translate-x-1/2">
-          <GlobeHero size={360} />
+          <GlobeHero size={400} />
         </div>
       </div>
     </div>
