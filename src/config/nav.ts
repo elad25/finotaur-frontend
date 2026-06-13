@@ -112,7 +112,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Dashboard', path: '/app/forex/overview', icon: LayoutDashboard },
       { label: 'Currency Strength', path: '/app/forex/strength', icon: Activity },
       { label: 'Correlation Map', path: '/app/forex/correlation', icon: Map },
-      { label: 'Economic Calendar', path: '/app/forex/calendar', icon: Calendar },
       { label: 'Major/Cross Pairs', path: '/app/forex/pairs', icon: Globe },
       { label: 'Interest Rates', path: '/app/forex/rates', icon: LineChart },
       { label: 'Macro Reports', path: '/app/forex/deep-analysis', icon: FileText },

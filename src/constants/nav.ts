@@ -353,7 +353,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Currency Strength',  path: '/app/forex/strength',         icon: Activity },
       { label: 'Heatmap',            path: '/app/forex/heatmap',          icon: Grid3x3 },
       { label: 'Correlation Map',    path: '/app/forex/correlation',      icon: Map },
-      { label: 'Economic Calendar',  path: '/app/forex/calendar',         icon: Calendar },
       { label: 'Major/Cross Pairs',  path: '/app/forex/pairs',            icon: Globe },
       { label: 'Central Bank Watch', path: '/app/forex/cb-watch',         icon: Building },
       { label: 'COT Positioning',    path: '/app/forex/cot',              icon: BarChart3 },

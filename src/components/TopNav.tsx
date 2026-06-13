@@ -14,6 +14,7 @@
 // =====================================================
 
 import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
+import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
@@ -43,6 +44,7 @@ export const TopNav = () => {
   const { open: openFino } = useFinoChat();
   const { toggle: toggleDrawer } = useProductDrawer();
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
+  const [accountType, setAccountType] = useState<string | null>(null);
 
   // Get platform plan
   useEffect(() => {
@@ -52,12 +54,13 @@ export const TopNav = () => {
       try {
         const { data } = await supabase
           .from('profiles')
-          .select('platform_plan')
+          .select('platform_plan, account_type')
           .eq('id', user.id)
           .maybeSingle();
 
         if (data) {
           setPlatformPlan(data.platform_plan);
+          setAccountType(data.account_type);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -72,19 +75,6 @@ export const TopNav = () => {
     navigate('/');
   };
 
-  const getPlanBadge = () => {
-    if (!platformPlan || platformPlan === 'free') return null;
-
-    const colors: Record<string, string> = {
-      core:       'bg-blue-500/20 text-blue-400 border-blue-500/40',
-      pro:        'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40',
-      enterprise: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
-    };
-
-    return colors[platformPlan] || null;
-  };
-
-  const planBadgeClass = getPlanBadge();
 
   return (
     <div
@@ -140,6 +130,11 @@ export const TopNav = () => {
 
         {/* ── RIGHT: Upgrade · Ask Fino · user menu ────────────── */}
         <div className="flex items-center gap-2 justify-end flex-shrink-0">
+
+          {/* Subscription tier badge */}
+          <div className="hidden md:flex items-center">
+            <SubscriptionBadge platformPlan={platformPlan} accountType={accountType} />
+          </div>
 
           {/* ✨ Upgrade CTA */}
           <DSButton
@@ -218,13 +213,6 @@ export const TopNav = () => {
                     <path d="M12 14c-5 0-9 3-9 6.7V22h18v-1.3c0-3.7-4-6.7-9-6.7z" />
                   </svg>
                 </div>
-
-                {planBadgeClass && (
-                  <span className={`hidden lg:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${planBadgeClass}`}>
-                    <Crown className="w-3 h-3" />
-                    {platformPlan?.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </span>
-                )}
 
                 <ChevronDown className="w-4 h-4 text-[#A0A0A0]" />
               </Button>

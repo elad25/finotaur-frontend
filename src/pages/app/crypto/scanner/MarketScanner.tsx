@@ -7,13 +7,14 @@
 // Slim header: coin pills, timeframe pills, LIVE status, close button.
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, Crosshair } from 'lucide-react';
 import { useBinanceOrderBook, type BookStatus } from './useBinanceOrderBook';
 import { FinotaurChart, type WallSegment } from '@/components/charting/FinotaurChart';
 import { pickDataSource } from '@/components/charting/dataSources';
 import type { Interval } from '@/components/charting/types';
 import { fetchWallsHistory } from '../_shared/api';
 import { useDepthSlices } from './useDepthSlices';
+import { useLiquidityBand } from './useLiquidityBand';
 
 // ── Coin config ───────────────────────────────────────────────────────────────
 
@@ -480,6 +481,39 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // 0 = All, 1 | 5 | 10 | 25 = only bins >= N% of the largest wall in view.
   const [sizeFilterPct, setSizeFilterPct] = useState<0 | 1 | 5 | 10 | 25>(5);
 
+  // ── Liquidity band auto-fit ─────────────────────────────────────────────
+  // When autoFitActive is true, the price axis is fitted to the resting-order
+  // band so limit orders are always visible. The user can disable it by
+  // interacting with the price axis; the "Fit" button re-enables it.
+  const [autoFitActive, setAutoFitActive] = useState(true);
+
+  const band = useLiquidityBand({
+    getBook: hook.getBook,
+    floorUsd,
+    isLive: hook.status === 'live',
+  });
+
+  // Reset auto-fit on symbol or interval change (WorkstationInner remounts on
+  // symbol change, so `autoFitActive` resets automatically for symbol changes;
+  // for interval changes we reset explicitly via this effect).
+  useEffect(() => {
+    setAutoFitActive(true);
+  // interval is the only dependency here — symbol remounts the whole component.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interval]);
+
+  const handleManualPriceScale = useCallback(() => {
+    setAutoFitActive(false);
+  }, []);
+
+  const handleFitClick = useCallback(() => {
+    setAutoFitActive(true);
+  }, []);
+
+  // The band passed to FinotaurChart: active only when auto-fit is on AND the
+  // band has been computed (requires at least one 3-second compute cycle).
+  const activeBand = autoFitActive ? band : null;
+
   // Depth matrix slices — drives DepthMatrixLayer.
   // fromMs/toMs are the same chart window as from/to (in ms).
   // barSpacingPx: approximate, derived from a typical chart width ÷ bars.
@@ -930,6 +964,24 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           })}
         </div>
 
+        {/* Fit button — restores auto-fit to the liquidity band.
+            Always visible: gold when active (auto-fit on), dim when inactive. */}
+        <button
+          onClick={handleFitClick}
+          title={autoFitActive ? 'Price axis fitted to liquidity band' : 'Click to re-fit price axis to liquidity band'}
+          aria-label="Fit price axis to liquidity band"
+          className={[
+            'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none border',
+            autoFitActive
+              ? 'border-[#C9A646]/40 text-[#C9A646]'
+              : 'border-zinc-700 text-white/30 hover:text-white/60 hover:border-zinc-600',
+          ].join(' ')}
+          style={autoFitActive ? { color: '#C9A646', borderColor: 'rgba(201,166,70,0.4)' } : undefined}
+        >
+          <Crosshair className="h-2.5 w-2.5" />
+          Fit
+        </button>
+
         {/* Minimal wall legend */}
         <span className="ml-auto flex items-center gap-2 text-[10px] text-white/25 select-none">
           <span
@@ -966,6 +1018,8 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           depthMatrixSizeFilterPct={sizeFilterPct}
           depthMatrixFloorUsd={floorUsd}
           depthMatrixCandleIntervalMs={intervalMs(interval)}
+          liquidityBand={activeBand}
+          onManualPriceScale={handleManualPriceScale}
         />
       </div>
     </div>

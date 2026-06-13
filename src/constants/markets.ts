@@ -202,7 +202,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     icon: Calendar,
     routes: {
       home: '/app/all-markets/calendar',
-      forex: '/app/forex/calendar',
     },
   },
   {
