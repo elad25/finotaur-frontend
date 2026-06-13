@@ -312,7 +312,6 @@ const FuturesTools = lazy(() => import("@/pages/app/futures/Tools"));
 const ForexOverview = lazy(() => import("@/pages/app/forex/Overview"));
 const ForexStrength = lazy(() => import("@/pages/app/forex/Strength"));
 const ForexCorrelation = lazy(() => import("@/pages/app/forex/Correlation"));
-const ForexCalendar = lazy(() => import("@/pages/app/forex/Calendar"));
 const ForexPairs = lazy(() => import("@/pages/app/forex/Pairs"));
 const ForexRates = lazy(() => import("@/pages/app/forex/Rates"));
 const ForexDeepAnalysis = lazy(() => import("@/pages/app/forex/DeepAnalysis"));
@@ -598,7 +597,6 @@ function AppContent() {
           <Route path="forex/overview" element={<LockedRoute domainId="forex"><ForexOverview /></LockedRoute>} />
           <Route path="forex/strength" element={<LockedRoute domainId="forex"><ForexStrength /></LockedRoute>} />
           <Route path="forex/correlation" element={<LockedRoute domainId="forex"><ForexCorrelation /></LockedRoute>} />
-          <Route path="forex/calendar" element={<LockedRoute domainId="forex"><ForexCalendar /></LockedRoute>} />
           <Route path="forex/pairs" element={<LockedRoute domainId="forex"><ForexPairs /></LockedRoute>} />
           <Route path="forex/rates" element={<LockedRoute domainId="forex"><ForexRates /></LockedRoute>} />
           <Route path="forex/deep-analysis" element={<LockedRoute domainId="forex"><ForexDeepAnalysis /></LockedRoute>} />

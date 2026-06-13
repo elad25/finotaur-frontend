@@ -12,7 +12,6 @@ import type {
   DXYSeriesResponse,
   ForexIntradayResponse,
   ForexCommentaryResponse,
-  ForexCalendarResponse,
   ForexCBRatesResponse,
   ForexCOTResponse,
   ForexCorrelationResponse,
@@ -82,15 +81,6 @@ export function useForexCommentary() {
   return usePoll<ForexCommentaryResponse>(
     () => forexFetch<ForexCommentaryResponse>('/api/forex/commentary'),
     0,
-  );
-}
-
-/** Economic calendar — 30min poll. `days` defaults to 7. */
-export function useForexCalendar(days = 7) {
-  return usePoll<ForexCalendarResponse>(
-    () => forexFetch<ForexCalendarResponse>('/api/forex/calendar?days=' + days),
-    1_800_000,
-    [days],
   );
 }
 
