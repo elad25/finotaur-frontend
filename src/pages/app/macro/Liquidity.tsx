@@ -76,7 +76,7 @@ const LiquidityHero = memo(function LiquidityHero() {
   const mom = snapshot?.deltaMoMPct;
   const yoy = snapshot?.deltaYoYPct;
   return (
-    <div className="mb-6">
+    <div className="mb-6 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 sm:p-6">
       <p className="text-xs uppercase tracking-widest text-white/40 font-medium mb-1">
         Howell Net Liquidity
       </p>

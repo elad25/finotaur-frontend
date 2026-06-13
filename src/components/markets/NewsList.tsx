@@ -360,7 +360,7 @@ function CategorySection({ id, label, icon: Icon, news, isLoading }: CategorySec
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 sm:p-6">
       {/* Category Header */}
       <div className="flex items-center gap-2 pb-2 border-b border-border/30">
         <Icon className="w-5 h-5 text-yellow-500" />
