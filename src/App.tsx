@@ -134,7 +134,11 @@ import { captureFirstTouch } from "@/lib/analytics/attribution";
 
 // LAZY LOADED PAGES
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
-const SettingsLayout = lazy(() => import("@/layouts/SettingsLayout"));
+const SettingsShell = lazy(() => import("@/features/settings/SettingsShell"));
+const AccountTab = lazy(() => import("@/features/settings/tabs/AccountTab"));
+const BillingTab = lazy(() => import("@/features/settings/tabs/BillingTab"));
+const NotificationsTab = lazy(() => import("@/features/settings/tabs/NotificationsTab"));
+const SecurityTab = lazy(() => import("@/features/settings/tabs/SecurityTab"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
@@ -777,7 +781,13 @@ function AppContent() {
           <Route path="funding/advance" element={<LockedRoute domainId="funding"><FundingAdvance /></LockedRoute>} />
           <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
           
-          <Route path="settings" element={<SuspenseRoute><SettingsLayout /></SuspenseRoute>} />
+          <Route path="settings" element={<SuspenseRoute><SettingsShell /></SuspenseRoute>}>
+            <Route index element={<Navigate to="account" replace />} />
+            <Route path="account" element={<SuspenseRoute><AccountTab /></SuspenseRoute>} />
+            <Route path="billing" element={<SuspenseRoute><BillingTab /></SuspenseRoute>} />
+            <Route path="notifications" element={<SuspenseRoute><NotificationsTab /></SuspenseRoute>} />
+            <Route path="security" element={<SuspenseRoute><SecurityTab /></SuspenseRoute>} />
+          </Route>
         </Route>
 
         {/* COPILOT STANDALONE SHELL — opens in new tab, no TopNav/SubNav */}
