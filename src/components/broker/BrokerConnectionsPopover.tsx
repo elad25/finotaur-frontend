@@ -430,6 +430,8 @@ function PopoverBody({
         <div className="py-2 text-center text-xs text-[#A0A0A0]">Loading...</div>
       ) : (
         <div className="overflow-hidden rounded-[12px] border border-[#C9A646]/20 bg-[#141414]">
+          {/* Scrollable account list — capped so it never runs off the viewport */}
+          <div className="max-h-[55vh] overflow-y-auto pr-1">
           <button
             type="button"
             role="option"
@@ -560,6 +562,7 @@ function PopoverBody({
               })}
             </>
           )}
+          </div>{/* end scrollable account list */}
 
           <div className="mx-2 mt-1 border-t border-zinc-800/60" />
           <div className="grid grid-cols-2 gap-2 p-2">

@@ -175,6 +175,8 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
             'flex flex-col overflow-hidden',
           )}
         >
+          {/* Scrollable account list — capped so it never runs off the viewport */}
+          <div className="max-h-[55vh] overflow-y-auto pr-1">
           {/* "All accounts" row */}
           <AccountRow
             id={ALL_PORTFOLIOS_ID}
@@ -287,8 +289,9 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
               </div>
             );
           })}
+          </div>{/* end scrollable account list */}
 
-          {/* Manage accounts footer */}
+          {/* Manage accounts footer — always visible, outside the scroll region */}
           <div className="border-t border-zinc-800/60 mx-2 mt-1 mb-0" />
           <button
             onClick={handleManage}
