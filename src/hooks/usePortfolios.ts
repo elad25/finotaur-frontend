@@ -122,6 +122,24 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
     }
   }
 
+  // ── 2b. Determine which Tradovate/NinjaTrader environments are still active ──
+  // Used to filter out orphaned tradovate-source portfolio rows whose broker
+  // connection was disconnected (is_active=false) but whose portfolios row
+  // persists (real row, not derived). Read-side filter — no rows deleted.
+  const { data: tvConns } = await supabase
+    .from('broker_connections')
+    .select('environment')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .in('broker', ['tradovate', 'ninja_trader']);
+  const activeTvEnvs = new Set((tvConns ?? []).map(c => c.environment));
+
+  // Apply filter: hide tradovate-source portfolios whose environment has no active connection.
+  // manual/broker portfolios are untouched.
+  portfolios = portfolios.filter(p =>
+    p.source !== 'tradovate' || activeTvEnvs.has(p.environment)
+  );
+
   // ── 3. Append non-Tradovate broker journal accounts ─────────
   // Query broker_connections with purpose='journal', is_active=true, broker != 'tradovate'.
   // Errors are swallowed so a broken broker_connections query never breaks the hook.

@@ -541,7 +541,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
             {/* OAuth description for Tradovate Live Account and NinjaTrader */}
             {usesTradovateAuth && !isPropFirmFlow && (
               <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
-                Click Connect to authenticate with {isNinjaTrader ? 'NinjaTrader' : 'Tradovate'} via OAuth. You'll be redirected to Tradovate's secure login and brought back here. Supports Apex, Topstep, MFFU and other prop firm accounts routed through your Tradovate login.
+                Log in securely on {isNinjaTrader ? 'NinjaTrader' : 'Tradovate'} via OAuth. For prop-firm accounts (Apex, Topstep, MFFU), use Prop Firm Account above.
               </div>
             )}
 
