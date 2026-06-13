@@ -4,16 +4,26 @@
 // Sits next to DashboardDatePicker; reads from PortfolioContext.
 // Does NOT duplicate state — consumes the same context as
 // AccountSwitcher (which lives inside the broker panel).
+// Groups accounts by connection; each group is collapsible with
+// a tri-state checkbox and a selected/total count.
 // ══════════════════════════════════════════════════════════════
 
 import { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react';
-import { Wallet, ChevronDown, Settings, Check } from 'lucide-react';
+import { Wallet, ChevronDown, Settings, Check, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
+import type { Portfolio } from '@/hooks/usePortfolios';
 
 interface AccountFilterDropdownProps {
   /** Called when user clicks "Manage accounts" — parent owns the modal state. */
   onManage: () => void;
+}
+
+// ── Group shape ──────────────────────────────────────────────
+interface PortfolioGroup {
+  key: string;
+  label: string;
+  portfolios: Portfolio[];
 }
 
 export const AccountFilterDropdown = memo(function AccountFilterDropdown({
@@ -33,6 +43,8 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
   } = usePortfolioContext();
 
   const [open, setOpen] = useState(false);
+  // Groups default collapsed — the whole point is taming the long list.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -70,6 +82,36 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     return `${count} accounts`;
   }, [isShowingAll, isShowingTrader, selectedPortfolioIds, portfolios]);
 
+  // Build groups: Tradovate → broker groups (by connection_id) → Manual
+  const groups = useMemo<PortfolioGroup[]>(() => {
+    const result: PortfolioGroup[] = [];
+
+    if (tradovatePortfolios.length > 0) {
+      result.push({ key: 'tradovate', label: 'Tradovate', portfolios: tradovatePortfolios });
+    }
+
+    // Group broker portfolios by broker_connection_id (fallback to portfolio id)
+    const brokerGroupMap = new Map<string, Portfolio[]>();
+    for (const p of brokerPortfolios) {
+      const groupKey = p.broker_connection_id ?? p.id;
+      if (!brokerGroupMap.has(groupKey)) {
+        brokerGroupMap.set(groupKey, []);
+      }
+      brokerGroupMap.get(groupKey)!.push(p);
+    }
+    for (const [connectionKey, portfs] of brokerGroupMap) {
+      const first = portfs[0];
+      const groupLabel = first.connection_label ?? first.name;
+      result.push({ key: `broker-${connectionKey}`, label: groupLabel, portfolios: portfs });
+    }
+
+    if (manualPortfolios.length > 0) {
+      result.push({ key: 'manual', label: 'Manual', portfolios: manualPortfolios });
+    }
+
+    return result;
+  }, [tradovatePortfolios, brokerPortfolios, manualPortfolios]);
+
   const handleToggleAll = useCallback(() => {
     setSelectedPortfolioIds([ALL_PORTFOLIOS_ID]);
   }, [setSelectedPortfolioIds]);
@@ -83,9 +125,48 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     onManage();
   }, [onManage]);
 
+  const toggleGroupExpanded = useCallback((key: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  // Toggle all portfolios in a group: add all or remove all.
+  const handleGroupToggle = useCallback((group: PortfolioGroup) => {
+    const groupIds = group.portfolios.map(p => p.id);
+    // Current real selection (strip sentinels)
+    const currentReal = selectedPortfolioIds.filter(
+      id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+    );
+    const allSelected = groupIds.every(id => currentReal.includes(id));
+
+    let nextIds: string[];
+    if (allSelected) {
+      // Remove all group ids
+      nextIds = currentReal.filter(id => !groupIds.includes(id));
+    } else {
+      // Add all group ids
+      const merged = new Set([...currentReal, ...groupIds]);
+      nextIds = Array.from(merged);
+    }
+
+    // If nothing remains, fall back to "All"
+    if (nextIds.length === 0) {
+      setSelectedPortfolioIds([ALL_PORTFOLIOS_ID]);
+    } else {
+      setSelectedPortfolioIds(nextIds);
+    }
+  }, [selectedPortfolioIds, setSelectedPortfolioIds]);
+
   if (isLoading) return null;
 
-  const hasAccounts = portfolios.length > 0;
+  const hasGroups = groups.length > 0;
 
   return (
     <div className="relative" ref={panelRef}>
@@ -118,7 +199,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
           role="listbox"
           aria-multiselectable="true"
           className={cn(
-            'absolute left-0 top-full mt-1.5 z-50 min-w-[220px] w-max max-w-xs',
+            'absolute left-0 top-full mt-1.5 z-50 min-w-[240px] w-max max-w-xs',
             'bg-[#141414] border border-[#C9A646]/20 rounded-xl shadow-xl',
             'flex flex-col overflow-hidden',
           )}
@@ -138,67 +219,103 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
             onToggle={handleToggleTrader}
           />
 
-          {hasAccounts && (
+          {hasGroups && (
             <div className="border-t border-zinc-800/60 mx-2 my-1" />
           )}
 
-          {/* My accounts group header */}
-          {hasAccounts && (
-            <div className="px-3 pt-1 pb-0.5">
-              <span className="text-[9px] text-zinc-600 font-semibold uppercase tracking-widest">
-                My accounts
-              </span>
-            </div>
-          )}
+          {/* Collapsible connection groups */}
+          {groups.map(group => {
+            const isExpanded = expanded.has(group.key);
+            const realSelected = selectedPortfolioIds.filter(
+              id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+            );
+            const selectedInGroup = group.portfolios.filter(p => realSelected.includes(p.id)).length;
+            const totalInGroup = group.portfolios.length;
+            const allChecked = !isShowingAll && !isShowingTrader && selectedInGroup === totalInGroup;
+            const someChecked = !isShowingAll && !isShowingTrader && selectedInGroup > 0 && selectedInGroup < totalInGroup;
 
-          {/* Tradovate accounts */}
-          {tradovatePortfolios.map(p => (
-            <AccountRow
-              key={p.id}
-              id={p.id}
-              label={p.name}
-              badge={p.environment === 'live' ? 'Live' : 'Demo'}
-              badgeColor={p.environment === 'live' ? 'emerald' : 'yellow'}
-              checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
-              onToggle={togglePortfolioSelection}
-            />
-          ))}
+            return (
+              <div key={group.key}>
+                {/* Group header row */}
+                <div
+                  className={cn(
+                    'flex items-center gap-2 w-full px-3 py-1.5',
+                    'hover:bg-zinc-800/40 transition-colors duration-100 cursor-pointer select-none',
+                  )}
+                  onClick={() => toggleGroupExpanded(group.key)}
+                >
+                  {/* Tri-state checkbox */}
+                  <button
+                    type="button"
+                    aria-label={`Toggle all ${group.label} accounts`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleGroupToggle(group);
+                    }}
+                    className={cn(
+                      'flex-shrink-0 w-3.5 h-3.5 rounded border transition-all flex items-center justify-center',
+                      allChecked
+                        ? 'bg-[#C9A646] border-[#C9A646]'
+                        : someChecked
+                          ? 'bg-[#C9A646]/20 border-[#C9A646]'
+                          : 'border-zinc-600 hover:border-zinc-400',
+                    )}
+                  >
+                    {allChecked && <Check className="w-2.5 h-2.5 text-[#0A0A0A]" strokeWidth={3} />}
+                    {someChecked && <Minus className="w-2.5 h-2.5 text-[#C9A646]" strokeWidth={3} />}
+                  </button>
 
-          {/* Manual portfolios */}
-          {manualPortfolios.map(p => (
-            <AccountRow
-              key={p.id}
-              id={p.id}
-              label={p.name}
-              badge="Manual"
-              badgeColor="zinc"
-              checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
-              onToggle={togglePortfolioSelection}
-            />
-          ))}
+                  {/* Group label */}
+                  <span className="flex-1 text-[9px] text-zinc-500 font-semibold uppercase tracking-widest truncate">
+                    {group.label}
+                  </span>
 
-          {/* Broker accounts (non-Tradovate journal connections) */}
-          {brokerPortfolios.length > 0 && (
-            <>
-              <div className="border-t border-zinc-800/60 mx-2 my-1" />
-              <div className="px-3 pt-1 pb-0.5">
-                <span className="text-[9px] text-zinc-600 font-semibold uppercase tracking-widest">
-                  Brokers
-                </span>
+                  {/* Selected / total count */}
+                  <span className="text-[9px] text-zinc-600 font-medium tabular-nums">
+                    {selectedInGroup}/{totalInGroup}
+                  </span>
+
+                  {/* Expand/collapse chevron */}
+                  <ChevronDown
+                    className={cn(
+                      'w-3 h-3 text-zinc-600 flex-shrink-0 transition-transform duration-150',
+                      !isExpanded && '-rotate-90',
+                    )}
+                  />
+                </div>
+
+                {/* Per-account rows (shown when expanded) */}
+                {isExpanded && group.portfolios.map(p => {
+                  let badge: string | undefined;
+                  let badgeColor: 'emerald' | 'yellow' | 'zinc' = 'zinc';
+
+                  if (group.key === 'manual') {
+                    badge = 'Manual';
+                    badgeColor = 'zinc';
+                  } else if (p.environment === 'live') {
+                    badge = 'Live';
+                    badgeColor = 'emerald';
+                  } else if (p.environment === 'demo') {
+                    badge = 'Demo';
+                    badgeColor = 'yellow';
+                  }
+
+                  return (
+                    <AccountRow
+                      key={p.id}
+                      id={p.id}
+                      label={p.name}
+                      badge={badge}
+                      badgeColor={badgeColor}
+                      checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
+                      onToggle={togglePortfolioSelection}
+                      indent
+                    />
+                  );
+                })}
               </div>
-              {brokerPortfolios.map(p => (
-                <AccountRow
-                  key={p.id}
-                  id={p.id}
-                  label={p.name}
-                  badge={p.environment === 'live' ? 'Live' : p.environment === 'demo' ? 'Demo' : undefined}
-                  badgeColor={p.environment === 'live' ? 'emerald' : 'yellow'}
-                  checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
-                  onToggle={togglePortfolioSelection}
-                />
-              ))}
-            </>
-          )}
+            );
+          })}
 
           {/* Manage accounts footer */}
           <div className="border-t border-zinc-800/60 mx-2 mt-1 mb-0" />
@@ -226,6 +343,7 @@ interface AccountRowProps {
   badge?: string;
   badgeColor?: 'emerald' | 'yellow' | 'zinc';
   onToggle: (id: string) => void;
+  indent?: boolean;
 }
 
 const AccountRow = memo(function AccountRow({
@@ -235,6 +353,7 @@ const AccountRow = memo(function AccountRow({
   badge,
   badgeColor = 'zinc',
   onToggle,
+  indent = false,
 }: AccountRowProps) {
   const badgeColors = {
     emerald: 'bg-emerald-400/10 text-emerald-400',
@@ -248,8 +367,9 @@ const AccountRow = memo(function AccountRow({
       aria-selected={checked}
       onClick={() => onToggle(id)}
       className={cn(
-        'flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium',
+        'flex items-center gap-2.5 w-full py-2 text-xs font-medium',
         'transition-colors duration-100 group',
+        indent ? 'pl-5 pr-3' : 'px-3',
         checked
           ? 'text-[#C9A646] bg-[#C9A646]/5'
           : 'text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/50',
