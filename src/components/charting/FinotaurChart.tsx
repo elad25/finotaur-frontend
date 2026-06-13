@@ -622,6 +622,27 @@ export interface FinotaurChartProps {
   depthMatrixFloorUsd?: number;
   /** Current candle interval in ms — used to map column→px width (matrix mode). */
   depthMatrixCandleIntervalMs?: number;
+  /**
+   * When provided, the candlestick price scale is auto-fitted to this band
+   * instead of the default lw-charts auto-scale (which fits all candles).
+   * Used by MarketScanner to focus the visible price range on the ±2% resting
+   * liquidity band so the user can see limit orders without manually zooming.
+   *
+   * - While active, the price axis shows [minPrice, maxPrice] (with 15% padding
+   *   already baked in by the caller).
+   * - Passing null (or omitting the prop) restores normal auto-scale behaviour.
+   * - When the user manually drags the price axis, the caller is expected to
+   *   stop passing a band (or set it to null) and this hook becomes a no-op.
+   */
+  liquidityBand?: { minPrice: number; maxPrice: number } | null;
+  /**
+   * Called the first time the user interacts with the price-scale axis
+   * (pointer-down inside the right-side price-scale column). The scanner uses
+   * this to disable auto-fit so manual zoom is respected.
+   *
+   * Only fired when `liquidityBand` is non-null — no-op otherwise.
+   */
+  onManualPriceScale?: () => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -648,6 +669,8 @@ export function FinotaurChart({
   depthMatrixSizeFilterPct = 5,
   depthMatrixFloorUsd = 1_000,
   depthMatrixCandleIntervalMs = 60_000,
+  liquidityBand = null,
+  onManualPriceScale,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -725,6 +748,13 @@ export function FinotaurChart({
   /** Direct ref to the tooltip DOM node — x/y are mutated via style for perf. */
   const wallTooltipDivRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * Latest liquidity band — held in a ref so the autoscaleInfoProvider closure
+   * always reads the current band without needing to be recreated on every 3s update.
+   * Updated synchronously in a useEffect when the `liquidityBand` prop changes.
+   */
+  const liquidityBandRef = useRef<{ minPrice: number; maxPrice: number } | null>(liquidityBand);
+
   // ─── Mount / unmount the chart ──────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
@@ -745,6 +775,21 @@ export function FinotaurChart({
       priceLineColor: t.priceLineColor,
       priceLineStyle: 2,
       priceLineWidth: 1,
+      // Liquidity band auto-fit: when a band is set, override lw-charts'
+      // default auto-scale (which would zoom to the entire kline history)
+      // and instead fit the price axis to [minPrice, maxPrice].
+      // The provider reads from liquidityBandRef so it always has the latest
+      // value without the series needing to be recreated on every band update.
+      // When the ref is null, pass through to the default implementation.
+      autoscaleInfoProvider: (baseImpl) => {
+        const band = liquidityBandRef.current;
+        if (band) {
+          return {
+            priceRange: { minValue: band.minPrice, maxValue: band.maxPrice },
+          };
+        }
+        return baseImpl();
+      },
     });
 
     chartRef.current = chart;
@@ -962,6 +1007,54 @@ export function FinotaurChart({
   // barCount ensures the candle series is ready before we subscribe.
   // wallRenderMode: changes the hit-test branch in the handler.
   }, [barCount, wallSegments, wallRenderMode]);
+
+  // ─── Liquidity band → autoscale sync ───────────────────────
+  // When the caller updates `liquidityBand`, write it to the ref so the
+  // autoscaleInfoProvider closure on the candlestick series reads the new value
+  // on the very next frame. Then call applyOptions with an empty object to tell
+  // lw-charts to re-query the provider without recreating the series.
+  // No-op when the chart/series hasn't mounted yet (no-op on undefined series).
+  useEffect(() => {
+    liquidityBandRef.current = liquidityBand;
+    // Nudge lw-charts to re-evaluate autoscale by touching a harmless option.
+    // This is the officially-supported way to force a re-call of
+    // autoscaleInfoProvider in v4 without full series teardown.
+    if (seriesRef.current) {
+      try {
+        seriesRef.current.applyOptions({});
+      } catch {
+        // Series may have been removed mid-flight — ignore.
+      }
+    }
+  }, [liquidityBand]);
+
+  // ─── Manual price-scale override detection ──────────────────
+  // lw-charts v4 has no event for "user dragged the price axis". We detect it
+  // via a native pointerdown listener on the right-edge price-scale column
+  // (the last ~55px of the container — matching lw-charts' default axis width).
+  // When triggered with an active liquidityBand we call onManualPriceScale so
+  // the scanner can disable auto-fit and show the "Fit" restore button.
+  useEffect(() => {
+    if (!onManualPriceScale) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handler = (e: PointerEvent) => {
+      // Only act when the band is active — otherwise the callback is irrelevant.
+      if (!liquidityBandRef.current) return;
+      // Hit-test: pointer is in the right-side price scale column (approx 55px).
+      const rect = el.getBoundingClientRect();
+      const xFromRight = rect.right - e.clientX;
+      if (xFromRight <= 55) {
+        onManualPriceScale();
+      }
+    };
+
+    el.addEventListener('pointerdown', handler);
+    return () => el.removeEventListener('pointerdown', handler);
+    // onManualPriceScale identity is expected to be stable (useCallback in caller).
+    // Re-attach if the callback reference changes.
+  }, [onManualPriceScale]);
 
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
