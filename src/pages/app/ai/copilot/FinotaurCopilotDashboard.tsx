@@ -17,7 +17,6 @@ import { AIRecommendationsCard } from './components/AIRecommendationsCard';
 
 // Row 3
 import { MarketComparisonChart } from './components/MarketComparisonChart';
-import { TopHoldingsCard } from './components/TopHoldingsCard';
 import { SectorExposureCard } from './components/SectorExposureCard';
 
 // Globe hero (Row 1 middle)
@@ -126,19 +125,15 @@ export function FinotaurCopilotDashboard() {
           </ErrorBoundary>
         </div>
 
-        {/* ROW 3 — Performance (5/12) | Holdings (3/12) | Sector (4/12) */}
+        {/* ROW 3 — Performance (8/12) | Sector (4/12) */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch [&>*]:h-full">
           <ErrorBoundary boundary="copilot-performance">
             <MarketComparisonChart
-              className="xl:col-span-5"
+              className="xl:col-span-8"
               portfolioSeries={snapshot.series}
               range={range}
               onRangeChange={setRange}
             />
-          </ErrorBoundary>
-
-          <ErrorBoundary boundary="copilot-holdings">
-            <TopHoldingsCard snapshot={snapshot} className="xl:col-span-3" />
           </ErrorBoundary>
 
           <ErrorBoundary boundary="copilot-sector">

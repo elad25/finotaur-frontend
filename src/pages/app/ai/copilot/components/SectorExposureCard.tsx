@@ -104,12 +104,11 @@ export function SectorExposureCard({ snapshot, className }: Props) {
             </p>
           </div>
         ) : (
-          <div className="flex flex-1 items-center">
-          <div className="flex w-full items-center gap-4">
-            {/* Donut */}
+          <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            {/* Donut — centered, larger */}
             <div
               className="relative flex-none"
-              style={{ width: 120, height: 120 }}
+              style={{ width: 240, height: 240 }}
             >
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -119,8 +118,8 @@ export function SectorExposureCard({ snapshot, className }: Props) {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius="62%"
-                    outerRadius="90%"
+                    innerRadius={72}
+                    outerRadius={110}
                     paddingAngle={2}
                     cornerRadius={4}
                     strokeWidth={0}
@@ -147,36 +146,37 @@ export function SectorExposureCard({ snapshot, className }: Props) {
               </ResponsiveContainer>
               {/* Center label */}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-mono text-sm font-semibold leading-tight text-white">100%</span>
-                <span className="text-[8px] uppercase tracking-[0.1em] text-ink-tertiary">ALLOCATED</span>
+                <span className="font-mono text-base font-semibold leading-tight text-white">
+                  {chartData.reduce((s, d) => s + d.pct, 0).toFixed(0)}%
+                </span>
+                <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">ALLOCATED</span>
               </div>
             </div>
 
-            {/* Legend */}
-            <ul className="flex flex-col gap-2 min-w-0 flex-1">
-              {chartData.slice(0, 5).map((item) => (
-                <li key={item.name} className="flex items-center gap-1.5 min-w-0">
+            {/* Legend — centered wrap row below donut */}
+            <ul className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+              {chartData.slice(0, 6).map((item) => (
+                <li key={item.name} className="flex items-center gap-1.5">
                   <span
                     className="inline-block rounded-[2px] flex-none"
                     style={{ width: 8, height: 8, background: colourFor(item.name) }}
                   />
-                  <span className="text-[11px] text-ink-secondary truncate flex-1 min-w-0">
+                  <span className="text-[11px] text-ink-secondary">
                     {item.name}
                   </span>
-                  <span className="text-[11px] font-semibold text-ink-primary tabular-nums flex-none">
+                  <span className="text-[11px] font-semibold text-ink-primary tabular-nums">
                     {item.pct.toFixed(0)}%
                   </span>
                 </li>
               ))}
             </ul>
           </div>
-          </div>
         )}
       </div>
 
       {/* Footer */}
       <Link
-        to="/copilot/ai-analyst"
+        to="/copilot/macro"
         className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.055] text-[11px] uppercase text-gold-primary transition-colors hover:bg-gold-primary/15"
       >
         View Full Breakdown <ArrowRight className="h-3.5 w-3.5" />
