@@ -397,7 +397,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Inflation & Growth',   path: '/app/macro/indicators' },
       { label: 'Global Markets',       path: '/app/macro/global' },
       { label: 'Risk & Regime',        path: '/app/macro/risk' },
-      { label: 'Economic Calendar',    path: '/app/macro/calendar' },
       { label: 'Macro Desk',           path: '/app/macro/desk' },
     ],
     sidebar: [
@@ -406,7 +405,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Inflation & Growth',   icon: BarChart3,       path: '/app/macro/indicators' },
       { label: 'Global Markets',       icon: Map,             path: '/app/macro/global' },
       { label: 'Risk & Regime',        icon: Activity,        path: '/app/macro/risk' },
-      { label: 'Economic Calendar',    icon: Calendar,        path: '/app/macro/calendar' },
       { label: 'Macro Desk',           icon: FileText,        path: '/app/macro/desk' },
     ],
   },
