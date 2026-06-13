@@ -7,7 +7,6 @@
 //      from CITY_LIGHTS, routed via a seeded PRNG (no Math.random at render)
 //   2. Atmosphere halo + rim arc
 //   3. Depth-modulated wireframe (limb dimming)
-//   4. Holographic pedestal (concentric ellipses + reflection glow)
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
@@ -449,9 +448,6 @@ export function GlobeHero({
   return (
     <div className={`relative ${className}`} style={style} role="img" aria-label="Holographic globe">
 
-      {/* Pedestal — concentric perspective ellipses below the globe */}
-      <PedestalRings globeSize={size} />
-
       <canvas
         ref={canvasRef}
         width={SIZE}
@@ -459,62 +455,6 @@ export function GlobeHero({
         className="absolute inset-0"
         style={style}
       />
-    </div>
-  );
-}
-
-// ─── Pedestal rings ──────────────────────────────────────────────────────────
-
-function PedestalRings({ globeSize }: { globeSize: number }) {
-  // Position at bottom of the globe element; offset below center.
-  const baseY  = globeSize * 0.87;   // vertical center of the ellipses
-  const width  = globeSize * 0.90;
-  const height = globeSize * 0.12;   // squashed perspective
-
-  const rings = [
-    { scaleX: 1.0,  scaleY: 1.0,  alpha: 0.22, strokeW: 1.2 },
-    { scaleX: 0.72, scaleY: 0.72, alpha: 0.32, strokeW: 1.0 },
-    { scaleX: 0.44, scaleY: 0.44, alpha: 0.45, strokeW: 0.8 },
-  ];
-
-  return (
-    <div
-      className="absolute left-1/2 -translate-x-1/2 pointer-events-none"
-      style={{ top: `${baseY}px`, width: `${width}px`, height: `${height * 3}px` }}
-    >
-      {/* Reflection glow under the pedestal */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2"
-        style={{
-          top: '40%',
-          width: `${width * 0.9}px`,
-          height: `${height * 1.6}px`,
-          background: 'radial-gradient(ellipse at center, rgba(244,217,123,0.12) 0%, rgba(201,166,70,0.04) 45%, transparent 70%)',
-          borderRadius: '50%',
-          transform: 'translateX(-50%)',
-        }}
-      />
-      {/* SVG rings */}
-      <svg
-        viewBox={`0 0 ${width} ${height * 3}`}
-        width={width}
-        height={height * 3}
-        className="absolute inset-0"
-        aria-hidden="true"
-      >
-        {rings.map((ring, i) => (
-          <ellipse
-            key={i}
-            cx={width / 2}
-            cy={height * 1.2}
-            rx={(width / 2) * ring.scaleX}
-            ry={(height / 2) * ring.scaleY}
-            fill="none"
-            stroke={`rgba(244,217,123,${ring.alpha})`}
-            strokeWidth={ring.strokeW}
-          />
-        ))}
-      </svg>
     </div>
   );
 }
