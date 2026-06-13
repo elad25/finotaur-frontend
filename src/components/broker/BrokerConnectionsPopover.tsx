@@ -1,8 +1,8 @@
 // src/components/broker/BrokerConnectionsPopover.tsx
 // Compact broker/account selector anchored to the journal dashboard broker button.
 
-import { useState } from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Plus, RefreshCw, Settings } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Minus, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -12,6 +12,8 @@ import { statusBadge } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
 import type { Portfolio } from '@/hooks/usePortfolios';
+import { buildAccountGroups } from '@/components/journal/accountGrouping';
+import type { PortfolioGroup } from '@/components/journal/accountGrouping';
 import { cn } from '@/lib/utils';
 
 const BORDER_LIGHT = 'rgba(255, 215, 0, 0.08)';
@@ -205,10 +207,12 @@ function SimpleAccountRow({
   portfolio,
   checked,
   onToggle,
+  indent = false,
 }: {
   portfolio: Portfolio;
   checked: boolean;
   onToggle: (id: string) => void;
+  indent?: boolean;
 }) {
   const badge = portfolio.source === 'manual'
     ? 'Manual'
@@ -227,7 +231,8 @@ function SimpleAccountRow({
       aria-selected={checked}
       onClick={() => onToggle(portfolio.id)}
       className={cn(
-        'group flex w-full items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors duration-100',
+        'group flex w-full items-center gap-2.5 py-2 text-xs font-medium transition-colors duration-100',
+        indent ? 'pl-5 pr-3' : 'px-3',
         checked
           ? 'bg-[#C9A646]/5 text-[#C9A646]'
           : 'text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100',
@@ -358,7 +363,9 @@ function PopoverBody({
   } = useBrokerConnections({ active: false, purpose: 'journal' });
 
   const {
-    portfolios,
+    tradovatePortfolios,
+    brokerPortfolios,
+    manualPortfolios,
     selectedPortfolioIds,
     togglePortfolioSelection,
     setSelectedPortfolioIds,
@@ -368,6 +375,41 @@ function PopoverBody({
   } = usePortfolioContext();
 
   const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
+  // Groups default collapsed — tames the long prop-firm account list.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const groups = useMemo<PortfolioGroup[]>(
+    () => buildAccountGroups(tradovatePortfolios, brokerPortfolios, manualPortfolios),
+    [tradovatePortfolios, brokerPortfolios, manualPortfolios],
+  );
+
+  const toggleGroupExpanded = useCallback((key: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const handleGroupToggle = useCallback((group: PortfolioGroup) => {
+    const groupIds = group.portfolios.map(p => p.id);
+    const currentReal = selectedPortfolioIds.filter(
+      id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+    );
+    const allSelected = groupIds.every(id => currentReal.includes(id));
+    let nextIds: string[];
+    if (allSelected) {
+      nextIds = currentReal.filter(id => !groupIds.includes(id));
+    } else {
+      nextIds = Array.from(new Set([...currentReal, ...groupIds]));
+    }
+    if (nextIds.length === 0) {
+      setSelectedPortfolioIds([ALL_PORTFOLIOS_ID]);
+    } else {
+      setSelectedPortfolioIds(nextIds);
+    }
+  }, [selectedPortfolioIds, setSelectedPortfolioIds]);
 
   const showLoading = loadingActive || loadingInactive || loadingPortfolios;
   const handleManage = () => {
@@ -420,7 +462,7 @@ function PopoverBody({
             <span className="flex-1 text-left">Trader</span>
           </button>
 
-          {portfolios.length > 0 && (
+          {groups.length > 0 && (
             <>
               <div className="mx-2 border-t border-zinc-800/60" />
               <div className="px-3 pb-0.5 pt-2">
@@ -429,14 +471,93 @@ function PopoverBody({
                 </span>
               </div>
 
-              {portfolios.map((portfolio) => (
-                <SimpleAccountRow
-                  key={portfolio.id}
-                  portfolio={portfolio}
-                  checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(portfolio.id)}
-                  onToggle={togglePortfolioSelection}
-                />
-              ))}
+              {groups.map(group => {
+                const isExpanded = expanded.has(group.key);
+                const realSelected = selectedPortfolioIds.filter(
+                  id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+                );
+                const selectedInGroup = group.portfolios.filter(p => realSelected.includes(p.id)).length;
+                const totalInGroup = group.portfolios.length;
+                const allChecked = !isShowingAll && !isShowingTrader && selectedInGroup === totalInGroup;
+                const someChecked = !isShowingAll && !isShowingTrader && selectedInGroup > 0 && selectedInGroup < totalInGroup;
+
+                // Single-account groups with a non-prop-firm key render as a direct row (no collapse)
+                const isPropFirmGroup = group.key.startsWith('pf_');
+                const isMultiAccount = totalInGroup > 1;
+                const useCollapse = isPropFirmGroup || isMultiAccount;
+
+                if (!useCollapse) {
+                  const portfolio = group.portfolios[0];
+                  return (
+                    <SimpleAccountRow
+                      key={group.key}
+                      portfolio={portfolio}
+                      checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(portfolio.id)}
+                      onToggle={togglePortfolioSelection}
+                    />
+                  );
+                }
+
+                return (
+                  <div key={group.key}>
+                    {/* Group header row */}
+                    <div
+                      className="flex w-full cursor-pointer select-none items-center gap-2 px-3 py-1.5 transition-colors duration-100 hover:bg-zinc-800/40"
+                      onClick={() => toggleGroupExpanded(group.key)}
+                    >
+                      {/* Tri-state checkbox */}
+                      <button
+                        type="button"
+                        aria-label={`Toggle all ${group.label} accounts`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleGroupToggle(group);
+                        }}
+                        className={cn(
+                          'flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border transition-all',
+                          allChecked
+                            ? 'border-[#C9A646] bg-[#C9A646]'
+                            : someChecked
+                              ? 'border-[#C9A646] bg-[#C9A646]/20'
+                              : 'border-zinc-600 hover:border-zinc-400',
+                        )}
+                      >
+                        {allChecked && <Check className="h-2.5 w-2.5 text-[#0A0A0A]" strokeWidth={3} />}
+                        {someChecked && <Minus className="h-2.5 w-2.5 text-[#C9A646]" strokeWidth={3} />}
+                      </button>
+
+                      {/* Group label */}
+                      <span className="flex-1 truncate text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                        {group.label}
+                      </span>
+
+                      {/* Selected / total count */}
+                      <span className="text-[9px] font-medium tabular-nums text-zinc-600">
+                        {selectedInGroup}/{totalInGroup}
+                      </span>
+
+                      {/* Expand/collapse chevron */}
+                      <ChevronDown
+                        className={cn(
+                          'h-3 w-3 flex-shrink-0 text-zinc-600 transition-transform duration-150',
+                          !isExpanded && '-rotate-90',
+                        )}
+                      />
+                    </div>
+
+                    {/* Per-account rows (shown when expanded) */}
+                    {isExpanded && group.portfolios.map(p => (
+                      <SimpleAccountRow
+                        key={p.id}
+                        portfolio={p}
+                        checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
+                        onToggle={togglePortfolioSelection}
+                        indent
+                      />
+                    ))}
+                  </div>
+                );
+              })}
             </>
           )}
 
