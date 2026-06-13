@@ -15,10 +15,11 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Gift, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const PROMO_CODE = 'JOIN2026';
 
-export default function PromoOfferChip() {
+export default function PromoOfferChip({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -40,7 +41,10 @@ export default function PromoOfferChip() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Trade Journal Premium offer — $10/month"
-        className="group relative inline-flex flex-shrink-0 items-center gap-1.5 overflow-hidden rounded-full px-3 py-1.5 text-xs font-semibold text-white"
+        className={cn(
+          'group relative inline-flex flex-shrink-0 items-center gap-1.5 overflow-hidden rounded-full px-3 py-1.5 text-xs font-semibold text-white',
+          className,
+        )}
         style={{
           backgroundImage: 'linear-gradient(135deg, #15803d 0%, #22c55e 50%, #16a34a 100%)',
           boxShadow: '0 0 0 1px rgba(34,197,94,0.35), 0 2px 10px rgba(34,197,94,0.35)',
