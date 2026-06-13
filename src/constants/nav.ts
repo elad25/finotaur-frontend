@@ -320,7 +320,7 @@ export const domains: Record<string, Domain> = {
   futures: {
     id: 'futures',
     label: 'Futures',
-    locked: false,
+    locked: true,
     beta: false,
     subNav: [
       { label: 'Overview',     path: '/app/futures/overview' },
