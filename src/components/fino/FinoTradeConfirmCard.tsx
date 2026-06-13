@@ -107,6 +107,16 @@ export default function FinoTradeConfirmCard({
     fees: null,
   });
 
+  // Tags accepted by the user from FINO's suggested_tags (FINOTAUR-tier only).
+  // Initialized empty — user must actively click chips to accept.
+  const [acceptedTags, setAcceptedTags] = useState<string[]>([]);
+
+  const toggleTag = (tag: string) => {
+    setAcceptedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  };
+
   const [phase, setPhase] = useState<Phase>('editing');
   const [errorMsg, setErrorMsg] = useState<string>('');
 
@@ -146,8 +156,11 @@ export default function FinoTradeConfirmCard({
         screenshotUrl = null;
       }
 
-      // 2. Build payload
-      const payload = buildCompletedTradePayload(form, screenshotUrl);
+      // 2. Build payload (merge accepted tags; buildCompletedTradePayload sets tags:[] by default)
+      const payload = {
+        ...buildCompletedTradePayload(form, screenshotUrl),
+        ...(acceptedTags.length > 0 ? { tags: acceptedTags } : {}),
+      };
 
       // 3. Insert trade
       const result = await createTrade(payload);
@@ -161,7 +174,7 @@ export default function FinoTradeConfirmCard({
       setPhase('error');
       scheduleAutoClear(6_000);
     }
-  }, [phase, form, file, scheduleAutoClear]);
+  }, [phase, form, file, acceptedTags, scheduleAutoClear]);
 
   // ---- Highlight class for missing fields ----
 
@@ -389,6 +402,48 @@ export default function FinoTradeConfirmCard({
           {extraction.missing.join(', ')}
         </p>
       )}
+
+      {/* FINOTAUR-tier: FINO's read (analysis note) */}
+      {extraction.analysis_note ? (
+        <div className="mt-2 rounded-md border border-gold-primary/20 bg-gold-primary/5 px-2.5 py-2">
+          <p className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gold-primary">
+            FINO&apos;s read
+          </p>
+          <p className="text-[10px] leading-relaxed text-ink-secondary">
+            {extraction.analysis_note}
+          </p>
+        </div>
+      ) : null}
+
+      {/* FINOTAUR-tier: suggested tag chips */}
+      {extraction.suggested_tags && extraction.suggested_tags.length > 0 ? (
+        <div className="mt-2">
+          <p className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-ink-tertiary">
+            Suggested tags — click to add
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {extraction.suggested_tags.map((tag) => {
+              const selected = acceptedTags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  disabled={phase === 'submitting'}
+                  className={cn(
+                    'rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-40',
+                    selected
+                      ? 'border-gold-primary bg-gold-primary/15 text-gold-primary'
+                      : 'border-input bg-background text-ink-secondary hover:border-gold-primary/50 hover:text-ink-primary',
+                  )}
+                >
+                  {selected ? '✓ ' : ''}{tag}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {/* Approve */}
       <Button

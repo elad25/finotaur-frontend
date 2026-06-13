@@ -51,6 +51,10 @@ export interface TradeExtraction {
   confidence: Record<string, unknown>;
   missing: string[];
   notes: string | null;
+  /** FINOTAUR-tier only: FINO's read of the trade. Absent for basic/core users. */
+  analysis_note?: string | null;
+  /** FINOTAUR-tier only: proposed journal tags. Absent for basic/core users. */
+  suggested_tags?: string[] | null;
 }
 
 // Types
