@@ -44,10 +44,12 @@ export const domains: Record<string, Domain> = {
       { label: 'Overview', path: '/app/stocks/overview' },
       { label: 'News', path: '/app/stocks/news' },
       { label: 'Screener', path: '/app/stocks/screener' },
+      { label: 'Compare', path: '/app/stocks/compare' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/stocks/screener', icon: Search },
+      { label: 'Compare Stocks', path: '/app/stocks/compare', icon: BarChart3 },
       { label: 'Insiders', path: '/app/stocks/insiders', icon: Landmark },
       { label: 'Earnings Calendar', path: '/app/stocks/earnings', icon: Calendar },
       { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },

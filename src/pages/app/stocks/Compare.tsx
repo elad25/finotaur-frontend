@@ -1,11 +1,12 @@
-// src/pages/app/etfs/Compare.tsx
+// src/pages/app/stocks/Compare.tsx
 // =====================================================
-// ETF SECTION — Compare
+// STOCK RESEARCH — Compare Stocks
 // =====================================================
-// Route: /app/etfs/compare
-// Add 2–4 ETF tickers. Fetches bars for each via
-// fetchETFBars, then renders a normalized cumulative-%
+// Route: /app/stocks/compare
+// Add 2–4 stock tickers. Fetches bars for each via
+// fetchCompareBars, then renders a normalized cumulative-%
 // performance line chart (rebased to 0% at start).
+// Below the chart: fundamentals comparison table.
 // Range buttons: 1D · 1W · 1M · 3M · 6M · 1Y · 5Y.
 // Autocomplete dropdown powered by useSymbolSuggest.
 // =====================================================
@@ -33,8 +34,17 @@ import {
 } from 'recharts';
 import { Card } from '@/components/ds/Card';
 import { fetchCompareBars, type EtfBarsRange } from '@/services/etf-analyzer.api';
+import {
+  fetchStockFundamentals,
+  fetchStockQuotes,
+  type StockFundamentals,
+  type StockQuote,
+} from '@/services/stock-compare.api';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import type { OhlcBar } from '@/types/etf.types';
+import { useMarketStatus } from '@/lib/marketStatus';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 // DS-friendly palette — 4 distinct series colors that work on dark backgrounds
 const SERIES_COLORS = ['#C9A646', '#4AD295', '#60A5FA', '#F87171'];
@@ -46,12 +56,16 @@ const ALL_RANGES: EtfBarsRange[] = ['1D', '1W', '1M', '3M', '6M', '1Y', '5Y'];
 // Intraday ranges — bars are sub-daily (more, closer-spaced points)
 const INTRADAY_RANGES = new Set<EtfBarsRange>(['1D', '1W']);
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface SeriesState {
   ticker: string;
   bars: OhlcBar[];
   loading: boolean;
   error: string | null;
 }
+
+// ─── Chart helpers ────────────────────────────────────────────────────────────
 
 // Build chart data: index of dates → { date, [ticker]: normalizedPct }
 function buildChartData(series: SeriesState[]): Record<string, string | number>[] {
@@ -60,13 +74,13 @@ function buildChartData(series: SeriesState[]): Record<string, string | number>[
 
   // Find common date range: union all dates, sorted
   const dateSet = new Set<string>();
-  loaded.forEach((s) => s.bars.forEach((b) => dateSet.add(b.t)));
+  loaded.forEach((s) => s.bars.forEach((b) => dateSet.add(String(b.t))));
   const dates = Array.from(dateSet).sort();
 
   return dates.map((date) => {
     const row: Record<string, string | number> = { date };
     loaded.forEach((s) => {
-      const barIdx = s.bars.findIndex((b) => b.t === date);
+      const barIdx = s.bars.findIndex((b) => String(b.t) === date);
       if (barIdx === -1) return;
       const base = s.bars[0].c;
       if (base === 0) return;
@@ -79,7 +93,6 @@ function buildChartData(series: SeriesState[]): Record<string, string | number>[
 /** Format an X-axis tick based on whether the range is intraday or daily. */
 function makeTickFormatter(range: EtfBarsRange): (dateStr: string) => string {
   if (INTRADAY_RANGES.has(range)) {
-    // Intraday: show short date + time (e.g. "Jun 3 10:30")
     return (dateStr: string) => {
       try {
         const d = new Date(dateStr);
@@ -93,7 +106,6 @@ function makeTickFormatter(range: EtfBarsRange): (dateStr: string) => string {
       }
     };
   }
-  // Daily: show month + 2-digit year (e.g. "Jan '25")
   return (dateStr: string) => {
     try {
       return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
@@ -118,6 +130,8 @@ function formatTooltipDate(dateStr: string, range: EtfBarsRange): string {
     return dateStr;
   }
 }
+
+// ─── Chart tooltip ────────────────────────────────────────────────────────────
 
 interface ChartTooltipProps {
   active?: boolean;
@@ -180,17 +194,14 @@ function SuggestDropdown({ items, highlightIndex, onSelect }: SuggestDropdownPro
                 : 'text-ink-secondary hover:bg-surface-2'
             }`}
           >
-            {/* Symbol */}
             <span className="font-data font-semibold text-sm text-ink-primary min-w-[52px]">
               {item.symbol}
             </span>
-            {/* Name */}
             <span className="flex-1 truncate text-xs text-ink-tertiary">{item.name}</span>
-            {/* Type badge */}
             {item.assetType && item.assetType !== 'unknown' && (
               <span
                 className={`flex-shrink-0 rounded-[4px] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                  item.assetType === 'etf'
+                  item.assetType === 'stock'
                     ? 'bg-gold-primary/20 text-gold-bright'
                     : 'bg-surface-2 text-ink-tertiary'
                 }`}
@@ -205,27 +216,327 @@ function SuggestDropdown({ items, highlightIndex, onSelect }: SuggestDropdownPro
   );
 }
 
-// Sort so ETF items appear first, then the rest.
-function sortByEtfFirst(items: SuggestItem[]): SuggestItem[] {
+// Sort so stock items appear first, then the rest.
+function sortByStockFirst(items: SuggestItem[]): SuggestItem[] {
   return [...items].sort((a, b) => {
-    const aIsEtf = a.assetType === 'etf' ? 0 : 1;
-    const bIsEtf = b.assetType === 'etf' ? 0 : 1;
-    return aIsEtf - bIsEtf;
+    const aIsStock = a.assetType === 'stock' ? 0 : 1;
+    const bIsStock = b.assetType === 'stock' ? 0 : 1;
+    return aIsStock - bIsStock;
   });
+}
+
+// ─── Fundamentals table formatting helpers ────────────────────────────────────
+
+/** Format a dollar value in compact notation: $4.28T, $265.6B, $51.4M, $1.2K, or $N. */
+function fmtCurrencyCompact(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9)  return `${sign}$${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6)  return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3)  return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+}
+
+/** Format a dollar price with 2 decimals or '—'. */
+function fmtPrice(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Format a ratio to 2 decimal places or '—'. */
+function fmtRatio(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return v.toFixed(2);
+}
+
+/** Format a percentage (input is already a percent value, e.g. 73.49 → "73.5%"). */
+function fmtPct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return `${v.toFixed(1)}%`;
+}
+
+/** Format volume as compact integer or '—'. */
+function fmtInt(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return `${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(abs / 1e3).toFixed(1)}K`;
+  return Math.round(abs).toLocaleString('en-US');
+}
+
+// ─── Fundamentals table ───────────────────────────────────────────────────────
+
+interface FundamentalsTableProps {
+  series: SeriesState[];
+  fundamentals: Record<string, StockFundamentals | null>;
+  fundLoading: Record<string, boolean>;
+  quotes: Record<string, StockQuote>;
+  range: EtfBarsRange;
+}
+
+interface TableRow {
+  label: string;
+  getValue: (ticker: string) => string;
+  getColor?: (ticker: string) => string;
+}
+
+interface RowGroup {
+  heading: string;
+  rows: TableRow[];
+}
+
+function FundamentalsTable({
+  series,
+  fundamentals,
+  fundLoading,
+  quotes,
+  range,
+}: FundamentalsTableProps) {
+  // Helper: returns '…' while fundamentals are loading, or the formatted value.
+  function cell(ticker: string, getFn: (f: StockFundamentals | null) => string): string {
+    if (fundLoading[ticker]) return '…';
+    return getFn(fundamentals[ticker] ?? null);
+  }
+
+  // Compute per-range return from bars
+  function rangeReturnNum(ticker: string): number | null {
+    const s = series.find((x) => x.ticker === ticker);
+    if (!s || s.bars.length < 2 || s.loading) return null;
+    const first = s.bars[0].c;
+    const last  = s.bars[s.bars.length - 1].c;
+    if (first === 0) return null;
+    return ((last - first) / first) * 100;
+  }
+
+  const groups: RowGroup[] = [
+    {
+      heading: 'PERFORMANCE & PRICE',
+      rows: [
+        {
+          label: 'Last Price',
+          getValue: (t) => fmtPrice(quotes[t]?.price),
+        },
+        {
+          label: '1D Change',
+          getValue: (t) => {
+            const pct = quotes[t]?.changePercent;
+            if (pct == null || !Number.isFinite(pct)) return '—';
+            return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+          },
+          getColor: (t) => {
+            const pct = quotes[t]?.changePercent;
+            if (pct == null) return '';
+            return pct >= 0 ? 'text-[#4AD295]' : 'text-[#E24B4A]';
+          },
+        },
+        {
+          label: `Return (${range})`,
+          getValue: (t) => {
+            const r = rangeReturnNum(t);
+            if (r == null) return '—';
+            return `${r >= 0 ? '+' : ''}${r.toFixed(2)}%`;
+          },
+          getColor: (t) => {
+            const r = rangeReturnNum(t);
+            if (r == null) return '';
+            return r >= 0 ? 'text-[#4AD295]' : 'text-[#E24B4A]';
+          },
+        },
+        {
+          label: '52W High',
+          getValue: (t) => fmtPrice(quotes[t]?.high52w),
+        },
+        {
+          label: '52W Low',
+          getValue: (t) => fmtPrice(quotes[t]?.low52w),
+        },
+        {
+          label: 'Volume',
+          getValue: (t) => fmtInt(quotes[t]?.volume),
+        },
+      ],
+    },
+    {
+      heading: 'VALUATION',
+      rows: [
+        {
+          label: 'Market Cap',
+          getValue: (t) => cell(t, (f) => fmtCurrencyCompact(f?.marketCap)),
+        },
+        {
+          label: 'P/E',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.pe)),
+        },
+      ],
+    },
+    {
+      heading: 'PROFITABILITY',
+      rows: [
+        {
+          label: 'Gross Margin',
+          getValue: (t) => cell(t, (f) => fmtPct(f?.grossMargin)),
+        },
+        {
+          label: 'Operating Margin',
+          getValue: (t) => cell(t, (f) => fmtPct(f?.operatingMargin)),
+        },
+        {
+          label: 'Net Margin',
+          getValue: (t) => cell(t, (f) => fmtPct(f?.netMargin)),
+        },
+        {
+          label: 'ROE',
+          getValue: (t) => cell(t, (f) => fmtPct(f?.roe)),
+        },
+        {
+          label: 'ROA',
+          getValue: (t) => cell(t, (f) => fmtPct(f?.roa)),
+        },
+      ],
+    },
+    {
+      heading: 'FINANCIAL HEALTH',
+      rows: [
+        {
+          label: 'Debt / Equity',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.debtToEquity)),
+        },
+        {
+          label: 'Current Ratio',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.currentRatio)),
+        },
+        {
+          label: 'Altman-Z',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.altmanZ)),
+        },
+        {
+          label: 'Piotroski-F',
+          getValue: (t) => cell(t, (f) => {
+            if (f?.piotroskiF == null) return '—';
+            return String(Math.round(f.piotroskiF));
+          }),
+        },
+      ],
+    },
+    {
+      heading: 'CLASSIFICATION',
+      rows: [
+        {
+          label: 'Sector',
+          getValue: (t) => cell(t, (f) => f?.sector ?? '—'),
+        },
+      ],
+    },
+  ];
+
+  return (
+    <Card padding="default">
+      <div className="mb-ds-4">
+        <span className="text-[11px] text-ink-tertiary uppercase tracking-wider">
+          Fundamentals Comparison
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              {/* empty label column header */}
+              <th className="w-[160px] min-w-[140px] py-ds-2 pr-ds-4 text-left text-xs text-ink-tertiary font-medium border-b border-border-ds-subtle" />
+              {series.map((s, idx) => (
+                <th
+                  key={s.ticker}
+                  className="py-ds-2 px-ds-3 text-center border-b border-border-ds-subtle"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span
+                      className="h-2 w-2 rounded-full flex-shrink-0"
+                      style={{ background: SERIES_COLORS[idx % SERIES_COLORS.length] }}
+                    />
+                    <span className="font-data font-semibold text-sm text-ink-primary">
+                      {s.ticker}
+                    </span>
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => (
+              <>
+                {/* Group sub-header */}
+                <tr key={`group-${group.heading}`}>
+                  <td
+                    colSpan={1 + series.length}
+                    className="pt-ds-4 pb-ds-1 text-[10px] font-semibold tracking-[1.2px] uppercase text-gold-muted"
+                  >
+                    {group.heading}
+                  </td>
+                </tr>
+
+                {group.rows.map((row) => (
+                  <tr
+                    key={`${group.heading}-${row.label}`}
+                    className="border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2/40 transition-colors"
+                  >
+                    <td className="py-ds-2 pr-ds-4 text-xs text-ink-secondary whitespace-nowrap">
+                      {row.label}
+                    </td>
+                    {series.map((s) => {
+                      const val   = row.getValue(s.ticker);
+                      const color = row.getColor?.(s.ticker) ?? '';
+                      return (
+                        <td
+                          key={s.ticker}
+                          className={`py-ds-2 px-ds-3 text-center font-data tabular-nums text-xs ${
+                            val === '…'
+                              ? 'text-ink-tertiary'
+                              : color || 'text-ink-primary'
+                          }`}
+                        >
+                          {val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-ds-3 text-xs text-ink-muted">
+        Fundamental ratios are derived from SEC filings and may lag the latest reported quarter.
+        Prices are delayed.
+      </p>
+    </Card>
+  );
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function ETFCompare() {
-  const [input, setInput]             = useState('');
-  const [series, setSeries]           = useState<SeriesState[]>([]);
-  const [range, setRange]             = useState<EtfBarsRange>('1Y');
+export default function StocksCompare() {
+  const [input, setInput]   = useState('');
+  const [series, setSeries] = useState<SeriesState[]>([]);
+  const [range, setRange]   = useState<EtfBarsRange>('1Y');
+
+  // Fundamentals & quotes state
+  const [fundamentals, setFundamentals] = useState<Record<string, StockFundamentals | null>>({});
+  const [fundLoading, setFundLoading]   = useState<Record<string, boolean>>({});
+  const [quotes, setQuotes]             = useState<Record<string, StockQuote>>({});
 
   // Autocomplete state
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const inputRef   = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Market status
+  const { isOpen, lastTradingDayLabel } = useMarketStatus();
 
   // Debounce: only send query to useSymbolSuggest after 200ms of no typing.
   const [debouncedInput, setDebouncedInput] = useState('');
@@ -236,7 +547,7 @@ export default function ETFCompare() {
 
   const suggestState = useSymbolSuggest(debouncedInput);
   const suggestItems = dropdownOpen
-    ? sortByEtfFirst(suggestState.data).slice(0, 8)
+    ? sortByStockFirst(suggestState.data).slice(0, 8)
     : [];
 
   // Close dropdown on outside click
@@ -253,30 +564,70 @@ export default function ETFCompare() {
 
   const atMax = series.length >= MAX_TICKERS;
 
+  // Load fundamentals for a single ticker
+  const loadFundamentals = useCallback(async (sym: string) => {
+    setFundLoading((prev) => ({ ...prev, [sym]: true }));
+    try {
+      const data = await fetchStockFundamentals(sym);
+      setFundamentals((prev) => ({ ...prev, [sym]: data }));
+    } catch {
+      // Fundamentals unavailable — keep null, don't block the rest
+      setFundamentals((prev) => ({ ...prev, [sym]: null }));
+    } finally {
+      setFundLoading((prev) => ({ ...prev, [sym]: false }));
+    }
+  }, []);
+
+  // Refresh quotes for all currently tracked symbols plus a new one
+  const refreshQuotes = useCallback(async (syms: string[]) => {
+    if (syms.length === 0) return;
+    try {
+      const data = await fetchStockQuotes(syms);
+      setQuotes(data);
+    } catch {
+      // Quotes unavailable — tolerate silently
+    }
+  }, []);
+
   const loadTicker = useCallback(
     async (ticker: string, currentRange: EtfBarsRange) => {
       const sym = ticker.toUpperCase().trim();
       if (!sym) return;
       // Guard: no duplicates, respect max
+      let alreadyPresent = false;
       setSeries((prev) => {
-        if (prev.some((s) => s.ticker === sym)) return prev;
+        if (prev.some((s) => s.ticker === sym)) { alreadyPresent = true; return prev; }
         if (prev.length >= MAX_TICKERS) return prev;
         return [...prev, { ticker: sym, bars: [], loading: true, error: null }];
       });
-      try {
-        const bars = await fetchCompareBars(sym, currentRange);
+      if (alreadyPresent) return;
+
+      // Bars + fundamentals in parallel; quotes refreshed after bars resolve
+      const barsPromise = fetchCompareBars(sym, currentRange).then((bars) => {
         setSeries((prev) =>
           prev.map((s) => (s.ticker === sym ? { ...s, bars, loading: false } : s)),
         );
-      } catch (e) {
+        return bars;
+      }).catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : 'Failed to load data.';
         setSeries((prev) =>
           prev.map((s) => (s.ticker === sym ? { ...s, loading: false, error: msg } : s)),
         );
-      }
+        return [] as OhlcBar[];
+      });
+
+      void loadFundamentals(sym);
+
+      // After bars resolve, refresh quotes for all known symbols
+      barsPromise.then(() => {
+        setSeries((prev) => {
+          const syms = prev.map((s) => s.ticker);
+          void refreshQuotes(syms);
+          return prev;
+        });
+      });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [loadFundamentals, refreshQuotes],
   );
 
   function addTicker(sym: string) {
@@ -314,10 +665,8 @@ export default function ETFCompare() {
     } else if (e.key === 'Escape') {
       setDropdownOpen(false);
       setHighlightIndex(-1);
-    } else if (e.key === 'Enter') {
-      // Handled by form onSubmit — no need to duplicate here; just prevent default
-      // if a suggestion is highlighted (form submit will pick it up).
     }
+    // Enter is handled by form onSubmit
   }
 
   function handleInputChange(e: ChangeEvent<HTMLInputElement>) {
@@ -351,7 +700,28 @@ export default function ETFCompare() {
   }
 
   function handleRemove(ticker: string) {
-    setSeries((prev) => prev.filter((s) => s.ticker !== ticker));
+    setSeries((prev) => {
+      const next = prev.filter((s) => s.ticker !== ticker);
+      // Refresh quotes for remaining tickers
+      const syms = next.map((s) => s.ticker);
+      if (syms.length > 0) void refreshQuotes(syms);
+      return next;
+    });
+    setFundamentals((prev) => {
+      const next = { ...prev };
+      delete next[ticker];
+      return next;
+    });
+    setFundLoading((prev) => {
+      const next = { ...prev };
+      delete next[ticker];
+      return next;
+    });
+    setQuotes((prev) => {
+      const next = { ...prev };
+      delete next[ticker];
+      return next;
+    });
   }
 
   async function handleRangeChange(newRange: EtfBarsRange) {
@@ -374,10 +744,11 @@ export default function ETFCompare() {
         }
       })();
     }
+    // Quotes don't change with range; fundamentals stay as-is
   }
 
-  const chartData    = buildChartData(series);
-  const loadedSeries = series.filter((s) => s.bars.length > 0 && !s.loading);
+  const chartData     = buildChartData(series);
+  const loadedSeries  = series.filter((s) => s.bars.length > 0 && !s.loading);
   const tickFormatter = makeTickFormatter(range);
 
   return (
@@ -385,19 +756,25 @@ export default function ETFCompare() {
       {/* Header */}
       <div className="space-y-ds-1">
         <span className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted">
-          ETF Research
+          Stock Research
         </span>
-        <h1 className="text-h2 font-medium text-ink-primary">Compare ETFs</h1>
+        <div className="flex items-center gap-ds-3 flex-wrap">
+          <h1 className="text-h2 font-medium text-ink-primary">Compare Stocks</h1>
+          {!isOpen && (
+            <span className="text-xs text-ink-tertiary border border-border-ds-subtle rounded-[4px] px-2 py-0.5">
+              Market Closed — showing {lastTradingDayLabel}
+            </span>
+          )}
+        </div>
         <p className="text-body text-ink-secondary">
-          Side-by-side normalized performance. Each series is rebased to 0% at the start of the selected range.
+          Side-by-side normalized performance and fundamentals. Each price series is rebased to
+          0% at the start of the selected range.
         </p>
       </div>
 
       {/* Ticker input + chips */}
       <Card padding="default">
-        {/* Input row with autocomplete */}
         <form onSubmit={handleAdd} className="flex gap-ds-2 mb-ds-4">
-          {/* Wrapper for positioning the dropdown */}
           <div ref={wrapperRef} className="relative flex-1">
             <input
               ref={inputRef}
@@ -407,7 +784,7 @@ export default function ETFCompare() {
               onKeyDown={handleInputKeyDown}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
-              placeholder={atMax ? 'Max 4 ETFs' : 'Add ticker — e.g. SPY'}
+              placeholder={atMax ? 'Max 4 stocks' : 'Add ticker — e.g. AAPL'}
               disabled={atMax}
               className="w-full rounded-[8px] border border-border-ds-subtle bg-surface-1 py-ds-3 px-ds-4 text-sm text-ink-primary placeholder:text-ink-muted transition-colors focus:border-border-ds-default focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               autoCapitalize="characters"
@@ -417,7 +794,6 @@ export default function ETFCompare() {
               aria-expanded={dropdownOpen && suggestItems.length > 0}
               aria-haspopup="listbox"
             />
-            {/* Suggestion dropdown */}
             {dropdownOpen && !atMax && (
               <SuggestDropdown
                 items={suggestItems}
@@ -455,14 +831,18 @@ export default function ETFCompare() {
                 />
                 <span className="font-data font-semibold text-ink-primary">{s.ticker}</span>
                 {s.loading && <span className="text-ink-tertiary">…</span>}
-                {s.error && <span className="text-[#E24B4A]" title={s.error}>!</span>}
-                {/* Final % */}
+                {s.error && (
+                  <span className="text-[#E24B4A]" title={s.error}>!</span>
+                )}
+                {/* Range return % */}
                 {s.bars.length > 0 && !s.loading && (() => {
                   const base = s.bars[0].c;
                   const last = s.bars[s.bars.length - 1].c;
                   const pct  = base > 0 ? ((last - base) / base) * 100 : 0;
                   return (
-                    <span className={`font-data tabular-nums ${pct >= 0 ? 'text-[#4AD295]' : 'text-[#E24B4A]'}`}>
+                    <span
+                      className={`font-data tabular-nums ${pct >= 0 ? 'text-[#4AD295]' : 'text-[#E24B4A]'}`}
+                    >
                       {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                     </span>
                   );
@@ -484,7 +864,6 @@ export default function ETFCompare() {
       {/* Chart */}
       {loadedSeries.length > 0 && (
         <Card padding="default">
-          {/* Range buttons */}
           <div className="flex items-center justify-between mb-ds-4">
             <span className="text-[11px] text-ink-tertiary uppercase tracking-wider">
               Normalized Performance
@@ -548,11 +927,22 @@ export default function ETFCompare() {
         </Card>
       )}
 
+      {/* Fundamentals table — shown once at least 1 ticker is loaded */}
+      {series.length >= 1 && (
+        <FundamentalsTable
+          series={series}
+          fundamentals={fundamentals}
+          fundLoading={fundLoading}
+          quotes={quotes}
+          range={range}
+        />
+      )}
+
       {/* Empty state */}
       {series.length === 0 && (
         <Card padding="default">
           <p className="text-center text-sm text-ink-tertiary py-8">
-            Add at least 2 ETF tickers above to compare their performance.
+            Add at least 2 stock tickers above to compare their performance and fundamentals.
           </p>
         </Card>
       )}
