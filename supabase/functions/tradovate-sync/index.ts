@@ -50,6 +50,21 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false } }
 );
 
+// Decode the Tradovate access-token JWT `sub` claim → provider userId.
+// OAuth prop-firm tokens (scope=trading_read) return [] from /account/list
+// WITHOUT this userId; WITH it they return the sponsored accounts.
+function extractUserIdFromJwt(accessToken: string): string | null {
+  try {
+    const parts = accessToken.split('.');
+    if (parts.length !== 3) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+    const sub = payload.sub;
+    return sub === undefined || sub === null || sub === '' ? null : String(sub);
+  } catch { return null; }
+}
+
 // ─── Get access token from Vault ──────────────────────────────
 async function getAccessToken(vaultSecretId: string): Promise<string> {
   const { data, error } = await supabaseAdmin.rpc('tradovate_vault_read', {
@@ -700,10 +715,12 @@ async function syncCredential(cred: {
   id: string;
   user_id: string;
   environment: 'live' | 'demo';
-  connection_data: { vault_secret_id?: string } | null;
+  connection_data: { vault_secret_id?: string; env_verified?: boolean } | null;
   account_id: string;
+  auth_method?: string | null;
 }, syncMode = 'cron'): Promise<{ inserted: number; errors: number }> {
-  const base = TRADOVATE_URLS[cred.environment];
+  let resolvedEnvironment: 'live' | 'demo' = cred.environment;
+  let base = TRADOVATE_URLS[resolvedEnvironment];
   const syncStartedAt = new Date();
   let inserted = 0;
   let errors = 0;
@@ -718,6 +735,88 @@ async function syncCredential(cred: {
   const vaultSecretId = cred.connection_data?.vault_secret_id;
   if (!vaultSecretId) throw new Error(`No vault_secret_id in connection_data for ${cred.id}`);
   const accessToken = await getAccessToken(vaultSecretId);
+
+  // 1b. OAuth env self-heal: verify which Tradovate environment the account
+  // actually lives on, and correct the stored environment if needed.
+  // Runs only once per connection (env_verified flag prevents repeat calls).
+  //
+  // Why: prop-firm OAuth tokens (Apex/Topstep/MFFU, scope=trading_read) return
+  // [] from /account/list WITHOUT ?userId=<sub>. The JWT sub claim carries the
+  // provider userId that unlocks sponsored accounts. We union both query forms
+  // (with userId and without) to handle all OAuth flavors defensively.
+  //
+  // Non-fatal: if /account/list returns [] on both envs (transient OAuth scope
+  // quirk or token not fully provisioned yet), we warn and keep the stored env
+  // so the fill fetch can still proceed. env_verified is NOT set, allowing
+  // a future tick to retry once permissions settle.
+  if (cred.auth_method === 'oauth' && !cred.connection_data?.env_verified) {
+    const providerUserId = extractUserIdFromJwt(accessToken);
+
+    const tryEnv = async (env: 'live' | 'demo'): Promise<boolean> => {
+      const baseUrl = TRADOVATE_URLS[env];
+      const candidateUrls: string[] = [];
+      if (providerUserId !== null) {
+        candidateUrls.push(`${baseUrl}/account/list?userId=${encodeURIComponent(providerUserId)}`);
+      }
+      candidateUrls.push(`${baseUrl}/account/list`);
+
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!res.ok) continue;
+          const body = await res.json();
+          if (!Array.isArray(body)) continue;
+          const accounts = body as Array<{ id: number }>;
+          if (accounts.some(a => a.id === accountIdNum)) return true;
+        } catch {
+          // per-URL errors are non-fatal; try next candidate
+        }
+      }
+      return false;
+    };
+
+    const storedEnv   = cred.environment;
+    const otherEnv    = storedEnv === 'live' ? 'demo' : 'live';
+    const foundOnStored = await tryEnv(storedEnv);
+
+    if (foundOnStored) {
+      // Account confirmed on stored env — mark verified, no environment change.
+      resolvedEnvironment = storedEnv;
+      base = TRADOVATE_URLS[resolvedEnvironment];
+      await supabaseAdmin
+        .from('broker_connections')
+        .update({ connection_data: { ...cred.connection_data, env_verified: true } })
+        .eq('id', cred.id);
+    } else {
+      const foundOnOther = await tryEnv(otherEnv);
+      if (foundOnOther) {
+        // Account lives on the other env — switch, persist, mark verified.
+        resolvedEnvironment = otherEnv;
+        base = TRADOVATE_URLS[resolvedEnvironment];
+        await supabaseAdmin
+          .from('broker_connections')
+          .update({
+            environment: otherEnv,
+            connection_data: { ...cred.connection_data, env_verified: true },
+          })
+          .eq('id', cred.id);
+        console.log(`[tradovate-sync] env self-heal: account ${accountIdNum} switched ${storedEnv} → ${otherEnv} for connection ${cred.id}`);
+      } else {
+        // /account/list returned [] on both envs — OAuth scope quirk or token
+        // not yet provisioned. Keep stored env, do NOT set env_verified so the
+        // next tick retries. Fill fetch proceeds with stored env (may return 0
+        // fills, which is benign).
+        console.warn(
+          `[tradovate-sync] env self-heal: account ${accountIdNum} not found via /account/list on either env` +
+          ` (OAuth scope quirk) — falling back to stored env ${storedEnv} for connection ${cred.id}`
+        );
+        resolvedEnvironment = storedEnv;
+        base = TRADOVATE_URLS[resolvedEnvironment];
+      }
+    }
+  }
 
   // 2. Get sync cursor
   const { data: syncState } = await supabaseAdmin
@@ -966,7 +1065,7 @@ Deno.serve(async (req: Request) => {
     // rows will rejoin the sync on the next tick automatically.
     let credentialsQuery = supabaseAdmin
       .from('broker_connections')
-      .select('id, user_id, environment, connection_data, account_id, created_at')
+      .select('id, user_id, environment, connection_data, account_id, created_at, auth_method')
       .in('broker', ['tradovate', 'ninja_trader'])
       .eq('is_active', true)
       .not('account_id', 'is', null);
