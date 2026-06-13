@@ -407,9 +407,10 @@ export const SubNav = () => {
                     For admin bypass: slightly dimmer + tooltip "Hidden from public — admin view". */}
                 {lockedForPublic && !locked && (
                   <Lock
-                    className="h-3 w-3 opacity-30"
-                    title="Hidden from public — admin view"
-                    aria-label="Hidden from public"
+                    className="h-3 w-3 flex-shrink-0"
+                    style={{ color: 'rgba(201,166,70,0.55)' }}
+                    title="Locked for regular users — admin view"
+                    aria-label="Locked for regular users"
                   />
                 )}
                 {locked && <Lock className="h-3 w-3 opacity-60" />}
