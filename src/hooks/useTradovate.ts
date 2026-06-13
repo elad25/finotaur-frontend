@@ -259,90 +259,6 @@ export function useTradovate() {
     }
   }, [userId, loadCredentials, queryClient]);
 
-  // ── Connect prop firm: username/password login with demo→live fallback.
-  // Prop firm accounts (Apex, Topstep, MyFundedFutures, etc.) run on Tradovate's
-  // LIVE API even when simulated — the prop firm pays for live-API access.
-  // We try 'demo' first; if that returns code='no_accounts' we retry on 'live'.
-  const [isPropFirmPending, setIsPropFirmPending] = useState(false);
-
-  const connectPropFirm = useCallback(async (params: {
-    username: string;
-    password: string;
-    connectionLabel: string;
-  }) => {
-    if (!userId) return { success: false, error: 'Not authenticated' };
-    setIsPropFirmPending(true);
-
-    const { username, password, connectionLabel } = params;
-
-    // Attempt login on a single environment.
-    // Returns { success: true } or { success: false, error, code }.
-    const attemptLogin = async (environment: 'live' | 'demo') => {
-      const { data, error } = await supabase.functions.invoke('tradovate-auth', {
-        body: {
-          mode: 'login',
-          userId,
-          environment,
-          username,
-          password,
-          broker: 'tradovate',
-          purpose: 'journal',
-          connectionLabel,
-        },
-      });
-
-      if (error) {
-        // FunctionsHttpError — real body lives in error.context
-        const { message, code } = await extractEdgeError(error, 'Connection failed');
-        return { success: false as const, error: message, code, data: null };
-      }
-      return { success: true as const, error: null, code: null, data };
-    };
-
-    try {
-      // First try demo (handles actual Tradovate Demo accounts)
-      let result = await attemptLogin('demo');
-
-      // If demo returned no_accounts (or the journal CID isn't registered on
-      // demo → app_env_mismatch), retry on live — some prop firm accounts
-      // (Apex, Topstep, MFFU…) run on Tradovate Live, not Demo.
-      if (!result.success && (result.code === 'no_accounts' || result.code === 'app_env_mismatch')) {
-        result = await attemptLogin('live');
-      }
-
-      if (!result.success) {
-        // Map error codes to clean English messages for the UI
-        const friendlyError = (() => {
-          switch (result.code) {
-            case 'invalid_credentials':
-            case 'app_env_mismatch':
-              return 'Invalid username or password';
-            case 'no_accounts':
-              return 'No accounts found for these credentials';
-            default:
-              return 'Connection failed — please try again';
-          }
-        })();
-        return { success: false, error: friendlyError };
-      }
-
-      // Success — invalidate all relevant caches
-      await queryClient.invalidateQueries({ queryKey: tradovateKeys.credentials(userId) });
-      await queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
-      await queryClient.invalidateQueries({ queryKey: ['portfolios', userId] });
-      await queryClient.invalidateQueries({ queryKey: ['trades'] });
-      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-
-      toast.success('Prop firm account connected — syncing trades...');
-      return { success: true };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Connection failed — please try again';
-      return { success: false, error: msg };
-    } finally {
-      setIsPropFirmPending(false);
-    }
-  }, [userId, queryClient]);
-
   // ── Disconnect — deletes broker_connections row entirely (Tradovate scope)
   // Post-F1.A: scoped to broker='tradovate' so we don't accidentally delete IBKR rows
   // when they ship. For soft-disconnect (UI "Disconnect" button → keep row, flip is_active=false),
@@ -531,7 +447,7 @@ export function useTradovate() {
     hasLiveConnection, hasDemoConnection, hasAnyConnection,
     hasLiveActive, hasDemoActive,
     copyRules, syncStatus, isLoading,
-    connect, connectPropFirm, isPropFirmPending,
+    connect,
     disconnect, triggerSync, updateLabel,
     addCopyRule, toggleCopyRule, deleteCopyRule,
     refresh: () => { loadCredentials(); loadCopyRules(); }
