@@ -89,26 +89,6 @@ export interface ForexCommentaryResponse {
   source: string;
 }
 
-/** A single economic calendar event. */
-export interface ForexCalendarEvent {
-  datetime: string;
-  currency: string;
-  country: string;
-  title: string;
-  impact: string;
-  actual: string | number | null;
-  forecast: string | number | null;
-  previous: string | number | null;
-  unit?: string | null;
-}
-
-/** Response from /api/forex/calendar */
-export interface ForexCalendarResponse {
-  events: ForexCalendarEvent[];
-  ts: number;
-  source: string;
-}
-
 /** A single central-bank rate entry. */
 export interface CBRate {
   bank: string;
