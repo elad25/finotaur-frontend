@@ -486,8 +486,17 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // auto-fit band without needing an additional fetch or re-render cycle.
   const candleRangeRef = useRef<{ high: number; low: number } | null>(null);
   const getCandleRange = useCallback(() => candleRangeRef.current, []);
+
+  // ── Time-window focus token ─────────────────────────────────────────────
+  // Bumping this triggers FinotaurChart to re-apply the 6h focusRange on the
+  // time scale. Starts at 0 (no-op on first render); bumped on bar load so the
+  // initial view snaps to the last-6h window, and again on Fit click.
+  const [timeFitToken, setTimeFitToken] = useState(0);
+
   const handleBarsLoad = useCallback((range: { high: number; low: number } | null) => {
     candleRangeRef.current = range;
+    // Snap the time axis to the 6h window once candles are loaded.
+    setTimeFitToken(t => t + 1);
   }, []);
 
   // ── Liquidity band auto-fit ─────────────────────────────────────────────
@@ -504,11 +513,12 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
     getCandleRange,
   });
 
-  // Reset auto-fit on symbol or interval change (WorkstationInner remounts on
-  // symbol change, so `autoFitActive` resets automatically for symbol changes;
-  // for interval changes we reset explicitly via this effect).
+  // Reset auto-fit and re-snap the time window on interval change.
+  // WorkstationInner remounts on symbol change so state resets automatically;
+  // for interval changes we reset explicitly via this effect.
   useEffect(() => {
     setAutoFitActive(true);
+    setTimeFitToken(t => t + 1);
   // interval is the only dependency here — symbol remounts the whole component.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interval]);
@@ -519,11 +529,25 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
   const handleFitClick = useCallback(() => {
     setAutoFitActive(true);
+    // Also re-snap the time axis to the 6h window so both axes are reset.
+    setTimeFitToken(t => t + 1);
   }, []);
 
   // The band passed to FinotaurChart: active only when auto-fit is on AND the
   // band has been computed (requires at least one 3-second compute cycle).
   const activeBand = autoFitActive ? band : null;
+
+  // ── 6h visible time window ──────────────────────────────────────────────
+  // The focusRange passed to FinotaurChart: "show the last 6 hours of data".
+  // 6h gives enough candle context AND covers the full depth-history window.
+  // Recomputed when `to` changes (every 30s timeTick) but FinotaurChart only
+  // re-applies it when timeFitToken is explicitly bumped — not on every slide.
+  const SIX_HOURS_SEC = 6 * 60 * 60;
+  const focusRange = useMemo(
+    () => ({ from: to - SIX_HOURS_SEC, to }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [to],
+  );
 
   // Depth matrix slices — drives DepthMatrixLayer.
   // fromMs/toMs are the same chart window as from/to (in ms).
@@ -979,8 +1003,8 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
             Always visible: gold when active (auto-fit on), dim when inactive. */}
         <button
           onClick={handleFitClick}
-          title={autoFitActive ? 'Price axis fitted to liquidity band' : 'Click to re-fit price axis to liquidity band'}
-          aria-label="Fit price axis to liquidity band"
+          title={autoFitActive ? 'Both axes fitted (last 6h · liquidity band)' : 'Click to re-fit both axes: time → last 6h, price → liquidity band'}
+          aria-label="Fit both axes to last 6h and liquidity band"
           className={[
             'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none border',
             autoFitActive
@@ -1022,6 +1046,8 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           dataSource={dataSource}
           theme="dark"
           height="100%"
+          focusRange={focusRange}
+          timeFitToken={timeFitToken}
           wallSegments={wallSegments}
           wallRenderMode="matrix"
           depthMatrixColumns={depthMatrix.columns}
