@@ -26,6 +26,23 @@ interface PortfolioGroup {
   portfolios: Portfolio[];
 }
 
+// ── Prop-firm detection ───────────────────────────────────────
+// Returns the group key + label for a Tradovate account name.
+// Evaluated in declaration order; first match wins.
+function detectFirmGroup(name: string): { key: string; label: string } {
+  const n = name.toUpperCase();
+  if (n.includes('APEX'))                                    return { key: 'pf_apex',    label: 'APEX' };
+  if (n.includes('MFFU') || n.includes('MYFUNDEDFUTURES') || n.startsWith('MFF'))
+                                                             return { key: 'pf_mffu',    label: 'MFFU' };
+  if (n.startsWith('TST') || n.includes('TOPSTEP'))         return { key: 'pf_topstep', label: 'Topstep' };
+  if (n.includes('EARN2TRADE') || n.startsWith('E2T'))      return { key: 'pf_e2t',     label: 'Earn2Trade' };
+  if (n.includes('BULENOX'))                                 return { key: 'pf_bulenox', label: 'Bulenox' };
+  if (n.includes('TRADEDAY'))                                return { key: 'pf_tradeday',label: 'TradeDay' };
+  if (n.includes('UPROFIT'))                                 return { key: 'pf_uprofit', label: 'Uprofit' };
+  // Personal / individual Tradovate account
+  return { key: 'tradovate', label: 'Tradovate' };
+}
+
 export const AccountFilterDropdown = memo(function AccountFilterDropdown({
   onManage,
 }: AccountFilterDropdownProps) {
@@ -82,12 +99,37 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     return `${count} accounts`;
   }, [isShowingAll, isShowingTrader, selectedPortfolioIds, portfolios]);
 
-  // Build groups: Tradovate → broker groups (by connection_id) → Manual
+  // Build groups: prop-firm buckets (sorted by label) → generic Tradovate →
+  //               broker groups (by connection_id) → Manual
   const groups = useMemo<PortfolioGroup[]>(() => {
     const result: PortfolioGroup[] = [];
 
+    // Split tradovate portfolios by detected firm identity
     if (tradovatePortfolios.length > 0) {
-      result.push({ key: 'tradovate', label: 'Tradovate', portfolios: tradovatePortfolios });
+      // Map: key → { label, portfolios[] } — preserves first-appearance order per bucket
+      const firmMap = new Map<string, { label: string; portfolios: Portfolio[] }>();
+      for (const p of tradovatePortfolios) {
+        const { key, label } = detectFirmGroup(p.name);
+        if (!firmMap.has(key)) {
+          firmMap.set(key, { label, portfolios: [] });
+        }
+        firmMap.get(key)!.portfolios.push(p);
+      }
+
+      // Emit prop-firm groups (all except the generic 'tradovate' bucket) sorted by label
+      const propFirmEntries = Array.from(firmMap.entries())
+        .filter(([key]) => key !== 'tradovate')
+        .sort(([, a], [, b]) => a.label.localeCompare(b.label));
+
+      for (const [key, { label, portfolios }] of propFirmEntries) {
+        result.push({ key, label, portfolios });
+      }
+
+      // Emit the generic 'Tradovate' bucket last among tradovate-derived groups
+      if (firmMap.has('tradovate')) {
+        const { label, portfolios } = firmMap.get('tradovate')!;
+        result.push({ key: 'tradovate', label, portfolios });
+      }
     }
 
     // Group broker portfolios by broker_connection_id (fallback to portfolio id)
