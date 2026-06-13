@@ -445,7 +445,7 @@ const NarrativeSection: React.FC = () => {
   const config = takeawayConfig[narrative.takeawayType];
 
   return (
-    <section className="mb-12">
+    <section className="mb-6 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       {/* Section Header */}
       <div className="flex items-center gap-2 mb-5">
         <div className="w-1 h-4 bg-amber-500/70 rounded-full" />
@@ -545,7 +545,7 @@ const TurningPointsSection: React.FC = () => {
   );
 
   return (
-    <section className="mb-12">
+    <section className="mb-6 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       <div className="flex items-center gap-2 mb-5">
         <div className="w-1 h-4 bg-purple-500/70 rounded-full" />
         <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-[0.15em]">Turning Points</span>
@@ -605,7 +605,7 @@ const CohesionHeatmap: React.FC = () => {
   };
 
   return (
-    <section className="mb-12">
+    <section className="mb-6 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 bg-cyan-500/70 rounded-full" />
@@ -701,7 +701,7 @@ const ThemesSection: React.FC = () => {
   };
 
   return (
-    <section className="mb-12">
+    <section className="mb-6 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       <div className="flex items-center gap-2 mb-5">
         <div className="w-1 h-4 bg-yellow-500/70 rounded-full" />
         <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-[0.15em]">Major Themes</span>
@@ -833,7 +833,7 @@ const ImplicationsSection: React.FC = () => {
   };
 
   return (
-    <section className="mb-12">
+    <section className="mb-6 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       <div className="flex items-center gap-2 mb-5">
         <div className="w-1 h-4 bg-blue-500/70 rounded-full" />
         <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-[0.15em]">Market Implications</span>
@@ -1005,6 +1005,8 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
         </div>
       </div>
 
+      {/* Results + Table/Cards */}
+      <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       {/* Results Count */}
       <div className="flex items-center justify-between mb-4">
         <span className="text-[11px] text-zinc-600">{filtered.length} indicators</span>
@@ -1164,6 +1166,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
           ))}
         </div>
       )}
+      </div>
     </>
   );
 };
@@ -1177,7 +1180,7 @@ const CalendarTab: React.FC = () => {
   const pastEvents = calendarEvents.filter(e => e.isPast);
 
   return (
-    <div>
+    <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">
       {/* Timeline Header */}
       <div className="flex items-center gap-2 mb-6">
         <div className="w-1 h-4 bg-amber-500/70 rounded-full" />
