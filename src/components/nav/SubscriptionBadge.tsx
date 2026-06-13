@@ -146,10 +146,10 @@ const TIER_CONFIG: Record<TierKey, TierConfig> = {
     description: 'No active subscription yet',
     group: 'Free',
     tag: 'CURRENT PLAN',
-    edge: '#4B5563',
-    peak: '#9CA3AF',
-    onColor: '#F9FAFB',
-    labelColor: '#D1D5DB',
+    edge: '#000000',
+    peak: '#171717',
+    onColor: '#FFFFFF',
+    labelColor: '#E4E4E7',
     useGoldClass: false,
   },
 };
@@ -224,14 +224,14 @@ export function SubscriptionBadge({
       {/* ── Popover: tier legend ── */}
       <PopoverContent
         align="end"
-        className="w-[400px] p-3 z-[200] border text-white max-h-[78vh] overflow-y-auto"
+        className="w-[340px] p-2 z-[200] border text-white max-h-[78vh] overflow-y-auto"
         style={{
           backgroundColor: '#0F0F0F',
           borderColor: 'rgba(201,166,70,0.2)',
         }}
       >
         {/* Header */}
-        <p className="text-sm font-semibold text-white mb-3">
+        <p className="text-xs font-semibold text-white mb-2.5">
           FINOTAUR Membership Tiers
         </p>
 
@@ -240,47 +240,67 @@ export function SubscriptionBadge({
           const cfg = TIER_CONFIG[key];
           const TierIcon = cfg.icon;
           const isCurrent = key === currentTier;
+          const isFree = key === 'free';
           const rowGlossy = glossyStyle(key);
+
+          // FREE tier: override tile styling for black-on-dark readability
+          const tileStyle: CSSProperties = isFree
+            ? {
+                ...rowGlossy.style,
+                border: '1px solid rgba(255,255,255,0.14)',
+                boxShadow:
+                  'inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 2px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.5)',
+              }
+            : rowGlossy.style;
+
+          const accentBg = isFree ? 'rgba(255,255,255,0.10)' : cfg.edge;
+          const watermarkColor = isFree ? '#FFFFFF' : cfg.edge;
+          const tagBg = isFree ? 'rgba(255,255,255,0.09)' : `${cfg.edge}26`;
+          const chevBorder = isFree
+            ? '1px solid rgba(255,255,255,0.22)'
+            : `1px solid ${cfg.edge}66`;
 
           return (
             <button
               key={key}
               type="button"
               onClick={() => navigate('/app/plans')}
-              className="relative w-full overflow-hidden flex items-center gap-3 rounded-[15px] px-3.5 py-3.5 mb-2.5 last:mb-0 cursor-pointer text-left hover:brightness-110 transition"
+              className="relative w-full overflow-hidden flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 mb-1.5 last:mb-0 cursor-pointer text-left hover:brightness-110 transition"
               style={{
                 background: '#121214',
                 border: '1px solid rgba(255,255,255,0.06)',
               }}
             >
-              {/* Glow layer */}
-              <span
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: `linear-gradient(100deg, transparent 42%, ${cfg.edge}26 100%)`,
-                }}
-              />
+              {/* Glow layer — skip for FREE (black glow is invisible) */}
+              {!isFree && (
+                <span
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: `linear-gradient(100deg, transparent 42%, ${cfg.edge}26 100%)`,
+                  }}
+                />
+              )}
 
               {/* Left accent bar */}
               <span
-                className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded"
-                style={{ background: cfg.edge }}
+                className="absolute left-0 top-2 bottom-2 w-[2.5px] rounded"
+                style={{ background: accentBg }}
               />
 
               {/* Watermark icon */}
               <span
-                className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ opacity: 0.1, color: cfg.edge }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ opacity: 0.1, color: watermarkColor }}
               >
-                <TierIcon className="w-16 h-16" />
+                <TierIcon className="w-[50px] h-[50px]" />
               </span>
 
               {/* Glossy tile */}
               <span
-                className={`relative z-[2] flex-shrink-0 w-12 h-12 rounded-[13px] flex items-center justify-center${rowGlossy.className ? ` ${rowGlossy.className}` : ''}`}
-                style={rowGlossy.style}
+                className={`relative z-[2] flex-shrink-0 w-10 h-10 rounded-[11px] flex items-center justify-center${rowGlossy.className ? ` ${rowGlossy.className}` : ''}`}
+                style={tileStyle}
               >
-                <TierIcon className="w-[23px] h-[23px]" style={{ color: cfg.onColor }} />
+                <TierIcon className="w-[19px] h-[19px]" style={{ color: cfg.onColor }} />
               </span>
 
               {/* Body */}
@@ -288,15 +308,15 @@ export function SubscriptionBadge({
                 {/* Row 1: name + tag pill */}
                 <span className="flex items-center gap-2">
                   <span
-                    className="text-[15px] font-bold tracking-[0.01em]"
+                    className="text-[13px] font-bold tracking-[0.01em]"
                     style={{ color: cfg.labelColor }}
                   >
                     {cfg.label}
                   </span>
                   <span
-                    className="text-[10px] font-bold tracking-[0.05em] uppercase px-2 py-0.5 rounded-full whitespace-nowrap"
+                    className="text-[9px] font-bold tracking-[0.05em] uppercase px-1.5 py-0.5 rounded-full whitespace-nowrap"
                     style={{
-                      background: `${cfg.edge}26`,
+                      background: tagBg,
                       color: cfg.labelColor,
                     }}
                   >
@@ -304,7 +324,7 @@ export function SubscriptionBadge({
                   </span>
                 </span>
                 {/* Description */}
-                <span className="block text-[12.5px] text-zinc-400 mt-1 leading-snug">
+                <span className="block text-[11px] text-zinc-400 mt-0.5 leading-snug">
                   {cfg.description}
                 </span>
               </span>
@@ -313,21 +333,21 @@ export function SubscriptionBadge({
               <span className="relative z-[2] flex-shrink-0">
                 {isCurrent ? (
                   <span
-                    className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.05em]"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold tracking-[0.05em]"
                     style={{ color: '#34D399' }}
                   >
-                    <CircleCheck className="w-4 h-4" />
+                    <CircleCheck className="w-3.5 h-3.5" />
                     CURRENT
                   </span>
                 ) : (
                   <span
-                    className="w-[30px] h-[30px] rounded-full flex items-center justify-center"
+                    className="w-[26px] h-[26px] rounded-full flex items-center justify-center"
                     style={{
-                      border: `1px solid ${cfg.edge}66`,
+                      border: chevBorder,
                       color: cfg.labelColor,
                     }}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </span>
                 )}
               </span>
