@@ -222,10 +222,10 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
   
   return (
     <div 
-      className={`relative group rounded-xl border transition-all duration-300 hover:scale-[1.02] ${
+      className={`relative group rounded-2xl border transition-all duration-300 hover:scale-[1.02] ${
         isNext 
           ? 'border-amber-500/50 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent shadow-lg shadow-amber-500/10' 
-          : 'border-gray-700/50 bg-gray-900/50 hover:border-gray-600'
+          : 'border-white/[0.06] bg-white/[0.03] hover:border-white/[0.1]'
       }`}
     >
       {/* Next Event Badge */}
@@ -241,7 +241,7 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${isNext ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-800 text-gray-400'}`}>
+            <div className={`p-2 rounded-lg ${isNext ? 'bg-amber-500/20 text-amber-400' : 'bg-white/[0.06] text-gray-400'}`}>
               {event.icon}
             </div>
             <div>
@@ -254,12 +254,12 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
         
         {/* Date & Countdown */}
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-black/40 rounded-lg p-3 border border-gray-800">
+          <div className="bg-black/40 rounded-lg p-3 border border-white/[0.06]">
             <span className="text-gray-500 text-xs uppercase tracking-wider">Next Release</span>
             <p className="text-white font-mono font-bold">{formatDate(event.nextDate)}</p>
             <p className="text-gray-400 text-sm">{event.time}</p>
           </div>
-          <div className="bg-black/40 rounded-lg p-3 border border-gray-800">
+          <div className="bg-black/40 rounded-lg p-3 border border-white/[0.06]">
             <span className="text-gray-500 text-xs uppercase tracking-wider">Countdown</span>
             <p className={`font-mono font-bold text-xl ${isNext ? 'text-amber-400' : 'text-white'}`}>
               {countdown}
@@ -269,15 +269,15 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
         
         {/* Data Grid */}
         <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="bg-black/30 rounded-lg p-3 text-center border border-gray-800/50">
+          <div className="bg-black/30 rounded-lg p-3 text-center border border-white/[0.06]">
             <span className="text-gray-500 text-xs uppercase">Previous</span>
             <p className="text-white font-mono font-bold">{event.previous}</p>
           </div>
-          <div className="bg-black/30 rounded-lg p-3 text-center border border-gray-800/50">
+          <div className="bg-black/30 rounded-lg p-3 text-center border border-white/[0.06]">
             <span className="text-gray-500 text-xs uppercase">Forecast</span>
             <p className="text-amber-400 font-mono font-bold">{event.forecast}</p>
           </div>
-          <div className="bg-black/30 rounded-lg p-3 text-center border border-gray-800/50">
+          <div className="bg-black/30 rounded-lg p-3 text-center border border-white/[0.06]">
             <span className="text-gray-500 text-xs uppercase">Actual</span>
             <p className="text-gray-500 font-mono font-bold">{event.actual || '—'}</p>
           </div>
@@ -287,7 +287,7 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
         {event.additionalInfo && (
           <div className="flex flex-wrap gap-2 mb-4">
             {Object.entries(event.additionalInfo).map(([key, value]) => (
-              <span key={key} className="px-2 py-1 bg-gray-800/50 rounded text-xs text-gray-400 border border-gray-700/50">
+              <span key={key} className="px-2 py-1 bg-white/[0.06] rounded text-xs text-gray-400 border border-white/[0.06]">
                 <span className="text-gray-500">{key}:</span> <span className="text-white">{value}</span>
               </span>
             ))}
@@ -300,7 +300,7 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
             <span className="transform group-open/details:rotate-90 transition-transform">▶</span>
             Market Impact Analysis
           </summary>
-          <div className="mt-3 space-y-2 pl-4 border-l-2 border-gray-700">
+          <div className="mt-3 space-y-2 pl-4 border-l-2 border-white/[0.1]">
             <div className="flex items-start gap-2">
               <span className="text-green-400 mt-0.5">{Icons.trendUp}</span>
               <p className="text-gray-400 text-sm">{event.marketEffect.bullish}</p>
@@ -313,7 +313,7 @@ const EventCard: React.FC<{ event: EventData; isNext: boolean }> = ({ event, isN
         </details>
         
         {/* Affected Assets */}
-        <div className="mt-4 pt-4 border-t border-gray-800">
+        <div className="mt-4 pt-4 border-t border-white/[0.06]">
           <span className="text-gray-500 text-xs uppercase tracking-wider">Typically Moves:</span>
           <div className="flex flex-wrap gap-1 mt-2">
             {event.affectedAssets.map(asset => (
@@ -333,11 +333,11 @@ const SummaryTable: React.FC<{ events: EventData[] }> = ({ events }) => {
   const sortedEvents = [...events].sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
   
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-700/50 bg-gray-900/50">
+    <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.03]">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-black/40 border-b border-gray-700">
+            <tr className="bg-black/40 border-b border-white/[0.1]">
               <th className="text-left py-4 px-6 text-gray-400 font-medium text-sm uppercase tracking-wider">Event</th>
               <th className="text-left py-4 px-6 text-gray-400 font-medium text-sm uppercase tracking-wider">Date</th>
               <th className="text-left py-4 px-6 text-gray-400 font-medium text-sm uppercase tracking-wider">Time (ET)</th>
@@ -350,13 +350,13 @@ const SummaryTable: React.FC<{ events: EventData[] }> = ({ events }) => {
             {sortedEvents.map((event, index) => (
               <tr 
                 key={event.id} 
-                className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${
+                className={`border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors ${
                   index === 0 ? 'bg-amber-500/5' : ''
                 }`}
               >
                 <td className="py-4 px-6">
                   <div className="flex items-center gap-3">
-                    <div className={`p-1.5 rounded ${index === 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-800 text-gray-400'}`}>
+                    <div className={`p-1.5 rounded ${index === 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-white/[0.06] text-gray-400'}`}>
                       {event.icon}
                     </div>
                     <div>
@@ -451,7 +451,7 @@ export default function MajorEvents() {
         </div>
         
         {/* Legend / Info Box */}
-        <div className="mt-12 p-6 rounded-xl border border-gray-700/50 bg-gray-900/30">
+        <div className="mt-12 p-6 rounded-xl border border-white/[0.06] bg-white/[0.02]">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
             <span className="text-gray-400">{Icons.info}</span>
             Understanding Impact Levels
@@ -475,7 +475,7 @@ export default function MajorEvents() {
             </div>
           </div>
           
-          <div className="mt-6 pt-6 border-t border-gray-700/50">
+          <div className="mt-6 pt-6 border-t border-white/[0.06]">
             <p className="text-gray-500 text-sm">
               <strong className="text-gray-400">Pro Tip:</strong> The Fed's interest rate decisions (FOMC) have the highest market impact. 
               CPI releases are the key driver for rate expectations. Always check the countdown and prepare your positions before major releases.

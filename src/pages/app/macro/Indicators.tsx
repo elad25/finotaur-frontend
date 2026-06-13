@@ -346,7 +346,7 @@ const Badge: React.FC<{ children: React.ReactNode; variant: 'emerald' | 'red' | 
     emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     red: 'bg-red-500/10 text-red-400 border-red-500/20',
     amber: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    zinc: 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50',
+    zinc: 'bg-white/[0.04] text-zinc-400 border-white/[0.1]',
     blue: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
     purple: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
   };
@@ -373,7 +373,7 @@ const MacroSummaryBar: React.FC = () => {
   ];
 
   return (
-    <div className="bg-[#0a0a0b] border-b border-zinc-800/40">
+    <div className="bg-[#0a0a0b] border-b border-white/[0.06]">
       <div className="max-w-6xl mx-auto px-6 py-2.5">
         <div className="flex items-center justify-between">
           {/* Left: Macro Pillars */}
@@ -382,7 +382,7 @@ const MacroSummaryBar: React.FC = () => {
             {summaryItems.map((item, idx) => (
               <React.Fragment key={item.key}>
                 <div 
-                  className="group relative flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-zinc-800/30 cursor-default transition-colors"
+                  className="group relative flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-white/[0.06] cursor-default transition-colors"
                 >
                   <span className="text-zinc-600">{item.icon}</span>
                   <span className="text-[10px] text-zinc-500 uppercase font-medium">{item.key}</span>
@@ -396,19 +396,19 @@ const MacroSummaryBar: React.FC = () => {
                   
                   {/* Tooltip */}
                   <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-                    <div className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 whitespace-nowrap shadow-xl">
+                    <div className="bg-white/[0.06] border border-white/[0.1] rounded px-2 py-1 whitespace-nowrap shadow-xl">
                       <span className="text-[10px] text-zinc-400">{item.change}</span>
                     </div>
                   </div>
                 </div>
-                {idx < summaryItems.length - 1 && <div className="w-px h-3 bg-zinc-800/50" />}
+                {idx < summaryItems.length - 1 && <div className="w-px h-3 bg-white/[0.04]" />}
               </React.Fragment>
             ))}
           </div>
 
           {/* Right: Surprise Index */}
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-zinc-900/50 border border-zinc-800/50">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/[0.03] border border-white/[0.06]">
               <Gauge className="w-3.5 h-3.5 text-zinc-600" />
               <span className="text-[9px] text-zinc-600 uppercase tracking-wider">Surprise</span>
               <span className={`text-sm font-mono font-medium ${surpriseIndex.current < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
@@ -511,7 +511,7 @@ const TurningPointsSection: React.FC = () => {
   const lagging = turningPoints.filter(t => t.type === 'lagging');
 
   const SignalCard: React.FC<{ point: TurningPoint }> = ({ point }) => (
-    <div className="group flex items-start gap-3 p-3 rounded-lg hover:bg-zinc-800/20 transition-colors cursor-default">
+    <div className="group flex items-start gap-3 p-3 rounded-lg hover:bg-white/[0.06] transition-colors cursor-default">
       {/* Direction Indicator */}
       <div className={`w-1 h-full min-h-[48px] rounded-full flex-shrink-0 ${
         point.direction === 'bullish' ? 'bg-emerald-500' : 
@@ -554,7 +554,7 @@ const TurningPointsSection: React.FC = () => {
       <div className="grid grid-cols-2 gap-8">
         {/* Leading Signals */}
         <div>
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-zinc-800/50">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-white/[0.06]">
             <Radio className="w-3.5 h-3.5 text-amber-500" />
             <span className="text-xs font-medium text-amber-400 uppercase tracking-wider">Leading Signals</span>
             <span className="text-[9px] text-zinc-600 ml-auto">Forward-looking</span>
@@ -568,7 +568,7 @@ const TurningPointsSection: React.FC = () => {
 
         {/* Lagging Signals */}
         <div>
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-zinc-800/50">
+          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-white/[0.06]">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
             <span className="text-xs font-medium text-blue-400 uppercase tracking-wider">Lagging Signals</span>
             <span className="text-[9px] text-zinc-600 ml-auto">Confirmation</span>
@@ -640,7 +640,7 @@ const CohesionHeatmap: React.FC = () => {
             </div>
 
             {/* Progress Bar */}
-            <div className="mt-3 h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="mt-3 h-1 bg-white/[0.06] rounded-full overflow-hidden">
               <div 
                 className={`h-full rounded-full transition-all duration-500 ${
                   item.direction === 'up' ? 'bg-emerald-500' : 
@@ -652,14 +652,14 @@ const CohesionHeatmap: React.FC = () => {
 
             {/* Hover Details */}
             {hoveredCategory === item.category && (
-              <div className="absolute left-0 right-0 top-full mt-2 p-3 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-20">
+              <div className="absolute left-0 right-0 top-full mt-2 p-3 bg-white/[0.03] border border-white/[0.06] rounded-lg shadow-xl z-20">
                 <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">{item.change}</div>
                 <div className="space-y-1.5">
                   {item.components.map((comp, i) => (
                     <div key={i} className="flex items-center justify-between">
                       <span className="text-[10px] text-zinc-500">{comp.name}</span>
                       <div className="flex items-center gap-2">
-                        <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="w-16 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-zinc-500 rounded-full"
                             style={{ width: `${(comp.contribution / 35) * 100}%` }}
@@ -716,7 +716,7 @@ const ThemesSection: React.FC = () => {
             <div 
               key={i}
               className={`border rounded-xl transition-all duration-300 ${
-                isExpanded ? 'border-zinc-700 bg-zinc-900/30' : 'border-zinc-800/50 hover:border-zinc-700/50'
+                isExpanded ? 'border-white/[0.1] bg-white/[0.03]' : 'border-white/[0.06] hover:border-white/[0.1]'
               }`}
             >
               {/* Header */}
@@ -743,7 +743,7 @@ const ThemesSection: React.FC = () => {
                     </div>
                   </div>
                   
-                  <button className="p-1 hover:bg-zinc-800/50 rounded transition-colors">
+                  <button className="p-1 hover:bg-white/[0.06] rounded transition-colors">
                     {isExpanded ? 
                       <ChevronUp className="w-5 h-5 text-zinc-500" /> : 
                       <ChevronDown className="w-5 h-5 text-zinc-500" />
@@ -754,7 +754,7 @@ const ThemesSection: React.FC = () => {
 
               {/* Expanded Content */}
               {isExpanded && (
-                <div className="px-4 pb-4 border-t border-zinc-800/50 pt-4 space-y-5">
+                <div className="px-4 pb-4 border-t border-white/[0.06] pt-4 space-y-5">
                   {/* Data Points */}
                   <div>
                     <div className="text-[9px] text-zinc-600 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
@@ -765,7 +765,7 @@ const ThemesSection: React.FC = () => {
                       {theme.dataPoints.map((point, j) => (
                         <span 
                           key={j} 
-                          className="text-[11px] text-zinc-400 bg-zinc-800/50 border border-zinc-700/30 px-3 py-1.5 rounded-lg"
+                          className="text-[11px] text-zinc-400 bg-white/[0.04] border border-white/[0.06] px-3 py-1.5 rounded-lg"
                         >
                           {point}
                         </span>
@@ -792,13 +792,13 @@ const ThemesSection: React.FC = () => {
                   </div>
 
                   {/* If/Then Decision Tree */}
-                  <div className="bg-zinc-800/20 border border-zinc-800/50 rounded-lg p-4">
+                  <div className="bg-white/[0.02] border border-white/[0.06] rounded-lg p-4">
                     <div className="text-[9px] text-amber-500 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
                       <GitBranch className="w-3 h-3" />
                       Decision Framework
                     </div>
                     <div className="flex items-center gap-4">
-                      <div className="flex-1 p-3 bg-zinc-900/50 rounded-lg border border-zinc-800/50">
+                      <div className="flex-1 p-3 bg-white/[0.03] rounded-lg border border-white/[0.06]">
                         <div className="text-[9px] text-zinc-600 uppercase mb-1">If</div>
                         <p className="text-[12px] text-zinc-300">{theme.ifThen.condition}</p>
                       </div>
@@ -844,7 +844,7 @@ const ImplicationsSection: React.FC = () => {
           const outlookConfig = getOutlookConfig(impl.outlook);
           
           return (
-            <div key={impl.asset} className="border border-zinc-800/50 rounded-xl p-5 hover:border-zinc-700/50 transition-colors">
+            <div key={impl.asset} className="border border-white/[0.06] rounded-xl p-5 hover:border-white/[0.1] transition-colors">
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -887,7 +887,7 @@ const ImplicationsSection: React.FC = () => {
               </div>
 
               {/* Key Chart */}
-              <div className="pt-3 border-t border-zinc-800/50">
+              <div className="pt-3 border-t border-white/[0.06]">
                 <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
                   <BarChart3 className="w-3 h-3" />
                   Key Chart
@@ -928,7 +928,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
   return (
     <>
       {/* Filter Bar */}
-      <div className="mb-6 p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-xl">
+      <div className="mb-6 p-4 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
         <div className="flex items-center justify-between flex-wrap gap-4">
           {/* Category Filters */}
           <div className="flex items-center gap-2">
@@ -936,7 +936,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
             <button
               onClick={() => setCategoryFilter('all')}
               className={`text-[10px] uppercase px-2.5 py-1.5 rounded-lg transition-colors ${
-                categoryFilter === 'all' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                categoryFilter === 'all' ? 'text-white bg-zinc-700' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06]'
               }`}
             >
               All
@@ -946,7 +946,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
                 key={cat.id}
                 onClick={() => setCategoryFilter(cat.id)}
                 className={`flex items-center gap-1.5 text-[10px] uppercase px-2.5 py-1.5 rounded-lg transition-colors ${
-                  categoryFilter === cat.id ? `${cat.color} bg-zinc-700` : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                  categoryFilter === cat.id ? `${cat.color} bg-zinc-700` : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06]'
                 }`}
               >
                 {cat.icon}
@@ -963,7 +963,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
                 key={type}
                 onClick={() => setSignalFilter(type)}
                 className={`text-[10px] uppercase px-2.5 py-1.5 rounded-lg transition-colors ${
-                  signalFilter === type ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                  signalFilter === type ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06]'
                 }`}
               >
                 {type}
@@ -984,7 +984,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
                     : type === 'negative' ? 'text-red-400 bg-red-500/10'
                     : type === 'neutral' ? 'text-zinc-300 bg-zinc-700'
                     : 'text-white bg-zinc-700'
-                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06]'
                 }`}
               >
                 {type === 'positive' ? '+ Beat' : type === 'negative' ? '- Miss' : type === 'neutral' ? '= Inline' : type}
@@ -996,7 +996,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
           <button
             onClick={() => setCompactMode(!compactMode)}
             className={`flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg transition-colors ${
-              compactMode ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
+              compactMode ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06]'
             }`}
           >
             {compactMode ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -1015,7 +1015,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="text-[10px] text-zinc-600 uppercase tracking-wider border-b border-zinc-800/50">
+              <tr className="text-[10px] text-zinc-600 uppercase tracking-wider border-b border-white/[0.06]">
                 <th className="pb-3 text-left font-medium">Indicator</th>
                 <th className="pb-3 text-left font-medium">Type</th>
                 <th className="pb-3 text-right font-medium">Last</th>
@@ -1029,7 +1029,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
               {filtered.map(ind => (
                 <tr 
                   key={ind.id}
-                  className="border-b border-zinc-800/30 hover:bg-zinc-900/30 cursor-pointer transition-colors"
+                  className="border-b border-white/[0.06] hover:bg-white/[0.03] cursor-pointer transition-colors"
                   onClick={() => onSelect(ind.id)}
                 >
                   <td className="py-3">
@@ -1077,7 +1077,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
         <div className="space-y-8">
           {groupedByCategory.map(group => (
             <div key={group.id}>
-              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-zinc-800/30">
+              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-white/[0.06]">
                 <span className={group.color}>{group.icon}</span>
                 <span className={`text-xs font-medium uppercase tracking-wider ${group.color}`}>{group.name}</span>
                 <span className="text-[10px] text-zinc-600 ml-2">{group.indicators.length} indicators</span>
@@ -1087,7 +1087,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
                 {group.indicators.map(ind => (
                   <div 
                     key={ind.id}
-                    className="relative flex items-center gap-4 p-3 rounded-lg hover:bg-zinc-900/30 cursor-pointer transition-colors group"
+                    className="relative flex items-center gap-4 p-3 rounded-lg hover:bg-white/[0.03] cursor-pointer transition-colors group"
                     onClick={() => onSelect(ind.id)}
                     onMouseEnter={() => setHoveredId(ind.id)}
                     onMouseLeave={() => setHoveredId(null)}
@@ -1152,7 +1152,7 @@ const IndicatorsTab: React.FC<{ proMode: boolean; onSelect: (id: string) => void
 
                     {/* Hover Tooltip */}
                     {hoveredId === ind.id && (
-                      <div className="absolute left-28 bottom-full mb-2 w-72 p-4 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl z-30">
+                      <div className="absolute left-28 bottom-full mb-2 w-72 p-4 bg-white/[0.06] border border-white/[0.1] rounded-xl shadow-2xl z-30">
                         <div className="text-[9px] text-amber-500 uppercase tracking-wider mb-2">Why It Matters</div>
                         <p className="text-[11px] text-zinc-300 leading-relaxed">{ind.importance}</p>
                       </div>
@@ -1203,7 +1203,7 @@ const CalendarTab: React.FC = () => {
           <div 
             key={i}
             className={`flex items-center gap-4 p-3 rounded-lg transition-colors ${
-              event.importance === 'high' ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-zinc-900/30'
+              event.importance === 'high' ? 'bg-amber-500/5 hover:bg-amber-500/10' : 'hover:bg-white/[0.03]'
             }`}
           >
             {/* Date */}
@@ -1214,7 +1214,7 @@ const CalendarTab: React.FC = () => {
 
             {/* Importance Indicator */}
             <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${
-              event.importance === 'high' ? 'bg-amber-500' : 'bg-zinc-700'
+              event.importance === 'high' ? 'bg-amber-500' : 'bg-white/[0.1]'
             }`} />
 
             {/* Indicator Name */}
@@ -1269,11 +1269,11 @@ const DetailModal: React.FC<{ indicator: IndicatorData | null; onClose: () => vo
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
       <div 
-        className="relative bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl" 
+        className="relative bg-white/[0.03] border border-white/[0.06] rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800/50 p-5">
+        <div className="sticky top-0 bg-white/[0.03] border-b border-white/[0.06] p-5">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-medium text-white mb-1">{indicator.name}</h2>
@@ -1303,7 +1303,7 @@ const DetailModal: React.FC<{ indicator: IndicatorData | null; onClose: () => vo
               </div>
               <button 
                 onClick={onClose}
-                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/[0.06] rounded-lg transition-colors"
               >
                 <X className="w-5 h-5 text-zinc-500" />
               </button>
@@ -1322,7 +1322,7 @@ const DetailModal: React.FC<{ indicator: IndicatorData | null; onClose: () => vo
               { label: 'Percentile', value: `${indicator.percentile}th` },
               { label: 'Days Out', value: `${indicator.daysToRelease}` }
             ].map(stat => (
-              <div key={stat.label} className="bg-zinc-800/30 rounded-lg p-3 text-center">
+              <div key={stat.label} className="bg-white/[0.02] rounded-lg p-3 text-center">
                 <div className="text-[8px] text-zinc-600 uppercase tracking-wider mb-1">{stat.label}</div>
                 <div className={`text-sm font-mono font-medium ${stat.color || 'text-zinc-300'}`}>{stat.value}</div>
               </div>
@@ -1339,7 +1339,7 @@ const DetailModal: React.FC<{ indicator: IndicatorData | null; onClose: () => vo
           </div>
 
           {/* Why It Matters */}
-          <div className="bg-zinc-800/20 rounded-xl p-4">
+          <div className="bg-white/[0.02] rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Info className="w-4 h-4 text-amber-500" />
               <span className="text-[10px] font-medium text-amber-500 uppercase tracking-wider">Why It Matters</span>
@@ -1363,7 +1363,7 @@ const DetailModal: React.FC<{ indicator: IndicatorData | null; onClose: () => vo
                     <div className="w-full flex-1 flex items-end">
                       <div 
                         className={`w-full rounded-t transition-all ${
-                          isLast ? 'bg-amber-500' : 'bg-zinc-700 hover:bg-zinc-600'
+                          isLast ? 'bg-amber-500' : 'bg-white/[0.1] hover:bg-white/[0.15]'
                         }`}
                         style={{ height: `${Math.max(height, 8)}%` }}
                       />
@@ -1397,7 +1397,7 @@ export default function MacroTerminal() {
       <MacroSummaryBar />
 
       {/* Main Header */}
-      <div className="border-b border-zinc-800/30 sticky top-0 z-40 bg-[#09090b]/95 backdrop-blur-md">
+      <div className="border-b border-white/[0.06] sticky top-0 z-40 bg-[#09090b]/95 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-4">
@@ -1417,7 +1417,7 @@ export default function MacroTerminal() {
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
                   proMode 
                     ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' 
-                    : 'text-zinc-500 bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'
+                    : 'text-zinc-500 bg-white/[0.03] border-white/[0.06] hover:border-white/[0.1]'
                 }`}
               >
                 <Zap className={`w-3.5 h-3.5 ${proMode ? 'fill-amber-400' : ''}`} />
@@ -1440,8 +1440,8 @@ export default function MacroTerminal() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all ${
                   activeTab === tab.id 
-                    ? 'text-white bg-zinc-800' 
-                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50'
+                    ? 'text-white bg-white/[0.06]'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]'
                 }`}
               >
                 {tab.icon}

@@ -75,17 +75,6 @@ const getRiskColor = (sentiment: string): string => {
   }
 };
 
-const getCategoryGradient = (category: string): string => {
-  switch (category) {
-    case 'index': return 'from-blue-500/20 to-blue-600/5';
-    case 'volatility': return 'from-purple-500/20 to-purple-600/5';
-    case 'bond': return 'from-cyan-500/20 to-cyan-600/5';
-    case 'currency': return 'from-green-500/20 to-green-600/5';
-    case 'commodity': return 'from-amber-500/20 to-amber-600/5';
-    case 'crypto': return 'from-orange-500/20 to-orange-600/5';
-    default: return 'from-slate-500/20 to-slate-600/5';
-  }
-};
 
 const formatCacheTime = (isoString: string): string => {
   const date = new Date(isoString);
@@ -124,22 +113,19 @@ const ChangeIndicator = ({ value, percent, size = 'normal' }: { value: number | 
 };
 
 const MarketCard = ({ asset, index }: { asset: MarketAsset; index: number }) => {
-  const [isHovered, setIsHovered] = useState(false);
   const hasError = asset.error || asset.price === null;
-  
+
   return (
     <div
       className={`
-        relative overflow-hidden rounded-xl border border-white/10 
-        bg-gradient-to-br ${getCategoryGradient(asset.category)}
-        backdrop-blur-sm transition-all duration-300 ease-out
-        hover:border-[#D4AF37]/50 hover:shadow-lg hover:shadow-[#D4AF37]/10
-        hover:scale-[1.02] cursor-pointer group
+        relative overflow-hidden rounded-2xl border border-white/[0.06]
+        bg-white/[0.03] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.2)]
+        transition-all duration-300 ease-out
+        hover:bg-white/[0.06] hover:border-white/[0.1] hover:translate-y-[-1px]
+        cursor-pointer group
         ${hasError ? 'opacity-60' : ''}
       `}
       style={{ animationDelay: `${index * 50}ms` }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Cached indicator */}
       {asset.cached && (
@@ -149,12 +135,6 @@ const MarketCard = ({ asset, index }: { asset: MarketAsset; index: number }) => 
           </div>
         </div>
       )}
-      
-      {/* Glow effect */}
-      <div className={`
-        absolute inset-0 bg-gradient-to-r from-[#D4AF37]/0 via-[#D4AF37]/5 to-[#D4AF37]/0
-        transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}
-      `} />
       
       {/* Content */}
       <div className="relative p-4">
@@ -216,12 +196,6 @@ const MarketCard = ({ asset, index }: { asset: MarketAsset; index: number }) => 
         </div>
       </div>
       
-      {/* Bottom accent line */}
-      <div className={`
-        absolute bottom-0 left-0 right-0 h-0.5 
-        bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent
-        transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}
-      `} />
     </div>
   );
 };
@@ -239,7 +213,7 @@ const MarketSentimentBar = ({ assets }: { assets: MarketAsset[] }) => {
   const overallSentiment = riskOnCount > riskOffCount ? 'Risk-On' : riskOnCount < riskOffCount ? 'Risk-Off' : 'Neutral';
   
   return (
-    <div className="bg-gradient-to-br from-slate-900/80 to-slate-800/50 rounded-2xl border border-white/10 p-6 mb-6">
+    <div className="bg-white/[0.03] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.2)] rounded-2xl border border-white/[0.06] p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold text-white mb-1">Market Sentiment</h2>
@@ -376,7 +350,7 @@ export default function MacroOverview() {
             </div>
           )}
           
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-slate-800/50 border border-white/10">
+          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${
                 isLoading ? 'bg-yellow-400' : 
@@ -424,7 +398,7 @@ export default function MacroOverview() {
       {isLoading && marketData.length === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="h-48 rounded-xl bg-slate-800/50 animate-pulse" />
+            <div key={i} className="h-48 rounded-2xl bg-white/[0.03] animate-pulse" />
           ))}
         </div>
       )}

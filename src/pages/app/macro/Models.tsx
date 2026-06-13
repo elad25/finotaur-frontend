@@ -337,7 +337,7 @@ export default function MacroModels() {
 
           {/* Shock Detector */}
           <div className="col-span-2 flex items-center">
-            <div className="p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800/40 w-full shadow-inner">
+            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] w-full shadow-inner">
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="w-4 h-4 text-emerald-400" />
                 <span className="text-sm text-zinc-400 font-medium">Shock Detector</span>
@@ -365,7 +365,7 @@ export default function MacroModels() {
         ═══════════════════════════════════════════════════════ */}
         <section className="grid grid-cols-12 gap-6 mb-14">
           {/* Radar */}
-          <div className="col-span-4 p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800/40">
+          <div className="col-span-4 p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
             <div className="flex items-center gap-2 mb-4">
               <Activity className="w-5 h-5 text-emerald-400" />
               <span className="text-base font-medium text-white">Macro Health Wheel</span>
@@ -374,8 +374,8 @@ export default function MacroModels() {
           </div>
 
           {/* Leading vs Lagging - COLLAPSIBLE + LARGER TEXT */}
-          <div className="col-span-4 p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800/40">
-            <button 
+          <div className="col-span-4 p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
+            <button
               onClick={() => setShowLeadLag(!showLeadLag)}
               className="w-full flex items-center justify-between mb-4"
             >
@@ -403,7 +403,7 @@ export default function MacroModels() {
                   </div>
                 </div>
                 
-                <div className="border-t border-zinc-800/50 pt-5">
+                <div className="border-t border-white/[0.06] pt-5">
                   <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Lagging (Confirming)</div>
                   <div className="space-y-2.5">
                     {laggingIndicators.map((ind, i) => (
@@ -418,7 +418,7 @@ export default function MacroModels() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-zinc-800/50">
+                <div className="pt-4 border-t border-white/[0.06]">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-400">Conclusion</span>
                     <span className="text-sm font-semibold text-emerald-400">Trend Strengthening</span>
@@ -429,8 +429,8 @@ export default function MacroModels() {
           </div>
 
           {/* Turning Points - COLLAPSIBLE */}
-          <div className="col-span-4 p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800/40">
-            <button 
+          <div className="col-span-4 p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
+            <button
               onClick={() => setShowTurningPoints(!showTurningPoints)}
               className="w-full flex items-center justify-between mb-4"
             >
@@ -444,7 +444,7 @@ export default function MacroModels() {
             {showTurningPoints && (
               <div className="space-y-3 animate-in fade-in duration-200">
                 {turningPoints.map((tp, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-zinc-800/20 border border-zinc-700/20">
+                  <div key={i} className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.1]">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-white">{tp.indicator}</span>
                       <span className={`text-xs px-2 py-1 rounded-md border ${getTurningPointStyle(tp.type)}`}>
@@ -471,7 +471,7 @@ export default function MacroModels() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
             {economicIndicators.map((indicator) => (
-              <div key={indicator.id} className="p-5 rounded-2xl bg-zinc-900/30 border border-zinc-800/40 hover:border-zinc-700/50 transition-all hover:shadow-lg hover:shadow-zinc-900/20">
+              <div key={indicator.id} className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-all hover:shadow-lg hover:shadow-zinc-900/20">
                 {/* Header - ALIGNED */}
                 <div className="flex items-center justify-between mb-3 h-5">
                   <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">{indicator.name}</span>
@@ -536,7 +536,7 @@ export default function MacroModels() {
                     <span className="text-zinc-500">S&P 500: </span>
                     <span className={`font-medium ${s.spx.startsWith('+') ? 'text-emerald-400' : 'text-red-400'}`}>{s.spx}</span>
                   </div>
-                  <div className="text-xs text-zinc-500 pt-3 border-t border-zinc-800/30 leading-relaxed">
+                  <div className="text-xs text-zinc-500 pt-3 border-t border-white/[0.06] leading-relaxed">
                     <span className="text-zinc-600">Driver:</span> {s.driver}
                   </div>
                 </div>
@@ -551,7 +551,7 @@ export default function MacroModels() {
               <span className="text-base font-medium text-white">Risk Controls</span>
             </div>
 
-            <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800/40 h-[calc(100%-44px)]">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06] h-[calc(100%-44px)]">
               <div className="text-xs text-zinc-500 uppercase tracking-wider mb-4">Hedge Recommendations</div>
               <div className="space-y-4">
                 {hedgeRecommendations.map((rec, i) => (
@@ -576,10 +576,10 @@ export default function MacroModels() {
               <span className="text-base font-medium text-white">Asset Sensitivity Matrix</span>
             </div>
 
-            <div className="rounded-2xl bg-zinc-900/30 border border-zinc-800/40 overflow-hidden">
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-zinc-800/40">
+                  <tr className="border-b border-white/[0.06]">
                     <th className="text-left p-4 text-sm text-zinc-500 font-medium">Asset Class</th>
                     <th className="text-center p-4 text-sm text-zinc-500 font-medium">Sensitivity</th>
                     <th className="text-center p-4 text-sm text-zinc-500 font-medium">Impact Now</th>
@@ -587,7 +587,7 @@ export default function MacroModels() {
                 </thead>
                 <tbody>
                   {assetSensitivity.map((asset, i) => (
-                    <tr key={i} className="border-b border-zinc-800/20 last:border-0 hover:bg-zinc-800/10 transition-colors">
+                    <tr key={i} className="border-b border-white/[0.06] last:border-0 hover:bg-white/[0.06] transition-colors">
                       <td className="p-4 text-sm text-white font-medium">{asset.asset}</td>
                       <td className="p-4 text-center">
                         <span className={`px-3 py-1 rounded-md text-xs font-medium ${
@@ -617,7 +617,7 @@ export default function MacroModels() {
               <span className="text-base font-medium text-white">Cross-Asset Correlations</span>
             </div>
 
-            <div className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800/40">
+            <div className="p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
               <div className="space-y-4">
                 {correlations.map((corr, i) => (
                   <div key={i} className="flex items-center justify-between py-2">
@@ -645,7 +645,7 @@ export default function MacroModels() {
 
           <div className="grid grid-cols-3 gap-5">
             {globalRegions.map((region, i) => (
-              <div key={i} className="p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800/40">
+              <div key={i} className="p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <span className="text-lg font-semibold text-white">{region.region}</span>
@@ -664,7 +664,7 @@ export default function MacroModels() {
                   <ScoreRing score={region.score} size={70} />
                 </div>
                 {/* ENHANCED: Description */}
-                <p className="text-sm text-zinc-400 leading-relaxed border-t border-zinc-800/30 pt-4">
+                <p className="text-sm text-zinc-400 leading-relaxed border-t border-white/[0.06] pt-4">
                   {region.description}
                 </p>
               </div>
@@ -693,11 +693,11 @@ export default function MacroModels() {
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center gap-3 text-zinc-400 hover:text-white transition-colors group"
           >
-            <div className="p-1.5 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-800 transition-colors">
+            <div className="p-1.5 rounded-lg bg-white/[0.04] group-hover:bg-white/[0.06] transition-colors">
               {showAdvanced ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </div>
             <span className="text-sm font-medium">Advanced Models</span>
-            <span className="text-xs text-zinc-600 px-2 py-0.5 bg-zinc-800/50 rounded">12</span>
+            <span className="text-xs text-zinc-600 px-2 py-0.5 bg-white/[0.04] rounded">12</span>
           </button>
 
           {showAdvanced && (
@@ -716,7 +716,7 @@ export default function MacroModels() {
                 { name: 'MOVE Index', value: '98', trend: 'down' as const },
                 { name: 'DXY Dollar Index', value: '104.2', trend: 'down' as const },
               ].map((m, i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/20 border border-zinc-800/30 hover:border-zinc-700/40 transition-colors">
+                <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] transition-colors">
                   <span className="text-sm text-zinc-400">{m.name}</span>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-white font-medium">{m.value}</span>
@@ -729,7 +729,7 @@ export default function MacroModels() {
         </section>
 
         {/* Footer */}
-        <footer className="pt-8 border-t border-zinc-800/30">
+        <footer className="pt-8 border-t border-white/[0.06]">
           <p className="text-xs text-zinc-600 leading-relaxed">
             Data sources: BEA, BLS, ISM, Federal Reserve, Treasury, CBOE. Models updated in real-time. Past performance is not indicative of future results.
           </p>

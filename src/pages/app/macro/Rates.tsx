@@ -227,7 +227,7 @@ const KPICard = ({
   trend?: 'up' | 'down' | 'neutral';
   loading?: boolean;
 }) => (
-  <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-950/90 border border-zinc-800/50 rounded-xl p-5 backdrop-blur-sm hover:border-amber-500/30 transition-all duration-300 group">
+  <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 backdrop-blur-sm hover:border-white/[0.1] transition-all duration-300 group">
     <div className="flex items-start justify-between mb-3">
       <div className="p-2 rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
         <Icon className="w-5 h-5 text-amber-500" />
@@ -282,7 +282,7 @@ const ProgressBar = ({ value, max = 100, color = 'amber' }: { value: number; max
   };
   
   return (
-    <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+    <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
       <div 
         className={`h-full ${colorClasses[color] || colorClasses.amber} rounded-full transition-all duration-500`}
         style={{ width: `${percentage}%` }}
@@ -321,7 +321,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   
   return (
-    <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl">
+    <div className="bg-white/[0.03] border border-white/[0.1] rounded-lg p-3 shadow-xl">
       <p className="text-xs text-zinc-400 mb-1">{label}</p>
       {payload.map((entry: any, idx: number) => (
         <p key={idx} className="text-sm font-medium" style={{ color: entry.color }}>
@@ -460,7 +460,7 @@ const YieldDisplay = ({ yields, loading }: { yields: YieldData[]; loading: boole
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {yields.map(y => (
-        <div key={y.id} className="bg-zinc-800/30 rounded-xl p-4">
+        <div key={y.id} className="bg-white/[0.02] rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-zinc-500">{y.maturity}</span>
             <span className={`text-xs font-medium ${
@@ -525,7 +525,7 @@ export default function MacroRates() {
             <button
               onClick={refetch}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm text-zinc-300 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.06] rounded-lg text-sm text-zinc-300 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -575,7 +575,7 @@ export default function MacroRates() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-2 mb-8 border-b border-zinc-800 pb-4">
+        <div className="flex items-center gap-2 mb-8 border-b border-white/[0.06] pb-4">
           {[
             { id: 'overview', label: 'Central Banks Overview', icon: Globe },
             { id: 'differentials', label: 'Rate Differentials & Carry', icon: LineChart },
@@ -587,7 +587,7 @@ export default function MacroRates() {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.id
                   ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/[0.04]'
               }`}
             >
               <tab.icon className="w-4 h-4" />
@@ -600,8 +600,8 @@ export default function MacroRates() {
         {activeTab === 'overview' && (
           <div className="space-y-8">
             {/* Central Banks Table */}
-            <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden backdrop-blur-sm">
-              <div className="p-6 border-b border-zinc-800/50">
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="p-6 border-b border-white/[0.06]">
                 <SectionHeader
                   title="Global Central Banks Overview"
                   subtitle="Policy rates, decisions, and outlook for major central banks"
@@ -617,7 +617,7 @@ export default function MacroRates() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-zinc-800/50">
+                      <tr className="border-b border-white/[0.06]">
                         <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider px-6 py-4">Bank</th>
                         <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider px-4 py-4">Currency</th>
                         <th className="text-right text-xs font-medium text-zinc-500 uppercase tracking-wider px-4 py-4">Current Rate</th>
@@ -632,14 +632,14 @@ export default function MacroRates() {
                       {banks.map((bank) => (
                         <tr 
                           key={bank.id}
-                          className={`border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors cursor-pointer ${
+                          className={`border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors cursor-pointer ${
                             selectedBank === bank.id ? 'bg-amber-500/5' : ''
                           }`}
                           onClick={() => setSelectedBank(selectedBank === bank.id ? null : bank.id)}
                         >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center border border-zinc-700/50">
+                              <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex items-center justify-center border border-white/[0.1]">
                                 <span className="text-sm font-bold text-amber-500">{bank.shortName}</span>
                               </div>
                               <div>
@@ -649,7 +649,7 @@ export default function MacroRates() {
                             </div>
                           </td>
                           <td className="px-4 py-4">
-                            <span className="px-2.5 py-1 rounded-md bg-zinc-800 text-zinc-300 text-sm font-mono">
+                            <span className="px-2.5 py-1 rounded-md bg-white/[0.06] text-zinc-300 text-sm font-mono">
                               {bank.currency}
                             </span>
                           </td>
@@ -706,7 +706,7 @@ export default function MacroRates() {
 
             {/* Rate History Chart */}
             {banks.length > 0 && (
-              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-sm">
                 <SectionHeader
                   title="Rate Decision History"
                   subtitle="Recent policy rate changes by central bank"
@@ -718,7 +718,7 @@ export default function MacroRates() {
 
             {/* Momentum Engine */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-sm">
                 <SectionHeader
                   title="Interest Rate Momentum Engine"
                   subtitle="Policy direction and momentum analysis"
@@ -727,7 +727,7 @@ export default function MacroRates() {
                 
                 <div className="space-y-4">
                   {banks.slice(0, 5).map(bank => (
-                    <div key={bank.id} className="bg-zinc-800/30 rounded-xl p-4">
+                    <div key={bank.id} className="bg-white/[0.02] rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <span className="text-sm font-bold text-amber-500">{bank.shortName}</span>
@@ -757,7 +757,7 @@ export default function MacroRates() {
               </div>
 
               {/* Currency Rate Overview */}
-              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-sm">
                 <SectionHeader
                   title="Currency Rate Overview"
                   subtitle="Quick reference for major currency policy rates"
@@ -766,7 +766,7 @@ export default function MacroRates() {
                 
                 <div className="grid grid-cols-2 gap-3">
                   {banks.map(bank => (
-                    <div key={bank.id} className="bg-zinc-800/30 rounded-xl p-4 hover:bg-zinc-800/50 transition-colors">
+                    <div key={bank.id} className="bg-white/[0.02] rounded-xl p-4 hover:bg-white/[0.04] transition-colors">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-lg font-bold text-white">{bank.currency}</span>
                         <span className={`text-xs ${getPolicyBiasColor(bank.policyBias)}`}>
@@ -796,8 +796,8 @@ export default function MacroRates() {
         {activeTab === 'differentials' && (
           <div className="space-y-8">
             {/* Rate Differentials Table */}
-            <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden backdrop-blur-sm">
-              <div className="p-6 border-b border-zinc-800/50">
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="p-6 border-b border-white/[0.06]">
                 <SectionHeader
                   title="Interest Rate Differentials"
                   subtitle="Cross-currency rate spreads and carry trade indicators"
@@ -813,7 +813,7 @@ export default function MacroRates() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-zinc-800/50">
+                      <tr className="border-b border-white/[0.06]">
                         <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider px-6 py-4">Pair</th>
                         <th className="text-right text-xs font-medium text-zinc-500 uppercase tracking-wider px-4 py-4">Rate Diff</th>
                         <th className="text-center text-xs font-medium text-zinc-500 uppercase tracking-wider px-4 py-4">Trend</th>
@@ -825,7 +825,7 @@ export default function MacroRates() {
                     </thead>
                     <tbody>
                       {differentials.map((rd) => (
-                        <tr key={rd.pair} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors">
+                        <tr key={rd.pair} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                           <td className="px-6 py-4">
                             <span className="font-mono font-bold text-white">{rd.pair}</span>
                           </td>
@@ -888,7 +888,7 @@ export default function MacroRates() {
 
             {/* Carry Trade Finder */}
             {topCarryOpportunities.length > 0 && (
-              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-sm">
                 <SectionHeader
                   title="Top Carry Opportunities"
                   subtitle="Best opportunities based on rate differentials and momentum"
@@ -899,10 +899,10 @@ export default function MacroRates() {
                   {topCarryOpportunities.map((opp, idx) => (
                     <div 
                       key={opp.pair}
-                      className={`relative bg-gradient-to-br rounded-xl p-5 border ${
-                        idx === 0 
-                          ? 'from-amber-500/10 to-amber-600/5 border-amber-500/30' 
-                          : 'from-zinc-800/50 to-zinc-900/50 border-zinc-700/50'
+                      className={`relative rounded-xl p-5 border ${
+                        idx === 0
+                          ? 'bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/30'
+                          : 'bg-white/[0.03] border-white/[0.06]'
                       }`}
                     >
                       {idx === 0 && (
@@ -933,7 +933,7 @@ export default function MacroRates() {
                         </div>
                       </div>
                       
-                      <div className="pt-4 border-t border-zinc-700/50">
+                      <div className="pt-4 border-t border-white/[0.1]">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-zinc-500">Carry Score</span>
                           <span className="text-sm font-bold text-amber-500">{opp.carryScore}</span>
@@ -951,7 +951,7 @@ export default function MacroRates() {
         {activeTab === 'forecast' && (
           <div className="space-y-8">
             {/* Treasury Yields */}
-            <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-sm">
               <SectionHeader
                 title="US Treasury Yields"
                 subtitle="Current yields across the maturity curve"
@@ -962,7 +962,7 @@ export default function MacroRates() {
 
             {/* 10Y Yield Chart */}
             {yields.length > 0 && (
-              <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-6 backdrop-blur-sm">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6 backdrop-blur-sm">
                 <SectionHeader
                   title="10-Year Treasury Yield History"
                   subtitle="60-day historical performance"
@@ -973,8 +973,8 @@ export default function MacroRates() {
             )}
 
             {/* Rate Forecasts Table */}
-            <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden backdrop-blur-sm">
-              <div className="p-6 border-b border-zinc-800/50">
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden backdrop-blur-sm">
+              <div className="p-6 border-b border-white/[0.06]">
                 <SectionHeader
                   title="Policy Rate Summary"
                   subtitle="Current rates and recent decision history"
@@ -990,7 +990,7 @@ export default function MacroRates() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-zinc-800/50">
+                      <tr className="border-b border-white/[0.06]">
                         <th className="text-left text-xs font-medium text-zinc-500 uppercase tracking-wider px-6 py-4">Bank</th>
                         <th className="text-right text-xs font-medium text-zinc-500 uppercase tracking-wider px-4 py-4">Current</th>
                         <th className="text-right text-xs font-medium text-zinc-500 uppercase tracking-wider px-4 py-4">YTD Change</th>
@@ -1005,7 +1005,7 @@ export default function MacroRates() {
                         const decisionCount = bank.decisions.filter(d => d.change !== 0).length;
                         
                         return (
-                          <tr key={bank.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors">
+                          <tr key={bank.id} className="border-b border-white/[0.06] hover:bg-white/[0.06] transition-colors">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-bold text-amber-500">{bank.shortName}</span>
@@ -1079,7 +1079,7 @@ export default function MacroRates() {
                   : ''}
                 Monitor upcoming meetings for policy shifts.
               </p>
-              <div className="flex items-center gap-6 mt-4 pt-4 border-t border-zinc-700/50">
+              <div className="flex items-center gap-6 mt-4 pt-4 border-t border-white/[0.1]">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-zinc-500" />
                   <DataFreshness asOf={lastFetchedAt} ttlHours={36} />
