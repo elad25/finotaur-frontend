@@ -2,14 +2,16 @@
 // ============================================================
 // Premium cinematic globe hero for COPILOT dashboard.
 // Builds on the base GlobeLoader canvas but adds:
-//   1. City lights — glowing dots on major cities with twinkle
+//   1. Traveling light pulses — beams sweeping great-circle arcs between
+//      land points ("data traveling around the world"); endpoints sourced
+//      from CITY_LIGHTS, routed via a seeded PRNG (no Math.random at render)
 //   2. Atmosphere halo + rim arc
 //   3. Depth-modulated wireframe (limb dimming)
 //   4. Holographic pedestal (concentric ellipses + reflection glow)
 // ============================================================
 
 import { useEffect, useRef, useState } from 'react';
-import { geoOrthographic, geoPath, geoGraticule10 } from 'd3-geo';
+import { geoOrthographic, geoPath, geoGraticule10, geoInterpolate, geoDistance } from 'd3-geo';
 import { feature, mesh } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
 import type { Feature, FeatureCollection, MultiLineString } from 'geojson';
@@ -21,10 +23,19 @@ const INK_HAIR   = 'rgba(244, 217, 123, 0.18)';
 const INK_FILL   = 'rgba(201, 166, 70, 0.10)';
 const LIMB_OUTER = 'rgba(0, 0, 0, 0.52)';
 
+// Pulse streak color components (gold) — used in drawArc
+const PULSE_R = 244;
+const PULSE_G = 217;
+const PULSE_B = 123;
+
 // ─── Canvas constants (internal design-space) ─────────────────────────────────
 const SIZE   = 400;
 const CENTER = SIZE / 2;
 const R      = 148;
+
+// Scale factor vs the 200-px reference design (R_ref=88).
+// Used to scale pixel sizes (bloom radius, line widths, shadow blur) proportionally.
+const SCALE = R / 88; // ≈ 1.682
 
 // ─── City lights — [longitude, latitude, brightness 0-1, twinkle phase] ──────
 // ~80 points: 42 real major cities + 38 pseudo-random land-area points
@@ -115,6 +126,32 @@ const CITY_LIGHTS: Array<[number, number, number, number]> = [
   [ 10.7,  63.4, 0.4, 1.8],
 ];
 
+// ─── Seeded PRNG (mulberry32) — deterministic pulse routing, no Math.random() ──
+// Seed is a fixed constant so routing is lively but not nondeterministic at render.
+function mulberry32(seed: number) {
+  let s = seed;
+  return function (): number {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let z = Math.imul(s ^ (s >>> 15), 1 | s);
+    z = z + Math.imul(z ^ (z >>> 7), 61 | z) ^ z;
+    return ((z ^ (z >>> 14)) >>> 0) / 0xFFFFFFFF;
+  };
+}
+const prng = mulberry32(0xDEADBEEF);
+
+// Extract [lng, lat] coordinate pairs from CITY_LIGHTS for pulse endpoints
+const PULSE_POINTS: Array<[number, number]> = CITY_LIGHTS.map(([lng, lat]) => [lng, lat]);
+
+// ─── Pulse arc type ───────────────────────────────────────────────────────────
+type PulseArc = {
+  a: [number, number];
+  b: [number, number];
+  interp: (t: number) => [number, number];
+  t: number;
+  speed: number;
+  life: number;
+};
+
 // ─── World data cache ─────────────────────────────────────────────────────────
 type WorldData = {
   land: Feature | FeatureCollection;
@@ -177,12 +214,114 @@ export function GlobeHero({
 
     const t0 = performance.now();
 
-    // Pre-compute per-city dot radii (deterministic, never in hot loop)
-    const cityRadii = CITY_LIGHTS.map(([,, brightness]) =>
-      1.0 + brightness * 1.5
-    );
+    // ── Pulse arc state ──────────────────────────────────────────────────────
+    const arcs: PulseArc[] = [];
+    let sinceSpawn = 0;
+    let lastFrameTime = t0;
 
-    const drawFrame = (t: number) => {
+    function spawnArc() {
+      const pts = PULSE_POINTS;
+      if (pts.length < 2) return;
+      const a = pts[(prng() * pts.length) | 0];
+      let b = pts[(prng() * pts.length) | 0];
+      let guard = 0;
+      while (b === a || geoDistance(a, b) < 0.5) {
+        b = pts[(prng() * pts.length) | 0];
+        if (++guard > 12) break;
+      }
+      arcs.push({
+        a, b,
+        interp: geoInterpolate(a, b) as (t: number) => [number, number],
+        t: 0,
+        speed: 0.45 + prng() * 0.35,
+        life: 0,
+      });
+    }
+
+    // Seed 3 arcs at staggered progress so globe reads live immediately
+    for (let i = 0; i < 3; i++) {
+      spawnArc();
+      if (arcs.length > 0) arcs[arcs.length - 1].t = 0.2 + i * 0.2;
+    }
+
+    function stepPulses(dt: number) {
+      sinceSpawn += dt;
+      if (sinceSpawn > 0.55 && arcs.length < 5) {
+        sinceSpawn = 0;
+        spawnArc();
+      }
+      for (let i = arcs.length - 1; i >= 0; i--) {
+        arcs[i].t += dt * arcs[i].speed;
+        arcs[i].life += dt;
+        if (arcs[i].t >= 1) arcs.splice(i, 1);
+      }
+    }
+
+    function drawArc(arc: PulseArc) {
+      const head = arc.t;
+      const tailLen = 0.5;
+      const tail = Math.max(0, head - tailLen);
+      const N = 36;
+
+      // Fade in over first fraction of life, fade out near destination
+      const fade = Math.min(1, arc.life * 2.6) * Math.min(1, (1 - arc.t) * 5 + 0.1);
+      if (fade <= 0.01) return;
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Draw the streak as short sub-segments ramping up toward the head
+      let prev = arc.interp(tail) as [number, number];
+      for (let i = 1; i <= N; i++) {
+        const f = i / N;                // 0 at tail → 1 at head
+        const pt = arc.interp(tail + (head - tail) * f) as [number, number];
+        const ease = f * f;             // brightness concentrated at head
+
+        ctx.beginPath();
+        path({ type: 'LineString', coordinates: [prev, pt] });
+        ctx.strokeStyle = `rgba(${PULSE_R},${PULSE_G},${PULSE_B},1)`;
+        ctx.globalAlpha = fade * (0.04 + ease * 0.62);
+        ctx.lineWidth = (0.3 + ease * 1.5) * SCALE;
+        ctx.shadowColor = `rgba(${PULSE_R},${PULSE_G},${PULSE_B},1)`;
+        ctx.shadowBlur  = (0.5 + ease * 3) * SCALE;
+        ctx.stroke();
+        prev = pt;
+      }
+
+      // Head bloom — radial gradient halo at the leading point
+      const hp = arc.interp(head) as [number, number];
+      const rotArr = projection.rotate();
+      const rotCenter: [number, number] = [-rotArr[0], -rotArr[1]];
+      if (geoDistance(hp, rotCenter) < Math.PI / 2 - 0.02) {
+        const p = projection(hp);
+        if (p) {
+          const bloomR = 3.8 * SCALE;
+          const coreR  = 0.9 * SCALE;
+          const g = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], bloomR);
+          g.addColorStop(0,   `rgba(${PULSE_R},${PULSE_G},${PULSE_B},1)`);
+          g.addColorStop(0.4, `rgba(${PULSE_R},${PULSE_G},${PULSE_B},0.45)`);
+          g.addColorStop(1,   `rgba(${PULSE_R},${PULSE_G},${PULSE_B},0)`);
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = fade;
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], bloomR, 0, 2 * Math.PI);
+          ctx.fill();
+          // Tiny bright core dot
+          ctx.globalAlpha = fade;
+          ctx.fillStyle = `rgba(${PULSE_R},${PULSE_G},${PULSE_B},1)`;
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], coreR, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      }
+
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    const drawFrame = (t: number, _dt: number) => {
       ctx.clearRect(0, 0, SIZE, SIZE);
 
       const lambda = reduceMotion ? -25 : ((t * 12) % 360) - 180;
@@ -246,39 +385,12 @@ export function GlobeHero({
         ctx.stroke();
       }
 
-      // ── 6. City lights ───────────────────────────────────────────────────
-      for (let i = 0; i < CITY_LIGHTS.length; i++) {
-        const [lng, lat, brightness, phase] = CITY_LIGHTS[i];
-        const proj = projection([lng, lat]);
-        if (!proj) continue;
-        const [px, py] = proj;
-
-        // Only draw if on the facing hemisphere (projection returns null for
-        // clipped points when clipAngle(90) is set, but verify within disc)
-        const dx = px - CENTER;
-        const dy = py - CENTER;
-        if (dx * dx + dy * dy > R * R) continue;
-
-        // Twinkle: modulate alpha with a sinusoidal per-dot phase
-        const twinkle = 0.65 + 0.35 * Math.sin(t * 2.1 + phase * 3.7);
-        const alpha = brightness * twinkle;
-        const dotR = cityRadii[i];
-
-        // Soft glow (larger, low-alpha radial)
-        const glow = ctx.createRadialGradient(px, py, 0, px, py, dotR * 3.5);
-        glow.addColorStop(0,   `rgba(244, 217, 123, ${(alpha * 0.6).toFixed(3)})`);
-        glow.addColorStop(0.4, `rgba(244, 217, 123, ${(alpha * 0.18).toFixed(3)})`);
-        glow.addColorStop(1,   'rgba(244, 217, 123, 0)');
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(px, py, dotR * 3.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Hot core
-        ctx.fillStyle = `rgba(244, 217, 123, ${Math.min(alpha, 1).toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(px, py, dotR, 0, Math.PI * 2);
-        ctx.fill();
+      // ── 6. Traveling light pulses ─────────────────────────────────────────
+      // Drawn last within the sphere clip so streaks hug the globe surface.
+      // Head bloom is also drawn here in the same pass (matching handoff draw order).
+      // prefers-reduced-motion: suppress pulses entirely (no static fallback needed).
+      if (!reduceMotion) {
+        for (let i = 0; i < arcs.length; i++) drawArc(arcs[i]);
       }
 
       // ── 7. Limb shading (depth on wireframe + globe feel) ────────────────
@@ -316,7 +428,10 @@ export function GlobeHero({
 
     const tick = (now: number) => {
       const t = (now - t0) / 1000;
-      drawFrame(t);
+      const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
+      if (!reduceMotion) stepPulses(dt);
+      drawFrame(t, dt);
       if (!reduceMotion) {
         rafRef.current = requestAnimationFrame(tick);
       }
