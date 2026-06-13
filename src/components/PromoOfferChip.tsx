@@ -1,11 +1,11 @@
-// src/components/PromoOfferBanner.tsx
+// src/components/PromoOfferChip.tsx
 // =====================================================
-// FINOTAUR PROMO OFFER BANNER — JOIN2026
+// FINOTAUR PROMO OFFER CHIP — JOIN2026
 // =====================================================
-// Site-wide, dismissible top strip (green→purple, gently animated) that
-// opens a popup revealing the discount code. Mounted in ProtectedAppLayout.
-// Click the strip  → popup with the JOIN2026 code + copy-to-clipboard.
-// Click the X      → dismiss (persisted in localStorage).
+// Compact green pill that lives in the TopNav (between the FINOTAUR logo
+// and the search omnibox). Gently animated (shine sweep + pulsing gift)
+// to draw clicks. Click → popup revealing the JOIN2026 code with
+// copy-to-clipboard.
 //
 // Offer: Trade Journal Premium for ~$10/mo — $35.00 off the first 3 payments
 // (Premium regular price $44.99/mo). All copy is English (FINOTAUR iron rule).
@@ -17,28 +17,10 @@ import { X, Gift, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PROMO_CODE = 'JOIN2026';
-const DISMISS_KEY = 'finotaur_promo_join2026_dismissed';
 
-export default function PromoOfferBanner() {
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(DISMISS_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
+export default function PromoOfferChip() {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const handleDismiss = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDismissed(true);
-    try {
-      localStorage.setItem(DISMISS_KEY, '1');
-    } catch {
-      /* ignore storage failures */
-    }
-  };
 
   const handleCopyCode = async () => {
     try {
@@ -51,65 +33,50 @@ export default function PromoOfferBanner() {
     }
   };
 
-  if (dismissed) return null;
-
   return (
     <>
-      {/* ── Top strip ─────────────────────────────────────────────── */}
+      {/* ── Green chip (in the TopNav) ────────────────────────────── */}
       <motion.button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Open the Trade Journal Premium offer"
-        className="relative flex w-full items-center justify-center gap-2 overflow-hidden px-10 py-2 text-center text-sm font-semibold text-white"
+        aria-label="Trade Journal Premium offer — $10/month"
+        className="group relative inline-flex flex-shrink-0 items-center gap-1.5 overflow-hidden rounded-full px-3 py-1.5 text-xs font-semibold text-white"
         style={{
-          backgroundImage:
-            'linear-gradient(90deg, #16a34a 0%, #22c55e 25%, #7c3aed 75%, #9333ea 100%)',
-          backgroundSize: '200% 100%',
+          backgroundImage: 'linear-gradient(135deg, #15803d 0%, #22c55e 50%, #16a34a 100%)',
+          boxShadow: '0 0 0 1px rgba(34,197,94,0.35), 0 2px 10px rgba(34,197,94,0.35)',
         }}
-        animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+        animate={{ boxShadow: [
+          '0 0 0 1px rgba(34,197,94,0.35), 0 2px 10px rgba(34,197,94,0.30)',
+          '0 0 0 1px rgba(34,197,94,0.55), 0 2px 16px rgba(34,197,94,0.55)',
+          '0 0 0 1px rgba(34,197,94,0.35), 0 2px 10px rgba(34,197,94,0.30)',
+        ] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        whileHover={{ scale: 1.04 }}
+        whileTap={{ scale: 0.97 }}
       >
-        {/* Moving shine sweep — adds subtle motion to draw the eye */}
+        {/* Moving shine sweep */}
         <motion.span
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 w-1/3"
           style={{
             background:
-              'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%)',
+              'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)',
           }}
-          animate={{ x: ['-150%', '450%'] }}
-          transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+          animate={{ x: ['-150%', '400%'] }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1.2 }}
         />
 
         <motion.span
           aria-hidden="true"
-          animate={{ scale: [1, 1.2, 1], rotate: [0, 12, -12, 0] }}
+          animate={{ rotate: [0, 12, -12, 0] }}
           transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
           className="relative inline-flex"
         >
-          <Gift className="h-4 w-4 text-yellow-200" />
+          <Gift className="h-3.5 w-3.5 text-yellow-100" />
         </motion.span>
 
-        <span className="relative">
-          Limited offer — Trade Journal Premium for just{' '}
-          <span className="font-extrabold underline decoration-yellow-200 decoration-2 underline-offset-2">
-            $10/mo
-          </span>
-          . Tap to reveal your code
-        </span>
-
-        {/* Dismiss */}
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={handleDismiss}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') handleDismiss(e as unknown as React.MouseEvent);
-          }}
-          aria-label="Dismiss offer"
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
-        >
-          <X className="h-4 w-4" />
+        <span className="relative hidden whitespace-nowrap sm:inline">
+          Premium for $10
         </span>
       </motion.button>
 
@@ -123,7 +90,7 @@ export default function PromoOfferBanner() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm"
+              className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm"
             />
 
             {/* Modal */}
@@ -132,7 +99,7 @@ export default function PromoOfferBanner() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+              className="fixed inset-0 z-[200] flex items-center justify-center p-4"
             >
               <div
                 role="dialog"
@@ -141,9 +108,9 @@ export default function PromoOfferBanner() {
                 className="relative w-full max-w-md overflow-hidden rounded-2xl"
                 style={{
                   background:
-                    'linear-gradient(135deg, rgba(16,18,16,0.98) 0%, rgba(10,10,14,0.99) 100%)',
-                  border: '2px solid rgba(124,58,237,0.55)',
-                  boxShadow: '0 0 60px rgba(34,197,94,0.25), 0 0 80px rgba(124,58,237,0.25)',
+                    'linear-gradient(135deg, rgba(13,20,15,0.98) 0%, rgba(8,12,9,0.99) 100%)',
+                  border: '2px solid rgba(34,197,94,0.55)',
+                  boxShadow: '0 0 60px rgba(34,197,94,0.30)',
                 }}
               >
                 {/* Close */}
@@ -164,8 +131,8 @@ export default function PromoOfferBanner() {
                     className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full"
                     style={{
                       background:
-                        'linear-gradient(135deg, rgba(34,197,94,0.3) 0%, rgba(124,58,237,0.25) 100%)',
-                      border: '2px solid rgba(124,58,237,0.5)',
+                        'linear-gradient(135deg, rgba(34,197,94,0.35) 0%, rgba(22,163,74,0.18) 100%)',
+                      border: '2px solid rgba(34,197,94,0.5)',
                     }}
                   >
                     <Gift className="h-8 w-8 text-emerald-300" />
@@ -178,9 +145,7 @@ export default function PromoOfferBanner() {
                     <span className="mr-2 align-middle text-base font-medium text-slate-500 line-through">
                       $44.99
                     </span>
-                    <span className="bg-gradient-to-r from-emerald-400 to-violet-400 bg-clip-text align-middle text-transparent">
-                      $10
-                    </span>
+                    <span className="align-middle text-emerald-400">$10</span>
                     <span className="align-middle text-base font-medium text-slate-400">
                       /month
                     </span>
@@ -205,19 +170,19 @@ export default function PromoOfferBanner() {
                     className="group relative cursor-pointer rounded-xl p-4 transition-transform hover:scale-[1.01]"
                     style={{
                       background:
-                        'linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(124,58,237,0.12) 100%)',
-                      border: '2px dashed rgba(124,58,237,0.5)',
+                        'linear-gradient(135deg, rgba(34,197,94,0.14) 0%, rgba(22,163,74,0.08) 100%)',
+                      border: '2px dashed rgba(34,197,94,0.5)',
                     }}
                   >
                     <div className="flex items-center justify-between">
                       <p className="text-2xl font-bold tracking-wider text-white">
                         {PROMO_CODE}
                       </p>
-                      <span className="rounded-lg bg-violet-500/20 p-3 transition-colors group-hover:bg-violet-500/30">
+                      <span className="rounded-lg bg-emerald-500/20 p-3 transition-colors group-hover:bg-emerald-500/30">
                         {copied ? (
                           <Check className="h-5 w-5 text-emerald-400" />
                         ) : (
-                          <Copy className="h-5 w-5 text-violet-300" />
+                          <Copy className="h-5 w-5 text-emerald-300" />
                         )}
                       </span>
                     </div>

@@ -23,6 +23,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
+import PromoOfferChip from '@/components/PromoOfferChip';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useProductDrawer } from '@/contexts/ProductDrawerContext';
 import {
@@ -125,6 +126,9 @@ export const TopNav = () => {
           >
             <Menu className="h-5 w-5" />
           </button>
+
+          {/* 🎁 Promo offer chip — JOIN2026 (between logo and search) */}
+          <PromoOfferChip />
         </div>
 
         {/* ── CENTER: GlobalOmnibox — truly viewport-centered ── */}
