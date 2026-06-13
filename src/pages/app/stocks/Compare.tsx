@@ -90,12 +90,23 @@ function buildChartData(series: SeriesState[]): Record<string, string | number>[
   });
 }
 
+/**
+ * Parse a chart date key into a Date. Bar timestamps from /api/etf/compare/bars
+ * arrive as epoch-ms NUMBERS, which become numeric strings once used as the chart
+ * dataKey — `new Date("1749821400000")` yields "Invalid Date", so coerce numeric
+ * strings back to a number first. ISO date strings still parse normally.
+ */
+function toBarDate(dateStr: string): Date {
+  const n = Number(dateStr);
+  return dateStr.trim() !== '' && Number.isFinite(n) ? new Date(n) : new Date(dateStr);
+}
+
 /** Format an X-axis tick based on whether the range is intraday or daily. */
 function makeTickFormatter(range: EtfBarsRange): (dateStr: string) => string {
   if (INTRADAY_RANGES.has(range)) {
     return (dateStr: string) => {
       try {
-        const d = new Date(dateStr);
+        const d = toBarDate(dateStr);
         const month = d.toLocaleDateString('en-US', { month: 'short' });
         const day = d.getDate();
         const h = d.getHours().toString().padStart(2, '0');
@@ -108,7 +119,7 @@ function makeTickFormatter(range: EtfBarsRange): (dateStr: string) => string {
   }
   return (dateStr: string) => {
     try {
-      return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      return toBarDate(dateStr).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     } catch {
       return dateStr;
     }
@@ -118,7 +129,7 @@ function makeTickFormatter(range: EtfBarsRange): (dateStr: string) => string {
 /** Format a date for the tooltip label. */
 function formatTooltipDate(dateStr: string, range: EtfBarsRange): string {
   try {
-    const d = new Date(dateStr);
+    const d = toBarDate(dateStr);
     if (INTRADAY_RANGES.has(range)) {
       return d.toLocaleString('en-US', {
         month: 'short', day: 'numeric',

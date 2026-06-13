@@ -82,8 +82,10 @@ interface RawFundamentals {
   };
 }
 
-/** Coerce a raw value to a finite number or null. */
+/** Coerce a raw value to a finite number or null. Null/undefined/'' → null
+ *  (NOT 0 — `Number(null)` is 0, which would render missing data as a real "0"). */
 function num(v: unknown): number | null {
+  if (v == null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
