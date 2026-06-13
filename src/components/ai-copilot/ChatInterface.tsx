@@ -16,6 +16,7 @@ import {
   Shield,
   Building2,
   LineChart,
+  Paperclip,
   LucideIcon,
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
@@ -46,6 +47,12 @@ interface ChatInterfaceProps {
    *  'aboveInput' — compact pill bubbles placed directly above the input bar;
    *                 chips vanish once the conversation has messages. */
   promptPlacement?: 'center' | 'aboveInput';
+  /**
+   * Optional callback invoked when the user selects or pastes an image file.
+   * When provided, a Paperclip upload button is shown in the composer row.
+   * When absent, no upload affordance is rendered (backward compatible).
+   */
+  onImageSelected?: (file: File) => void;
 }
 
 interface PromptChip {
@@ -86,12 +93,14 @@ export const ChatInterface = memo(function ChatInterface({
   placeholder = 'Ask about market analysis, trade ideas, reports...',
   disclaimer = 'AI responses are based on FINOTAUR reports. Not financial advice.',
   promptPlacement = 'center',
+  onImageSelected,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Auto-scroll to bottom
   useEffect(() => {
@@ -134,6 +143,30 @@ export const ChatInterface = memo(function ChatInterface({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  // Image upload via hidden file input
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImageSelected) {
+      onImageSelected(file);
+    }
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+  };
+
+  // Image paste from clipboard
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onImageSelected) return;
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith('image/'));
+    if (imageItem) {
+      const file = imageItem.getAsFile();
+      if (file) {
+        e.preventDefault();
+        onImageSelected(file);
+      }
     }
   };
   
@@ -266,15 +299,43 @@ export const ChatInterface = memo(function ChatInterface({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 placeholder={placeholder}
                 disabled={isLoading}
                 rows={1}
-                className="min-h-[56px] max-h-[200px] w-full resize-none bg-transparent py-4 pl-5 pr-14 text-ink-primary placeholder:text-ink-muted focus:outline-none"
+                className={cn(
+                  "min-h-[56px] max-h-[200px] w-full resize-none bg-transparent py-4 text-ink-primary placeholder:text-ink-muted focus:outline-none",
+                  onImageSelected ? "pl-5 pr-[5.5rem]" : "pl-5 pr-14",
+                )}
                 style={{ scrollbarWidth: 'thin' }}
               />
-              
+
+              {/* Hidden file input for image upload */}
+              {onImageSelected && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleFileInputChange}
+                />
+              )}
+
+              {/* Paperclip upload button — only when onImageSelected is provided */}
+              {onImageSelected && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  title="Upload screenshot"
+                  className="absolute bottom-3 right-14 flex h-10 w-10 items-center justify-center rounded-[12px] text-ink-muted transition-colors hover:text-gold-primary disabled:opacity-40"
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
+              )}
+
               {/* Send Button */}
               <button
                 onClick={handleSend}

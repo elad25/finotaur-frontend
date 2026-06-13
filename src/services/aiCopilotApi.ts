@@ -33,6 +33,26 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Trade extraction types (used by extractTradeFromImage)
+// ---------------------------------------------------------------------------
+
+export interface TradeExtraction {
+  symbol: string | null;
+  side: 'LONG' | 'SHORT' | null;
+  asset_class: 'stock' | 'etf' | 'futures' | 'options' | 'crypto' | 'forex' | null;
+  entry_price: number | null;
+  exit_price: number | null;
+  stop_price: number | null;
+  take_profit_price: number | null;
+  quantity: number | null;
+  rr: number | null;
+  outcome: 'WIN' | 'LOSS' | 'BE' | null;
+  confidence: Record<string, unknown>;
+  missing: string[];
+  notes: string | null;
+}
+
 // Types
 interface ChatResponse {
   success: boolean;
@@ -367,6 +387,32 @@ export const aiCopilotApi = {
     }
 
     return response.json() as Promise<{ tagged: number }>;
+  },
+
+  /**
+   * Extract trade data from a TradingView screenshot.
+   * Body: { imageBase64, mediaType, userText? }
+   * Returns { extraction, tier } where extraction may contain null fields.
+   */
+  async extractTradeFromImage(
+    imageBase64: string,
+    mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
+    userText?: string,
+  ): Promise<{ extraction: TradeExtraction; tier: string }> {
+    const headers = await getAuthHeaders();
+
+    const response = await fetch(`${API_BASE}/api/ai/fino/extract-trade`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ imageBase64, mediaType, userText }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || body.error || `Extract failed (${response.status})`);
+    }
+
+    return response.json() as Promise<{ extraction: TradeExtraction; tier: string }>;
   },
 
   /**
