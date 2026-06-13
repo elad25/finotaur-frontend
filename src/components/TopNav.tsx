@@ -127,8 +127,10 @@ export const TopNav = () => {
             <Menu className="h-5 w-5" />
           </button>
 
-          {/* 🎁 Promo offer chip — JOIN2026 (between logo and search) */}
-          <PromoOfferChip />
+          {/* 🎁 Promo offer chip — JOIN2026. ml-auto pushes it to the right
+              of the left column (toward the centered search), with a margin
+              so it sits a touch left of the omnibox rather than flush. */}
+          <PromoOfferChip className="ml-auto mr-8 lg:mr-20" />
         </div>
 
         {/* ── CENTER: GlobalOmnibox — truly viewport-centered ── */}
