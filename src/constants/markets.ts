@@ -126,7 +126,6 @@ export type MarketFunction =
   | 'macro-inflation'
   | 'macro-global'
   | 'macro-risk'
-  | 'macro-calendar'
   | 'macro-desk';
 
 export interface MarketFunctionMeta {
@@ -543,16 +542,6 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       macro: '/app/macro/indicators',
     },
   },
-  {
-    id: 'events',
-    label: 'Major Events',
-    icon: Zap,
-    routes: {
-      macro: '/app/macro/events',
-    },
-    locked: true, // closed to public (not in free Research Lab list)
-  },
-
   // ── Options-specific ─────────────────────────────────────────────────────
   {
     id: 'options-chain',
@@ -704,7 +693,6 @@ const MACRO_FUNCTIONS: MarketFunctionMeta[] = [
   { id: 'macro-inflation', label: 'Inflation & Growth',   icon: BarChart3,       routes: { macro: '/app/macro/indicators' }, locked: false },
   { id: 'macro-global',    label: 'Global Markets',       icon: Map,             routes: { macro: '/app/macro/global' },     locked: false },
   { id: 'macro-risk',      label: 'Risk & Regime',        icon: Activity,        routes: { macro: '/app/macro/risk' },       locked: false },
-  { id: 'macro-calendar',  label: 'Economic Calendar',    icon: Calendar,        routes: { macro: '/app/macro/calendar' },   locked: false },
   { id: 'macro-desk',      label: 'Macro Desk',           icon: FileText,        routes: { macro: '/app/macro/desk' },       locked: false },
 ];
 

@@ -240,7 +240,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Inflation & Growth', path: '/app/macro/indicators', icon: BarChart3 },
     { label: 'Global Markets', path: '/app/macro/global', icon: Map },
     { label: 'Risk & Regime', path: '/app/macro/risk', icon: Activity },
-    { label: 'Economic Calendar', path: '/app/macro/calendar', icon: Calendar },
     { label: 'Macro Desk', path: '/app/macro/desk', icon: FileText },
   ],
 

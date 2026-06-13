@@ -347,7 +347,6 @@ const MacroRatesCentralBanks = lazy(() => import("@/pages/app/macro/tabs/RatesCe
 const MacroInflationGrowth = lazy(() => import("@/pages/app/macro/tabs/InflationGrowth"));
 const MacroGlobalMarkets = lazy(() => import("@/pages/app/macro/tabs/GlobalMarkets"));
 const MacroRiskRegime = lazy(() => import("@/pages/app/macro/tabs/RiskRegime"));
-const MacroEconomicCalendar = lazy(() => import("@/pages/app/macro/tabs/EconomicCalendar"));
 const MacroDeskPage = lazy(() => import("@/pages/app/macro/tabs/MacroDesk"));
 
 // Options — sealed pending licensed data feed (Track B). Pages kept on disk; routes serve ComingSoon.
@@ -635,7 +634,6 @@ function AppContent() {
           <Route path="macro/indicators" element={<LockedRoute domainId="macro"><MacroInflationGrowth /></LockedRoute>} />
           <Route path="macro/global" element={<LockedRoute domainId="macro"><MacroGlobalMarkets /></LockedRoute>} />
           <Route path="macro/risk" element={<LockedRoute domainId="macro"><MacroRiskRegime /></LockedRoute>} />
-          <Route path="macro/calendar" element={<LockedRoute domainId="macro"><MacroEconomicCalendar /></LockedRoute>} />
           <Route path="macro/desk" element={<LockedRoute domainId="macro"><MacroDeskPage /></LockedRoute>} />
 
           {/* MACRO — redirects for old paths */}
@@ -643,7 +641,6 @@ function AppContent() {
           <Route path="macro/cross-asset" element={<Navigate to="/app/macro/global?view=cross-asset" replace />} />
           <Route path="macro/global-heatmap" element={<Navigate to="/app/macro/global?view=heatmap" replace />} />
           <Route path="macro/models" element={<Navigate to="/app/macro/risk?view=models" replace />} />
-          <Route path="macro/events" element={<Navigate to="/app/macro/calendar?view=events" replace />} />
           <Route path="macro/reports" element={<Navigate to="/app/macro/desk?view=reports" replace />} />
           <Route path="macro/sentiment" element={<Navigate to="/app/macro/desk?view=sentiment" replace />} />
           <Route path="macro/news" element={<Navigate to="/app/macro/desk?view=news" replace />} />

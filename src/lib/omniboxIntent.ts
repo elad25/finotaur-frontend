@@ -47,7 +47,6 @@ export const ROUTE_CATALOGUE: RouteTarget[] = [
   { label: 'Stocks Overview',    path: '/app/stocks/overview',        group: 'Markets',      keywords: ['stocks', 'overview', 'equities'] },
   { label: 'Stocks Screener',    path: '/app/stocks/screener',        group: 'Markets',      keywords: ['screener', 'filter', 'scan', 'stocks'] },
   { label: 'Stocks News',        path: '/app/stocks/news',            group: 'Markets',      keywords: ['news', 'headlines', 'stocks'] },
-  { label: 'Economic Calendar',  path: '/app/macro/calendar',         group: 'Markets',      keywords: ['calendar', 'events', 'economic', 'macro'] },
   { label: 'Macro Overview',     path: '/app/macro/overview',         group: 'Markets',      keywords: ['macro', 'rates', 'liquidity', 'bonds'] },
   { label: 'Crypto Overview',    path: '/app/crypto/overview',        group: 'Markets',      keywords: ['crypto', 'bitcoin', 'eth', 'defi'] },
   // AI Arena

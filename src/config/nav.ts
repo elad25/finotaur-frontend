@@ -149,10 +149,8 @@ export const domains: Record<string, Domain> = {
     ],
     sidebar: [
       { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
-      { label: 'Global Calendar', path: '/app/macro/calendar', icon: Calendar },
       { label: 'Interest Rates', path: '/app/macro/rates', icon: LineChart },
       { label: 'Economic Indicators', path: '/app/macro/indicators', icon: BarChart3 },
-      { label: 'Major Events', path: '/app/macro/events', icon: Zap },
       { label: 'Reports & PDFs', path: '/app/macro/reports', icon: FileText },
       { label: 'Sentiment', path: '/app/macro/sentiment', icon: Activity },
     ],
