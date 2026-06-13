@@ -2,11 +2,10 @@
 // Premium broker connection modal for the journal dashboard.
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   Brain,
-  Building2,
   Check,
   CheckCircle2,
   ExternalLink,
@@ -14,7 +13,6 @@ import {
   Lock,
   RefreshCw,
   ShieldCheck,
-  User,
   X,
   Zap,
 } from 'lucide-react';
@@ -180,14 +178,9 @@ function EnvironmentToggle({
   );
 }
 
-// Account type sub-choice shown when Tradovate is selected.
-// 'live' = existing OAuth flow; 'prop_firm' = username/password with auto-env-detect.
-type TradovateAccountType = 'live' | 'prop_firm';
-
 export default function AddBrokerPopup({ open, onOpenChange }: Props) {
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const { isLoading, connectPropFirm, isPropFirmPending } = useTradovate();
+  const { isLoading } = useTradovate();
 
   const [selectedBroker, setSelectedBroker] = useState<BrokerName>('tradovate');
   const [connectionName, setConnectionName] = useState('');
@@ -195,10 +188,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const [error, setError] = useState('');
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [showBinancePopup, setShowBinancePopup] = useState(false);
-  // Tradovate-specific sub-choice: Live Account (OAuth) vs Prop Firm (username/password)
-  const [tradovateAccountType, setTradovateAccountType] = useState<TradovateAccountType>('live');
-  const [propUsername, setPropUsername] = useState('');
-  const [propPassword, setPropPassword] = useState('');
 
   useEffect(() => {
     if (!open) {
@@ -208,41 +197,28 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       setError('');
       setRiskAcknowledged(false);
       setShowBinancePopup(false);
-      setTradovateAccountType('live');
-      setPropUsername('');
-      setPropPassword('');
     }
   }, [open]);
 
   useEffect(() => {
     if (!open || connectionName) return;
     const config = BROKER_CONFIGS[selectedBroker];
-    if (selectedBroker === 'tradovate' && tradovateAccountType === 'prop_firm') {
-      setConnectionName('Prop Firm');
-    } else {
-      const suffix = selectedBroker === 'tradovate' || selectedBroker === 'ninja_trader'
-        ? ` (${env})`
-        : '';
-      setConnectionName(`${config.displayName}${suffix}`.slice(0, CONNECTION_NAME_MAX));
-    }
+    const suffix = selectedBroker === 'tradovate' || selectedBroker === 'ninja_trader'
+      ? ` (${env})`
+      : '';
+    setConnectionName(`${config.displayName}${suffix}`.slice(0, CONNECTION_NAME_MAX));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBroker, env, open, tradovateAccountType]);
+  }, [selectedBroker, env, open]);
 
   const config = BROKER_CONFIGS[selectedBroker];
   const isNinjaTrader = selectedBroker === 'ninja_trader';
   const usesTradovateAuth = TRADOVATE_AUTH_BROKERS.includes(selectedBroker);
-  // Prop firm path: only for Tradovate tile with 'prop_firm' sub-choice (not NinjaTrader)
-  const isPropFirmFlow = selectedBroker === 'tradovate' && tradovateAccountType === 'prop_firm';
-  // OAuth path: Live Account sub-choice for Tradovate, all NinjaTrader, IB OAuth
-  const isOAuth = (usesTradovateAuth && !isPropFirmFlow) || config.features.oauth;
+  const isOAuth = usesTradovateAuth || config.features.oauth;
 
   const canSubmit = useMemo(() => {
     if (!riskAcknowledged) return false;
     if (selectedBroker === 'binance') {
       return Boolean(user);
-    }
-    if (isPropFirmFlow) {
-      return Boolean(user) && propUsername.trim().length > 0 && propPassword.length > 0 && !isPropFirmPending;
     }
     if (usesTradovateAuth) {
       return Boolean(user) && !isLoading;
@@ -251,7 +227,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       return Boolean(user) && !isLoading;
     }
     return false;
-  }, [riskAcknowledged, selectedBroker, usesTradovateAuth, isPropFirmFlow, isLoading, isPropFirmPending, user, propUsername, propPassword]);
+  }, [riskAcknowledged, selectedBroker, usesTradovateAuth, isLoading, user]);
 
   const handleConnect = async () => {
     setError('');
@@ -259,22 +235,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
     // Binance uses a dedicated API-key popup (not OAuth redirect).
     if (selectedBroker === 'binance' && user) {
       setShowBinancePopup(true);
-      return;
-    }
-
-    // Prop firm flow: username/password login with auto demo→live fallback.
-    if (isPropFirmFlow && user) {
-      const result = await connectPropFirm({
-        username: propUsername.trim(),
-        password: propPassword,
-        connectionLabel: connectionName || 'Prop Firm',
-      });
-      if (result.success) {
-        onOpenChange(false);
-        navigate('/app/journal/overview');
-      } else {
-        setError(result.error ?? 'Connection failed — please try again');
-      }
       return;
     }
 
@@ -303,25 +263,12 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const handlePickBroker = (broker: BrokerName) => {
     setSelectedBroker(broker);
     setError('');
-    // Reset prop firm sub-fields when switching brokers
-    setPropUsername('');
-    setPropPassword('');
     if (broker === 'tradovate') {
-      // Keep the current tradovateAccountType; connection name will be set by effect
+      // Connection name will be set by effect
       setConnectionName('');
     } else {
-      setTradovateAccountType('live');
       setConnectionName(`${BROKER_CONFIGS[broker].displayName}${broker === 'ninja_trader' ? ` (${env})` : ''}`.slice(0, CONNECTION_NAME_MAX));
     }
-  };
-
-  const handlePickAccountType = (type: TradovateAccountType) => {
-    setTradovateAccountType(type);
-    setError('');
-    setPropUsername('');
-    setPropPassword('');
-    // Reset connection name so the effect auto-fills the right default
-    setConnectionName('');
   };
 
   return (
@@ -406,68 +353,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
             </div>
           </div>
 
-          {/* Tradovate account type sub-choice (Live Account vs Prop Firm) */}
-          {selectedBroker === 'tradovate' && (
-            <div className="mb-3">
-              <label className="mb-1.5 block text-[10px] uppercase tracking-[0.18em] text-ink-secondary">
-                Account Type
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {/* Live Account — OAuth */}
-                <button
-                  type="button"
-                  onClick={() => handlePickAccountType('live')}
-                  className={[
-                    'flex flex-col items-start gap-1 rounded-[9px] border px-3 py-2.5 text-left transition-all duration-200',
-                    tradovateAccountType === 'live'
-                      ? 'border-[#C9A646] bg-[#C9A646]/[0.08] shadow-[0_0_18px_rgba(201,166,70,0.18)]'
-                      : 'border-[#C9A646]/15 bg-[#0A0A0A]/80 hover:border-[#C9A646]/35 hover:bg-[#C9A646]/[0.035]',
-                  ].join(' ')}
-                  aria-pressed={tradovateAccountType === 'live'}
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-[#E8C766]" />
-                      <span className="text-xs font-semibold text-ink-primary">Live Account</span>
-                    </div>
-                    {tradovateAccountType === 'live' && (
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-gold text-ink-on-gold shadow-btn-gold">
-                        <Check className="h-2.5 w-2.5" />
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-ink-secondary">Connect securely via Tradovate OAuth</span>
-                </button>
-
-                {/* Prop Firm Account — username/password */}
-                <button
-                  type="button"
-                  onClick={() => handlePickAccountType('prop_firm')}
-                  className={[
-                    'flex flex-col items-start gap-1 rounded-[9px] border px-3 py-2.5 text-left transition-all duration-200',
-                    tradovateAccountType === 'prop_firm'
-                      ? 'border-[#C9A646] bg-[#C9A646]/[0.08] shadow-[0_0_18px_rgba(201,166,70,0.18)]'
-                      : 'border-[#C9A646]/15 bg-[#0A0A0A]/80 hover:border-[#C9A646]/35 hover:bg-[#C9A646]/[0.035]',
-                  ].join(' ')}
-                  aria-pressed={tradovateAccountType === 'prop_firm'}
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-[#E8C766]" />
-                      <span className="text-xs font-semibold text-ink-primary">Prop Firm Account</span>
-                    </div>
-                    {tradovateAccountType === 'prop_firm' && (
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-gold text-ink-on-gold shadow-btn-gold">
-                        <Check className="h-2.5 w-2.5" />
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-ink-secondary">APEX, Topstep, MyFundedFutures & other prop firms</span>
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="mb-3">
             <h3 className="mb-1.5 text-[10px] uppercase tracking-[0.18em] text-ink-secondary">
               Your Security Is Our Priority
@@ -497,51 +382,15 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               <h3 className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-secondary">
                 {`${config.displayName} Credentials`}
               </h3>
-              {/* Hide env toggle for prop firm flow — environment is auto-detected */}
-              {usesTradovateAuth && !isPropFirmFlow && (
+              {usesTradovateAuth && (
                 <EnvironmentToggle value={env} onChange={setEnv} />
               )}
             </div>
 
-            {/* Prop firm username/password form */}
-            {isPropFirmFlow && (
-              <div className="flex flex-col gap-2.5">
-                <div>
-                  <label className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-ink-secondary">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={propUsername}
-                    onChange={(e) => setPropUsername(e.target.value)}
-                    placeholder="Your Tradovate / prop firm username"
-                    autoComplete="off"
-                    className="h-10 w-full rounded-[12px] border border-[#C9A646]/18 bg-[#050505] px-4 text-sm text-ink-primary outline-none transition-colors placeholder:text-ink-muted focus:border-[#C9A646]/45"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-ink-secondary">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={propPassword}
-                    onChange={(e) => setPropPassword(e.target.value)}
-                    placeholder="Your account password"
-                    autoComplete="off"
-                    className="h-10 w-full rounded-[12px] border border-[#C9A646]/18 bg-[#050505] px-4 text-sm text-ink-primary outline-none transition-colors placeholder:text-ink-muted focus:border-[#C9A646]/45"
-                  />
-                </div>
-                <p className="text-[11px] text-ink-secondary">
-                  Use the same credentials you use to log in to Tradovate / your prop firm trading account.
-                </p>
-              </div>
-            )}
-
-            {/* OAuth description for Tradovate Live Account and NinjaTrader */}
-            {usesTradovateAuth && !isPropFirmFlow && (
+            {/* OAuth description for Tradovate and NinjaTrader */}
+            {usesTradovateAuth && (
               <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
-                Log in securely on {isNinjaTrader ? 'NinjaTrader' : 'Tradovate'} via OAuth. For prop-firm accounts (Apex, Topstep, MFFU), use Prop Firm Account above.
+                Log in securely on {isNinjaTrader ? 'NinjaTrader' : 'Tradovate'} via OAuth. Prop-firm accounts (Apex, Topstep, MFFU) connect through the same OAuth path — the backend auto-detects your account type.
               </div>
             )}
 
@@ -645,15 +494,10 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               disabled={!canSubmit}
               className="flex h-10 items-center justify-center gap-2 rounded-[11px] bg-gradient-gold text-sm font-semibold text-ink-on-gold shadow-btn-gold transition-all duration-300 hover:scale-[1.01] hover:shadow-btn-gold-hover disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100"
             >
-              {(isLoading || isPropFirmPending) ? (
+              {isLoading ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
                   Connecting...
-                </>
-              ) : isPropFirmFlow ? (
-                <>
-                  <Zap className="h-4 w-4" />
-                  Connect Account
                 </>
               ) : isOAuth ? (
                 <>
