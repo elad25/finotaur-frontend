@@ -643,6 +643,12 @@ export interface FinotaurChartProps {
    * Only fired when `liquidityBand` is non-null — no-op otherwise.
    */
   onManualPriceScale?: () => void;
+  /**
+   * Called once after each bar fetch completes with the high/low extremes of
+   * the loaded candles. The scanner uses this to merge the candle range into
+   * the liquidity band so price action is always visible in the auto-fit view.
+   */
+  onBarsLoad?: (range: { high: number; low: number } | null) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -671,6 +677,7 @@ export function FinotaurChart({
   depthMatrixCandleIntervalMs = 60_000,
   liquidityBand = null,
   onManualPriceScale,
+  onBarsLoad,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1011,20 +1018,35 @@ export function FinotaurChart({
   // ─── Liquidity band → autoscale sync ───────────────────────
   // When the caller updates `liquidityBand`, write it to the ref so the
   // autoscaleInfoProvider closure on the candlestick series reads the new value
-  // on the very next frame. Then call applyOptions with an empty object to tell
-  // lw-charts to re-query the provider without recreating the series.
-  // No-op when the chart/series hasn't mounted yet (no-op on undefined series).
+  // on the very next frame.
+  //
+  // THE CRITICAL FIX (bug from PR #758): `seriesRef.current.applyOptions({})`
+  // does NOT force lw-charts to re-apply the band after a manual price-axis drag
+  // because the price scale is locked in manual mode (autoScale=false). We must
+  // explicitly call `priceScale().applyOptions({ autoScale: true })` when the
+  // band is active so lw-charts re-enters auto mode and re-queries every series'
+  // autoscaleInfoProvider on the right scale. The candlestick series returns the
+  // band range; all wall Baseline series return null — so the band wins.
+  //
+  // When the band is cleared (null), we only nudge via applyOptions({}) to avoid
+  // re-entering auto mode unnecessarily (the user may have manually zoomed, and
+  // we want to preserve that state when auto-fit is turned off).
   useEffect(() => {
     liquidityBandRef.current = liquidityBand;
-    // Nudge lw-charts to re-evaluate autoscale by touching a harmless option.
-    // This is the officially-supported way to force a re-call of
-    // autoscaleInfoProvider in v4 without full series teardown.
-    if (seriesRef.current) {
-      try {
-        seriesRef.current.applyOptions({});
-      } catch {
-        // Series may have been removed mid-flight — ignore.
+    const series = seriesRef.current;
+    if (!series) return;
+    try {
+      if (liquidityBand) {
+        // Force the price scale back to auto mode so autoscaleInfoProvider
+        // is immediately re-queried and the band range takes effect.
+        // This is what makes the band authoritative regardless of prior manual zoom.
+        series.priceScale().applyOptions({ autoScale: true });
+      } else {
+        // Band deactivated — nudge without re-entering auto mode.
+        series.applyOptions({});
       }
+    } catch {
+      // Series or price scale may have been removed mid-flight — ignore.
     }
   }, [liquidityBand]);
 
@@ -1069,6 +1091,23 @@ export function FinotaurChart({
         seriesRef.current.setData(bars);
         barsRef.current = bars;
         setBarCount(bars.length);
+
+        // Report candle hi/low to caller so it can include price action in the
+        // liquidity band (makes the band authoritative for the visible candles).
+        if (onBarsLoad) {
+          if (bars.length > 0) {
+            let hi = -Infinity;
+            let lo = Infinity;
+            for (const b of bars) {
+              if (b.high > hi) hi = b.high;
+              if (b.low  < lo) lo = b.low;
+            }
+            onBarsLoad({ high: hi, low: lo });
+          } else {
+            onBarsLoad(null);
+          }
+        }
+
         if (bars.length > 0) {
           if (focusRange) {
             chartRef.current?.timeScale().setVisibleRange({
@@ -1092,7 +1131,7 @@ export function FinotaurChart({
     return () => {
       cancelled = true;
     };
-  }, [symbol, interval, from, to, dataSource, onError, focusRange]);
+  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad]);
 
   // ─── Apply markers ──────────────────────────────────────────
   useEffect(() => {
