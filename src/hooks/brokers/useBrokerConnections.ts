@@ -97,10 +97,13 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
         return { success: false, error: e.message };
       }
       invalidate();
+      qc.invalidateQueries({ queryKey: ['portfolios', userId] });
+      qc.invalidateQueries({ queryKey: ['trades'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Connection disconnected');
       return { success: true };
     },
-    [userId, invalidate],
+    [userId, invalidate, qc],
   );
 
   /**
@@ -122,10 +125,13 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
         return { success: false, error: e.message };
       }
       invalidate();
+      qc.invalidateQueries({ queryKey: ['portfolios', userId] });
+      qc.invalidateQueries({ queryKey: ['trades'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Connection removed');
       return { success: true };
     },
-    [userId, invalidate],
+    [userId, invalidate, qc],
   );
 
   /**
