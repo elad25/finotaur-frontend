@@ -68,6 +68,7 @@ const BrokerReconnectModal = lazy(() =>
   import("@/components/broker/BrokerReconnectModal").then((m) => ({ default: m.BrokerReconnectModal })),
 );
 import AddBrokerPopup from "@/components/broker/AddBrokerPopup";
+import { ManageConnectionsModal } from '@/components/broker/ManageConnectionsModal';
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -1243,6 +1244,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   const [showSnapTradePopup, setShowSnapTradePopup] = useState(false);
   const [showTradovateModal, setShowTradovateModal] = useState(false);
   const [tradovateInitialStep, setTradovateInitialStep] = useState<'select-env' | 'manage'>('select-env');
+  const [showManageConnections, setShowManageConnections] = useState(false);
   const [showBrokerPanel, setShowBrokerPanel] = useState(false);
   const [showBrokerPicker, setShowBrokerPicker] = useState(false);
   const { syncStatus, hasAnyConnection, credentials, reconnect } = useTradovate();
@@ -1567,7 +1569,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             />
 
             <AccountFilterDropdown
-              onManage={() => { setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+              onManage={() => setShowManageConnections(true)}
             />
 
             {/* ✅ Broker Status Button — visible to all, opens account panel */}
@@ -1655,7 +1657,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                       </button>
                       {/* Manage existing connections */}
                       <button
-                        onClick={() => { setShowBrokerPanel(false); setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+                        onClick={() => { setShowBrokerPanel(false); setShowManageConnections(true); }}
                         className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-zinc-800/60 hover:bg-zinc-700/60 text-zinc-300 hover:text-white text-xs font-medium transition-all border border-zinc-700/40"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
@@ -1673,7 +1675,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 CTA, which calls openAddBrokerPopup to open the pre-mounted AddBrokerPopup. */}
             <BrokerConnectionsPopover
               onAddConnection={openAddBrokerPopup}
-              onManage={() => { setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+              onManage={() => setShowManageConnections(true)}
             >
               <Button
                 variant="goldOutline"
@@ -1942,6 +1944,12 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </Suspense>
         </ErrorBoundary>
       )}
+
+      <ManageConnectionsModal
+        open={showManageConnections}
+        onOpenChange={setShowManageConnections}
+        onAddConnection={openAddBrokerPopup}
+      />
 
       {showTradovateModal && (
         <ErrorBoundary>
