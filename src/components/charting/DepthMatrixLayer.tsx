@@ -18,6 +18,13 @@
 //       4. clearRect the visible canvas + ctx.drawImage(offscreen, ...) — ALWAYS,
 //          no early-return allowed between clear and blit.
 //     The dirty/fingerprint check gates ONLY step 2 — never steps 3+4.
+//   - drawImage uses a SOURCE sub-rectangle computed from the visible portion of
+//     the depth matrix (not always the full offscreen).  When the matrix spans
+//     beyond the visible time range the raw left/right edges go negative or past
+//     paneW; clamping the DESTINATION without adjusting the source would stretch
+//     the bitmap and shift every column away from its candle — the pan-lock bug.
+//     srcLeft/srcRight map the clamped destination back to the exact offscreen
+//     pixel columns that are visible, so column ci always lands at colToX(ci.t).
 //   - try/finally with setTransform reset — mid-frame throw cannot corrupt
 //     the transform stack.
 //   - Clips drawing at timeScale().width() so nothing paints over the price axis.
@@ -559,8 +566,14 @@ export function DepthMatrixLayer({
 
         // px-per-second derived from the actual distance between two resolved bars.
         // Do NOT use options().barSpacing — it can lag during kinetic zoom.
-        const actualPxPerBar = ref2.x - ref1.x;
-        const pxPerSec       = ivSec > 0 ? actualPxPerBar / ivSec : 1;
+        // Divide by the ACTUAL time delta between the two resolved bars, not by
+        // ivSec alone — they can differ when there is a candle gap between ref1
+        // and ref2 (ref2 steps right until it finds the next non-null bar, which
+        // may be N > 1 intervals away). Using ivSec in that case overstates
+        // pxPerSec by a factor of N and drifts every column off by that ratio.
+        const actualPxPerBar  = ref2.x - ref1.x;
+        const actualTimeDelta = ref2.tSec - ref1.tSec; // seconds; == ivSec when no gap
+        const pxPerSec        = actualTimeDelta > 0 ? actualPxPerBar / actualTimeDelta : 1;
 
         // Update barSpacingRef each frame (single-column fallback + external readers).
         if (Math.abs(actualPxPerBar) > 0) {
@@ -590,11 +603,37 @@ export function DepthMatrixLayer({
           ? (xN - x0) / (meta.numCols - 1)
           : barSpacingRef.current;
 
-        // Left edge of first column, right edge of last.
-        const drawLeft  = Math.max(0,    x0 - colWidthPx * 0.5);
-        const drawRight = Math.min(paneW, xN + colWidthPx * 0.5);
+        // Raw (unclipped) left/right canvas edges of the entire offscreen.
+        // These may be negative or > paneW when the depth matrix extends
+        // beyond the currently-visible time range.
+        const rawLeft  = x0 - colWidthPx * 0.5;
+        const rawRight = xN + colWidthPx * 0.5;
+        const rawWidth = rawRight - rawLeft; // total canvas px span of all columns
+
+        // Clip to the chart pane so we don't paint over the price axis.
+        const drawLeft  = Math.max(0,    rawLeft);
+        const drawRight = Math.min(paneW, rawRight);
 
         if (drawRight <= drawLeft) return;
+
+        // ── Source-rect clipping (the pan-lock fix) ───────────────────────
+        // When rawLeft < 0 (columns extend before visible range) or
+        // rawRight > paneW (columns extend past visible range), naively
+        // passing the ENTIRE offscreen to drawImage and clamping only the
+        // destination stretches the bitmap to fill the clamped rect.  That
+        // mis-maps every column's pixel to a different canvas x than the candle
+        // at the same time occupies — exactly the "walls drift during pan"
+        // symptom.
+        //
+        // Fix: map the clamped destination back to the corresponding SOURCE
+        // sub-rectangle so drawImage renders each offscreen column at the exact
+        // canvas x that colToX() would assign it.  The mapping is linear
+        // because both the offscreen column grid and the canvas time axis are
+        // uniformly spaced.
+        const srcScale = meta.numCols / rawWidth;        // offscreen pixels per canvas px
+        const srcLeft  = (drawLeft  - rawLeft) * srcScale; // first visible column (fractional)
+        const srcRight = (drawRight - rawLeft) * srcScale; // last  visible column (fractional)
+        const srcW     = srcRight - srcLeft;
 
         // Price axis: map priceMin → bottom, priceMax → top in canvas space.
         const yAtPriceMax = seriesInstance.priceToCoordinate(meta.priceMax);
@@ -611,18 +650,26 @@ export function DepthMatrixLayer({
         const drawH = drawBottom - drawTop;
 
         // ── Draw offscreen → canvas (single blit) ───────────────────────
+        // Source rect is the clipped sub-rectangle of the offscreen that
+        // corresponds to the visible portion of the depth matrix.  Each
+        // source column therefore lands at exactly the same canvas x as the
+        // candle bar at that column's timestamp.
         ctx.drawImage(
           offscreen,
-          0, 0, meta.numCols, meta.numRows, // source rect (entire offscreen)
-          drawLeft, drawTop, drawW, drawH,  // destination rect
+          srcLeft, 0, srcW, meta.numRows, // source: visible portion of offscreen
+          drawLeft, drawTop, drawW, drawH, // destination: visible canvas region
         );
 
       } finally {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.imageSmoothingEnabled = true;
+        // Always commit the fingerprint — even when an early return fires inside
+        // the try block (e.g. drawRight <= drawLeft, priceToCoordinate null).
+        // Without this, a single missed blit frame left lastFingerprintRef stale,
+        // causing fingerprintChanged = true on EVERY subsequent frame and
+        // triggering redundant recomputeNorm calls until the pan resolved.
+        lastFingerprintRef.current = fingerprint;
       }
-
-      lastFingerprintRef.current = fingerprint;
     }
 
     rafRef.current = requestAnimationFrame(drawFrame);
