@@ -24,6 +24,11 @@ import type { TradeExtraction } from '@/services/aiCopilotApi';
 import { compressImageFile } from '@/lib/fino/screenshotTrade';
 import type { LucideIcon } from 'lucide-react';
 
+// Feature flag — gates the screenshot → trade extraction surface (📎 button,
+// paste-to-extract, spinner/error/review cards). Defaults OFF.
+// Set VITE_ENABLE_FINO_DETECTIVE=true in .env.local to enable locally.
+const FINO_DETECTIVE_ENABLED = import.meta.env.VITE_ENABLE_FINO_DETECTIVE === 'true';
+
 // Suggestion chips shown in the FINO drawer's empty state.
 // Morning briefing chip is prepended so it surfaces first.
 const FINO_PROMPT_ROWS: { icon: LucideIcon; question: string }[][] = [
@@ -183,6 +188,7 @@ function FinoChatPanel({
   // When the backend requests a screenshot upload, open the existing file picker.
   useEffect(() => {
     const handleFinoAction = (e: Event) => {
+      if (!FINO_DETECTIVE_ENABLED) return;
       const detail = (e as CustomEvent<{ action: string }>).detail;
       if (detail?.action === 'screenshot_trade') {
         filePickerTriggerRef.current?.();
@@ -239,20 +245,20 @@ function FinoChatPanel({
           <FinoActionBar />
 
           {/* Screenshot extraction indicators — mounted near FinoActionBar */}
-          {extractionState.phase === 'extracting' && (
+          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'extracting' && (
             <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-[#C9A646]/20 bg-[#0D0C0A] px-3 py-2">
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#C9A646]" />
               <span className="text-[11px] text-[#C9A646]">Analyzing screenshot…</span>
             </div>
           )}
 
-          {extractionState.phase === 'error' && (
+          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'error' && (
             <div className="mx-4 mb-2 rounded-lg border border-red-500/20 bg-red-950/30 px-3 py-2">
               <span className="text-[11px] text-red-400">{extractionState.message}</span>
             </div>
           )}
 
-          {extractionState.phase === 'review' && (
+          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'review' && (
             <FinoTradeConfirmCard
               extraction={extractionState.extraction}
               file={extractionState.file}
@@ -277,8 +283,8 @@ function FinoChatPanel({
               dailyLimit={usage?.daily_limit}
               promptRows={FINO_PROMPT_ROWS}
               promptPlacement="aboveInput"
-              onImageSelected={handleImageSelected}
-              openFilePickerRef={filePickerTriggerRef}
+              onImageSelected={FINO_DETECTIVE_ENABLED ? handleImageSelected : undefined}
+              openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
             />
           </div>
         </>
