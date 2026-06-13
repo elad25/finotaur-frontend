@@ -370,6 +370,18 @@ function FundamentalsTable({
           label: 'P/E',
           getValue: (t) => cell(t, (f) => fmtRatio(f?.pe)),
         },
+        {
+          label: 'P/S',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.ps)),
+        },
+        {
+          label: 'P/B',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.pb)),
+        },
+        {
+          label: 'EV/EBITDA',
+          getValue: (t) => cell(t, (f) => fmtRatio(f?.evEbitda)),
+        },
       ],
     },
     {
@@ -418,6 +430,19 @@ function FundamentalsTable({
             if (f?.piotroskiF == null) return '—';
             return String(Math.round(f.piotroskiF));
           }),
+        },
+      ],
+    },
+    {
+      heading: 'SIZE',
+      rows: [
+        {
+          label: 'Revenue (TTM)',
+          getValue: (t) => cell(t, (f) => fmtCurrencyCompact(f?.revenueTTM)),
+        },
+        {
+          label: 'Net Income (TTM)',
+          getValue: (t) => cell(t, (f) => fmtCurrencyCompact(f?.netIncomeTTM)),
         },
       ],
     },
