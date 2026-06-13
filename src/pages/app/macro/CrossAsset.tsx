@@ -857,7 +857,7 @@ const analyzeAssetRatio = (assetX: MarketAsset | undefined, assetY: MarketAsset 
 // ==================== COMPONENTS ====================
 
 const SectionCard = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-gradient-to-br from-slate-900/80 to-slate-800/50 rounded-2xl border border-white/10 p-5 ${className}`}>{children}</div>
+  <div className={`bg-white/[0.03] rounded-2xl border border-white/10 p-5 ${className}`}>{children}</div>
 );
 
 const SectionHeader = ({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle?: string }) => (
@@ -1014,7 +1014,7 @@ const CustomAssetRatio = ({ assets }: { assets: MarketAsset[] }) => {
         </div>
         
         {showDropdown && (
-          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-xl overflow-hidden">
+          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white/[0.03] border border-white/10 rounded-lg shadow-xl overflow-hidden">
             {/* Search Input */}
             <div className="p-2 border-b border-white/10">
               <input
@@ -1116,7 +1116,7 @@ const CustomAssetRatio = ({ assets }: { assets: MarketAsset[] }) => {
             setAssetX(assetY);
             setAssetY(temp);
           }}
-          className="p-2 rounded-full bg-slate-800/50 border border-white/10 hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/10 transition-all group"
+          className="p-2 rounded-full bg-white/[0.03] border border-white/10 hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/10 transition-all group"
           title="Swap assets"
         >
           <ArrowRightLeft className="w-4 h-4 text-slate-400 group-hover:text-[#D4AF37] transition-colors" />
@@ -1252,7 +1252,7 @@ const CustomAssetRatio = ({ assets }: { assets: MarketAsset[] }) => {
             </div>
             
             {/* Status */}
-            <div className="p-3 bg-slate-800/50 rounded-xl border border-white/10">
+            <div className="p-3 bg-white/[0.03] rounded-xl border border-white/10">
               <div className="flex items-center gap-2 mb-1">
                 <Activity className="w-4 h-4 text-[#D4AF37]" />
                 <span className="font-semibold text-sm text-white">Status</span>
@@ -1356,12 +1356,12 @@ export default function CrossAssetTerminal() {
           <p className="text-slate-400 text-sm mt-1">How rates, dollar, commodities and equities interact — the macro brain of the market</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex gap-1 bg-slate-800/50 rounded-lg p-1 border border-white/10">
+          <div className="flex gap-1 bg-white/[0.03] rounded-lg p-1 border border-white/10">
             {(['1D', '1W'] as const).map((tf) => (
               <button key={tf} onClick={() => setTimeframe(tf)} className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${timeframe === tf ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'text-gray-400 hover:text-white'}`}>{tf}</button>
             ))}
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10">
             <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-400' : dataSource === 'cache' ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
             <span className="text-sm text-slate-300">{isLoading ? 'Loading' : dataSource === 'cache' ? 'Cached' : 'Live'}</span>
             <button onClick={fetchMarketData} disabled={isLoading} className="p-1 hover:bg-white/5 rounded"><RefreshCw className={`w-4 h-4 text-[#D4AF37] ${isLoading ? 'animate-spin' : ''}`} /></button>
@@ -1373,7 +1373,7 @@ export default function CrossAssetTerminal() {
       {dataSource === 'cache' && <div className="flex items-center gap-2 text-amber-400 text-sm p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl"><Database className="w-4 h-4" /> Market Closed {cachedAt && `(${formatCacheTime(cachedAt)})`}</div>}
 
       {isLoading && marketData.length === 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-48 rounded-xl bg-slate-800/50 animate-pulse" />)}</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-48 rounded-xl bg-white/[0.03] animate-pulse" />)}</div>
       ) : marketData.length > 0 && (
         <>
           {/* Row 1: What Matters (Causal Chain) + Risk + Regime */}
@@ -1439,7 +1439,7 @@ export default function CrossAssetTerminal() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {relationships.map((rel, idx) => (
-                <div key={idx} className={`p-4 rounded-xl border ${rel.active ? getSignalBg(rel.relationship) : 'bg-slate-800/30 border-slate-700/50'}`}>
+                <div key={idx} className={`p-4 rounded-xl border ${rel.active ? getSignalBg(rel.relationship) : 'bg-white/[0.02] border-white/[0.1]'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-white font-bold text-sm">{rel.asset1}</span>
@@ -1456,7 +1456,7 @@ export default function CrossAssetTerminal() {
                   <div className="flex items-center gap-2 mb-2 text-xs">
                     <span className="text-slate-500">Corr:</span>
                     <span className={`font-mono ${rel.correlation > 0 ? 'text-emerald-400' : rel.correlation < 0 ? 'text-red-400' : 'text-slate-400'}`}>{rel.correlation > 0 ? '+' : ''}{rel.correlation.toFixed(2)}</span>
-                    <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                       <div className={`h-full ${rel.relationship === 'positive' ? 'bg-emerald-400' : rel.relationship === 'negative' ? 'bg-red-400' : 'bg-slate-400'}`} style={{ width: `${rel.strength}%` }} />
                     </div>
                   </div>
@@ -1535,7 +1535,7 @@ export default function CrossAssetTerminal() {
                   <span className="text-slate-500 text-xs">{breadth.bearish}/{breadth.total}</span>
                 </div>
               </div>
-              <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex">
+              <div className="h-3 bg-white/[0.06] rounded-full overflow-hidden flex">
                 <div className="bg-emerald-500" style={{ width: `${breadth.bullishPct}%` }} />
                 <div className="bg-red-500" style={{ width: `${breadth.bearishPct}%` }} />
               </div>

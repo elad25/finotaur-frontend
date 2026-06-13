@@ -581,7 +581,7 @@ const IndexCard = ({ index, range, onClick }: { index: MarketIndex; range: TimeR
         <span className={`text-[10px] px-1.5 py-0.5 rounded ${
           index.status === 'open' 
             ? 'bg-[#2ECC71]/20 text-[#2ECC71]' 
-            : 'bg-gray-700/30 text-gray-500'
+            : 'bg-white/[0.06] text-gray-500'
         }`}>
           {index.status === 'open' ? 'Live' : 'Closed'}
         </span>
@@ -764,7 +764,7 @@ const FuturesPanel = ({ futures }: { futures: FuturesData[] }) => (
 
 // Narrative Panel - No emojis
 const NarrativePanel = ({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) => (
-  <div className="bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-xl overflow-hidden">
+  <div className="bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-2xl overflow-hidden">
     <button onClick={onToggle} className="w-full p-4 flex items-center justify-between hover:bg-amber-500/5 transition-colors">
       <div className="flex items-center gap-3">
         <div className="p-2 bg-amber-500/20 rounded-lg"><Sparkles className="w-5 h-5 text-amber-400" /></div>
@@ -1367,7 +1367,7 @@ export default function GlobalHeatmap() {
           </div>
           
           {/* Global Stats Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-4 py-3 px-4 bg-[#141414] rounded-xl border border-[#1F1F1F]">
+          <div className="flex flex-wrap items-center justify-between gap-4 py-3 px-4 bg-[#141414] rounded-2xl border border-[#1F1F1F]">
             <div className="flex items-center gap-6">
               <div><div className="text-xs text-gray-500 mb-0.5">Global Regime</div><div className={`text-lg font-bold ${regime.color}`}>{regime.label}</div></div>
               <div className="h-8 w-px bg-[#2A2A2A]" />

@@ -486,9 +486,9 @@ const Tooltip: React.FC<{ children: React.ReactNode; content: string }> = ({ chi
     <div className="relative inline-flex" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
       {children}
       {show && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-200 whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-1 duration-150">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-white/[0.06] border border-white/[0.1] rounded-lg text-xs text-zinc-200 whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-1 duration-150">
           {content}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-zinc-800" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white/[0.06]" />
         </div>
       )}
     </div>
@@ -546,7 +546,7 @@ const SensitivityBar: React.FC<{ score: number }> = ({ score }) => {
   return (
     <Tooltip content={`Market Sensitivity: ${score}%`}>
       <div className="flex items-center gap-2">
-        <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div className="w-16 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
           <div 
             className={`h-full bg-gradient-to-r ${getBarColor(score)} rounded-full transition-all duration-500`}
             style={{ width: `${score}%` }}
@@ -581,14 +581,14 @@ const RegionOverview: React.FC<{ events: EconomicEvent[] }> = ({ events }) => {
   }, [events]);
   
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+    <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <Map className="w-4 h-4 text-zinc-500" />
         <span className="text-zinc-400 text-xs uppercase tracking-wider font-medium">Events by Region</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {regionCounts.slice(0, 6).map(([region, count]) => (
-          <div key={region} className="flex items-center justify-between px-2 py-1.5 bg-zinc-800/50 rounded-lg">
+          <div key={region} className="flex items-center justify-between px-2 py-1.5 bg-white/[0.04] rounded-lg">
             <span className="text-sm">{FLAGS[region as Region]} {region}</span>
             <span className="text-zinc-400 text-sm font-mono">{count}</span>
           </div>
@@ -617,7 +617,7 @@ const EventClustersCard: React.FC = () => {
   };
   
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+    <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <Layers className="w-4 h-4 text-rose-400" />
         <span className="text-rose-400 text-xs uppercase tracking-wider font-medium">Event Clusters</span>
@@ -635,7 +635,7 @@ const EventClustersCard: React.FC = () => {
             <p className="text-zinc-500 text-xs">{cluster.description}</p>
             <div className="flex flex-wrap gap-1 mt-2">
               {cluster.events.map((event, j) => (
-                <span key={j} className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
+                <span key={j} className="px-1.5 py-0.5 bg-white/[0.06] text-zinc-400 text-[10px] rounded">
                   {event}
                 </span>
               ))}
@@ -650,7 +650,7 @@ const EventClustersCard: React.FC = () => {
 // Week Themes Card (Enhanced)
 const WeekThemesCard: React.FC = () => {
   return (
-    <div className="bg-gradient-to-br from-zinc-900/90 to-zinc-800/50 border border-amber-500/20 rounded-xl p-5 backdrop-blur-sm">
+    <div className="bg-white/[0.03] border border-amber-500/20 rounded-xl p-5 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Eye className="w-5 h-5 text-amber-400" />
@@ -675,22 +675,22 @@ const WeekThemesCard: React.FC = () => {
           </ul>
         </div>
         
-        <div className="pt-3 border-t border-zinc-800">
+        <div className="pt-3 border-t border-white/[0.06]">
           <span className="text-zinc-500 text-[10px] uppercase tracking-wider font-medium flex items-center gap-1.5">
             <Target className="w-3 h-3 text-blue-400" />
             Assets in Focus
           </span>
           <p className="text-zinc-200 text-sm mt-1.5 font-medium">{macroRegime.assetFocus}</p>
         </div>
-        
-        <div className="pt-3 border-t border-zinc-800">
+
+        <div className="pt-3 border-t border-white/[0.06]">
           <span className="text-zinc-500 text-[10px] uppercase tracking-wider font-medium flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-rose-400" />
             Market Movers
           </span>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {['CPI', 'ECB', 'NFP', 'NVDA'].map(event => (
-              <span key={event} className="px-2 py-1 bg-zinc-800/80 text-zinc-300 text-xs rounded-md border border-zinc-700/50">
+              <span key={event} className="px-2 py-1 bg-white/[0.04] text-zinc-300 text-xs rounded-md border border-white/[0.1]">
                 {event}
               </span>
             ))}
@@ -704,7 +704,7 @@ const WeekThemesCard: React.FC = () => {
 // Fed Watch Card
 const FedWatchCard: React.FC = () => {
   return (
-    <div className="bg-gradient-to-br from-zinc-900/90 to-zinc-800/50 border border-blue-500/20 rounded-xl p-5 backdrop-blur-sm">
+    <div className="bg-white/[0.03] border border-blue-500/20 rounded-xl p-5 backdrop-blur-sm">
       <div className="flex items-center gap-2 mb-4">
         <Building2 className="w-5 h-5 text-blue-400" />
         <h3 className="text-blue-400 font-semibold tracking-wide text-sm uppercase">CME FedWatch</h3>
@@ -720,12 +720,12 @@ const FedWatchCard: React.FC = () => {
           <span className="text-zinc-200 text-xs">{fedWatchProbabilities.nextMeeting}</span>
         </div>
         
-        <div className="pt-3 border-t border-zinc-800 space-y-2">
+        <div className="pt-3 border-t border-white/[0.06] space-y-2">
           <span className="text-zinc-500 text-[10px] uppercase tracking-wider font-medium">Probabilities</span>
           {fedWatchProbabilities.probabilities.map((p, i) => (
             <div key={i} className="flex items-center gap-3">
               <span className="text-zinc-400 text-xs font-mono w-24">{p.rate}</span>
-              <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+              <div className="flex-1 h-2 bg-white/[0.06] rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
                   style={{ width: `${p.probability}%` }}
@@ -754,7 +754,7 @@ const TodaysSummaryCard: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
   }[heatLevel];
   
   return (
-    <div className="bg-gradient-to-br from-zinc-900/90 to-zinc-800/50 border border-zinc-700/50 rounded-xl p-5 backdrop-blur-sm">
+    <div className="bg-white/[0.03] border border-white/[0.1] rounded-xl p-5 backdrop-blur-sm">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Zap className="w-5 h-5 text-amber-400" />
@@ -797,9 +797,9 @@ const EventCard: React.FC<{ event: EconomicEvent; expanded?: boolean; onToggle?:
   return (
     <div 
       className={`
-        relative bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4 
-        hover:border-amber-500/30 hover:bg-zinc-900/80 transition-all duration-300 cursor-pointer
-        ${expanded ? 'border-amber-500/40 ring-1 ring-amber-500/10 bg-zinc-900/90' : ''}
+        relative bg-white/[0.03] border border-white/[0.06] rounded-xl p-4
+        hover:border-white/[0.1] hover:bg-white/[0.03] transition-all duration-300 cursor-pointer
+        ${expanded ? 'border-amber-500/40 ring-1 ring-amber-500/10 bg-white/[0.03]' : ''}
       `}
       onClick={onToggle}
     >
@@ -843,7 +843,7 @@ const EventCard: React.FC<{ event: EconomicEvent; expanded?: boolean; onToggle?:
               )}
               {event.historicalMove && (
                 <Tooltip content={`Past 5 releases moved S&P 500 by avg ±${event.historicalMove}%`}>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800/50 rounded">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/[0.04] rounded">
                     <Activity className="w-3 h-3 text-zinc-500" />
                     <span className="text-amber-400 font-mono text-xs">±{event.historicalMove}%</span>
                   </div>
@@ -860,7 +860,7 @@ const EventCard: React.FC<{ event: EconomicEvent; expanded?: boolean; onToggle?:
       </div>
       
       {expanded && event.assetsImpacted && event.assetsImpacted.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-zinc-800 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="mt-4 pt-4 border-t border-white/[0.06] animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Assets Impacted</h4>
             <button className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-xs hover:bg-amber-500/20 transition-colors">
@@ -872,7 +872,7 @@ const EventCard: React.FC<{ event: EconomicEvent; expanded?: boolean; onToggle?:
             {event.assetsImpacted.map((a, i) => (
               <div 
                 key={i} 
-                className="flex items-center justify-between px-3 py-2 bg-zinc-800/40 border border-zinc-700/50 rounded-lg"
+                className="flex items-center justify-between px-3 py-2 bg-white/[0.02] border border-white/[0.1] rounded-lg"
               >
                 <span className="text-zinc-300 text-sm">{a.asset}</span>
                 <ImpactStars impact={a.impact} size="sm" showTooltip={false} />
@@ -903,7 +903,7 @@ const FilterBar: React.FC<{
 }) => {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 p-1 bg-zinc-900/80 rounded-lg border border-zinc-800 w-fit">
+      <div className="flex items-center gap-1 p-1 bg-white/[0.03] rounded-lg border border-white/[0.06] w-fit">
         {[
           { id: 'today' as ViewMode, label: 'Today / Week' },
           { id: 'month' as ViewMode, label: 'Month' },
@@ -915,7 +915,7 @@ const FilterBar: React.FC<{
             className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
               viewMode === tab.id 
                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]'
             }`}
           >
             {tab.label}
@@ -929,11 +929,11 @@ const FilterBar: React.FC<{
           <span className="text-xs uppercase tracking-wider">Filters:</span>
         </div>
         
-        <div className="flex items-center gap-1 p-0.5 bg-zinc-900/80 rounded-md border border-zinc-800">
+        <div className="flex items-center gap-1 p-0.5 bg-white/[0.03] rounded-md border border-white/[0.06]">
           <button
             onClick={() => setImpactFilter('all')}
             className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-              impactFilter === 'all' ? 'bg-zinc-700 text-zinc-200' : 'text-zinc-500 hover:text-zinc-300'
+              impactFilter === 'all' ? 'bg-white/[0.06] text-zinc-200' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
             All
@@ -947,7 +947,7 @@ const FilterBar: React.FC<{
                     ? level === 'high' ? 'bg-rose-500/20 border border-rose-500/30'
                       : level === 'medium' ? 'bg-amber-500/20 border border-amber-500/30'
                       : 'bg-emerald-500/20 border border-emerald-500/30'
-                    : 'hover:bg-zinc-800'
+                    : 'hover:bg-white/[0.06]'
                 }`}
               >
                 <ImpactStars impact={level} size="sm" showTooltip={false} />
@@ -959,7 +959,7 @@ const FilterBar: React.FC<{
         <select
           value={regionFilter}
           onChange={(e) => setRegionFilter(e.target.value as Region | 'all')}
-          className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-md text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+          className="px-3 py-1.5 bg-white/[0.03] border border-white/[0.06] rounded-md text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
         >
           <option value="all">All Regions</option>
           {Object.entries(FLAGS).map(([code, flag]) => (
@@ -970,7 +970,7 @@ const FilterBar: React.FC<{
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value as EventCategory | 'all')}
-          className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-md text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+          className="px-3 py-1.5 bg-white/[0.03] border border-white/[0.06] rounded-md text-sm text-zinc-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
         >
           <option value="all">All Categories</option>
           {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
@@ -1002,12 +1002,12 @@ const EventsTimeline: React.FC<{ events: EconomicEvent[]; title: string; subtitl
           <h3 className="text-zinc-100 font-semibold text-lg">{title}</h3>
           {subtitle && <p className="text-zinc-500 text-sm">{subtitle}</p>}
         </div>
-        <span className="ml-auto px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded-full font-mono">
+        <span className="ml-auto px-2 py-0.5 bg-white/[0.06] text-zinc-400 text-xs rounded-full font-mono">
           {events.length} events
         </span>
       </div>
       
-      <div className="absolute left-0 top-16 bottom-0 w-px bg-gradient-to-b from-amber-500/60 via-zinc-700/50 to-transparent" />
+      <div className="absolute left-0 top-16 bottom-0 w-px bg-gradient-to-b from-amber-500/60 via-white/[0.06] to-transparent" />
       
       <div className="space-y-3 pl-6">
         {events.map(event => (
@@ -1081,22 +1081,22 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
     extreme: { bg: 'bg-rose-500/20', border: 'border-rose-500/40', glow: 'shadow-rose-500/20 shadow-lg' },
     high: { bg: 'bg-rose-500/10', border: 'border-rose-500/30', glow: '' },
     medium: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', glow: '' },
-    low: { bg: 'bg-zinc-800/50', border: 'border-zinc-700/50', glow: '' }
+    low: { bg: 'bg-white/[0.04]', border: 'border-white/[0.1]', glow: '' }
   };
   
   return (
     <div className="space-y-6">
       {/* Monthly Overview Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
           <div className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Total Events</div>
           <div className="text-2xl font-bold text-zinc-100">{monthlyStats.totalEvents}</div>
         </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
           <div className="text-zinc-500 text-xs uppercase tracking-wider mb-1">High Impact</div>
           <div className="text-2xl font-bold text-rose-400">{monthlyStats.highImpactCount}</div>
         </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
           <div className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Top Regions</div>
           <div className="flex gap-1 mt-1">
             {monthlyStats.topRegions.map(([region]) => (
@@ -1104,7 +1104,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
             ))}
           </div>
         </div>
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
           <div className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Focus Areas</div>
           <div className="flex gap-2 mt-1">
             {monthlyStats.topCategories.map(([cat]) => (
@@ -1118,12 +1118,12 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
       
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Calendar Grid */}
-        <div className="lg:col-span-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-6">
+        <div className="lg:col-span-2 bg-white/[0.03] border border-white/[0.06] rounded-xl p-6">
           {/* Month Navigation */}
           <div className="flex items-center justify-between mb-6">
             <button 
               onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-white/[0.06] rounded-lg transition-colors"
             >
               <ChevronLeft className="w-5 h-5 text-zinc-400" />
             </button>
@@ -1132,7 +1132,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
             </h3>
             <button 
               onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              className="p-2 hover:bg-white/[0.06] rounded-lg transition-colors"
             >
               <ChevronRight className="w-5 h-5 text-zinc-400" />
             </button>
@@ -1171,7 +1171,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
                     min-h-[80px] p-2 rounded-xl border transition-all cursor-pointer
                     ${isSelected ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-transparent'}
                     ${isCurrentDay && !isSelected ? 'border-amber-500/50' : ''}
-                    ${config ? `${config.bg} ${config.border} ${config.glow}` : 'hover:bg-zinc-800/50'}
+                    ${config ? `${config.bg} ${config.border} ${config.glow}` : 'hover:bg-white/[0.04]'}
                   `}
                 >
                   {/* Day Number */}
@@ -1212,7 +1212,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
                       {/* Event Count Badge */}
                       {dayEvents.length > 1 && (
                         <div className="mt-1">
-                          <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] text-zinc-400 bg-white/[0.06] px-1.5 py-0.5 rounded">
                             {dayEvents.length} events
                           </span>
                         </div>
@@ -1225,7 +1225,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
           </div>
           
           {/* Legend */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mt-6 pt-4 border-t border-zinc-800">
+          <div className="flex flex-wrap items-center justify-center gap-4 mt-6 pt-4 border-t border-white/[0.06]">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-rose-500/20 border border-rose-500/40" />
               <span className="text-zinc-500 text-xs">High Volatility</span>
@@ -1235,20 +1235,20 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
               <span className="text-zinc-500 text-xs">Medium</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-zinc-800/50 border border-zinc-700/50" />
+              <div className="w-4 h-4 rounded bg-white/[0.04] border border-white/[0.1]" />
               <span className="text-zinc-500 text-xs">Low Impact</span>
             </div>
           </div>
         </div>
         
         {/* Day Detail Sidebar */}
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-5">
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-zinc-100 font-semibold">
               {selectedDay ? formatDate(`2025-01-${String(selectedDay).padStart(2, '0')}`) : 'Select a day'}
             </h4>
             {selectedDayEvents.length > 0 && (
-              <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded-full">
+              <span className="px-2 py-0.5 bg-white/[0.06] text-zinc-400 text-xs rounded-full">
                 {selectedDayEvents.length} events
               </span>
             )}
@@ -1257,7 +1257,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
           {selectedDayEvents.length > 0 ? (
             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
               {selectedDayEvents.sort((a, b) => a.time.localeCompare(b.time)).map(event => (
-                <div key={event.id} className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700/50">
+                <div key={event.id} className="bg-white/[0.04] rounded-lg p-3 border border-white/[0.1]">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-base">{FLAGS[event.country]}</span>
@@ -1280,7 +1280,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
                   )}
                   
                   {(event.forecast || event.previous) && (
-                    <div className="flex gap-3 mt-2 pt-2 border-t border-zinc-700/50 text-xs">
+                    <div className="flex gap-3 mt-2 pt-2 border-t border-white/[0.1] text-xs">
                       {event.forecast && (
                         <div>
                           <span className="text-zinc-600">Fcst: </span>
@@ -1308,7 +1308,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
           
           {/* Day Region Breakdown */}
           {selectedDayEvents.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-zinc-800">
+            <div className="mt-4 pt-4 border-t border-white/[0.06]">
               <div className="text-zinc-500 text-xs uppercase tracking-wider mb-2">By Region</div>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(
@@ -1317,7 +1317,7 @@ const CalendarMonthView: React.FC<{ events: EconomicEvent[] }> = ({ events }) =>
                     return acc;
                   }, {} as Record<string, number>)
                 ).map(([region, count]) => (
-                  <div key={region} className="flex items-center gap-1.5 px-2 py-1 bg-zinc-800/50 rounded-md">
+                  <div key={region} className="flex items-center gap-1.5 px-2 py-1 bg-white/[0.04] rounded-md">
                     <span className="text-sm">{FLAGS[region as Region]}</span>
                     <span className="text-zinc-400 text-xs">{count}</span>
                   </div>
@@ -1339,7 +1339,7 @@ const MarketImpactView: React.FC<{ events: EconomicEvent[] }> = ({ events }) => 
   
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-rose-500/10 via-zinc-900/50 to-transparent border border-rose-500/20 rounded-xl p-6">
+      <div className="bg-gradient-to-r from-rose-500/10 via-white/[0.03] to-transparent border border-rose-500/20 rounded-xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 bg-rose-500/20 rounded-lg">
             <TrendingUp className="w-6 h-6 text-rose-400" />
@@ -1352,8 +1352,8 @@ const MarketImpactView: React.FC<{ events: EconomicEvent[] }> = ({ events }) => 
         
         <div className="grid gap-4 md:grid-cols-2">
           {highImpactEvents.map((event, index) => (
-            <div key={event.id} className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 relative overflow-hidden">
-              <div className="absolute top-0 right-0 px-3 py-1 bg-zinc-800 text-zinc-400 text-xs font-mono rounded-bl-lg">
+            <div key={event.id} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 relative overflow-hidden">
+              <div className="absolute top-0 right-0 px-3 py-1 bg-white/[0.06] text-zinc-400 text-xs font-mono rounded-bl-lg">
                 #{index + 1}
               </div>
               
@@ -1374,7 +1374,7 @@ const MarketImpactView: React.FC<{ events: EconomicEvent[] }> = ({ events }) => 
                   <span className="text-zinc-500 text-xs uppercase tracking-wider">Market Sensitivity</span>
                   <span className="text-rose-400 font-mono text-sm font-semibold">{event.sensitivityScore}%</span>
                 </div>
-                <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-rose-500 to-rose-400 rounded-full transition-all duration-700"
                     style={{ width: `${event.sensitivityScore}%` }}
@@ -1383,18 +1383,18 @@ const MarketImpactView: React.FC<{ events: EconomicEvent[] }> = ({ events }) => 
               </div>
               
               {event.historicalMove && (
-                <div className="flex items-center justify-between py-2 px-3 bg-zinc-800/50 rounded-lg">
+                <div className="flex items-center justify-between py-2 px-3 bg-white/[0.04] rounded-lg">
                   <span className="text-zinc-500 text-xs">Past 5 Releases Avg. Move</span>
                   <span className="text-amber-400 font-mono text-sm font-medium">±{event.historicalMove}%</span>
                 </div>
               )}
               
               {event.assetsImpacted && (
-                <div className="mt-3 pt-3 border-t border-zinc-800">
+                <div className="mt-3 pt-3 border-t border-white/[0.06]">
                   <span className="text-zinc-500 text-[10px] uppercase tracking-wider">Key Assets</span>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {event.assetsImpacted.slice(0, 4).map((asset, i) => (
-                      <span key={i} className="px-2 py-1 bg-zinc-800 text-zinc-300 text-xs rounded">
+                      <span key={i} className="px-2 py-1 bg-white/[0.06] text-zinc-300 text-xs rounded">
                         {asset.asset}
                       </span>
                     ))}
@@ -1466,7 +1466,7 @@ export default function MacroCalendar() {
         <div className="grid gap-4 lg:grid-cols-3 mb-8">
           <EventClustersCard />
           <RegionOverview events={mockEvents} />
-          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4">
+          <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
               <Info className="w-4 h-4 text-zinc-500" />
               <span className="text-zinc-400 text-xs uppercase tracking-wider font-medium">Quick Legend</span>
@@ -1484,7 +1484,7 @@ export default function MacroCalendar() {
                 <ImpactStars impact="low" />
                 <span className="text-zinc-400 text-xs">Low — Limited impact</span>
               </div>
-              <div className="pt-2 border-t border-zinc-800">
+              <div className="pt-2 border-t border-white/[0.06]">
                 <div className="flex items-center gap-2">
                   <Activity className="w-3.5 h-3.5 text-amber-400" />
                   <span className="text-zinc-400 text-xs">±X% = Historical S&P move</span>
@@ -1538,7 +1538,7 @@ export default function MacroCalendar() {
           <MarketImpactView events={filteredEvents} />
         )}
         
-        <div className="mt-12 pt-6 border-t border-zinc-800/50">
+        <div className="mt-12 pt-6 border-t border-white/[0.06]">
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-zinc-500">
             <span>All times in ET (Eastern Time)</span>
             <span className="text-zinc-700">•</span>
