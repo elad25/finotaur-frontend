@@ -64,6 +64,7 @@ export type MarketFunction =
   | 'valuation'
   | 'insider'
   | 'earnings'
+  | 'stock-compare'
   // Crypto-specific
   | 'derivatives'
   | 'defi-tvl'
@@ -289,6 +290,14 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       stocks: '/app/stocks/earnings',
     },
     locked: true, // earnings calendar = Finnhub, no commercial license — closed to public
+  },
+  {
+    id: 'stock-compare',
+    label: 'Compare',
+    icon: GitCompare,
+    routes: {
+      stocks: '/app/stocks/compare',
+    },
   },
 
   // ── Crypto-specific ───────────────────────────────────────────────────────

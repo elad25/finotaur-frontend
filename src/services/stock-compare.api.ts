@@ -39,6 +39,11 @@ export interface StockFundamentals {
   symbol:           string;
   marketCap:        number | null;
   pe:               number | null;
+  ps:               number | null;
+  pb:               number | null;
+  evEbitda:         number | null;
+  revenueTTM:       number | null;
+  netIncomeTTM:     number | null;
   grossMargin:      number | null;
   operatingMargin:  number | null;
   netMargin:        number | null;
@@ -62,6 +67,8 @@ interface RawFundamentals {
     roa?:              { value?: unknown };
     debtToEquity?:     { value?: unknown };
     currentRatio?:     { value?: unknown };
+    revenueTTM?:       { value?: unknown };
+    netIncomeTTM?:     { value?: unknown };
   };
   valuation?: {
     multiples?: Array<{ metric: string; value: unknown }>;
@@ -131,11 +138,16 @@ export async function fetchStockFundamentals(symbol: string): Promise<StockFunda
     roa:             num(raw.kpis?.roa?.value),
     debtToEquity:    num(raw.kpis?.debtToEquity?.value),
     currentRatio:    num(raw.kpis?.currentRatio?.value),
+    revenueTTM:      num(raw.kpis?.revenueTTM?.value),
+    netIncomeTTM:    num(raw.kpis?.netIncomeTTM?.value),
     altmanZ:         num(raw.health?.altmanZ),
     piotroskiF:      num(raw.health?.piotroskiF),
     sector:          typeof raw.context?.sector === 'string' ? raw.context.sector : null,
-    // Valuation multiple: treat 0 / negative as invalid sentinel → null
+    // Valuation multiples: treat 0 / negative as invalid sentinel → null
     pe:              posNum(mult('PE')),
+    ps:              posNum(mult('PS')),
+    pb:              posNum(mult('PB')),
+    evEbitda:        posNum(mult('EVEBITDA')),
   };
 
   fundCache.set(sym, { data, fetchedAt: Date.now() });
