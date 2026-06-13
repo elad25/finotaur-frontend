@@ -583,6 +583,14 @@ export interface FinotaurChartProps {
    */
   focusRange?: { from: number; to: number };
   /**
+   * Bumping token that imperatively re-applies `focusRange` on the time axis.
+   * Increment this when the caller wants to re-focus the time window (e.g. after
+   * the user clicks "Fit"). Only meaningful when `focusRange` is also provided.
+   * Version 0 / undefined is a no-op (avoids double-apply on initial mount,
+   * which is already handled by the bar-load effect).
+   */
+  timeFitToken?: number;
+  /**
    * Optional overlay price lines drawn on the candle series (e.g. order-book walls).
    * Diffed by `id` on every update — only changed lines are recreated, avoiding flicker.
    * When absent or empty the feature is a complete no-op; backtest/journal callers
@@ -667,6 +675,7 @@ export function FinotaurChart({
   height = 600,
   onError,
   focusRange,
+  timeFitToken,
   priceLines,
   wallSegments,
   wallRenderMode = 'series',
@@ -1049,6 +1058,28 @@ export function FinotaurChart({
       // Series or price scale may have been removed mid-flight — ignore.
     }
   }, [liquidityBand]);
+
+  // ─── Imperative time-window re-focus (Fit button) ──────────
+  // When `timeFitToken` is bumped by the caller (e.g. scanner "Fit" click),
+  // re-apply `focusRange` on the time scale so the visible window snaps back
+  // to the last-6h window regardless of where the user has panned/zoomed.
+  // Token 0 / undefined is treated as "no-op on first render" — the bar-load
+  // effect already handles the initial setVisibleRange.
+  useEffect(() => {
+    if (!timeFitToken || !focusRange || !chartRef.current) return;
+    try {
+      chartRef.current.timeScale().setVisibleRange({
+        from: focusRange.from as never,
+        to:   focusRange.to   as never,
+      });
+    } catch {
+      // Chart may be mid-teardown — ignore.
+    }
+  // Only re-run when the token changes; focusRange identity changes every 30s
+  // with the scanner's timeTick but we must NOT re-apply on every slide —
+  // only when the token is explicitly bumped.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeFitToken]);
 
   // ─── Manual price-scale override detection ──────────────────
   // lw-charts v4 has no event for "user dragged the price axis". We detect it
