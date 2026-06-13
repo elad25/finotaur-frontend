@@ -35,7 +35,7 @@ export const ASSET_CLASSES: AssetClassMeta[] = [
   { id: 'stocks',      label: 'Stocks',      icon: TrendingUp },
   { id: 'options',     label: 'Options',     icon: Layers,    comingSoon: true },
   { id: 'crypto',      label: 'Crypto',      icon: Coins },
-  { id: 'futures',     label: 'Futures',     icon: BarChart3 },
+  { id: 'futures',     label: 'Futures',     icon: BarChart3, comingSoon: true },
   { id: 'forex',       label: 'Forex',       icon: Globe },
   { id: 'commodities', label: 'Commodities', icon: Flame },
   { id: 'macro',       label: 'Macro',       icon: Brain },
