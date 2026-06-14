@@ -74,6 +74,10 @@ function isReady(fields: TradeConfirmFields): boolean {
   return REQUIRED_FIELDS.every((k) => {
     const v = fields[k];
     if (v == null || v === '') return false;
+    if (k === 'quantity') {
+      const n = typeof v === 'number' ? v : Number(v);
+      return Number.isFinite(n) && n > 0;
+    }
     return true;
   });
 }
@@ -313,7 +317,7 @@ export default function FinoTradeConfirmCard({
             value={numOrEmpty(form.entry_price)}
             onChange={(e) => setField('entry_price', parseNum(e.target.value))}
             placeholder="0.00"
-            className={cn('h-8 text-xs', missingCls('entry_price'))}
+            className={cn('h-8 text-xs no-spinner', missingCls('entry_price'))}
             disabled={phase === 'submitting'}
           />
         </div>
@@ -328,7 +332,7 @@ export default function FinoTradeConfirmCard({
             value={numOrEmpty(form.exit_price)}
             onChange={(e) => setField('exit_price', parseNum(e.target.value))}
             placeholder="0.00"
-            className={cn('h-8 text-xs', missingCls('exit_price'))}
+            className={cn('h-8 text-xs no-spinner', missingCls('exit_price'))}
             disabled={phase === 'submitting'}
           />
         </div>
@@ -343,7 +347,7 @@ export default function FinoTradeConfirmCard({
             value={numOrEmpty(form.stop_price)}
             onChange={(e) => setField('stop_price', parseNum(e.target.value))}
             placeholder="0.00"
-            className={cn('h-8 text-xs', missingCls('stop_price'))}
+            className={cn('h-8 text-xs no-spinner', missingCls('stop_price'))}
             disabled={phase === 'submitting'}
           />
         </div>
@@ -356,24 +360,38 @@ export default function FinoTradeConfirmCard({
             value={numOrEmpty(form.take_profit_price)}
             onChange={(e) => setField('take_profit_price', parseNum(e.target.value))}
             placeholder="0.00"
-            className="h-8 text-xs"
+            className="h-8 text-xs no-spinner"
             disabled={phase === 'submitting'}
           />
         </div>
 
         {/* Quantity */}
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] uppercase tracking-wider text-ink-tertiary">
-            Qty {isMissing('quantity', extraction.missing) && <span className="text-amber-400">*</span>}
-          </label>
-          <Input
-            type="number"
-            value={numOrEmpty(form.quantity)}
-            onChange={(e) => setField('quantity', parseNum(e.target.value))}
-            placeholder="1"
-            className={cn('h-8 text-xs', missingCls('quantity'))}
-            disabled={phase === 'submitting'}
-          />
+          {(() => {
+            const qtyInvalid = !(typeof form.quantity === 'number' && form.quantity > 0);
+            return (
+              <>
+                <label className="text-[10px] uppercase tracking-wider text-ink-tertiary">
+                  Position Size {qtyInvalid && <span className="text-amber-400">*</span>}
+                </label>
+                <Input
+                  type="number"
+                  value={numOrEmpty(form.quantity)}
+                  onChange={(e) => setField('quantity', parseNum(e.target.value))}
+                  placeholder="1"
+                  className={cn(
+                    'h-8 text-xs no-spinner',
+                    missingCls('quantity'),
+                    qtyInvalid ? 'border-amber-500/60 focus-visible:ring-amber-500/40' : '',
+                  )}
+                  disabled={phase === 'submitting'}
+                />
+                {qtyInvalid && (
+                  <span className="text-[10px] text-amber-400">Required for P&amp;L</span>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* Fees */}
@@ -384,7 +402,7 @@ export default function FinoTradeConfirmCard({
             value={numOrEmpty(form.fees ?? null)}
             onChange={(e) => setField('fees', parseNum(e.target.value))}
             placeholder="0.00"
-            className="h-8 text-xs"
+            className="h-8 text-xs no-spinner"
             disabled={phase === 'submitting'}
           />
         </div>
