@@ -175,19 +175,24 @@ export const ChatInterface = memo(function ChatInterface({
     e.target.value = '';
   };
 
-  // Image paste from clipboard
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  // Global image paste — lets the user Ctrl+V a screenshot anywhere in the chat
+  // (Claude-style), not only when the textarea is focused.
+  useEffect(() => {
     if (!onImageSelected) return;
-    const items = Array.from(e.clipboardData.items);
-    const imageItem = items.find((item) => item.type.startsWith('image/'));
-    if (imageItem) {
-      const file = imageItem.getAsFile();
-      if (file) {
-        e.preventDefault();
-        onImageSelected(file);
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData ? Array.from(e.clipboardData.items) : [];
+      const imageItem = items.find((item) => item.type.startsWith('image/'));
+      if (imageItem) {
+        const file = imageItem.getAsFile();
+        if (file) {
+          e.preventDefault();
+          onImageSelected(file);
+        }
       }
-    }
-  };
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [onImageSelected]);
   
   const showEmptyState = messages.length === 0 && !isLoading;
 
@@ -318,7 +323,6 @@ export const ChatInterface = memo(function ChatInterface({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 placeholder={placeholder}
