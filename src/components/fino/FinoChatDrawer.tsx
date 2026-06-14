@@ -6,8 +6,8 @@
 // engine the retired /app/ai/assistant page used (useAICopilot + ChatInterface).
 // =====================================================
 
-import { useEffect, useRef, useState } from 'react';
-import { X, Plus, Sparkles, Sun, TrendingUp, BarChart3, Bitcoin, Shield, Building2, LineChart } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { X, Plus, Sparkles, Sun, TrendingUp, BarChart3, Bitcoin, Shield, Building2, LineChart, Loader2 } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
@@ -18,7 +18,16 @@ import type { FinoPageData } from '@/contexts/FinoChatContext';
 import FinoAvatar from '@/components/fino/FinoAvatar';
 import FinoSessionReviewCard from '@/components/fino/FinoSessionReviewCard';
 import { FinoActionBar } from '@/components/fino/FinoActionBar';
+import FinoTradeConfirmCard from '@/components/fino/FinoTradeConfirmCard';
+import { aiCopilotApi } from '@/services/aiCopilotApi';
+import type { TradeExtraction } from '@/services/aiCopilotApi';
+import { compressImageFile } from '@/lib/fino/screenshotTrade';
 import type { LucideIcon } from 'lucide-react';
+
+// Feature flag — gates the screenshot → trade extraction surface (📎 button,
+// paste-to-extract, spinner/error/review cards). Defaults OFF.
+// Set VITE_ENABLE_FINO_DETECTIVE=true in .env.local to enable locally.
+const FINO_DETECTIVE_ENABLED = import.meta.env.VITE_ENABLE_FINO_DETECTIVE === 'true';
 
 // Suggestion chips shown in the FINO drawer's empty state.
 // Morning briefing chip is prepended so it surfaces first.
@@ -107,6 +116,16 @@ export default function FinoChatDrawer() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Extraction state for the screenshot → trade flow
+// ---------------------------------------------------------------------------
+
+type ExtractionState =
+  | { phase: 'idle' }
+  | { phase: 'extracting' }
+  | { phase: 'review'; extraction: TradeExtraction; file: File; mediaType: string }
+  | { phase: 'error'; message: string };
+
 function FinoChatPanel({
   onClose,
   initialQuery,
@@ -126,6 +145,12 @@ function FinoChatPanel({
   } = useAICopilot();
   const { getPageData } = useFinoChat();
 
+  // Screenshot → trade extraction state
+  const [extractionState, setExtractionState] = useState<ExtractionState>({ phase: 'idle' });
+
+  // Imperative ref populated by ChatInterface — lets us open the file picker from here.
+  const filePickerTriggerRef = useRef<(() => void) | null>(null);
+
   // Auto-submit the initial query once per unique query string.
   // Guards against double-send (StrictMode double-mount) via lastSentRef.
   const lastSentRef = useRef<string | null>(null);
@@ -135,6 +160,43 @@ function FinoChatPanel({
     lastSentRef.current = initialQuery;
     void sendMessage(initialQuery, buildFinoContext(getPageData));
   }, [initialQuery, sendMessage, getPageData]);
+
+  // Called by ChatInterface when user selects or pastes an image
+  const handleImageSelected = useCallback(async (file: File) => {
+    setExtractionState({ phase: 'extracting' });
+    try {
+      const { imageBase64, mediaType } = await compressImageFile(file);
+      const { extraction } = await aiCopilotApi.extractTradeFromImage(
+        imageBase64,
+        mediaType,
+      );
+      setExtractionState({ phase: 'review', extraction, file, mediaType });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to analyze screenshot';
+      setExtractionState({ phase: 'error', message });
+      // Auto-dismiss error after 5 s
+      setTimeout(() => setExtractionState({ phase: 'idle' }), 5_000);
+    }
+  }, []);
+
+  const resetExtraction = useCallback(() => {
+    setExtractionState({ phase: 'idle' });
+  }, []);
+
+  // Listen for action events emitted by the SSE stream (via aiCopilotApi case 'action').
+  // When the backend requests a screenshot upload, open the existing file picker.
+  useEffect(() => {
+    const handleFinoAction = (e: Event) => {
+      if (!FINO_DETECTIVE_ENABLED) return;
+      const detail = (e as CustomEvent<{ action: string }>).detail;
+      if (detail?.action === 'screenshot_trade') {
+        filePickerTriggerRef.current?.();
+      }
+    };
+    window.addEventListener('fino:action', handleFinoAction);
+    return () => window.removeEventListener('fino:action', handleFinoAction);
+  }, []);
 
   const iconBtn =
     'flex h-8 w-8 items-center justify-center rounded-lg border border-border-ds-subtle text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary';
@@ -181,6 +243,29 @@ function FinoChatPanel({
           <FinoSessionReviewCard />
           {/* Action approval bar — shown when the SSE stream emits a type:'action' event */}
           <FinoActionBar />
+
+          {/* Screenshot extraction indicators — mounted near FinoActionBar */}
+          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'extracting' && (
+            <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-[#C9A646]/20 bg-[#0D0C0A] px-3 py-2">
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#C9A646]" />
+              <span className="text-[11px] text-[#C9A646]">Analyzing screenshot…</span>
+            </div>
+          )}
+
+          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'error' && (
+            <div className="mx-4 mb-2 rounded-lg border border-red-500/20 bg-red-950/30 px-3 py-2">
+              <span className="text-[11px] text-red-400">{extractionState.message}</span>
+            </div>
+          )}
+
+          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'review' && (
+            <FinoTradeConfirmCard
+              extraction={extractionState.extraction}
+              file={extractionState.file}
+              onClose={resetExtraction}
+            />
+          )}
+
           <div className="flex min-h-0 flex-1 flex-col">
             <ChatInterface
               messages={messages}
@@ -198,6 +283,8 @@ function FinoChatPanel({
               dailyLimit={usage?.daily_limit}
               promptRows={FINO_PROMPT_ROWS}
               promptPlacement="aboveInput"
+              onImageSelected={FINO_DETECTIVE_ENABLED ? handleImageSelected : undefined}
+              openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
             />
           </div>
         </>

@@ -33,6 +33,30 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Trade extraction types (used by extractTradeFromImage)
+// ---------------------------------------------------------------------------
+
+export interface TradeExtraction {
+  symbol: string | null;
+  side: 'LONG' | 'SHORT' | null;
+  asset_class: 'stock' | 'etf' | 'futures' | 'options' | 'crypto' | 'forex' | null;
+  entry_price: number | null;
+  exit_price: number | null;
+  stop_price: number | null;
+  take_profit_price: number | null;
+  quantity: number | null;
+  rr: number | null;
+  outcome: 'WIN' | 'LOSS' | 'BE' | null;
+  confidence: Record<string, unknown>;
+  missing: string[];
+  notes: string | null;
+  /** FINOTAUR-tier only: FINO's read of the trade. Absent for basic/core users. */
+  analysis_note?: string | null;
+  /** FINOTAUR-tier only: proposed journal tags. Absent for basic/core users. */
+  suggested_tags?: string[] | null;
+}
+
 // Types
 interface ChatResponse {
   success: boolean;
@@ -61,6 +85,8 @@ interface StreamCallbacks {
   onSources?: (sources: any[]) => void;
   onComplete?: (data: any) => void;
   onError?: (error: string) => void;
+  /** Called when the server emits a type:'action' SSE event. */
+  onAction?: (action: { action: string; label?: string; count?: number }) => void;
   signal?: AbortSignal;
 }
 
@@ -130,6 +156,7 @@ export const aiCopilotApi = {
       onSources,
       onComplete,
       onError,
+      onAction,
       signal,
     } = options;
 
@@ -212,6 +239,12 @@ export const aiCopilotApi = {
                       },
                     }),
                   );
+                  // Also call the optional callback so direct callers can react.
+                  onAction?.({
+                    action: data.action as string,
+                    label: data.label as string | undefined,
+                    count: data.count as number | undefined,
+                  });
                   break;
 
                 default:
@@ -367,6 +400,32 @@ export const aiCopilotApi = {
     }
 
     return response.json() as Promise<{ tagged: number }>;
+  },
+
+  /**
+   * Extract trade data from a TradingView screenshot.
+   * Body: { imageBase64, mediaType, userText? }
+   * Returns { extraction, tier } where extraction may contain null fields.
+   */
+  async extractTradeFromImage(
+    imageBase64: string,
+    mediaType: 'image/jpeg' | 'image/png' | 'image/webp',
+    userText?: string,
+  ): Promise<{ extraction: TradeExtraction; tier: string }> {
+    const headers = await getAuthHeaders();
+
+    const response = await fetch(`${API_BASE}/api/ai/fino/extract-trade`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ imageBase64, mediaType, userText }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || body.error || `Extract failed (${response.status})`);
+    }
+
+    return response.json() as Promise<{ extraction: TradeExtraction; tier: string }>;
   },
 
   /**
