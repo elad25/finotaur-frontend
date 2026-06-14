@@ -13,12 +13,14 @@
 import { useNavigate } from 'react-router-dom';
 import { ASSET_CLASSES, getMarketsItemsForAsset } from '@/constants/markets';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { cn } from '@/lib/utils';
 import { Lock } from 'lucide-react';
 
 export function MarketsAssetTabs() {
   const navigate = useNavigate();
   const { selectedAsset, setSelectedAsset } = useAssetSelector();
+  const { hasBetaAccess } = useAdminAuth();
 
   const handleSelect = (assetId: (typeof ASSET_CLASSES)[number]['id']) => {
     setSelectedAsset(assetId);
@@ -44,12 +46,14 @@ export function MarketsAssetTabs() {
             key={asset.id}
             role="tab"
             aria-selected={isActive}
-            onClick={() => handleSelect(asset.id)}
+            onClick={() => { if (asset.comingSoon) return; handleSelect(asset.id); }}
             className={cn(
               'flex-shrink-0 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200',
               isActive
                 ? 'text-[#C9A646] bg-[#C9A646]/05'
-                : 'text-[#A0A0A0] hover:bg-[#141414] hover:text-[#F4F4F4]',
+                : asset.comingSoon
+                  ? 'text-[#A0A0A0] opacity-50 cursor-not-allowed'
+                  : 'text-[#A0A0A0] hover:bg-[#141414] hover:text-[#F4F4F4]',
             )}
             style={
               isActive
@@ -62,7 +66,7 @@ export function MarketsAssetTabs() {
           >
             <Icon className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
             <span>{asset.label}</span>
-            {asset.comingSoon && (
+            {asset.comingSoon && hasBetaAccess && (
               <>
                 <Lock
                   className="h-2.5 w-2.5 flex-shrink-0"

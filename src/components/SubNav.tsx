@@ -413,7 +413,6 @@ export const SubNav = () => {
                     aria-label="Locked for regular users"
                   />
                 )}
-                {locked && <Lock className="h-3 w-3 opacity-60" />}
                 
                 {/* 🔥 Beta badge */}
                 {isBetaItem && (

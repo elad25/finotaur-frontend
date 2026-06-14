@@ -92,7 +92,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
             {isExpanded && (
               <>
                 <span className={labelClass}>{fn.label}</span>
-                {itemLocked && (
+                {itemLocked && hasBetaAccess && (
                   <Lock
                     className="h-2.5 w-2.5 flex-shrink-0"
                     style={{ color: 'rgba(201,166,70,0.55)' }}
@@ -100,7 +100,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
                     aria-label="Closed to the public"
                   />
                 )}
-                {fn.priceGated && (
+                {fn.priceGated && hasBetaAccess && (
                   <GatedLockBadge />
                 )}
               </>
@@ -110,14 +110,14 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
             {!isExpanded && (
               <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-base-900 border border-gray-600 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                 {fn.label}
-                {itemLocked && (
+                {itemLocked && hasBetaAccess && (
                   <Lock
                     className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
                     style={{ color: 'rgba(201,166,70,0.55)' }}
                     title="Closed to the public"
                   />
                 )}
-                {fn.priceGated && (
+                {fn.priceGated && hasBetaAccess && (
                   <Lock
                     className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500"
                     title="Price gated"

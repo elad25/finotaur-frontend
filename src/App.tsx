@@ -30,6 +30,7 @@ import TickerResearch from "@/pages/research/TickerResearchPage";
 import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 import { BetaRoute } from "@/components/routes/BetaRoute";
+import { AdminBetaGate } from "@/components/routes/AdminBetaGate";
 
 import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
@@ -482,7 +483,7 @@ function AppContent() {
           <Route path="home" element={<SuspenseRoute><HomePage /></SuspenseRoute>} />
 
           {/* ALL MARKETS */}
-          <Route path="all-markets/overview" element={<SuspenseRoute><AllMarketsOverview /></SuspenseRoute>} />
+          <Route path="all-markets/overview" element={<SuspenseRoute><AdminBetaGate><AllMarketsOverview /></AdminBetaGate></SuspenseRoute>} />
           <Route path="all-markets/chart" element={<SuspenseRoute><AllMarketsChart /></SuspenseRoute>} />
           <Route path="all-markets/summary" element={<SuspenseRoute><AllMarketsSummary /></SuspenseRoute>} />
           <Route path="all-markets/movers" element={<SuspenseRoute><AllMarketsMovers /></SuspenseRoute>} />
@@ -547,7 +548,7 @@ function AppContent() {
           <Route path="etf/performance" element={<Navigate to="/app/etfs/overview"  replace />} />
 
           {/* STOCKS */}
-          <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><StocksOverview /></LockedRoute>} />
+          <Route path="stocks/overview" element={<LockedRoute domainId="stocks"><AdminBetaGate><StocksOverview /></AdminBetaGate></LockedRoute>} />
           {/* Screener now lives at the all-markets (home) level — see all-markets/screener below.
               Redirect keeps old bookmarks/links working. */}
           <Route path="stocks/screener" element={<Navigate to="/app/all-markets/screener" replace />} />
@@ -558,11 +559,11 @@ function AppContent() {
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />
           <Route path="stocks/sectors/:id" element={<LockedRoute domainId="stocks"><StocksSectorDetail /></LockedRoute>} />
-          <Route path="stocks/catalysts" element={<LockedRoute domainId="stocks"><StocksCatalysts /></LockedRoute>} />
+          <Route path="stocks/catalysts" element={<LockedRoute domainId="stocks"><AdminBetaGate><StocksCatalysts /></AdminBetaGate></LockedRoute>} />
           {/* Stocks Upgrades/Downgrades — sealed: analyst-ratings source (Finnhub/FMP) not licensed for redistribution. Sealed pending licensed source.
               To re-enable: restore <LockedRoute domainId="stocks"><StocksUpgrades /></LockedRoute> and remove locked:true from nav.ts. */}
           <Route path="stocks/upgrades" element={<OptionsComingSoon title="Upgrades / Downgrades" description="Analyst ratings data is coming soon — we're securing a licensed data feed." />} />
-          <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><StocksValuation /></LockedRoute>} />
+          <Route path="stocks/valuation" element={<LockedRoute domainId="stocks"><AdminBetaGate><StocksValuation /></AdminBetaGate></LockedRoute>} />
           <Route path="stocks/sentiment" element={<LockedRoute domainId="stocks"><StocksSentiment /></LockedRoute>} />
           <Route path="stocks/insider"  element={<LockedRoute domainId="stocks"><StocksInsider  /></LockedRoute>} />
           <Route path="stocks/insiders" element={<LockedRoute domainId="stocks"><StocksInsiders /></LockedRoute>} />

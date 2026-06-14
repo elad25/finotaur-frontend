@@ -39,7 +39,7 @@ export const ASSET_CLASSES: AssetClassMeta[] = [
   { id: 'forex',       label: 'Forex',       icon: Globe },
   { id: 'commodities', label: 'Commodities', icon: Flame },
   { id: 'macro',       label: 'Macro',       icon: Brain },
-  { id: 'etf',         label: 'ETF',         icon: PieChart,  comingSoon: true },
+  { id: 'etf',         label: 'ETF',         icon: PieChart },
 ];
 
 // ---------------------------------------------------------------------------
