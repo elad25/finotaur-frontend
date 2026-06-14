@@ -229,7 +229,7 @@ export default function PromoOfferBanner() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm"
+              className="fixed inset-0 z-[210] bg-black/85 backdrop-blur-sm"
             />
 
             {/* Modal */}
@@ -238,7 +238,7 @@ export default function PromoOfferBanner() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+              className="fixed inset-0 z-[210] flex items-center justify-center p-4"
             >
               <div
                 role="dialog"
