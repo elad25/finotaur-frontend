@@ -38,6 +38,7 @@ import {
 } from "@/hooks/useDashboardData";
 import { BORDER_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettingsData } from "@/lib/queryClient";
 
 // ================================================
@@ -126,12 +127,30 @@ const JournalInfoIcon = ({
   label: string;
   className?: string;
 }) => (
-  <HelpCircle
-    className={`${className} shrink-0 cursor-help text-white/38 transition-colors hover:text-[#E8C766]`}
-    aria-label={label}
-    role="img"
-    title={label}
-  />
+  <TooltipProvider delayDuration={120}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={(e) => e.preventDefault()}
+          className="inline-flex shrink-0 items-center justify-center"
+        >
+          <HelpCircle
+            className={`${className} shrink-0 cursor-help text-white/38 transition-colors hover:text-[#E8C766]`}
+            role="img"
+          />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="start"
+        className="max-w-[240px] border-[#E8C766]/25 bg-[rgba(10,10,10,0.96)] text-[11px] font-medium leading-snug text-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.6)]"
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
 );
 
 const formatPlainCurrency = (value: number): string => {
