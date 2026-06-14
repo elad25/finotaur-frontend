@@ -55,7 +55,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
         const Icon = fn.icon;
         const route = fn.routes[selectedAsset]!; // always defined — getMarketsItemsForAsset filters these
 
-        const itemLocked = fn.locked === true;         // closed to the public (paywall)
+        const itemLocked = fn.locked === true || (fn.lockedAssets?.includes(selectedAsset) ?? false); // closed to the public (paywall)
         const blocked = itemLocked && !hasBetaAccess;   // regular users cannot open it
 
         const active = !blocked &&

@@ -137,6 +137,12 @@ export interface MarketFunctionMeta {
   routes: Partial<Record<AssetClass, string>>;
   /** Closed to the general public (paywall). Free Research Lab items omit this. */
   locked?: boolean;
+  /**
+   * Lock this function only for SPECIFIC assets (admin/beta only on those assets),
+   * while it stays open on the rest. Used for shared functions like Overview that
+   * are gated on stocks + home but free on crypto/forex/macro.
+   */
+  lockedAssets?: AssetClass[];
   /** Marks this item as compliance price-gated (Polygon redistribution license not held). */
   priceGated?: boolean;
   /**
@@ -167,6 +173,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       macro:       '/app/macro/overview',
     },
     priceGated: true,  // compliance gate: Overview pages render raw Polygon price/chart data for stocks + all-markets
+    lockedAssets: ['stocks', 'home'], // Early-access: stocks + all-markets overview are admin/beta only
   },
   {
     id: 'screener',
@@ -255,6 +262,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       stocks:      '/app/stocks/catalysts',
     },
+    locked: true, // Early-access: admin/beta only
   },
   {
     id: 'upgrades',
@@ -272,6 +280,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       stocks: '/app/stocks/valuation',
     },
+    locked: true, // Early-access: admin/beta only
   },
   {
     id: 'insider',
