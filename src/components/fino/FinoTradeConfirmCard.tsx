@@ -20,7 +20,7 @@ import { uploadScreenshot } from '@/lib/trades';
 import { createTrade } from '@/lib/trades';
 import { compressImageFile, buildCompletedTradePayload } from '@/lib/fino/screenshotTrade';
 import type { TradeConfirmFields } from '@/lib/fino/screenshotTrade';
-import { useStrategiesOptimized } from '@/hooks/useStrategies';
+import { useStrategiesOptimized, useCreateStrategyOptimized } from '@/hooks/useStrategies';
 import { useAuth } from '@/hooks/useAuth';
 
 // ---------------------------------------------------------------------------
@@ -122,6 +122,20 @@ export default function FinoTradeConfirmCard({
   const userId = getEffectiveUserId();
   const [strategyId, setStrategyId] = useState<string | null>(null);
   const { data: strategies = [] } = useStrategiesOptimized(userId ?? undefined);
+  const createStrategy = useCreateStrategyOptimized();
+  const [newStrategyName, setNewStrategyName] = useState('');
+
+  const handleCreateStrategy = async () => {
+    const name = newStrategyName.trim();
+    if (!name || !userId) return;
+    try {
+      const created = await createStrategy.mutateAsync({ user_id: userId, name });
+      if (created?.id) setStrategyId(created.id);
+      setNewStrategyName('');
+    } catch {
+      // mutation already shows an error toast
+    }
+  };
 
   const toggleTag = (tag: string) => {
     setAcceptedTags((prev) =>
@@ -451,6 +465,26 @@ export default function FinoTradeConfirmCard({
               ))}
             </SelectContent>
           </Select>
+          <div className="mt-1 flex items-center gap-1.5">
+            <Input
+              type="text"
+              value={newStrategyName}
+              onChange={(e) => setNewStrategyName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateStrategy(); } }}
+              placeholder="New strategy name"
+              disabled={phase === 'submitting' || createStrategy.isPending}
+              className="h-8 flex-1 text-xs no-spinner"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCreateStrategy}
+              disabled={!newStrategyName.trim() || !userId || phase === 'submitting' || createStrategy.isPending}
+              className="h-8 px-2 text-xs"
+            >
+              {createStrategy.isPending ? 'Adding…' : 'Add'}
+            </Button>
+          </div>
         </div>
       </div>
 
