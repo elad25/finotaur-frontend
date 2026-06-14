@@ -1,5 +1,5 @@
 // src/hooks/useTradovate.ts
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -460,6 +460,49 @@ export function useTradovate() {
     toast.success('Connection renamed');
     return { success: true };
   }, [userId, queryClient]);
+
+  // ── Post-OAuth connection-name apply
+  // After a Tradovate OAuth redirect, the oauth-callback edge function creates
+  // the broker_connections row and auto-names it (e.g. "live – ACCOUNT123").
+  // AddBrokerPopup stored the user-typed name in localStorage before the
+  // redirect. Once credentials load (non-empty) we pick the most-recently-created
+  // Tradovate connection, rename it via updateLabel, and clear the pending key.
+  // The applied-flag ref prevents re-running when the query refreshes later.
+  const pendingNameApplied = useRef(false);
+  useEffect(() => {
+    if (!userId) return;
+    if (credentials.length === 0) return;
+    if (pendingNameApplied.current) return;
+
+    const raw = localStorage.getItem('pending_tradovate_connection_name');
+    if (!raw) return;
+
+    let parsed: { name: string; ts: number };
+    try {
+      parsed = JSON.parse(raw) as { name: string; ts: number };
+    } catch {
+      localStorage.removeItem('pending_tradovate_connection_name');
+      return;
+    }
+
+    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+    if (!parsed.name || Date.now() - parsed.ts > FIFTEEN_MINUTES_MS) {
+      // Stale or empty — discard without applying.
+      localStorage.removeItem('pending_tradovate_connection_name');
+      return;
+    }
+
+    // Mark applied immediately so a query-refetch mid-flight doesn't double-apply.
+    pendingNameApplied.current = true;
+    localStorage.removeItem('pending_tradovate_connection_name');
+
+    // credentials is ordered by created_at ASC — the newest connection is last.
+    const target = credentials[credentials.length - 1];
+    updateLabel(target.id, parsed.name).catch(() => {
+      // If the rename fails, log silently. The user can rename manually via
+      // ManageConnectionsModal. Do not re-store the pending key (avoid loops).
+    });
+  }, [userId, credentials, updateLabel]);
 
   // ── Add copy rule
   const addCopyRule = useCallback(async (
