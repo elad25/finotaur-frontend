@@ -113,7 +113,13 @@ export const BillingTab = () => {
   const [showPlatformDowngradeInfoDialog, setShowPlatformDowngradeInfoDialog] = useState(false);
 
   // Platform subscription (main website)
-  const platformPlan = profile?.platform_plan || 'free';
+  // Canonical DB value is the BARE form ('core'|'finotaur'|'enterprise'); normalize to the
+  // prefixed form this component compares against so bare values resolve correctly.
+  const platformPlanRaw = profile?.platform_plan || 'free';
+  const platformPlan = platformPlanRaw === 'core' ? 'platform_core'
+    : platformPlanRaw === 'finotaur' ? 'platform_finotaur'
+    : platformPlanRaw === 'enterprise' ? 'platform_enterprise'
+    : platformPlanRaw;
   const platformStatus = profile?.platform_subscription_status || 'inactive';
   const platformInfo = getPlanInfo(platformPlan, 'platform');
   const platformIsActive = ['active', 'trial'].includes(platformStatus);
@@ -854,7 +860,7 @@ export const BillingTab = () => {
       </Card>
 
       {/* 🔥 WAR ZONE NEWSLETTER CARD - Hide if user has Finotaur/Enterprise Platform */}
-      {!['platform_finotaur', 'platform_enterprise'].includes(profile?.platform_plan || '') && (
+      {!['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
       <Card className={cn(
         "p-6 relative overflow-hidden shadow-xl",
         newsletterIsActive && newsletterInterval === 'yearly'
@@ -1152,7 +1158,7 @@ export const BillingTab = () => {
       )}
 
       {/* 🔥 TOP SECRET CARD - Hide if user has Finotaur/Enterprise Platform */}
-      {!['platform_finotaur', 'platform_enterprise'].includes(profile?.platform_plan || '') && (
+      {!['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
       <Card className={cn(
         "p-6 relative overflow-hidden shadow-xl",
         topSecretIsActive && topSecretInterval === 'yearly'

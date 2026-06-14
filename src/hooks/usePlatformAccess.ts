@@ -16,6 +16,19 @@ import { supabase } from '@/lib/supabase';
 
 export type PlatformPlan = 'free' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise';
 
+/**
+ * Canonical platform_plan in the DB / RPCs is the BARE form ('core' | 'finotaur' | 'enterprise').
+ * The webhook historically wrote the prefixed form. Normalize either shape to the prefixed
+ * enum this gate uses internally, so bare DB values (incl. admin-granted users) resolve correctly.
+ */
+function normalizePlatformPlan(raw: string | null | undefined): PlatformPlan {
+  const v = (raw || 'free').toString().toLowerCase();
+  if (v === 'platform_core' || v === 'core') return 'platform_core';
+  if (v === 'platform_finotaur' || v === 'finotaur') return 'platform_finotaur';
+  if (v === 'platform_enterprise' || v === 'enterprise') return 'platform_enterprise';
+  return 'free';
+}
+
 export type FeaturePage =
   | 'stock_analyzer'
   | 'sector_analyzer'
@@ -213,7 +226,7 @@ export function usePlatformAccess() {
 
       if (!error && data && data.length > 0) {
         const row = data[0];
-        setPlan((row.platform_plan || 'free') as PlatformPlan);
+        setPlan(normalizePlatformPlan(row.platform_plan));
         setUsage({
           stockAnalysisToday: row.stock_analysis_today,
           stockAnalysisLimit: row.stock_analysis_limit,
