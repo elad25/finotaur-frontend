@@ -16,7 +16,7 @@ import {
 import { useForexMacro } from './_shared/hooks';
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { UpgradeGate } from '@/components/access/UpgradeGate';
+import ForexUpsellGate from './components/ForexUpsellGate';
 import type { MacroIndicator } from './_shared/types';
 
 // ── Constants ─────────────────────────────────────────────────
@@ -129,7 +129,7 @@ export default function ForexCurrency() {
         title={`${code} Macro Cockpit`}
         description="Policy stance, key indicators, positioning, and AI macro summary."
       >
-        <UpgradeGate feature={`${code} Macro Cockpit`} upgradeTarget="core" />
+        <ForexUpsellGate feature={`${code} Macro Cockpit`} />
       </PageTemplate>
     );
   }

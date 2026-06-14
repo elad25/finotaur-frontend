@@ -13,7 +13,7 @@ import {
 import { useForexCorrelation } from './_shared/hooks';
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { UpgradeGate } from '@/components/access/UpgradeGate';
+import ForexUpsellGate from './components/ForexUpsellGate';
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ export default function ForexCorrelation() {
         title="Correlation Matrix"
         description="Rolling correlation across the major pairs."
       >
-        <UpgradeGate feature="Correlation Matrix" upgradeTarget="core" />
+        <ForexUpsellGate feature="Correlation Matrix" />
       </PageTemplate>
     );
   }
