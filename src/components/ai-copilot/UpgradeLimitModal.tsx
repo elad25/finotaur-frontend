@@ -36,7 +36,7 @@ export const UpgradeLimitModal = memo(function UpgradeLimitModal({
 
   const handleCreditsClick = (credits: number) => {
     setIsProcessing(true);
-    window.location.href = `/pricing?credits=${credits}`;
+    window.location.href = `/app/all-markets/pricing?credits=${credits}`;
   };
 
   // ============================================
