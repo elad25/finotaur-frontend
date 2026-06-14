@@ -44,7 +44,7 @@ export default function WelcomeIntro() {
       .then((m) => {
         if (cancelled) return;
         const confetti = m.default;
-        const end = Date.now() + 3000;
+        const end = Date.now() + 1500;
         const colors = ['#C9A646', '#E6C675', '#B8944E', '#FFD700'];
         (function frame() {
           confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.6 }, colors, zIndex: 10000 });
