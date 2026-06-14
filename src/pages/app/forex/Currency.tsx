@@ -14,9 +14,9 @@ import {
   EmptyState,
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexMacro } from './_shared/hooks';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import ForexUpsellGate from './components/ForexUpsellGate';
+import { UpgradeGate } from '@/components/access/UpgradeGate';
 import type { MacroIndicator } from './_shared/types';
 
 // ── Constants ─────────────────────────────────────────────────
@@ -94,9 +94,9 @@ export default function ForexCurrency() {
   const { code: rawCode } = useParams<{ code: string }>();
   const code = (rawCode ?? '').toUpperCase();
 
-  const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
+  const { isPlatformPaid, isAdmin, isLoading: subLoading } = useSubscriptionStatus();
   const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
-  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
+  const entitled = isPlatformPaid || isAdmin || isStaffAdmin || hasBetaAccess;
 
   const fullName = CURRENCY_NAMES[code] ?? code;
 
@@ -129,7 +129,7 @@ export default function ForexCurrency() {
         title={`${code} Macro Cockpit`}
         description="Policy stance, key indicators, positioning, and AI macro summary."
       >
-        <ForexUpsellGate feature={`${code} Macro Cockpit`} />
+        <UpgradeGate feature={`${code} Macro Cockpit`} upgradeTarget="core" />
       </PageTemplate>
     );
   }
