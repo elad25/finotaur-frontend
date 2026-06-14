@@ -13,7 +13,7 @@ import {
 import { useForexCBRates } from './_shared/hooks';
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { UpgradeGate } from '@/components/access/UpgradeGate';
+import ForexUpsellGate from './components/ForexUpsellGate';
 import type { CBRate, CarryEntry } from './_shared/types';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -132,7 +132,7 @@ export default function ForexCBWatch() {
         title="Central Bank Watch"
         description="Policy rates, upcoming decisions, and carry differentials across the 8 majors."
       >
-        <UpgradeGate feature="Central Bank Watch" upgradeTarget="core" />
+        <ForexUpsellGate feature="Central Bank Watch" />
       </PageTemplate>
     );
   }

@@ -12,7 +12,7 @@ import {
 import { useForexCOT } from './_shared/hooks';
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import { UpgradeGate } from '@/components/access/UpgradeGate';
+import ForexUpsellGate from './components/ForexUpsellGate';
 import type { COTPosition } from './_shared/types';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export default function ForexCOT() {
         title="COT Positioning"
         description="CFTC Commitment of Traders — speculative net positioning in FX futures."
       >
-        <UpgradeGate feature="COT Positioning" upgradeTarget="core" />
+        <ForexUpsellGate feature="COT Positioning" />
       </PageTemplate>
     );
   }

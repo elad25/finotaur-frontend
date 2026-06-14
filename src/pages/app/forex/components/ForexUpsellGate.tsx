@@ -1,6 +1,8 @@
 // ============================================================
 // src/pages/app/forex/components/ForexUpsellGate.tsx
-// Premium paywall for advanced forex features.
+// Friendly platform-tier upsell for Markets features.
+// Shown when the user's plan is below the required tier (PRO).
+// NOT a full pricing table — just a warm note + a link to Pricing.
 // Zero API calls — pure static UI. Gold-on-black, English only.
 // ============================================================
 
@@ -25,19 +27,20 @@ export default function ForexUpsellGate({ feature }: ForexUpsellGateProps) {
       </div>
       <div className="mt-ds-2 h-[3px] w-12 rounded-full bg-gold-primary" />
 
-      {/* Description */}
+      {/* Friendly message */}
       <p className="mt-ds-4 text-body leading-relaxed text-ink-secondary">
-        Unlock central-bank rate tracking, COT positioning, correlation analysis,
-        and AI macro cockpits with{' '}
-        <span className="font-medium text-gold-primary">FINOTAUR Premium</span>.
+        This is a{' '}
+        <span className="font-medium text-gold-primary">PRO</span> feature.
+        If you'd like access, you can upgrade anytime from Pricing — whenever
+        you're ready.
       </p>
 
       {/* CTA */}
       <div className="mt-ds-6">
         <Button variant="gold" size="default" asChild>
-          <Link to="/pricing" className="inline-flex items-center gap-2">
+          <Link to="/app/all-markets/pricing" className="inline-flex items-center gap-2">
             <Crown className="h-4 w-4" />
-            Upgrade to Premium
+            Go to Pricing
             <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>
