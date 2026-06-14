@@ -16,7 +16,7 @@ import {
   Shield,
   Building2,
   LineChart,
-  Paperclip,
+  Plus,
   LucideIcon,
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
@@ -49,7 +49,7 @@ interface ChatInterfaceProps {
   promptPlacement?: 'center' | 'aboveInput';
   /**
    * Optional callback invoked when the user selects or pastes an image file.
-   * When provided, a Paperclip upload button is shown in the composer row.
+   * When provided, a "+" attach button is shown on the left of the composer row.
    * When absent, no upload affordance is rendered (backward compatible).
    */
   onImageSelected?: (file: File) => void;
@@ -326,7 +326,7 @@ export const ChatInterface = memo(function ChatInterface({
                 rows={1}
                 className={cn(
                   "min-h-[56px] max-h-[200px] w-full resize-none bg-transparent py-4 text-ink-primary placeholder:text-ink-muted focus:outline-none",
-                  onImageSelected ? "pl-5 pr-[5.5rem]" : "pl-5 pr-14",
+                  onImageSelected ? "pl-14 pr-14" : "pl-5 pr-14",
                 )}
                 style={{ scrollbarWidth: 'thin' }}
               />
@@ -342,16 +342,16 @@ export const ChatInterface = memo(function ChatInterface({
                 />
               )}
 
-              {/* Paperclip upload button — only when onImageSelected is provided */}
+              {/* Plus attach button — left side, Claude-style, only when onImageSelected is provided */}
               {onImageSelected && (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
-                  title="Upload screenshot"
-                  className="absolute bottom-3 right-14 flex h-10 w-10 items-center justify-center rounded-[12px] text-ink-muted transition-colors hover:text-gold-primary disabled:opacity-40"
+                  title="Attach a trade screenshot"
+                  className="absolute bottom-3 left-2 flex h-9 w-9 items-center justify-center rounded-full border border-border-ds-subtle text-ink-secondary transition-colors hover:border-gold-border hover:text-gold-primary disabled:opacity-40"
                 >
-                  <Paperclip className="h-5 w-5" />
+                  <Plus className="h-5 w-5" />
                 </button>
               )}
 
