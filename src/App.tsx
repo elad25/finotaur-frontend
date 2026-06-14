@@ -158,7 +158,6 @@ const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
 const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
 const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
-const WelcomePopup = lazy(() => import("@/components/WelcomePopup"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
 const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
@@ -426,8 +425,6 @@ function AppContent() {
       {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
       <Suspense fallback={null}>
         <WelcomeOffer />
-        {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
-        <WelcomePopup />
       </Suspense>
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
@@ -586,7 +583,7 @@ function AppContent() {
           <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
           <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
           <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
-          <Route path="crypto/scanner" element={<LockedRoute domainId="crypto"><CryptoMarketScanner /></LockedRoute>} />
+          <Route path="crypto/scanner" element={<LockedRoute domainId="crypto"><AdminBetaGate><CryptoMarketScanner /></AdminBetaGate></LockedRoute>} />
 
           {/* FUTURES: licensed-data-safe workspace only. No live CME quotes/charts/DOM/OI fetches. */}
           <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />
