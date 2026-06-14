@@ -481,16 +481,27 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // 0 = All, 1 | 5 | 10 | 25 = only bins >= N% of the largest wall in view.
   const [sizeFilterPct, setSizeFilterPct] = useState<0 | 1 | 5 | 10 | 25>(5);
 
+  // ── Candle range tracking ───────────────────────────────────────────────
+  // Stable ref + accessor so useLiquidityBand can merge candle hi/low into the
+  // auto-fit band without needing an additional fetch or re-render cycle.
+  const candleRangeRef = useRef<{ high: number; low: number } | null>(null);
+  const getCandleRange = useCallback(() => candleRangeRef.current, []);
+  const handleBarsLoad = useCallback((range: { high: number; low: number } | null) => {
+    candleRangeRef.current = range;
+  }, []);
+
   // ── Liquidity band auto-fit ─────────────────────────────────────────────
   // When autoFitActive is true, the price axis is fitted to the resting-order
-  // band so limit orders are always visible. The user can disable it by
+  // band (union of qualifying walls + candle hi/low) so both price action and
+  // all resting walls are always visible. The user can disable it by
   // interacting with the price axis; the "Fit" button re-enables it.
   const [autoFitActive, setAutoFitActive] = useState(true);
 
   const band = useLiquidityBand({
-    getBook: hook.getBook,
+    getBook:       hook.getBook,
     floorUsd,
-    isLive: hook.status === 'live',
+    isLive:        hook.status === 'live',
+    getCandleRange,
   });
 
   // Reset auto-fit on symbol or interval change (WorkstationInner remounts on
@@ -1020,6 +1031,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
           depthMatrixCandleIntervalMs={intervalMs(interval)}
           liquidityBand={activeBand}
           onManualPriceScale={handleManualPriceScale}
+          onBarsLoad={handleBarsLoad}
         />
       </div>
     </div>
