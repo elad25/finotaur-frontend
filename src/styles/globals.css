@@ -741,7 +741,7 @@ nav[class*="flex-col"] button.active {
 /* 2026-06-11 Cloudflare edge-cache variant poisoning incident: a deploy-window
    SPA-fallback HTML response was cached under the text/css Accept variant of the
    previous hash. This rule exists only to change the bundle hash → new asset URL. */
-:root { --cf-cache-bust: 20260611; }
+:root { --cf-cache-bust: 20260614; }
 
 /* COPILOT AI Advices pull-tab glow pulse */
 @keyframes ai-tab-pulse {
