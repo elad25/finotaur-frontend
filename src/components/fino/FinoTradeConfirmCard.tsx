@@ -20,6 +20,7 @@ import { uploadScreenshot } from '@/lib/trades';
 import { createTrade } from '@/lib/trades';
 import { compressImageFile, buildCompletedTradePayload } from '@/lib/fino/screenshotTrade';
 import type { TradeConfirmFields } from '@/lib/fino/screenshotTrade';
+import { useStrategiesOptimized } from '@/hooks/useStrategiesOptimized';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -115,6 +116,10 @@ export default function FinoTradeConfirmCard({
   // Initialized empty — user must actively click chips to accept.
   const [acceptedTags, setAcceptedTags] = useState<string[]>([]);
 
+  // Strategy linking
+  const [strategyId, setStrategyId] = useState<string | null>(null);
+  const { data: strategies = [] } = useStrategiesOptimized();
+
   const toggleTag = (tag: string) => {
     setAcceptedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
@@ -160,10 +165,11 @@ export default function FinoTradeConfirmCard({
         screenshotUrl = null;
       }
 
-      // 2. Build payload (merge accepted tags; buildCompletedTradePayload sets tags:[] by default)
+      // 2. Build payload (merge accepted tags and strategy; buildCompletedTradePayload sets tags:[] by default)
       const payload = {
         ...buildCompletedTradePayload(form, screenshotUrl),
         ...(acceptedTags.length > 0 ? { tags: acceptedTags } : {}),
+        ...(strategyId ? { strategy_id: strategyId } : {}),
       };
 
       // 3. Insert trade
@@ -178,7 +184,7 @@ export default function FinoTradeConfirmCard({
       setPhase('error');
       scheduleAutoClear(6_000);
     }
-  }, [phase, form, file, acceptedTags, scheduleAutoClear]);
+  }, [phase, form, file, acceptedTags, strategyId, scheduleAutoClear]);
 
   // ---- exitFromTarget: exit was auto-defaulted from take_profit_price ----
   const exitFromTarget =
@@ -418,6 +424,30 @@ export default function FinoTradeConfirmCard({
             className="h-8 text-xs no-spinner"
             disabled={phase === 'submitting'}
           />
+        </div>
+
+        {/* Strategy */}
+        <div className="col-span-2 flex flex-col gap-1">
+          <label className="text-[10px] uppercase tracking-wider text-ink-tertiary">Strategy</label>
+          <Select
+            value={strategyId ?? 'none'}
+            onValueChange={(v) => setStrategyId(v === 'none' ? null : v)}
+            disabled={phase === 'submitting'}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" className="text-xs">
+                No strategy
+              </SelectItem>
+              {strategies.map((s: { id: string; name: string }) => (
+                <SelectItem key={s.id} value={s.id} className="text-xs">
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
