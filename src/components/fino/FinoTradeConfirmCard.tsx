@@ -20,7 +20,8 @@ import { uploadScreenshot } from '@/lib/trades';
 import { createTrade } from '@/lib/trades';
 import { compressImageFile, buildCompletedTradePayload } from '@/lib/fino/screenshotTrade';
 import type { TradeConfirmFields } from '@/lib/fino/screenshotTrade';
-import { useStrategiesOptimized } from '@/hooks/useStrategiesOptimized';
+import { useStrategiesOptimized } from '@/hooks/useStrategies';
+import { useAuth } from '@/hooks/useAuth';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -116,9 +117,11 @@ export default function FinoTradeConfirmCard({
   // Initialized empty — user must actively click chips to accept.
   const [acceptedTags, setAcceptedTags] = useState<string[]>([]);
 
-  // Strategy linking
+  // Strategy linking — use the same proven hook + userId path as the journal.
+  const { getEffectiveUserId } = useAuth();
+  const userId = getEffectiveUserId();
   const [strategyId, setStrategyId] = useState<string | null>(null);
-  const { data: strategies = [] } = useStrategiesOptimized();
+  const { data: strategies = [] } = useStrategiesOptimized(userId ?? undefined);
 
   const toggleTag = (tag: string) => {
     setAcceptedTags((prev) =>
