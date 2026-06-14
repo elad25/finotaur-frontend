@@ -104,7 +104,7 @@ export default function FinoTradeConfirmCard({
     side: extraction.side ?? 'LONG',
     asset_class: extraction.asset_class ?? 'stock',
     entry_price: extraction.entry_price,
-    exit_price: extraction.exit_price,
+    exit_price: extraction.exit_price ?? extraction.take_profit_price ?? null,
     stop_price: extraction.stop_price,
     take_profit_price: extraction.take_profit_price,
     quantity: extraction.quantity,
@@ -179,6 +179,10 @@ export default function FinoTradeConfirmCard({
       scheduleAutoClear(6_000);
     }
   }, [phase, form, file, acceptedTags, scheduleAutoClear]);
+
+  // ---- exitFromTarget: exit was auto-defaulted from take_profit_price ----
+  const exitFromTarget =
+    extraction.exit_price == null && extraction.take_profit_price != null;
 
   // ---- Highlight class for missing fields ----
 
@@ -313,7 +317,8 @@ export default function FinoTradeConfirmCard({
             Entry {isMissing('entry_price', extraction.missing) && <span className="text-amber-400">*</span>}
           </label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={numOrEmpty(form.entry_price)}
             onChange={(e) => setField('entry_price', parseNum(e.target.value))}
             placeholder="0.00"
@@ -325,16 +330,20 @@ export default function FinoTradeConfirmCard({
         {/* Exit */}
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wider text-ink-tertiary">
-            Exit {isMissing('exit_price', extraction.missing) && <span className="text-amber-400">*</span>}
+            Exit {(form.exit_price == null || form.exit_price === '') && <span className="text-amber-400">*</span>}
           </label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={numOrEmpty(form.exit_price)}
             onChange={(e) => setField('exit_price', parseNum(e.target.value))}
             placeholder="0.00"
             className={cn('h-8 text-xs no-spinner', missingCls('exit_price'))}
             disabled={phase === 'submitting'}
           />
+          {exitFromTarget && (
+            <span className="mt-0.5 block text-[10px] text-amber-400">Exit set to target — edit if it closed elsewhere</span>
+          )}
         </div>
 
         {/* Stop */}
@@ -343,7 +352,8 @@ export default function FinoTradeConfirmCard({
             Stop {isMissing('stop_price', extraction.missing) && <span className="text-amber-400">*</span>}
           </label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={numOrEmpty(form.stop_price)}
             onChange={(e) => setField('stop_price', parseNum(e.target.value))}
             placeholder="0.00"
@@ -356,7 +366,8 @@ export default function FinoTradeConfirmCard({
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wider text-ink-tertiary">Target</label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={numOrEmpty(form.take_profit_price)}
             onChange={(e) => setField('take_profit_price', parseNum(e.target.value))}
             placeholder="0.00"
@@ -375,7 +386,8 @@ export default function FinoTradeConfirmCard({
                   Position Size {qtyInvalid && <span className="text-amber-400">*</span>}
                 </label>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={numOrEmpty(form.quantity)}
                   onChange={(e) => setField('quantity', parseNum(e.target.value))}
                   placeholder="1"
@@ -398,7 +410,8 @@ export default function FinoTradeConfirmCard({
         <div className="flex flex-col gap-1">
           <label className="text-[10px] uppercase tracking-wider text-ink-tertiary">Fees</label>
           <Input
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={numOrEmpty(form.fees ?? null)}
             onChange={(e) => setField('fees', parseNum(e.target.value))}
             placeholder="0.00"
