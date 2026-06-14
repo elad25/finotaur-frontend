@@ -14,7 +14,6 @@ import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
 import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
 import { ProductDrawer } from '@/components/ProductDrawer';
 import SpotlightTour from '@/components/onboarding/SpotlightTour';
-import PromoOfferBanner from '@/components/PromoOfferBanner';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -102,7 +101,6 @@ export const ProtectedAppLayout = () => {
         <MentorViewBanner />
         {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
-        <PromoOfferBanner />
         {!hideSubNav && <SubNav />}
         {/* Product Drawer — rendered at layout level so it overlays everything */}
         <ProductDrawer />
