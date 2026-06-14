@@ -34,7 +34,7 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Camera } from "lucide-react";
 import { usePortfolios } from "@/hooks/usePortfolios"; // still needed for refetchPortfolios
 
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
@@ -53,6 +53,7 @@ import { normalizeAssetClass } from '@/utils/assetClass';
 import { supabase } from '@/lib/supabase';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
+import { useFinoChat } from '@/contexts/FinoChatContext';
 import { formatTradeDate, formatForInput } from '@/utils/dateFormatter';
 import { 
   getCurrentTradingSession, 
@@ -783,6 +784,7 @@ const {
   // ✅ Get user's 1R value from hook
   const { oneR: oneRValue } = useRiskSettings();
   const { calculateCommission } = useCommissions();
+  const { open: openFino } = useFinoChat();
 
   const [showBasicLimitModal, setShowBasicLimitModal] = useState(false);
 
@@ -1934,17 +1936,27 @@ if (hasResult && directRiskUSD > 0) {
 
             
 
-            {/* Right: Completion */}
-            <div className="text-right flex-shrink-0">
-              <div className="text-xs text-zinc-500 mb-1">Completion</div>
-              <div className="flex items-center gap-2">
-                <div className="w-32 h-2 bg-zinc-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-yellow-600 to-yellow-400 transition-all duration-500"
-                    style={{ width: `${completionPercent}%` }}
-                  />
+            {/* Right: Log with FINO */}
+            <div className="hidden md:block w-72 flex-shrink-0">
+              <div className="rounded-xl border border-[#C9A646]/30 bg-[linear-gradient(145deg,#0f0f0d,#161613)] p-4 shadow-[0_0_30px_rgba(0,0,0,0.25)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-[#C9A646]" />
+                  <h3 className="text-sm font-semibold text-white">Log it instantly with FINO</h3>
                 </div>
-                <span className="text-sm font-semibold text-yellow-400">{completionPercent}%</span>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Upload a screenshot of your trade and FINO fills this in automatically.
+                </p>
+                <p className="mt-2 text-[11px] text-zinc-500 leading-relaxed">
+                  Make sure the image shows: <span className="text-zinc-300">Symbol</span>, <span className="text-zinc-300">Direction</span>, <span className="text-zinc-300">Entry</span>, <span className="text-zinc-300">Stop</span>, <span className="text-zinc-300">Target</span>, <span className="text-zinc-300">Position Size</span>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openFino()}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-yellow-600 to-yellow-400 px-3 py-2 text-xs font-semibold text-black transition-opacity hover:opacity-90"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Open FINO
+                </button>
               </div>
             </div>
           </div>
