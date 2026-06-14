@@ -339,6 +339,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
     routes: {
       crypto: '/app/crypto/scanner',
     },
+    locked: true, // admin/beta only — gated like the other early-access surfaces
     newWindow: true,
   },
 

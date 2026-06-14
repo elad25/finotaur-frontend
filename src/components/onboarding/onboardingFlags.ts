@@ -21,7 +21,7 @@ export const TOUR_ACTIVE_KEY = 'finotaur_tour_active';
 // ---------------------------------------------------------------------------
 // recordOnboardingCompletion
 // Best-effort: if the user is not authenticated or the request fails we still
-// proceed cleanly. The downstream WelcomePopup (Risk Setup) gates on this.
+// proceed cleanly.
 // ---------------------------------------------------------------------------
 export const recordOnboardingCompletion = async (): Promise<void> => {
   try {
