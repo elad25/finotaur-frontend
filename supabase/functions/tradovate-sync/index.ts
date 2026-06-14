@@ -322,7 +322,16 @@ async function getContractInfo(
 // Short flow: Sell=open SHORT entry, Buy=close SHORT
 async function processFill(
   fill: TradovateFill,
-  cred: { id: string; user_id: string; account_id: number; environment: 'live' | 'demo' },
+  cred: {
+    id: string;
+    user_id: string;
+    account_id: number;
+    environment: 'live' | 'demo';
+    // portfolio_id: set for legacy multi-account syncs so each Tradovate account's
+    // fills are attributed to the matching portfolios row (journal account selector).
+    // Null for OAuth single-account syncs (preserves existing behavior).
+    portfolio_id?: string | null;
+  },
   symbol: string,
   multiplier: number,
   base: string,
@@ -622,6 +631,10 @@ async function processFill(
       // external_id (`tradovate::fill::${fill.id}`) IS the broker trade ref.
       external_id:          `tradovate::fill::${fill.id}`,
       idempotency_key:      `tradovate::${cred.user_id}::${cred.environment}::${fill.id}`,
+      // portfolio_id: wires this trade to the per-account journal portfolio row.
+      // Set for legacy multi-account syncs (one portfolios row per Tradovate account);
+      // null for OAuth single-account syncs (no change to existing behavior).
+      portfolio_id:         cred.portfolio_id ?? null,
       symbol,
       side:                 fillSide,
       quantity:             fill.qty,
@@ -818,7 +831,8 @@ async function syncCredential(cred: {
     }
   }
 
-  // 2. Get sync cursor
+  // 2. Get sync cursor (single-account / OAuth path only — legacy path builds its
+  // own per-account cursor map below).
   const { data: syncState } = await supabaseAdmin
     .from('tradovate_sync_state')
     .select('last_fill_id, fills_processed')
@@ -833,27 +847,319 @@ async function syncCredential(cred: {
   // carries user_id + connection_id in 429 / non-2xx observability rows.
   const attribution = { userId: cred.user_id, connectionId: cred.id };
 
-  // 3. Fetch new fills
-  const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId, attribution);
-  // v47 fix: Tradovate's /fill/list returns fills in FIFO-pairing order
-  // (each opening fill followed by its matching closing fill), NOT in fill.id
-  // order. Without sorting, multi-leg positions get processed as N independent
-  // round-trips instead of one aggregated position (e.g. BUY+BUY+BUY+SELL+SELL+SELL
-  // becomes 3 separate trade rows instead of 1 with 3 partial_exits).
-  // fill.id is monotonic with execution time on Tradovate, so sort by id ASC
-  // restores the actual sequence the user executed.
-  fills.sort((a, b) => a.id - b.id);
+  // ─── Single-account (OAuth) path ──────────────────────────────────────────
+  // Preserves the EXACT existing behavior for all non-legacy connections.
+  if (cred.auth_method !== 'legacy') {
+    // 3. Fetch new fills
+    const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId, attribution);
+    // v47 fix: sort ascending by fill.id (monotonic with execution time) so
+    // multi-leg positions are processed in the correct sequence.
+    fills.sort((a, b) => a.id - b.id);
+
+    return processAccountFills({
+      connectionId:        cred.id,
+      userId:              cred.user_id,
+      accountIdNum,
+      environment:         resolvedEnvironment,
+      portfolioId:         null, // OAuth: no per-account portfolio attribution
+      base,
+      accessToken,
+      fills,
+      syncMode,
+      syncStartedAt,
+      attribution,
+      prevFillsProcessed:  syncState?.fills_processed ?? 0,
+    });
+  }
+
+  // ─── Legacy (username/password) multi-account path ────────────────────────
+  // A single legacy credential can control many Tradovate accounts (e.g. 28
+  // APEX prop-firm accounts). The token's /fill/list returns fills for ALL of
+  // them interleaved, with no accountId field on the fill itself. We attribute
+  // each fill to an account via the orderId → accountId map from /order/list,
+  // then process each account's fill subset independently through
+  // processAccountFills (correct per-account position engine + cursor).
+
+  // Step L1: discover all accounts controlled by this token.
+  let discoveredAccountIds: number[] = [accountIdNum];
+  try {
+    const accountRes = await fetch(`${base}/account/list`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (accountRes.ok) {
+      const accountBody = await accountRes.json();
+      if (Array.isArray(accountBody) && accountBody.length > 0) {
+        discoveredAccountIds = (accountBody as Array<{ id: number }>)
+          .map(a => a.id)
+          .filter(id => typeof id === 'number' && Number.isFinite(id));
+        if (discoveredAccountIds.length === 0) {
+          // Parsed successfully but yielded no valid ids — fall back to primary.
+          discoveredAccountIds = [accountIdNum];
+        }
+        console.log(JSON.stringify({
+          event: 'legacy_accounts_discovered',
+          connection_id: cred.id,
+          count: discoveredAccountIds.length,
+          primary_account_id: accountIdNum,
+        }));
+      } else {
+        console.warn(
+          `[tradovate-sync] legacy: /account/list returned empty or non-array — ` +
+          `falling back to primary account ${accountIdNum} for connection ${cred.id}`
+        );
+      }
+    } else {
+      console.warn(
+        `[tradovate-sync] legacy: /account/list returned HTTP ${accountRes.status} — ` +
+        `falling back to primary account ${accountIdNum} for connection ${cred.id}`
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[tradovate-sync] legacy: /account/list fetch error — ` +
+      `falling back to primary account ${accountIdNum}:`, err
+    );
+  }
+
+  // Step L2: build orderId → accountId attribution map from /order/list.
+  // A single call mirrors the single-call assumption of fetchFills — no
+  // pagination. Tradovate returns all orders in the account's history.
+  // Warn if response is suspiciously large (possible undocumented page cap).
+  const orderMap = new Map<number, number>(); // orderId → accountId
+  try {
+    const orderRes = await fetch(`${base}/order/list`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (orderRes.ok) {
+      const orderBody = await orderRes.json();
+      if (Array.isArray(orderBody)) {
+        if (orderBody.length >= 1000) {
+          console.warn(
+            `[tradovate-sync] legacy: /order/list returned ${orderBody.length} rows — ` +
+            `may be hitting an undocumented page cap; some fills may be attributed to wrong account. ` +
+            `connection=${cred.id}`
+          );
+        }
+        for (const order of orderBody as Array<{ id: number; accountId: number }>) {
+          if (typeof order.id === 'number' && typeof order.accountId === 'number') {
+            orderMap.set(order.id, order.accountId);
+          }
+        }
+        console.log(JSON.stringify({
+          event: 'legacy_order_map_built',
+          connection_id: cred.id,
+          order_count: orderBody.length,
+          map_size: orderMap.size,
+        }));
+      }
+    } else {
+      console.warn(
+        `[tradovate-sync] legacy: /order/list returned HTTP ${orderRes.status} — ` +
+        `all fills will be attributed to primary account ${accountIdNum} for connection ${cred.id}`
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[tradovate-sync] legacy: /order/list fetch error — ` +
+      `all fills will be attributed to primary account ${accountIdNum}:`, err
+    );
+  }
+
+  // Step L3: build portfolio map: tradovate_account_id → portfolios.id.
+  // tradovate-auth already creates one portfolios row per account on connect.
+  const portfolioMap = new Map<number, string>(); // tradovate_account_id → portfolios.id
+  if (discoveredAccountIds.length > 0) {
+    const { data: portfolioRows, error: portfolioErr } = await supabaseAdmin
+      .from('portfolios')
+      .select('id, tradovate_account_id')
+      .eq('user_id', cred.user_id)
+      .eq('environment', resolvedEnvironment)
+      .in('tradovate_account_id', discoveredAccountIds);
+    if (portfolioErr) {
+      console.warn(
+        `[tradovate-sync] legacy: portfolios lookup error (portfolio_id will be null):`,
+        portfolioErr.message
+      );
+    } else {
+      for (const row of (portfolioRows ?? []) as Array<{ id: string; tradovate_account_id: number }>) {
+        if (row.tradovate_account_id !== null) {
+          portfolioMap.set(Number(row.tradovate_account_id), row.id);
+        }
+      }
+    }
+  }
+
+  // Step L4: read per-account cursors from tradovate_sync_state.
+  // Build a map: accountId → { last_fill_id, fills_processed }.
+  const cursorMap = new Map<number, { last_fill_id: number; fills_processed: number }>();
+  // Seed with existing primary-account cursor so we don't re-fetch known fills.
+  cursorMap.set(accountIdNum, {
+    last_fill_id:    syncState?.last_fill_id ?? 0,
+    fills_processed: syncState?.fills_processed ?? 0,
+  });
+  if (discoveredAccountIds.length > 1) {
+    const { data: allCursorRows } = await supabaseAdmin
+      .from('tradovate_sync_state')
+      .select('account_id, last_fill_id, fills_processed')
+      .eq('user_id', cred.user_id)
+      .eq('environment', resolvedEnvironment)
+      .in('account_id', discoveredAccountIds);
+    for (const row of (allCursorRows ?? []) as Array<{ account_id: number; last_fill_id: number; fills_processed: number }>) {
+      cursorMap.set(Number(row.account_id), {
+        last_fill_id:    row.last_fill_id ?? 0,
+        fills_processed: row.fills_processed ?? 0,
+      });
+    }
+  }
+
+  // Step L5: fetch ALL fills once, using the minimum cursor across all accounts
+  // so no account's new fills are missed.
+  let minCursor = 0;
+  for (const id of discoveredAccountIds) {
+    const cur = cursorMap.get(id)?.last_fill_id ?? 0;
+    if (minCursor === 0 || cur < minCursor) minCursor = cur;
+  }
+  const allFills = await fetchFills(base, accessToken, accountIdNum, minCursor, attribution);
+  // Sort ascending by fill.id (monotonic with execution time) for correct
+  // position engine sequencing within each account's subset.
+  allFills.sort((a, b) => a.id - b.id);
+
+  // Step L6: attribute each fill to its account via the order map.
+  // Falls back to primary accountIdNum when orderId not in the map.
+  const fillsByAccount = new Map<number, TradovateFill[]>();
+  for (const id of discoveredAccountIds) fillsByAccount.set(id, []);
+  let unmappedCount = 0;
+  for (const fill of allFills) {
+    const targetAccountId = orderMap.get(fill.orderId) ?? null;
+    if (targetAccountId !== null && fillsByAccount.has(targetAccountId)) {
+      fillsByAccount.get(targetAccountId)!.push(fill);
+    } else {
+      // orderId not in map or belongs to an account not in discoveredAccountIds —
+      // attribute to primary account so fills are never silently dropped.
+      fillsByAccount.get(accountIdNum)!.push(fill);
+      unmappedCount++;
+    }
+  }
+  if (unmappedCount > 0) {
+    console.warn(JSON.stringify({
+      event: 'legacy_unmapped_fills',
+      connection_id: cred.id,
+      unmapped_count: unmappedCount,
+      attributed_to: accountIdNum,
+      note: 'orderId not found in /order/list map; attributed to primary account',
+    }));
+  }
+
+  // Step L7: process each account's fill subset independently.
+  let legacyInserted = 0;
+  let legacyErrors   = 0;
+  let anyAccountHadFills = false;
+
+  for (const acctId of discoveredAccountIds) {
+    const cursor = cursorMap.get(acctId) ?? { last_fill_id: 0, fills_processed: 0 };
+    // Filter to only fills newer than this account's own cursor (some fills were
+    // fetched with minCursor which may be lower than this account's cursor).
+    const accountFills = (fillsByAccount.get(acctId) ?? [])
+      .filter(f => f.id > cursor.last_fill_id);
+
+    if (accountFills.length === 0) continue;
+    anyAccountHadFills = true;
+
+    const portfolioId = portfolioMap.get(acctId) ?? null;
+    const result = await processAccountFills({
+      connectionId:       cred.id,
+      userId:             cred.user_id,
+      accountIdNum:       acctId,
+      environment:        resolvedEnvironment,
+      portfolioId,
+      base,
+      accessToken,
+      fills:              accountFills, // pre-sorted, pre-filtered
+      syncMode,
+      syncStartedAt,
+      attribution,
+      prevFillsProcessed: cursor.fills_processed,
+    });
+    legacyInserted += result.inserted;
+    legacyErrors   += result.errors;
+  }
+
+  // Step L8: if NO account had new fills, call no-fills record_sync_completion
+  // once for the primary account to update last_sync_at / heartbeat.
+  if (!anyAccountHadFills) {
+    const { error: rpcErr } = await supabaseAdmin.rpc('record_sync_completion', {
+      p_connection_id:        cred.id,
+      p_user_id:              cred.user_id,
+      p_account_id:           accountIdNum,
+      p_environment:          resolvedEnvironment,
+      p_max_fill_id:          null,
+      p_prev_fills_processed: cursorMap.get(accountIdNum)?.fills_processed ?? 0,
+      p_inserted:             0,
+      p_errors:               0,
+      p_fills_fetched:        0,
+      p_sync_mode:            syncMode,
+      p_sync_started_at:      syncStartedAt.toISOString(),
+      p_log_details:          { reason: 'no_new_fills', path: 'legacy_multi_account' },
+    });
+    if (rpcErr) {
+      console.error('[tradovate-sync] record_sync_completion failed (legacy no-fills):', rpcErr);
+    }
+    return { inserted: 0, errors: 0 };
+  }
+
+  return { inserted: legacyInserted, errors: legacyErrors };
+}
+
+// ─── Per-account fill processing ──────────────────────────────
+// Extracted from syncCredential so both the single-account (OAuth) and
+// multi-account (legacy) paths share identical fill → trade logic.
+//
+// Preconditions the caller MUST satisfy:
+//   - `fills` already filtered to f.id > this account's last_fill_id
+//   - `fills` already sorted ascending by f.id
+//   - `prevFillsProcessed` comes from the account's tradovate_sync_state row
+//
+// Handles:
+//   - no-fills early return (with record_sync_completion heartbeat)
+//   - contract cache population
+//   - batched-RPC path (PROCESS_FILLS_VIA_RPC, gated OFF by default)
+//   - JS per-fill loop fallback (always used when portfolioId is set, to
+//     stamp portfolio_id on each trade row — the RPC doesn't accept it)
+//   - record_sync_completion + scheduleRetry-on-errors
+async function processAccountFills(args: {
+  connectionId:       string;
+  userId:             string;
+  accountIdNum:       number;
+  environment:        'live' | 'demo';
+  portfolioId:        string | null;
+  base:               string;
+  accessToken:        string;
+  fills:              TradovateFill[];
+  syncMode:           string;
+  syncStartedAt:      Date;
+  attribution:        { userId: string; connectionId: string };
+  prevFillsProcessed: number;
+}): Promise<{ inserted: number; errors: number }> {
+  const {
+    connectionId, userId, accountIdNum, environment, portfolioId,
+    base, accessToken, fills, syncMode, syncStartedAt, attribution,
+    prevFillsProcessed,
+  } = args;
+
+  let inserted = 0;
+  let errors   = 0;
+
   if (fills.length === 0) {
     // B6 perf fix (2026-05-21): one RPC instead of UPDATE + clearRetry + INSERT.
     // record_sync_completion handles broker_connections metadata + clearRetry +
     // broker_sync_logs in a single transaction. Cursor upsert skipped (p_max_fill_id=null).
     const { error: rpcErr } = await supabaseAdmin.rpc('record_sync_completion', {
-      p_connection_id:        cred.id,
-      p_user_id:              cred.user_id,
+      p_connection_id:        connectionId,
+      p_user_id:              userId,
       p_account_id:           accountIdNum,
-      p_environment:          cred.environment,
+      p_environment:          environment,
       p_max_fill_id:          null,
-      p_prev_fills_processed: syncState?.fills_processed ?? 0,
+      p_prev_fills_processed: prevFillsProcessed,
       p_inserted:             0,
       p_errors:               0,
       p_fills_fetched:        0,
@@ -872,8 +1178,15 @@ async function syncCredential(cred: {
   const contractCache: Record<number, { name: string; fullPointValue: number }> = {};
 
   // processFill expects numeric account_id (matches tradovate_position_state schema).
-  // environment is also passed for the idempotency_key formula (see processFill body).
-  const credForFill = { id: cred.id, user_id: cred.user_id, account_id: accountIdNum, environment: cred.environment };
+  // portfolio_id: set for legacy multi-account (one portfolios row per Tradovate
+  // account); null for OAuth (preserves existing behavior byte-for-byte).
+  const credForFill = {
+    id:           connectionId,
+    user_id:      userId,
+    account_id:   accountIdNum,
+    environment,
+    portfolio_id: portfolioId,
+  };
 
   // B1 perf fix (2026-05-21) — feature-flagged batched-RPC path.
   // Default OFF. Enable per-deployment via `PROCESS_FILLS_VIA_RPC=true` env var.
@@ -881,7 +1194,13 @@ async function syncCredential(cred: {
   // RPC call with the full fills array + contract map instead of N×4-6 round-
   // trips. Same per-fill semantics as the JS path (CLOSE/ADDON/OPEN), just
   // wrapped in a single transaction. Falls back to JS path if RPC errors.
+  //
+  // IMPORTANT: when portfolioId is non-null (legacy multi-account), we ALWAYS
+  // use the JS per-fill loop (skip RPC path) because process_tradovate_fills RPC
+  // does not accept a portfolio_id parameter. This ensures portfolio_id is stamped
+  // on every trade row for the account-selector filter in the journal.
   const useBatchedRpc =
+    portfolioId === null &&
     (Deno.env.get('PROCESS_FILLS_VIA_RPC') ?? '').toLowerCase() === 'true';
   let batchedRpcHandled = false;
 
@@ -916,9 +1235,9 @@ async function syncCredential(cred: {
     }));
 
     const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc('process_tradovate_fills', {
-      p_user_id:      cred.user_id,
+      p_user_id:      userId,
       p_account_id:   accountIdNum,
-      p_environment:  cred.environment,
+      p_environment:  environment,
       p_contract_map: contractMap,
       p_fills:        fillsPayload,
     });
@@ -943,7 +1262,8 @@ async function syncCredential(cred: {
   }
 
   // Per-fill JS loop path (unchanged from v48). Runs when feature flag is OFF
-  // OR when the batched RPC errored above (fallback path).
+  // OR when the batched RPC errored above (fallback path),
+  // OR when portfolioId is non-null (legacy multi-account — RPC path skipped above).
   if (!batchedRpcHandled) {
     for (const fill of fills) {
       try {
@@ -979,12 +1299,12 @@ async function syncCredential(cred: {
   // for the backoff math + notification dispatch that don't fit cleanly in plpgsql.
   const maxFillId = fills.reduce((m, f) => (f.id > m ? f.id : m), 0);
   const { error: rpcErr } = await supabaseAdmin.rpc('record_sync_completion', {
-    p_connection_id:        cred.id,
-    p_user_id:              cred.user_id,
+    p_connection_id:        connectionId,
+    p_user_id:              userId,
     p_account_id:           accountIdNum,
-    p_environment:          cred.environment,
+    p_environment:          environment,
     p_max_fill_id:          maxFillId,
-    p_prev_fills_processed: syncState?.fills_processed ?? 0,
+    p_prev_fills_processed: prevFillsProcessed,
     p_inserted:             inserted,
     p_errors:               errors,
     p_fills_fetched:        fills.length,
@@ -999,7 +1319,7 @@ async function syncCredential(cred: {
   if (errors > 0) {
     // Error path: RPC only wrote metadata + log; scheduleRetry computes backoff
     // and may invoke broker-state-change-notify (transitions to degraded).
-    await scheduleRetry(supabaseAdmin, cred.id, `${errors} fills failed to insert`);
+    await scheduleRetry(supabaseAdmin, connectionId, `${errors} fills failed to insert`);
   }
 
   return { inserted, errors };
