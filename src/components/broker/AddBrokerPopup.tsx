@@ -7,7 +7,6 @@ import {
   AlertCircle,
   Brain,
   Check,
-  CheckCircle2,
   ExternalLink,
   Link2,
   Lock,
@@ -180,7 +179,7 @@ function EnvironmentToggle({
 
 export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const { user } = useAuth();
-  const { isLoading, connectPropFirm, isPropFirmPending } = useTradovate();
+  const { isLoading } = useTradovate();
 
   const [selectedBroker, setSelectedBroker] = useState<BrokerName>('tradovate');
   const [connectionName, setConnectionName] = useState('');
@@ -188,12 +187,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const [error, setError] = useState('');
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [showBinancePopup, setShowBinancePopup] = useState(false);
-
-  // Advanced prop-firm / username-password path (Tradovate only)
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [pfUsername, setPfUsername] = useState('');
-  const [pfPassword, setPfPassword] = useState('');
-  const [pfError, setPfError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -203,22 +196,8 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       setError('');
       setRiskAcknowledged(false);
       setShowBinancePopup(false);
-      setShowAdvanced(false);
-      setPfUsername('');
-      setPfPassword('');
-      setPfError(null);
     }
   }, [open]);
-
-  useEffect(() => {
-    if (!open || connectionName) return;
-    const config = BROKER_CONFIGS[selectedBroker];
-    const suffix = selectedBroker === 'tradovate' || selectedBroker === 'ninja_trader'
-      ? ` (${env})`
-      : '';
-    setConnectionName(`${config.displayName}${suffix}`.slice(0, CONNECTION_NAME_MAX));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBroker, env, open]);
 
   const config = BROKER_CONFIGS[selectedBroker];
   const isNinjaTrader = selectedBroker === 'ninja_trader';
@@ -231,13 +210,13 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       return Boolean(user);
     }
     if (usesTradovateAuth) {
-      return Boolean(user) && !isLoading;
+      return Boolean(user) && !isLoading && connectionName.trim().length > 0;
     }
     if (selectedBroker === 'interactive_brokers') {
       return Boolean(user) && !isLoading;
     }
     return false;
-  }, [riskAcknowledged, selectedBroker, usesTradovateAuth, isLoading, user]);
+  }, [riskAcknowledged, selectedBroker, usesTradovateAuth, isLoading, user, connectionName]);
 
   const handleConnect = async () => {
     setError('');
@@ -252,6 +231,14 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       try {
         const { getTradovateAuthorizationUrl } = await import(
           '@/lib/brokers/tradovate/tradovate-oauth'
+        );
+        // Persist the user-typed name so we can apply it after the OAuth
+        // redirect completes and the user lands back on the journal page.
+        // The pending entry is consumed (and removed) by useTradovate's
+        // post-connect effect. TTL: 15 minutes — stale entries are ignored.
+        localStorage.setItem(
+          'pending_tradovate_connection_name',
+          JSON.stringify({ name: connectionName.trim(), ts: Date.now() }),
         );
         window.location.href = await getTradovateAuthorizationUrl(env);
       } catch (e) {
@@ -273,33 +260,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const handlePickBroker = (broker: BrokerName) => {
     setSelectedBroker(broker);
     setError('');
-    // Reset advanced form when switching brokers
-    setShowAdvanced(false);
-    setPfUsername('');
-    setPfPassword('');
-    setPfError(null);
-    if (broker === 'tradovate') {
-      // Connection name will be set by effect
-      setConnectionName('');
-    } else {
-      setConnectionName(`${BROKER_CONFIGS[broker].displayName}${broker === 'ninja_trader' ? ` (${env})` : ''}`.slice(0, CONNECTION_NAME_MAX));
-    }
-  };
-
-  const handlePropFirmSubmit = async () => {
-    setPfError(null);
-    const label = connectionName.trim() || 'Tradovate (Prop Firm)';
-    const res = await connectPropFirm({
-      username: pfUsername.trim(),
-      password: pfPassword,
-      connectionLabel: label,
-    });
-    if (res.success) {
-      setPfPassword('');
-      onOpenChange(false);
-    } else {
-      setPfError(res.error ?? 'Could not connect. Check your username and password.');
-    }
+    setConnectionName('');
   };
 
   return (
@@ -355,17 +316,21 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
                 type="text"
                 value={connectionName}
                 onChange={(e) => setConnectionName(e.target.value.slice(0, CONNECTION_NAME_MAX))}
-                placeholder={`${config.displayName} (${env})`}
+                placeholder="e.g. My Tradovate Live"
                 autoComplete="off"
-                className="h-10 w-full rounded-[12px] border border-[#C9A646]/18 bg-[#050505] px-4 pr-20 text-sm text-ink-primary outline-none transition-colors placeholder:text-ink-muted focus:border-[#C9A646]/45"
+                className="h-10 w-full rounded-[12px] border border-[#C9A646]/18 bg-[#050505] px-4 pr-16 text-sm text-ink-primary outline-none transition-colors placeholder:text-ink-muted focus:border-[#C9A646]/45"
               />
-              <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
+              <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center">
                 <span className="text-xs text-ink-secondary">
                   {connectionName.length}/{CONNECTION_NAME_MAX}
                 </span>
-                <CheckCircle2 className="h-4 w-4 text-status-success" />
               </div>
             </div>
+            {usesTradovateAuth && connectionName.trim().length === 0 && (
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Enter a connection name to continue.
+              </p>
+            )}
           </div>
 
           <div className="mb-3">
@@ -536,71 +501,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               )}
             </button>
           </div>
-
-          {/* Advanced prop-firm path — Tradovate only, hidden by default */}
-          {selectedBroker === 'tradovate' && (
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => { setShowAdvanced((v) => !v); setPfError(null); }}
-                className="text-[11px] text-zinc-500 underline-offset-2 hover:text-zinc-400 hover:underline"
-              >
-                Advanced — import trades with username &amp; password
-              </button>
-
-              {showAdvanced && (
-                <div className="mt-2 space-y-2 rounded-[10px] border border-white/10 bg-[#0A0A0A]/70 p-3">
-                  <div>
-                    <label className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-ink-secondary">
-                      Username
-                    </label>
-                    <input
-                      type="text"
-                      value={pfUsername}
-                      onChange={(e) => setPfUsername(e.target.value)}
-                      autoComplete="username"
-                      placeholder="Tradovate username"
-                      className="h-9 w-full rounded-[10px] border border-[#C9A646]/18 bg-[#050505] px-3 text-sm text-ink-primary outline-none transition-colors placeholder:text-ink-muted focus:border-[#C9A646]/45"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-ink-secondary">
-                      Password
-                    </label>
-                    <input
-                      type="password"
-                      value={pfPassword}
-                      onChange={(e) => setPfPassword(e.target.value)}
-                      autoComplete="current-password"
-                      placeholder="••••••••"
-                      className="h-9 w-full rounded-[10px] border border-[#C9A646]/18 bg-[#050505] px-3 text-sm text-ink-primary outline-none transition-colors placeholder:text-ink-muted focus:border-[#C9A646]/45"
-                    />
-                  </div>
-                  {pfError && (
-                    <p className="flex items-start gap-2 text-xs text-num-negative">
-                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      {pfError}
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handlePropFirmSubmit}
-                    disabled={!pfUsername.trim() || !pfPassword || isPropFirmPending}
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-[10px] border border-[#C9A646]/30 bg-[#C9A646]/10 text-sm font-medium text-[#E8C766] transition-all hover:bg-[#C9A646]/18 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {isPropFirmPending ? (
-                      <>
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                        Connecting…
-                      </>
-                    ) : (
-                      'Import trades'
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
           <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-white/[0.08] pt-1.5 text-[9px] text-ink-tertiary">
             <span className="inline-flex items-center gap-1.5">

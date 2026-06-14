@@ -72,7 +72,9 @@ async function getAccessToken(vaultSecretId: string): Promise<string> {
   });
   if (error || !data) throw new Error('Cannot read from Vault');
   const parsed = JSON.parse(data);
-  return parsed.accessToken;
+  // OAuth tokens (stored by oauth-callback) use snake_case `access_token`;
+  // legacy tokens may use camelCase `accessToken`. Accept both.
+  return parsed.access_token ?? parsed.accessToken;
 }
 
 // ─── Fetch fills from Tradovate ───────────────────────────────
@@ -831,8 +833,8 @@ async function syncCredential(cred: {
     }
   }
 
-  // 2. Get sync cursor (single-account / OAuth path only — legacy path builds its
-  // own per-account cursor map below).
+  // 2. Get sync cursor for the primary account (seeds the per-account cursor map
+  // built in Step L4 below; also used for the no-fills L8 heartbeat fallback).
   const { data: syncState } = await supabaseAdmin
     .from('tradovate_sync_state')
     .select('last_fill_id, fills_processed')
@@ -841,82 +843,91 @@ async function syncCredential(cred: {
     .eq('account_id', accountIdNum)
     .single();
 
-  const lastFillId = syncState?.last_fill_id ?? 0;
-
   // Phase 1B.1: every Tradovate API call from this credential's sync run
   // carries user_id + connection_id in 429 / non-2xx observability rows.
   const attribution = { userId: cred.user_id, connectionId: cred.id };
 
-  // ─── Single-account (OAuth) path ──────────────────────────────────────────
-  // Preserves the EXACT existing behavior for all non-legacy connections.
-  if (cred.auth_method !== 'legacy') {
-    // 3. Fetch new fills
-    const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId, attribution);
-    // v47 fix: sort ascending by fill.id (monotonic with execution time) so
-    // multi-leg positions are processed in the correct sequence.
-    fills.sort((a, b) => a.id - b.id);
-
-    return processAccountFills({
-      connectionId:        cred.id,
-      userId:              cred.user_id,
-      accountIdNum,
-      environment:         resolvedEnvironment,
-      portfolioId:         null, // OAuth: no per-account portfolio attribution
-      base,
-      accessToken,
-      fills,
-      syncMode,
-      syncStartedAt,
-      attribution,
-      prevFillsProcessed:  syncState?.fills_processed ?? 0,
-    });
-  }
-
-  // ─── Legacy (username/password) multi-account path ────────────────────────
-  // A single legacy credential can control many Tradovate accounts (e.g. 28
-  // APEX prop-firm accounts). The token's /fill/list returns fills for ALL of
-  // them interleaved, with no accountId field on the fill itself. We attribute
-  // each fill to an account via the orderId → accountId map from /order/list,
-  // then process each account's fill subset independently through
-  // processAccountFills (correct per-account position engine + cursor).
+  // ─── Multi-account path (all connections: OAuth + legacy) ─────────────────
+  // A single Tradovate token can control many accounts (e.g. 28 APEX prop-firm
+  // accounts under one OAuth login, or many accounts under one legacy credential).
+  // The token's /fill/list returns fills for ALL of them interleaved, with no
+  // accountId field on the fill itself. We attribute each fill to an account via
+  // the orderId → accountId map from /order/list, then process each account's
+  // fill subset independently through processAccountFills (correct per-account
+  // position engine + cursor). N=1 is handled correctly by the same path.
 
   // Step L1: discover all accounts controlled by this token.
+  // OAuth tokens (scope=trading_read) return [] from plain /account/list but
+  // return sponsored accounts when ?userId=<jwtSub> is supplied. Mirror the env
+  // self-heal pattern: try the userId-qualified URL first for OAuth, then plain
+  // as fallback; take the first candidate returning a non-empty array.
   let discoveredAccountIds: number[] = [accountIdNum];
   try {
-    const accountRes = await fetch(`${base}/account/list`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (accountRes.ok) {
-      const accountBody = await accountRes.json();
-      if (Array.isArray(accountBody) && accountBody.length > 0) {
-        discoveredAccountIds = (accountBody as Array<{ id: number }>)
+    const providerUserId = cred.auth_method === 'oauth'
+      ? extractUserIdFromJwt(accessToken)
+      : null;
+
+    const candidateUrls: string[] = [];
+    if (providerUserId !== null) {
+      // OAuth: userId-qualified URL first — unlocks prop-firm sponsored accounts.
+      candidateUrls.push(`${base}/account/list?userId=${encodeURIComponent(providerUserId)}`);
+    }
+    candidateUrls.push(`${base}/account/list`);
+
+    let accountsFound = false;
+    for (const url of candidateUrls) {
+      try {
+        const accountRes = await fetch(url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!accountRes.ok) {
+          console.warn(
+            `[tradovate-sync] account discovery: ${url} returned HTTP ${accountRes.status} — ` +
+            `trying next candidate for connection ${cred.id}`
+          );
+          continue;
+        }
+        const accountBody = await accountRes.json();
+        if (!Array.isArray(accountBody) || accountBody.length === 0) {
+          console.warn(
+            `[tradovate-sync] account discovery: ${url} returned empty or non-array — ` +
+            `trying next candidate for connection ${cred.id}`
+          );
+          continue;
+        }
+        const parsed = (accountBody as Array<{ id: number }>)
           .map(a => a.id)
           .filter(id => typeof id === 'number' && Number.isFinite(id));
-        if (discoveredAccountIds.length === 0) {
-          // Parsed successfully but yielded no valid ids — fall back to primary.
-          discoveredAccountIds = [accountIdNum];
+        if (parsed.length === 0) {
+          // Array present but no valid ids — try next candidate.
+          continue;
         }
+        discoveredAccountIds = parsed;
+        accountsFound = true;
         console.log(JSON.stringify({
-          event: 'legacy_accounts_discovered',
+          event: 'accounts_discovered',
           connection_id: cred.id,
+          auth_method: cred.auth_method ?? 'unknown',
+          discovery_url: url,
           count: discoveredAccountIds.length,
           primary_account_id: accountIdNum,
         }));
-      } else {
+        break; // first non-empty candidate wins
+      } catch (urlErr) {
         console.warn(
-          `[tradovate-sync] legacy: /account/list returned empty or non-array — ` +
-          `falling back to primary account ${accountIdNum} for connection ${cred.id}`
+          `[tradovate-sync] account discovery: fetch error for ${url}:`, urlErr
         );
       }
-    } else {
+    }
+    if (!accountsFound) {
       console.warn(
-        `[tradovate-sync] legacy: /account/list returned HTTP ${accountRes.status} — ` +
+        `[tradovate-sync] account discovery: all candidates returned empty — ` +
         `falling back to primary account ${accountIdNum} for connection ${cred.id}`
       );
     }
   } catch (err) {
     console.warn(
-      `[tradovate-sync] legacy: /account/list fetch error — ` +
+      `[tradovate-sync] account discovery: unexpected error — ` +
       `falling back to primary account ${accountIdNum}:`, err
     );
   }
