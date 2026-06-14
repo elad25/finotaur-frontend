@@ -11,9 +11,9 @@ import {
   EmptyState,
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexCBRates } from './_shared/hooks';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import ForexUpsellGate from './components/ForexUpsellGate';
+import { UpgradeGate } from '@/components/access/UpgradeGate';
 import type { CBRate, CarryEntry } from './_shared/types';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -120,9 +120,9 @@ function CarryRow({ entry }: { entry: CarryEntry }) {
 // ── Main page ─────────────────────────────────────────────────
 
 export default function ForexCBWatch() {
-  const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
+  const { isPlatformPaid, isAdmin, isLoading: subLoading } = useSubscriptionStatus();
   const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
-  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
+  const entitled = isPlatformPaid || isAdmin || isStaffAdmin || hasBetaAccess;
 
   const { data, loading } = useForexCBRates();
 
@@ -132,7 +132,7 @@ export default function ForexCBWatch() {
         title="Central Bank Watch"
         description="Policy rates, upcoming decisions, and carry differentials across the 8 majors."
       >
-        <ForexUpsellGate feature="Central Bank Watch" />
+        <UpgradeGate feature="Central Bank Watch" upgradeTarget="core" />
       </PageTemplate>
     );
   }

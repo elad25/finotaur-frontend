@@ -10,9 +10,9 @@ import {
   EmptyState,
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexCOT } from './_shared/hooks';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import ForexUpsellGate from './components/ForexUpsellGate';
+import { UpgradeGate } from '@/components/access/UpgradeGate';
 import type { COTPosition } from './_shared/types';
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -74,9 +74,9 @@ function COTRow({ pos }: { pos: COTPosition }) {
 // ── Main page ─────────────────────────────────────────────────
 
 export default function ForexCOT() {
-  const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
+  const { isPlatformPaid, isAdmin, isLoading: subLoading } = useSubscriptionStatus();
   const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
-  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
+  const entitled = isPlatformPaid || isAdmin || isStaffAdmin || hasBetaAccess;
 
   const { data, loading } = useForexCOT();
 
@@ -86,7 +86,7 @@ export default function ForexCOT() {
         title="COT Positioning"
         description="CFTC Commitment of Traders — speculative net positioning in FX futures."
       >
-        <ForexUpsellGate feature="COT Positioning" />
+        <UpgradeGate feature="COT Positioning" upgradeTarget="core" />
       </PageTemplate>
     );
   }

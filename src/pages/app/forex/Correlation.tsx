@@ -11,9 +11,9 @@ import {
   EmptyState,
 } from '@/pages/app/crypto/_shared/GlassUI';
 import { useForexCorrelation } from './_shared/hooks';
-import { useSubscription } from '@/hooks/useSubscription';
+import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
-import ForexUpsellGate from './components/ForexUpsellGate';
+import { UpgradeGate } from '@/components/access/UpgradeGate';
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -74,9 +74,9 @@ function MatrixSkeleton({ size = 7 }: { size?: number }) {
 type WindowOption = '30d' | '90d';
 
 export default function ForexCorrelation() {
-  const { isPremium, isAdmin, isLifetimeUser, isLoading: subLoading } = useSubscription();
+  const { isPlatformPaid, isAdmin, isLoading: subLoading } = useSubscriptionStatus();
   const { isAdmin: isStaffAdmin, hasBetaAccess } = useAdminAuth();
-  const entitled = isPremium || isAdmin || isLifetimeUser || isStaffAdmin || hasBetaAccess;
+  const entitled = isPlatformPaid || isAdmin || isStaffAdmin || hasBetaAccess;
 
   const [window, setWindow] = useState<WindowOption>('30d');
   const { data, loading } = useForexCorrelation(window);
@@ -87,7 +87,7 @@ export default function ForexCorrelation() {
         title="Correlation Matrix"
         description="Rolling correlation across the major pairs."
       >
-        <ForexUpsellGate feature="Correlation Matrix" />
+        <UpgradeGate feature="Correlation Matrix" upgradeTarget="core" />
       </PageTemplate>
     );
   }
