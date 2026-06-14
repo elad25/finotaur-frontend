@@ -2,7 +2,7 @@
 // Editable confirmation card shown after FINO extracts a trade from a screenshot.
 // Mirrors FinoActionBar's phase/auto-clear style; uses DS Button + Card + ui/Input/Select.
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle, ExternalLink, Loader2, XCircle } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -21,7 +21,7 @@ import { createTrade } from '@/lib/trades';
 import { compressImageFile, buildCompletedTradePayload } from '@/lib/fino/screenshotTrade';
 import type { TradeConfirmFields } from '@/lib/fino/screenshotTrade';
 import { useStrategiesOptimized, useCreateStrategyOptimized } from '@/hooks/useStrategies';
-import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -117,9 +117,17 @@ export default function FinoTradeConfirmCard({
   // Initialized empty — user must actively click chips to accept.
   const [acceptedTags, setAcceptedTags] = useState<string[]>([]);
 
-  // Strategy linking — use the same proven hook + userId path as the journal.
-  const { getEffectiveUserId } = useAuth();
-  const userId = getEffectiveUserId();
+  // Strategy linking. Read the user id straight from the Supabase session
+  // (source of truth, same as createTrade) — useAuth() is a standalone hook
+  // whose `user` can be null in a late-mounted drawer, which left the picker empty.
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUserId(data.user?.id ?? null);
+    });
+    return () => { active = false; };
+  }, []);
   const [strategyId, setStrategyId] = useState<string | null>(null);
   const { data: strategies = [] } = useStrategiesOptimized(userId ?? undefined);
   const createStrategy = useCreateStrategyOptimized();
