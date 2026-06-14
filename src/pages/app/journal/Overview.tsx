@@ -58,6 +58,7 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 
 const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
+const FinoScore = lazy(() => import("@/components/journal/FinoScore"));
 const BreakdownPanel = lazy(() => import("@/components/journal/BreakdownPanel"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
@@ -1858,14 +1859,14 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             {/* ✅ UPDATED: Best/Worst trades with timezone and session */}
             
 
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1fr]">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
             <ErrorBoundary fallback={
               <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-                Failed to load chart. Please refresh the page.
+                Failed to load FINO Score.
               </div>
             }>
               <Suspense fallback={<ChartSkeleton />}>
-                <EquityChart data={stats.equitySeries || []} trades={stats.trades || []} />
+                <FinoScore stats={stats} />
               </Suspense>
             </ErrorBoundary>
 
@@ -1876,6 +1877,16 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             }>
               <Suspense fallback={<ChartSkeleton />}>
                 <DailyPnLChart data={stats.equitySeries || []} trades={stats.trades || []} />
+              </Suspense>
+            </ErrorBoundary>
+
+            <ErrorBoundary fallback={
+              <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
+                Failed to load chart. Please refresh the page.
+              </div>
+            }>
+              <Suspense fallback={<ChartSkeleton />}>
+                <EquityChart data={stats.equitySeries || []} trades={stats.trades || []} />
               </Suspense>
             </ErrorBoundary>
             </div>
