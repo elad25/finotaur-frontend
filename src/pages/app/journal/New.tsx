@@ -1963,12 +1963,6 @@ if (hasResult && directRiskUSD > 0) {
                         <h3 className="text-sm font-semibold text-white truncate">
                           Log it instantly with <span className="text-[#C9A646]">FINO</span>
                         </h3>
-                        {isFreeJournal && (
-                          <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-[#C9A646]/40 bg-[#C9A646]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#C9A646]">
-                            <Lock className="w-2.5 h-2.5" />
-                            Basic+
-                          </span>
-                        )}
                       </div>
                       {/* Field chips */}
                       <div className="flex flex-wrap gap-1.5">
@@ -1985,14 +1979,21 @@ if (hasResult && directRiskUSD > 0) {
                     </div>
                     {/* CTA cluster */}
                     <div className="flex flex-shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openFino()}
-                        aria-label="Upload trade screenshot"
-                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-zinc-400 transition-colors hover:border-[#C9A646]/40 hover:text-[#C9A646]"
-                      >
-                        <Upload className="w-4 h-4" />
-                      </button>
+                      {isFreeJournal ? (
+                        <span className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#C9A646]/40 bg-[#C9A646]/15 px-3 text-xs font-semibold uppercase tracking-wide text-[#C9A646]">
+                          <Lock className="w-3 h-3" />
+                          Basic+
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openFino()}
+                          aria-label="Upload trade screenshot"
+                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-zinc-400 transition-colors hover:border-[#C9A646]/40 hover:text-[#C9A646]"
+                        >
+                          <Upload className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openFino()}
