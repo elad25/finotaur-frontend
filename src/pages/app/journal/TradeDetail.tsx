@@ -11,12 +11,21 @@ import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
-import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil, X } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertCircle, Pencil, X } from 'lucide-react';
 import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Skeleton';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
 import OptionPayoffChart from '@/components/journal/OptionPayoffChart';
 import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
+import { TradeStatsList } from '@/components/journal/TradeStatsList';
+import type { StatRow } from '@/components/journal/TradeStatsList';
+import { StarRating } from '@/components/journal/StarRating';
+import { TagMultiSelect } from '@/components/journal/TagMultiSelect';
+import StrategyChecklistVerify from '@/components/journal/StrategyChecklistVerify';
+import { useTradeTags } from '@/hooks/useTradeTags';
+import { useJournalTags } from '@/hooks/useJournalTags';
+import { useStrategiesOptimized } from '@/hooks/useStrategies';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 
 interface PartialLeg {
   // Common fields written by both the Tradovate edge fn (v48+) and the
@@ -66,6 +75,11 @@ interface Trade {
   // Multi-leg options spread fields
   leg_count?: number;
   strategy_type?: string;
+  // Annotation panel fields
+  strategy_id?: string | null;
+  setup_quality_rating?: number | null;
+  mental_state?: number | null;
+  checklist_results?: Record<string, boolean> | null;
   // Forex — populated only when asset_class === 'forex'
   base_currency?: string;
   quote_currency?: string;
@@ -98,6 +112,11 @@ interface EditDraft {
   actual_user_r: string; // string for input binding; parsed to number | null on save
   option_outcome: string; // '' = normal close (saved as NULL)
   expiration_date: string; // ISO date string, options only
+  // Annotation panel fields
+  strategyId: string | null;
+  checklistResults: Record<string, boolean>;
+  setupQualityRating: number | null;
+  mentalState: number | null;
 }
 
 // Local mirror of MultiUploadZone's internal Screenshot shape (not exported from that module).
@@ -181,6 +200,10 @@ function tradeToEditDraft(trade: Trade): EditDraft {
       trade.actual_user_r != null ? String(trade.actual_user_r) : '',
     option_outcome: trade.option_outcome ?? '',
     expiration_date: trade.expiration_date ?? '',
+    strategyId: trade.strategy_id ?? null,
+    checklistResults: trade.checklist_results ?? {},
+    setupQualityRating: trade.setup_quality_rating ?? null,
+    mentalState: trade.mental_state ?? null,
   };
 }
 
@@ -189,6 +212,7 @@ export default function JournalTradeDetail() {
   const navigate = useNavigate();
   const timezone = useTimezone();
   const { toast } = useToast();
+  const { id: userId } = useEffectiveUser();
 
   const [trade, setTrade] = useState<Trade | null>(null);
 
@@ -236,6 +260,15 @@ export default function JournalTradeDetail() {
   const [existingScreenshots, setExistingScreenshots] = useState<string[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingScreenshot[]>([]);
 
+  // ---- annotation panel state (tags split by category) ----
+  const [mistakeIds, setMistakeIds] = useState<string[]>([]);
+  const [mentalIds, setMentalIds] = useState<string[]>([]);
+
+  // Hooks for the annotation panel
+  const { tagIds: linkedTagIds, setTradeTags } = useTradeTags(trade?.id);
+  const { tags: allJournalTags } = useJournalTags(); // all categories — used to split by category
+  const { data: strategies = [] } = useStrategiesOptimized(userId ?? undefined);
+
   useEffect(() => {
     if (id) {
       fetchTrade();
@@ -252,13 +285,32 @@ export default function JournalTradeDetail() {
     return () => { cancelled = true; };
   }, [trade?.id, trade?.leg_count]);
 
+  // Split linked tag IDs into mistake / mental whenever the linked set or tag metadata loads.
+  // This runs on initial load and whenever linkedTagIds changes (e.g. after a save).
+  useEffect(() => {
+    const mistakeSet = new Set(
+      allJournalTags.filter((t) => t.category === 'mistake').map((t) => t.id),
+    );
+    const mentalSet = new Set(
+      allJournalTags.filter((t) => t.category === 'mental').map((t) => t.id),
+    );
+    setMistakeIds(linkedTagIds.filter((id) => mistakeSet.has(id)));
+    setMentalIds(linkedTagIds.filter((id) => mentalSet.has(id)));
+  }, [linkedTagIds, allJournalTags]);
+
   // Warn before unload if the user has unsaved edits.
   useEffect(() => {
     if (!isEditing || !draft || !trade) return;
     const baseline = tradeToEditDraft(trade);
-    const isDirty = (Object.keys(baseline) as Array<keyof EditDraft>).some(
-      (key) => draft[key] !== baseline[key],
-    );
+    const isDirty = (Object.keys(baseline) as Array<keyof EditDraft>).some((key) => {
+      const a = draft[key];
+      const b = baseline[key];
+      // Deep-compare object fields to avoid false-positive dirty on {}.
+      if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+        return JSON.stringify(a) !== JSON.stringify(b);
+      }
+      return a !== b;
+    });
     if (!isDirty) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -292,6 +344,8 @@ export default function JournalTradeDetail() {
     setExistingScreenshots(trade.screenshots ?? []);
     setPendingFiles([]);
     setSaveError(null);
+    // mistakeIds / mentalIds are already correctly set by the useEffect above;
+    // no reset needed here — they reflect the current persisted state.
     setIsEditing(true);
   };
 
@@ -345,6 +399,10 @@ export default function JournalTradeDetail() {
       tags: string[] | null;
       actual_user_r: number | null;
       screenshots: string[];
+      strategy_id: string | null;
+      checklist_results: Record<string, boolean> | null;
+      setup_quality_rating: number | null;
+      mental_state: number | null;
       option_outcome?: string | null;
       expiration_date?: string | null;
     } = {
@@ -356,6 +414,11 @@ export default function JournalTradeDetail() {
       actual_user_r:
         parsedR !== null && !isNaN(parsedR) ? parsedR : null,
       screenshots: finalScreenshots,
+      strategy_id: draft.strategyId || null,
+      checklist_results:
+        Object.keys(draft.checklistResults).length > 0 ? draft.checklistResults : null,
+      setup_quality_rating: draft.setupQualityRating || null,
+      mental_state: draft.mentalState || null,
     };
 
     // Options-only: persist the expiration outcome and expiration date
@@ -366,12 +429,16 @@ export default function JournalTradeDetail() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('trades')
-        .update(payload)
-        .eq('id', trade.id)
-        .select()
-        .single();
+      const [{ data, error }] = await Promise.all([
+        supabase
+          .from('trades')
+          .update(payload)
+          .eq('id', trade.id)
+          .select()
+          .single(),
+        // Persist the tag links (mistake + mental) for this trade.
+        setTradeTags([...mistakeIds, ...mentalIds]),
+      ]);
 
       if (error) throw error;
 
@@ -508,156 +575,80 @@ export default function JournalTradeDetail() {
         )}
       </div>
 
-      {/* Main Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* P&L Card */}
-        {trade.pnl !== null && trade.pnl !== undefined && (
+      {/* ── Stats Panel (TradeZella-style flat list) ─────────────────────── */}
+      {(() => {
+        // Build the duration string (reuse same calc from old Duration card)
+        let durationStr: string | null = null;
+        if (trade.close_at) {
+          const diff = new Date(trade.close_at).getTime() - new Date(trade.open_at).getTime();
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const days = Math.floor(hours / 24);
+          durationStr = days > 0 ? `${days}d ${hours % 24}h` : `${hours}h`;
+        }
+
+        const rValue = trade.actual_user_r != null ? trade.actual_user_r : trade.actual_r;
+
+        // Build rows — only include rows that have a real value
+        const rows: StatRow[] = [
+          { label: 'Side', value: trade.side, tone: trade.side === 'LONG' ? 'positive' : 'negative' },
+          { label: 'Contracts', value: String(trade.quantity) },
+          ...(trade.outcome && trade.outcome !== 'OPEN'
+            ? [{ label: 'Outcome', value: trade.outcome, tone: (trade.outcome === 'WIN' ? 'positive' : trade.outcome === 'LOSS' ? 'negative' : 'muted') as StatRow['tone'] }]
+            : []),
+          ...(rValue != null
+            ? [{ label: 'R-Multiple', value: `${rValue > 0 ? '+' : ''}${rValue.toFixed(2)}R`, tone: (rValue > 0 ? 'positive' : 'negative') as StatRow['tone'] }]
+            : []),
+          ...(trade.rr
+            ? [{ label: 'Risk:Reward', value: `1:${trade.rr.toFixed(2)}` }]
+            : []),
+          ...(durationStr ? [{ label: 'Duration', value: durationStr, tone: 'muted' as StatRow['tone'] }] : []),
+          { label: 'Entry', value: `$${trade.entry_price.toFixed(2)}` },
+          ...(trade.exit_price ? [{ label: 'Exit', value: `$${trade.exit_price.toFixed(2)}` }] : []),
+          ...(trade.stop_price ? [{ label: 'Stop Loss', value: `$${trade.stop_price.toFixed(2)}`, tone: 'negative' as StatRow['tone'] }] : []),
+          ...(trade.take_profit_price ? [{ label: 'Take Profit', value: `$${trade.take_profit_price.toFixed(2)}`, tone: 'positive' as StatRow['tone'] }] : []),
+          ...(trade.fees ? [{ label: 'Fees', value: `$${trade.fees.toFixed(2)}`, tone: 'muted' as StatRow['tone'] }] : []),
+          ...(trade.risk_usd ? [{ label: 'Risk Amount', value: `$${trade.risk_usd.toFixed(2)}`, tone: 'negative' as StatRow['tone'] }] : []),
+          ...(trade.reward_usd ? [{ label: 'Reward Potential', value: `$${trade.reward_usd.toFixed(2)}`, tone: 'positive' as StatRow['tone'] }] : []),
+          ...(trade.session ? [{ label: 'Session', value: formatSessionDisplay(trade.session), tone: 'muted' as StatRow['tone'] }] : []),
+          { label: 'Entry Time', value: formatTradeDate(trade.open_at, timezone), tone: 'muted' as StatRow['tone'] },
+          ...(trade.close_at ? [{ label: 'Exit Time', value: formatTradeDate(trade.close_at, timezone), tone: 'muted' as StatRow['tone'] }] : []),
+        ];
+
+        const pnlHeadline = trade.pnl != null
+          ? {
+              label: 'Net P&L',
+              value: `${trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)} USD`,
+              tone: (trade.pnl > 0 ? 'positive' : trade.pnl < 0 ? 'negative' : 'default') as 'positive' | 'negative' | 'default',
+            }
+          : undefined;
+
+        return <TradeStatsList headline={pnlHeadline} rows={rows} />;
+      })()}
+
+      {/* Execution Legs — visible when the trade was scaled on either side. */}
+      {(() => {
+        const entries = Array.isArray(trade.partial_entries) ? trade.partial_entries : [];
+        const exits = Array.isArray(trade.partial_exits) ? trade.partial_exits : [];
+        const scaled = entries.length > 1 || exits.length > 1;
+        if (!scaled) return null;
+        return (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-4 h-4 text-zinc-500" />
-              <span className="text-sm text-zinc-500">P&L</span>
-            </div>
-            <div className={`text-2xl font-bold ${
-              trade.pnl > 0 ? 'text-green-400' : trade.pnl < 0 ? 'text-red-400' : 'text-zinc-400'
-            }`}>
-              {trade.pnl > 0 ? '+' : ''}{trade.pnl < 0 ? '' : ''}{Math.abs(trade.pnl).toFixed(2)} USD
-            </div>
-          </div>
-        )}
-
-        {/* R-Multiple Card */}
-        {(trade.actual_user_r != null || trade.actual_r) && (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Target className="w-4 h-4 text-zinc-500" />
-              <span className="text-sm text-zinc-500">R-Multiple</span>
-            </div>
-            {(() => {
-              const r = trade.actual_user_r != null ? trade.actual_user_r : trade.actual_r;
-              if (r == null) return null;
-              return (
-                <div className={`text-2xl font-bold ${r > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {r > 0 ? '+' : ''}{r.toFixed(2)}R
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {/* Risk:Reward Card */}
-        {trade.rr && (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="w-4 h-4 text-zinc-500" />
-              <span className="text-sm text-zinc-500">Risk:Reward</span>
-            </div>
-            <div className="text-2xl font-bold text-white">
-              1:{trade.rr.toFixed(2)}
+            <h3 className="text-xl font-semibold text-white mb-4">Execution Legs</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {entries.length >= 1 ? (
+                <LegsList legs={entries} label="Entries" tone="entry" />
+              ) : (
+                <div />
+              )}
+              {exits.length >= 1 ? (
+                <LegsList legs={exits} label="Exits" tone="exit" />
+              ) : (
+                <div />
+              )}
             </div>
           </div>
-        )}
-
-        {/* Duration Card */}
-        {trade.close_at && (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Calendar className="w-4 h-4 text-zinc-500" />
-              <span className="text-sm text-zinc-500">Duration</span>
-            </div>
-            <div className="text-2xl font-bold text-white">
-              {(() => {
-                const diff = new Date(trade.close_at!).getTime() - new Date(trade.open_at).getTime();
-                const hours = Math.floor(diff / (1000 * 60 * 60));
-                const days = Math.floor(hours / 24);
-                if (days > 0) return `${days}d ${hours % 24}h`;
-                return `${hours}h`;
-              })()}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Trade Details */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Trade Details</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Entry */}
-          <div>
-            <label className="text-sm text-zinc-500 mb-1 block">Entry Price</label>
-            <div className="text-lg font-semibold text-white">${trade.entry_price.toFixed(2)}</div>
-          </div>
-
-          {/* Exit */}
-          {trade.exit_price && (
-            <div>
-              <label className="text-sm text-zinc-500 mb-1 block">Exit Price</label>
-              <div className="text-lg font-semibold text-white">${trade.exit_price.toFixed(2)}</div>
-            </div>
-          )}
-
-          {/* Quantity */}
-          <div>
-            <label className="text-sm text-zinc-500 mb-1 block">Quantity</label>
-            <div className="text-lg font-semibold text-white">{trade.quantity}</div>
-          </div>
-
-          {/* Stop Loss */}
-          {trade.stop_price && (
-            <div>
-              <label className="text-sm text-zinc-500 mb-1 block">Stop Loss</label>
-              <div className="text-lg font-semibold text-red-400">${trade.stop_price.toFixed(2)}</div>
-            </div>
-          )}
-
-          {/* Take Profit */}
-          {trade.take_profit_price && (
-            <div>
-              <label className="text-sm text-zinc-500 mb-1 block">Take Profit</label>
-              <div className="text-lg font-semibold text-green-400">${trade.take_profit_price.toFixed(2)}</div>
-            </div>
-          )}
-
-          {/* Entry Time */}
-          <div>
-            <label className="text-sm text-zinc-500 mb-1 block">Entry Time</label>
-            <div className="text-lg font-semibold text-white">{formatTradeDate(trade.open_at, timezone)}</div>
-          </div>
-
-          {/* Exit Time */}
-          {trade.close_at && (
-            <div>
-              <label className="text-sm text-zinc-500 mb-1 block">Exit Time</label>
-              <div className="text-lg font-semibold text-white">{formatTradeDate(trade.close_at, timezone)}</div>
-            </div>
-          )}
-        </div>
-
-        {/* Execution Legs — visible when the trade was scaled on either side.
-            When section is shown, BOTH columns render (even if one side is 1
-            leg) so the user can see at what price the single-leg side filled. */}
-        {(() => {
-          const entries = Array.isArray(trade.partial_entries) ? trade.partial_entries : [];
-          const exits = Array.isArray(trade.partial_exits) ? trade.partial_exits : [];
-          const scaled = entries.length > 1 || exits.length > 1;
-          if (!scaled) return null;
-          return (
-            <div className="mt-6 pt-6 border-t border-zinc-800">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {entries.length >= 1 ? (
-                  <LegsList legs={entries} label="Entries" tone="entry" />
-                ) : (
-                  <div />
-                )}
-                {exits.length >= 1 ? (
-                  <LegsList legs={exits} label="Exits" tone="exit" />
-                ) : (
-                  <div />
-                )}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
+        );
+      })()}
 
       {/* Option Details — single-leg options only */}
       {trade.asset_class === 'options' && (() => {
@@ -856,29 +847,98 @@ export default function JournalTradeDetail() {
         );
       })()}
 
-      {/* Risk Management */}
-      {(trade.risk_usd || trade.reward_usd) && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <h3 className="text-xl font-semibold text-white mb-4">Risk Management</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {trade.risk_usd && (
-              <div>
-                <label className="text-sm text-zinc-500 mb-1 block">Risk Amount</label>
-                <div className="text-lg font-semibold text-red-400">${trade.risk_usd.toFixed(2)}</div>
-              </div>
-            )}
-            {trade.reward_usd && (
-              <div>
-                <label className="text-sm text-zinc-500 mb-1 block">Reward Potential</label>
-                <div className="text-lg font-semibold text-green-400">${trade.reward_usd.toFixed(2)}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Trade Scorecard */}
       {id && <TradeScorecard tradeId={id} />}
+
+      {/* ── Setup & Verification ─────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <h3 className="text-xl font-semibold text-white mb-4">Setup & Verification</h3>
+
+        {/* Strategy picker */}
+        <div className="mb-4">
+          <label className="text-sm text-zinc-400 mb-1.5 block font-medium">Strategy</label>
+          {isEditing && draft ? (
+            <select
+              value={draft.strategyId ?? ''}
+              onChange={(e) =>
+                setDraft({ ...draft, strategyId: e.target.value || null })
+              }
+              className="w-full rounded-lg bg-zinc-800 border border-zinc-700 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646] transition-colors"
+            >
+              <option value="">— No setup —</option>
+              {strategies.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-white text-sm">
+              {trade.strategy_id
+                ? (strategies.find((s) => s.id === trade.strategy_id)?.name ?? '—')
+                : '—'}
+            </p>
+          )}
+        </div>
+
+        {/* Checklist */}
+        <StrategyChecklistVerify
+          strategyId={isEditing && draft ? draft.strategyId : trade.strategy_id}
+          results={isEditing && draft ? draft.checklistResults : trade.checklist_results}
+          onChange={(results) => draft && setDraft({ ...draft, checklistResults: results })}
+          readOnly={!isEditing}
+          actual={{
+            rr: trade.rr,
+            rMultiple: trade.actual_user_r ?? trade.actual_r,
+          }}
+        />
+      </div>
+
+      {/* ── Tags ─────────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <h3 className="text-xl font-semibold text-white mb-4">Tags</h3>
+        <div className="space-y-4">
+          <TagMultiSelect
+            category="mistake"
+            label="Mistakes"
+            selectedTagIds={mistakeIds}
+            onChange={setMistakeIds}
+            readOnly={!isEditing}
+          />
+          <TagMultiSelect
+            category="mental"
+            label="Mental"
+            selectedTagIds={mentalIds}
+            onChange={setMentalIds}
+            readOnly={!isEditing}
+          />
+        </div>
+      </div>
+
+      {/* ── Ratings ──────────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+        <h3 className="text-xl font-semibold text-white mb-4">Ratings</h3>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-400 font-medium w-36 shrink-0">Setup Quality</span>
+            <StarRating
+              value={isEditing && draft ? draft.setupQualityRating : trade.setup_quality_rating}
+              onChange={(v) => draft && setDraft({ ...draft, setupQualityRating: v === 0 ? null : v })}
+              readOnly={!isEditing}
+              size="md"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-400 font-medium w-36 shrink-0">Mental State</span>
+            <StarRating
+              value={isEditing && draft ? draft.mentalState : trade.mental_state}
+              onChange={(v) => draft && setDraft({ ...draft, mentalState: v === 0 ? null : v })}
+              readOnly={!isEditing}
+              size="md"
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Trade Notes — view mode or edit mode */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
@@ -1039,23 +1099,6 @@ export default function JournalTradeDetail() {
           </>
         )}
       </div>
-
-      {/* Tags */}
-      {!isEditing && trade.tags && trade.tags.length > 0 && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <h3 className="text-xl font-semibold text-white mb-4">Tags</h3>
-          <div className="flex flex-wrap gap-2">
-            {trade.tags.map((tag, index) => (
-              <span
-                key={index}
-                className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded-lg text-sm"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Screenshots */}
       {isEditing ? (

@@ -132,6 +132,13 @@ export async function createStrategy(payload: any) {
         setup_type: payload.setupType || null,
         default_stop_loss: payload.defaultStopLoss || null,
         default_take_profit: payload.defaultTakeProfit || null,
+        confirmation_signals: payload.confirmationSignals || null,
+        checklist: payload.checklist || null,
+        position_sizing_rule: payload.positionSizingRule || null,
+        expected_win_rate: payload.expectedWinRate || null,
+        avg_rr_goal: payload.avgRRGoal || null,
+        psychological_notes: payload.psychologicalNotes || null,
+        typical_session: payload.typicalSession || null,
         status: 'active',
         deleted_at: null  // ✅ Ensure it's not deleted
       })
@@ -179,6 +186,13 @@ export async function updateStrategy(id: string, payload: any) {
         setup_type: payload.setupType,
         default_stop_loss: payload.defaultStopLoss,
         default_take_profit: payload.defaultTakeProfit,
+        confirmation_signals: payload.confirmationSignals ?? null,
+        checklist: payload.checklist ?? null,
+        position_sizing_rule: payload.positionSizingRule ?? null,
+        expected_win_rate: payload.expectedWinRate ?? null,
+        avg_rr_goal: payload.avgRRGoal ?? null,
+        psychological_notes: payload.psychologicalNotes ?? null,
+        typical_session: payload.typicalSession ?? null,
         status: payload.status,
         updated_at: new Date().toISOString()
       })

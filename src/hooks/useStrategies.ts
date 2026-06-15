@@ -29,7 +29,17 @@ export function useStrategiesOptimized(userId?: string) {
       }
 
       console.log('✅ useStrategiesOptimized: Loaded', data?.length || 0, 'strategies');
-      return data || [];
+      // Map snake_case DB columns to camelCase aliases (additive — existing keys preserved).
+      return (data || []).map((row) => ({
+        ...row,
+        checklist: row.checklist ?? null,
+        avgRRGoal: row.avg_rr_goal ?? null,
+        confirmationSignals: row.confirmation_signals ?? null,
+        psychologicalNotes: row.psychological_notes ?? null,
+        expectedWinRate: row.expected_win_rate ?? null,
+        defaultStopLoss: row.default_stop_loss ?? null,
+        defaultTakeProfit: row.default_take_profit ?? null,
+      }));
     },
     enabled: !!userId,
     staleTime: 30000, // 30 seconds
@@ -109,6 +119,13 @@ export function useCreateStrategyOptimized() {
           category: strategy.category,
           status: 'active',
           created_at: new Date().toISOString(),
+          confirmation_signals: strategy.confirmationSignals || null,
+          checklist: strategy.checklist || null,
+          position_sizing_rule: strategy.positionSizingRule || null,
+          expected_win_rate: strategy.expectedWinRate || null,
+          avg_rr_goal: strategy.avgRRGoal || null,
+          psychological_notes: strategy.psychologicalNotes || null,
+          typical_session: strategy.typicalSession || null,
         }])
         .select()
         .single();

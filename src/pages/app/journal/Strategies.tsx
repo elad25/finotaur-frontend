@@ -8,6 +8,7 @@ import {
   Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
 } from "lucide-react";
 import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
+import ChecklistEditor, { type ChecklistItem } from '@/components/journal/strategy/ChecklistEditor';
 import { SkeletonStatRow, SkeletonChart, SkeletonTable, SkeletonCard } from '@/components/ds/Skeleton';
 import { useTrades } from "@/hooks/useTradesData";
 import EquityCurveChart from '@/components/charts/EquityCurveChart';
@@ -41,6 +42,7 @@ interface ExtendedStrategy {
   markets?: string[];
   setupType?: string;
   confirmationSignals?: string[];
+  checklist?: ChecklistItem[];
   visualExamples?: string[];
   defaultStopLoss?: number;
   defaultTakeProfit?: number;
@@ -1032,6 +1034,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [expectedWinRate, setExpectedWinRate] = useState<number | undefined>();
   const [avgRRGoal, setAvgRRGoal] = useState<number | undefined>();
   const [psychologicalNotes, setPsychologicalNotes] = useState("");
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
 
   useEffect(() => {
     if (editingStrategy) {
@@ -1049,6 +1052,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setExpectedWinRate(editingStrategy.expectedWinRate);
       setAvgRRGoal(editingStrategy.avgRRGoal);
       setPsychologicalNotes(editingStrategy.psychologicalNotes || "");
+      setChecklist(editingStrategy.checklist || []);
     } else {
       setName("");
       setDescription("");
@@ -1065,6 +1069,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setExpectedWinRate(undefined);
       setAvgRRGoal(undefined);
       setPsychologicalNotes("");
+      setChecklist([]);
       setCurrentStep(1);
     }
   }, [editingStrategy, isOpen]);
@@ -1118,6 +1123,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       markets: [],
       setupType,
       confirmationSignals: confirmationSignals ? [confirmationSignals] : [],
+      checklist,
       defaultStopLoss,
       defaultTakeProfit,
       avgRiskPerTrade,
@@ -1138,10 +1144,10 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       delete strategyData.id;
       strategyData.createdAt = new Date().toISOString();
     }
-    
+
     onSave(strategyData);
     onClose();
-  }, [name, description, assetClasses, setupType, confirmationSignals, visualExamples,
+  }, [name, description, assetClasses, setupType, confirmationSignals, checklist, visualExamples,
       defaultStopLoss, defaultTakeProfit, avgRiskPerTrade, maxDailyLoss,
       positionSizingRule, typicalSession, expectedWinRate, avgRRGoal,
       psychologicalNotes, isEditMode, editingStrategy, onSave, onClose]);
@@ -1299,6 +1305,13 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                   className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 resize-none transition-all focus:outline-none focus:border-[#C9A646]"
                   style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
+                  Entry Checklist
+                </label>
+                <ChecklistEditor items={checklist} onChange={setChecklist} />
               </div>
 
               <div>
@@ -1953,11 +1966,28 @@ const strategiesWithStats = useMemo(() => {
 
     try {
       if (editingStrategy) {
-        // 🔥 FIX: Use editingStrategy presence as source of truth for edit mode
+        // 🔥 FIX: Use editingStrategy presence as source of truth for edit mode.
+        // useUpdateStrategyOptimized expects { id, payload } where payload is
+        // passed directly to supabase .update() — so we must use snake_case keys.
         await updateStrategyMutation.mutateAsync({
-          ...strategyData,
-          id: editingStrategy.id, // ensure correct UUID
-          user_id: userId,
+          id: editingStrategy.id,
+          payload: {
+            name: strategyData.name,
+            description: strategyData.description,
+            category: strategyData.category,
+            timeframe: strategyData.timeframe,
+            setup_type: strategyData.setupType,
+            default_stop_loss: strategyData.defaultStopLoss,
+            default_take_profit: strategyData.defaultTakeProfit,
+            confirmation_signals: strategyData.confirmationSignals,
+            checklist: strategyData.checklist,
+            position_sizing_rule: strategyData.positionSizingRule,
+            expected_win_rate: strategyData.expectedWinRate,
+            avg_rr_goal: strategyData.avgRRGoal,
+            psychological_notes: strategyData.psychologicalNotes,
+            typical_session: strategyData.typicalSession,
+            status: strategyData.status,
+          },
         });
         toast.success('Strategy updated successfully!');
       } else {

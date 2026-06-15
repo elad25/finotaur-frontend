@@ -184,6 +184,30 @@ export function useNotebook() {
     onSuccess: invalidateEntries,
   });
 
+  // createEntryAsync — same as createEntry but returns the created NotebookEntry.
+  // Used by consumers that need the new entry's id immediately (e.g. TagMultiSelect
+  // mental-tag notebook link flow).
+  const createEntryAsync = async (
+    partial: Partial<Pick<NotebookEntry, 'folderId' | 'title' | 'content' | 'tags' | 'pinned'>>,
+  ): Promise<NotebookEntry> => {
+    if (!userId) throw new Error('No user ID');
+    const { data, error } = await supabase
+      .from('journal_notebook_entries')
+      .insert({
+        user_id: userId,
+        folder_id: partial.folderId ?? null,
+        title: partial.title ?? '',
+        content: partial.content ?? '',
+        tags: partial.tags ?? [],
+        pinned: partial.pinned ?? false,
+      })
+      .select('id, folder_id, title, content, tags, pinned, created_at, updated_at')
+      .single();
+    if (error) throw error;
+    await invalidateEntries();
+    return mapEntry(data);
+  };
+
   const updateEntryMutation = useMutation({
     mutationFn: async ({
       id,
@@ -252,6 +276,7 @@ export function useNotebook() {
     createEntry: (
       partial: Partial<Pick<NotebookEntry, 'folderId' | 'title' | 'content' | 'tags' | 'pinned'>>,
     ) => createEntryMutation.mutate(partial),
+    createEntryAsync,
     updateEntry: (
       id: string,
       partial: Partial<Pick<NotebookEntry, 'folderId' | 'title' | 'content' | 'tags' | 'pinned'>>,
