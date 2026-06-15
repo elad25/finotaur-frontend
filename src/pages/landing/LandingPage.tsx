@@ -24,8 +24,23 @@ import NinjaTraderCompliance from '@/components/landing-new/NinjaTraderComplianc
 import Footer from '@/components/landing-new/Footer';
 import { SEO } from '@/components/seo/SEO';
 import { softwareApplication, faqPage } from '@/components/seo/jsonLd';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const LandingPage = () => {
+  const location = useLocation();
+
+  // Scroll to an in-page section when the URL carries a hash (e.g. /#pricing,
+  // including arrivals redirected from /pricing). Delayed so the section is mounted.
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    const t = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 250);
+    return () => clearTimeout(t);
+  }, [location.hash]);
+
   return (
     <div className="landing-mono-default min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
       <SEO
