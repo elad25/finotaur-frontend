@@ -124,7 +124,8 @@ type ExtractionState =
   | { phase: 'idle' }
   | { phase: 'extracting' }
   | { phase: 'review'; extraction: TradeExtraction; file: File; mediaType: string }
-  | { phase: 'error'; message: string };
+  // kind 'upgrade' → tier gate (gold upsell banner, persists); 'error' → genuine failure (red, auto-dismiss)
+  | { phase: 'error'; message: string; kind: 'upgrade' | 'error' };
 
 function FinoChatPanel({
   onClose,
@@ -174,9 +175,18 @@ function FinoChatPanel({
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Failed to analyze screenshot';
-      setExtractionState({ phase: 'error', message });
-      // Auto-dismiss error after 5 s
-      setTimeout(() => setExtractionState({ phase: 'idle' }), 5_000);
+      const code = (err as { code?: string })?.code;
+      const status = (err as { status?: number })?.status;
+      const isUpgrade = code === 'upgrade_required' || status === 403;
+      setExtractionState({
+        phase: 'error',
+        message,
+        kind: isUpgrade ? 'upgrade' : 'error',
+      });
+      // Auto-dismiss genuine errors after 5 s; keep the upgrade prompt until the user acts.
+      if (!isUpgrade) {
+        setTimeout(() => setExtractionState({ phase: 'idle' }), 5_000);
+      }
     }
   }, []);
 
@@ -252,11 +262,43 @@ function FinoChatPanel({
             </div>
           )}
 
-          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'error' && (
-            <div className="mx-4 mb-2 rounded-lg border border-red-500/20 bg-red-950/30 px-3 py-2">
-              <span className="text-[11px] text-red-400">{extractionState.message}</span>
-            </div>
-          )}
+          {/* Tier gate — friendly gold upsell, persists until the user acts */}
+          {FINO_DETECTIVE_ENABLED &&
+            extractionState.phase === 'error' &&
+            extractionState.kind === 'upgrade' && (
+              <div className="mx-4 mb-2 flex items-start gap-2.5 rounded-lg border border-[#C9A646]/30 bg-[#C9A646]/10 px-3 py-2.5">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" />
+                <div className="flex-1">
+                  <p className="text-[11px] leading-snug text-[#E8D9A8]">{extractionState.message}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href = '/app/all-markets/pricing';
+                    }}
+                    className="mt-1.5 inline-flex items-center rounded-md bg-[#C9A646] px-2.5 py-1 text-[11px] font-semibold text-black transition-colors hover:bg-[#d8b65a]"
+                  >
+                    Upgrade
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={resetExtraction}
+                  className="text-[#C9A646]/60 transition-colors hover:text-[#C9A646]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+          {/* Genuine extraction failure — red, auto-dismisses */}
+          {FINO_DETECTIVE_ENABLED &&
+            extractionState.phase === 'error' &&
+            extractionState.kind === 'error' && (
+              <div className="mx-4 mb-2 rounded-lg border border-red-500/20 bg-red-950/30 px-3 py-2">
+                <span className="text-[11px] text-red-400">{extractionState.message}</span>
+              </div>
+            )}
 
           {FINO_DETECTIVE_ENABLED && extractionState.phase === 'review' && (
             <FinoTradeConfirmCard

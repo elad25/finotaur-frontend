@@ -422,7 +422,12 @@ export const aiCopilotApi = {
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.message || body.error || `Extract failed (${response.status})`);
+      const err = new Error(body.message || body.error || `Extract failed (${response.status})`);
+      // Carry the server's error code + HTTP status so callers can distinguish a
+      // tier gate (403 upgrade_required) from a genuine failure.
+      (err as Error & { code?: string; status?: number }).code = body.error;
+      (err as Error & { code?: string; status?: number }).status = response.status;
+      throw err;
     }
 
     return response.json() as Promise<{ extraction: TradeExtraction; tier: string }>;
