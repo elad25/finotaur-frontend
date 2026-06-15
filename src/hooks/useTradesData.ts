@@ -127,6 +127,10 @@ export interface Trade {
   expiration_date?: string;
   underlying_symbol?: string;
   option_outcome?: string | null;
+  // Trade annotation taxonomy (DB migration applied 2026-06-15)
+  setup_quality_rating?: number | null;
+  mental_state?: number | null;
+  checklist_results?: Record<string, boolean> | null;
 }
 export interface TradeStats {
   totalTrades: number;
