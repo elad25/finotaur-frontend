@@ -1251,12 +1251,19 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   
   // ✅ NEW: Get user name from auth for personalized greeting
   const { user } = useAuth();
+  // First name only for the welcome greeting. Prefer the explicit first_name
+  // captured at registration; otherwise take the first token of any full name,
+  // then fall back to the email handle.
   const displayName = useMemo(() => {
-    return user?.user_metadata?.display_name || 
-           user?.user_metadata?.full_name || 
-           user?.user_metadata?.name ||
-           user?.email?.split('@')[0] || 
-           'Trader';
+    const meta = user?.user_metadata;
+    const firstName =
+      meta?.first_name ||
+      (meta?.display_name || meta?.full_name || meta?.name || '')
+        .trim()
+        .split(' ')[0] ||
+      user?.email?.split('@')[0] ||
+      'Trader';
+    return firstName;
   }, [user]);
   
   const [dateStart, setDateStart] = useState<Date | null>(null);

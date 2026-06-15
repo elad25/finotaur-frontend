@@ -294,34 +294,44 @@ export const AccountTab = () => {
         </div>
 
         <div className="space-y-4">
-          {/* Name */}
+          {/* Name — separate First / Last name fields (both view + edit modes) */}
           <div className="grid gap-1.5">
-            <Label className="text-sm text-zinc-300">Name</Label>
-            {editingProfile ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
-                <Input
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="First name"
-                  autoComplete="given-name"
-                  className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
-                />
-                <Input
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Last name"
-                  autoComplete="family-name"
-                  className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+              {/* First name */}
+              <div className="grid gap-1.5">
+                <Label className="text-sm text-zinc-300">First name</Label>
+                {editingProfile ? (
+                  <Input
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="First name"
+                    autoComplete="given-name"
+                    className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                  />
+                ) : (
+                  <div className="h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
+                    {firstName || 'Not set'}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="max-w-md h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
-                {profile?.display_name ||
-                  [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
-                  user?.email?.split('@')[0] ||
-                  'Not set'}
+              {/* Last name */}
+              <div className="grid gap-1.5">
+                <Label className="text-sm text-zinc-300">Last name</Label>
+                {editingProfile ? (
+                  <Input
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Last name"
+                    autoComplete="family-name"
+                    className="h-10 bg-zinc-800/80 border-zinc-600/50 text-white placeholder:text-zinc-500"
+                  />
+                ) : (
+                  <div className="h-10 px-3 flex items-center rounded-md bg-zinc-800/40 border border-zinc-700/30 text-white">
+                    {lastName || 'Not set'}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
             <p className="text-xs text-zinc-500">Shown in the app and community</p>
           </div>
 
