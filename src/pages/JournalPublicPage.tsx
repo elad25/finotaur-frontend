@@ -85,7 +85,7 @@ const HeroSection = () => {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="text-xl text-slate-300 leading-relaxed font-light max-w-xl"
             >
-              In 10 trades, Finotaur shows what's quietly killing your P&L — and how to fix it.
+              In 15 trades, Finotaur shows what's quietly killing your P&L — and how to fix it.
             </motion.p>
 
             <motion.div
@@ -358,14 +358,14 @@ const plans = [
   {
     id: "basic", name: "Basic", monthlyPrice: "$24.99", yearlyPrice: "$229", yearlyMonthlyEquivalent: "$19.08",
     description: "Essential tools + automatic broker sync", trialDays: 14,
-    features: ["14-day free trial", "Broker sync (12,000+ brokers) - Coming soon", "25 trades/month (manual + auto-sync)", "📚 Full Finotaur Academy (300+ lessons)", "Full performance analytics", "Strategy builder & tracking", "Calendar & trading sessions", "Advanced statistics & metrics", "Equity curve & charts", "Trade screenshots & notes", "Email support"],
-    cta: "Start 14-Day Free Trial", featured: false, savings: "Save 24%",
+    features: ["14-day free trial", "Automatic broker sync — leading brokers supported", "25 trades / month", "Full FINOTAUR Academy (300+ lessons)", "Full performance analytics & equity curve", "Strategy builder & playbooks", "Trading sessions & tagging", "Advanced statistics & metrics", "Risk/Reward calculator", "Trade screenshots & notes", "Email support"],
+    cta: "Start 14-Day Free Trial", featured: false, savings: "Yearly — save ~3 months",
   },
   {
     id: "premium", name: "Premium", monthlyPrice: "$44.99", yearlyPrice: "$409", yearlyMonthlyEquivalent: "$34.08",
-    description: "Unlimited everything + AI intelligence",
-    features: ["Everything in Basic, plus:", "Unlimited trades", "AI-powered insights & coach", "Advanced AI analysis", "Pattern recognition", "Custom AI reports", "Behavioral risk alerts", "Backtesting system", "Priority support", "Early access to new features", "🔜 Coming Soon: Auto broker sync"],
-    cta: "Get Premium", featured: true, savings: "Save 24%",
+    description: "Unlimited trades + your AI trading coach",
+    features: ["Everything in Basic, plus:", "Unlimited trades — never hit a cap", "Your FINOTAUR Score — one number that grades your real edge", "Daily AI briefing — ranked insights on what to fix first", "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically", "Leak Finder — AI names the exact mistake costing you money", "Behavioral & risk alerts before you tilt", "Custom AI reports & backtesting", "Priority support", "Early access to new features"],
+    cta: "Get Premium", featured: true, savings: "Yearly — save ~3 months",
   },
 ];
 

@@ -279,7 +279,7 @@ export default function BacktestLanding() {
                 <tbody>
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">Manual Trades</td>
-                    <td className="p-6 text-center text-zinc-400">10 lifetime</td>
+                    <td className="p-6 text-center text-zinc-400">15 lifetime</td>
                     <td className="p-6 text-center text-zinc-400">25/month</td>
                     <td className="p-6 text-center text-[#C9A646] font-semibold">Unlimited</td>
                   </tr>

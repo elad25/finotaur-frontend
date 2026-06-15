@@ -42,11 +42,11 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: "$0",
     description: "Start your trading journey",
     features: [
-      "10 trades limit (lifetime)",
-      "Basic trade journal",
-      "Limited statistics",
+      "15 trades to uncover your first leak",
+      "Trade journal (manual + auto-import)",
+      "Core performance stats",
       "Community access",
-      "Mobile app access"
+      "Mobile app"
     ],
     cta: "Current Plan",
     featured: false
@@ -79,21 +79,22 @@ const plans: Plan[] = [
     monthlyPrice: "$44.99",
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34.08",
-    description: "Complete Trading Journal & Analytics with AI",
+    description: "Unlimited trades + your AI trading coach",
     features: [
-      "Everything in Basic",
-      "Automatic broker sync (12,000+ brokers)🔜 Coming Soon",
-      "AI-powered insights & coach",
-      "Advanced AI analysis",
-      "Pattern recognition",
-      "Custom AI reports",
-      "Behavioral risk alerts",
+      "Everything in Basic, plus:",
+      "Unlimited trades — never hit a cap",
+      "Your FINOTAUR Score — one number that grades your real edge",
+      "Daily AI briefing — ranked insights on what to fix first",
+      "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
+      "Leak Finder — AI names the exact mistake costing you money",
+      "Behavioral & risk alerts before you tilt",
+      "Custom AI reports & backtesting",
       "Priority support",
       "Early access to new features"
     ],
     cta: "Upgrade to Premium",
     featured: true,
-    savings: "Save 24%"
+    savings: "Yearly — save ~3 months"
   }
 ];
 
@@ -330,10 +331,10 @@ function UpgradePlanModal({
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                    Start free — 10 trades
+                    Start free — 15 trades
                   </h4>
                   <p className="text-slate-300 text-base leading-relaxed">
-                    If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
+                    If Finotaur doesn't show a pattern that's hurting you within 15 trades, don't upgrade.
                   </p>
                 </div>
               </div>

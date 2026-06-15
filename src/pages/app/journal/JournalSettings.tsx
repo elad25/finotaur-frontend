@@ -53,21 +53,23 @@ const plans: Plan[] = [
     monthlyPrice: 24.99,
     yearlyPrice: 229,
     yearlyMonthlyEquivalent: 19.08,
-    description: "Essential tools + automatic broker sync",
+    description: "Every tool serious traders need",
     trialDays: 14, // 🔥 14-day free trial
     features: [
       "14-day free trial",
-      "Up to 25 trades per month",
-      "Full performance analytics",
-      "Strategy builder & tracking",
-      "Calendar & trading sessions",
-      "Equity curve & charts",
+      "25 trades / month",
+      "Full performance analytics & equity curve",
+      "Strategy builder & playbooks",
+      "Trading sessions & tagging",
+      "Advanced statistics & metrics",
+      "Risk/Reward calculator",
       "Trade screenshots & notes",
+      "Full FINOTAUR Academy (300+ lessons)",
       "Email support",
     ],
-    cta: "Start Free Trial",
+    cta: "Start 14-Day Free Trial",
     featured: false,
-    savings: "Save 24%",
+    savings: "Yearly — save ~3 months",
     tier: 1,
     badge: {
       text: "14-Day Free Trial",
@@ -80,22 +82,23 @@ const plans: Plan[] = [
     monthlyPrice: 44.99,
     yearlyPrice: 409,
     yearlyMonthlyEquivalent: 34.08,
-    description: "Unlimited everything + AI intelligence",
+    description: "Unlimited trades + your AI trading coach",
     trialDays: 0, // 🔥 No trial - payment from day 0
     features: [
       "Everything in Basic, plus:",
-      "Unlimited trades",
-      "AI-powered insights & coach",
-      "Advanced AI analysis",
-      "Pattern recognition",
-      "Custom AI reports",
-      "Behavioral risk alerts",
-      "Backtesting system",
+      "Unlimited trades — never hit a cap",
+      "Your FINOTAUR Score — one number that grades your real edge",
+      "Daily AI briefing — ranked insights on what to fix first",
+      "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
+      "Leak Finder — AI names the exact mistake costing you money",
+      "Behavioral & risk alerts before you tilt",
+      "Custom AI reports & backtesting",
       "Priority support",
+      "Early access to new features",
     ],
     cta: "Upgrade to Premium",
     featured: true,
-    savings: "Save 24%",
+    savings: "Yearly — save ~3 months",
     tier: 2,
   }
 ];
@@ -542,7 +545,7 @@ const UpgradePlanModal = ({
               >
                 Yearly
                 <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                  Save up to 24%
+                  Save ~3 months
                 </span>
               </button>
             </div>

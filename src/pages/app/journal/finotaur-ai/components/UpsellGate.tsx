@@ -149,7 +149,7 @@ export function UpsellGate() {
             <FeatureRow
               icon={<BarChart3 className="h-5 w-5 text-gold-primary" />}
               title="Daily AI Briefings"
-              description="Get focused insights every day on what matters most for your performance."
+              description="Ranked insights on what to fix first — delivered every day based on your recent trades."
             />
             <FeatureRow
               icon={<Brain className="h-5 w-5 text-gold-primary" />}

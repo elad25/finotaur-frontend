@@ -284,7 +284,7 @@ export function getTradeLimitsDisplay(profile: UserProfile | null | undefined): 
   displayText: string;
 } {
   if (!profile) {
-    return { max: 10, isUnlimited: false, displayText: '10 trades (lifetime)' };
+    return { max: 15, isUnlimited: false, displayText: '15 trades (lifetime)' };
   }
 
   // Admins get unlimited
@@ -292,14 +292,14 @@ export function getTradeLimitsDisplay(profile: UserProfile | null | undefined): 
     return { max: 999999, isUnlimited: true, displayText: 'Unlimited' };
   }
 
-  const maxTrades = profile.max_trades ?? 10;
+  const maxTrades = profile.max_trades ?? 15;
   const isUnlimited = maxTrades >= 999999;
 
   if (isUnlimited) {
     return { max: maxTrades, isUnlimited: true, displayText: 'Unlimited' };
   }
 
-  // Basic = 25/month, Free = 10 lifetime
+  // Basic = 25/month, Free = 15 lifetime
   const periodText = profile.account_type === 'basic' ? '/month' : ' (lifetime)';
   return { 
     max: maxTrades, 
