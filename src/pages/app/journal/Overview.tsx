@@ -16,6 +16,7 @@
 import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import dayjs from "dayjs";
 import { FEATURES } from "@/config/features";
 import {
@@ -1420,6 +1421,36 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   const effectiveReadOnly = readOnly || isMentorView;
   const bypassPortfolioFilter = !!overrideUserId || isMentorView;
   // queryClient hoisted ~90 lines up to fix TDZ in handleSyncAllTrades deps.
+
+  // OAuth return handler — invalidate stale caches so newly-connected accounts
+  // appear immediately without a manual page refresh.
+  // The edge function redirects to /app/journal/overview?oauth_status=connected&broker=<name>
+  // after a successful broker OAuth flow. We read the param here, invalidate
+  // all broker/portfolio/trade caches, show a success toast, then strip the
+  // params so a manual refresh does not re-trigger.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthStatus = params.get('oauth_status');
+    if (oauthStatus !== 'connected') return;
+    // Wait until userId resolves before invalidating per-user query keys.
+    if (!userId) return;
+
+    const rawBroker = params.get('broker') ?? '';
+    const brokerLabel = rawBroker
+      ? rawBroker.charAt(0).toUpperCase() + rawBroker.slice(1)
+      : 'Broker';
+
+    void queryClient.invalidateQueries({ queryKey: ['tradovate_credentials', userId] });
+    void queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
+    void queryClient.invalidateQueries({ queryKey: ['portfolios', userId] });
+    void queryClient.invalidateQueries({ queryKey: ['trades'] });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+    toast.success(`${brokerLabel} connected — syncing your accounts…`);
+
+    // Strip the OAuth params so a manual refresh does not re-trigger.
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [userId, queryClient]);
 
   // Convert date range to days for useDashboardStats (null = ALL TIME)
   const dashboardDays = useMemo(() => {

@@ -64,10 +64,18 @@ export function buildAccountGroups(
       result.push({ key, label, portfolios });
     }
 
-    // Emit the generic 'Tradovate' bucket last among tradovate-derived groups
+    // Emit the generic 'Tradovate' bucket last among tradovate-derived groups.
+    // Prefer the user's custom connection name when the bucket's accounts share
+    // a single non-empty connection_label; else fall back to 'Tradovate'.
     if (firmMap.has('tradovate')) {
       const { label, portfolios } = firmMap.get('tradovate')!;
-      result.push({ key: 'tradovate', label, portfolios });
+      const customLabels = new Set(
+        portfolios
+          .map(p => p.connection_label?.trim())
+          .filter((l): l is string => Boolean(l)),
+      );
+      const groupLabel = customLabels.size === 1 ? [...customLabels][0] : label;
+      result.push({ key: 'tradovate', label: groupLabel, portfolios });
     }
   }
 
