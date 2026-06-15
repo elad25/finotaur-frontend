@@ -433,6 +433,9 @@ function AppContent() {
         )}
         {/* PUBLIC ROUTES */}
         <Route path="/" element={<LandingPage />} />
+        {/* /pricing has no standalone page — the public pricing lives in the
+            landing's #pricing section. Redirect direct hits there. */}
+        <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
