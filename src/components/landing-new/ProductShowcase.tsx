@@ -16,7 +16,7 @@ import { SectionTitle } from "./_shared/SectionTitle";
 const journalFeatures = [
   {
     icon: Link2,
-    title: "12,000+ Broker Sync",
+    title: "Leading Broker Sync",
     description: "Auto-import every trade. No manual entry.",
   },
   {

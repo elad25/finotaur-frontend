@@ -163,8 +163,8 @@ const DEFAULT_STATE: FrontendTradeCount = {
   total: 0,
   monthly: 0,
   accountType: 'free',
-  limit: 10,
-  remaining: 10,
+  limit: 15,
+  remaining: 15,
   canCreate: true,
   isUnlimited: false,
   error: null,
@@ -173,7 +173,7 @@ const DEFAULT_STATE: FrontendTradeCount = {
 
 // Account limits configuration
 const ACCOUNT_LIMITS = {
-  free: 10,      // 10 lifetime trades
+  free: 15,      // 15 lifetime trades
   basic: 100,    // 100 monthly trades
   premium: 999999, // Unlimited
   admin: 999999,   // Unlimited

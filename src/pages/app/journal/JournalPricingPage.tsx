@@ -31,13 +31,15 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: '$0',
     description: 'Start your trading journey',
     features: [
-      '10 trades limit (lifetime)',
-      'Basic trade journal',
-      'Limited statistics',
+      'Automatic broker sync — leading brokers supported',
+      '15 trades to uncover your first leak',
+      'Trade journal (manual + auto-import)',
+      'Core performance stats',
+      'Trading calendar',
       'Community access',
-      'Mobile app access',
+      'Mobile app',
     ],
-    cta: 'Current Plan',
+    cta: 'Start Free',
     featured: false,
   },
   {
@@ -46,21 +48,22 @@ const plans: Plan[] = [
     monthlyPrice: '$24.99',
     yearlyPrice: '$229',
     yearlyMonthlyEquivalent: '$19.08',
-    description: 'Essential trading tools for serious traders',
+    description: 'Every tool serious traders need',
     features: [
-      'Unlimited trade journal',
-      'Full performance analytics',
-      'Strategy builder & tracking',
-      'Calendar & trading sessions',
+      'Everything in Free, plus:',
+      '25 trades / month',
+      'Full performance analytics & equity curve',
+      'Strategy builder & playbooks',
+      'Trading sessions & tagging',
       'Advanced statistics & metrics',
-      'Equity curve & charts',
       'Risk/Reward calculator',
       'Trade screenshots & notes',
+      'Full FINOTAUR Academy (300+ lessons)',
       'Email support',
     ],
-    cta: 'Upgrade to Basic',
+    cta: 'Start 14-Day Free Trial',
     featured: false,
-    savings: 'Save 24%',
+    savings: 'Yearly — save ~3 months',
   },
   {
     id: 'premium',
@@ -68,21 +71,22 @@ const plans: Plan[] = [
     monthlyPrice: '$44.99',
     yearlyPrice: '$409',
     yearlyMonthlyEquivalent: '$34.08',
-    description: 'Complete Trading Journal & Analytics with AI',
+    description: 'Unlimited trades + your AI trading coach',
     features: [
-      'Everything in Basic',
-      'Automatic broker sync (12,000+ brokers) 🔜 Coming Soon',
-      'AI-powered insights & coach',
-      'Advanced AI analysis',
-      'Pattern recognition',
-      'Custom AI reports',
-      'Behavioral risk alerts',
+      'Everything in Basic, plus:',
+      'Unlimited trades — never hit a cap',
+      'Your FINOTAUR Score — one number that grades your real edge',
+      'Daily AI briefing — ranked insights on what to fix first',
+      'Pattern of the Week — your biggest recurring edge or leak, surfaced automatically',
+      'Leak Finder — AI names the exact mistake costing you money',
+      'Behavioral & risk alerts before you tilt',
+      'Custom AI reports & backtesting',
       'Priority support',
       'Early access to new features',
     ],
     cta: 'Upgrade to Premium',
     featured: true,
-    savings: 'Save 24%',
+    savings: 'Yearly — save ~3 months',
   },
 ];
 
@@ -129,9 +133,9 @@ export default function JournalPricingPage() {
         </div>
 
         <div className="text-center mb-10">
-          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Choose Your Plan</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">Turn every trade into your edge</h1>
           <p className="text-zinc-400 max-w-xl mx-auto">
-            Start with a 14-day free trial on Basic, or go Premium for unlimited access
+            Auto-sync your broker, see what's quietly costing you, and fix it with an AI coach built for traders.
           </p>
         </div>
 
@@ -162,10 +166,10 @@ export default function JournalPricingPage() {
               </div>
               <div className="text-left flex-1">
                 <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                  Start free — 10 trades
+                  Start free — 15 trades
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
+                  If Finotaur doesn't show a pattern that's hurting you within 15 trades, don't upgrade.
                 </p>
               </div>
             </div>
@@ -195,7 +199,7 @@ export default function JournalPricingPage() {
             >
               Yearly
               <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                Save up to 24%
+                Save ~3 months
               </span>
             </button>
           </div>

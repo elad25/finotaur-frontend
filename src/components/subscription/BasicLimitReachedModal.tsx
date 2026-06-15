@@ -4,7 +4,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Crown, Zap, CheckCircle2, TrendingUp, Infinity, BarChart3, Clock, ArrowRight } from 'lucide-react';
+import { Crown, Zap, TrendingUp, Infinity, BarChart3, Clock, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface BasicLimitReachedModalProps {
@@ -105,9 +105,9 @@ export function BasicLimitReachedModal({
 
             <div className="grid grid-cols-2 gap-3">
               {[
-                { icon: Infinity, text: 'Unlimited trades', highlight: true },
-                { icon: BarChart3, text: 'Advanced analytics' },
-                { icon: TrendingUp, text: 'AI insights' },
+                { icon: Infinity, text: 'Unlimited trades — never hit a cap', highlight: true },
+                { icon: BarChart3, text: 'Daily AI briefing' },
+                { icon: TrendingUp, text: 'FINOTAUR Score' },
                 { icon: Clock, text: 'Priority support' },
               ].map((benefit, i) => (
                 <div 

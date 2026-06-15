@@ -237,7 +237,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     category: 'journal',
     features: [
       '14-day free trial',
-      'Broker sync (12,000+ brokers)',
+      'Broker sync — leading brokers supported',
       '25 trades/month (manual + auto-sync)',
       'Full performance analytics',
       'Strategy builder & tracking',
@@ -264,7 +264,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     category: 'journal',
     features: [
       '14-day free trial',
-      'Broker sync (12,000+ brokers)',
+      'Broker sync — leading brokers supported',
       '25 trades/month (manual + auto-sync)',
       'Full performance analytics',
       'Strategy builder & tracking',

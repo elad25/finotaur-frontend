@@ -43,7 +43,7 @@ const faqs: FAQItem[] = [
   {
     question: "What about the Trading Journal?",
     answer:
-      "Journal Premium syncs with 12,000+ brokers to auto-import your trades. The AI analyzes your patterns, identifies costly mistakes, tracks strategy performance, and provides Bloomberg-level analytics. It's included free with the Finotaur plan ($40/mo value) — you'd normally pay separately for this.",
+      "Journal Premium syncs with leading brokers to auto-import your trades. The AI analyzes your patterns, identifies costly mistakes, tracks strategy performance, and provides Bloomberg-level analytics. It's included free with the Finotaur plan ($40/mo value) — you'd normally pay separately for this.",
   },
   {
     question: "Is my data safe?",
