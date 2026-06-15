@@ -34,7 +34,7 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Upload } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Upload, Lock } from "lucide-react";
 import { usePortfolios } from "@/hooks/usePortfolios"; // still needed for refetchPortfolios
 
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
@@ -761,6 +761,7 @@ const {
   isPremium, 
   isUnlimitedUser,
   isLegacyFreeUser,
+  isFreeJournal,
   isLoading: subscriptionLoading,
   warningState,
   markWarningShown 
@@ -1962,6 +1963,12 @@ if (hasResult && directRiskUSD > 0) {
                         <h3 className="text-sm font-semibold text-white truncate">
                           Log it instantly with <span className="text-[#C9A646]">FINO</span>
                         </h3>
+                        {isFreeJournal && (
+                          <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-[#C9A646]/40 bg-[#C9A646]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#C9A646]">
+                            <Lock className="w-2.5 h-2.5" />
+                            Basic+
+                          </span>
+                        )}
                       </div>
                       {/* Field chips */}
                       <div className="flex flex-wrap gap-1.5">
