@@ -34,7 +34,7 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Camera } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Upload } from "lucide-react";
 import { usePortfolios } from "@/hooks/usePortfolios"; // still needed for refetchPortfolios
 
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
@@ -1908,55 +1908,101 @@ if (hasResult && directRiskUSD > 0) {
         {/* Header */}
         <section className="pt-10 relative">
           <div className="pointer-events-none absolute -top-6 left-0 h-24 w-64 rounded-full bg-yellow-500/10 blur-3xl" />
-          <div className="flex items-center justify-between gap-6">
-            {/* Left: Title */}
-            <div className="min-w-0">
-              <h1 className="text-3xl font-semibold text-white tracking-tight flex items-center gap-3">
-                {isEditMode ? (
-                  <>
-                    Edit Trade
-                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      Editing
-                    </span>
-                  </>
-                ) : (
-                  'New Trade'
-                )}
-              </h1>
-              <p className="mt-1 text-zinc-400 flex items-center gap-3">
-                {isEditMode ? 'Update your trade details' : 'Log a new trade to your journal'}
-                {lastSaved && (
-                  <span className="text-xs text-zinc-500 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" />
-                    Saved {Math.round((Date.now() - lastSaved.getTime()) / 1000)}s ago
-                  </span>
-                )}
-              </p>
-            </div>
-
-            
-
-            {/* Right: Log with FINO */}
-            <div className="hidden md:block w-72 flex-shrink-0">
-              <div className="rounded-xl border border-[#C9A646]/30 bg-[linear-gradient(145deg,#0f0f0d,#161613)] p-4 shadow-[0_0_30px_rgba(0,0,0,0.25)]">
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-4 h-4 text-[#C9A646]" />
-                  <h3 className="text-sm font-semibold text-white">Log it instantly with FINO</h3>
+          <div className="rounded-3xl border border-white/[0.06] bg-[linear-gradient(145deg,#0c0c0b,#121211)] p-6 md:p-8 shadow-[0_0_40px_rgba(0,0,0,0.25)]">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
+              {/* Left: Icon badge + Title */}
+              <div className="flex items-center gap-5 min-w-0">
+                <div className="hidden sm:flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl border border-[#C9A646]/30 bg-[linear-gradient(145deg,rgba(201,166,70,0.18),rgba(201,166,70,0.04))] shadow-[0_0_24px_rgba(201,166,70,0.12)]">
+                  <TrendingUp className="w-7 h-7 text-[#E3C676]" />
                 </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  Upload a screenshot of your trade and FINO fills this in automatically.
-                </p>
-                <p className="mt-2 text-[11px] text-zinc-500 leading-relaxed">
-                  Make sure the image shows: <span className="text-zinc-300">Symbol</span>, <span className="text-zinc-300">Direction</span>, <span className="text-zinc-300">Entry</span>, <span className="text-zinc-300">Stop</span>, <span className="text-zinc-300">Target</span>, <span className="text-zinc-300">Position Size</span>.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => openFino()}
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-yellow-600 to-yellow-400 px-3 py-2 text-xs font-semibold text-black transition-opacity hover:opacity-90"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  Open FINO
-                </button>
+                <div className="min-w-0">
+                  <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight flex items-center gap-3">
+                    {isEditMode ? (
+                      <>
+                        Edit Trade
+                        <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 align-middle">
+                          Editing
+                        </span>
+                      </>
+                    ) : (
+                      'New Trade'
+                    )}
+                  </h1>
+                  <p className="mt-2 text-lg text-zinc-400">
+                    {isEditMode ? 'Update your trade details' : 'Log a new trade to your journal'}
+                  </p>
+                  {lastSaved && (
+                    <p className="mt-3 text-sm text-zinc-500 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Saved {Math.round((Date.now() - lastSaved.getTime()) / 1000)}s ago
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Log with FINO */}
+              <div className="w-full lg:w-[34rem] lg:flex-shrink-0">
+                <div className="relative overflow-hidden rounded-2xl border border-[#C9A646]/30 bg-[linear-gradient(145deg,#0f0f0d,#161613)] p-5 shadow-[0_0_30px_rgba(0,0,0,0.25)]">
+                  {/* Decorative gold swoosh, top-right */}
+                  <svg
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -top-6 -right-6 h-32 w-44 opacity-40"
+                    viewBox="0 0 180 130"
+                    fill="none"
+                  >
+                    <path d="M10 120 C 70 120, 150 60, 175 0" stroke="#C9A646" strokeOpacity="0.35" strokeWidth="1.2" />
+                    <path d="M40 128 C 95 124, 160 70, 182 14" stroke="#C9A646" strokeOpacity="0.22" strokeWidth="1.2" />
+                    <path d="M72 132 C 120 126, 168 84, 188 34" stroke="#C9A646" strokeOpacity="0.14" strokeWidth="1.2" />
+                  </svg>
+
+                  <div className="relative flex items-center gap-2.5 mb-2">
+                    <Sparkles className="w-5 h-5 text-[#C9A646]" />
+                    <h3 className="text-base font-semibold text-white">
+                      Log it instantly with <span className="text-[#C9A646]">FINO</span>
+                    </h3>
+                  </div>
+                  <p className="relative text-sm text-zinc-400 leading-relaxed">
+                    Upload a screenshot of your trade and FINO will automatically extract the details.
+                  </p>
+
+                  {/* Field chips */}
+                  <div className="relative mt-4 flex flex-wrap gap-2">
+                    {['Symbol', 'Direction', 'Entry', 'Stop', 'Target', 'Position Size'].map((field) => (
+                      <span
+                        key={field}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-black/40 px-3 py-1.5 text-xs font-medium text-zinc-300"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#C9A646]" />
+                        {field}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="relative my-4 border-t border-white/[0.06]" />
+
+                  {/* Bottom row: upload + formats + CTA */}
+                  <div className="relative flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openFino()}
+                      aria-label="Upload trade screenshot"
+                      className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-zinc-400 transition-colors hover:border-[#C9A646]/40 hover:text-[#C9A646]"
+                    >
+                      <Upload className="w-4 h-4" />
+                    </button>
+                    <p className="text-xs text-zinc-500">
+                      Supported formats: PNG, JPG, JPEG
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openFino()}
+                      className="ml-auto inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-yellow-600 to-yellow-400 px-5 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Open FINO
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
