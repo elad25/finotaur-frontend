@@ -1284,6 +1284,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     effectivePortfolioIds,
     setActivePortfolioId,
     hasMultiplePortfolios,
+    isShowingTrader,
   } = usePortfolioContext();
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
   const [showImportPopup, setShowImportPopup] = useState(false);
@@ -1857,11 +1858,16 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
 
         {stats && (allBrokerConnections.length > 0 || (stats.trades && stats.trades.length > 0) || emptyStateDismissed) && (
           <>
+            {isShowingTrader && stats && (
+              <div className="mb-3 rounded-xl border border-[#C9A646]/20 bg-[#C9A646]/5 px-3 py-2 text-[11px] text-[#C9A646]">
+                Trader view — noise-free: {stats.closedTrades} decisions · each weighted once · per-contract · burned accounts excluded
+              </div>
+            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <JournalKpiCard
                 label="Net P&L"
                 value={formatCurrency(stats.netPnl)}
-                hint={`${stats.closedTrades} closed trades`}
+                hint={isShowingTrader ? `${stats.closedTrades} decisions` : `${stats.closedTrades} closed trades`}
                 tone={stats.netPnl >= 0 ? "green" : "red"}
                 icon={<TrendingUp className="h-8 w-8" strokeWidth={2} />}
                 tooltip="Total profit or loss from all closed trades in the selected date range."
@@ -1905,7 +1911,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               <JournalKpiCard
                 label="Expectancy"
                 value={formatSignedCurrency(expectancy)}
-                hint="Per Trade"
+                hint={isShowingTrader ? "Per contract" : "Per Trade"}
                 tone={expectancy >= 0 ? "green" : "red"}
                 visual="target"
                 tooltip="Estimated average P&L per trade based on win rate, average win, and average loss."
