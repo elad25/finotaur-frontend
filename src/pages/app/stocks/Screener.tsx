@@ -116,7 +116,7 @@ export default function StocksScreener() {
         <AssetSwitch active={assetTab} onChange={setAssetTab} />
         <FinoExplains
           title="What is the Screener?"
-          className="mt-ds-4 lg:w-auto lg:ml-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           Filter the entire stock and crypto universe by the metrics that matter — market cap,
           P/E, sector, RSI, performance and more. Set your criteria, sort any column, and the

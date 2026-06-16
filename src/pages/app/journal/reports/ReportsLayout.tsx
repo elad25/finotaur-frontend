@@ -13,7 +13,7 @@ export default function JournalReportsLayout() {
       <div className="relative px-4 pt-4 sm:px-6">
         <FinoExplains
           title="What are the Journal Reports?"
-          className="mt-ds-4 lg:absolute lg:right-6 lg:top-4 lg:z-10 lg:mt-0 lg:w-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           Your trading, fully X-rayed. This analytics suite breaks your performance down every way
           that matters — win rate, risk, day-by-day, by strategy and by setup — so you can see

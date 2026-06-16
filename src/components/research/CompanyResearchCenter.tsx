@@ -438,7 +438,7 @@ export function CompanyResearchCenter() {
         {!ticker && (
           <FinoExplains
             title="What is the Company Research Center?"
-            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+            className="mt-ds-3 ml-auto w-fit"
           >
             Here you can search any ticker you want and pull every quarterly (10-Q) and
             annual (10-K) report for U.S. stocks — sourced straight from official SEC filings.

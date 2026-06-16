@@ -39,7 +39,7 @@ export default function FuturesTools() {
       title="Futures Calculators"
       description="Local risk and contract-sizing tools based on static contract specs. No market data connection required."
     >
-      <FinoExplains title="What are the Futures Tools?" className="mt-ds-4 lg:w-auto lg:ml-auto lg:mt-0">
+      <FinoExplains title="What are the Futures Tools?" className="mt-ds-3 ml-auto w-fit">
         Quick futures calculators — work out contract value, required margin, and potential profit
         or loss before you place a trade. Enter your numbers for instant answers.
       </FinoExplains>

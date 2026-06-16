@@ -170,7 +170,7 @@ export default function StockAnalyzer() {
     >
       <FinoExplains
         title="What is the Stock Analyzer?"
-        className="mt-ds-4 lg:w-auto lg:ml-auto"
+        className="mt-ds-3 ml-auto w-fit"
       >
         Type any ticker and let Fino&apos;s AI break the company down for you — business, financials,
         valuation, earnings and options — all in plain English. Use the tabs to jump straight to

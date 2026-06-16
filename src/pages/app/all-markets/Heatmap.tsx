@@ -1198,7 +1198,7 @@ export default function HeatmapPage() {
 
       <FinoExplains
         title="What is the Heatmap?"
-        className="mt-ds-4 lg:w-auto lg:ml-auto"
+        className="mt-ds-3 ml-auto w-fit"
       >
         A bird's-eye view of the whole market on one screen. Every tile is a stock, sized by
         market cap and colored by performance — green for gainers, red for losers. Hover a tile

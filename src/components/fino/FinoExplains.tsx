@@ -25,14 +25,14 @@ interface FinoExplainsProps {
 export function FinoExplains({
   title,
   children,
-  className = '',
+  className = 'mt-ds-3 ml-auto w-fit',
   contentClassName = 'lg:w-[300px]',
   defaultOpen = false,
 }: FinoExplainsProps) {
   return (
     <aside className={className}>
       <details
-        className="group rounded-[12px] border border-gold-border bg-surface-1"
+        className="group w-fit rounded-[12px] border border-gold-border bg-surface-1"
         open={defaultOpen}
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-ds-4 py-ds-2 [&::-webkit-details-marker]:hidden">

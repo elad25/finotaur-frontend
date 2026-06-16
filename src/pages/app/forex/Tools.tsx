@@ -398,7 +398,7 @@ export default function ForexTools() {
       title="Forex Calculators"
       description="Currency converter, pip value, and position-size tools."
     >
-      <FinoExplains title="What are the Forex Tools?" className="mt-ds-4 lg:w-auto lg:ml-auto lg:mt-0">
+      <FinoExplains title="What are the Forex Tools?" className="mt-ds-3 ml-auto w-fit">
         Essential forex calculators in one place — pip value, position size, margin and risk. Plug
         in your trade and see the numbers instantly.
       </FinoExplains>
