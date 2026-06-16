@@ -117,7 +117,7 @@ const FlowScannerContent = memo(function FlowScannerContent() {
           </h1>
           <FinoExplains
             title="What is the Flow Scanner?"
-            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+            className="mt-ds-3 ml-auto w-fit"
           >
             Spot unusual activity as it happens. The scanner flags large, out-of-the-ordinary
             trades, with AI highlighting the ones worth a closer look.

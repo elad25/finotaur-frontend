@@ -566,7 +566,7 @@ export default function StocksValuation() {
         </p>
         <FinoExplains
           title="What is the Valuation tool?"
-          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           Find out what a stock is really worth. It runs a discounted-cash-flow (DCF) estimate
           of intrinsic value, compares the company's multiples against its peers, and scores how

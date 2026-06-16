@@ -209,7 +209,7 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
       </p>
       <FinoExplains
         title="What is the Sector Analyzer?"
-        className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+        className="mt-ds-3 ml-auto w-fit"
       >
         Pick a sector and get an AI deep-dive — what&apos;s driving it, which names are leading,
         and how it stacks up against the rest of the market.

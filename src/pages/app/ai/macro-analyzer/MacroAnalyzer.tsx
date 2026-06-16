@@ -304,7 +304,7 @@ export default function MacroAnalyzer() {
             </p>
             <FinoExplains
               title="What is the Macro Analyzer?"
-              className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+              className="mt-ds-3 ml-auto w-fit"
             >
               The big picture, decoded. Fino&apos;s AI weaves interest rates, inflation, growth and
               global events into a clear read on the macro backdrop driving every market.

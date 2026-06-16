@@ -682,7 +682,7 @@ export default function JournalImport() {
         <PageTitle title="Import Trades" subtitle="Upload a CSV export from your broker or journal" />
         <FinoExplains
           title="How do I import trades?"
-          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           Bring your existing trades into FINOTAUR. Upload a CSV or JSON from your broker, map the
           columns, preview the result, and import everything in one go.

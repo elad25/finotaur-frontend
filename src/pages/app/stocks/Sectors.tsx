@@ -322,7 +322,7 @@ const StocksSectors = memo(function StocksSectors() {
 
       <FinoExplains
         title="What is Sector Analysis?"
-        className="mt-ds-4 lg:w-auto lg:ml-auto"
+        className="mt-ds-3 ml-auto w-fit"
       >
         See how all 11 market sectors are performing at a glance, as a sortable table or a
         color-coded heatmap. Compare returns across 1D, 1W, 1M, YTD and 1Y, spot the leaders

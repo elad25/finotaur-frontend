@@ -1051,7 +1051,7 @@ export default function StocksCompare() {
         </p>
         <FinoExplains
           title="What is Compare?"
-          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           Put up to four stocks head-to-head. Add tickers, choose a date range, and see their
           performance normalized on one chart alongside key fundamentals — so you can tell at a

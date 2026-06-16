@@ -32,7 +32,7 @@ export function CopilotPageHeader() {
         </div>
         <FinoExplains
           title="What is COPILOT?"
-          className="mt-4 xl:absolute xl:right-[220px] xl:top-1/2 xl:mt-0 xl:-translate-y-1/2 xl:w-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           COPILOT is your personal AI portfolio analyst. Connect your brokerage and it watches your real positions — explaining your risk, your macro exposure and the best opportunities for the holdings you actually own.
         </FinoExplains>

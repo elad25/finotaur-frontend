@@ -1692,7 +1692,7 @@ function Top5Content() {
 
         <FinoExplains
           title="What is Top 5?"
-          className="mt-ds-4 lg:w-auto lg:ml-auto"
+          className="mt-ds-3 ml-auto w-fit"
         >
           Fino&apos;s daily shortlist. Every day the AI scans the market and surfaces the five
           highest-conviction opportunities — each with the reasoning behind it.

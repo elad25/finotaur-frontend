@@ -64,7 +64,7 @@ function OptionsIntelligenceContent() {
           </h1>
           <FinoExplains
             title="What is Options Intelligence?"
-            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+            className="mt-ds-3 ml-auto w-fit"
           >
             Make sense of the options chain. Fino&apos;s AI explains the greeks, models potential
             profit and loss, and suggests strategies for any ticker — no options expertise required.

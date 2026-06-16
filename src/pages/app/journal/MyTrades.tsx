@@ -1613,7 +1613,7 @@ const stats = useMemo<Stats>(() => {
           )}
         </div>
 
-        <FinoExplains title="What is My Trades?" className="mt-ds-4 lg:w-auto lg:ml-auto lg:mt-0">
+        <FinoExplains title="What is My Trades?" className="mt-ds-3 ml-auto w-fit">
           Your complete trade history in one table. Sort and filter by ticker, strategy, date or
           result, search any trade, and click a row to review and annotate it. This is the raw
           record behind all your journal analytics.

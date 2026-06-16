@@ -410,7 +410,7 @@ export const Builder = () => {
           </p>
           <FinoExplains
             title="What is the Backtest Builder?"
-            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+            className="mt-ds-3 ml-auto w-fit"
           >
             Test a strategy before you risk real money. Define your entry and exit conditions and
             risk rules, run them against historical data, and see exactly how it would have
