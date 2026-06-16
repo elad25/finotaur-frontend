@@ -422,7 +422,7 @@ export function CompanyResearchCenter() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="animate-fade-in space-y-ds-5">
+    <div className="animate-fade-in space-y-ds-5 pt-ds-4">
       {/* ------------------------------------------------------------------ */}
       {/* A. Header row                                                        */}
       {/* ------------------------------------------------------------------ */}
@@ -486,13 +486,60 @@ export function CompanyResearchCenter() {
       </div>
 
       {!ticker ? (
-        /* Empty state — no company selected yet */
-        <div className="flex flex-col items-center justify-center py-ds-9 text-center">
-          <FileText size={34} className="mb-ds-3 text-ink-secondary/40" />
-          <p className="text-[15px] font-medium text-ink-primary">Search for a company</p>
-          <p className="mt-1.5 max-w-[340px] text-[13px] text-ink-secondary">
-            Find quarterly and annual reports by company name, ticker, or CIK.
-          </p>
+        /* Landing state — no company selected yet:
+           empty-state hint on the left, gold "Fino explains" panel on the right */
+        <div className="flex flex-col items-stretch justify-center gap-ds-5 pt-ds-4 lg:flex-row">
+          {/* Empty-state hint */}
+          <div className="flex flex-1 flex-col items-center justify-center py-ds-9 text-center">
+            <FileText size={34} className="mb-ds-3 text-ink-secondary/40" />
+            <p className="text-[15px] font-medium text-ink-primary">Search for a company</p>
+            <p className="mt-1.5 max-w-[340px] text-[13px] text-ink-secondary">
+              Find quarterly and annual reports by company name, ticker, or CIK.
+            </p>
+          </div>
+
+          {/* Gold "Fino explains" info panel */}
+          <aside className="w-full shrink-0 lg:w-[340px]">
+            <div className="flex flex-col gap-ds-4 rounded-[12px] border border-gold-border bg-surface-1 p-ds-5">
+              <div className="flex items-center gap-2">
+                <img
+                  src="/fino-avatar.png"
+                  alt="Fino"
+                  className="h-7 w-7 rounded-full object-cover ring-1 ring-gold-border"
+                />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-gold-primary">
+                  Fino Explains
+                </span>
+              </div>
+
+              <p className="text-[15px] font-semibold leading-tight text-ink-primary">
+                What is the Company Research Center?
+              </p>
+
+              <p className="text-[13px] leading-relaxed text-ink-secondary">
+                Here you can search any ticker you want and pull every quarterly (10-Q)
+                and annual (10-K) report for U.S. stocks — sourced straight from official
+                SEC filings. Just type a company name, ticker, or CIK above to get started.
+              </p>
+
+              <Button
+                variant="gold"
+                size="default"
+                className="w-full"
+                showArrow={false}
+                onClick={() =>
+                  openFino({
+                    path: location.pathname,
+                    label: 'Ask Fino',
+                    query: 'What can I do on the Company Research Center page?',
+                  })
+                }
+              >
+                <Sparkles size={14} />
+                Ask Fino
+              </Button>
+            </div>
+          </aside>
         </div>
       ) : (
         <>
