@@ -435,9 +435,9 @@ export function CompanyResearchCenter() {
         </div>
 
         {!ticker && (
-          <aside className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-[340px]">
+          <aside className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto">
             <details className="group rounded-[12px] border border-gold-border bg-surface-1">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-ds-4 py-ds-2 [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-ds-4 py-ds-2 [&::-webkit-details-marker]:hidden">
                 <div className="flex items-center gap-2.5">
                   <img
                     src="/fino-avatar.png"
@@ -454,7 +454,7 @@ export function CompanyResearchCenter() {
                 />
               </summary>
 
-              <div className="flex flex-col gap-ds-3 px-ds-4 pb-ds-4">
+              <div className="flex flex-col gap-ds-3 px-ds-4 pb-ds-4 lg:w-[300px]">
                 <p className="text-[15px] font-semibold leading-tight text-ink-primary">
                   What is the Company Research Center?
                 </p>
