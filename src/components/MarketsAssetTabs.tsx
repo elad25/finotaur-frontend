@@ -27,7 +27,8 @@ export function MarketsAssetTabs() {
     // Per-asset landing override: some assets' first function (Overview) is
     // Early-Access-gated, so we send the user to an open page instead.
     const ASSET_LANDING_OVERRIDE: Partial<Record<typeof assetId, string>> = {
-      stocks: '/app/stocks/reports',   // Overview is gated → land on Reports (Company Research Center).
+      home: '/app/all-markets/screener',   // Overview is gated → land on the open Screener.
+      stocks: '/app/stocks/reports',        // Overview is gated → land on Reports (Company Research Center).
     };
     // Navigate to the override, else the first function route available for the
     // chosen asset. Falls back to /app/<asset>/overview if none mapped yet.
