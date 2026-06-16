@@ -18,6 +18,7 @@ import { AiMacroAnalyzerSkeletonPage } from '@/components/skeletons/AiMacroAnaly
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import {
   BarChart3, Activity, FileText, Banknote, Globe, Brain, ShieldCheck, Crosshair, Zap
 } from 'lucide-react';
@@ -301,6 +302,13 @@ export default function MacroAnalyzer() {
             <p className="relative mt-4 text-[9px] font-medium uppercase tracking-[0.46em] text-ink-tertiary">
               AI-powered economic intelligence & market regime analysis
             </p>
+            <FinoExplains
+              title="What is the Macro Analyzer?"
+              className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+            >
+              The big picture, decoded. Fino&apos;s AI weaves interest rates, inflation, growth and
+              global events into a clear read on the macro backdrop driving every market.
+            </FinoExplains>
           </div>
 
           <div className="relative mx-auto mb-8 grid w-full max-w-[820px] grid-cols-1 overflow-hidden rounded-lg border border-white/[0.065] bg-black/24 shadow-[0_18px_54px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:grid-cols-3">
