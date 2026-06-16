@@ -446,20 +446,10 @@ function TabContent({ tabId, news, isLoading }: TabContentProps) {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        {/* Featured skeleton */}
-        <div className="bg-card rounded-xl overflow-hidden border border-border/50 animate-pulse">
-          <div className="aspect-[16/9] w-full bg-muted" />
-          <div className="p-4 space-y-2">
-            <div className="h-3 w-16 bg-muted rounded" />
-            <div className="h-5 w-full bg-muted rounded" />
-            <div className="h-5 w-3/4 bg-muted rounded" />
-          </div>
-        </div>
-        {/* List skeletons */}
-        {[1, 2, 3].map((i) => (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-0.5">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div key={i} className="flex gap-4 p-3 animate-pulse">
-            <div className="w-28 h-20 bg-muted rounded-lg flex-shrink-0" />
+            <div className="w-28 h-20 sm:w-36 sm:h-24 bg-muted rounded-lg flex-shrink-0" />
             <div className="flex-1 space-y-2 py-1">
               <div className="h-4 w-full bg-muted rounded" />
               <div className="h-4 w-2/3 bg-muted rounded" />
@@ -478,9 +468,6 @@ function TabContent({ tabId, news, isLoading }: TabContentProps) {
       </div>
     );
   }
-
-  const featuredItem = displayNews[0];
-  const restItems = displayNews.slice(1);
 
   // For the "all" tab, infer the category from the item's first category field for fallback images;
   // for specific tabs, use the tabId directly.
@@ -513,26 +500,18 @@ function TabContent({ tabId, news, isLoading }: TabContentProps) {
         </span>
       </div>
 
-      {/* Featured item — big card */}
-      <NewsCard
-        news={featuredItem}
-        variant="featured"
-        category={resolveCategory(featuredItem)}
-      />
-
-      {/* Rest — standard horizontal cards */}
-      {restItems.length > 0 && (
-        <div className="space-y-1">
-          {restItems.map((item) => (
-            <NewsCard
-              key={item.id}
-              news={item}
-              variant="standard"
-              category={resolveCategory(item)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Uniform compact list — no oversized hero so many stories fit per
+          screen instead of one dominant article. 2 columns on large screens. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-0.5">
+        {displayNews.map((item) => (
+          <NewsCard
+            key={item.id}
+            news={item}
+            variant="standard"
+            category={resolveCategory(item)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
