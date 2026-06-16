@@ -264,6 +264,16 @@ All colors MUST be HSL.
      Reference: DESIGN_SYSTEM.md §2 (typography), §9 (do/don't)
      ============================================================ */
 
+  /* Hide scrollbars on horizontally-scrollable rails (tabs, breaking
+     news band) while keeping scroll functional. Added 2026-06-16. */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Numbers — apply to ANY element displaying a numeric value */
   .num {
     font-family: var(--font-data);
