@@ -83,6 +83,7 @@ export interface UserWithStats extends AdminUser {
   platform_subscription_status?: string | null;
   newsletter_status?: string | null;
   top_secret_status?: string | null;
+  platform_plan?: string | null;
 }
 
 /** Which product categories a user is subscribed to. */
