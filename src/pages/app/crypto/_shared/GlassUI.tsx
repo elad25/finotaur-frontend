@@ -207,14 +207,18 @@ export const SectionHeader = memo(function SectionHeader({
   className,
 }: SectionHeaderProps) {
   return (
-    <div className={cn('flex items-end justify-between mb-4', className)}>
-      <div>
+    <div className={cn('relative flex items-center justify-center mb-4', className)}>
+      <div className="text-center">
         <h2 className="text-base sm:text-lg font-bold text-white/90">{title}</h2>
         {subtitle && (
           <p className="text-xs text-white/40 mt-0.5">{subtitle}</p>
         )}
       </div>
-      {action && <div className="flex-shrink-0">{action}</div>}
+      {action && (
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex-shrink-0">
+          {action}
+        </div>
+      )}
     </div>
   );
 });

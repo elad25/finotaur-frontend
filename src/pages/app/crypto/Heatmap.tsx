@@ -272,6 +272,7 @@ const Heatmap = memo(function Heatmap() {
     <PageTemplate
       title="Crypto Heatmap"
       description="Top 100 cryptocurrencies — tile size proportional to market cap, color by 24h change"
+      centered
     >
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}

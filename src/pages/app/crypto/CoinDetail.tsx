@@ -221,7 +221,7 @@ export default function CoinDetail() {
   if (loading && !coin) return <CryptoCoinDetailSkeletonPage />;
 
   return (
-    <PageTemplate title={coin?.name || coinId || 'Coin'} description={`Live data for ${coin?.name || ''}`}>
+    <PageTemplate title={coin?.name || coinId || 'Coin'} description={`Live data for ${coin?.name || ''}`} centered>
       <div className="space-y-4">
         <GlassCard padding="lg"><QuickStats coin={coin} /></GlassCard>
         <GlassTabs tabs={TABS} active={tab} onChange={setTab} />

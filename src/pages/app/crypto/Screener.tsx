@@ -137,7 +137,7 @@ export default function CryptoScreener({ embedded = false }: { embedded?: boolea
   }
 
   return (
-    <PageTemplate title="Market Scanner" description="Find opportunities across crypto markets">
+    <PageTemplate title="Market Scanner" description="Find opportunities across crypto markets" centered>
       <CryptoScreenerContent />
     </PageTemplate>
   );

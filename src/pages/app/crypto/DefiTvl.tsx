@@ -299,6 +299,7 @@ const DefiTvl = memo(function DefiTvl() {
     <PageTemplate
       title="DeFi TVL"
       description="Total value locked across chains, protocols, and yield opportunities"
+      centered
     >
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}

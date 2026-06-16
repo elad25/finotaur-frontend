@@ -87,7 +87,7 @@ const CalculatorsTab = memo(function CalculatorsTab() {
 export default function CryptoWatchlist() {
   const [tab, setTab] = useState('watchlist');
   return (
-    <PageTemplate title="My Crypto" description="Personal watchlist, portfolio, and trading tools">
+    <PageTemplate title="My Crypto" description="Personal watchlist, portfolio, and trading tools" centered>
       <div className="space-y-4">
         <GlassTabs tabs={TABS} active={tab} onChange={setTab} />
         <GlassCard padding="sm">

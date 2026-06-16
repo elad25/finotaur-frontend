@@ -4,9 +4,9 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { fetchGlobal, fetchCoins, fetchTrending, fetchFearGreed, fetchCoinDetail, fetchCategories, fetchExchanges, fetchKlines, fetchFunding, fetchNews } from './api';
+import { fetchGlobal, fetchCoins, fetchTrending, fetchFearGreed, fetchCoinDetail, fetchCategories, fetchExchanges, fetchKlines, fetchFunding, fetchNews, fetchDerivatives, fetchFearGreedHistory, fetchTreasury, fetchOnChain } from './api';
 import { generateSignals } from './technicals';
-import type { CoinMarketData, GlobalMarketData, TrendingCoin, FearGreedData, FundingRateData, KlineData, CategoryData, ExchangeData, TechnicalSignal } from './types';
+import type { CoinMarketData, GlobalMarketData, TrendingCoin, FearGreedData, FundingRateData, KlineData, CategoryData, ExchangeData, TechnicalSignal, DerivativesPayload, TreasuryPayload, OnChainPayload } from './types';
 
 function usePoll<T>(fetcher: () => Promise<T>, interval: number, deps: any[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -62,6 +62,24 @@ export function useFundingRates() {
 
 export function useCryptoNews(limit = 30) {
   return usePoll<any[]>(() => fetchNews(limit), 120_000, [limit]);
+}
+
+// ── New endpoint hooks ────────────────────────────────────────
+
+export function useDerivatives() {
+  return usePoll<DerivativesPayload>(() => fetchDerivatives(), 60_000);
+}
+
+export function useFearGreedHistory() {
+  return usePoll<FearGreedData[]>(() => fetchFearGreedHistory(), 600_000);
+}
+
+export function useTreasury() {
+  return usePoll<TreasuryPayload>(() => fetchTreasury(), 1_800_000);
+}
+
+export function useOnChain() {
+  return usePoll<OnChainPayload>(() => fetchOnChain(), 300_000);
 }
 
 export function useTechnicalSignals(symbol: string, interval: string) {

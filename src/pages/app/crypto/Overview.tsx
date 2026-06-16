@@ -248,7 +248,7 @@ const MiniHeatmap = memo(function MiniHeatmap() {
 // ── Main Page ────────────────────────────────────────────────
 export default function CryptoOverview() {
   return (
-    <PageTemplate title="Crypto Dashboard" description="Live crypto market snapshot">
+    <PageTemplate title="Crypto Dashboard" description="Live crypto market snapshot" centered>
       <div className="space-y-4">
         <LiveTicker />
         <MarketStatsBar />
