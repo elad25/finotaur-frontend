@@ -87,6 +87,7 @@ import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { TradeGradeBadge } from '@/pages/app/journal/finotaur-ai/components/TradeGradeBadge';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 interface Trade {
   id: string;
@@ -1579,7 +1580,7 @@ const stats = useMemo<Stats>(() => {
   return (
     <div className="flex flex-col h-full pl-3">
       {/* Header */}
-      <div className="flex items-center px-6 py-4 gap-4">
+      <div className="flex flex-wrap items-center px-6 py-4 gap-4">
         <h1 className="text-2xl font-bold text-white">My Trades</h1>
 
         {/* Account Switcher Dropdown — same pattern as Overview */}
@@ -1611,6 +1612,12 @@ const stats = useMemo<Stats>(() => {
             </div>
           )}
         </div>
+
+        <FinoExplains title="What is My Trades?" className="mt-ds-4 lg:w-auto lg:ml-auto lg:mt-0">
+          Your complete trade history in one table. Sort and filter by ticker, strategy, date or
+          result, search any trade, and click a row to review and annotate it. This is the raw
+          record behind all your journal analytics.
+        </FinoExplains>
       </div>
 
       {/* 🔥 Admin Impersonation Indicator */}

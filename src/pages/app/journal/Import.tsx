@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ds/Skeleton';
 import { toast } from 'sonner';
 
 import PageTitle from '@/components/PageTitle';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { useImportTrades } from '@/hooks/useImportTrades';
@@ -677,7 +678,16 @@ export default function JournalImport() {
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
-      <PageTitle title="Import Trades" subtitle="Upload a CSV export from your broker or journal" />
+      <div className="relative">
+        <PageTitle title="Import Trades" subtitle="Upload a CSV export from your broker or journal" />
+        <FinoExplains
+          title="How do I import trades?"
+          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+        >
+          Bring your existing trades into FINOTAUR. Upload a CSV or JSON from your broker, map the
+          columns, preview the result, and import everything in one go.
+        </FinoExplains>
+      </div>
 
       {/* Step indicator */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 px-6 py-4">

@@ -11,6 +11,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { useForexHeatmap } from './_shared/hooks';
 import { GlassCard, SectionHeader } from '@/pages/app/crypto/_shared/GlassUI';
 import { cn } from '@/lib/utils';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ── Currency lists ───────────────────────────────────────────
 const MAJORS = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'] as const;
@@ -397,6 +398,10 @@ export default function ForexTools() {
       title="Forex Calculators"
       description="Currency converter, pip value, and position-size tools."
     >
+      <FinoExplains title="What are the Forex Tools?" className="mt-ds-4 lg:w-auto lg:ml-auto lg:mt-0">
+        Essential forex calculators in one place — pip value, position size, margin and risk. Plug
+        in your trade and see the numbers instantly.
+      </FinoExplains>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <CurrencyConverter rates={rates} ratesLoading={loading} />
         <PipValueCalculator rates={rates} />

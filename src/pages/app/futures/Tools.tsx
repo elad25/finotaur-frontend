@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { GlassCard, GlassStat } from '@/pages/app/crypto/_shared/GlassUI';
 import { FuturesPageShell, SectionHeader } from './_shared/FuturesPageShell';
 import { formatCurrency, futuresContracts } from './_shared/data';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 export default function FuturesTools() {
   const [symbol, setSymbol] = useState('ES');
@@ -38,6 +39,10 @@ export default function FuturesTools() {
       title="Futures Calculators"
       description="Local risk and contract-sizing tools based on static contract specs. No market data connection required."
     >
+      <FinoExplains title="What are the Futures Tools?" className="mt-ds-4 lg:w-auto lg:ml-auto lg:mt-0">
+        Quick futures calculators — work out contract value, required margin, and potential profit
+        or loss before you place a trade. Enter your numbers for instant answers.
+      </FinoExplains>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
         {/* Input card */}
         <GlassCard padding="lg" className="space-y-4">

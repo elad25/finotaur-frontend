@@ -34,6 +34,7 @@ import {
 } from '@/types/backtest-strategy';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { useMentorView } from '@/contexts/MentorViewContext';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ─── Quick templates ────────────────────────────────────────────
 const TEMPLATES: Array<{ name: string; build: () => Strategy }> = [
@@ -399,7 +400,7 @@ export const Builder = () => {
     <div className="min-h-screen bg-[#0A0A0A] p-6 text-[#F4F4F4]">
       <div className="mx-auto max-w-4xl">
         {/* Header */}
-        <div className="mb-6">
+        <div className="relative mb-6">
           <h1 className="flex items-center gap-3 text-3xl font-bold text-[#C9A646]">
             <Sparkles size={28} />
             Strategy Builder
@@ -407,6 +408,14 @@ export const Builder = () => {
           <p className="mt-1 text-sm text-zinc-500">
             Build rule-based strategies. Run them on any chart in the Backtest tab.
           </p>
+          <FinoExplains
+            title="What is the Backtest Builder?"
+            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          >
+            Test a strategy before you risk real money. Define your entry and exit conditions and
+            risk rules, run them against historical data, and see exactly how it would have
+            performed.
+          </FinoExplains>
         </div>
 
         {/* Toolbar */}
