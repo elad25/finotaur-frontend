@@ -45,6 +45,7 @@ import {
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import type { OhlcBar } from '@/types/etf.types';
 import { useMarketStatus } from '@/lib/marketStatus';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1032,7 +1033,7 @@ export default function StocksCompare() {
   return (
     <div className="mx-auto max-w-[960px] py-ds-7 px-ds-4 flex flex-col gap-ds-5">
       {/* Header */}
-      <div className="space-y-ds-1">
+      <div className="relative space-y-ds-1">
         <span className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted">
           Stock Research
         </span>
@@ -1048,6 +1049,14 @@ export default function StocksCompare() {
           Side-by-side normalized performance and fundamentals. Each price series is rebased to
           0% at the start of the selected range.
         </p>
+        <FinoExplains
+          title="What is Compare?"
+          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+        >
+          Put up to four stocks head-to-head. Add tickers, choose a date range, and see their
+          performance normalized on one chart alongside key fundamentals — so you can tell at a
+          glance which one came out ahead.
+        </FinoExplains>
       </div>
 
       {/* Ticker input + chips */}

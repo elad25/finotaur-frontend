@@ -6,6 +6,7 @@ import React, { memo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SectionSpinner } from '@/components/ds/Spinner';
 import { useSectorsAll, type Sector, type SectorVsMarketEntry } from '@/hooks/stocks/useSectors';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -318,6 +319,15 @@ const StocksSectors = memo(function StocksSectors() {
             ))}
           </div>
         </div>
+
+      <FinoExplains
+        title="What is Sector Analysis?"
+        className="mt-ds-4 lg:w-auto lg:ml-auto"
+      >
+        See how all 11 market sectors are performing at a glance, as a sortable table or a
+        color-coded heatmap. Compare returns across 1D, 1W, 1M, YTD and 1Y, spot the leaders
+        and laggards versus the market, and click a sector to drill into its holdings.
+      </FinoExplains>
 
         {/* Content */}
         {isLoading && <SectionSpinner />}
