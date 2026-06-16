@@ -196,7 +196,7 @@ const CalendarTab = memo(function CalendarTab() {
 export default function CryptoAcademy() {
   const [tab, setTab] = useState('learn');
   return (
-    <PageTemplate title="Academy & Research" description="Learn, read reports, and track events">
+    <PageTemplate title="Academy & Research" description="Learn, read reports, and track events" centered>
       <div className="space-y-4">
         <GlassTabs tabs={TABS} active={tab} onChange={setTab} />
         {tab === 'learn' && <LearnTab />}

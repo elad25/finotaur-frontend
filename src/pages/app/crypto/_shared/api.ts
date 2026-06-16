@@ -15,6 +15,7 @@ const TTLS: Record<string, number> = {
   categories: 300_000, exchanges: 600_000, klines: 30_000, funding: 60_000,
   coin: 120_000, news: 120_000, reports: 300_000, whales: 15_000,
   walls: 8_000, wallsKlines: 3_600_000,
+  derivatives: 60_000, fearGreedHistory: 600_000, treasury: 1_800_000, onchain: 300_000,
 };
 
 function getTTL(url: string): number {
@@ -56,6 +57,25 @@ export const fetchKlines = (symbol: string, interval: string, limit = 200) =>
 export const fetchFunding = () => cryptoFetch('/api/crypto/funding-rates');
 export const fetchNews = (limit = 30) => cryptoFetch(`/api/crypto/news?limit=${limit}`);
 export const fetchReports = () => cryptoFetch('/api/crypto/reports');
+
+// ── New endpoint fetchers ─────────────────────────────────────
+// /api/crypto/derivatives → { data: { assets, totals, estimatedLiquidations }, ts }
+export const fetchDerivatives = () =>
+  cryptoFetch<{ data: import('./types').DerivativesPayload; ts: number }>('/api/crypto/derivatives')
+    .then(r => r.data);
+
+// /api/crypto/fear-greed → { data: FearGreedData[], ... }  (newest first)
+export const fetchFearGreedHistory = (): Promise<import('./types').FearGreedData[]> =>
+  cryptoFetch('/api/crypto/fear-greed').then((d: any) => d?.data || []);
+
+// /api/crypto/treasury → { bitcoin: {...}, ethereum: {...}, ts }  (bare, no outer `data` key)
+export const fetchTreasury = () =>
+  cryptoFetch<import('./types').TreasuryPayload>('/api/crypto/treasury');
+
+// /api/crypto/onchain → { data: { chains, fees, stablecoinSupply, ts }, ts }
+export const fetchOnChain = () =>
+  cryptoFetch<{ data: import('./types').OnChainPayload; ts: number }>('/api/crypto/onchain')
+    .then(r => r.data);
 
 // ── Whale Trades ─────────────────────────────────────────────
 export const fetchWhaleTrades = (opts: { minUsd?: number; symbol?: string; side?: string; limit?: number } = {}) => {

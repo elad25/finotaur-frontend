@@ -373,6 +373,7 @@ const Stablecoins = memo(function Stablecoins() {
     <PageTemplate
       title="Stablecoins"
       description="Circulating supply, peg health, and market dominance across top stablecoins"
+      centered
     >
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}

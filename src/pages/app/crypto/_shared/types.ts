@@ -130,6 +130,97 @@ export interface WhaleTrade {
 
 export type WhaleStreamEvent = { type: 'trade'; data: WhaleTrade };
 
+// ── Derivatives ──────────────────────────────────────────────
+export interface DerivativeAsset {
+  base: string;
+  total_open_interest_usd: number;
+  avg_funding_rate: number | null;
+  total_volume_24h: number;
+  market_count: number;
+  liquidation_risk: 'extreme_long' | 'extreme_short' | 'moderate' | 'neutral' | null;
+}
+
+export interface DerivativesTotals {
+  total_open_interest_usd: number;
+  avg_funding_rate: number | null;
+  total_volume_24h: number;
+  asset_count: number;
+}
+
+export interface EstimatedLiquidations {
+  /** Always true — signals this is a risk-tier proxy, not real liquidation data */
+  estimated: true;
+  note: string;
+  methodology: string;
+  elevated_long_squeeze_risk: string[];
+  elevated_short_squeeze_risk: string[];
+  moderate_risk: string[];
+}
+
+/** Shape returned by fetchDerivatives() (after unwrapping `.data`) */
+export interface DerivativesPayload {
+  assets: DerivativeAsset[];
+  totals: DerivativesTotals;
+  estimatedLiquidations: EstimatedLiquidations;
+}
+
+// ── Treasury ──────────────────────────────────────────────────
+export interface TreasuryCompany {
+  name: string;
+  symbol: string;
+  country: string | null;
+  total_holdings: number | null;
+  total_entry_value_usd: number | null;
+  total_current_value_usd: number | null;
+  percentage_of_total_supply: number | null;
+}
+
+export interface TreasuryAsset {
+  total_holdings: number | null;
+  total_value_usd: number | null;
+  market_cap_dominance: number | null;
+  companies: TreasuryCompany[];
+}
+
+/** Shape returned by fetchTreasury() (bare response, no outer `data` key) */
+export interface TreasuryPayload {
+  bitcoin: TreasuryAsset;
+  ethereum: TreasuryAsset;
+  ts: number;
+}
+
+// ── On-Chain ──────────────────────────────────────────────────
+export interface DefiChain {
+  name: string;
+  tvl: number;
+  tokenSymbol: string | null;
+  cmcId: string | null;
+  gecko_id: string | null;
+}
+
+export interface ProtocolFee {
+  name: string;
+  slug: string;
+  fees_24h: number | null;
+  revenue_24h: number | null;
+  chains: string[];
+  category: string | null;
+}
+
+export interface StablecoinSupplySummary {
+  total_circulating_usd: number;
+  change_24h_pct: number | null;
+  top_count: number;
+}
+
+/** Shape returned by fetchOnChain() (after unwrapping `.data`) */
+export interface OnChainPayload {
+  chains: DefiChain[];
+  fees: ProtocolFee[];
+  stablecoinSupply: StablecoinSupplySummary;
+  ts: number;
+}
+
 // ── Order Book Walls ──────────────────────────────────────────
 export interface OrderWall {
   symbol: string;
