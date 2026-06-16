@@ -437,12 +437,12 @@ export function CompanyResearchCenter() {
         {!ticker && (
           <aside className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-[340px]">
             <details className="group rounded-[12px] border border-gold-border bg-surface-1">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-ds-4 [&::-webkit-details-marker]:hidden">
-                <div className="flex items-center gap-2">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-ds-4 py-ds-2 [&::-webkit-details-marker]:hidden">
+                <div className="flex items-center gap-2.5">
                   <img
                     src="/fino-avatar.png"
                     alt="Fino"
-                    className="h-7 w-7 rounded-full object-cover ring-1 ring-gold-border"
+                    className="h-9 w-9 rounded-full object-cover ring-1 ring-gold-border"
                   />
                   <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-gold-primary">
                     Fino Explains
