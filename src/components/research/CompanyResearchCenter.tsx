@@ -26,6 +26,7 @@ import { Button } from '@/components/ds/Button';
 import { SectionSpinner } from '@/components/ds/Spinner';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import StockLogo from './StockLogo';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -435,37 +436,14 @@ export function CompanyResearchCenter() {
         </div>
 
         {!ticker && (
-          <aside className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto">
-            <details className="group rounded-[12px] border border-gold-border bg-surface-1">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-ds-4 py-ds-2 [&::-webkit-details-marker]:hidden">
-                <div className="flex items-center gap-2.5">
-                  <img
-                    src="/fino-avatar.png"
-                    alt="Fino"
-                    className="h-9 w-9 rounded-full object-cover ring-1 ring-gold-border"
-                  />
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-gold-primary">
-                    Fino Explains
-                  </span>
-                </div>
-                <ChevronDown
-                  size={16}
-                  className="text-gold-primary transition-transform duration-200 group-open:rotate-180"
-                />
-              </summary>
-
-              <div className="flex flex-col gap-ds-3 px-ds-4 pb-ds-4 lg:w-[300px]">
-                <p className="text-[15px] font-semibold leading-tight text-ink-primary">
-                  What is the Company Research Center?
-                </p>
-                <p className="text-[13px] leading-relaxed text-ink-secondary">
-                  Here you can search any ticker you want and pull every quarterly (10-Q)
-                  and annual (10-K) report for U.S. stocks — sourced straight from official
-                  SEC filings. Just type a company name, ticker, or CIK above to get started.
-                </p>
-              </div>
-            </details>
-          </aside>
+          <FinoExplains
+            title="What is the Company Research Center?"
+            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          >
+            Here you can search any ticker you want and pull every quarterly (10-Q) and
+            annual (10-K) report for U.S. stocks — sourced straight from official SEC filings.
+            Just type a company name, ticker, or CIK above to get started.
+          </FinoExplains>
         )}
       </div>
 

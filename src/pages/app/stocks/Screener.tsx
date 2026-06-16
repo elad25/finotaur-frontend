@@ -10,6 +10,7 @@ import { FilterPanel } from './_screener/FilterPanel';
 import { ResultsTable } from './_screener/ResultsTable';
 import type { Filters, SortState } from './_screener/types';
 import { EMPTY_FILTERS } from './_screener/types';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 import CryptoScreener from '../crypto/Screener';
 
@@ -111,8 +112,16 @@ export default function StocksScreener() {
 
   return (
     <div className="space-y-3 px-4 py-4 sm:px-6">
-      <div className="flex justify-center">
+      <div className="relative flex flex-col items-center gap-ds-2">
         <AssetSwitch active={assetTab} onChange={setAssetTab} />
+        <FinoExplains
+          title="What is the Screener?"
+          className="mt-ds-4 lg:w-auto lg:ml-auto"
+        >
+          Filter the entire stock and crypto universe by the metrics that matter — market cap,
+          P/E, sector, RSI, performance and more. Set your criteria, sort any column, and the
+          results update live. Use the toggle up top to switch between Stocks and Crypto.
+        </FinoExplains>
       </div>
 
       {assetTab === 'stocks' ? (

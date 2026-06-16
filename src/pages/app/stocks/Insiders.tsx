@@ -8,6 +8,7 @@ import { memo } from 'react';
 import { ConsensusStrip } from './_insiders/ConsensusStrip';
 import { ManagersGrid } from './_insiders/ManagersGrid';
 import { useInstitutionalManagers } from './_insiders/hooks';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 export default memo(function Insiders() {
   const { data, loading, error } = useInstitutionalManagers();
@@ -15,11 +16,19 @@ export default memo(function Insiders() {
   return (
     <div className="space-y-6 px-4 py-4 sm:px-6">
       {/* Page header */}
-      <div>
+      <div className="relative">
         <h1 className="text-base font-semibold text-white/90">Insiders</h1>
         <p className="text-[11px] text-white/30 mt-0.5">
           Track the portfolios of the world's top investors — straight from SEC 13F filings.
         </p>
+        <FinoExplains
+          title="What is Insider & 13F?"
+          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+        >
+          Follow the smart money. Each quarter big institutions disclose their holdings in SEC
+          13F filings — here you can track 28 top fund managers, see what they're buying and
+          selling, and find the stocks they hold most.
+        </FinoExplains>
       </div>
 
       {/* Consensus strip */}

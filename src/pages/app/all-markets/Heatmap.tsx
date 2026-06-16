@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { RefreshCw, Maximize2, Share2, Clock, AlertCircle } from 'lucide-react';
 import { PriceGate } from '@/components/compliance/PriceGate';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ============ TYPES ============
 interface StockData {
@@ -1194,6 +1195,15 @@ export default function HeatmapPage() {
           </button>
         </div>
       </div>
+
+      <FinoExplains
+        title="What is the Heatmap?"
+        className="mt-ds-4 lg:w-auto lg:ml-auto"
+      >
+        A bird's-eye view of the whole market on one screen. Every tile is a stock, sized by
+        market cap and colored by performance — green for gainers, red for losers. Hover a tile
+        for details or click a sector to zoom in.
+      </FinoExplains>
 
       {/* Heatmap content — raw Polygon price data; gated until licensed */}
       <PriceGate

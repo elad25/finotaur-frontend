@@ -31,6 +31,7 @@
 
 import React from "react";
 import { useParams } from "react-router-dom";
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import { StocksValuationSkeletonPage } from '@/components/skeletons/StocksValuationSkeleton';
 import {
   ResponsiveContainer,
@@ -551,7 +552,7 @@ export default function StocksValuation() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
+      <div className="relative">
         <h2 className="text-lg font-semibold text-neutral-100">
           Valuation Analysis
           {context.sector && (
@@ -563,6 +564,14 @@ export default function StocksValuation() {
         <p className="text-xs text-neutral-500 mt-0.5">
           Data source: SEC EDGAR financials + internal DCF model. Redistribution-safe.
         </p>
+        <FinoExplains
+          title="What is the Valuation tool?"
+          className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+        >
+          Find out what a stock is really worth. It runs a discounted-cash-flow (DCF) estimate
+          of intrinsic value, compares the company's multiples against its peers, and scores how
+          cheap or expensive it looks today.
+        </FinoExplains>
       </div>
 
       {/* Row 1: DCF Fair Value + Grade Scorecard */}
