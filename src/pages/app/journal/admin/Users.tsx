@@ -473,6 +473,21 @@ const UserRow = React.memo<{
     return names[user.account_type] || user.account_type;
   }, [user.account_type, isInTrial]);
 
+  // Platform tier label for the Platform badge (Core / FINOTAUR / Enterprise)
+  const platformPlanLabel = useMemo(() => {
+    const labels: Record<string, string> = {
+      platform_core: 'Core',
+      platform_finotaur: 'FINOTAUR',
+      platform_enterprise: 'Enterprise',
+    };
+    return user.platform_plan ? labels[user.platform_plan] ?? null : null;
+  }, [user.platform_plan]);
+
+  // FINOTAUR and Enterprise platform tiers already include WAR ZONE + Top Secret,
+  // so their separate badges are redundant and should be hidden.
+  const platformIncludesNewsletters =
+    user.platform_plan === 'platform_finotaur' || user.platform_plan === 'platform_enterprise';
+
   // Subscription info - now properly typed
   const subscriptionStatus = user.subscription_status || 'active';
   const subscriptionInterval = user.subscription_interval || 'monthly';
@@ -533,7 +548,7 @@ const UserRow = React.memo<{
         <div className="flex flex-wrap gap-1">
           {user.products?.includes('platform') && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">
-              Platform
+              {platformPlanLabel ? `Platform · ${platformPlanLabel}` : 'Platform'}
             </span>
           )}
           {user.products?.includes('journal') && (
@@ -541,12 +556,12 @@ const UserRow = React.memo<{
               {isInTrial ? 'Journal · Trial' : user.account_type === 'premium' ? 'Journal · Premium' : 'Journal · Basic'}
             </span>
           )}
-          {user.products?.includes('warzone') && (
+          {user.products?.includes('warzone') && !platformIncludesNewsletters && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
               WAR ZONE
             </span>
           )}
-          {user.products?.includes('top_secret') && (
+          {user.products?.includes('top_secret') && !platformIncludesNewsletters && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
               Top Secret
             </span>

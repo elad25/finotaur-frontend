@@ -248,6 +248,7 @@ function mapDbRowToUserWithStats(user: any): UserWithStats {
     platform_subscription_status: user.platform_subscription_status || null,
     newsletter_status: user.newsletter_status || null,
     top_secret_status: user.top_secret_status || null,
+    platform_plan: user.platform_plan || null,
 
     // Derived product membership badges
     products: deriveProducts(user),
