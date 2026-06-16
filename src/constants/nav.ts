@@ -88,12 +88,12 @@ export const domains: Record<string, Domain> = {
     label: 'Markets',
     locked: false,   // Research Lab — free ($0/user: SEC/FRED/Polygon-flat/cache). Open to all.
     beta: false,
-    defaultPath: '/app/all-markets/overview',
+    defaultPath: '/app/all-markets/screener',   // Overview is Early-Access-gated; land on the open Screener instead.
     subNav: [
       // The Markets product does not use the SubNav bar for asset switching
       // (the asset selector lives in the Top Bar). Keeping one entry so the
       // SubNav renders the FINO AI button without crashing.
-      { label: 'Markets', path: '/app/all-markets/overview' },
+      { label: 'Markets', path: '/app/all-markets/screener' },
     ],
     sidebar: [
       // Placeholder — actual Markets sidebar is rendered by MarketsSidebar.tsx

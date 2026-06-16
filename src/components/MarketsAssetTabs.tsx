@@ -24,10 +24,18 @@ export function MarketsAssetTabs() {
 
   const handleSelect = (assetId: (typeof ASSET_CLASSES)[number]['id']) => {
     setSelectedAsset(assetId);
-    // Navigate to the first function route available for the chosen asset.
-    // Falls back to /app/<asset>/overview if no mapped functions exist yet.
+    // Per-asset landing override: some assets' first function (Overview) is
+    // Early-Access-gated, so we send the user to an open page instead.
+    const ASSET_LANDING_OVERRIDE: Partial<Record<typeof assetId, string>> = {
+      stocks: '/app/stocks/reports',   // Overview is gated → land on Reports (Company Research Center).
+    };
+    // Navigate to the override, else the first function route available for the
+    // chosen asset. Falls back to /app/<asset>/overview if none mapped yet.
     const items = getMarketsItemsForAsset(assetId);
-    const firstRoute = items[0]?.routes[assetId] ?? `/app/${assetId}/overview`;
+    const firstRoute =
+      ASSET_LANDING_OVERRIDE[assetId] ??
+      items[0]?.routes[assetId] ??
+      `/app/${assetId}/overview`;
     navigate(firstRoute);
   };
 
