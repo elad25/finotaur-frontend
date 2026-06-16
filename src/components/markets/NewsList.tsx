@@ -1,9 +1,8 @@
 // src/components/markets/NewsList.tsx
-// Yahoo Finance Style - Premium News Experience
-// Beautiful cards with images, clean typography, professional feel
+// Tabbed, breaking-news-first layout — asset-class tabs + live breaking band
 
 import React, { useState, useMemo } from "react";
-import { useNewsByCategory } from "@/hooks/useNews";
+import { useNewsByCategory, useTopNews } from "@/hooks/useNews";
 import type { NewsItem } from "@/types/news";
 import { cn } from "@/lib/utils";
 import {
@@ -17,16 +16,20 @@ import {
   Bitcoin,
   DollarSign,
   Gem,
+  Newspaper,
 } from "lucide-react";
 
-// ============ CATEGORY CONFIG ============
-const CATEGORIES = [
-  { id: "global", label: "Macro", icon: Globe },
-  { id: "stocks", label: "Stocks", icon: TrendingUp },
-  { id: "crypto", label: "Crypto", icon: Bitcoin },
-  { id: "forex", label: "Forex", icon: DollarSign },
-  { id: "commodities", label: "Commodities", icon: Gem },
-] as const;
+// ============ TAB CONFIG ============
+type TabId = "all" | "stocks" | "crypto" | "forex" | "commodities" | "global";
+
+const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: "all",         label: "All News",    icon: Newspaper  },
+  { id: "stocks",      label: "Stocks",      icon: TrendingUp },
+  { id: "crypto",      label: "Crypto",      icon: Bitcoin    },
+  { id: "forex",       label: "Forex",       icon: DollarSign },
+  { id: "commodities", label: "Commodities", icon: Gem        },
+  { id: "global",      label: "Macro",       icon: Globe      },
+];
 
 // ============ FALLBACK IMAGES - Multiple per category for variety ============
 const CATEGORY_FALLBACK_IMAGES: Record<string, string[]> = {
@@ -76,8 +79,25 @@ const CATEGORY_FALLBACK_IMAGES: Record<string, string[]> = {
 function getFallbackImage(category: string, newsId: string): string {
   const images = CATEGORY_FALLBACK_IMAGES[category] || CATEGORY_FALLBACK_IMAGES.global;
   // Use hash of ID to get consistent image for same article
-  const hash = newsId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hash = newsId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
   return images[hash % images.length];
+}
+
+// ============ TEXT HELPERS ============
+// Some news providers return HTML markup in the summary/description field
+// (e.g. Forexlive sends "<ul><li>CPI +3.2% ...</li></ul>"). Strip tags and
+// decode the common entities so the card shows clean plain text.
+function stripHtml(raw: string): string {
+  if (!raw) return "";
+  const noTags = raw.replace(/<[^>]*>/g, " ");
+  const decoded = noTags
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"');
+  return decoded.replace(/\s+/g, " ").trim();
 }
 
 // ============ TIME HELPERS ============
@@ -122,11 +142,11 @@ interface NewsImageProps {
 function NewsImage({ src, alt, category = "global", newsId, className }: NewsImageProps) {
   const [imgError, setImgError] = useState(false);
   const fallback = useMemo(() => getFallbackImage(category, newsId), [category, newsId]);
-  
+
   return (
     <div className={cn("relative overflow-hidden bg-muted", className)}>
       <img
-        src={imgError ? fallback : (src || fallback)}
+        src={imgError ? fallback : src || fallback}
         alt={alt}
         onError={() => setImgError(true)}
         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -138,7 +158,7 @@ function NewsImage({ src, alt, category = "global", newsId, className }: NewsIma
   );
 }
 
-// ============ NEWS CARD COMPONENT (Yahoo Finance Style) ============
+// ============ NEWS CARD COMPONENT ============
 interface NewsCardProps {
   news: NewsItem;
   variant?: "featured" | "standard" | "compact";
@@ -167,7 +187,7 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
             newsId={news.id}
             className="aspect-[16/9] w-full"
           />
-          
+
           {/* Content */}
           <div className="p-4">
             {/* Meta row */}
@@ -183,11 +203,9 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
                   {time.label}
                 </span>
               ) : (
-                <span className="text-xs text-muted-foreground">
-                  {time.label}
-                </span>
+                <span className="text-xs text-muted-foreground">{time.label}</span>
               )}
-              
+
               {ticker && (
                 <span className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">
                   ${ticker}
@@ -201,9 +219,9 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
             </h3>
 
             {/* Summary */}
-            {news.summary && (
+            {stripHtml(news.summary) && (
               <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-                {news.summary}
+                {stripHtml(news.summary)}
               </p>
             )}
 
@@ -211,11 +229,11 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
             <div className="flex items-center justify-between pt-2 border-t border-border/30">
               <div className="flex items-center gap-2">
                 {news.sourceLogo && (
-                  <img 
-                    src={news.sourceLogo} 
+                  <img
+                    src={news.sourceLogo}
                     alt={news.source}
                     className="w-4 h-4 rounded-sm"
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                    onError={(e) => (e.currentTarget.style.display = "none")}
                   />
                 )}
                 <span className="text-xs font-medium text-muted-foreground">
@@ -230,7 +248,7 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
     );
   }
 
-  // Standard card - Horizontal layout (Yahoo Finance style)
+  // Standard card - Horizontal layout
   if (variant === "standard") {
     return (
       <a
@@ -248,7 +266,7 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
             newsId={news.id}
             className="w-28 h-20 sm:w-36 sm:h-24 rounded-lg flex-shrink-0"
           />
-          
+
           {/* Content */}
           <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
             {/* Headline */}
@@ -258,25 +276,22 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
 
             {/* Meta */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground">
-                {news.source}
-              </span>
+              <span className="text-xs text-muted-foreground">{news.source}</span>
               <span className="text-muted-foreground/30">•</span>
-              {time.isFresh ? (
-                <span className="text-xs text-emerald-400 font-medium">
-                  {time.label}
+              {time.isBreaking ? (
+                <span className="inline-flex items-center gap-1 text-xs text-red-400 font-semibold animate-pulse">
+                  <Zap className="w-2.5 h-2.5" />
+                  Breaking
                 </span>
+              ) : time.isFresh ? (
+                <span className="text-xs text-emerald-400 font-medium">{time.label}</span>
               ) : (
-                <span className="text-xs text-muted-foreground">
-                  {time.label}
-                </span>
+                <span className="text-xs text-muted-foreground">{time.label}</span>
               )}
               {ticker && (
                 <>
                   <span className="text-muted-foreground/30">•</span>
-                  <span className="text-xs font-bold text-yellow-500">
-                    ${ticker}
-                  </span>
+                  <span className="text-xs font-bold text-yellow-500">${ticker}</span>
                 </>
               )}
             </div>
@@ -286,7 +301,7 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
     );
   }
 
-  // Compact variant - Just headline and source
+  // Compact variant — just headline and source (used in breaking band)
   return (
     <a
       href={news.url}
@@ -306,30 +321,132 @@ function NewsCard({ news, variant = "standard", category = "global" }: NewsCardP
   );
 }
 
-// ============ CATEGORY SECTION ============
-interface CategorySectionProps {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
+// ============ BREAKING NEWS BAND ============
+interface BreakingNewsBandProps {
   news: NewsItem[];
   isLoading: boolean;
 }
 
-function CategorySection({ id, label, icon: Icon, news, isLoading }: CategorySectionProps) {
-  // Maximum 4 items - quality over quantity
-  const displayNews = news.slice(0, 4);
-  const featuredNews = displayNews[0];
-  const otherNews = displayNews.slice(1);
+function BreakingNewsBand({ news, isLoading }: BreakingNewsBandProps) {
+  // Dedupe by id, then sort by publishedAt DESC (newest first)
+  const sorted = useMemo(() => {
+    const seen = new Set<string>();
+    const unique = news.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    return unique.sort(
+      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+  }, [news]);
+
+  // Show skeleton while loading
+  if (isLoading) {
+    return (
+      <div className="bg-white/[0.03] border border-red-500/20 rounded-xl p-4 space-y-3">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-24 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+        </div>
+        {/* Card row skeleton */}
+        <div className="flex gap-3 overflow-hidden">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="flex-shrink-0 w-64 h-24 bg-muted rounded-lg animate-pulse"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Hide entirely when empty
+  if (sorted.length === 0) return null;
+
+  return (
+    <div className="bg-white/[0.03] border border-red-500/20 rounded-xl p-4">
+      {/* Band header */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-bold animate-pulse">
+          <Zap className="w-3 h-3" />
+          BREAKING
+        </span>
+        <span className="text-sm font-semibold text-foreground">Breaking News</span>
+      </div>
+
+      {/* Horizontally scrollable compact cards */}
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {sorted.map((item) => {
+          const time = getTimeLabel(item.publishedAt);
+          const ticker = item.tickers?.[0];
+          return (
+            <a
+              key={item.id}
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex-shrink-0 w-64 bg-card border border-border/50 hover:border-red-500/30 rounded-lg p-3 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:shadow-red-500/5"
+            >
+              <p className="text-xs font-medium text-foreground group-hover:text-yellow-400 transition-colors leading-snug line-clamp-3 mb-2">
+                {item.headline}
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground">{item.source}</span>
+                <span className="text-muted-foreground/30 text-xs">•</span>
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    time.isBreaking ? "text-red-400" : time.isFresh ? "text-emerald-400" : "text-muted-foreground"
+                  )}
+                >
+                  {time.label}
+                </span>
+                {ticker && (
+                  <span className="text-xs font-bold text-yellow-500 ml-auto">
+                    ${ticker}
+                  </span>
+                )}
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============ TAB CONTENT ============
+interface TabContentProps {
+  tabId: TabId;
+  news: NewsItem[];
+  isLoading: boolean;
+}
+
+function TabContent({ tabId, news, isLoading }: TabContentProps) {
+  // Dedupe by id (the "all" tab concatenates categories, so the same article
+  // can appear under more than one category → duplicate React keys), then
+  // sort by recency DESC.
+  const sorted = useMemo(() => {
+    const seen = new Set<string>();
+    const unique = news.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    return unique.sort(
+      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+  }, [news]);
+
+  // Cap at 24 items
+  const displayNews = sorted.slice(0, 24);
 
   if (isLoading) {
     return (
       <div className="space-y-4">
-        {/* Header skeleton */}
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 bg-muted rounded animate-pulse" />
-          <div className="h-5 w-20 bg-muted rounded animate-pulse" />
-        </div>
-        
         {/* Featured skeleton */}
         <div className="bg-card rounded-xl overflow-hidden border border-border/50 animate-pulse">
           <div className="aspect-[16/9] w-full bg-muted" />
@@ -339,9 +456,8 @@ function CategorySection({ id, label, icon: Icon, news, isLoading }: CategorySec
             <div className="h-5 w-3/4 bg-muted rounded" />
           </div>
         </div>
-
         {/* List skeletons */}
-        {[1, 2].map((i) => (
+        {[1, 2, 3].map((i) => (
           <div key={i} className="flex gap-4 p-3 animate-pulse">
             <div className="w-28 h-20 bg-muted rounded-lg flex-shrink-0" />
             <div className="flex-1 space-y-2 py-1">
@@ -356,40 +472,63 @@ function CategorySection({ id, label, icon: Icon, news, isLoading }: CategorySec
   }
 
   if (displayNews.length === 0) {
-    return null;
+    return (
+      <div className="flex items-center justify-center py-16">
+        <p className="text-sm text-muted-foreground">No recent news in this category.</p>
+      </div>
+    );
+  }
+
+  const featuredItem = displayNews[0];
+  const restItems = displayNews.slice(1);
+
+  // For the "all" tab, infer the category from the item's first category field for fallback images;
+  // for specific tabs, use the tabId directly.
+  function resolveCategory(item: NewsItem): string {
+    if (tabId !== "all") return tabId;
+    // Map the item's categories array to our CATEGORY_FALLBACK_IMAGES keys
+    const categoryMap: Record<string, string> = {
+      earnings: "stocks",
+      macro: "global",
+      regulatory: "global",
+      mna: "stocks",
+      product: "stocks",
+      guidance: "stocks",
+      other: "global",
+    };
+    const firstCat = item.categories?.[0];
+    return (firstCat && categoryMap[firstCat]) || "global";
   }
 
   return (
-    <div className="space-y-4 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 sm:p-6">
-      {/* Category Header */}
-      <div className="flex items-center gap-2 pb-2 border-b border-border/30">
-        <Icon className="w-5 h-5 text-yellow-500" />
-        <h3 className="font-semibold text-foreground">
-          {label}
-        </h3>
-        <span className="text-xs text-muted-foreground ml-auto">
+    <div className="space-y-4">
+      {/* "Latest" caption */}
+      <div className="flex items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Latest
+        </span>
+        <span className="text-xs text-muted-foreground">
           {displayNews.length} stories
         </span>
       </div>
 
-      {/* Featured News */}
-      {featuredNews && (
-        <NewsCard 
-          news={featuredNews} 
-          variant="featured" 
-          category={id}
-        />
-      )}
+      {/* Featured item — big card */}
+      <NewsCard
+        news={featuredItem}
+        variant="featured"
+        category={resolveCategory(featuredItem)}
+      />
 
-      {/* Other News - Standard cards */}
-      {otherNews.length > 0 && (
+      {/* Rest — standard horizontal cards */}
+      {restItems.length > 0 && (
         <div className="space-y-1">
-          {otherNews.map((item) => (
-            <NewsCard 
-              key={item.id} 
-              news={item} 
+          {restItems.map((item) => (
+            <NewsCard
+              key={item.id}
+              news={item}
               variant="standard"
-              category={id}
+              category={resolveCategory(item)}
             />
           ))}
         </div>
@@ -400,24 +539,39 @@ function CategorySection({ id, label, icon: Icon, news, isLoading }: CategorySec
 
 // ============ MAIN COMPONENT ============
 export function NewsList() {
-  const { categories, isLoading, error, refetch, lastUpdated } =
-    useNewsByCategory({ limit: 6 }); // Fetch slightly more, display 4
+  const [activeTab, setActiveTab] = useState<TabId>("all");
+
+  const {
+    categories,
+    isLoading: catLoading,
+    error: catError,
+    refetch,
+    lastUpdated,
+  } = useNewsByCategory({ limit: 20 });
+
+  const {
+    news: breakingNews,
+    isLoading: breakingLoading,
+  } = useTopNews(12);
+
+  const activeItems = categories[activeTab] ?? [];
 
   return (
     <div className="space-y-6">
-      {/* Minimal Header - Just refresh controls, no title */}
+      {/* Top bar: refresh controls */}
       <div className="flex items-center justify-end gap-3">
         {lastUpdated && (
           <span className="text-xs text-muted-foreground">
-            Updated {lastUpdated.toLocaleTimeString("en-US", { 
-              hour: "2-digit", 
-              minute: "2-digit" 
+            Updated{" "}
+            {lastUpdated.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
             })}
           </span>
         )}
         <button
           onClick={() => refetch()}
-          disabled={isLoading}
+          disabled={catLoading}
           className={cn(
             "p-2 rounded-lg",
             "text-muted-foreground hover:text-yellow-400",
@@ -427,17 +581,17 @@ export function NewsList() {
           )}
           title="Refresh news"
         >
-          <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
+          <RefreshCw className={cn("w-4 h-4", catLoading && "animate-spin")} />
         </button>
       </div>
 
-      {/* Error State */}
-      {error && (
+      {/* Error banner */}
+      {catError && (
         <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
           <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
           <div>
             <p className="text-sm font-medium text-destructive">Failed to load news</p>
-            <p className="text-xs text-destructive/80">{error}</p>
+            <p className="text-xs text-destructive/80">{catError}</p>
           </div>
           <button
             onClick={() => refetch()}
@@ -448,24 +602,49 @@ export function NewsList() {
         </div>
       )}
 
-      {/* Two Column Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-10">
-        {CATEGORIES.map((category) => (
-          <CategorySection
-            key={category.id}
-            id={category.id}
-            label={category.label}
-            icon={category.icon}
-            news={categories[category.id] || []}
-            isLoading={isLoading}
-          />
-        ))}
+      {/* Breaking News band — always visible, above tabs */}
+      <BreakingNewsBand news={breakingNews} isLoading={breakingLoading} />
+
+      {/* Tab bar — horizontally scrollable on mobile */}
+      <div className="overflow-x-auto scrollbar-hide">
+        <div className="flex gap-1 min-w-max border-b border-border/30 pb-0">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all duration-200 whitespace-nowrap",
+                  isActive
+                    ? "text-yellow-400 bg-yellow-500/10"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <Icon className={cn("w-4 h-4", isActive && "text-yellow-400")} />
+                {tab.label}
+                {/* Gold underline for active tab */}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-yellow-500 rounded-full" />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Active tab content */}
+      <TabContent
+        tabId={activeTab}
+        news={activeItems}
+        isLoading={catLoading}
+      />
 
       {/* Footer */}
       <div className="flex items-center justify-center pt-6 border-t border-border/30">
         <p className="text-xs text-muted-foreground/50">
-          Powered by Polygon • Real-time market intelligence
+          Real-time market intelligence
         </p>
       </div>
     </div>
