@@ -21,6 +21,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 import { AIArenaShell } from '@/components/ai-arena';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import { SearchBar } from '@/components/stock-analyzer/SearchBar';
 import { StockLoadingSkeleton } from '@/components/stock-analyzer/StockLoadingSkeleton';
 import { TabNav } from '@/components/stock-analyzer/TabNav';
@@ -167,6 +168,15 @@ export default function StockAnalyzer() {
       goldHalo={false}
       constructionMarkers={false}
     >
+      <FinoExplains
+        title="What is the Stock Analyzer?"
+        className="mt-ds-4 lg:w-auto lg:ml-auto"
+      >
+        Type any ticker and let Fino&apos;s AI break the company down for you — business, financials,
+        valuation, earnings and options — all in plain English. Use the tabs to jump straight to
+        what you care about.
+      </FinoExplains>
+
       {/* Usage badge */}
       {stockData && (
         <motion.div

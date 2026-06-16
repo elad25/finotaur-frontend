@@ -39,6 +39,7 @@ import CatalystDeckView, { type CatalystDeckResponse } from './CatalystDeckView'
 import type { ScanResult, CatalystResult, CatalystPick, AnalystAction, SpilloverCompany } from '../../../services/top5Scanner.api';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // Lazy load admin tracker (only loaded when admin toggles ON)
 const AdminTrackerView = lazy(() => import('./AdminTrackerView'));
@@ -1688,6 +1689,14 @@ function Top5Content() {
             </div>
           )}
         </motion.div>
+
+        <FinoExplains
+          title="What is Top 5?"
+          className="mt-ds-4 lg:w-auto lg:ml-auto"
+        >
+          Fino&apos;s daily shortlist. Every day the AI scans the market and surfaces the five
+          highest-conviction opportunities — each with the reasoning behind it.
+        </FinoExplains>
 
         {/* ═══ ADMIN TRACKER ═══ */}
         {adminModeEnabled && isAdmin && (

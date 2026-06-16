@@ -8,6 +8,7 @@ import { SkeletonChart } from '@/components/ds/Skeleton';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { AiOptionsIntelligenceSkeletonPage } from '@/components/skeletons/AiOptionsIntelligenceSkeleton';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 
@@ -56,11 +57,18 @@ function OptionsIntelligenceContent() {
 
       <div className="relative z-10 mx-auto w-full max-w-[1536px] px-6 lg:px-10 pt-5 pb-8 md:pt-6 md:pb-10">
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-6">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="relative text-center mb-6">
           <h1 className="mb-3 font-sans text-[46px] font-bold leading-none md:text-[62px]">
             <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Options</span>{' '}
             <span className="text-ink-primary">Intelligence</span>
           </h1>
+          <FinoExplains
+            title="What is Options Intelligence?"
+            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          >
+            Make sense of the options chain. Fino&apos;s AI explains the greeks, models potential
+            profit and loss, and suggests strategies for any ticker — no options expertise required.
+          </FinoExplains>
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">Institutional Options Flow & Market Intelligence</p>
             {isRefreshing && <Loader2 className="h-4 w-4 text-[#C9A646] animate-spin" />}

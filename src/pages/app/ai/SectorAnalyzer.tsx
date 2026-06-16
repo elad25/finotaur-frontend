@@ -32,6 +32,7 @@ import { RisksTab } from '@/components/SectorAnalyzer/tabs/RisksTab';
 import { sectorMetadata, defaultBreakoutCandidate } from '@/components/SectorAnalyzer/data';
 import { Sector, TabType, SentimentType } from '@/components/SectorAnalyzer/types';
 import { useAllSectorAnalysis, useSectorAnalysis, sectorNameToId } from '@/hooks/useSectorAnalysis';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import type { SectorSnapshot } from '@/hooks/useSectorAnalysis';
 
 // =====================================================
@@ -206,6 +207,13 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
       <p className="relative mt-4 text-[9px] font-medium uppercase tracking-[0.46em] text-ink-tertiary">
         Institutional-grade sector deep dive
       </p>
+      <FinoExplains
+        title="What is the Sector Analyzer?"
+        className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+      >
+        Pick a sector and get an AI deep-dive — what&apos;s driving it, which names are leading,
+        and how it stacks up against the rest of the market.
+      </FinoExplains>
     </motion.div>
 
     {/* Subtitle */}

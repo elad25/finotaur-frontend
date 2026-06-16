@@ -18,6 +18,7 @@ import { useFlowData } from './shared/useFlowData';
 import { LoadingSkeleton, Skeleton } from './shared/Ui';
 import { QuickStats, TabNav } from './components/StatsAndNav';
 import { SignalFeedSection } from './components/SignalFeedSection';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import { FlowDrawer } from './tabs/AllFlowTab';
 import type { FlowItem } from './shared/types';
 
@@ -108,12 +109,19 @@ const FlowScannerContent = memo(function FlowScannerContent() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-6"
+          className="relative text-center mb-6"
         >
           <h1 className="mb-3 font-sans text-[46px] font-bold leading-none md:text-[62px]">
             <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Flow</span>{' '}
             <span className="text-ink-primary">Scanner</span>
           </h1>
+          <FinoExplains
+            title="What is the Flow Scanner?"
+            className="mt-ds-4 lg:absolute lg:right-0 lg:top-0 lg:z-10 lg:mt-0 lg:w-auto"
+          >
+            Spot unusual activity as it happens. The scanner flags large, out-of-the-ordinary
+            trades, with AI highlighting the ones worth a closer look.
+          </FinoExplains>
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">
             Dark pool prints · Insider trades · Institutional moves · Confluence alerts
