@@ -403,7 +403,18 @@ const buildDayChart = (trades: Trade[], oneR: number) => {
   const points = cumulative.map((value, index) => {
     const x = padX + index * xStep;
     const y = padY + (height - padY * 2) - ((value - min) / range) * (height - padY * 2);
-    return { x, y, value };
+    // index 0 is the synthetic $0 start point (no trade); index i maps to source[i - 1]
+    const trade = index === 0 ? null : source[index - 1] ?? null;
+    const tradePnl = trade ? getTradeData(trade, oneR).pnl : null;
+    return {
+      x,
+      y,
+      value,
+      trade,
+      tradePnl,
+      symbol: trade?.symbol ?? null,
+      time: trade ? (trade.close_at ?? trade.open_at) : null,
+    };
   });
 
   return {
@@ -411,6 +422,7 @@ const buildDayChart = (trades: Trade[], oneR: number) => {
     height,
     min,
     max,
+    points,
     zeroY: padY + (height - padY * 2) - ((0 - min) / range) * (height - padY * 2),
     path: points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" "),
     areaPath: points.length
@@ -901,6 +913,41 @@ const DaySummaryCard = memo(({
 }) => {
   const isLossDay = day.netPnl < 0;
   const chart = useMemo(() => buildDayChart(day.trades, oneR), [day.trades, oneR]);
+
+  const [hover, setHover] = useState<{ index: number; left: number; top: number; width: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const chartBoxRef = useRef<HTMLDivElement>(null);
+
+  const handleChartMove = useCallback((event: React.MouseEvent<SVGRectElement>) => {
+    const svg = svgRef.current;
+    const box = chartBoxRef.current;
+    if (!svg || !box || chart.points.length === 0) return;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const cursor = svg.createSVGPoint();
+    cursor.x = event.clientX;
+    cursor.y = event.clientY;
+    const userPoint = cursor.matrixTransform(ctm.inverse());
+    let nearest = 0;
+    let nearestDist = Infinity;
+    chart.points.forEach((point, idx) => {
+      const dist = Math.abs(point.x - userPoint.x);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = idx;
+      }
+    });
+    const target = chart.points[nearest];
+    const projected = svg.createSVGPoint();
+    projected.x = target.x;
+    projected.y = target.y;
+    const screen = projected.matrixTransform(ctm);
+    const boxRect = box.getBoundingClientRect();
+    setHover({ index: nearest, left: screen.x - boxRect.left, top: screen.y - boxRect.top, width: boxRect.width });
+  }, [chart.points]);
+
+  const hoverPoint = hover ? chart.points[hover.index] : null;
+
   const pnlTone = isLossDay ? "text-num-negative" : "text-emerald-400";
   const chartTone = isLossDay ? "text-num-negative" : "text-emerald-400";
   const gradientId = `day-chart-${day.key.replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -965,8 +1012,8 @@ const DaySummaryCard = memo(({
       </div>
 
       <div className="grid gap-ds-3 xl:grid-cols-[minmax(300px,0.8fr)_1.2fr]">
-        <div className={`relative h-[165px] rounded-[10px] border border-border-ds-subtle bg-surface-base/70 p-ds-3 ${chartTone}`}>
-          <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-[122px] w-full overflow-visible">
+        <div ref={chartBoxRef} className={`relative h-[165px] rounded-[10px] border border-border-ds-subtle bg-surface-base/70 p-ds-3 ${chartTone}`}>
+          <svg ref={svgRef} viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-[122px] w-full overflow-visible">
             <defs>
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
                 <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
@@ -980,7 +1027,46 @@ const DaySummaryCard = memo(({
             {chart.areaPath && <path d={chart.areaPath} fill={`url(#${gradientId})`} />}
             <path d={chart.path} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
             {chart.lastPoint && <circle cx={chart.lastPoint.x} cy={chart.lastPoint.y} r="6" fill="currentColor" />}
+            {hoverPoint && (
+              <g style={{ pointerEvents: "none" }}>
+                <line x1={hoverPoint.x} x2={hoverPoint.x} y1={0} y2={chart.height} className="stroke-ink-secondary/60" strokeWidth="1" strokeDasharray="2 3" />
+                <circle cx={hoverPoint.x} cy={hoverPoint.y} r="6.5" fill="currentColor" stroke="#000" strokeWidth="2.5" />
+              </g>
+            )}
+            <rect
+              x="0"
+              y="0"
+              width={chart.width}
+              height={chart.height}
+              fill="transparent"
+              pointerEvents="all"
+              style={{ cursor: "crosshair" }}
+              onMouseMove={handleChartMove}
+              onMouseLeave={() => setHover(null)}
+            />
           </svg>
+          {hover && hoverPoint && (
+            <div
+              className="pointer-events-none absolute z-20 w-max max-w-[200px] -translate-x-1/2 -translate-y-full rounded-[8px] border border-border-ds-default bg-black/95 px-ds-2 py-1.5 text-left shadow-xl"
+              style={{ left: Math.min(Math.max(hover.left, 74), Math.max(hover.width - 74, 74)), top: Math.max(hover.top - 10, 4) }}
+            >
+              <div className="text-[11px] font-medium text-ink-secondary tabular-nums">
+                {hoverPoint.time ? formatTradeTime(hoverPoint.time, timezone) : "Start"}
+              </div>
+              <div className={`mt-0.5 text-sm font-semibold tabular-nums ${hoverPoint.value < 0 ? "text-num-negative" : "text-emerald-400"}`}>
+                {formatSignedCurrency(hoverPoint.value, 2)}
+                <span className="ml-1 text-[10px] font-normal text-ink-muted">cumulative</span>
+              </div>
+              {hoverPoint.trade && (
+                <div className="mt-1 flex items-center gap-ds-2 border-t border-border-ds-subtle pt-1 text-[11px]">
+                  <span className="font-mono text-ink-primary">{hoverPoint.symbol}</span>
+                  <span className={`tabular-nums ${(hoverPoint.tradePnl ?? 0) < 0 ? "text-num-negative" : "text-emerald-400"}`}>
+                    {formatSignedCurrency(hoverPoint.tradePnl ?? 0, 2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="pointer-events-none absolute left-ds-3 top-ds-3 flex h-[122px] flex-col justify-between text-[11px] text-ink-secondary tabular-nums">
             <span>{formatSignedCurrency(chart.max, 0)}</span>
             <span>$0</span>
