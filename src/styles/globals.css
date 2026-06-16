@@ -758,3 +758,7 @@ nav[class*="flex-col"] button.active {
   0%, 100% { box-shadow: -6px 0 24px rgba(0,0,0,0.55), -2px 0 8px rgba(244,217,123,0.10); }
   50%      { box-shadow: -6px 0 24px rgba(0,0,0,0.55), -2px 0 14px rgba(244,217,123,0.30); }
 }
+
+/* Cloudflare edge cache-bust: forces a fresh bundle hash to escape a poisoned
+   asset variant-cache entry (2026-06-16). Inert — no visual effect. */
+:root { --cf-cache-bust: "20260616-1634"; }
