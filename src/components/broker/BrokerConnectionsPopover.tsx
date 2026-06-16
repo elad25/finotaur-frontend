@@ -8,7 +8,7 @@ import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
-import { statusBadge } from '@/components/broker/brokerStatusBadge';
+import { statusBadge, connectionNeedsAttention } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
 import type { Portfolio } from '@/hooks/usePortfolios';
@@ -142,7 +142,7 @@ function AccountListRow({
   onReconnect: (conn: BrokerConnection) => void;
 }) {
   const badge = connection ? statusBadge(connection) : null;
-  const hasConnectionIssue = connection && connection.status !== 'connected' && connection.status !== 'active';
+  const hasConnectionIssue = connection ? connectionNeedsAttention(connection) : false;
   const environment = portfolio.environment ? portfolio.environment.toUpperCase() : null;
 
   return (
@@ -277,9 +277,7 @@ function ConnectionGroupSection({
   const badge = group.connection ? statusBadge(group.connection) : null;
   const brokerName = group.broker === 'manual' ? 'Manual Import' : brokerDisplay(group.broker);
   const displayBrokerName = group.broker === 'manual' ? 'MANUAL' : brokerName.toUpperCase();
-  const hasConnectionIssue = group.connection
-    && group.connection.status !== 'connected'
-    && group.connection.status !== 'renewing';
+  const hasConnectionIssue = group.connection ? connectionNeedsAttention(group.connection) : false;
 
   return (
     <section className="border-t border-white/[0.06] first:border-t-0">

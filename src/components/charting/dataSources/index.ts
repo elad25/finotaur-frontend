@@ -27,9 +27,33 @@ export { BinanceSource } from './BinanceSource';
 const CRYPTO_PATTERN = /^[A-Z]{2,10}(USDT|USDC|BUSD|USD|BTC|ETH)$/;
 const FUTURES_PATTERN = /^([A-Z]{1,4})([FGHJKMNQUVXZ])(\d{1,2})$/;
 
+/**
+ * ISO-4217 fiat currency codes used to disambiguate forex spot pairs from
+ * crypto pairs. Both can end in "USD" (EURUSD vs BTCUSD) — the distinguishing
+ * factor is that a forex pair is two fiat currency codes concatenated.
+ */
+const FIAT_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD',
+  'SEK', 'NOK', 'DKK', 'SGD', 'HKD', 'MXN', 'ZAR', 'TRY', 'PLN', 'CNH', 'CZK', 'HUF',
+]);
+
+/**
+ * True if the raw symbol is a forex spot pair (two fiat ISO-4217 codes, e.g.
+ * EURUSD, GBPJPY). Tolerates an existing Yahoo `=X` suffix. Forex pairs must
+ * NEVER route to Binance even though many end in "USD".
+ */
+export function isForexPair(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const s = raw.trim().toUpperCase().replace(/=X$/, '');
+  if (s.length !== 6) return false;
+  return FIAT_CURRENCIES.has(s.slice(0, 3)) && FIAT_CURRENCIES.has(s.slice(3, 6));
+}
+
 /** True if the raw broker symbol looks like a crypto pair routable to Binance. */
 export function isCryptoSymbol(raw: string): boolean {
-  return CRYPTO_PATTERN.test(raw.trim().toUpperCase());
+  const symbol = raw.trim().toUpperCase();
+  if (isForexPair(symbol)) return false;
+  return CRYPTO_PATTERN.test(symbol);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +114,10 @@ export function toYahooSymbol(raw: string | null | undefined): string | null {
   // USD — the =X suffix ensures it always routes to Yahoo, never Binance.
   if (symbol.endsWith('=X')) return symbol;
 
+  // Forex spot pair (two fiat codes, e.g. EURUSD) → Yahoo `=X` form. Must come
+  // before the crypto check because forex pairs also match CRYPTO_PATTERN.
+  if (isForexPair(symbol)) return `${symbol}=X`;
+
   // Crypto → not Yahoo (route to Binance via pickDataSource)
   if (CRYPTO_PATTERN.test(symbol)) return null;
 
@@ -120,7 +148,7 @@ export function toBinanceSymbol(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const symbol = raw.trim().toUpperCase();
   if (!symbol) return null;
-  if (!CRYPTO_PATTERN.test(symbol)) return null;
+  if (!isCryptoSymbol(symbol)) return null;
   return symbol;
 }
 
