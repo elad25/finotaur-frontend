@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Link2 } from 'lucide-react';
 import IBConnectionPopup from '@/components/brokers/IBConnectionPopup';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 export function CopilotPageHeader() {
   const [showBrokerPopup, setShowBrokerPopup] = useState(false);
@@ -29,6 +30,12 @@ export function CopilotPageHeader() {
             <span className="text-ink-primary">COPILOT</span>
           </h1>
         </div>
+        <FinoExplains
+          title="What is COPILOT?"
+          className="mt-4 xl:absolute xl:right-[220px] xl:top-1/2 xl:mt-0 xl:-translate-y-1/2 xl:w-auto"
+        >
+          COPILOT is your personal AI portfolio analyst. Connect your brokerage and it watches your real positions — explaining your risk, your macro exposure and the best opportunities for the holdings you actually own.
+        </FinoExplains>
         {ib.isConnected ? (
           <button
             type="button"

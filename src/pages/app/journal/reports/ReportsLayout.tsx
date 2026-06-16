@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import ReportsTabsNav from '@/components/journal/reports/ReportsTabsNav';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 /**
  * JournalReportsLayout — shared layout for all /app/journal/reports/* sub-routes.
@@ -9,6 +10,16 @@ import ReportsTabsNav from '@/components/journal/reports/ReportsTabsNav';
 export default function JournalReportsLayout() {
   return (
     <>
+      <div className="relative px-4 pt-4 sm:px-6">
+        <FinoExplains
+          title="What are the Journal Reports?"
+          className="mt-ds-4 lg:absolute lg:right-6 lg:top-4 lg:z-10 lg:mt-0 lg:w-auto"
+        >
+          Your trading, fully X-rayed. This analytics suite breaks your performance down every way
+          that matters — win rate, risk, day-by-day, by strategy and by setup — so you can see
+          what's working and what's costing you.
+        </FinoExplains>
+      </div>
       <ReportsTabsNav />
       <Outlet />
     </>
