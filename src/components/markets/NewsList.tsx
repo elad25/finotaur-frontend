@@ -355,7 +355,7 @@ function BreakingNewsBand({ news, isLoading }: BreakingNewsBandProps) {
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="flex-shrink-0 w-64 h-24 bg-muted rounded-lg animate-pulse"
+              className="flex-shrink-0 w-64 h-44 bg-muted rounded-lg animate-pulse"
             />
           ))}
         </div>
@@ -388,27 +388,37 @@ function BreakingNewsBand({ news, isLoading }: BreakingNewsBandProps) {
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex-shrink-0 w-64 bg-card border border-border/50 hover:border-red-500/30 rounded-lg p-3 flex flex-col justify-between transition-all duration-200 hover:shadow-md hover:shadow-red-500/5"
+              className="group flex-shrink-0 w-64 bg-card border border-border/50 hover:border-red-500/30 rounded-lg overflow-hidden flex flex-col transition-all duration-200 hover:shadow-md hover:shadow-red-500/5"
             >
-              <p className="text-xs font-medium text-foreground group-hover:text-yellow-400 transition-colors leading-snug line-clamp-3 mb-2">
-                {item.headline}
-              </p>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-muted-foreground">{item.source}</span>
-                <span className="text-muted-foreground/30 text-xs">•</span>
-                <span
-                  className={cn(
-                    "text-xs font-medium",
-                    time.isBreaking ? "text-red-400" : time.isFresh ? "text-emerald-400" : "text-muted-foreground"
-                  )}
-                >
-                  {time.label}
-                </span>
-                {ticker && (
-                  <span className="text-xs font-bold text-yellow-500 ml-auto">
-                    ${ticker}
+              {/* Thumbnail — every story has an image (real or category fallback) */}
+              <NewsImage
+                src={item.imageUrl}
+                alt={item.headline}
+                category="global"
+                newsId={item.id}
+                className="w-full h-28"
+              />
+              <div className="p-3 flex flex-col justify-between flex-1">
+                <p className="text-xs font-medium text-foreground group-hover:text-yellow-400 transition-colors leading-snug line-clamp-2 mb-2">
+                  {item.headline}
+                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs text-muted-foreground">{item.source}</span>
+                  <span className="text-muted-foreground/30 text-xs">•</span>
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      time.isBreaking ? "text-red-400" : time.isFresh ? "text-emerald-400" : "text-muted-foreground"
+                    )}
+                  >
+                    {time.label}
                   </span>
-                )}
+                  {ticker && (
+                    <span className="text-xs font-bold text-yellow-500 ml-auto">
+                      ${ticker}
+                    </span>
+                  )}
+                </div>
               </div>
             </a>
           );
