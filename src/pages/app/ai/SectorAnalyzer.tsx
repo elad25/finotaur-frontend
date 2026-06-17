@@ -33,6 +33,7 @@ import { sectorMetadata, defaultBreakoutCandidate } from '@/components/SectorAna
 import { Sector, TabType, SentimentType } from '@/components/SectorAnalyzer/types';
 import { useAllSectorAnalysis, useSectorAnalysis, sectorNameToId } from '@/hooks/useSectorAnalysis';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import type { SectorSnapshot } from '@/hooks/useSectorAnalysis';
 
 // =====================================================
@@ -190,8 +191,17 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className="flex min-h-[calc(100vh-128px)] flex-col items-center pb-7 pt-4"
+    className="relative flex min-h-[calc(100vh-128px)] flex-col items-center pb-7 pt-4"
   >
+    {/* Fino Explains — pinned top-right (swapped with the market-status badge) */}
+    <FinoExplains
+      title="What is the Sector Analyzer?"
+      className="absolute right-0 top-0 z-30"
+    >
+      Pick a sector and get an AI deep-dive — what&apos;s driving it, which names are leading,
+      and how it stacks up against the rest of the market.
+    </FinoExplains>
+
     {/* Title */}
     <motion.div
       initial={{ opacity: 0, y: -18 }}
@@ -207,13 +217,11 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isEr
       <p className="relative mt-4 text-[9px] font-medium uppercase tracking-[0.46em] text-ink-tertiary">
         Institutional-grade sector deep dive
       </p>
-      <FinoExplains
-        title="What is the Sector Analyzer?"
-        className="mt-ds-3 ml-auto w-fit"
-      >
-        Pick a sector and get an AI deep-dive — what&apos;s driving it, which names are leading,
-        and how it stacks up against the rest of the market.
-      </FinoExplains>
+      {/* Market-status badge — moved here (swapped with the Fino Explains panel).
+          Renders only when the US market is closed; centered under the subtitle. */}
+      <div className="mt-ds-3 flex justify-center">
+        <MarketStatusBadge className="relative top-auto right-auto" />
+      </div>
     </motion.div>
 
     {/* Subtitle */}
