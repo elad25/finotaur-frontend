@@ -39,6 +39,7 @@ export interface BrokerConnection {
   account_id?: string | null;        // TEXT in DB; numeric for Tradovate; coerce as needed
   account_name?: string | null;
   environment?: BrokerEnvironment | string | null;
+  auth_method?: string | null;   // 'oauth' | 'password' | null — drives reconnect path
   connection_name?: string | null;   // user-given label (was tradovate_credentials.connection_label)
   connected_at?: string | null;
   disconnected_at?: string | null;
