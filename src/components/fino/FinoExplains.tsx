@@ -32,27 +32,27 @@ export function FinoExplains({
   return (
     <aside className={className}>
       <details
-        className="group w-fit rounded-[12px] border border-gold-border bg-surface-1"
+        className="group w-fit rounded-2xl border border-gold-border bg-surface-1"
         open={defaultOpen}
       >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-ds-4 py-ds-2 [&::-webkit-details-marker]:hidden">
-          <div className="flex items-center gap-2.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 pl-1.5 pr-3 [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center gap-2">
             <img
               src="/fino-avatar.png"
               alt="Fino"
-              className="h-9 w-9 rounded-full object-cover ring-1 ring-gold-border"
+              className="h-6 w-6 rounded-full object-cover ring-1 ring-gold-border"
             />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-gold-primary">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.15em] text-gold-primary">
               Fino Explains
             </span>
           </div>
           <ChevronDown
-            size={16}
-            className="text-gold-primary transition-transform duration-200 group-open:rotate-180"
+            size={13}
+            className="text-gold-primary/60 transition-transform duration-200 group-open:rotate-180"
           />
         </summary>
 
-        <div className={`flex flex-col gap-ds-3 px-ds-4 pb-ds-4 ${contentClassName}`}>
+        <div className={`flex flex-col gap-ds-3 px-3.5 pb-3.5 pt-1 ${contentClassName}`}>
           <p className="text-[15px] font-semibold leading-tight text-ink-primary">
             {title}
           </p>
