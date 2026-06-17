@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent, Crown, ArrowUp, ArrowDown, Clock } from "lucide-react";
+import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent, Crown, ArrowUp, ArrowDown, Clock, Target } from "lucide-react";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { formatNumber } from "@/utils/smartCalc";
 
@@ -1375,11 +1375,29 @@ const portfolioValues = useMemo(() => {
                     <span className="text-xs font-medium text-zinc-400">Per Trade</span>
                   </div>
                   <div className="text-xl font-bold text-white">
-                    {riskSettings?.riskMode === 'percentage' 
+                    {riskSettings?.riskMode === 'percentage'
                       ? `${safeFormatNumber(riskSettings.riskPerTrade, 0)}%`
                       : `$${safeFormatNumber(riskSettings?.riskPerTrade, 0)}`
                     }
                   </div>
+                </div>
+              </div>
+
+              {/* R Definition display card */}
+              <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-700/50 flex items-center justify-center">
+                    <Target className="w-4 h-4 text-zinc-400" />
+                  </div>
+                  <span className="text-xs font-medium text-zinc-400">R Definition</span>
+                </div>
+                <div className="text-xl font-bold text-white">
+                  {riskSettings?.rBasisMode === 'manual' ? 'Manual' : 'Per Trade'}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">
+                  {riskSettings?.rBasisMode === 'manual'
+                    ? 'Actual R uses your global 1R'
+                    : "Actual R from each trade's stop"}
                 </div>
               </div>
             </div>

@@ -35,6 +35,7 @@ export interface RiskSettings {
   totalPnL: number;
   isDynamic?: boolean;
   tradeCount?: number;
+  rBasisMode: 'per_trade' | 'manual';
 }
 
 export interface CommissionSetting {
@@ -61,6 +62,7 @@ const DEFAULT_SETTINGS: RiskSettings = {
   totalPnL: 0,
   isDynamic: false,
   tradeCount: 0,
+  rBasisMode: 'per_trade',
 };
 
 const DEFAULT_COMMISSIONS: CommissionSettings = {
@@ -105,7 +107,7 @@ async function fetchRiskSettings(userId: string): Promise<RiskSettings> {
   // 🔥 NEW: Fetch from database columns (NOT JSONB)
   const { data, error } = await supabase
     .from('profiles')
-    .select('portfolio_size, risk_percentage, risk_mode, fixed_risk_amount, current_portfolio, total_pnl, initial_portfolio, trade_count')
+    .select('portfolio_size, risk_percentage, risk_mode, fixed_risk_amount, current_portfolio, total_pnl, initial_portfolio, trade_count, r_basis_mode')
     .eq('id', userId)
     .single();
 
@@ -137,6 +139,7 @@ async function fetchRiskSettings(userId: string): Promise<RiskSettings> {
     totalPnL,
     isDynamic: false,
     tradeCount: toNumber(data?.trade_count || 0),
+    rBasisMode: (data?.r_basis_mode === 'manual' ? 'manual' : 'per_trade') as 'per_trade' | 'manual',
   };
 }
 
@@ -212,6 +215,10 @@ export function useRiskSettings() {
       
       if (newSettings.initialPortfolio !== undefined) {
         updateData.initial_portfolio = newSettings.initialPortfolio;
+      }
+
+      if (newSettings.rBasisMode !== undefined) {
+        updateData.r_basis_mode = newSettings.rBasisMode;
       }
 
       console.log('📊 DB update object:', updateData);

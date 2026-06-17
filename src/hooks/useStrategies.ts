@@ -42,6 +42,8 @@ export function useStrategiesOptimized(userId?: string) {
         defaultTakeProfit: row.default_take_profit ?? null,
         // Strategy components model (nullable until DB backfill runs).
         components: (row.components ?? null) as StrategyComponent[] | null,
+        planned1rUsd: row.planned_1r_usd ?? null,
+        standardQuantity: row.standard_quantity ?? null,
       }));
     },
     enabled: !!userId,
@@ -220,6 +222,31 @@ export function useUpdateStrategyOptimized() {
       toast.success('Strategy updated successfully! ✅');
       console.log('✅ Strategy updated:', data.name);
     },
+  });
+}
+
+// ==========================================
+// 🎯 STRATEGY R CONFIGS - lightweight map for 1R resolution
+// ==========================================
+export function useStrategyRConfigs(userId?: string) {
+  return useQuery({
+    queryKey: ['strategyRConfigs', userId ?? 'me'],
+    queryFn: async (): Promise<Map<string, { planned_1r_usd: number | null; standard_quantity: number | null; default_stop_loss: number | null }>> => {
+      const { data, error } = await supabase
+        .from('strategies')
+        .select('id, planned_1r_usd, standard_quantity, default_stop_loss')
+        .is('deleted_at', null);
+      if (error) throw error;
+      const map = new Map<string, { planned_1r_usd: number | null; standard_quantity: number | null; default_stop_loss: number | null }>();
+      (data ?? []).forEach((r: any) => map.set(r.id, {
+        planned_1r_usd: r.planned_1r_usd ?? null,
+        standard_quantity: r.standard_quantity ?? null,
+        default_stop_loss: r.default_stop_loss ?? null,
+      }));
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: true,
   });
 }
 

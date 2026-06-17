@@ -29,7 +29,8 @@ import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRisk
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
-import { useStrategiesOptimized } from "@/hooks/useStrategies";
+import { useStrategiesOptimized, useStrategyRConfigs } from "@/hooks/useStrategies";
+import { resolvePlanned1R, detectBehavior } from '@/utils/rResolver';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -191,7 +192,7 @@ interface DaySummary {
 type SummaryPeriod = "day" | "week";
 
 // 🔥 UPDATED: Now calculates R based on global 1R from settings
-const getTradeData = (trade: Trade, oneR: number) => {
+const getTradeData = (trade: Trade, oneR: number, rBasisMode: 'per_trade' | 'manual' = 'per_trade', planned1R?: number | null) => {
   const isRiskOnlyMode = trade.input_mode === 'risk-only';
   
   // 🔥 Get risk from direct field OR legacy metrics
@@ -222,38 +223,55 @@ const getTradeData = (trade: Trade, oneR: number) => {
     }
   }
   
-  // 🔥 Determine actual R based on mode
+  // 🔥 Determine actual R based on mode + R-basis setting
   let actualR: number | null = null;
-  
-  if (isRiskOnlyMode) {
-    if (hasRiskOnlyResult) {
-      // 🔥 FIX: Priority order - check all sources for actual_r
-      if (trade.actual_user_r !== null && trade.actual_user_r !== undefined) {
+  const realContractR =
+    trade.actual_r !== null && trade.actual_r !== undefined && !Number.isNaN(Number(trade.actual_r))
+      ? Number(trade.actual_r)
+      : null;
+
+  if (rBasisMode === 'manual') {
+    // Manual / global-1R behavior (legacy)
+    if (isRiskOnlyMode) {
+      if (hasRiskOnlyResult) {
+        if (trade.actual_user_r !== null && trade.actual_user_r !== undefined) {
+          actualR = Number(trade.actual_user_r);
+        } else if (trade.actual_r !== null && trade.actual_r !== undefined) {
+          actualR = Number(trade.actual_r);
+        } else if (trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined) {
+          actualR = Number(trade.metrics.actual_r);
+        } else if (riskUSD > 0) {
+          actualR = pnl / riskUSD;
+        }
+      } else {
+        actualR = Number(trade.user_risk_r) || null;
+      }
+    } else {
+      if (trade.actual_user_r !== undefined && trade.actual_user_r !== null) {
         actualR = Number(trade.actual_user_r);
-      } else if (trade.actual_r !== null && trade.actual_r !== undefined) {
+      } else if (trade.actual_r !== undefined && trade.actual_r !== null) {
         actualR = Number(trade.actual_r);
       } else if (trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined) {
         actualR = Number(trade.metrics.actual_r);
-      } else if (riskUSD > 0) {
-        actualR = pnl / riskUSD;
+      } else if (trade.exit_price && oneR > 0) {
+        actualR = calculateActualR(pnl, oneR);
       }
-    } else {
-      // 🔥 OPEN trade - show planned R:R ratio
-      actualR = Number(trade.user_risk_r) || null;
     }
   } else {
-    // Summary mode: use stored or calculate
-    if (trade.actual_user_r !== undefined && trade.actual_user_r !== null) {
-      actualR = Number(trade.actual_user_r);
-    } else if (trade.actual_r !== undefined && trade.actual_r !== null) {
-      actualR = Number(trade.actual_r);
-    } else if (trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined) {
-      actualR = Number(trade.metrics.actual_r);
-    } else if (trade.exit_price && oneR > 0) {
-      actualR = calculateActualR(pnl, oneR);
+    // Per-trade: R only from a real per-trade risk basis (stop_price / risk_usd → actual_r)
+    if (isRiskOnlyMode) {
+      if (hasRiskOnlyResult) {
+        actualR = realContractR ?? (riskUSD > 0 ? pnl / riskUSD : null);
+      } else {
+        actualR = Number(trade.user_risk_r) || null;
+      }
+    } else {
+      actualR = (planned1R != null && planned1R > 0)
+        ? (pnl != null ? Number(pnl) / planned1R : null)
+        : realContractR;
     }
   }
-  
+
   // 🔥 CRITICAL: Risk-Only = closed ONLY if user entered a result!
   const isClosed = isRiskOnlyMode 
     ? hasRiskOnlyResult
@@ -602,9 +620,11 @@ const TradeRow = memo(({
   onToggleSelect: (id: string) => void;
   readOnly?: boolean;
 }) => {
+  const { settings: tradeRowRiskSettings } = useRiskSettings();
+  const tradeRowRBasisMode = tradeRowRiskSettings?.rBasisMode ?? 'per_trade';
   const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
-    () => getTradeData(trade, oneR),
-    [trade, oneR]
+    () => getTradeData(trade, oneR, tradeRowRBasisMode),
+    [trade, oneR, tradeRowRBasisMode]
   );
   const isOption = trade.asset_class === 'options';
   const isForex = trade.asset_class === 'forex';
@@ -912,6 +932,8 @@ const DaySummaryCard = memo(({
   onToggle: () => void;
   onOpenTrade: (trade: Trade) => void;
 }) => {
+  const { settings: daySummaryRiskSettings } = useRiskSettings();
+  const daySummaryRBasisMode = daySummaryRiskSettings?.rBasisMode ?? 'per_trade';
   const isLossDay = day.netPnl < 0;
   const chart = useMemo(() => buildDayChart(day.trades, oneR), [day.trades, oneR]);
 
@@ -1127,7 +1149,7 @@ const DaySummaryCard = memo(({
                 <span>R</span>
               </div>
               {day.trades.map((trade) => {
-                const { pnl, actualR, outcome, isClosed } = getTradeData(trade, oneR);
+                const { pnl, actualR, outcome, isClosed } = getTradeData(trade, oneR, daySummaryRBasisMode);
                 const pnlClass = pnl >= 0 ? "text-emerald-400" : "text-num-negative";
 
                 return (
@@ -1201,7 +1223,8 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const timezone = useTimezone();
   
   // 🔥 Load global 1R from settings
-  const { oneR, loading: riskLoading } = useRiskSettings();
+  const { oneR, settings: riskSettings, loading: riskLoading } = useRiskSettings();
+  const rBasisMode = riskSettings?.rBasisMode ?? 'per_trade';
   
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
@@ -1211,7 +1234,8 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const mentorPortfolioId = (overrideUserId || isMentorView) ? undefined : effectivePortfolioId;
   const { data: trades = [], isLoading, error } = useTrades(userId, mentorPortfolioId);
   const { data: strategies = [] } = useStrategiesOptimized(userId);
-  
+  const { data: strategyRConfigs } = useStrategyRConfigs(userId);
+
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
   const { mutateAsync: updateTradeMutation } = useUpdateTrade();
@@ -1223,6 +1247,9 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [summaryPeriod, setSummaryPeriod] = useState<SummaryPeriod>("day");
   const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(() => new Set());
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [isSettingR, setIsSettingR] = useState(false);
+  const [stopInput, setStopInput] = useState('');
+  const [savingR, setSavingR] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showBrokerPanel, setShowBrokerPanel] = useState(false);
@@ -1321,8 +1348,8 @@ const stats = useMemo<Stats>(() => {
 
     // 🚀 OPTIMIZED: Single loop instead of multiple passes
     closedTrades.forEach(trade => {
-      const { pnl, actualR, outcome } = getTradeData(trade, oneR);
-      
+      const { pnl, actualR, outcome } = getTradeData(trade, oneR, rBasisMode);
+
       if (outcome === "WIN") wins++;
       else if (outcome === "LOSS") losses++;
       else if (outcome === "BE") breakeven++;
@@ -1344,7 +1371,7 @@ const stats = useMemo<Stats>(() => {
       losses,
       breakeven,
     };
-  }, [trades, oneR]);
+  }, [trades, oneR, rBasisMode]);
 
   // ✅ 5. 🚀 OPTIMIZED: Filtered trades - memoized
   const filteredTrades = useMemo(() => {
@@ -1411,6 +1438,35 @@ const stats = useMemo<Stats>(() => {
       toast.error(error?.message || "Failed to assign strategy");
     }
   }, [strategies, updateTradeMutation]);
+
+  const handleSetR = useCallback(async () => {
+    if (!selectedTrade) return;
+    const stop = Number(stopInput);
+    if (!Number.isFinite(stop) || stop <= 0) {
+      toast.error('Enter a valid stop price');
+      return;
+    }
+    if (stop === Number(selectedTrade.entry_price)) {
+      toast.error('Stop price cannot equal entry price');
+      return;
+    }
+    setSavingR(true);
+    try {
+      const updated = await updateTradeMutation({
+        id: selectedTrade.id,
+        data: { stop_price: stop },
+      });
+      if (updated) setSelectedTrade(updated as Trade);
+      setIsSettingR(false);
+      setStopInput('');
+      toast.success('R set from stop price');
+    } catch (error: any) {
+      console.error('Set R error:', error);
+      toast.error(error?.message || 'Failed to set R');
+    } finally {
+      setSavingR(false);
+    }
+  }, [selectedTrade, stopInput, updateTradeMutation]);
 
   const confirmDeleteTrade = useCallback(async () => {
     if (!tradeToDelete) return;
@@ -1522,8 +1578,8 @@ const stats = useMemo<Stats>(() => {
     ];
 
     const rows = filteredTrades.map(trade => {
-      const { pnl, actualR, outcome, multiplier, riskUSD } = getTradeData(trade, oneR);
-      
+      const { pnl, actualR, outcome, multiplier, riskUSD } = getTradeData(trade, oneR, rBasisMode);
+
       return [
         formatTradeDate(trade.open_at, timezone),
         trade.symbol,
@@ -1565,7 +1621,7 @@ const stats = useMemo<Stats>(() => {
     document.body.removeChild(link);
     
     toast.success(`Exported ${filteredTrades.length} trades`);
-  }, [filteredTrades, oneR, timezone]);
+  }, [filteredTrades, oneR, timezone, rBasisMode]);
 
   // ✅ 7. Loading state - ONLY AFTER ALL HOOKS!
   if (riskLoading || isLoading) {
@@ -1891,7 +1947,21 @@ const stats = useMemo<Stats>(() => {
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DialogContent className="max-w-[96vw] w-[1450px] h-[92vh] p-0 border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
           {selectedTrade && (() => {
-const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(selectedTrade, oneR);
+  const selStrategyCfg = strategyRConfigs?.get?.(selectedTrade.strategy_id ?? '') ?? null;
+  const resolved1R = resolvePlanned1R(selectedTrade as any, selStrategyCfg, oneR);
+const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(selectedTrade, oneR, rBasisMode, resolved1R.value);
+  const displayR = actualR;
+  const canSetR =
+    isClosed &&
+    selectedTrade.input_mode !== 'risk-only' &&
+    rBasisMode === 'per_trade' &&
+    resolved1R.value == null;
+  const behaviorTags = rBasisMode === 'per_trade' ? detectBehavior(selectedTrade as any, selStrategyCfg, resolved1R.value) : [];
+  const oneRLabel =
+    resolved1R.source === 'strategy' ? 'strategy' :
+    resolved1R.source === 'trade' ? 'trade' :
+    resolved1R.source === 'stop' ? 'stop' :
+    resolved1R.source === 'global' ? 'global 1R' : '—';
             return (
             <div className="flex h-full max-h-full overflow-hidden">
               {/* Left Side - Trade Information */}
@@ -1975,11 +2045,11 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           Actual R
                         </div>
                         <div className={`text-base font-bold ${
-                          actualR && actualR > 0 ? 'text-emerald-400' : 
-                          actualR && actualR < 0 ? 'text-red-400' : 
+                          displayR && displayR > 0 ? 'text-emerald-400' :
+                          displayR && displayR < 0 ? 'text-red-400' :
                           'text-zinc-400'
                         }`}>
-                          {actualR !== null && actualR !== undefined ? formatRValue(actualR) : '—'}
+                          {displayR !== null && displayR !== undefined ? formatRValue(displayR) : '—'}
                         </div>
                       </div>
                       <div>
@@ -2055,7 +2125,9 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           <div>
                             <div className="text-[11px] text-zinc-500 mb-1">Stop Loss</div>
                             <div className="text-base font-semibold text-red-400">
-                              ${formatNumber(selectedTrade.stop_price, 2)}
+                              {selectedTrade.stop_price
+                                ? `$${formatNumber(selectedTrade.stop_price, 2)}`
+                                : '—'}
                             </div>
                           </div>
                           <div>
@@ -2131,7 +2203,9 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           <div>
                             <div className="text-[11px] text-zinc-500 mb-1">Risk per Point</div>
                             <div className="text-base font-semibold text-red-400">
-                              ${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}
+                              {selectedTrade.stop_price
+                                ? `$${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}`
+                                : '—'}
                             </div>
                           </div>
                           <div>
@@ -2162,22 +2236,96 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       )}
                     </div>
                     
-                    {/* Show calculation using global 1R - 🔥 Only for Summary mode */}
+                    {/* Risk basis: real contract R when a stop/risk exists; otherwise prompt to Set R */}
                     {selectedTrade.input_mode !== 'risk-only' && (
                       <div className="mt-3 pt-3 border-t border-zinc-800/50">
-                        <div className="text-xs text-zinc-500 space-y-1">
-                          <div className="font-mono">
-                            Trade Risk = ${formatNumber(riskUSD, 2)}
-                          </div>
-                          <div className="font-mono text-blue-400">
-                            Your 1R (Settings) = ${formatNumber(oneR, 2)}
-                          </div>
-                          {selectedTrade.exit_price && actualR !== null && (
-                            <div className={`font-mono font-semibold ${actualR > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              Actual R = ${formatNumber(Math.abs(pnl), 2)} ÷ ${formatNumber(oneR, 2)} = {actualR.toFixed(2)}R
+                        {rBasisMode === 'manual' ? (
+                          <div className="text-xs text-zinc-500 space-y-1">
+                            <div className="font-mono">
+                              Trade Risk = ${formatNumber(riskUSD, 2)}
                             </div>
-                          )}
-                        </div>
+                            <div className="font-mono text-blue-400">
+                              Your 1R (Settings) = ${formatNumber(oneR, 2)}
+                            </div>
+                            {selectedTrade.exit_price && displayR !== null && (
+                              <div className={`font-mono font-semibold ${displayR > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                Actual R = ${formatNumber(Math.abs(pnl), 2)} ÷ ${formatNumber(oneR, 2)} = {displayR.toFixed(2)}R
+                              </div>
+                            )}
+                          </div>
+                        ) : resolved1R.value != null ? (
+                          <div className="text-xs text-zinc-500 space-y-2">
+                            <div className="font-mono">
+                              1R = ${formatNumber(resolved1R.value, 2)} <span className="text-zinc-600">({oneRLabel})</span>
+                            </div>
+                            {selectedTrade.exit_price != null && displayR !== null && (
+                              <div className={`font-mono font-semibold ${displayR > 0 ? 'text-emerald-400' : displayR < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                                Actual R = ${formatNumber(Math.abs(Number(selectedTrade.pnl) || 0), 2)} ÷ ${formatNumber(resolved1R.value, 2)} = {displayR.toFixed(2)}R
+                              </div>
+                            )}
+                            {behaviorTags.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                {behaviorTags.map((t) => (
+                                  <span
+                                    key={t.kind}
+                                    title={t.detail || ''}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                      t.kind === 'stop_not_honored'
+                                        ? 'border-red-500/40 text-red-400 bg-red-500/10'
+                                        : 'border-amber-500/40 text-amber-400 bg-amber-500/10'
+                                    }`}
+                                  >
+                                    {t.label}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : canSetR ? (
+                          isSettingR ? (
+                            <div className="space-y-2">
+                              <div className="text-[11px] text-zinc-400">
+                                Enter the stop price you placed for this trade — R is computed from it.
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={stopInput}
+                                  onChange={(e) => setStopInput(e.target.value)}
+                                  placeholder="Stop price"
+                                  className="w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                />
+                                <button
+                                  onClick={handleSetR}
+                                  disabled={savingR}
+                                  className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                                >
+                                  {savingR ? 'Saving…' : 'Save'}
+                                </button>
+                                <button
+                                  onClick={() => { setIsSettingR(false); setStopInput(''); }}
+                                  disabled={savingR}
+                                  className="rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-xs text-zinc-500">
+                                No risk defined for this trade (no stop synced).
+                              </div>
+                              <button
+                                onClick={() => { setIsSettingR(true); setStopInput(''); }}
+                                className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500"
+                              >
+                                Set R
+                              </button>
+                            </div>
+                          )
+                        ) : null}
                       </div>
                     )}
                     
