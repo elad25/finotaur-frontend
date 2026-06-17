@@ -19,6 +19,7 @@ import { LoadingSkeleton, Skeleton } from './shared/Ui';
 import { QuickStats, TabNav } from './components/StatsAndNav';
 import { SignalFeedSection } from './components/SignalFeedSection';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { FlowDrawer } from './tabs/AllFlowTab';
 import type { FlowItem } from './shared/types';
 
@@ -94,6 +95,15 @@ const FlowScannerContent = memo(function FlowScannerContent() {
       className="min-h-screen relative overflow-hidden"
       style={{ background: 'radial-gradient(circle at 50% 0%, rgba(201,166,70,0.08), transparent 30%), linear-gradient(180deg, #080808 0%, #0d0b08 48%, #080808 100%)' }}
     >
+      {/* Fino Explains — pinned top-right of the full-width page container */}
+      <FinoExplains
+        title="What is the Flow Scanner?"
+        className="absolute right-0 top-0 z-30"
+      >
+        Spot unusual activity as it happens. The scanner flags large, out-of-the-ordinary
+        trades, with AI highlighting the ones worth a closer look.
+      </FinoExplains>
+
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-24 -left-36 h-64 w-[720px] rotate-[-18deg] rounded-[50%] border border-[#C9A646]/20" />
         <div className="absolute -top-16 -left-28 h-56 w-[760px] rotate-[-18deg] rounded-[50%] border border-[#C9A646]/10" />
@@ -115,13 +125,10 @@ const FlowScannerContent = memo(function FlowScannerContent() {
             <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Flow</span>{' '}
             <span className="text-ink-primary">Scanner</span>
           </h1>
-          <FinoExplains
-            title="What is the Flow Scanner?"
-            className="mt-ds-3 ml-auto w-fit"
-          >
-            Spot unusual activity as it happens. The scanner flags large, out-of-the-ordinary
-            trades, with AI highlighting the ones worth a closer look.
-          </FinoExplains>
+          {/* Market-status badge — centered under the title (Fino Explains moved top-right) */}
+          <div className="mt-ds-3 flex justify-center">
+            <MarketStatusBadge className="relative top-auto right-auto" />
+          </div>
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">
             Dark pool prints · Insider trades · Institutional moves · Confluence alerts

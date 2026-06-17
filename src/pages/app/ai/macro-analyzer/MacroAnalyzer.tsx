@@ -19,6 +19,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import {
   BarChart3, Activity, FileText, Banknote, Globe, Brain, ShieldCheck, Crosshair, Zap
 } from 'lucide-react';
@@ -260,6 +261,15 @@ export default function MacroAnalyzer() {
       <MacroArenaStyles />
 
       <div className="relative min-h-screen overflow-hidden bg-section-base">
+        {/* Fino Explains — pinned top-right of the full-width page container */}
+        <FinoExplains
+          title="What is the Macro Analyzer?"
+          className="absolute right-0 top-0 z-30"
+        >
+          The big picture, decoded. Fino&apos;s AI weaves interest rates, inflation, growth and
+          global events into a clear read on the macro backdrop driving every market.
+        </FinoExplains>
+
         <div
           className="absolute inset-0 bg-section-base"
           style={{
@@ -302,13 +312,10 @@ export default function MacroAnalyzer() {
             <p className="relative mt-4 text-[9px] font-medium uppercase tracking-[0.46em] text-ink-tertiary">
               AI-powered economic intelligence & market regime analysis
             </p>
-            <FinoExplains
-              title="What is the Macro Analyzer?"
-              className="mt-ds-3 ml-auto w-fit"
-            >
-              The big picture, decoded. Fino&apos;s AI weaves interest rates, inflation, growth and
-              global events into a clear read on the macro backdrop driving every market.
-            </FinoExplains>
+            {/* Market-status badge — centered under the subtitle (Fino Explains moved top-right) */}
+            <div className="mt-ds-3 flex justify-center">
+              <MarketStatusBadge className="relative top-auto right-auto" />
+            </div>
           </div>
 
           <div className="relative mx-auto mb-8 grid w-full max-w-[820px] grid-cols-1 overflow-hidden rounded-lg border border-white/[0.065] bg-black/24 shadow-[0_18px_54px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:grid-cols-3">

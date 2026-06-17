@@ -22,6 +22,7 @@ import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 
 import { AIArenaShell } from '@/components/ai-arena';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { SearchBar } from '@/components/stock-analyzer/SearchBar';
 import { StockLoadingSkeleton } from '@/components/stock-analyzer/StockLoadingSkeleton';
 import { TabNav } from '@/components/stock-analyzer/TabNav';
@@ -159,6 +160,16 @@ export default function StockAnalyzer() {
 
   return (
     <ErrorBoundary boundary="stock-analyzer" fallback={<AiToolErrorFallback />}>
+    {/* Relative wrapper so absolute-positioned Fino panel anchors to the full page width */}
+    <div className="relative">
+      <FinoExplains
+        title="What is the Stock Analyzer?"
+        className="absolute right-0 top-0 z-30"
+      >
+        Type any ticker and let Fino&apos;s AI break the company down for you — business, financials,
+        valuation, earnings and options — all in plain English. Use the tabs to jump straight to
+        what you care about.
+      </FinoExplains>
     <AIArenaShell
       eyebrow={undefined}
       title={stockData ? undefined : 'Stock Analyzer'}
@@ -168,14 +179,12 @@ export default function StockAnalyzer() {
       goldHalo={false}
       constructionMarkers={false}
     >
-      <FinoExplains
-        title="What is the Stock Analyzer?"
-        className="mt-ds-3 ml-auto w-fit"
-      >
-        Type any ticker and let Fino&apos;s AI break the company down for you — business, financials,
-        valuation, earnings and options — all in plain English. Use the tabs to jump straight to
-        what you care about.
-      </FinoExplains>
+      {/* Market-status badge — centered under the hero, visible when market is closed */}
+      {!stockData && (
+        <div className="mt-ds-3 flex justify-center">
+          <MarketStatusBadge className="relative top-auto right-auto" />
+        </div>
+      )}
 
       {/* Usage badge */}
       {stockData && (
@@ -310,6 +319,7 @@ export default function StockAnalyzer() {
         </motion.div>
       )}
     </AIArenaShell>
+    </div>
     </ErrorBoundary>
   );
 }
