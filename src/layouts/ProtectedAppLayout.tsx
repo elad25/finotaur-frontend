@@ -69,7 +69,11 @@ export const ProtectedAppLayout = () => {
 
   // Show "Market Closed — Showing Friday's Close" badge across AI Arena routes
   // when US equities are closed. Auto-hides during regular session.
-  const showMarketStatus = location.pathname.startsWith('/app/ai/');
+  // Sector Analyzer renders its own market-status badge inside the page header
+  // (swapped with the Fino Explains panel), so suppress the global fixed one there.
+  const showMarketStatus =
+    location.pathname.startsWith('/app/ai/') &&
+    location.pathname !== '/app/ai/sector-analyzer';
 
   // Journal pages manage their own page container (max-w + px) — adding the
   // global sidebar gap there would double-pad them.
