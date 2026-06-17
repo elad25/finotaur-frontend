@@ -14,7 +14,7 @@ import type { BrokerConnection } from '@/lib/brokers/types';
  * not completed a successful sync for this long is genuinely broken and must
  * be surfaced to the user.
  */
-const STUCK_RENEWING_GRACE_MS = 2 * 60 * 60 * 1000; // 2 hours
+const STUCK_RENEWING_GRACE_MS = 45 * 60 * 1000; // 45 minutes
 
 /**
  * True when a `renewing` connection has been failing long enough that it is no
