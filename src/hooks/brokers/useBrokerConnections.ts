@@ -31,7 +31,7 @@ interface UseBrokerConnectionsOptions {
 const SELECT_COLS =
   'id,user_id,broker,status,is_active,purpose,account_id,account_name,environment,connection_name,' +
   'connected_at,disconnected_at,last_sync_at,last_successful_sync_at,error_count,last_error,' +
-  'last_error_at,token_expires_at,connection_data,created_at,updated_at';
+  'last_error_at,token_expires_at,connection_data,created_at,updated_at,auth_method';
 
 const queryKey = (userId: string, opts: UseBrokerConnectionsOptions) =>
   ['broker_connections', userId, opts.active ?? 'all', opts.broker ?? 'all', opts.purpose ?? 'all'] as const;
@@ -155,6 +155,27 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
         toast.error(`Reconnect not yet implemented for ${conn.broker}`);
         return { success: false, error: `Reconnect not implemented for ${conn.broker}` };
+      }
+
+      // OAuth connections have no stored username/password to silently re-login
+      // with — `tradovate-auth mode=reconnect` 401s for them. Re-authenticate via
+      // the same OAuth authorize flow used for the initial connect: redirect the
+      // browser to Tradovate, which round-trips back through oauth-callback and
+      // mints a fresh token. (mode=reconnect below remains for legacy credential
+      // connections where auth_method is not 'oauth'.)
+      if (conn.auth_method === 'oauth') {
+        try {
+          const { getTradovateAuthorizationUrl } = await import(
+            '@/lib/brokers/tradovate/tradovate-oauth'
+          );
+          const env = conn.environment === 'live' ? 'live' : 'demo';
+          window.location.href = await getTradovateAuthorizationUrl(env);
+          return { success: true };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Could not start reconnect';
+          toast.error(msg);
+          return { success: false, error: msg };
+        }
       }
 
       const { data, error: e } = await supabase.functions.invoke('tradovate-auth', {
