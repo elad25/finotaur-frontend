@@ -85,11 +85,11 @@ export const WHOP_PLAN_IDS = {
   // Journal - Basic ($24.99/mo). New plan as of 2026-06-17 (prior plan
   // plan_2hIXaJbGP1tYN was the legacy $19.99 price).
   basic_monthly: 'plan_H0VDCb6iD1dYQ',
-  basic_yearly: 'plan_x0jTFLe9qNv8i',
-  
-  // Journal - Premium (no trial)
-  premium_monthly: 'plan_v7QKxkvKIZooe',
-  premium_yearly: 'plan_gBG436aeJxaHU',
+  basic_yearly: 'plan_80ZhPpre3iRU2', // $229/yr — new plan 2026-06-17 (was plan_x0jTFLe9qNv8i)
+
+  // Journal - Premium (no trial). New plans 2026-06-17.
+  premium_monthly: 'plan_N33S1p5Y3dHrK', // $44.99/mo (was plan_v7QKxkvKIZooe)
+  premium_yearly: 'plan_WrjUcvrRhwWPL', // $409/yr (was plan_gBG436aeJxaHU)
   
 // 🔥 Platform - Core ($59/month, 14-day trial)
   platform_core_monthly: 'plan_M4ig2ZhYd2RUE',
@@ -190,9 +190,12 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   // Journal
   'plan_H0VDCb6iD1dYQ': 'basic_monthly', // current $24.99 plan (2026-06-17)
   'plan_2hIXaJbGP1tYN': 'basic_monthly', // legacy $19.99 plan — kept for in-flight refs
-  'plan_x0jTFLe9qNv8i': 'basic_yearly',
-  'plan_v7QKxkvKIZooe': 'premium_monthly',
-  'plan_gBG436aeJxaHU': 'premium_yearly',
+  'plan_80ZhPpre3iRU2': 'basic_yearly', // current $229/yr (2026-06-17)
+  'plan_x0jTFLe9qNv8i': 'basic_yearly', // legacy — kept for in-flight refs
+  'plan_N33S1p5Y3dHrK': 'premium_monthly', // current $44.99/mo (2026-06-17)
+  'plan_v7QKxkvKIZooe': 'premium_monthly', // legacy — kept for in-flight refs
+  'plan_WrjUcvrRhwWPL': 'premium_yearly', // current $409/yr (2026-06-17)
+  'plan_gBG436aeJxaHU': 'premium_yearly', // legacy — kept for in-flight refs
   
   // Platform
   'plan_M4ig2ZhYd2RUE': 'platform_core_monthly',
