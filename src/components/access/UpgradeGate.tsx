@@ -383,7 +383,7 @@ export function UpgradeGate({
                       <span className="text-sm text-[#6B6B6B]">/month</span>
                     </div>
                     {billingInterval === 'yearly' && (
-                      <span className="text-xs text-green-400">Billed {tier.key === 'core' ? '$590' : '$1,090'}/yr</span>
+                      <span className="text-xs text-green-400">Billed {tier.key === 'core' ? '$599' : '$1,090'}/yr</span>
                     )}
                     <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
                   </div>

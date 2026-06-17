@@ -55,7 +55,7 @@ const plans: Plan[] = [
     id: "core",
     name: "Core",
     monthlyPrice: "$59",
-    yearlyPrice: "$590",
+    yearlyPrice: "$599",
     yearlyMonthlyEquivalent: "$49",
     description: "Full market intelligence tools",
     trialDays: 14,
