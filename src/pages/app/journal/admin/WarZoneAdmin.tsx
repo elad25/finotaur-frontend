@@ -17,6 +17,9 @@
 //   — metadata.move_pct → immediate_impact_pct
 //   — 4-column heatmap (same_day / 30d / 60d / 90d)
 //   — Catalyst Tracking callout panel
+// v2.2 (2026-06-17): Performance & Edge panel
+//   — "Focus Ideas — What Made Money": dollar P&L on closed focus ideas
+//   — "Report Mentions — Edge vs S&P": alpha tracking by mention_type + firm
 // =====================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -151,6 +154,65 @@ interface FocusTrackingRow {
 }
 
 type FocusStatusFilter = 'all' | 'open' | 'target_hit' | 'stopped';
+
+// ---------------------------------------------------------------------------
+// Performance & Edge — types and constants (v2.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fixed position-size model for P&L simulation.
+ * Every focus idea is modeled as a $10,000 position.
+ * This is a modeling assumption displayed explicitly in the UI.
+ */
+const POSITION_SIZE = 10_000;
+
+interface ClosedIdeaPnL {
+  id: string;
+  ticker: string;
+  company: string | null;
+  direction: 'LONG' | 'SHORT';
+  archetype_label: string | null;
+  entry_price: number;
+  exit_price: number; // weekly_target for target_hit, stop_price for stopped
+  status: 'target_hit' | 'stopped';
+  outcome_date: string | null;
+  realized_pct: number;   // direction-aware realized return %
+  dollar_pnl: number;     // POSITION_SIZE * realized_pct / 100
+}
+
+interface ArchetypeEdge {
+  label: string;
+  count: number;
+  wins: number;
+  win_rate_pct: number | null;
+  avg_realized_pct: number | null;
+  total_dollar_pnl: number;
+}
+
+interface MentionEdgeByType {
+  mention_type: string;
+  label: string;
+  count: number;
+  count_with_30d: number;
+  avg_change_30d_pct: number | null;
+  avg_alpha_30d_pct: number | null;
+}
+
+interface MentionEdgeByFirm {
+  firm: string;
+  count: number;
+  count_with_30d: number;
+  avg_alpha_30d_pct: number | null;
+}
+
+// Raw row shape returned from warzone_ticker_mentions for Part B
+interface MentionEdgeRow {
+  mention_type: string;
+  source_firm: string | null;
+  change_30d_pct: number | null;
+  alpha_30d_pct: number | null;
+  report_date: string;
+}
 
 // Compute direction-aware return %: LONG = (p/entry-1)*100, SHORT = (1-p/entry)*100
 function focusReturn(price: number | null, entry: number | null, direction: 'LONG' | 'SHORT'): number | null {
@@ -602,6 +664,745 @@ const DrilldownModal: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
+// Performance & Edge Panel — sub-component (v2.2)
+// Answers: "What in the WAR ZONE report actually translates to money?"
+//
+// Part A: Focus Ideas P&L (closed rows from warzone_focus_tracking)
+// Part B: Report Mentions Edge vs S&P (from warzone_ticker_mentions)
+// ---------------------------------------------------------------------------
+
+// Inline SVG equity curve — lightweight, no extra chart dependency.
+// Renders a filled area sparkline of cumulative P&L over time.
+const EquityCurve: React.FC<{
+  points: { date: string; cumPnl: number }[];
+}> = ({ points }) => {
+  if (points.length < 2) {
+    return (
+      <p className="text-small text-ink-muted italic py-2">
+        Not enough closed ideas to draw a curve (need 2+).
+      </p>
+    );
+  }
+
+  const W = 560;
+  const H = 120;
+  const PAD = { top: 12, right: 16, bottom: 28, left: 60 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+
+  const pnls = points.map((p) => p.cumPnl);
+  const minPnl = Math.min(0, ...pnls);
+  const maxPnl = Math.max(0, ...pnls);
+  const range = maxPnl - minPnl || 1;
+
+  const toX = (i: number) => PAD.left + (i / (points.length - 1)) * innerW;
+  const toY = (v: number) => PAD.top + innerH - ((v - minPnl) / range) * innerH;
+  const zeroY = toY(0);
+
+  const linePath = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(p.cumPnl).toFixed(1)}`)
+    .join(' ');
+
+  const areaPath =
+    `${linePath} L${toX(points.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${toX(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
+
+  const lastPnl = points[points.length - 1].cumPnl;
+  const lastX = toX(points.length - 1);
+  const lastY = toY(lastPnl);
+  const isPositive = lastPnl >= 0;
+  const lineColor = isPositive ? 'rgba(255,255,255,0.9)' : 'rgba(226,75,74,0.9)';
+  const fillId = `eq-fill-${isPositive ? 'pos' : 'neg'}`;
+
+  // Y-axis tick labels
+  const tickValues = [minPnl, 0, maxPnl].filter(
+    (v, i, arr) => i === 0 || Math.abs(v - arr[i - 1]) > range * 0.15,
+  );
+
+  return (
+    <svg
+      width="100%"
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      aria-label="Cumulative P&L equity curve"
+      style={{ display: 'block', maxWidth: '100%' }}
+    >
+      <defs>
+        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={isPositive ? 'rgba(255,255,255,0.15)' : 'rgba(226,75,74,0.15)'} />
+          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+        </linearGradient>
+      </defs>
+
+      {/* Zero baseline */}
+      <line
+        x1={PAD.left} y1={zeroY.toFixed(1)}
+        x2={W - PAD.right} y2={zeroY.toFixed(1)}
+        stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="4,3"
+      />
+
+      {/* Filled area */}
+      <path d={areaPath} fill={`url(#${fillId})`} />
+
+      {/* Line */}
+      <path d={linePath} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinejoin="round" />
+
+      {/* Last-value dot */}
+      <circle cx={lastX.toFixed(1)} cy={lastY.toFixed(1)} r="3" fill={lineColor} />
+
+      {/* Last-value label */}
+      <text
+        x={(lastX + 6).toFixed(1)}
+        y={(lastY + 4).toFixed(1)}
+        fill={lineColor}
+        fontSize="10"
+        fontFamily="monospace"
+      >
+        {lastPnl >= 0 ? '+' : ''}${Math.round(lastPnl).toLocaleString()}
+      </text>
+
+      {/* Y-axis ticks */}
+      {tickValues.map((v) => (
+        <text
+          key={v}
+          x={(PAD.left - 4).toFixed(1)}
+          y={(toY(v) + 3).toFixed(1)}
+          fill="rgba(255,255,255,0.4)"
+          fontSize="9"
+          fontFamily="monospace"
+          textAnchor="end"
+        >
+          {v >= 0 ? '+' : ''}${Math.round(v / 1000)}k
+        </text>
+      ))}
+
+      {/* X-axis: first + last date labels */}
+      <text
+        x={PAD.left.toFixed(1)} y={(H - 4).toFixed(1)}
+        fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="sans-serif"
+      >
+        {points[0].date}
+      </text>
+      <text
+        x={(W - PAD.right).toFixed(1)} y={(H - 4).toFixed(1)}
+        fill="rgba(255,255,255,0.3)" fontSize="9" fontFamily="sans-serif"
+        textAnchor="end"
+      >
+        {points[points.length - 1].date}
+      </text>
+    </svg>
+  );
+};
+
+// Part A pill/badge for status
+const PnlStatusBadge: React.FC<{ status: 'target_hit' | 'stopped' }> = ({ status }) =>
+  status === 'target_hit' ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-[#0d9488]/15 text-[#2dd4bf] border border-[#0d9488]/25" style={{ borderRadius: 4 }}>
+      Target Hit
+    </span>
+  ) : (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-status-error/15 text-num-negative border border-status-error/25" style={{ borderRadius: 4 }}>
+      Stopped
+    </span>
+  );
+
+const WarZonePerformanceEdge: React.FC<{
+  focusAllData: FocusTrackingRow[] | undefined;
+  focusLoading: boolean;
+}> = ({ focusAllData, focusLoading }) => {
+  // ---- Part B: mentions edge query ----------------------------------------
+  const { data: mentionEdgeData, isLoading: mentionEdgeLoading } = useQuery<{
+    rows: MentionEdgeRow[];
+    maxReportDate: string | null;
+  }>({
+    queryKey: ['warzone-mention-edge'],
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('warzone_ticker_mentions')
+        .select('mention_type, source_firm, change_30d_pct, alpha_30d_pct, report_date')
+        .order('report_date', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      const safeRows = (rows ?? []) as MentionEdgeRow[];
+      const maxReportDate =
+        safeRows.length > 0
+          ? safeRows.reduce((a, b) => (b.report_date > a ? b.report_date : a), safeRows[0].report_date)
+          : null;
+      return { rows: safeRows, maxReportDate };
+    },
+    staleTime: 60_000,
+  });
+
+  // ---- Part A: compute P&L from closed focus rows --------------------------
+  const closedIdeas: ClosedIdeaPnL[] = React.useMemo(() => {
+    if (!focusAllData) return [];
+    const result: ClosedIdeaPnL[] = [];
+
+    for (const row of focusAllData) {
+      if (row.status !== 'target_hit' && row.status !== 'stopped') continue;
+      if (row.entry_price === null || row.entry_price === 0) continue;
+
+      // Choose exit price: target_hit → weekly_target, stopped → stop_price
+      const exitPrice =
+        row.status === 'target_hit' ? row.weekly_target : row.stop_price;
+      if (exitPrice === null) continue; // skip rows with missing prices
+
+      // Direction-aware realized return %
+      const realizedPct =
+        row.direction === 'LONG'
+          ? round2((exitPrice / row.entry_price - 1) * 100)!
+          : round2((1 - exitPrice / row.entry_price) * 100)!;
+
+      const dollar_pnl = round2((POSITION_SIZE * realizedPct) / 100)!;
+
+      result.push({
+        id: row.id,
+        ticker: row.ticker,
+        company: row.company,
+        direction: row.direction,
+        archetype_label: row.archetype_label,
+        entry_price: row.entry_price,
+        exit_price: exitPrice,
+        status: row.status,
+        outcome_date: row.outcome_date,
+        realized_pct: realizedPct,
+        dollar_pnl,
+      });
+    }
+
+    // Sort by outcome_date ascending for the equity curve
+    return result.sort((a, b) => {
+      if (!a.outcome_date && !b.outcome_date) return 0;
+      if (!a.outcome_date) return 1;
+      if (!b.outcome_date) return -1;
+      return a.outcome_date.localeCompare(b.outcome_date);
+    });
+  }, [focusAllData]);
+
+  const openCount = focusAllData
+    ? focusAllData.filter((r) => r.status === 'open').length
+    : 0;
+
+  // KPI aggregates
+  const totalClosed = closedIdeas.length;
+  const wins = closedIdeas.filter((r) => r.status === 'target_hit').length;
+  const winRate = totalClosed > 0 ? round2((wins / totalClosed) * 100) : null;
+  const totalDollarPnl = round2(closedIdeas.reduce((s, r) => s + r.dollar_pnl, 0));
+  const avgDollarPerIdea =
+    totalClosed > 0 ? round2((totalDollarPnl ?? 0) / totalClosed) : null;
+
+  const bestIdea =
+    closedIdeas.length > 0
+      ? closedIdeas.reduce((a, b) => (b.dollar_pnl > a.dollar_pnl ? b : a))
+      : null;
+  const worstIdea =
+    closedIdeas.length > 0
+      ? closedIdeas.reduce((a, b) => (b.dollar_pnl < a.dollar_pnl ? b : a))
+      : null;
+
+  // Equity curve: cumulative P&L ordered by outcome_date
+  const equityPoints = React.useMemo(() => {
+    let cum = 0;
+    return closedIdeas
+      .filter((r) => r.outcome_date !== null)
+      .map((r) => {
+        cum += r.dollar_pnl;
+        return {
+          date: r.outcome_date!.slice(0, 10), // YYYY-MM-DD
+          cumPnl: round2(cum)!,
+        };
+      });
+  }, [closedIdeas]);
+
+  // Archetype breakdown
+  const archetypeMap = React.useMemo(() => {
+    const map = new Map<string, { count: number; wins: number; pcts: number[]; dollars: number[] }>();
+    for (const r of closedIdeas) {
+      const key = r.archetype_label ?? 'Unknown';
+      if (!map.has(key)) map.set(key, { count: 0, wins: 0, pcts: [], dollars: [] });
+      const entry = map.get(key)!;
+      entry.count += 1;
+      if (r.status === 'target_hit') entry.wins += 1;
+      entry.pcts.push(r.realized_pct);
+      entry.dollars.push(r.dollar_pnl);
+    }
+    const result: ArchetypeEdge[] = [];
+    for (const [label, v] of map) {
+      const total_dollar_pnl = round2(v.dollars.reduce((s, x) => s + x, 0))!;
+      result.push({
+        label,
+        count: v.count,
+        wins: v.wins,
+        win_rate_pct: v.count > 0 ? round2((v.wins / v.count) * 100) : null,
+        avg_realized_pct: v.pcts.length > 0 ? round2(mean(v.pcts)) : null,
+        total_dollar_pnl,
+      });
+    }
+    return result.sort((a, b) => b.total_dollar_pnl - a.total_dollar_pnl);
+  }, [closedIdeas]);
+
+  // ---- Part B aggregations -------------------------------------------------
+  const { mentionByType, mentionByFirm, mentionTotalCount, mentionWith30dCount } =
+    React.useMemo(() => {
+      const rows = mentionEdgeData?.rows ?? [];
+      const mentionTotalCount = rows.length;
+      const mentionWith30dCount = rows.filter((r) => r.change_30d_pct !== null).length;
+
+      // By mention_type
+      const typeMap = new Map<string, { change30: number[]; alpha30: number[]; count: number }>();
+      for (const r of rows) {
+        if (!typeMap.has(r.mention_type)) typeMap.set(r.mention_type, { change30: [], alpha30: [], count: 0 });
+        const e = typeMap.get(r.mention_type)!;
+        e.count += 1;
+        if (r.change_30d_pct !== null) e.change30.push(r.change_30d_pct);
+        if (r.alpha_30d_pct !== null) e.alpha30.push(r.alpha_30d_pct);
+      }
+      const mentionByType: MentionEdgeByType[] = [];
+      for (const [mt, v] of typeMap) {
+        mentionByType.push({
+          mention_type: mt,
+          label: MENTION_TYPE_CONFIG[mt as MentionType]?.label ?? mt,
+          count: v.count,
+          count_with_30d: v.change30.length,
+          avg_change_30d_pct: v.change30.length > 0 ? round2(mean(v.change30)) : null,
+          avg_alpha_30d_pct: v.alpha30.length > 0 ? round2(mean(v.alpha30)) : null,
+        });
+      }
+      // Sort by avg_alpha descending (nulls last)
+      mentionByType.sort((a, b) => {
+        if (a.avg_alpha_30d_pct === null && b.avg_alpha_30d_pct === null) return 0;
+        if (a.avg_alpha_30d_pct === null) return 1;
+        if (b.avg_alpha_30d_pct === null) return -1;
+        return b.avg_alpha_30d_pct - a.avg_alpha_30d_pct;
+      });
+
+      // By source_firm (analyst ratings primarily)
+      const firmMap = new Map<string, { change30: number[]; alpha30: number[]; count: number }>();
+      for (const r of rows) {
+        if (!r.source_firm) continue;
+        if (!firmMap.has(r.source_firm)) firmMap.set(r.source_firm, { change30: [], alpha30: [], count: 0 });
+        const e = firmMap.get(r.source_firm)!;
+        e.count += 1;
+        if (r.change_30d_pct !== null) e.change30.push(r.change_30d_pct);
+        if (r.alpha_30d_pct !== null) e.alpha30.push(r.alpha_30d_pct);
+      }
+      const mentionByFirm: MentionEdgeByFirm[] = [];
+      for (const [firm, v] of firmMap) {
+        mentionByFirm.push({
+          firm,
+          count: v.count,
+          count_with_30d: v.alpha30.length,
+          avg_alpha_30d_pct: v.alpha30.length > 0 ? round2(mean(v.alpha30)) : null,
+        });
+      }
+      // Top firms by avg alpha, only where data exists
+      const mentionByFirmSorted = mentionByFirm
+        .filter((f) => f.avg_alpha_30d_pct !== null)
+        .sort((a, b) => (b.avg_alpha_30d_pct ?? 0) - (a.avg_alpha_30d_pct ?? 0))
+        .slice(0, 10);
+
+      return { mentionByType, mentionByFirm: mentionByFirmSorted, mentionTotalCount, mentionWith30dCount };
+    }, [mentionEdgeData]);
+
+  const mentionMaxDate = mentionEdgeData?.maxReportDate ?? null;
+  const noMentions30dData = mentionWith30dCount === 0;
+
+  // ---- Render --------------------------------------------------------------
+  return (
+    <div className="space-y-4">
+      {/* Panel header */}
+      <div>
+        <h2 className="text-h3 font-semibold text-gold-primary">Performance &amp; Edge</h2>
+        <p className="text-small text-ink-tertiary mt-1">
+          What in the WAR ZONE report actually translates to money.
+        </p>
+      </div>
+
+      {/* ====== PART A — Focus Ideas P&L ====================================== */}
+      <Card padding="default">
+        {/* Part A header */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-gold-primary/10 flex-shrink-0">
+            <TrendingUp className="w-4 h-4 text-gold-primary" />
+          </div>
+          <div>
+            <p className="text-small font-semibold text-ink-primary">
+              Focus Ideas — What Made Money
+            </p>
+            <p className="text-small text-ink-tertiary mt-0.5">
+              Closed positions only (target hit or stopped). Modeling assumption:{' '}
+              <span className="font-mono text-gold-muted">
+                ${POSITION_SIZE.toLocaleString()} per idea
+              </span>
+              {' '}— direction-aware P&amp;L.
+            </p>
+          </div>
+        </div>
+
+        {focusLoading && !focusAllData ? (
+          <SkeletonTable rows={3} cols={4} />
+        ) : totalClosed === 0 ? (
+          /* Empty / thin state */
+          <div className="flex flex-col items-center gap-3 py-8 text-ink-tertiary">
+            <Target className="w-8 h-8 text-ink-muted" />
+            <p className="text-small text-center">
+              No closed ideas yet — tracking{' '}
+              <span className="text-ink-primary font-medium">{openCount}</span> open position
+              {openCount !== 1 ? 's' : ''}.
+            </p>
+            <p className="text-[11px] text-ink-muted">
+              P&amp;L will appear here once ideas close (target hit or stopped).
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* KPI tiles */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+              <StatTile
+                label="Closed Ideas"
+                value={totalClosed.toLocaleString()}
+                icon={Activity}
+              />
+              <StatTile
+                label="Win Rate"
+                value={winRate !== null ? `${winRate.toFixed(1)}%` : '—'}
+                icon={Target}
+              />
+              <StatTile
+                label="Total P&L"
+                value={
+                  <span className={pctColorClass(totalDollarPnl)}>
+                    {totalDollarPnl !== null
+                      ? `${totalDollarPnl >= 0 ? '+' : ''}$${Math.abs(totalDollarPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </span>
+                }
+                icon={BarChart3}
+              />
+              <StatTile
+                label="Avg per Idea"
+                value={
+                  <span className={pctColorClass(avgDollarPerIdea)}>
+                    {avgDollarPerIdea !== null
+                      ? `${avgDollarPerIdea >= 0 ? '+' : ''}$${Math.abs(avgDollarPerIdea).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </span>
+                }
+                icon={Zap}
+              />
+              <StatTile
+                label="Best Idea"
+                value={
+                  bestIdea ? (
+                    <span className="text-num-small font-sans leading-snug">
+                      <span className="font-mono font-semibold text-gold-primary">{bestIdea.ticker}</span>
+                      <span className={`block font-mono ${pctColorClass(bestIdea.dollar_pnl)}`}>
+                        +${bestIdea.dollar_pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </span>
+                  ) : '—'
+                }
+                icon={TrendingUp}
+              />
+              <StatTile
+                label="Worst Idea"
+                value={
+                  worstIdea ? (
+                    <span className="text-num-small font-sans leading-snug">
+                      <span className="font-mono font-semibold text-gold-primary">{worstIdea.ticker}</span>
+                      <span className={`block font-mono ${pctColorClass(worstIdea.dollar_pnl)}`}>
+                        ${worstIdea.dollar_pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </span>
+                  ) : '—'
+                }
+                icon={TrendingDown}
+              />
+            </div>
+
+            {/* Open context */}
+            {openCount > 0 && (
+              <p className="text-[11px] text-ink-muted mb-4">
+                <span className="text-gold-muted font-medium">{openCount}</span> open idea
+                {openCount !== 1 ? 's' : ''} not counted — P&amp;L realises when they close.
+              </p>
+            )}
+
+            {/* Equity curve */}
+            {equityPoints.length >= 2 && (
+              <div className="mb-5">
+                <span className="font-sans text-eyebrow text-gold-muted uppercase tracking-[1.5px] block mb-2">
+                  Cumulative P&amp;L — $10k / idea model
+                </span>
+                <div className="bg-surface-2 rounded-lg p-3">
+                  <EquityCurve points={equityPoints} />
+                </div>
+              </div>
+            )}
+
+            {/* Archetype breakdown table */}
+            {archetypeMap.length > 0 && (
+              <div>
+                <span className="font-sans text-eyebrow text-gold-muted uppercase tracking-[1.5px] block mb-3">
+                  By Archetype
+                </span>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-small border-collapse">
+                    <thead>
+                      <tr className="border-b border-border-ds-default">
+                        {['Archetype', 'Ideas', 'Wins', 'Win Rate', 'Avg Return %', 'Total P&L'].map(
+                          (col) => (
+                            <th
+                              key={col}
+                              className="text-left px-3 py-2 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap text-ink-tertiary"
+                            >
+                              {col}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {archetypeMap.map((row) => (
+                        <tr
+                          key={row.label}
+                          className="border-b border-border-ds-subtle/60 hover:bg-surface-2/50 transition-colors duration-fast"
+                        >
+                          <td className="px-3 py-2 text-ink-secondary max-w-[200px]">
+                            <span className="line-clamp-1" title={row.label}>{row.label}</span>
+                          </td>
+                          <td className="px-3 py-2 font-mono text-ink-primary">{row.count}</td>
+                          <td className="px-3 py-2 font-mono text-ink-primary">{row.wins}</td>
+                          <td className={`px-3 py-2 font-mono ${pctColorClass(row.win_rate_pct)}`}>
+                            {row.win_rate_pct !== null ? `${row.win_rate_pct.toFixed(1)}%` : '—'}
+                          </td>
+                          <td className={`px-3 py-2 font-mono ${pctColorClass(row.avg_realized_pct)}`}>
+                            {formatPct(row.avg_realized_pct)}
+                          </td>
+                          <td className={`px-3 py-2 font-mono font-semibold ${pctColorClass(row.total_dollar_pnl)}`}>
+                            {row.total_dollar_pnl >= 0 ? '+' : ''}$
+                            {Math.abs(row.total_dollar_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Per-idea detail table */}
+            <div className="mt-5">
+              <span className="font-sans text-eyebrow text-gold-muted uppercase tracking-[1.5px] block mb-3">
+                Closed Ideas Detail
+              </span>
+              <div className="overflow-x-auto">
+                <table className="w-full text-small border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-ds-default">
+                      {['Ticker', 'Dir', 'Status', 'Entry', 'Exit', 'Realized %', 'P&L ($10k)', 'Close Date'].map(
+                        (col) => (
+                          <th
+                            key={col}
+                            className="text-left px-3 py-2 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap text-ink-tertiary"
+                          >
+                            {col}
+                          </th>
+                        ),
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...closedIdeas].reverse().map((row) => (
+                      <tr
+                        key={row.id}
+                        className="border-b border-border-ds-subtle/60 hover:bg-surface-2/50 transition-colors duration-fast"
+                      >
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="font-mono font-semibold text-gold-primary">{row.ticker}</span>
+                          {row.company && (
+                            <span className="block text-[11px] text-ink-muted leading-tight">{row.company}</span>
+                          )}
+                        </td>
+                        <td className={`px-3 py-2 font-mono font-semibold ${row.direction === 'LONG' ? 'text-ink-primary' : 'text-num-negative'}`}>
+                          {row.direction}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <PnlStatusBadge status={row.status} />
+                        </td>
+                        <td className="px-3 py-2 font-mono text-ink-secondary whitespace-nowrap">
+                          {formatPrice(row.entry_price)}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-ink-secondary whitespace-nowrap">
+                          {formatPrice(row.exit_price)}
+                        </td>
+                        <td className={`px-3 py-2 font-mono ${pctColorClass(row.realized_pct)}`}>
+                          {formatPct(row.realized_pct)}
+                        </td>
+                        <td className={`px-3 py-2 font-mono font-semibold ${pctColorClass(row.dollar_pnl)}`}>
+                          {row.dollar_pnl >= 0 ? '+' : ''}$
+                          {Math.abs(row.dollar_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-ink-tertiary">
+                          {row.outcome_date ? formatDate(row.outcome_date) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* ====== PART B — Report Mentions Edge ================================= */}
+      <Card padding="default">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-status-info/10 flex-shrink-0">
+            <BarChart3 className="w-4 h-4 text-status-info" />
+          </div>
+          <div>
+            <p className="text-small font-semibold text-ink-primary">
+              Report Mentions — Edge vs S&amp;P (maturing)
+            </p>
+            <p className="text-small text-ink-tertiary mt-0.5">
+              Mention returns mature at 30/60/90 days — this fills over time.
+              {mentionMaxDate && (
+                <span className="ml-2 text-ink-muted">
+                  As of {formatDate(mentionMaxDate)}.
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {mentionEdgeLoading ? (
+          <SkeletonTable rows={4} cols={5} />
+        ) : noMentions30dData ? (
+          /* No 30d data yet */
+          <div className="space-y-3">
+            <div className="bg-surface-2 rounded-lg px-4 py-3 text-small text-ink-tertiary">
+              Capturing mentions — alpha vs S&amp;P unlocks at 30 days.{' '}
+              <span className="text-ink-primary font-medium">{mentionEdgeData?.rows.length ?? 0}</span> mention
+              {(mentionEdgeData?.rows.length ?? 0) !== 1 ? 's' : ''} tracked,{' '}
+              <span className="text-ink-primary font-medium">{(mentionEdgeData?.rows.length ?? 0) - mentionWith30dCount}</span> awaiting their 30-day mark.
+            </div>
+            {/* Still show raw mention counts by type even with no 30d data */}
+            {mentionByType.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-small border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-ds-default">
+                      {['Mention Type', 'Total Mentions', '30d Data', 'Avg +30d %', 'Avg Alpha vs S&P'].map((col) => (
+                        <th key={col} className="text-left px-3 py-2 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap text-ink-tertiary">
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mentionByType.map((row) => (
+                      <tr key={row.mention_type} className="border-b border-border-ds-subtle/60 hover:bg-surface-2/50 transition-colors duration-fast">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <MentionBadge type={row.mention_type as MentionType} />
+                        </td>
+                        <td className="px-3 py-2 font-mono text-ink-primary">{row.count}</td>
+                        <td className="px-3 py-2 font-mono text-ink-tertiary">{row.count_with_30d}</td>
+                        <td className={`px-3 py-2 font-mono ${pctColorClass(row.avg_change_30d_pct)}`}>
+                          {formatPct(row.avg_change_30d_pct)}
+                        </td>
+                        <td className={`px-3 py-2 font-mono ${pctColorClass(row.avg_alpha_30d_pct)}`}>
+                          {formatPct(row.avg_alpha_30d_pct)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {/* By mention type */}
+            <div>
+              <span className="font-sans text-eyebrow text-gold-muted uppercase tracking-[1.5px] block mb-3">
+                By Mention Type
+              </span>
+              <div className="overflow-x-auto">
+                <table className="w-full text-small border-collapse">
+                  <thead>
+                    <tr className="border-b border-border-ds-default">
+                      {['Mention Type', 'Total', '30d Data', 'Avg +30d %', 'Avg Alpha vs S&P'].map((col) => (
+                        <th key={col} className="text-left px-3 py-2 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap text-ink-tertiary">
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mentionByType.map((row) => (
+                      <tr key={row.mention_type} className="border-b border-border-ds-subtle/60 hover:bg-surface-2/50 transition-colors duration-fast">
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <MentionBadge type={row.mention_type as MentionType} />
+                        </td>
+                        <td className="px-3 py-2 font-mono text-ink-primary">{row.count}</td>
+                        <td className="px-3 py-2 font-mono text-ink-tertiary">{row.count_with_30d}</td>
+                        <td className={`px-3 py-2 font-mono ${pctColorClass(row.avg_change_30d_pct)}`}>
+                          {formatPct(row.avg_change_30d_pct)}
+                        </td>
+                        <td className={`px-3 py-2 font-mono ${pctColorClass(row.avg_alpha_30d_pct)}`}>
+                          {formatPct(row.avg_alpha_30d_pct)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* By source firm — only where alpha data exists */}
+            {mentionByFirm.length > 0 && (
+              <div>
+                <span className="font-sans text-eyebrow text-gold-muted uppercase tracking-[1.5px] block mb-3">
+                  Top Analyst Firms by Alpha (30d, where data exists)
+                </span>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-small border-collapse">
+                    <thead>
+                      <tr className="border-b border-border-ds-default">
+                        {['Firm / Source', 'Mentions', 'With Alpha Data', 'Avg Alpha vs S&P 30d'].map((col) => (
+                          <th key={col} className="text-left px-3 py-2 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap text-ink-tertiary">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mentionByFirm.map((row) => (
+                        <tr key={row.firm} className="border-b border-border-ds-subtle/60 hover:bg-surface-2/50 transition-colors duration-fast">
+                          <td className="px-3 py-2 text-ink-secondary font-medium max-w-[180px]">
+                            <span className="truncate block" title={row.firm}>{row.firm}</span>
+                          </td>
+                          <td className="px-3 py-2 font-mono text-ink-primary">{row.count}</td>
+                          <td className="px-3 py-2 font-mono text-ink-tertiary">{row.count_with_30d}</td>
+                          <td className={`px-3 py-2 font-mono font-semibold ${pctColorClass(row.avg_alpha_30d_pct)}`}>
+                            {formatPct(row.avg_alpha_30d_pct)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 const WarZoneAdmin: React.FC = () => {
@@ -911,7 +1712,7 @@ const WarZoneAdmin: React.FC = () => {
     queryFn: async (): Promise<FocusTrackingRow[]> => {
       const { data: rows, error } = await supabase
         .from('warzone_focus_tracking')
-        .select('id, report_date, ticker, direction, entry_price, price_30d, status, outcome_date')
+        .select('id, report_date, ticker, company, direction, archetype_label, entry_price, weekly_target, target_type, stop_price, price_30d, status, outcome_date, outcome_price')
         .order('report_date', { ascending: false });
       if (error) throw new Error(error.message);
       return (rows ?? []) as FocusTrackingRow[];
@@ -1368,6 +2169,14 @@ const WarZoneAdmin: React.FC = () => {
           )}
         </Card>
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Section B — Performance & Edge (v2.2)                              */}
+      {/* ------------------------------------------------------------------ */}
+      <WarZonePerformanceEdge
+        focusAllData={focusAllData}
+        focusLoading={focusLoading}
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 2 — Catalyst Tracking callout (Task 5)                      */}
