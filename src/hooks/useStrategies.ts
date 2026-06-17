@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import type { StrategyComponent } from '@/utils/strategyComponents';
 
 // ==========================================
 // 🎯 FETCH ALL STRATEGIES - WITH IMPERSONATION SUPPORT
@@ -39,6 +40,8 @@ export function useStrategiesOptimized(userId?: string) {
         expectedWinRate: row.expected_win_rate ?? null,
         defaultStopLoss: row.default_stop_loss ?? null,
         defaultTakeProfit: row.default_take_profit ?? null,
+        // Strategy components model (nullable until DB backfill runs).
+        components: (row.components ?? null) as StrategyComponent[] | null,
       }));
     },
     enabled: !!userId,
