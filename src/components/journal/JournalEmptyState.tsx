@@ -13,18 +13,16 @@ interface JournalEmptyStateProps {
 /**
  * Journal empty-state component.
  *
- * Free users (no subscription) get 15 lifetime trades — added manually via
- * "Add your first trade". Basic ($19.99/mo) gets 25/month and can connect
- * a broker for auto-sync. Premium ($39.99/mo) gets unlimited + backtest +
- * trade copier. Tradovate auto-sync is gated to paid tiers; the manual
- * journal stays open to everyone.
+ * The no-broker variant leads with a single CTA — "Connect broker" — which
+ * opens the broker connection modal (Tradovate auto-sync). Manual trade
+ * entry still exists elsewhere in the journal, but the first-run empty state
+ * now points users to the broker connection as the primary path.
  *
- * The no-broker variant therefore leads with the manual path (gold CTA,
- * works for every tier) and offers Tradovate as a secondary upgrade path.
+ * `onAddManualTrade` is retained on the props for backward compatibility but
+ * is no longer rendered here.
  */
 export function JournalEmptyState({
   variant,
-  onAddManualTrade,
   onConnectBroker,
 }: JournalEmptyStateProps) {
   if (variant === 'no-trades') {
@@ -59,24 +57,15 @@ export function JournalEmptyState({
         FINOTAUR · Trading Journal
       </h2>
       <p className="text-ink-secondary max-w-md mb-ds-5">
-        Add trades manually to start tracking your performance — no broker
-        required. Or connect Tradovate to sync automatically every 5 minutes.
+        Connect your broker to sync every trade automatically — your journal
+        fills itself and stays up to date every 5 minutes.
       </p>
 
-      <div className="flex flex-col sm:flex-row items-center gap-ds-3 mb-ds-5">
-        {onAddManualTrade && (
-          <Button variant="gold" size="lg" onClick={onAddManualTrade}>
-            Add your first trade
-          </Button>
-        )}
+      <div className="flex flex-col items-center gap-ds-3 mb-ds-5">
         {onConnectBroker && (
-          <button
-            type="button"
-            onClick={onConnectBroker}
-            className="text-sm text-ink-secondary hover:text-ink-primary underline underline-offset-4 transition-colors"
-          >
-            Or connect Tradovate (auto-sync)
-          </button>
+          <Button variant="gold" size="lg" onClick={onConnectBroker}>
+            Connect broker
+          </Button>
         )}
       </div>
 
