@@ -39,7 +39,7 @@ export function FinoExplains({
               alt="Fino"
               className="h-6 w-6 rounded-full object-cover ring-1 ring-gold-border"
             />
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.15em] text-gold-primary">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.15em] text-gold-bright">
               Fino Explains
             </span>
           </div>
