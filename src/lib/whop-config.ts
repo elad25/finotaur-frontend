@@ -100,7 +100,7 @@ export const WHOP_PLAN_IDS = {
   platform_finotaur_yearly: 'plan_M2zS1EoNXJF10',
   
   // 🔥 Platform - Copilot ($200/month, no trial)
-  platform_enterprise_monthly: 'plan_nHveClWPmjJNT',
+  platform_enterprise_monthly: 'plan_LG6ODA91iOCzQ', // $200/mo (was plan_nHveClWPmjJNT @ $499)
   platform_enterprise_yearly: 'plan_dfy2uADNyEExg',
   
 // ═══════════════════════════════════════════
@@ -205,7 +205,8 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   // 🔥 Finotaur Platform
   'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',
   'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',
-  'plan_nHveClWPmjJNT': 'platform_enterprise_monthly',
+  'plan_LG6ODA91iOCzQ': 'platform_enterprise_monthly', // current $200/mo (2026-06-17)
+  'plan_nHveClWPmjJNT': 'platform_enterprise_monthly', // legacy $499/mo — kept for in-flight refs
   'plan_dfy2uADNyEExg': 'platform_enterprise_yearly',
   'prod_9e5E84XpsrhWE': 'platform_enterprise_yearly',
   
