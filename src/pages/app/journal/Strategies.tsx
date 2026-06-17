@@ -62,6 +62,8 @@ interface ExtendedStrategy {
   expectedWinRate?: number;
   avgRRGoal?: number;
   psychologicalNotes?: string;
+  planned1rUsd?: number;
+  standardQuantity?: number;
   status: 'active' | 'archived';
   createdAt: string;
 }
@@ -1063,6 +1065,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [typicalSession, setTypicalSession] = useState("");
   const [expectedWinRate, setExpectedWinRate] = useState<number | undefined>();
   const [avgRRGoal, setAvgRRGoal] = useState<number | undefined>();
+  const [planned1rUsd, setPlanned1rUsd] = useState<number | undefined>();
+  const [standardQuantity, setStandardQuantity] = useState<number | undefined>();
   const [psychologicalNotes, setPsychologicalNotes] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
 
@@ -1081,6 +1085,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setTypicalSession(editingStrategy.typicalSession || "");
       setExpectedWinRate(editingStrategy.expectedWinRate);
       setAvgRRGoal(editingStrategy.avgRRGoal);
+      setPlanned1rUsd(editingStrategy.planned1rUsd);
+      setStandardQuantity(editingStrategy.standardQuantity);
       setPsychologicalNotes(editingStrategy.psychologicalNotes || "");
       setChecklist(editingStrategy.checklist || []);
       // Load components from the canonical field; fall back to legacy derivation.
@@ -1100,6 +1106,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setTypicalSession("");
       setExpectedWinRate(undefined);
       setAvgRRGoal(undefined);
+      setPlanned1rUsd(undefined);
+      setStandardQuantity(undefined);
       setPsychologicalNotes("");
       setChecklist([]);
       setComponents([]);
@@ -1191,6 +1199,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       typicalSession,
       expectedWinRate,
       avgRRGoal,
+      planned1rUsd,
+      standardQuantity,
       psychologicalNotes,
       visualExamples: uploadedURLs,
       status: 'active' as const,
@@ -1209,6 +1219,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   }, [name, description, assetClasses, setupType, confirmationSignals, checklist, components,
       visualExamples, defaultStopLoss, defaultTakeProfit, avgRiskPerTrade, maxDailyLoss,
       positionSizingRule, typicalSession, expectedWinRate, avgRRGoal,
+      planned1rUsd, standardQuantity,
       psychologicalNotes, isEditMode, editingStrategy, onSave, onClose]);
 
   if (!isOpen) return null;
@@ -1559,6 +1570,44 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                     className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
                     style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
+                    Planned 1R (USD)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={planned1rUsd || ''}
+                    onChange={(e) => setPlanned1rUsd(parseFloat(e.target.value) || undefined)}
+                    placeholder="200"
+                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
+                  />
+                  <p className="mt-1 text-xs" style={{ color: '#9A9A9A' }}>
+                    Your fixed risk unit — Actual R is measured against this
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
+                    Standard Quantity
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={standardQuantity || ''}
+                    onChange={(e) => setStandardQuantity(parseFloat(e.target.value) || undefined)}
+                    placeholder="1"
+                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
+                  />
+                  <p className="mt-1 text-xs" style={{ color: '#9A9A9A' }}>
+                    Your normal size — used to flag over-sizing
+                  </p>
                 </div>
               </div>
 
@@ -2139,6 +2188,8 @@ const strategiesWithStats = useMemo(() => {
             position_sizing_rule: strategyData.positionSizingRule,
             expected_win_rate: strategyData.expectedWinRate,
             avg_rr_goal: strategyData.avgRRGoal,
+            planned_1r_usd: strategyData.planned1rUsd ?? null,
+            standard_quantity: strategyData.standardQuantity ?? null,
             psychological_notes: strategyData.psychologicalNotes,
             typical_session: strategyData.typicalSession,
             status: strategyData.status,

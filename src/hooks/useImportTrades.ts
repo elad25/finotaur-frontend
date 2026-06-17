@@ -296,7 +296,7 @@ export function enrichTrade(trade: FinotaurTrade): FinotaurTrade {
   // Calculate risk amount if stop loss is available
   if (enriched.risk_amount == null && enriched.stop_loss != null && enriched.entry_price != null) {
     const riskPerUnit = Math.abs(enriched.entry_price - enriched.stop_loss);
-    enriched.risk_amount = riskPerUnit * enriched.quantity;
+    enriched.risk_amount = riskPerUnit * enriched.quantity * getAssetMultiplier(enriched.symbol);
   }
   
   return enriched;

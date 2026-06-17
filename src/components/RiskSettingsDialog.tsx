@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, DollarSign, Percent, AlertCircle, CheckCircle2, TrendingUp, Info } from 'lucide-react';
+import { X, DollarSign, Percent, AlertCircle, CheckCircle2, TrendingUp, Info, Target, SlidersHorizontal } from 'lucide-react';
 import { formatNumber } from '@/utils/smartCalc';
 import { useRiskSettings } from '@/hooks/useRiskSettings';
 
@@ -14,6 +14,7 @@ interface FormSettings {
   portfolioSize: number;
   riskMode: RiskMode;
   riskPerTrade: number;
+  rBasisMode: 'per_trade' | 'manual';
 }
 
 export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialogProps) {
@@ -24,6 +25,7 @@ export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialog
     portfolioSize: 10000,
     riskMode: 'percentage',
     riskPerTrade: 1,
+    rBasisMode: 'per_trade',
   });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -34,6 +36,7 @@ export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialog
         portfolioSize: settings.portfolioSize,
         riskMode: settings.riskMode,
         riskPerTrade: settings.riskPerTrade,
+        rBasisMode: settings.rBasisMode,
       });
       setErrors({});
     }
@@ -86,6 +89,7 @@ export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialog
         // ✅ Also update initial/current portfolio if this is first setup
         initialPortfolio: settings?.initialPortfolio || formSettings.portfolioSize,
         currentPortfolio: formSettings.portfolioSize,
+        rBasisMode: formSettings.rBasisMode,
       });
       
       // ✅ Only close after successful save
@@ -243,6 +247,54 @@ export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialog
                   {formSettings.riskMode === 'percentage'
                     ? 'Recommended: 0.5% - 2% per trade'
                     : 'Recommended: Keep under 10% of portfolio'}
+                </p>
+              </div>
+
+              {/* R Definition Mode Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-3">
+                  R Definition
+                  <span className="text-zinc-500 text-xs ml-2">(How "Actual R" is measured)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormSettings({ ...formSettings, rBasisMode: 'per_trade' })}
+                    className={`p-4 rounded-lg border-2 transition-all text-left ${
+                      formSettings.rBasisMode === 'per_trade'
+                        ? 'border-[#C9A646] bg-[#C9A646]/10'
+                        : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    <Target
+                      className={`w-5 h-5 mb-2 ${
+                        formSettings.rBasisMode === 'per_trade' ? 'text-[#C9A646]' : 'text-zinc-400'
+                      }`}
+                    />
+                    <div className="text-sm font-medium text-zinc-200">Per Trade</div>
+                    <div className="text-xs text-zinc-500 mt-1">From each trade's stop</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormSettings({ ...formSettings, rBasisMode: 'manual' })}
+                    className={`p-4 rounded-lg border-2 transition-all text-left ${
+                      formSettings.rBasisMode === 'manual'
+                        ? 'border-[#C9A646] bg-[#C9A646]/10'
+                        : 'border-zinc-700 bg-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    <SlidersHorizontal
+                      className={`w-5 h-5 mb-2 ${
+                        formSettings.rBasisMode === 'manual' ? 'text-[#C9A646]' : 'text-zinc-400'
+                      }`}
+                    />
+                    <div className="text-sm font-medium text-zinc-200">Manual</div>
+                    <div className="text-xs text-zinc-500 mt-1">From your global 1R</div>
+                  </button>
+                </div>
+                <p className="text-zinc-500 text-xs mt-2">
+                  Per Trade: R comes from the stop you set on each trade (blank until defined). Manual: R uses your global 1R above.
                 </p>
               </div>
             </div>
