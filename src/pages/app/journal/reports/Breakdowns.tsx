@@ -11,6 +11,8 @@ import type { Trade } from '@/hooks/useTradesData';
 import { Card } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
 import { getAssetClass } from '@/utils/tradeCalculations';
+import type { BreakdownRow } from '@/lib/journal/breakdownKit';
+import { emptyRow, accumulateTrade } from '@/lib/journal/breakdownKit';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,32 +30,6 @@ const R_BUCKETS: { label: string; min: number; max: number }[] = [
   { label: '1R to 2R',   min: 1,        max: 2  },
   { label: '> 2R',        min: 2,        max: Infinity },
 ];
-
-// ---------------------------------------------------------------------------
-// Internal row type
-// ---------------------------------------------------------------------------
-
-interface BreakdownRow {
-  label: string;
-  count: number;
-  wins: number;
-  netPnl: number;
-  /** Sum of R values for averaging */
-  totalR: number;
-  rCount: number;
-}
-
-function emptyRow(label: string): BreakdownRow {
-  return { label, count: 0, wins: 0, netPnl: 0, totalR: 0, rCount: 0 };
-}
-
-function accumulateTrade(row: BreakdownRow, t: Trade): void {
-  row.count += 1;
-  if ((t.pnl ?? 0) > 0) row.wins += 1;
-  row.netPnl += t.pnl ?? 0;
-  const r = t.actual_user_r ?? t.actual_r ?? t.rr;
-  if (r != null) { row.totalR += r; row.rCount += 1; }
-}
 
 // ---------------------------------------------------------------------------
 // Grouping helpers

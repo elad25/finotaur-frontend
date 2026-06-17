@@ -5,11 +5,19 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   Plus, X, Upload, TrendingUp, Target, Shield, Brain, ChevronRight, ChevronLeft,
   Settings, Trash2, Edit2, BarChart3, Activity, List, TrendingDown, Award,
-  Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
+  Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown, ToggleLeft, ToggleRight
 } from "lucide-react";
 import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
-import ChecklistEditor, { type ChecklistItem } from '@/components/journal/strategy/ChecklistEditor';
+import { type ChecklistItem } from '@/components/journal/strategy/ChecklistEditor';
 import { SkeletonStatRow, SkeletonChart, SkeletonTable, SkeletonCard } from '@/components/ds/Skeleton';
+import StrategyPlanVsActual from '@/components/journal/strategy/StrategyPlanVsActual';
+import StrategyAdherenceAnalytics from '@/components/journal/strategy/StrategyAdherenceAnalytics';
+import {
+  getStrategyComponents,
+  newComponentId,
+  COMPONENT_TYPES,
+  type StrategyComponent,
+} from '@/utils/strategyComponents';
 import { useTrades } from "@/hooks/useTradesData";
 import EquityCurveChart from '@/components/charts/EquityCurveChart';
 import { 
@@ -43,6 +51,7 @@ interface ExtendedStrategy {
   setupType?: string;
   confirmationSignals?: string[];
   checklist?: ChecklistItem[];
+  components?: StrategyComponent[] | null;
   visualExamples?: string[];
   defaultStopLoss?: number;
   defaultTakeProfit?: number;
@@ -264,7 +273,7 @@ function StrategyDetailView() {
     timezone, // ✅ log timezone
   });
   
-  const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'analytics' | 'insights'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'analytics' | 'insights' | 'adherence'>('overview');
 
   const { data: strategy, isLoading: strategyLoading } = useStrategyOptimized(id, userId);
   const { data: allTrades = [], isLoading: tradesLoading } = useTrades(userId);
@@ -402,6 +411,7 @@ const strategyTrades = useMemo(() => {
           {[
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'trades', label: 'Trades', icon: List },
+            { id: 'adherence', label: 'Adherence', icon: Shield },
           ].map(tab => (
             <button
               key={tab.id}
@@ -431,6 +441,15 @@ const strategyTrades = useMemo(() => {
           <div className="space-y-4">
             {stats.totalTrades > 0 ? (
               <>
+                {/* ── Plan vs Actual ── */}
+                <StrategyPlanVsActual
+                  expectedWinRate={strategy.expectedWinRate}
+                  avgRrGoal={strategy.avgRRGoal}
+                  actualWinRate={stats.winRate}
+                  actualAvgR={stats.avgR}
+                  sampleSize={stats.totalTrades}
+                />
+
                 <div
                   className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
                   style={{
@@ -982,6 +1001,16 @@ const strategyTrades = useMemo(() => {
             </div>
           </div>
         )}
+
+        {/* ==========================================
+            🎯 TAB: ADHERENCE
+            ========================================== */}
+        {activeTab === 'adherence' && (
+          <StrategyAdherenceAnalytics
+            trades={strategyTrades as any}
+            strategy={strategy}
+          />
+        )}
       </div>
 
       <style>{`
@@ -1018,13 +1047,14 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const isEditMode = !!editingStrategy;
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
-  
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [assetClasses, setAssetClasses] = useState<string[]>([]);
   const [setupType, setSetupType] = useState("");
   const [confirmationSignals, setConfirmationSignals] = useState("");
   const [visualExamples, setVisualExamples] = useState<File[]>([]);
+  const [components, setComponents] = useState<StrategyComponent[]>([]);
   const [defaultStopLoss, setDefaultStopLoss] = useState<number | undefined>();
   const [defaultTakeProfit, setDefaultTakeProfit] = useState<number | undefined>();
   const [avgRiskPerTrade, setAvgRiskPerTrade] = useState<number | undefined>();
@@ -1053,6 +1083,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setAvgRRGoal(editingStrategy.avgRRGoal);
       setPsychologicalNotes(editingStrategy.psychologicalNotes || "");
       setChecklist(editingStrategy.checklist || []);
+      // Load components from the canonical field; fall back to legacy derivation.
+      setComponents(getStrategyComponents(editingStrategy));
     } else {
       setName("");
       setDescription("");
@@ -1070,6 +1102,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setAvgRRGoal(undefined);
       setPsychologicalNotes("");
       setChecklist([]);
+      setComponents([]);
       setCurrentStep(1);
     }
   }, [editingStrategy, isOpen]);
@@ -1112,9 +1145,27 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
   const handleSave = useCallback(() => {
     if (!name) return;
-    
+
     const uploadedURLs: string[] = visualExamples.map(file => URL.createObjectURL(file));
-    
+
+    // Assign stable ids to any component row that was added without one.
+    const finalComponents: StrategyComponent[] = components.map(c =>
+      c.id ? c : { ...c, id: newComponentId() }
+    );
+
+    // Back-compat: derive the legacy columns from finalComponents so the
+    // existing DB columns (checklist jsonb, confirmation_signals text[]) are
+    // still written by the hooks (which persist them server-side).
+    //   checklist  ← components of type 'checklist'  (shape { id, label })
+    //   confirmationSignals ← components of type 'confirmation' (label strings)
+    const derivedChecklist: ChecklistItem[] = finalComponents
+      .filter(c => c.type === 'checklist')
+      .map(c => ({ id: c.id, label: c.label }));
+
+    const derivedConfirmationSignals: string[] = finalComponents
+      .filter(c => c.type === 'confirmation')
+      .map(c => c.label);
+
     const strategyData: any = {
       name: name.trim(),
       description,
@@ -1122,8 +1173,16 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       timeframe: '',
       markets: [],
       setupType,
-      confirmationSignals: confirmationSignals ? [confirmationSignals] : [],
-      checklist,
+      // Legacy field: prefer derivedConfirmationSignals when components are set;
+      // fall back to the free-text signal input for backward compat if no
+      // confirmation components were authored.
+      confirmationSignals: finalComponents.length > 0
+        ? derivedConfirmationSignals
+        : (confirmationSignals ? [confirmationSignals] : []),
+      // Legacy checklist column (same logic as above).
+      checklist: finalComponents.length > 0 ? derivedChecklist : checklist,
+      // New canonical components column.
+      components: finalComponents,
       defaultStopLoss,
       defaultTakeProfit,
       avgRiskPerTrade,
@@ -1147,8 +1206,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
     onSave(strategyData);
     onClose();
-  }, [name, description, assetClasses, setupType, confirmationSignals, checklist, visualExamples,
-      defaultStopLoss, defaultTakeProfit, avgRiskPerTrade, maxDailyLoss,
+  }, [name, description, assetClasses, setupType, confirmationSignals, checklist, components,
+      visualExamples, defaultStopLoss, defaultTakeProfit, avgRiskPerTrade, maxDailyLoss,
       positionSizingRule, typicalSession, expectedWinRate, avgRRGoal,
       psychologicalNotes, isEditMode, editingStrategy, onSave, onClose]);
 
@@ -1278,7 +1337,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
           )}
 
           {currentStep === 2 && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Setup Type (required) */}
               <div>
                 <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
                   Setup Type *
@@ -1293,27 +1353,110 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                 />
               </div>
 
+              {/* ── Components Editor ── */}
               <div>
-                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                  Confirmation Signals
-                </label>
-                <textarea
-                  value={confirmationSignals}
-                  onChange={(e) => setConfirmationSignals(e.target.value)}
-                  placeholder="Volume spike, MACD crossover, RSI divergence..."
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 resize-none transition-all focus:outline-none focus:border-[#C9A646]"
-                  style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                />
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-semibold" style={{ color: '#EAEAEA' }}>
+                    Strategy Components
+                  </label>
+                  <span className="text-xs" style={{ color: '#9A9A9A' }}>
+                    Add conditions, signals, checklist items &amp; risk rules
+                  </span>
+                </div>
+
+                {/* Grouped rows by type */}
+                {COMPONENT_TYPES.map(({ type, label: typeLabel }) => {
+                  const typeRows = components.filter(c => c.type === type);
+                  return (
+                    <div key={type} className="mb-4">
+                      {/* Type group header */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span
+                          className="text-xs font-semibold uppercase tracking-wider"
+                          style={{ color: '#C9A646' }}
+                        >
+                          {typeLabel}
+                        </span>
+                        <div className="flex-1 h-px" style={{ background: 'rgba(201,166,70,0.15)' }} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setComponents(prev => [...prev, {
+                              id: newComponentId(),
+                              type,
+                              label: '',
+                              trackAdherence: true,
+                            }]);
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:scale-105"
+                          style={{ background: 'rgba(201,166,70,0.12)', color: '#C9A646', border: '1px solid rgba(201,166,70,0.25)' }}
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add
+                        </button>
+                      </div>
+
+                      {/* Component rows */}
+                      <div className="space-y-2">
+                        {typeRows.length === 0 && (
+                          <p className="text-xs pl-1" style={{ color: '#6A6A6A' }}>No {typeLabel.toLowerCase()} yet.</p>
+                        )}
+                        {typeRows.map((comp) => (
+                          <div key={comp.id} className="flex items-center gap-2">
+                            {/* Label input */}
+                            <input
+                              type="text"
+                              value={comp.label}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setComponents(prev =>
+                                  prev.map(c => c.id === comp.id ? { ...c, label: val } : c)
+                                );
+                              }}
+                              placeholder={`${typeLabel} item…`}
+                              className="flex-1 px-3 py-2 rounded-lg bg-black/30 border-2 text-sm transition-all focus:outline-none focus:border-[#C9A646]"
+                              style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
+                            />
+                            {/* Track adherence toggle */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setComponents(prev =>
+                                  prev.map(c =>
+                                    c.id === comp.id ? { ...c, trackAdherence: !c.trackAdherence } : c
+                                  )
+                                );
+                              }}
+                              title={comp.trackAdherence ? 'Tracking adherence (click to disable)' : 'Not tracking (click to enable)'}
+                              className="flex-shrink-0 p-1.5 rounded-lg transition-all"
+                              style={{ color: comp.trackAdherence ? '#C9A646' : '#6A6A6A' }}
+                            >
+                              {comp.trackAdherence
+                                ? <ToggleRight className="w-5 h-5" />
+                                : <ToggleLeft className="w-5 h-5" />
+                              }
+                            </button>
+                            {/* Remove button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setComponents(prev => prev.filter(c => c.id !== comp.id));
+                              }}
+                              className="flex-shrink-0 p-1.5 rounded-lg transition-all hover:bg-white/5"
+                              style={{ color: '#6A6A6A' }}
+                              aria-label="Remove component"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                  Entry Checklist
-                </label>
-                <ChecklistEditor items={checklist} onChange={setChecklist} />
-              </div>
-
+              {/* Visual Examples */}
               <div>
                 <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
                   Visual Examples
@@ -1480,36 +1623,48 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Expected Win Rate (%)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={expectedWinRate || ''}
-                    onChange={(e) => setExpectedWinRate(parseFloat(e.target.value) || undefined)}
-                    placeholder="65"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
+              {/* Targets section */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wider"
+                    style={{ color: '#C9A646' }}
+                  >
+                    Targets
+                  </span>
+                  <div className="flex-1 h-px" style={{ background: 'rgba(201,166,70,0.15)' }} />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
+                      Expected Win Rate (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={expectedWinRate || ''}
+                      onChange={(e) => setExpectedWinRate(parseFloat(e.target.value) || undefined)}
+                      placeholder="65"
+                      className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                      style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Avg R:R Goal
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={avgRRGoal || ''}
-                    onChange={(e) => setAvgRRGoal(parseFloat(e.target.value) || undefined)}
-                    placeholder="2.5"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
+                  <div>
+                    <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
+                      Avg R:R Goal
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={avgRRGoal || ''}
+                      onChange={(e) => setAvgRRGoal(parseFloat(e.target.value) || undefined)}
+                      placeholder="2.5"
+                      className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                      style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -2,16 +2,26 @@
  * StrategyChecklistVerify — per-trade strategy adherence widget.
  *
  * Shows:
- *  1. Each checklist item from the linked strategy as an interactive toggle
+ *  1. Trackable strategy components grouped by type (Entry Conditions,
+ *     Confirmations, Checklist, Risk Rules) as interactive toggles
  *     (or read-only check/x in readOnly mode).
- *  2. An adherence summary bar (n / total checks, gold progress).
+ *  2. An adherence summary bar (n / total trackable components, gold progress).
  *  3. A compact Plan vs Actual block comparing strategy goals to trade actuals.
+ *
+ * Backward compatible: falls back to legacy `strategy.checklist` /
+ * `strategy.confirmationSignals` via `getStrategyComponents` when
+ * `strategy.components` is not yet populated.
  */
 
 import { Check, X } from 'lucide-react';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useStrategiesOptimized } from '@/hooks/useStrategies';
-import type { ChecklistItem } from '@/components/journal/strategy/ChecklistEditor';
+import {
+  getStrategyComponents,
+  trackableComponents,
+  COMPONENT_TYPES,
+  type StrategyComponent,
+} from '@/utils/strategyComponents';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +54,66 @@ function fmt(n: number | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Sub-component: a single toggle row
+// ---------------------------------------------------------------------------
+
+function ComponentRow({
+  component,
+  isChecked,
+  readOnly,
+  onToggle,
+}: {
+  component: StrategyComponent;
+  isChecked: boolean;
+  readOnly: boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        disabled={readOnly}
+        onClick={() => onToggle(component.id)}
+        className={[
+          'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left',
+          'transition-colors duration-100',
+          readOnly
+            ? 'cursor-default'
+            : 'cursor-pointer hover:bg-white/[0.04]',
+        ].join(' ')}
+        aria-pressed={isChecked}
+      >
+        {/* Check icon */}
+        <span
+          className={[
+            'flex h-4 w-4 shrink-0 items-center justify-center rounded',
+            isChecked
+              ? 'bg-emerald-500/20 text-emerald-400'
+              : 'bg-white/[0.06] text-white/25',
+          ].join(' ')}
+        >
+          {isChecked ? (
+            <Check size={10} strokeWidth={2.5} />
+          ) : (
+            <X size={10} strokeWidth={2} />
+          )}
+        </span>
+        <span
+          className={[
+            'text-[12px] leading-snug',
+            isChecked ? 'text-white/80' : 'text-white/45',
+          ].join(' ')}
+        >
+          {component.label !== '' ? component.label : (
+            <em className="text-white/30">Untitled item</em>
+          )}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -72,13 +142,17 @@ export default function StrategyChecklistVerify({
   }
 
   const safeResults: Record<string, boolean> = results ?? {};
-  const checklist: ChecklistItem[] =
-    strategy != null && Array.isArray(strategy.checklist)
-      ? (strategy.checklist as ChecklistItem[])
-      : [];
 
-  const total = checklist.length;
-  const checked = checklist.filter((item) => safeResults[item.id] === true).length;
+  // Derive components from the strategy using the canonical helper.
+  // Falls back to legacy checklist + confirmationSignals when `components`
+  // column is not yet populated (fully backward compatible).
+  const allComponents = strategy != null
+    ? getStrategyComponents(strategy)
+    : [];
+  const trackable = trackableComponents(allComponents);
+
+  const total = trackable.length;
+  const checked = trackable.filter((c) => safeResults[c.id] === true).length;
   const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
 
   const planRR = strategy?.avgRRGoal ?? null;
@@ -95,9 +169,16 @@ export default function StrategyChecklistVerify({
     onChange({ ...safeResults, [id]: next });
   };
 
+  // Build a map from component type → trackable components for grouped render.
+  const groupedComponents = COMPONENT_TYPES.map(({ type, label }) => ({
+    type,
+    label,
+    items: trackable.filter((c) => c.type === type),
+  })).filter((g) => g.items.length > 0);
+
   return (
     <div className={PANEL}>
-      {/* ---- Checklist items ---- */}
+      {/* ---- Trackable components, grouped by type ---- */}
       {total === 0 ? (
         <p className="mb-3 text-[12px] text-white/40 italic">
           No checklist defined for this strategy yet.
@@ -119,55 +200,30 @@ export default function StrategyChecklistVerify({
             <span className="text-[11px] tabular-nums text-white/40">{pct}%</span>
           </div>
 
-          {/* Items */}
-          <ul className="mb-3 space-y-1.5">
-            {checklist.map((item) => {
-              const isChecked = safeResults[item.id] === true;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    disabled={readOnly}
-                    onClick={() => handleToggle(item.id)}
-                    className={[
-                      'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left',
-                      'transition-colors duration-100',
-                      readOnly
-                        ? 'cursor-default'
-                        : 'cursor-pointer hover:bg-white/[0.04]',
-                    ].join(' ')}
-                    aria-pressed={isChecked}
-                  >
-                    {/* Check icon */}
-                    <span
-                      className={[
-                        'flex h-4 w-4 shrink-0 items-center justify-center rounded',
-                        isChecked
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-white/[0.06] text-white/25',
-                      ].join(' ')}
-                    >
-                      {isChecked ? (
-                        <Check size={10} strokeWidth={2.5} />
-                      ) : (
-                        <X size={10} strokeWidth={2} />
-                      )}
-                    </span>
-                    <span
-                      className={[
-                        'text-[12px] leading-snug',
-                        isChecked ? 'text-white/80' : 'text-white/45',
-                      ].join(' ')}
-                    >
-                      {item.label !== '' ? item.label : (
-                        <em className="text-white/30">Untitled item</em>
-                      )}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Grouped items */}
+          <div className="mb-3 space-y-3">
+            {groupedComponents.map((group) => (
+              <div key={group.type}>
+                {/* Group label — only shown when multiple groups are present */}
+                {groupedComponents.length > 1 && (
+                  <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+                    {group.label}
+                  </p>
+                )}
+                <ul className="space-y-1">
+                  {group.items.map((component) => (
+                    <ComponentRow
+                      key={component.id}
+                      component={component}
+                      isChecked={safeResults[component.id] === true}
+                      readOnly={readOnly}
+                      onToggle={handleToggle}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </>
       )}
 

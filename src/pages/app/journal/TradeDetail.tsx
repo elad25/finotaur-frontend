@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { JournalTradeDetailSkeletonPage } from "@/components/skeletons/JournalTradeDetailSkeleton";
 import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -11,7 +11,7 @@ import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
-import { Loader2, ArrowLeft, AlertCircle, Pencil, X } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertCircle, Pencil, X, ClipboardList } from 'lucide-react';
 import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Skeleton';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
@@ -260,6 +260,10 @@ export default function JournalTradeDetail() {
   const [existingScreenshots, setExistingScreenshots] = useState<string[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingScreenshot[]>([]);
 
+  // Ref for the Setup & Verification panel — used to scroll into view when the
+  // trader clicks the "Review against your strategy" prompt.
+  const setupPanelRef = useRef<HTMLDivElement>(null);
+
   // ---- annotation panel state (tags split by category) ----
   const [mistakeIds, setMistakeIds] = useState<string[]>([]);
   const [mentalIds, setMentalIds] = useState<string[]>([]);
@@ -355,6 +359,19 @@ export default function JournalTradeDetail() {
     setPendingFiles([]);
     setSaveError(null);
     setIsEditing(false);
+  };
+
+  /**
+   * Opens edit mode focused on the strategy adherence section.
+   * Used by the "Review against your strategy" prompt so broker-synced
+   * trades without checklist_results get a clear, one-click path to review.
+   */
+  const handleStartStrategyReview = () => {
+    handleEditClick();
+    // Scroll the Setup & Verification panel into view after React re-renders.
+    requestAnimationFrame(() => {
+      setupPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const handleSave = async () => {
@@ -851,7 +868,7 @@ export default function JournalTradeDetail() {
       {id && <TradeScorecard tradeId={id} />}
 
       {/* ── Setup & Verification ─────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+      <div ref={setupPanelRef} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
         <h3 className="text-xl font-semibold text-white mb-4">Setup & Verification</h3>
 
         {/* Strategy picker */}
@@ -880,6 +897,30 @@ export default function JournalTradeDetail() {
             </p>
           )}
         </div>
+
+        {/*
+          Post-trade review prompt — visible in read-only mode when a strategy
+          is linked but checklist_results is empty/null. Broker-synced trades
+          arrive without checklist data, so this is the primary nudge for the
+          trader to mark adherence after a trade closes.
+        */}
+        {!isEditing && trade.strategy_id && !trade.checklist_results && (
+          <button
+            type="button"
+            onClick={handleStartStrategyReview}
+            className={[
+              'mb-4 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left',
+              'border border-[#C9A646]/30 bg-[#C9A646]/[0.06]',
+              'hover:bg-[#C9A646]/[0.10] transition-colors duration-150',
+            ].join(' ')}
+          >
+            <ClipboardList className="h-4 w-4 shrink-0 text-[#C9A646]" />
+            <span className="text-[13px] font-medium text-[#C9A646]">
+              Review against your strategy
+            </span>
+            <span className="ml-auto text-[11px] text-white/30">Not reviewed yet</span>
+          </button>
+        )}
 
         {/* Checklist */}
         <StrategyChecklistVerify
