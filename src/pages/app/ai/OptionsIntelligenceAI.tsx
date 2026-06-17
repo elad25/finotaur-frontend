@@ -9,6 +9,7 @@ import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { AiOptionsIntelligenceSkeletonPage } from '@/components/skeletons/AiOptionsIntelligenceSkeleton';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 
@@ -45,6 +46,15 @@ function OptionsIntelligenceContent() {
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: 'radial-gradient(circle at 50% 0%, rgba(201,166,70,0.08), transparent 30%), linear-gradient(180deg, #080808 0%, #0d0b08 48%, #080808 100%)' }}>
+      {/* Fino Explains — pinned top-right of the full-width page container */}
+      <FinoExplains
+        title="What is Options Intelligence?"
+        className="absolute right-0 top-0 z-30"
+      >
+        Make sense of the options chain. Fino&apos;s AI explains the greeks, models potential
+        profit and loss, and suggests strategies for any ticker — no options expertise required.
+      </FinoExplains>
+
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-24 -left-36 h-64 w-[720px] rotate-[-18deg] rounded-[50%] border border-[#C9A646]/20" />
@@ -62,13 +72,10 @@ function OptionsIntelligenceContent() {
             <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Options</span>{' '}
             <span className="text-ink-primary">Intelligence</span>
           </h1>
-          <FinoExplains
-            title="What is Options Intelligence?"
-            className="mt-ds-3 ml-auto w-fit"
-          >
-            Make sense of the options chain. Fino&apos;s AI explains the greeks, models potential
-            profit and loss, and suggests strategies for any ticker — no options expertise required.
-          </FinoExplains>
+          {/* Market-status badge — centered under the title (Fino Explains moved top-right) */}
+          <div className="mt-ds-3 flex justify-center">
+            <MarketStatusBadge className="relative top-auto right-auto" />
+          </div>
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">Institutional Options Flow & Market Intelligence</p>
             {isRefreshing && <Loader2 className="h-4 w-4 text-[#C9A646] animate-spin" />}

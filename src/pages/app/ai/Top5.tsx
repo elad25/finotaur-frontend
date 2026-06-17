@@ -40,6 +40,7 @@ import type { ScanResult, CatalystResult, CatalystPick, AnalystAction, Spillover
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 
 // Lazy load admin tracker (only loaded when admin toggles ON)
 const AdminTrackerView = lazy(() => import('./AdminTrackerView'));
@@ -1643,6 +1644,16 @@ function Top5Content() {
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #080808 0%, #0c0a07 40%, #080808 100%)', overflowAnchor: 'none' }}>
+      {/* Fino Explains — pinned top-right; offset top-12 to clear the admin-mode toggle
+          which is absolute top-0 right-0 inside the header motion.div */}
+      <FinoExplains
+        title="What is Top 5?"
+        className="absolute right-0 top-12 z-30"
+      >
+        Fino&apos;s daily shortlist. Every day the AI scans the market and surfaces the five
+        highest-conviction opportunities — each with the reasoning behind it.
+      </FinoExplains>
+
       {/* Ambient glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[5%] left-[10%] w-[900px] h-[900px] rounded-full blur-[200px]" style={{ background: `${GOLD.dim}0.04)` }} />
@@ -1663,6 +1674,10 @@ function Top5Content() {
             <span className="text-white/90">FINOTAUR </span>
             <span style={{ background: GOLD.gradient, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: `drop-shadow(0 0 20px ${GOLD.dim}0.3))` }}>Intelligence Desk</span>
           </h1>
+          {/* Market-status badge — centered under the title (Fino Explains moved top-right) */}
+          <div className="mt-ds-3 flex justify-center">
+            <MarketStatusBadge className="relative top-auto right-auto" />
+          </div>
           <p className="text-[14px] tracking-wide" style={{ color: '#8A8A8A' }}>
             {adminModeEnabled ? 'Admin Tracker · Recommendation performance monitoring'
               : isLoading ? 'Loading latest analysis...' : totalPicks > 0
@@ -1689,14 +1704,6 @@ function Top5Content() {
             </div>
           )}
         </motion.div>
-
-        <FinoExplains
-          title="What is Top 5?"
-          className="mt-ds-3 ml-auto w-fit"
-        >
-          Fino&apos;s daily shortlist. Every day the AI scans the market and surfaces the five
-          highest-conviction opportunities — each with the reasoning behind it.
-        </FinoExplains>
 
         {/* ═══ ADMIN TRACKER ═══ */}
         {adminModeEnabled && isAdmin && (
