@@ -26,16 +26,13 @@ export function FinoExplains({
   title,
   children,
   className = 'mt-ds-3 ml-auto w-fit',
-  contentClassName = 'lg:w-[300px]',
+  contentClassName = 'w-[300px]',
   defaultOpen = false,
 }: FinoExplainsProps) {
   return (
     <aside className={className}>
-      <details
-        className="group w-fit rounded-2xl border border-gold-border bg-surface-1"
-        open={defaultOpen}
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 pl-1.5 pr-3 [&::-webkit-details-marker]:hidden">
+      <details className="group relative w-fit" open={defaultOpen}>
+        <summary className="flex w-fit cursor-pointer list-none items-center justify-between gap-2 rounded-full border border-gold-border bg-black py-1 pl-1.5 pr-3 [&::-webkit-details-marker]:hidden">
           <div className="flex items-center gap-2">
             <img
               src="/fino-avatar.png"
@@ -52,7 +49,9 @@ export function FinoExplains({
           />
         </summary>
 
-        <div className={`flex flex-col gap-ds-3 px-3.5 pb-3.5 pt-1 ${contentClassName}`}>
+        <div
+          className={`absolute right-0 top-full z-50 mt-2 flex max-w-[80vw] flex-col gap-ds-3 rounded-2xl border border-gold-border bg-black p-3.5 shadow-xl shadow-black/60 ${contentClassName}`}
+        >
           <p className="text-[15px] font-semibold leading-tight text-ink-primary">
             {title}
           </p>
