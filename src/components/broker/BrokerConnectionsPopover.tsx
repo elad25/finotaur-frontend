@@ -208,11 +208,15 @@ function SimpleAccountRow({
   checked,
   onToggle,
   indent = false,
+  connection,
+  onReconnect,
 }: {
   portfolio: Portfolio;
   checked: boolean;
   onToggle: (id: string) => void;
   indent?: boolean;
+  connection?: BrokerConnection;
+  onReconnect?: (conn: BrokerConnection) => void;
 }) {
   const badge = portfolio.source === 'manual'
     ? 'Manual'
@@ -224,6 +228,9 @@ function SimpleAccountRow({
     : portfolio.environment === 'live'
       ? 'bg-emerald-400/10 text-emerald-400'
       : 'bg-yellow-400/10 text-yellow-400';
+
+  const statusDot = connection ? statusBadge(connection) : null;
+  const needsAttention = connection ? connectionNeedsAttention(connection) : false;
 
   return (
     <button
@@ -240,6 +247,27 @@ function SimpleAccountRow({
     >
       <CheckboxMark checked={checked} compact />
       <span className="min-w-0 flex-1 truncate text-left">{portfolio.name}</span>
+      {statusDot && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ background: statusDot.color, boxShadow: `0 0 6px ${statusDot.color}` }}
+          aria-label={statusDot.label}
+        />
+      )}
+      {needsAttention && connection && onReconnect && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onReconnect(connection);
+          }}
+          className="flex h-5 shrink-0 items-center gap-1 rounded border border-[#C9A646]/25 px-1.5 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
+          aria-label="Reconnect broker"
+        >
+          <RefreshCw className="h-2.5 w-2.5" />
+          Reconnect
+        </button>
+      )}
       <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-semibold', badgeClass)}>
         {badge}
       </span>
@@ -353,12 +381,21 @@ function PopoverBody({
   onManage?: () => void;
 }) {
   const {
+    connections: activeConnections,
     isLoading: loadingActive,
   } = useBrokerConnections({ active: true, purpose: 'journal' });
   const {
+    connections: inactiveConnections,
     isLoading: loadingInactive,
     reconnect,
   } = useBrokerConnections({ active: false, purpose: 'journal' });
+
+  // Merge active + inactive so we can surface needs-attention indicators for
+  // both connected and recently-disconnected connections.
+  const allConnections = useMemo(
+    () => [...activeConnections, ...inactiveConnections],
+    [activeConnections, inactiveConnections],
+  );
 
   const {
     tradovatePortfolios,
@@ -379,6 +416,33 @@ function PopoverBody({
   const groups = useMemo<PortfolioGroup[]>(
     () => buildAccountGroups(tradovatePortfolios, brokerPortfolios, manualPortfolios),
     [tradovatePortfolios, brokerPortfolios, manualPortfolios],
+  );
+
+  /**
+   * Returns the BrokerConnection that backs a given portfolio, or undefined.
+   *
+   * - source === 'broker': direct match via portfolio.broker_connection_id
+   *   (the portfolio id itself is "broker_<connection_uuid>").
+   * - source === 'tradovate': match by environment — a Tradovate/NinjaTrader
+   *   broker_connections row for the same environment backs this portfolio.
+   * - source === 'manual': no backing connection.
+   */
+  const connectionForPortfolio = useCallback(
+    (portfolio: Portfolio): BrokerConnection | undefined => {
+      if (portfolio.source === 'broker') {
+        const connId = portfolio.broker_connection_id;
+        return connId ? allConnections.find(c => c.id === connId) : undefined;
+      }
+      if (portfolio.source === 'tradovate') {
+        return allConnections.find(
+          c =>
+            (c.broker === 'tradovate' || c.broker === 'ninja_trader') &&
+            c.environment === portfolio.environment,
+        );
+      }
+      return undefined;
+    },
+    [allConnections],
   );
 
   const toggleGroupExpanded = useCallback((key: string) => {
@@ -488,15 +552,26 @@ function PopoverBody({
 
                 if (!useCollapse) {
                   const portfolio = group.portfolios[0];
+                  const conn = connectionForPortfolio(portfolio);
                   return (
                     <SimpleAccountRow
                       key={group.key}
                       portfolio={portfolio}
                       checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(portfolio.id)}
                       onToggle={togglePortfolioSelection}
+                      connection={conn}
+                      onReconnect={setReconnectFor}
                     />
                   );
                 }
+
+                // For the group header status dot, use the first portfolio's
+                // connection — for a prop-firm group all accounts share the
+                // same Tradovate connection (same environment), so any of them
+                // represent the connection state.
+                const groupConn = connectionForPortfolio(group.portfolios[0]);
+                const groupDot = groupConn ? statusBadge(groupConn) : null;
+                const groupNeedsAttention = groupConn ? connectionNeedsAttention(groupConn) : false;
 
                 return (
                   <div key={group.key}>
@@ -531,6 +606,31 @@ function PopoverBody({
                         {group.label}
                       </span>
 
+                      {/* Connection status dot — shown for any non-ok state */}
+                      {groupDot && (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: groupDot.color, boxShadow: `0 0 6px ${groupDot.color}` }}
+                          aria-label={groupDot.label}
+                        />
+                      )}
+
+                      {/* Reconnect button — shown only when attention is needed */}
+                      {groupNeedsAttention && groupConn && (
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setReconnectFor(groupConn);
+                          }}
+                          className="flex h-5 shrink-0 items-center gap-1 rounded border border-[#C9A646]/25 px-1.5 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
+                          aria-label={`Reconnect ${group.label}`}
+                        >
+                          <RefreshCw className="h-2.5 w-2.5" />
+                          Reconnect
+                        </button>
+                      )}
+
                       {/* Selected / total count */}
                       <span className="text-[9px] font-medium tabular-nums text-zinc-600">
                         {selectedInGroup}/{totalInGroup}
@@ -553,6 +653,8 @@ function PopoverBody({
                         checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
                         onToggle={togglePortfolioSelection}
                         indent
+                        connection={connectionForPortfolio(p)}
+                        onReconnect={setReconnectFor}
                       />
                     ))}
                   </div>
