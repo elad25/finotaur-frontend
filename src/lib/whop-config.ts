@@ -82,8 +82,9 @@ export interface PlanConfig {
 // ============================================
 
 export const WHOP_PLAN_IDS = {
-  // Journal - Basic with 14-day trial
-  basic_monthly: 'plan_2hIXaJbGP1tYN',
+  // Journal - Basic ($24.99/mo). New plan as of 2026-06-17 (prior plan
+  // plan_2hIXaJbGP1tYN was the legacy $19.99 price).
+  basic_monthly: 'plan_H0VDCb6iD1dYQ',
   basic_yearly: 'plan_x0jTFLe9qNv8i',
   
   // Journal - Premium (no trial)
@@ -187,7 +188,8 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
 // Plan ID to Name lookup
 export const PLAN_ID_TO_NAME: Record<string, string> = {
   // Journal
-  'plan_2hIXaJbGP1tYN': 'basic_monthly',
+  'plan_H0VDCb6iD1dYQ': 'basic_monthly', // current $24.99 plan (2026-06-17)
+  'plan_2hIXaJbGP1tYN': 'basic_monthly', // legacy $19.99 plan — kept for in-flight refs
   'plan_x0jTFLe9qNv8i': 'basic_yearly',
   'plan_v7QKxkvKIZooe': 'premium_monthly',
   'plan_gBG436aeJxaHU': 'premium_yearly',
