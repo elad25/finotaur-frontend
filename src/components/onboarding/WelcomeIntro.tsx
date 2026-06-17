@@ -10,11 +10,35 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import {
+  Newspaper,
+  Brain,
+  Filter,
+  LineChart,
+  BookOpen,
+  CalendarDays,
+  LayoutGrid,
+  Bell,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Wordmark } from '@/components/ds/Wordmark';
 import { TOUR_ACTIVE_KEY } from './onboardingFlags';
+
+// The scattered tools a trader/investor usually juggles across many apps —
+// now unified inside Finotaur. Shown as a quick visual on the welcome screen.
+const CAPABILITIES: { icon: LucideIcon; label: string }[] = [
+  { icon: Newspaper, label: 'Research' },
+  { icon: Brain, label: 'AI Analysis' },
+  { icon: Filter, label: 'Screeners' },
+  { icon: LineChart, label: 'Live Charts' },
+  { icon: BookOpen, label: 'Trade Journal' },
+  { icon: CalendarDays, label: 'Economic Calendar' },
+  { icon: LayoutGrid, label: 'Sector Maps' },
+  { icon: Bell, label: 'Smart Alerts' },
+];
 
 export default function WelcomeIntro() {
   const navigate = useNavigate();
@@ -152,12 +176,51 @@ export default function WelcomeIntro() {
               You're not a trader anymore — you're a Finotaur.
             </p>
 
-            {/* Motivational body */}
+            {/* Mission body — what Finotaur is & why it exists */}
             <p className="text-ink-secondary text-sm md:text-base leading-relaxed max-w-md">
-              Great that you're taking your future one step forward. In the next
-              30 seconds we'll walk you through the rooms where your edge gets
-              built.
+              Finotaur is your central terminal for trading and investing —
+              every tool a trader and investor needs, finally in one place.
+              In the next 30 seconds we'll walk you through the rooms where
+              your edge gets built.
             </p>
+
+            {/* Capability grid — the scattered tools Finotaur unifies */}
+            <div className="w-full pt-1">
+              <p
+                className="text-[11px] font-medium tracking-[0.18em] uppercase mb-3"
+                style={{ color: '#808080' }}
+              >
+                Everything in one terminal
+              </p>
+              <div className="grid grid-cols-4 gap-y-3 gap-x-2">
+                {CAPABILITIES.map(({ icon: Icon, label }, i) => (
+                  <motion.div
+                    key={label}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.35,
+                      delay: 0.3 + i * 0.05,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    className="flex flex-col items-center gap-1.5 text-center"
+                  >
+                    <span
+                      className="flex h-11 w-11 items-center justify-center rounded-xl"
+                      style={{
+                        background: 'rgba(201,166,70,0.10)',
+                        border: '1px solid rgba(201,166,70,0.22)',
+                      }}
+                    >
+                      <Icon className="h-5 w-5" style={{ color: '#C9A646' }} />
+                    </span>
+                    <span className="text-[10px] leading-tight text-ink-secondary">
+                      {label}
+                    </span>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
 
             {/* CTA */}
             <Button

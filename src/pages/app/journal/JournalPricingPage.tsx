@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Check, ChevronLeft, Shield, TrendingUp, Zap } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useWhopCheckout } from '@/hooks/useWhopCheckout';
+import type { PlanName } from '@/lib/whop-config';
 
 type BillingInterval = 'monthly' | 'yearly';
 
@@ -94,6 +96,9 @@ export default function JournalPricingPage() {
   const navigate = useNavigate();
   const { limits } = useSubscription();
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const { initiateCheckout, isLoading } = useWhopCheckout({
+    onError: (e) => toast.error('Checkout failed', { description: e.message }),
+  });
 
   const currentPlan = limits?.account_type ?? 'free';
 
@@ -116,7 +121,14 @@ export default function JournalPricingPage() {
       toast.info('This is your current plan');
       return;
     }
-    toast.info(`Upgrade to ${planId} — Payment integration coming soon`);
+    if (planId === 'free') {
+      toast.info("You're on the Free plan — no checkout needed");
+      return;
+    }
+    // planId is 'basic' | 'premium' here; both are valid PlanName values.
+    // Respect the Monthly/Yearly toggle. The hook routes to the correct Whop
+    // checkout (Edge Function first, direct URL fallback).
+    initiateCheckout({ planName: planId as PlanName, billingInterval });
   };
 
   return (
@@ -310,10 +322,12 @@ export default function JournalPricingPage() {
                 {/* CTA Button */}
                 <button
                   onClick={() => handlePlanSelect(plan.id)}
-                  disabled={isCurrentPlan}
+                  disabled={isCurrentPlan || isLoading}
                   className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
                     isCurrentPlan
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                      : isLoading
+                      ? 'opacity-60 cursor-wait'
                       : plan.featured
                       ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black hover:scale-[1.02]'
                       : 'border-2 border-[#C9A646]/40 hover:border-[#C9A646] hover:bg-[#C9A646]/10 text-white hover:scale-[1.02]'
