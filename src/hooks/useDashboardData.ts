@@ -20,6 +20,7 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
+import { aggregateCopiedTrades } from '@/lib/tradeAggregation';
 
 // ================================================
 // TYPES & INTERFACES
@@ -728,7 +729,13 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       // use server-side aggregated path: RPC + view + 2 small SELECTs. Eliminates the
       // unbounded trades fetch. JS path below remains for short lookbacks.
       const isAllTimeView = !daysBack || daysBack >= MAX_LOOKBACK_DAYS;
-      if (isAllTimeView) {
+      // All-accounts scope = no specific portfolio selected. Copier trades span
+      // multiple portfolios, so dedup is required and the RPC aggregate path
+      // (which counts raw rows) must be bypassed in favour of the raw-trades path.
+      const isAllAccounts =
+        !dashboardPortfolioId &&
+        (!dashboardPortfolioIds || dashboardPortfolioIds.length === 0);
+      if (isAllTimeView && !isAllAccounts) {
         const effectivePortfolioIds = dashboardPortfolioIds && dashboardPortfolioIds.length > 0
           ? dashboardPortfolioIds
           : (dashboardPortfolioId ? [dashboardPortfolioId] : null);
@@ -751,7 +758,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         .select(`
           id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
           open_at, close_at, stop_price, entry_price, quantity, exit_price,
-          multiplier, session, input_mode, tags
+          multiplier, session, input_mode, tags, side, fees, portfolio_id
         `)
         .eq('user_id', userId)
         .is('deleted_at', null)
@@ -797,8 +804,13 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       }
       
       devLog(`✅ Loaded ${data?.length || 0} trades (will filter closed in computeStats)`);
-      
-      return computeStats(data || []);
+
+      // De-duplicate copier trades for the "all accounts" scope so Overview
+      // counts match My Trades (single shared aggregation logic).
+      const rows = isAllAccounts
+        ? aggregateCopiedTrades(data || [], 'all-accounts')
+        : (data || []);
+      return computeStats(rows);
     },
     enabled: !!userId,
     // ✅ OPTIMIZED: Longer stale time, no refetch on mount
