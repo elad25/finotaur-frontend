@@ -81,7 +81,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // 🔥 IMPORT CENTRALIZED TRADE OPERATIONS
-import { updateTrade, deleteTrade } from "@/lib/trades";
+import { updateTrade, deleteTrade, bulkDeleteTrades } from "@/lib/trades";
 
 // 🔥 NEW: Import timezone utilities + session formatting
 import { useTimezone } from '@/contexts/TimezoneContext';
@@ -142,6 +142,7 @@ interface Trade {
   quote_rate?: number;
   pip_size?: number;
   lot_size?: number;
+  group_trade_ids?: string[];
   // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
@@ -1472,7 +1473,14 @@ const stats = useMemo<Stats>(() => {
     if (!tradeToDelete) return;
 
     try {
-      const result = await deleteTrade(tradeToDelete);
+      // A visible row in "All Accounts" view can aggregate the same trade copied
+      // across multiple accounts. Delete ALL underlying copies of the selected row,
+      // not just the representative — otherwise siblings survive and the row returns.
+      const row = filteredTrades.find((t) => t.id === tradeToDelete);
+      const idsToDelete = row?.group_trade_ids ?? [tradeToDelete];
+      const result = idsToDelete.length > 1
+        ? await bulkDeleteTrades(idsToDelete)
+        : await deleteTrade(tradeToDelete);
 
       if (result.success) {
         toast.success("Trade deleted successfully");
@@ -1491,7 +1499,7 @@ const stats = useMemo<Stats>(() => {
       console.error('Delete trade error:', error);
       toast.error(error?.message || "Failed to delete trade");
     }
-  }, [tradeToDelete, queryClient]);
+  }, [tradeToDelete, queryClient, filteredTrades]);
 
   // 🔥 NEW: Quick update handler (for future inline edits)
   const handleQuickUpdate = useCallback(async (tradeId: string, updates: Partial<Trade>) => {
@@ -1542,10 +1550,17 @@ const stats = useMemo<Stats>(() => {
   // ── Bulk-delete handler (passed to BulkActionBar) ─────────────────────────
 
   const handleBulkDelete = useCallback(async (ids: string[]) => {
-    await bulkDeleteMutation(ids);
+    // Each visible row may aggregate multiple underlying trades (same trade copied
+    // across accounts in "All Accounts" view). Expand the selected representative ids
+    // to ALL underlying trade ids so the whole selected row is deleted, not just one copy.
+    const byId = new Map(filteredTrades.map((t) => [t.id, t]));
+    const expandedIds = Array.from(
+      new Set(ids.flatMap((id) => byId.get(id)?.group_trade_ids ?? [id]))
+    );
+    await bulkDeleteMutation(expandedIds);
     await queryClient.invalidateQueries({ queryKey: ['trades'] });
     await queryClient.invalidateQueries({ queryKey: ['subscription'] });
-  }, [bulkDeleteMutation, queryClient]);
+  }, [bulkDeleteMutation, queryClient, filteredTrades]);
 
   // ── Bulk-tag handler (passed to BulkActionBar) ────────────────────────────
   // Merges a new tag into each selected trade's tags array (union).
