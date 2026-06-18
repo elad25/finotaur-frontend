@@ -38,7 +38,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -67,7 +67,8 @@ function TradeChartSkeleton() {
     </div>
   );
 }
-import { AccountSwitcher } from "@/components/AccountSwitcher";
+import { AccountFilterDropdown } from '@/components/journal/AccountFilterDropdown';
+import { ManageConnectionsModal } from '@/components/broker/ManageConnectionsModal';
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -1253,17 +1254,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [savingR, setSavingR] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [showBrokerPanel, setShowBrokerPanel] = useState(false);
-  const brokerPanelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (brokerPanelRef.current && !brokerPanelRef.current.contains(e.target as Node)) {
-        setShowBrokerPanel(false);
-      }
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
+  const [showManageConnections, setShowManageConnections] = useState(false);
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
 
   // ── Bulk selection state ───────────────────────────────────────────────────
@@ -1654,35 +1645,8 @@ const stats = useMemo<Stats>(() => {
       <div className="flex flex-wrap items-center px-6 py-4 gap-4">
         <h1 className="text-2xl font-bold text-white">My Trades</h1>
 
-        {/* Account Switcher Dropdown — same pattern as Overview */}
-        <div className="relative" ref={brokerPanelRef}>
-          <button
-            onClick={() => setShowBrokerPanel(v => !v)}
-            className="flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-700/50 hover:border-[#C9A646]/30 rounded-xl px-3 py-2 transition-all duration-200 text-xs font-medium text-zinc-300"
-          >
-            <Layers className="w-3.5 h-3.5 text-[#C9A646]" />
-            <span>{activePortfolio?.name ?? 'All Accounts'}</span>
-            <ChevronDown className="w-3 h-3 text-zinc-500" />
-          </button>
-
-          {showBrokerPanel && (
-            <div
-              className="absolute left-0 top-11 z-50 w-64 rounded-2xl shadow-2xl overflow-hidden"
-              style={{
-                background: 'rgba(14,14,14,0.98)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(20px)',
-              }}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Select Account</span>
-              </div>
-              <div className="p-2 max-h-72 overflow-y-auto custom-scrollbar">
-                <AccountSwitcher />
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Account filter — matches Overview exactly */}
+        <AccountFilterDropdown onManage={() => setShowManageConnections(true)} />
 
         <FinoExplains title="What is My Trades?" className="mt-ds-3 ml-auto w-fit">
           Your complete trade history in one table. Sort and filter by ticker, strategy, date or
@@ -2721,6 +2685,12 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ManageConnectionsModal
+        open={showManageConnections}
+        onOpenChange={setShowManageConnections}
+        onAddConnection={() => setShowManageConnections(false)}
+      />
     </div>
   );
 }
