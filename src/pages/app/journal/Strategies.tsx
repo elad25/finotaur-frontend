@@ -1547,25 +1547,27 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Planned 1R (USD)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={planned1rUsd || ''}
-                    onChange={(e) => setPlanned1rUsd(parseFloat(e.target.value) || undefined)}
-                    placeholder="200"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
-                  <p className="mt-1 text-xs" style={{ color: '#9A9A9A' }}>
-                    Your fixed risk unit — Actual R is measured against this
-                  </p>
-                </div>
+              <div className="rounded-lg p-4" style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.25)' }}>
+                <label className="flex items-center gap-2 text-sm font-bold mb-2" style={{ color: '#C9A646' }}>
+                  <DollarSign size={15} />
+                  Risk per trade ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={planned1rUsd || ''}
+                  onChange={(e) => setPlanned1rUsd(parseFloat(e.target.value) || undefined)}
+                  placeholder="e.g. 200"
+                  className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                  style={{ borderColor: 'rgba(201,166,70,0.35)', color: '#EAEAEA' }}
+                />
+                <p className="mt-2 text-xs" style={{ color: '#9A9A9A' }}>
+                  Your planned 1R for this strategy. Used to measure trades in R. If left empty, R is calculated from your stop loss.
+                </p>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
                     Standard Quantity

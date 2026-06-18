@@ -10,7 +10,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { statusBadge, connectionNeedsAttention } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
-import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
+import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
 import type { Portfolio } from '@/hooks/usePortfolios';
 import { buildAccountGroups } from '@/components/journal/accountGrouping';
 import type { PortfolioGroup } from '@/components/journal/accountGrouping';
@@ -405,7 +405,6 @@ function PopoverBody({
     togglePortfolioSelection,
     setSelectedPortfolioIds,
     isShowingAll,
-    isShowingTrader,
     isLoading: loadingPortfolios,
   } = usePortfolioContext();
 
@@ -457,7 +456,7 @@ function PopoverBody({
   const handleGroupToggle = useCallback((group: PortfolioGroup) => {
     const groupIds = group.portfolios.map(p => p.id);
     const currentReal = selectedPortfolioIds.filter(
-      id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+      id => id !== ALL_PORTFOLIOS_ID,
     );
     const allSelected = groupIds.every(id => currentReal.includes(id));
     let nextIds: string[];
@@ -510,22 +509,6 @@ function PopoverBody({
             <span className="flex-1 text-left">All accounts</span>
           </button>
 
-          <button
-            type="button"
-            role="option"
-            aria-selected={isShowingTrader}
-            onClick={() => setSelectedPortfolioIds([TRADER_PORTFOLIO_ID])}
-            className={cn(
-              'flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold transition-colors',
-              isShowingTrader
-                ? 'bg-[#C9A646]/5 text-[#C9A646]'
-                : 'text-zinc-300 hover:bg-zinc-800/50',
-            )}
-          >
-            <CheckboxMark checked={isShowingTrader} compact />
-            <span className="flex-1 text-left">Trader</span>
-          </button>
-
           {groups.length > 0 && (
             <>
               <div className="mx-2 border-t border-zinc-800/60" />
@@ -538,12 +521,12 @@ function PopoverBody({
               {groups.map(group => {
                 const isExpanded = expanded.has(group.key);
                 const realSelected = selectedPortfolioIds.filter(
-                  id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+                  id => id !== ALL_PORTFOLIOS_ID,
                 );
                 const selectedInGroup = group.portfolios.filter(p => realSelected.includes(p.id)).length;
                 const totalInGroup = group.portfolios.length;
-                const allChecked = !isShowingAll && !isShowingTrader && selectedInGroup === totalInGroup;
-                const someChecked = !isShowingAll && !isShowingTrader && selectedInGroup > 0 && selectedInGroup < totalInGroup;
+                const allChecked = !isShowingAll && selectedInGroup === totalInGroup;
+                const someChecked = !isShowingAll && selectedInGroup > 0 && selectedInGroup < totalInGroup;
 
                 // Single-account groups with a non-prop-firm key render as a direct row (no collapse)
                 const isPropFirmGroup = group.key.startsWith('pf_');
@@ -557,7 +540,7 @@ function PopoverBody({
                     <SimpleAccountRow
                       key={group.key}
                       portfolio={portfolio}
-                      checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(portfolio.id)}
+                      checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
                       onToggle={togglePortfolioSelection}
                       connection={conn}
                       onReconnect={setReconnectFor}
@@ -650,7 +633,7 @@ function PopoverBody({
                       <SimpleAccountRow
                         key={p.id}
                         portfolio={p}
-                        checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
+                        checked={!isShowingAll && selectedPortfolioIds.includes(p.id)}
                         onToggle={togglePortfolioSelection}
                         indent
                         connection={connectionForPortfolio(p)}

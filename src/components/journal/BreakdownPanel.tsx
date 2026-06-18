@@ -7,6 +7,7 @@ import React, { useState, useMemo } from "react";
 import { HelpCircle } from "lucide-react";
 import { type Trade } from "@/hooks/useDashboardData";
 import { normalizeSymbol } from "@/utils/normalizeSymbol";
+import { tradeR } from "@/utils/rAggregates";
 
 // ------------------------------------------------
 // Types
@@ -21,6 +22,7 @@ interface GroupRow {
   netPnl: number;
   totalR: number;
   rCount: number; // trades with a valid R value
+  netR: number;   // sum of tradeR() for all trades in this group (nulls skipped)
 }
 
 interface SortConfig {
@@ -30,6 +32,7 @@ interface SortConfig {
 
 interface BreakdownPanelProps {
   trades: Trade[];
+  unit?: '$' | 'R';
 }
 
 // ------------------------------------------------
@@ -62,7 +65,7 @@ function groupTrades(trades: Trade[], tab: TabKey): Map<string, GroupRow> {
     }
 
     if (!map.has(key)) {
-      map.set(key, { name: key, count: 0, wins: 0, netPnl: 0, totalR: 0, rCount: 0 });
+      map.set(key, { name: key, count: 0, wins: 0, netPnl: 0, totalR: 0, rCount: 0, netR: 0 });
     }
 
     const row = map.get(key)!;
@@ -75,6 +78,12 @@ function groupTrades(trades: Trade[], tab: TabKey): Map<string, GroupRow> {
     if (rVal != null) {
       row.totalR += rVal;
       row.rCount += 1;
+    }
+
+    // Net R: sum tradeR() per trade, skip nulls
+    const r = tradeR(t);
+    if (r != null) {
+      row.netR += r;
     }
   }
 
@@ -122,7 +131,7 @@ const Th: React.FC<ThProps> = ({ label, sortKey, current, onSort, className = ""
 // Main component
 // ------------------------------------------------
 
-const BreakdownPanel: React.FC<BreakdownPanelProps> = ({ trades }) => {
+const BreakdownPanel: React.FC<BreakdownPanelProps> = ({ trades, unit = '$' }) => {
   const [activeTab, setActiveTab] = useState<TabKey>("symbol");
   const [sort, setSort] = useState<SortConfig>({ column: "netPnl", dir: "desc" });
 
@@ -210,7 +219,7 @@ const BreakdownPanel: React.FC<BreakdownPanelProps> = ({ trades }) => {
                 <Th label="Name" sortKey="name" current={sort} onSort={handleSort} className="min-w-[120px]" />
                 <Th label="Trades" sortKey="count" current={sort} onSort={handleSort} />
                 <Th label="Win Rate" sortKey="winrate" current={sort} onSort={handleSort} />
-                <Th label="Net P&L" sortKey="netPnl" current={sort} onSort={handleSort} />
+                <Th label={unit === 'R' ? "Net R" : "Net P&L"} sortKey={unit === 'R' ? "netR" : "netPnl"} current={sort} onSort={handleSort} />
                 <Th label="Avg R" sortKey="avgR" current={sort} onSort={handleSort} />
               </tr>
             </thead>
@@ -229,8 +238,10 @@ const BreakdownPanel: React.FC<BreakdownPanelProps> = ({ trades }) => {
                     <td className={`px-3 py-2.5 text-sm font-medium ${winrateColor(winrate)}`}>
                       {winrate.toFixed(1)}%
                     </td>
-                    <td className={`px-3 py-2.5 text-sm font-medium ${pnlColor(row.netPnl)}`}>
-                      {formatCurrencyLocal(row.netPnl)}
+                    <td className={`px-3 py-2.5 text-sm font-medium ${unit === 'R' ? pnlColor(row.netR) : pnlColor(row.netPnl)}`}>
+                      {unit === 'R'
+                        ? `${row.netR >= 0 ? '+' : '-'}${Math.abs(row.netR).toFixed(1)}R`
+                        : formatCurrencyLocal(row.netPnl)}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-[#A0A0A0]">
                       {avgR != null ? `${avgR >= 0 ? "+" : ""}${avgR.toFixed(2)}R` : "—"}

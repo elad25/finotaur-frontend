@@ -20,6 +20,7 @@ import {
 } from 'recharts';
 import { Check, ChevronDown, HelpCircle } from 'lucide-react';
 import { CHART_COLORS } from '@/constants/dashboard';
+import { tradeR, type TradeForRAgg } from '@/utils/rAggregates';
 
 interface EquityData {
   date: string;
@@ -27,7 +28,7 @@ interface EquityData {
   pnl: number;
 }
 
-interface EquityTrade {
+interface EquityTrade extends TradeForRAgg {
   id?: string;
   symbol?: string | null;
   pnl: number | null;
@@ -40,9 +41,16 @@ type EquityViewMode = 'daily' | 'trades';
 interface EquityChartProps {
   data: EquityData[];
   trades?: EquityTrade[];
+  unit?: '$' | 'R';
 }
 
-const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
+/** Format a cumulative R value for display in tooltip / Y-axis. */
+const formatRValue = (value: number): string => {
+  const sign = value >= 0 ? '+' : '-';
+  return `${sign}${Math.abs(value).toFixed(1)}R`;
+};
+
+const EquityChart = React.memo(({ data, trades = [], unit = '$' }: EquityChartProps) => {
   const [viewMode, setViewMode] = useState<EquityViewMode>('daily');
   const [selectorOpen, setSelectorOpen] = useState(false);
   // ✅ Optimize data for large datasets and ensure valid values
@@ -112,7 +120,84 @@ const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
     ];
   }, [trades]);
 
-  const rawDisplayData = viewMode === 'trades' ? tradeData : dailyData;
+  // R-mode: cumulative R per trade (sorted same as tradeData)
+  const tradeDataR = useMemo(() => {
+    if (!trades || trades.length === 0) return [];
+    let runningR = 0;
+    const sorted = [...trades]
+      .filter(t => t && t.pnl != null && isFinite(Number(t.pnl)))
+      .sort((a, b) => {
+        const aTime = new Date(a.close_at || a.open_at || 0).getTime();
+        const bTime = new Date(b.close_at || b.open_at || 0).getTime();
+        return aTime - bTime;
+      });
+    const mapped = sorted
+      .map((trade, index) => {
+        const r = tradeR(trade);
+        if (r === null) return null;
+        runningR += r;
+        const tradeNumber = index + 1;
+        const date = trade.close_at || trade.open_at;
+        return {
+          date: `#${tradeNumber}`,
+          equity: runningR,
+          pnl: r,
+          viewLabel: `#${tradeNumber}`,
+          tooltipLabel: [
+            `Trade #${tradeNumber}`,
+            trade.symbol ? String(trade.symbol).toUpperCase() : null,
+            date ? new Date(date as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null,
+          ].filter(Boolean).join(' · '),
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+    if (mapped.length === 0) return mapped;
+    return [
+      { date: '#0', equity: 0, pnl: 0, viewLabel: 'Start', tooltipLabel: 'Start · +0.0R' },
+      ...mapped,
+    ];
+  }, [trades]);
+
+  // R-mode: cumulative R per calendar day
+  const dailyDataR = useMemo(() => {
+    if (!trades || trades.length === 0) return [];
+    const grouped = new Map<string, number>();
+    const sorted = [...trades]
+      .filter(t => t && (t.close_at || t.open_at))
+      .sort((a, b) => {
+        const aTime = new Date(a.close_at || a.open_at || 0).getTime();
+        const bTime = new Date(b.close_at || b.open_at || 0).getTime();
+        return aTime - bTime;
+      });
+    for (const trade of sorted) {
+      const r = tradeR(trade);
+      if (r === null) continue;
+      const dateStr = new Date(trade.close_at || trade.open_at || 0)
+        .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      grouped.set(dateStr, (grouped.get(dateStr) ?? 0) + r);
+    }
+    const days = Array.from(grouped.entries());
+    if (days.length === 0) return [];
+    let runningR = 0;
+    const mapped = days.map(([dateStr, dayR]) => {
+      runningR += dayR;
+      return {
+        date: dateStr,
+        equity: runningR,
+        pnl: dayR,
+        viewLabel: dateStr,
+        tooltipLabel: `${dateStr} · ${formatRValue(runningR)}`,
+      };
+    });
+    return [
+      { date: 'Start', equity: 0, pnl: 0, viewLabel: 'Start', tooltipLabel: 'Start · +0.0R' },
+      ...mapped,
+    ];
+  }, [trades]);
+
+  const rawDisplayData = unit === 'R'
+    ? (viewMode === 'trades' ? tradeDataR : dailyDataR)
+    : (viewMode === 'trades' ? tradeData : dailyData);
 
   const optimizedData = useMemo(() => {
     if (rawDisplayData.length > 200) {
@@ -253,13 +338,14 @@ const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
               stroke="rgba(255,255,255,0.06)"
               axisLine={{ strokeWidth: 0.5 }}
             />
-            <YAxis 
+            <YAxis
               domain={yAxisDomain}
-              tick={{ fill: CHART_COLORS.textMuted, fontSize: 11, fontWeight: 300 }} 
+              tick={{ fill: CHART_COLORS.textMuted, fontSize: 11, fontWeight: 300 }}
               stroke="rgba(255,255,255,0.06)"
               axisLine={{ strokeWidth: 0.5 }}
               allowDataOverflow={false}
               tickFormatter={(value) => {
+                if (unit === 'R') return formatRValue(value);
                 if (value === 0) return '$0';
                 const absValue = Math.abs(value);
                 if (absValue >= 1000) {
@@ -283,10 +369,13 @@ const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
               labelFormatter={(_, payload) => payload?.[0]?.payload?.tooltipLabel ?? ''}
               formatter={(val: any) => {
                 const value = Number(val);
-                if (isNaN(value) || !isFinite(value)) return ['$0.00', 'Equity'];
+                if (isNaN(value) || !isFinite(value)) {
+                  return unit === 'R' ? ['+0.0R', 'Equity'] : ['$0.00', 'Equity'];
+                }
+                if (unit === 'R') return [formatRValue(value), 'Equity'];
                 const sign = value < 0 ? '-' : '';
                 const abs = Math.abs(value);
-                return [`${sign}$${abs.toFixed(2)}`, "Equity"];
+                return [`${sign}$${abs.toFixed(2)}`, 'Equity'];
               }}
             />
             <Area 

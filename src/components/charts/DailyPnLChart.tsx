@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 import { BarChart3, HelpCircle } from 'lucide-react';
 import { CHART_COLORS } from '@/constants/dashboard';
+import { tradeR, type TradeForRAgg } from '@/utils/rAggregates';
 
 interface DailyPnLData {
   date: string;
@@ -28,7 +29,7 @@ interface DailyPnLData {
   pnl: number;
 }
 
-interface RawTrade {
+interface RawTrade extends TradeForRAgg {
   open_at: string;
   pnl: number | null;
 }
@@ -36,13 +37,37 @@ interface RawTrade {
 interface DailyPnLChartProps {
   data: DailyPnLData[];
   trades?: RawTrade[];
+  unit?: '$' | 'R';
 }
 
-const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
+const DailyPnLChart = React.memo(({ data, trades, unit = '$' }: DailyPnLChartProps) => {
   // 🔥 FIX: Group by open_at (actual trade date) when trades provided
   // Fallback to equitySeries data (grouped by close_at) if no trades
   const optimizedData = useMemo(() => {
-    // ✅ Priority: use raw trades grouped by open_at
+    if (unit === 'R' && trades && trades.length > 0) {
+      // R-mode: sum tradeR per calendar day, skip trades with no risk basis
+      const grouped = new Map<string, { date: string; pnl: number; equity: number }>();
+      trades.forEach(trade => {
+        if (!trade.open_at) return;
+        const r = tradeR(trade);
+        if (r === null) return;
+        const key = new Date(trade.open_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (!grouped.has(key)) {
+          grouped.set(key, { date: key, pnl: 0, equity: 0 });
+        }
+        grouped.get(key)!.pnl += r;
+      });
+      const sorted = Array.from(grouped.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      if (sorted.length > 100) {
+        const step = Math.ceil(sorted.length / 100);
+        return sorted.filter((_, i) => i % step === 0 || i === sorted.length - 1);
+      }
+      return sorted;
+    }
+
+    // ✅ Priority: use raw trades grouped by open_at ($ mode)
     if (trades && trades.length > 0) {
       const grouped = new Map<string, { date: string; pnl: number; equity: number }>();
 
@@ -74,7 +99,7 @@ const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
       return data.filter((_, index) => index % step === 0);
     }
     return data;
-  }, [trades, data]);
+  }, [trades, data, unit]);
   
   // ✅ Empty state
   if (!data || data.length === 0) {
@@ -174,17 +199,21 @@ const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
               tickLine={false}
               height={50}
             />
-            <YAxis 
-              tick={{ 
-                fill: CHART_COLORS.text, 
-                fontSize: 11, 
+            <YAxis
+              tick={{
+                fill: CHART_COLORS.text,
+                fontSize: 11,
                 fontWeight: 500
-              }} 
+              }}
               stroke="rgba(255,255,255,0.1)"
               axisLine={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
               tickLine={false}
               width={60}
               tickFormatter={(value) => {
+                if (unit === 'R') {
+                  const sign = value >= 0 ? '+' : '-';
+                  return `${sign}${Math.abs(value).toFixed(1)}R`;
+                }
                 if (value === 0) return '$0';
                 const absValue = Math.abs(value);
                 if (absValue >= 1000) {
@@ -208,32 +237,34 @@ const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
                   const isPositive = value >= 0;
                   const color = isPositive ? CHART_COLORS.profitGradientStart : CHART_COLORS.lossGradientStart;
                   const absValue = Math.abs(value);
-                  const formatted = isPositive 
-                    ? `+$${absValue.toFixed(2)}`
-                    : `-$${absValue.toFixed(2)}`;
-                  
+                  const formatted = unit === 'R'
+                    ? `${isPositive ? '+' : '-'}${absValue.toFixed(1)}R`
+                    : isPositive
+                      ? `+$${absValue.toFixed(2)}`
+                      : `-$${absValue.toFixed(2)}`;
+
                   return (
-                    <div 
-                      style={{ 
-                        background: 'linear-gradient(135deg, #141414 0%, #1A1A1A 100%)', 
+                    <div
+                      style={{
+                        background: 'linear-gradient(135deg, #141414 0%, #1A1A1A 100%)',
                         border: `1.5px solid ${color}`,
                         borderRadius: 12,
                         padding: '12px 14px',
                         boxShadow: `0 8px 24px ${color}40`,
                       }}
                     >
-                      <div style={{ 
-                        color: CHART_COLORS.textMuted, 
-                        fontSize: 10, 
+                      <div style={{
+                        color: CHART_COLORS.textMuted,
+                        fontSize: 10,
                         fontWeight: 500,
                         marginBottom: 6,
                         textTransform: 'uppercase',
                       }}>
                         {label}
                       </div>
-                      <div style={{ 
-                        color: color, 
-                        fontSize: 15, 
+                      <div style={{
+                        color: color,
+                        fontSize: 15,
                         fontWeight: 700,
                       }}>
                         {formatted}

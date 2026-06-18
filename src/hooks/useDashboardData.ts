@@ -17,10 +17,8 @@ import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
 import { logger } from '@/lib/logger';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
-import { TRADER_PORTFOLIO_ID, isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
+import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { normalizeSymbol } from '@/utils/normalizeSymbol';
-import { groupIntoDecisions, computeTraderStats, type TraderRawTrade } from '@/lib/traderDecisions';
-import { fetchActiveConnectionIds } from '@/lib/traderView';
 import dayjs from 'dayjs';
 
 // ================================================
@@ -688,21 +686,18 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
   
   const userId = overrideUserId || effectiveUserId;
   const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
-  const isTraderView = portfolioId === TRADER_PORTFOLIO_ID;
-  const dashboardPortfolioId = portfolioId === TRADER_PORTFOLIO_ID ? null : portfolioId;
-  const dashboardPortfolioIds = portfolioIds?.filter(id => id !== TRADER_PORTFOLIO_ID) ?? null;
-  
+  const dashboardPortfolioId = portfolioId ?? null;
+  const dashboardPortfolioIds = portfolioIds ?? null;
+
   // Track if we've prefetched to avoid doing it multiple times
   const hasPrefetched = useRef(false);
 
   const query = useQuery({
     queryKey: [
       ...dashboardKeys.stats(userId || '', daysBack || -1),
-      portfolioId === TRADER_PORTFOLIO_ID
-        ? 'trader'
-        : dashboardPortfolioIds && dashboardPortfolioIds.length > 0
-          ? dashboardPortfolioIds.join(',')
-          : (dashboardPortfolioId ?? 'all'),
+      dashboardPortfolioIds && dashboardPortfolioIds.length > 0
+        ? dashboardPortfolioIds.join(',')
+        : (dashboardPortfolioId ?? 'all'),
     ],
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
@@ -728,105 +723,6 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       }
 
       const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
-
-      // ── Trader lens: noise-free stats from logical decisions ──────────
-      // When the "Trader" view is selected we bypass the regular per-portfolio
-      // path entirely. Instead we pull ALL trades for this user (no portfolio
-      // filter — the Trader universe = every account), collapse concurrent
-      // copies into one logical decision per groupIntoDecisions(), exclude
-      // trades from burned (inactive) broker connections, and build stats
-      // equal-weighted per decision rather than per fill.
-      if (isTraderView) {
-        const { data, error: traderError } = await client
-          .from('trades')
-          .select('id, symbol, side, pnl, rr, actual_r, actual_user_r, risk_usd, open_at, close_at, entry_price, exit_price, quantity, multiplier, session, input_mode, broker_connection_id, portfolio_id')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .gte('open_at', cutoffDate)
-          .order('open_at', { ascending: true, nullsFirst: false });
-
-        if (traderError) {
-          console.error('❌ Trader lens query error:', traderError.message);
-          if (traderError.code === 'PGRST116' || traderError.message?.includes('row-level security')) {
-            throw new Error(
-              `Access denied. ${isImpersonating ? 'Admin mode required.' : 'You can only view your own data.'}`
-            );
-          }
-          throw traderError;
-        }
-
-        // Fetch active broker connections to exclude burned accounts.
-        const activeConnectionIds = await fetchActiveConnectionIds(client, userId);
-
-        const rows = (data ?? []) as TraderRawTrade[];
-        const decisions = groupIntoDecisions(rows, { activeConnectionIds });
-        const t = computeTraderStats(decisions, rows.length);
-
-        const bestTrade = t.bestTrade
-          ? {
-              pnl: t.bestTrade.pnl,
-              rr: t.bestTrade.rr,
-              symbol: t.bestTrade.symbol,
-              open_at: t.bestTrade.open_at,
-              session: (t.bestTrade.session ?? undefined) as TradingSession | undefined,
-            }
-          : null;
-        const worstTrade = t.worstTrade
-          ? {
-              pnl: t.worstTrade.pnl,
-              rr: t.worstTrade.rr,
-              symbol: t.worstTrade.symbol,
-              open_at: t.worstTrade.open_at,
-              session: (t.worstTrade.session ?? undefined) as TradingSession | undefined,
-            }
-          : null;
-
-        // Map decisions to the Trade[] shape for downstream panels (Trade
-        // Performance "By Time" / "By Duration" read open_at/close_at/pnl/symbol).
-        // These are decision-level pseudo-trades; input_mode 'risk-only' so the
-        // closed-trade test (isTradeClosed) passes via pnl being present.
-        const trades = decisions.map(d => ({
-          id: d.symbol + '-' + d.entryAt,
-          symbol: d.symbol,
-          side: d.side,
-          pnl: d.realPnl,
-          open_at: d.entryAt,
-          close_at: d.exitAt,
-          quantity: d.contracts,
-          session: d.session as TradingSession | undefined,
-          input_mode: 'risk-only' as const,
-          rr: d.rr,
-          actual_r: null,
-          actual_user_r: null,
-          risk_usd: null,
-          reward_usd: null,
-          stop_price: null,
-          entry_price: null,
-          exit_price: null,
-          multiplier: null,
-          tags: null,
-        })) as unknown as Trade[];
-
-        const baseStats = {
-          netPnl: t.netPnl,
-          winrate: t.winrate,
-          avgRR: t.avgRR,
-          maxDrawdown: t.maxDrawdown,
-          closedTrades: t.closedTrades,
-          wins: t.wins,
-          losses: t.losses,
-          breakeven: t.breakeven,
-          profitFactor: t.profitFactor,
-          avgWin: t.avgWin,
-          avgLoss: t.avgLoss,
-          equitySeries: t.equitySeries,
-          bestTrade,
-          worstTrade,
-          trades,
-        };
-        return { ...baseStats, tier: calculateTier(baseStats) };
-      }
-      // ── End Trader lens ───────────────────────────────────────────────
 
       // CHUNK 3 B.4 phase 2.D — for "all-time" view (no daysBack or >= MAX_LOOKBACK_DAYS),
       // use server-side aggregated path: RPC + view + 2 small SELECTs. Eliminates the
