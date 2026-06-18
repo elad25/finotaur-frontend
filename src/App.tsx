@@ -391,9 +391,9 @@ const FundingTransactions = lazy(() => import("@/pages/app/funding/Transactions"
 // LOADING COMPONENT — imported from @/components/ds/Spinner
 
 // WRAPPERS
-const SuspenseRoute = memo(({ children }: { children: React.ReactNode }) => (
+const SuspenseRoute = memo(({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) => (
   <ErrorBoundary boundary="suspense-route">
-    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
+    <Suspense fallback={fallback ?? <RouteSkeleton />}>{children}</Suspense>
   </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
@@ -592,10 +592,9 @@ function AppContent() {
           <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
           <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
           <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
-          <Route path="crypto/scanner" element={<SuspenseRoute><AdminBetaGate><CryptoMarketScanner /></AdminBetaGate></SuspenseRoute>} />
-
-          {/* TRADING ARENA — admin + beta only, full-screen workstation (Phase 0) */}
-          <Route path="trading-arena/:section?" element={<SuspenseRoute><AdminBetaGate><TradingArenaPage /></AdminBetaGate></SuspenseRoute>} />
+          {/* Market Scanner is a fullscreen overlay — use a fullscreen-black loading
+              fallback (chunk + auth) so the transition never flashes an app-shell skeleton. */}
+          <Route path="crypto/scanner" element={<SuspenseRoute fallback={<div className="fixed inset-0 z-[100] bg-black" />}><AdminBetaGate fallback={<div className="fixed inset-0 z-[100] bg-black" />}><CryptoMarketScanner /></AdminBetaGate></SuspenseRoute>} />
 
           {/* TRADING ARENA — admin + beta only, full-screen workstation (Phase 0) */}
           <Route path="trading-arena/:section?" element={<SuspenseRoute><AdminBetaGate><TradingArenaPage /></AdminBetaGate></SuspenseRoute>} />

@@ -17,6 +17,10 @@ import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 
 interface AdminBetaGateProps {
   children: ReactNode;
+  /** Optional loading fallback (defaults to RouteSkeleton). Pass a fullscreen
+   *  element for routes that render as a fullscreen overlay (e.g. Market Scanner)
+   *  so the auth check doesn't flash an app-shell skeleton. */
+  fallback?: ReactNode;
 }
 
 // 🔒 Early Access locked screen — rendered in-place for non-admin/beta users
@@ -68,11 +72,11 @@ const EarlyAccessLockedPage = memo(() => (
 EarlyAccessLockedPage.displayName = 'EarlyAccessLockedPage';
 
 // 🔒 ADMIN/BETA GATE COMPONENT
-export const AdminBetaGate = memo(({ children }: AdminBetaGateProps) => {
+export const AdminBetaGate = memo(({ children, fallback }: AdminBetaGateProps) => {
   const { hasBetaAccess, isLoading } = useAdminAuth();
 
   if (isLoading) {
-    return <RouteSkeleton />;
+    return <>{fallback ?? <RouteSkeleton />}</>;
   }
 
   if (hasBetaAccess) {
