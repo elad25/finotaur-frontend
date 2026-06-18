@@ -31,6 +31,7 @@ import {
 import { ChartTab }     from './tabs/ChartTab';
 import { OrderFlowTab } from './tabs/OrderFlowTab';
 import { TapeTab }      from './tabs/TapeTab';
+import { CvdTab }       from './tabs/CvdTab';
 import { LockedTab }    from './tabs/LockedTab';
 
 // ---------------------------------------------------------------------------
@@ -248,6 +249,9 @@ export default function TradingArena() {
         )}
         {activeTab === 'tape' && (
           <TapeTab symbol={symbol} />
+        )}
+        {activeTab === 'cvd' && (
+          <CvdTab symbol={symbol} interval={interval} />
         )}
         {activeTab === 'options' && <LockedTab label="Options" />}
         {activeTab === 'futures'  && <LockedTab label="Futures" />}
