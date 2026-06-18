@@ -1230,7 +1230,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
-  const { effectivePortfolioId, activePortfolio, isShowingTrader } = usePortfolioContext();
+  const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
   // When viewing another user's journal (mentor view), do not apply the
   // logged-in mentor's portfolio filter — show all of the student's trades.
   const mentorPortfolioId = (overrideUserId || isMentorView) ? undefined : effectivePortfolioId;
@@ -1668,11 +1668,6 @@ const stats = useMemo<Stats>(() => {
       {/* Compact Stats Bar */}
       <div className="border-b border-zinc-900/50">
         <div className="px-6 py-4">
-          {isShowingTrader && (
-            <div className="mb-3 rounded-xl border border-[#C9A646]/20 bg-[#C9A646]/5 px-3 py-2 text-[11px] text-[#C9A646]">
-              Trader view — noise-free: {stats.totalTrades} decisions · each weighted once · per-contract · burned accounts excluded
-            </div>
-          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatsCard
               icon={Target}

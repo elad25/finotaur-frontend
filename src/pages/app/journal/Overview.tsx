@@ -84,6 +84,8 @@ import { usePortfolioContext } from '@/contexts/PortfolioContext';
 import { AccountSwitcher } from '@/components/AccountSwitcher';
 import { AccountFilterDropdown } from '@/components/journal/AccountFilterDropdown';
 import type { FinotaurTrade } from '@/utils/importUtils';
+import { useDisplayUnit } from '@/hooks/useDisplayUnit';
+import { aggregateR, tradeR, type TradeForRAgg } from '@/utils/rAggregates';
 
 // ================================================
 // LOADING SKELETONS
@@ -170,6 +172,18 @@ const formatSignedCurrency = (value: number): string => {
     maximumFractionDigits: 2,
   });
   return `${value >= 0 ? "+" : "-"}$${formatted}`;
+};
+
+/** Format a signed R value: null → "—"; else "+1.4R" / "-2.0R" */
+const formatR = (value: number | null): string => {
+  if (value === null) return "—";
+  return `${value >= 0 ? "+" : "-"}${Math.abs(value).toFixed(1)}R`;
+};
+
+/** Format an unsigned R magnitude (for avg-loss display): null → "—"; else "1.0R" */
+const formatRMag = (value: number | null): string => {
+  if (value === null) return "—";
+  return `${Math.abs(value).toFixed(1)}R`;
 };
 
 const KpiSparkline = React.memo(({ type = "line" }: { type?: "line" | "bars" | "target" }) => {
@@ -394,10 +408,39 @@ const getTradeDurationData = (stats: DashboardStats): DataPoint[] => {
     .sort((a: any, b: any) => a.sortKey - b.sortKey);
 };
 
-const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) => {
-  if (!data || data.length === 0) {
+const TradeTimePerformanceChart = React.memo(({
+  data,
+  trades = [],
+  unit = '$',
+}: {
+  data: DataPoint[];
+  trades?: TradeForRAgg[];
+  unit?: '$' | 'R';
+}) => {
+  // Build R-based display points when unit === 'R'
+  const displayPoints = React.useMemo(() => {
+    if (unit !== 'R') return data;
+    // Re-derive from trades: filter those with open_at, sort by time, compute R
+    type RPoint = { time: string; value: number; isProfit: boolean };
+    const pts: RPoint[] = [];
+    for (const trade of trades) {
+      // open_at comes via the DashboardStats Trade shape (string field)
+      const openAt = (trade as unknown as { open_at?: string | null }).open_at;
+      if (!openAt) continue;
+      const r = tradeR(trade);
+      if (r === null) continue;
+      pts.push({
+        time: new Date(openAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        value: r,
+        isProfit: r >= 0,
+      });
+    }
+    return pts.sort((a, b) => a.time.localeCompare(b.time));
+  }, [data, trades, unit]);
+
+  if (!displayPoints || displayPoints.length === 0) {
     return (
-      <div 
+      <div
         className="flex h-[218px] items-center justify-center rounded-[12px] border border-white/[0.06] bg-black/10"
         style={{
           background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(14,14,14,0.95) 100%)'
@@ -409,20 +452,19 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
   }
 
   // ✅ DYNAMIC: Calculate max value from actual data
-  const allValues = data.map(d => Math.abs(d.value));
-  const dataMax = Math.max(...allValues);
-  // Add 10% padding to the scale for better visibility
-  const maxValue = Math.max(dataMax * 1.1, 100);
-  
-  // ✅ Find min value for proper negative scaling
-  const minValue = Math.min(...data.map(d => d.value), 0);
-  const maxPositive = Math.max(...data.map(d => d.value), 0);
-  
+  const minValue = Math.min(...displayPoints.map(d => d.value), 0);
+  const maxPositive = Math.max(...displayPoints.map(d => d.value), 0);
+
   // ✅ Calculate scale range (symmetric around zero for better visualization)
-  const scaleMax = Math.max(Math.abs(minValue), Math.abs(maxPositive)) * 1.1;
-  
+  const scaleMax = Math.max(Math.abs(minValue), Math.abs(maxPositive)) * 1.1 || 1;
+
+  const fmtLabel = (v: number) =>
+    unit === 'R'
+      ? `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(1)}R`
+      : `$${Math.round(Math.abs(v))}`;
+
   return (
-    <div 
+    <div
       className="rounded-[12px] border border-white/[0.06] bg-black/10 p-0"
     >
       <div className="mb-3 flex items-center justify-between">
@@ -436,20 +478,20 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
           />
         </div>
         <div className="text-xs text-[#666666]">
-          {data.length} trades
+          {displayPoints.length} trades
         </div>
       </div>
 
       <div className="relative h-[168px] w-full">
         {/* Y-axis labels - DYNAMIC based on data */}
         <div className="absolute left-0 top-2 bottom-10 flex flex-col justify-between text-[10px] text-[#666666] pr-2 w-12 text-right">
-          <span>${scaleMax.toFixed(0)}</span>
-          <span>${(scaleMax * 0.75).toFixed(0)}</span>
-          <span>${(scaleMax * 0.5).toFixed(0)}</span>
-          <span>${(scaleMax * 0.25).toFixed(0)}</span>
-          <span className="text-white/60">$0</span>
-          <span>-${(scaleMax * 0.25).toFixed(0)}</span>
-          <span>-${(scaleMax * 0.5).toFixed(0)}</span>
+          <span>{fmtLabel(scaleMax)}</span>
+          <span>{fmtLabel(scaleMax * 0.75)}</span>
+          <span>{fmtLabel(scaleMax * 0.5)}</span>
+          <span>{fmtLabel(scaleMax * 0.25)}</span>
+          <span className="text-white/60">{unit === 'R' ? '0R' : '$0'}</span>
+          <span>-{fmtLabel(scaleMax * 0.25)}</span>
+          <span>-{fmtLabel(scaleMax * 0.5)}</span>
         </div>
 
         {/* Chart area */}
@@ -479,16 +521,19 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
             />
 
             {/* Data points - DYNAMIC positioning */}
-            {data.map((point, i) => {
+            {displayPoints.map((point, i) => {
               // ✅ X: 3% padding on each side
               const xPadding = 3;
-              const x = xPadding + ((i / Math.max(data.length - 1, 1)) * (100 - xPadding * 2));
-              
+              const x = xPadding + ((i / Math.max(displayPoints.length - 1, 1)) * (100 - xPadding * 2));
+
               // ✅ Y: Dynamic scaling based on actual value and scaleMax
-              // 50% is zero line, scale proportionally up/down from there
               const yPercent = (point.value / scaleMax) * 43; // 43% max for padding
               const y = 50 - yPercent;
-              
+
+              const tooltipVal = unit === 'R'
+                ? `${point.value >= 0 ? '+' : ''}${point.value.toFixed(1)}R`
+                : `${point.value >= 0 ? '+' : ''}$${point.value.toFixed(2)}`;
+
               return (
                 <g key={i}>
                   {/* Outer glow effect */}
@@ -511,7 +556,7 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
                     stroke={point.isProfit ? '#4AD295' : '#E36363'}
                     strokeOpacity="0.3"
                   >
-                    <title>{`${point.time}: ${point.value >= 0 ? '+' : ''}$${point.value.toFixed(2)}`}</title>
+                    <title>{`${point.time}: ${tooltipVal}`}</title>
                   </circle>
                 </g>
               );
@@ -521,7 +566,7 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
 
         {/* X-axis labels */}
         <div className="absolute left-14 right-2 bottom-0 flex justify-between text-[10px] text-[#666666]">
-          {data.filter((_, i) => i % Math.ceil(data.length / 6) === 0).map((point, i) => (
+          {displayPoints.filter((_, i) => i % Math.ceil(displayPoints.length / 6) === 0).map((point, i) => (
             <span key={i}>{point.time}</span>
           ))}
         </div>
@@ -535,14 +580,49 @@ TradeTimePerformanceChart.displayName = 'TradeTimePerformanceChart';
 // ✅ UPDATED: Trade Duration Chart with Lock Feature
 // ================================================
 
-const TradeDurationPerformanceChart = React.memo(({ 
+const TradeDurationPerformanceChart = React.memo(({
   data,
-  isLocked = false
-}: { 
+  trades = [],
+  unit = '$',
+  isLocked = false,
+}: {
   data: DataPoint[];
+  trades?: TradeForRAgg[];
+  unit?: '$' | 'R';
   isLocked?: boolean;
 }) => {
-  const maxValue = Math.max(...data.map(d => Math.abs(d.value)), 100);
+  // Build R-based display points when unit === 'R'
+  const displayPoints = React.useMemo(() => {
+    if (unit !== 'R') return data;
+    type RPoint = { duration: string; value: number; isProfit: boolean; sortKey: number };
+    const pts: RPoint[] = [];
+    for (const trade of trades) {
+      const t = trade as unknown as { open_at?: string | null; close_at?: string | null };
+      if (!t.open_at || !t.close_at) continue;
+      const r = tradeR(trade);
+      if (r === null) continue;
+      const durationMinutes = Math.max(
+        0,
+        Math.round((new Date(t.close_at).getTime() - new Date(t.open_at).getTime()) / 60000)
+      );
+      let durationStr: string;
+      if (durationMinutes < 60) {
+        durationStr = `${durationMinutes}m`;
+      } else if (durationMinutes < 1440) {
+        const hours = Math.floor(durationMinutes / 60);
+        const mins = durationMinutes % 60;
+        durationStr = `${hours}h:${mins}m`;
+      } else {
+        const days = Math.floor(durationMinutes / 1440);
+        const hours = Math.floor((durationMinutes % 1440) / 60);
+        durationStr = `${days}d:${hours}h`;
+      }
+      pts.push({ duration: durationStr, value: r, isProfit: r >= 0, sortKey: durationMinutes });
+    }
+    return pts.sort((a, b) => a.sortKey - b.sortKey);
+  }, [data, trades, unit]);
+
+  const maxValue = Math.max(...displayPoints.map(d => Math.abs(d.value)), 1);
   
   // ✅ LOCKED STATE FOR FREE USERS OR USERS WITHOUT SNAPTRADE
   if (isLocked) {
@@ -661,13 +741,27 @@ const TradeDurationPerformanceChart = React.memo(({
 
       <div className="relative h-[168px] w-full">
         <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-[10px] text-[#666666] pr-2">
-          <span>${(maxValue).toFixed(0)}</span>
-          <span>${(maxValue * 0.75).toFixed(0)}</span>
-          <span>${(maxValue * 0.5).toFixed(0)}</span>
-          <span>${(maxValue * 0.25).toFixed(0)}</span>
-          <span>$0</span>
-          <span>-${(maxValue * 0.25).toFixed(0)}</span>
-          <span>-${(maxValue * 0.5).toFixed(0)}</span>
+          {unit === 'R' ? (
+            <>
+              <span>+{maxValue.toFixed(1)}R</span>
+              <span>+{(maxValue * 0.75).toFixed(1)}R</span>
+              <span>+{(maxValue * 0.5).toFixed(1)}R</span>
+              <span>+{(maxValue * 0.25).toFixed(1)}R</span>
+              <span>0R</span>
+              <span>-{(maxValue * 0.25).toFixed(1)}R</span>
+              <span>-{(maxValue * 0.5).toFixed(1)}R</span>
+            </>
+          ) : (
+            <>
+              <span>${maxValue.toFixed(0)}</span>
+              <span>${(maxValue * 0.75).toFixed(0)}</span>
+              <span>${(maxValue * 0.5).toFixed(0)}</span>
+              <span>${(maxValue * 0.25).toFixed(0)}</span>
+              <span>$0</span>
+              <span>-${(maxValue * 0.25).toFixed(0)}</span>
+              <span>-${(maxValue * 0.5).toFixed(0)}</span>
+            </>
+          )}
         </div>
 
         <div className="absolute left-12 right-0 top-0 bottom-8">
@@ -693,10 +787,13 @@ const TradeDurationPerformanceChart = React.memo(({
               strokeWidth="1"
             />
 
-            {data.map((point, i) => {
-              const x = (i / (data.length - 1)) * 100;
+            {displayPoints.map((point, i) => {
+              const x = (i / Math.max(displayPoints.length - 1, 1)) * 100;
               const y = 50 - (point.value / maxValue) * 50;
-              
+              const tooltipVal = unit === 'R'
+                ? `${point.value >= 0 ? '+' : ''}${point.value.toFixed(1)}R`
+                : `$${point.value.toFixed(2)}`;
+
               return (
                 <circle
                   key={i}
@@ -707,7 +804,7 @@ const TradeDurationPerformanceChart = React.memo(({
                   className="hover:r-6 transition-all cursor-pointer"
                   opacity="0.8"
                 >
-                  <title>{`${point.duration}: $${point.value.toFixed(2)}`}</title>
+                  <title>{`${point.duration}: ${tooltipVal}`}</title>
                 </circle>
               );
             })}
@@ -715,7 +812,7 @@ const TradeDurationPerformanceChart = React.memo(({
         </div>
 
         <div className="absolute left-12 right-0 bottom-0 flex justify-between text-[10px] text-[#666666]">
-          {data.filter((_, i) => i % Math.ceil(data.length / 8) === 0).map((point, i) => (
+          {displayPoints.filter((_, i) => i % Math.ceil(displayPoints.length / 8) === 0).map((point, i) => (
             <span key={i}>{point.duration}</span>
           ))}
         </div>
@@ -1284,7 +1381,6 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     effectivePortfolioIds,
     setActivePortfolioId,
     hasMultiplePortfolios,
-    isShowingTrader,
   } = usePortfolioContext();
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
   const [showImportPopup, setShowImportPopup] = useState(false);
@@ -1522,7 +1618,15 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     const lossProbability = 1 - winProbability;
     return (winProbability * (stats.avgWin || 0)) + (lossProbability * (stats.avgLoss || 0));
   }, [stats]);
-  
+
+  // Display-unit toggle ($ vs R)
+  const { unit, setUnit } = useDisplayUnit();
+
+  const rAgg = useMemo(
+    () => aggregateR((stats?.trades ?? []) as unknown as import('@/utils/rAggregates').TradeForRAgg[]),
+    [stats?.trades],
+  );
+
   // ✅ Check if Trade Duration chart should be locked
   // 2026-05-19: previous gate locked the chart for paid users whenever
   // tradeDurationData.length === 0 — which meant a brand-new paid account
@@ -1795,6 +1899,28 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </Button>
             )}
 
+            {/* Display-unit toggle: $ | R */}
+            <div
+              role="group"
+              aria-label="Display unit"
+              className="flex h-10 items-center rounded-[12px] border border-[#C9A646]/30 bg-[#0F0F0F] overflow-hidden"
+            >
+              {(['$', 'R'] as const).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => setUnit(u)}
+                  aria-pressed={unit === u}
+                  className={`h-full w-10 text-[12px] font-semibold transition-all duration-200 ${
+                    unit === u
+                      ? 'bg-[#C9A646] text-black'
+                      : 'text-[#A0A0A0] hover:text-white'
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+
             {/* F2.5: Import Trades — compact (handler unchanged) */}
             {!effectiveReadOnly && (
               <Button
@@ -1858,19 +1984,22 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
 
         {stats && (allBrokerConnections.length > 0 || (stats.trades && stats.trades.length > 0) || emptyStateDismissed) && (
           <>
-            {isShowingTrader && stats && (
-              <div className="mb-3 rounded-xl border border-[#C9A646]/20 bg-[#C9A646]/5 px-3 py-2 text-[11px] text-[#C9A646]">
-                Trader view — noise-free: {stats.closedTrades} decisions · each weighted once · per-contract · burned accounts excluded
-              </div>
-            )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <JournalKpiCard
-                label="Net P&L"
-                value={formatCurrency(stats.netPnl)}
-                hint={isShowingTrader ? `${stats.closedTrades} decisions` : `${stats.closedTrades} closed trades`}
-                tone={stats.netPnl >= 0 ? "green" : "red"}
+                label={unit === 'R' ? "Net R" : "Net P&L"}
+                value={unit === 'R' ? formatR(rAgg.totalR) : formatCurrency(stats.netPnl)}
+                hint={`${stats.closedTrades} closed trades`}
+                tone={
+                  unit === 'R'
+                    ? (rAgg.totalR >= 0 ? "green" : "red")
+                    : (stats.netPnl >= 0 ? "green" : "red")
+                }
                 icon={<TrendingUp className="h-8 w-8" strokeWidth={2} />}
-                tooltip="Total profit or loss from all closed trades in the selected date range."
+                tooltip={
+                  unit === 'R'
+                    ? "Total realized R across all closed trades in the selected date range."
+                    : "Total profit or loss from all closed trades in the selected date range."
+                }
               />
 
               <JournalKpiCard
@@ -1902,7 +2031,11 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                     ? `${(stats.avgWin / Math.abs(stats.avgLoss)).toFixed(2)}`
                     : "—"
                 }
-                hint={`${formatSignedCurrency(stats.avgWin || 0)} / ${formatPlainCurrency(stats.avgLoss || 0)}`}
+                hint={
+                  unit === 'R'
+                    ? `${formatR(rAgg.avgWinR)} / ${formatRMag(rAgg.avgLossR)}`
+                    : `${formatSignedCurrency(stats.avgWin || 0)} / ${formatPlainCurrency(stats.avgLoss || 0)}`
+                }
                 tone="gold"
                 visual="bars"
                 tooltip="Average winning trade compared with average losing trade. Higher means winners are larger relative to losses."
@@ -1910,14 +2043,33 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
 
               <JournalKpiCard
                 label="Expectancy"
-                value={formatSignedCurrency(expectancy)}
-                hint={isShowingTrader ? "Per contract" : "Per Trade"}
-                tone={expectancy >= 0 ? "green" : "red"}
+                value={
+                  unit === 'R'
+                    ? formatR(rAgg.expectancyR)
+                    : formatSignedCurrency(expectancy)
+                }
+                hint="Per Trade"
+                tone={
+                  unit === 'R'
+                    ? ((rAgg.expectancyR ?? 0) >= 0 ? "green" : "red")
+                    : (expectancy >= 0 ? "green" : "red")
+                }
                 visual="target"
-                tooltip="Estimated average P&L per trade based on win rate, average win, and average loss."
+                tooltip={
+                  unit === 'R'
+                    ? "Estimated average R per trade based on win rate, average win R, and average loss R."
+                    : "Estimated average P&L per trade based on win rate, average win, and average loss."
+                }
               />
 
             </div>
+
+            {/* R-mode excluded-trades note */}
+            {unit === 'R' && rAgg.excludedNoRiskCount > 0 && (
+              <p className="mt-1 text-[11px] text-white/36 text-right">
+                {rAgg.excludedNoRiskCount} trade{rAgg.excludedNoRiskCount !== 1 ? 's' : ''} excluded — no risk basis
+              </p>
+            )}
 
             {/* ✅ UPDATED: Best/Worst trades with timezone and session */}
             
@@ -1939,7 +2091,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </div>
             }>
               <Suspense fallback={<ChartSkeleton />}>
-                <DailyPnLChart data={stats.equitySeries || []} trades={stats.trades || []} />
+                <DailyPnLChart data={stats.equitySeries || []} trades={stats.trades || []} unit={unit} />
               </Suspense>
             </ErrorBoundary>
 
@@ -1949,7 +2101,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </div>
             }>
               <Suspense fallback={<ChartSkeleton />}>
-                <EquityChart data={stats.equitySeries || []} trades={stats.trades || []} />
+                <EquityChart data={stats.equitySeries || []} trades={stats.trades || []} unit={unit} />
               </Suspense>
             </ErrorBoundary>
             </div>
@@ -1964,9 +2116,11 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                   <span className="text-[11px] text-white/50">{stats.closedTrades} trades</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <TradeTimePerformanceChart data={tradeTimeData} />
+              <TradeTimePerformanceChart data={tradeTimeData} trades={(stats?.trades ?? []) as unknown as import('@/utils/rAggregates').TradeForRAgg[]} unit={unit} />
               <TradeDurationPerformanceChart
                 data={tradeDurationData}
+                trades={(stats?.trades ?? []) as unknown as import('@/utils/rAggregates').TradeForRAgg[]}
+                unit={unit}
                 isLocked={isDurationChartLocked}
                   />
                 </div>
@@ -1977,7 +2131,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               Failed to load breakdown. Please refresh.
             </div>}>
               <Suspense fallback={<ChartSkeleton />}>
-                <BreakdownPanel trades={stats.trades || []} />
+                <BreakdownPanel trades={stats.trades || []} unit={unit} />
               </Suspense>
             </ErrorBoundary>
 

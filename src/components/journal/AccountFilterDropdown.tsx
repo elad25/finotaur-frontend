@@ -11,7 +11,7 @@
 import { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { Wallet, ChevronDown, Settings, Check, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
+import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
 import { buildAccountGroups } from '@/components/journal/accountGrouping';
 import type { PortfolioGroup } from '@/components/journal/accountGrouping';
 
@@ -32,7 +32,6 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     togglePortfolioSelection,
     setSelectedPortfolioIds,
     isShowingAll,
-    isShowingTrader,
     isLoading,
   } = usePortfolioContext();
 
@@ -66,15 +65,14 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
   // Button label
   const label = useMemo(() => {
     if (isShowingAll) return 'All accounts';
-    if (isShowingTrader) return 'Trader';
-    const count = selectedPortfolioIds.filter(id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID).length;
+    const count = selectedPortfolioIds.filter(id => id !== ALL_PORTFOLIOS_ID).length;
     if (count === 0) return 'All accounts';
     if (count === 1) {
       const match = portfolios.find(p => p.id === selectedPortfolioIds[0]);
       return match?.name ?? 'Account';
     }
     return `${count} accounts`;
-  }, [isShowingAll, isShowingTrader, selectedPortfolioIds, portfolios]);
+  }, [isShowingAll, selectedPortfolioIds, portfolios]);
 
   // Build groups: prop-firm buckets (sorted by label) → generic Tradovate →
   //               broker groups (by connection_id) → Manual
@@ -85,10 +83,6 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
 
   const handleToggleAll = useCallback(() => {
     setSelectedPortfolioIds([ALL_PORTFOLIOS_ID]);
-  }, [setSelectedPortfolioIds]);
-
-  const handleToggleTrader = useCallback(() => {
-    setSelectedPortfolioIds([TRADER_PORTFOLIO_ID]);
   }, [setSelectedPortfolioIds]);
 
   const handleManage = useCallback(() => {
@@ -113,7 +107,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     const groupIds = group.portfolios.map(p => p.id);
     // Current real selection (strip sentinels)
     const currentReal = selectedPortfolioIds.filter(
-      id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+      id => id !== ALL_PORTFOLIOS_ID,
     );
     const allSelected = groupIds.every(id => currentReal.includes(id));
 
@@ -185,13 +179,6 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
             onToggle={handleToggleAll}
           />
 
-          <AccountRow
-            id={TRADER_PORTFOLIO_ID}
-            label="Trader"
-            checked={isShowingTrader}
-            onToggle={handleToggleTrader}
-          />
-
           {hasGroups && (
             <div className="border-t border-zinc-800/60 mx-2 my-1" />
           )}
@@ -200,12 +187,12 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
           {groups.map(group => {
             const isExpanded = expanded.has(group.key);
             const realSelected = selectedPortfolioIds.filter(
-              id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID,
+              id => id !== ALL_PORTFOLIOS_ID,
             );
             const selectedInGroup = group.portfolios.filter(p => realSelected.includes(p.id)).length;
             const totalInGroup = group.portfolios.length;
-            const allChecked = !isShowingAll && !isShowingTrader && selectedInGroup === totalInGroup;
-            const someChecked = !isShowingAll && !isShowingTrader && selectedInGroup > 0 && selectedInGroup < totalInGroup;
+            const allChecked = !isShowingAll && selectedInGroup === totalInGroup;
+            const someChecked = !isShowingAll && selectedInGroup > 0 && selectedInGroup < totalInGroup;
 
             return (
               <div key={group.key}>
@@ -280,7 +267,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
                       label={p.name}
                       badge={badge}
                       badgeColor={badgeColor}
-                      checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
+                      checked={!isShowingAll && selectedPortfolioIds.includes(p.id)}
                       onToggle={togglePortfolioSelection}
                       indent
                     />

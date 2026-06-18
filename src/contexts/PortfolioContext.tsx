@@ -6,7 +6,7 @@
 // ══════════════════════════════════════════════════════
 
 import { createContext, useContext, ReactNode } from 'react';
-import { usePortfolios, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID, type Portfolio } from '@/hooks/usePortfolios';
+import { usePortfolios, ALL_PORTFOLIOS_ID, type Portfolio } from '@/hooks/usePortfolios';
 
 interface PortfolioContextValue {
   portfolios:             Portfolio[];
@@ -15,7 +15,6 @@ interface PortfolioContextValue {
   activePortfolio:        Portfolio | null;
   setActivePortfolioId:   (id: string | null) => void;
   isShowingAll:           boolean;
-  isShowingTrader:        boolean;
   isLoading:              boolean;
   manualPortfolios:       Portfolio[];
   tradovatePortfolios:    Portfolio[];
@@ -45,4 +44,4 @@ export function usePortfolioContext(): PortfolioContextValue {
   return ctx;
 }
 
-export { ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID };
+export { ALL_PORTFOLIOS_ID };
