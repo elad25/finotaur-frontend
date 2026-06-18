@@ -18,6 +18,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
 import { scheduleRetry } from '../_shared/retryQueue.ts';
 import { fetchWithRetry as sharedFetchWithRetry } from '../_shared/fetchWithRetry.ts';
+import { matchStop, type StopOrder } from './_stopMatch.ts';
+
+// Diagnostic: last stop-index summary, surfaced in non-cron responses for verification.
+let lastStopDiag: Record<string, unknown> | null = null;
 
 // Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
 // is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
@@ -337,7 +341,8 @@ async function processFill(
   symbol: string,
   multiplier: number,
   base: string,
-  accessToken: string
+  accessToken: string,
+  stopOrders: StopOrder[] = [],
 ): Promise<'inserted' | 'updated' | 'skipped' | 'error'> {
 
   const fillSide  = fill.action === 'Buy' ? 'LONG' : 'SHORT';
@@ -621,6 +626,27 @@ async function processFill(
   }
 
   // First leg: create a fresh trade row + position state row.
+  const matchedStop = matchStop(
+    {
+      symbol,
+      side: fillSide,
+      entryPrice: fill.price,
+      openAt: fillAt,
+      closeAt: null,
+      entryOrderId: (fill as any).orderId ?? null,
+    },
+    stopOrders,
+  );
+  if (matchedStop) {
+    console.log(JSON.stringify({
+      event:       'stop_matched',
+      external_id: `tradovate::fill::${fill.id}`,
+      symbol,
+      side:        fillSide,
+      stop_price:  matchedStop.stopPrice,
+    }));
+  }
+
   const { data: newTrade, error: insertErr } = await supabaseAdmin
     .from('trades')
     .insert({
@@ -641,6 +667,7 @@ async function processFill(
       side:                 fillSide,
       quantity:             fill.qty,
       entry_price:          fill.price,
+      stop_price:           matchedStop?.stopPrice ?? null,
       exit_price:           null,
       pnl:                  null,
       open_at:              fillAt,
@@ -733,7 +760,7 @@ async function syncCredential(cred: {
   connection_data: { vault_secret_id?: string; env_verified?: boolean } | null;
   account_id: string;
   auth_method?: string | null;
-}, syncMode = 'cron'): Promise<{ inserted: number; errors: number }> {
+}, syncMode = 'cron', backfillStops = false): Promise<{ inserted: number; errors: number }> {
   let resolvedEnvironment: 'live' | 'demo' = cred.environment;
   let base = TRADOVATE_URLS[resolvedEnvironment];
   const syncStartedAt = new Date();
@@ -937,6 +964,9 @@ async function syncCredential(cred: {
   // pagination. Tradovate returns all orders in the account's history.
   // Warn if response is suspiciously large (possible undocumented page cap).
   const orderMap = new Map<number, number>(); // orderId → accountId
+  // Raw order objects preserved for stop-order index construction below.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let rawOrderBody: any[] = [];
   try {
     const orderRes = await fetch(`${base}/order/list`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -944,6 +974,7 @@ async function syncCredential(cred: {
     if (orderRes.ok) {
       const orderBody = await orderRes.json();
       if (Array.isArray(orderBody)) {
+        rawOrderBody = orderBody;
         if (orderBody.length >= 1000) {
           console.warn(
             `[tradovate-sync] legacy: /order/list returned ${orderBody.length} rows — ` +
@@ -975,6 +1006,108 @@ async function syncCredential(cred: {
       `all fills will be attributed to primary account ${accountIdNum}:`, err
     );
   }
+
+  // Step L2b: build stopOrders index for stop-price derivation.
+  //
+  // Tradovate often stores stopPrice/orderType on the orderVersion record rather
+  // than the order record itself. Fetch /orderVersion/list defensively; on any
+  // failure, continue with an empty map (stop derivation degrades gracefully —
+  // forward fills still land, just without stop_price).
+  const ovByOrderId = new Map<number, { orderType?: string; stopPrice?: number }>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let rawOvBody: any[] = [];
+  try {
+    const ovRes = await fetch(`${base}/orderVersion/list`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (ovRes.ok) {
+      const ovBody = await ovRes.json();
+      if (Array.isArray(ovBody)) {
+        rawOvBody = ovBody;
+        // Keep, per orderId, the EARLIEST version (smallest id) that has a stopPrice set.
+        for (const ov of ovBody as Array<{ id?: number; orderId?: number; orderType?: string; stopPrice?: number }>) {
+          const ovId     = ov?.id;
+          const orderId  = ov?.orderId;
+          const sp       = ov?.stopPrice;
+          if (typeof orderId !== 'number' || sp == null) continue;
+          const existing = ovByOrderId.get(orderId);
+          if (existing === undefined || (typeof ovId === 'number' && typeof existing === 'object' && (existing as any)._minId > ovId)) {
+            ovByOrderId.set(orderId, { orderType: ov?.orderType, stopPrice: Number(sp), _minId: ovId } as any);
+          }
+        }
+      }
+    } else {
+      console.warn(
+        `[tradovate-sync] stop_index: /orderVersion/list returned HTTP ${ovRes.status} — ` +
+        `stop derivation degraded for connection ${cred.id}`
+      );
+    }
+  } catch (ovErr) {
+    console.warn(
+      `[tradovate-sync] stop_index: /orderVersion/list fetch error — stop derivation degraded:`, ovErr
+    );
+  }
+
+  // Build the StopOrder[] from raw order objects + orderVersion overlay.
+  // Contract-symbol resolution reuses getContractInfo (B2 DB cache) with a
+  // local in-memory cache to avoid redundant calls within this sync run.
+  const stopContractCache = new Map<number, string>(); // contractId → symbol
+  const stopOrders: StopOrder[] = [];
+
+  for (const o of rawOrderBody) {
+    const id: number | undefined = o?.id;
+    if (typeof id !== 'number') continue;
+
+    const orderType: string | undefined  = o?.orderType  ?? ovByOrderId.get(id)?.orderType;
+    const stopPrice: number | undefined  = o?.stopPrice  ?? ovByOrderId.get(id)?.stopPrice;
+
+    if (orderType !== 'Stop' && orderType !== 'StopLimit') continue;
+    if (stopPrice == null) continue;
+
+    const contractId: number | undefined = o?.contractId;
+    if (typeof contractId !== 'number') continue;
+
+    // Resolve symbol via cache-first path.
+    let symbol: string;
+    if (stopContractCache.has(contractId)) {
+      symbol = stopContractCache.get(contractId)!;
+    } else {
+      try {
+        const info = await getContractInfo(base, accessToken, contractId, attribution);
+        symbol = info.name;
+        stopContractCache.set(contractId, symbol);
+      } catch {
+        continue; // can't resolve symbol — skip this order
+      }
+    }
+
+    const action: 'Buy' | 'Sell' | undefined = o?.action;
+    if (action !== 'Buy' && action !== 'Sell') continue;
+
+    const timestamp: string | undefined = o?.timestamp;
+    if (typeof timestamp !== 'string') continue;
+
+    stopOrders.push({
+      orderId:   id,
+      symbol,
+      action,
+      orderType,
+      stopPrice: Number(stopPrice),
+      timestamp,
+      parentId:  o?.parentId ?? null,
+    });
+  }
+
+  // Diagnostic log — confirms live payload shape via get_logs.
+  lastStopDiag = {
+    order_count:  rawOrderBody.length,
+    order_keys:   rawOrderBody[0] ? Object.keys(rawOrderBody[0]) : [],
+    ov_count:     rawOvBody.length,
+    ov_keys:      rawOvBody[0] ? Object.keys(rawOvBody[0]) : [],
+    stop_orders:  stopOrders.length,
+    sample_stop:  stopOrders[0] ?? null,
+  };
+  console.log(JSON.stringify({ event: 'stop_index_built', ...lastStopDiag }));
 
   // Step L3: build portfolio map: tradovate_account_id → portfolios.id.
   // tradovate-auth already creates one portfolios row per account on connect.
@@ -1090,9 +1223,66 @@ async function syncCredential(cred: {
       syncStartedAt,
       attribution,
       prevFillsProcessed: cursor.fills_processed,
+      stopOrders,
     });
     legacyInserted += result.inserted;
     legacyErrors   += result.errors;
+  }
+
+  // Step L7b: backfill stop_price for existing trades with stop_price IS NULL.
+  // Only runs when the caller passes backfillStops=true (never on normal cron ticks).
+  if (backfillStops) {
+    const { data: openTrades, error: backfillQueryErr } = await supabaseAdmin
+      .from('trades')
+      .select('id, symbol, side, entry_price, open_at, close_at, external_id')
+      .eq('user_id', cred.user_id)
+      .eq('broker', 'tradovate')
+      .is('stop_price', null)
+      .is('deleted_at', null);
+
+    if (backfillQueryErr) {
+      console.warn('[tradovate-sync] stop_backfill query error:', backfillQueryErr.message);
+    } else {
+      const scanned = (openTrades ?? []).length;
+      let filled = 0;
+      for (const trade of (openTrades ?? []) as Array<{
+        id: string;
+        symbol: string;
+        side: string;
+        entry_price: number;
+        open_at: string;
+        close_at: string | null;
+        external_id: string | null;
+      }>) {
+        const tradeSide = (trade.side === 'LONG' || trade.side === 'SHORT') ? trade.side : null;
+        if (!tradeSide) continue;
+        const matched = matchStop(
+          {
+            symbol:       trade.symbol,
+            side:         tradeSide as 'LONG' | 'SHORT',
+            entryPrice:   Number(trade.entry_price),
+            openAt:       trade.open_at,
+            closeAt:      trade.close_at ?? null,
+            entryOrderId: null,
+          },
+          stopOrders,
+        );
+        if (!matched) continue;
+        // Guard: only write if stop_price IS still null (prevent overwriting user-set R).
+        const { error: updateErr } = await supabaseAdmin
+          .from('trades')
+          .update({ stop_price: matched.stopPrice })
+          .eq('id', trade.id)
+          .is('stop_price', null);
+        if (!updateErr) filled++;
+      }
+      console.log(JSON.stringify({
+        event:    'stop_backfill_done',
+        user_id:  cred.user_id,
+        scanned,
+        filled,
+      }));
+    }
   }
 
   // Step L8: if NO account had new fills, call no-fills record_sync_completion
@@ -1150,11 +1340,12 @@ async function processAccountFills(args: {
   syncStartedAt:      Date;
   attribution:        { userId: string; connectionId: string };
   prevFillsProcessed: number;
+  stopOrders?:        StopOrder[];
 }): Promise<{ inserted: number; errors: number }> {
   const {
     connectionId, userId, accountIdNum, environment, portfolioId,
     base, accessToken, fills, syncMode, syncStartedAt, attribution,
-    prevFillsProcessed,
+    prevFillsProcessed, stopOrders = [],
   } = args;
 
   let inserted = 0;
@@ -1288,7 +1479,8 @@ async function processAccountFills(args: {
         const result = await processFill(
           fill, credForFill,
           contract.name, contract.fullPointValue,
-          base, accessToken
+          base, accessToken,
+          stopOrders,
         );
 
         if (result === 'inserted' || result === 'updated') inserted++;
@@ -1385,6 +1577,10 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const mode: string = body.mode ?? 'manual';
+    // backfillStops: when true, after forward-fill processing each credential
+    // also scans existing trades with stop_price IS NULL and patches them.
+    // Never true on cron ticks — must be explicitly sent in the payload.
+    const backfillStops: boolean = mode !== 'cron' && body.backfillStops === true;
 
     // Includes both 'tradovate' and 'ninja_trader' since NT Web accounts run
     // on the same Tradovate cloud API and need the same sync handling. The
@@ -1523,7 +1719,7 @@ Deno.serve(async (req: Request) => {
       batchCount++;
 
       const results = await Promise.allSettled(
-        batch.map(cred => syncCredential(cred as any, mode))
+        batch.map(cred => syncCredential(cred as any, mode, backfillStops))
       );
 
       for (let j = 0; j < results.length; j++) {
@@ -1621,7 +1817,7 @@ Deno.serve(async (req: Request) => {
       console.warn('[tradovate-sync] total failure — skipping heartbeat write to let staleness alert');
     }
 
-    return json({ synced, totalInserted, totalErrors });
+    return json({ synced, totalInserted, totalErrors, ...(mode !== 'cron' ? { stopDiag: lastStopDiag } : {}) });
 
   } catch (err: unknown) {
     console.error('[tradovate-sync]', err);
