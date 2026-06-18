@@ -109,7 +109,7 @@ export default function ShortInterestContent() {
 
       <p>
         Finotaur's{' '}
-        <Link to="/app/stocks" className="text-primary hover:underline">
+        <Link to="/app/stocks/overview" className="text-primary hover:underline">
           Stock Analyzer
         </Link>{' '}
         surfaces short interest data alongside price action and technical

@@ -221,7 +221,7 @@ function TradeLimitModal({
 
         <div className="px-5 pb-5 flex flex-col gap-2">
           <button
-            onClick={() => { onClose(); window.location.href = '/settings?tab=billing'; }}
+            onClick={() => { onClose(); window.location.href = '/app/settings?tab=billing'; }}
             className="w-full py-2.5 rounded-xl text-sm font-bold text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg, #C9A646, #B48C2C)' }}
           >

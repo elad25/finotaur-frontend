@@ -101,7 +101,7 @@ export default function DeathCrossContent() {
 
       <p>
         Finotaur's{' '}
-        <Link to="/app/stocks" className="text-primary hover:underline">
+        <Link to="/app/stocks/overview" className="text-primary hover:underline">
           Stock Analyzer
         </Link>{' '}
         plots the 50-day and 200-day moving averages with historical crossover

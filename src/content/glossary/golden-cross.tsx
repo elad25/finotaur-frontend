@@ -100,7 +100,7 @@ export default function GoldenCrossContent() {
 
       <p>
         Finotaur's{' '}
-        <Link to="/app/stocks" className="text-primary hover:underline">
+        <Link to="/app/stocks/overview" className="text-primary hover:underline">
           Stock Analyzer
         </Link>{' '}
         overlays the 50-day and 200-day moving averages alongside price

@@ -333,14 +333,17 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   admin: [
-    { label: 'Dashboard', path: '/app/journal/admin', icon: LayoutDashboard },
-    { label: 'Users', path: '/app/journal/admin/users', icon: Users },
-    { label: 'Analytics', path: '/app/journal/admin/analytics', icon: BarChart3 },
-    { label: 'Subscribers', path: '/app/journal/admin/subscribers', icon: CreditCard },
-    { label: 'Support', path: '/app/journal/admin/support', icon: HeadphonesIcon },
-    { label: 'Cancellations', path: '/app/journal/admin/Cancellations', icon: UserX },
-    ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/journal/admin/affiliate', icon: Gift }] : []),
-    { label: 'Top Traders', path: '/app/journal/admin/top-traders', icon: Trophy },
+    // Admin nav migrated from the retired /app/journal/admin/* prefix to the
+    // unified Admin CRM at /app/admin/* (AdminCRMShell). Each target verified
+    // against src/pages/app/admin/AdminCRMShell.tsx routes.
+    { label: 'Dashboard', path: '/app/admin/overview', icon: LayoutDashboard },
+    { label: 'Users', path: '/app/admin/users', icon: Users },
+    { label: 'Analytics', path: '/app/admin/analytics', icon: BarChart3 },
+    { label: 'Subscribers', path: '/app/admin/billing', icon: CreditCard },
+    { label: 'Support', path: '/app/admin/support', icon: HeadphonesIcon },
+    { label: 'Cancellations', path: '/app/admin/billing/cancellations', icon: UserX },
+    ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/admin/affiliates', icon: Gift }] : []),
+    { label: 'Top Traders', path: '/app/admin/analytics/top-traders', icon: Trophy },
     { label: 'divider', path: '', icon: null, divider: true },
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
   ],

@@ -45,7 +45,7 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
   };
 
   const handleViewUserDetails = () => {
-    navigate(`/app/journal/admin/users/${user.id}`);
+    navigate(`/app/admin/users/${user.id}`);
   };
 
   const handleImpersonate = async () => {

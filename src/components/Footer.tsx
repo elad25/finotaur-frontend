@@ -12,14 +12,14 @@ const Footer = () => {
               The Bloomberg for retail investors. Institutional-grade workflow, without the institutional price tag.
             </p>
             <Button asChild className="glow-primary">
-              <Link to="/signup">Start Free Trial</Link>
+              <Link to="/register">Start Free Trial</Link>
             </Button>
           </div>
           <div>
             <h4 className="font-semibold mb-4 text-foreground">Product</h4>
             <ul className="space-y-3 text-sm">
               <li>
-                <Link to="/features" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/#features" className="text-muted-foreground hover:text-primary transition-colors">
                   Features
                 </Link>
               </li>
@@ -29,7 +29,7 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/blog" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/research" className="text-muted-foreground hover:text-primary transition-colors">
                   Blog
                 </Link>
               </li>

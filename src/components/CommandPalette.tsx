@@ -50,16 +50,16 @@ const CommandPalette = ({ open, onOpenChange }: CommandPaletteProps) => {
         navigate(`/app/all-markets/summary?symbol=${value}`);
         break;
       case "news":
-        navigate("/app/news");
+        navigate("/app/all-markets/news");
         break;
       case "earnings":
-        navigate("/app/earnings");
+        navigate("/app/stocks/earnings");
         break;
       case "watchlist":
-        navigate("/app/watchlists");
+        navigate("/app/all-markets/watchlist");
         break;
       case "alert":
-        navigate("/app/alerts");
+        navigate("/app/settings");
         break;
       case "journal":
         navigate("/app/journal");

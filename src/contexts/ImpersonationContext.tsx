@@ -298,7 +298,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       queryClient.clear();
       queryClient.invalidateQueries();
 
-      navigate('/app/journal/admin/users', { replace: true });
+      navigate('/app/admin/users', { replace: true });
 
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('impersonation-stopped'));

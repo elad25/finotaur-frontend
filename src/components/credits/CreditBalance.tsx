@@ -205,7 +205,7 @@ export function CreditBalance() {
               className="w-full justify-between border-[#C9A646]/40 text-[#C9A646] hover:bg-[#C9A646]/10"
               onClick={() => {
                 setOpen(false);
-                navigate('/app/credits/purchase');
+                navigate('/app/all-markets/pricing');
               }}
             >
               <span className="flex items-center gap-2">

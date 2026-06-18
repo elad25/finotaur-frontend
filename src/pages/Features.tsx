@@ -136,7 +136,7 @@ const Features = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" asChild className="glow-primary">
-                <Link to="/signup">
+                <Link to="/register">
                   Start Free <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>

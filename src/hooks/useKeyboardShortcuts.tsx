@@ -35,31 +35,31 @@ export const useKeyboardShortcuts = (handlers: ShortcutHandlers = {}) => {
         // g + d - Dashboard
         case "d":
           if (e.key === "d") {
-            navigate("/app/dashboard");
+            navigate("/app/home");
           }
           break;
         // g + c - Charts
         case "c":
           if (e.key === "c") {
-            navigate("/app/charts");
+            navigate("/app/all-markets/chart");
           }
           break;
         // g + s - Screener
         case "s":
           if (e.key === "s") {
-            navigate("/app/screener");
+            navigate("/app/all-markets/screener");
           }
           break;
         // g + e - Earnings
         case "e":
           if (e.key === "e") {
-            navigate("/app/earnings");
+            navigate("/app/stocks/earnings");
           }
           break;
         // g + n - News
         case "n":
           if (e.key === "n") {
-            navigate("/app/news");
+            navigate("/app/all-markets/news");
           }
           break;
         // a - Add Alert

@@ -167,7 +167,7 @@ function NotFound404() {
           This post may have been moved or doesn&apos;t exist.
         </p>
         <Link
-          to="/blog"
+          to="/research"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded
                      border border-[#C9A646]/30 text-[#C9A646] text-sm
                      hover:bg-[#C9A646]/10 transition-colors"
@@ -287,7 +287,7 @@ export default function BlogPost() {
         <div className="max-w-3xl mx-auto">
           {/* Back link */}
           <Link
-            to="/blog"
+            to="/research"
             className="inline-flex items-center gap-1.5 text-xs text-white/40
                        hover:text-[#C9A646] transition-colors mb-8"
           >

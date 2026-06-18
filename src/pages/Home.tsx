@@ -144,7 +144,7 @@ const Home = () => {
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button size="lg" asChild className="glow-primary text-lg h-14 px-8">
-                  <Link to="/signup">
+                  <Link to="/register">
                     Start Free <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>
@@ -383,7 +383,7 @@ const Home = () => {
                     className={`w-full ${tier.highlighted ? "glow-primary" : ""}`}
                     variant={tier.highlighted ? "default" : "secondary"}
                   >
-                    <Link to="/signup">{tier.cta}</Link>
+                    <Link to="/register">{tier.cta}</Link>
                   </Button>
                 </Card>
               </div>
@@ -412,7 +412,7 @@ const Home = () => {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" asChild className="glow-primary text-lg h-14 px-8">
-                  <Link to="/signup">
+                  <Link to="/register">
                     Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>

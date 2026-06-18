@@ -70,6 +70,24 @@ jobs:
       - name: Crash guard (blocking)
         run: npm run typecheck:crash-guard
 
+  # BLOCKING gate. Fails the build if any static client-side navigation
+  # (navigate('/x'), <Navigate to>, <Link/NavLink to>, window.location.href)
+  # points to a path with no matching <Route> in src/App.tsx — the in-app 404
+  # class. Added after the 2026-06-18 OAuth /onboarding 404 (and a sweep that
+  # found ~18 more dead links). Uses only Node built-ins, so no npm install.
+  # See scripts/check-routes.mjs.
+  route-guard:
+    name: route-guard (dead links)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Route guard (blocking)
+        run: node scripts/check-routes.mjs
+
   lint:
     name: lint (eslint)
     runs-on: ubuntu-latest

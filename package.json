@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "typecheck:crash-guard": "node scripts/ci/crash-guard.mjs",
+    "route-guard": "node scripts/check-routes.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
