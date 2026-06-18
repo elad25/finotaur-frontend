@@ -305,6 +305,9 @@ const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
 const CryptoWhales = lazy(() => import("@/pages/app/crypto/whales/WhalesHub"));
 const CryptoMarketScanner = lazy(() => import("@/pages/app/crypto/scanner/MarketScanner"));
 
+// Trading Arena — admin + beta only, full-screen workstation (Phase 0)
+const TradingArenaPage = lazy(() => import("@/pages/app/trading-arena/TradingArena"));
+
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
 const FuturesContracts = lazy(() => import("@/pages/app/futures/Contracts"));
@@ -587,6 +590,9 @@ function AppContent() {
           <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
           <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
           <Route path="crypto/scanner" element={<LockedRoute domainId="crypto"><AdminBetaGate><CryptoMarketScanner /></AdminBetaGate></LockedRoute>} />
+
+          {/* TRADING ARENA — admin + beta only, full-screen workstation (Phase 0) */}
+          <Route path="trading-arena/:section?" element={<SuspenseRoute><AdminBetaGate><TradingArenaPage /></AdminBetaGate></SuspenseRoute>} />
 
           {/* FUTURES: licensed-data-safe workspace only. No live CME quotes/charts/DOM/OI fetches. */}
           <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />

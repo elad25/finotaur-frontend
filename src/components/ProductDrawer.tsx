@@ -26,6 +26,7 @@ import {
   BookOpen,
   Zap,
   Home,
+  Swords,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -33,13 +34,14 @@ import {
 // Per-product metadata: icon + one-line sublabel
 // ---------------------------------------------------------------------------
 const PRODUCT_META: Record<string, { icon: LucideIcon; sublabel: string }> = {
-  markets:     { icon: TrendingUp, sublabel: 'Research Hub' },
-  ai:          { icon: Brain,      sublabel: 'AI-Powered Tools' },
-  copilot:     { icon: Copy,       sublabel: 'Your Portfolio AI' },
-  'war-zone':  { icon: Flame,      sublabel: 'High Conviction Setups' },
-  'top-secret':{ icon: FileText,   sublabel: 'Premium Research' },
-  journal:     { icon: BookOpen,   sublabel: 'Track. Review. Improve.' },
-  'copy-trade':{ icon: Zap,        sublabel: 'Beta: Trade Copier' },
+  markets:         { icon: TrendingUp, sublabel: 'Research Hub' },
+  ai:              { icon: Brain,      sublabel: 'AI-Powered Tools' },
+  copilot:         { icon: Copy,       sublabel: 'Your Portfolio AI' },
+  'war-zone':      { icon: Flame,      sublabel: 'High Conviction Setups' },
+  'top-secret':    { icon: FileText,   sublabel: 'Premium Research' },
+  journal:         { icon: BookOpen,   sublabel: 'Track. Review. Improve.' },
+  'copy-trade':    { icon: Zap,        sublabel: 'Beta: Trade Copier' },
+  'trading-arena': { icon: Swords,     sublabel: 'Beta: Trading Workstation' },
 };
 
 // ---------------------------------------------------------------------------

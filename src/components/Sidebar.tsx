@@ -106,7 +106,8 @@ type EnvironmentType =
   | 'connections'
   | 'markets'
   | 'war-zone'
-  | 'top-secret';
+  | 'top-secret'
+  | 'trading-arena';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -256,6 +257,11 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Latest Reports', path: '/app/top-secret',       icon: FileText },
     { label: 'Admin',          path: '/app/top-secret/admin', icon: Shield, beta: true, adminOnly: true },
   ],
+
+  // Trading Arena — full-screen workstation (admin + beta only).
+  // The sidebar is effectively hidden (HIDE_CHROME_ROUTES), but an entry here
+  // prevents getCurrentEnvironment() from falling through to the 'journal' default.
+  'trading-arena': [],
 
   'ai': [
     { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
@@ -431,6 +437,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/journal/affiliate')) return 'affiliate';
     if (path.startsWith('/app/journal/backtest')) return 'backtest';
     
+    // Trading Arena (full-screen — sidebar hidden, but environment must resolve)
+    if (path.startsWith('/app/trading-arena')) return 'trading-arena';
+
     // Phase 1 products — must come before generic all-markets check
     if (path.startsWith('/app/all-markets/warzone') || path.startsWith('/app/warzone')) return 'war-zone';
     if (path.startsWith('/app/top-secret')) return 'top-secret';
