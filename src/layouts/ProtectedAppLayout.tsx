@@ -46,8 +46,10 @@ const NO_SUBNAV_ROUTES = [
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
 // Admin CRM is its own admin app; the marketing/trading chrome is noise
 // inside it and the user is reaching it via a new-tab open from SubNav.
+// Trading Arena is a full-screen workstation with its own top bar.
 const HIDE_CHROME_ROUTES = [
   '/app/admin',
+  '/app/trading-arena', // Trading Arena: full-screen, renders own top bar
 ];
 
 export const ProtectedAppLayout = () => {

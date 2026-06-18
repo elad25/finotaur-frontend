@@ -29,6 +29,7 @@ import {
   Link, Gift, Swords, Crown, Shield, Copy, Droplet, Grid3x3, Calculator,
   GitCompare,
   ScanLine,
+  Crosshair,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -226,6 +227,26 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
+  // TRADING ARENA — admin + beta only (Phase 0 scaffold).
+  // Full-screen workstation: Chart, Order Flow, locked tabs (Options/Futures/Forex).
+  // Hidden from regular users via beta: true (same mechanism as copy-trade).
+  // ===========================================================================
+  'trading-arena': {
+    id: 'trading-arena',
+    label: 'Trading Arena',
+    locked: false,
+    beta: true, // 🔒 hidden from non-beta users (same gate as copy-trade)
+    defaultPath: '/app/trading-arena/chart',
+    subNav: [
+      { label: 'Trading Arena', path: '/app/trading-arena/chart', beta: true },
+    ],
+    sidebar: [
+      { label: 'Chart',       path: '/app/trading-arena/chart',      icon: Crosshair, beta: true },
+      { label: 'Order Flow',  path: '/app/trading-arena/order-flow', icon: Activity,  beta: true },
+    ],
+  },
+
+  // ===========================================================================
   // LEGACY DOMAINS — KEPT IN FULL so Sidebar environment detection, route
   // guards, and DomainGuard still work. Removed from domainOrder so they no
   // longer appear in the Product Drawer. Routes in App.tsx are untouched.
@@ -309,7 +330,7 @@ export const domains: Record<string, Domain> = {
       { label: 'DeFi TVL',        path: '/app/crypto/defi-tvl',   icon: Coins },
       { label: 'Stablecoins',     path: '/app/crypto/stablecoins', icon: DollarSign },
       { label: 'Block Trades',    path: '/app/crypto/whales/trades', icon: Layers },
-      { label: 'Market Scanner',  path: '/app/crypto/scanner',       icon: ScanLine },
+      { label: 'Market Scanner',  path: '/app/crypto/scanner',       icon: ScanLine, beta: true },
       { label: 'Heatmap',         path: '/app/crypto/heatmap',     icon: Map },
       { label: 'Watchlist',       path: '/app/crypto/watchlist',   icon: Bell },
       // Academy removed from sidebar (route /app/crypto/academy still exists)
@@ -527,7 +548,8 @@ export const domainOrder = [
   'war-zone',
   'top-secret',
   'journal',
-  'copy-trade', // hidden for non-beta; admin-only in practice
+  'copy-trade',     // hidden for non-beta; admin-only in practice
+  'trading-arena',  // hidden for non-beta; full-screen workstation (Phase 0)
   // Removed from Drawer (routes/pages/domain defs preserved):
   //   'all-markets', 'stocks', 'crypto', 'futures', 'forex',
   //   'commodities', 'macro', 'funding'
