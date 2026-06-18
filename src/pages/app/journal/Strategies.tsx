@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   Plus, X, Upload, TrendingUp, Target, Shield, Brain, ChevronRight, ChevronLeft,
   Settings, Trash2, Edit2, BarChart3, Activity, List, TrendingDown, Award,
-  Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown, ToggleLeft, ToggleRight
+  Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
 } from "lucide-react";
 import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
 import { type ChecklistItem } from '@/components/journal/strategy/ChecklistEditor';
@@ -1136,10 +1136,10 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
   const canGoNext = useCallback(() => {
     if (currentStep === 1) return name.trim() !== "";
-    if (currentStep === 2) return setupType.trim() !== "";
+    if (currentStep === 2) return true;
     if (currentStep === 3) return defaultStopLoss && defaultTakeProfit;
     return true;
-  }, [currentStep, name, setupType, defaultStopLoss, defaultTakeProfit]);
+  }, [currentStep, name, defaultStopLoss, defaultTakeProfit]);
 
   const handleNext = useCallback(() => {
     if (canGoNext() && currentStep < totalSteps) {
@@ -1232,11 +1232,11 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[120px] pb-6"
       style={{ background: 'rgba(0,0,0,0.8)' }}
     >
       <div 
-        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden rounded-2xl"
+        className="relative w-full max-w-3xl max-h-[calc(100vh-144px)] flex flex-col overflow-hidden rounded-2xl"
         style={{
           background: 'linear-gradient(135deg, rgba(20,20,20,0.98) 0%, rgba(10,10,10,0.98) 100%)',
           border: '2px solid rgba(201,166,70,0.25)',
@@ -1351,21 +1351,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
           {currentStep === 2 && (
             <div className="space-y-5">
-              {/* Setup Type (required) */}
-              <div>
-                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                  Setup Type *
-                </label>
-                <input
-                  type="text"
-                  value={setupType}
-                  onChange={(e) => setSetupType(e.target.value)}
-                  placeholder="e.g., Support/Resistance Breakout"
-                  className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                  style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                />
-              </div>
-
               {/* ── Components Editor ── */}
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -1395,22 +1380,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                           {typeLabel}
                         </span>
                         <div className="flex-1 h-px" style={{ background: 'rgba(201,166,70,0.15)' }} />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setComponents(prev => [...prev, {
-                              id: newComponentId(),
-                              type,
-                              label: '',
-                              trackAdherence: true,
-                            }]);
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all hover:scale-105"
-                          style={{ background: 'rgba(201,166,70,0.12)', color: '#C9A646', border: '1px solid rgba(201,166,70,0.25)' }}
-                        >
-                          <Plus className="w-3 h-3" />
-                          Add
-                        </button>
                       </div>
 
                       {/* Component rows */}
@@ -1434,25 +1403,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                               className="flex-1 px-3 py-2 rounded-lg bg-black/30 border-2 text-sm transition-all focus:outline-none focus:border-[#C9A646]"
                               style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
                             />
-                            {/* Track adherence toggle */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setComponents(prev =>
-                                  prev.map(c =>
-                                    c.id === comp.id ? { ...c, trackAdherence: !c.trackAdherence } : c
-                                  )
-                                );
-                              }}
-                              title={comp.trackAdherence ? 'Tracking adherence (click to disable)' : 'Not tracking (click to enable)'}
-                              className="flex-shrink-0 p-1.5 rounded-lg transition-all"
-                              style={{ color: comp.trackAdherence ? '#C9A646' : '#6A6A6A' }}
-                            >
-                              {comp.trackAdherence
-                                ? <ToggleRight className="w-5 h-5" />
-                                : <ToggleLeft className="w-5 h-5" />
-                              }
-                            </button>
                             {/* Remove button */}
                             <button
                               type="button"
@@ -1468,6 +1418,24 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                           </div>
                         ))}
                       </div>
+
+                      {/* Add button — on its own row below the list */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setComponents(prev => [...prev, {
+                            id: newComponentId(),
+                            type,
+                            label: '',
+                            trackAdherence: true,
+                          }]);
+                        }}
+                        className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-2 rounded-lg text-xs font-medium transition-all hover:bg-[rgba(201,166,70,0.08)]"
+                        style={{ color: '#C9A646', border: '1px dashed rgba(201,166,70,0.35)' }}
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add {typeLabel}
+                      </button>
                     </div>
                   );
                 })}
@@ -1622,7 +1590,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                   Position Sizing
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {['Fixed $', '% of Equity', 'ATR-Based', 'Kelly'].map(rule => (
+                  {['Fixed $', '% of Equity'].map(rule => (
                     <button
                       key={rule}
                       onClick={() => setPositionSizingRule(rule)}
