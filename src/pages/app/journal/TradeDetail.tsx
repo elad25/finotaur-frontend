@@ -326,12 +326,14 @@ export default function JournalTradeDetail() {
 
   const fetchTrade = async () => {
     try {
+      // maybeSingle(): a missing/soft-deleted trade returns data=null with NO error,
+      // so a normal "not found" state renders the graceful UI without logging an error.
       const { data, error } = await supabase
         .from('trades')
         .select('*')
         .eq('id', id)
         .is('deleted_at', null)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       setTrade(data);

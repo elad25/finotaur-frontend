@@ -984,8 +984,9 @@ export function useSnapTradeConnections(overrideUserId?: string) {
 // ================================================
 
 export function formatCurrency(value: number): string {
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}$${Math.abs(value).toFixed(2)}`;
+  // Negatives must show an explicit minus sign (not just red color), e.g. "−$14,440.00".
+  const sign = value >= 0 ? '+' : '−';
+  return `${sign}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatPercentage(value: number): string {
