@@ -5,7 +5,7 @@
 import type { Interval } from '@/components/charting/types';
 
 /** Active tab identifiers for the Trading Arena. */
-export type TabId = 'chart' | 'order-flow' | 'tape' | 'options' | 'futures' | 'forex';
+export type TabId = 'chart' | 'order-flow' | 'tape' | 'cvd' | 'options' | 'futures' | 'forex';
 
 export interface TradingArenaTab {
   id: TabId;
@@ -17,6 +17,7 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
   { id: 'chart',      label: 'Chart',        locked: false },
   { id: 'order-flow', label: 'Order Flow',   locked: false },
   { id: 'tape',       label: 'Time & Sales', locked: false },
+  { id: 'cvd',        label: 'CVD',          locked: false },
   { id: 'options',    label: 'Options',      locked: true },
   { id: 'futures',    label: 'Futures',      locked: true },
   { id: 'forex',      label: 'Forex',        locked: true },
@@ -24,7 +25,7 @@ export const TRADING_ARENA_TABS: TradingArenaTab[] = [
 
 /** Maps the :section URL param to a TabId, defaulting to 'chart'. */
 export function toTabId(raw: string | undefined): TabId {
-  const valid: TabId[] = ['chart', 'order-flow', 'tape', 'options', 'futures', 'forex'];
+  const valid: TabId[] = ['chart', 'order-flow', 'tape', 'cvd', 'options', 'futures', 'forex'];
   if (raw && (valid as string[]).includes(raw)) return raw as TabId;
   return 'chart';
 }
