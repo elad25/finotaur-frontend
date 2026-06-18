@@ -1729,7 +1729,7 @@ const stats = useMemo<Stats>(() => {
             <StatsCard
               icon={DollarSign}
               title="Net P&L"
-              value={`${stats.totalPnL >= 0 ? '+' : ''}$${formatNumber(Math.abs(stats.totalPnL), 2)}`}
+              value={formatSignedCurrency(stats.totalPnL)}
               subtitle={stats.totalPnL !== 0 ? (stats.totalPnL >= 0 ? 'Profit' : 'Loss') : undefined}
               color="rgba(234, 179, 8, 0.1)"
               valueColor={stats.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
