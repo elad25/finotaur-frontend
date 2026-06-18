@@ -6,6 +6,7 @@
  */
 
 import type { Trade } from '@/hooks/useTradesData';
+import { tradeR } from '@/utils/rAggregates';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,8 +67,8 @@ export function computeGroupStats(trades: Trade[]): GroupStats {
       if (pnl < largestLoss) largestLoss = pnl;
     }
 
-    // R-multiple: prefer actual_user_r → actual_r → rr
-    const r = t.actual_user_r ?? t.actual_r ?? t.rr;
+    // R-multiple: canonical rule (strategy-planned → stop-based, never global user-1R)
+    const r = tradeR(t);
     if (r != null) {
       totalR += r;
       rCount += 1;

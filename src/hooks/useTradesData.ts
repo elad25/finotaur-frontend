@@ -10,6 +10,7 @@
 // ================================================
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { tradeR } from '@/utils/rAggregates';
 import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { queryKeys } from '@/lib/queryClient';
@@ -401,8 +402,8 @@ function calculateTradeStats(trades: Trade[]): TradeStats {
       else outcome = 'BE';
     }
     
-    // 🔥 FIX: Get actual_r from multiple sources
-    const actualR = trade.actual_r ?? trade.metrics?.actual_r ?? null;
+    // Canonical R: strategy-planned → stop-based, never global user-1R
+    const actualR = tradeR(trade);
 
     if (outcome === 'WIN') wins++;
     else if (outcome === 'LOSS') losses++;
@@ -410,8 +411,8 @@ function calculateTradeStats(trades: Trade[]): TradeStats {
 
     totalPnL += pnl;
 
-    if (actualR !== null && actualR !== undefined) {
-      totalR += Number(actualR);
+    if (actualR !== null) {
+      totalR += actualR;
       rCount++;
     }
   }

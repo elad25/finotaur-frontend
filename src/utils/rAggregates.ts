@@ -41,10 +41,17 @@ export interface StrategyLike {
 /**
  * Resolve the realized R multiple for a single trade.
  *
- * Priority (REALIZED R only — the planned `rr` field is NOT used as realized R):
- *   a. trade.actual_user_r != null  → stored resolver output (strategy→stop)
- *   b. trade.actual_r != null       → stored stop-based actual R
- *   c. live fallback via computeActualR + resolvePlanned1R
+ * Canonical priority — the SAME rule used by every journal surface
+ * (Overview / My Trades / Breakdown):
+ *   1. strategy.planned_1r_usd > 0  → strategy-based R (for future use once
+ *      strategies are assigned to trades)
+ *   2. trade.actual_r != null        → stored stop-based actual R
+ *   3. live stop fallback            → resolvePlanned1R with null strategy
+ *      (resolves via stop_price only, never via a global/user flat-1R value)
+ *
+ * NOTE: actual_user_r (global user flat-1R) is intentionally NOT used here.
+ * It caused Overview to show inflated R (e.g. 4.89R) while My Trades showed
+ * the correct stop-based R (2.75R). The canonical R is always stop/strategy-based.
  *
  * Returns null when there is no risk basis (no strategy planned_1r AND
  * no usable stop), so callers can show "—" and offer "Set R".
@@ -53,13 +60,16 @@ export function tradeR(
   trade: TradeForRAgg,
   strategy?: StrategyRConfig | StrategyLike | null,
 ): number | null {
-  if (trade.actual_user_r != null) {
-    return Number(trade.actual_user_r);
+  // 1. Strategy-planned 1R (ready for when strategies get assigned)
+  if (strategy?.planned_1r_usd != null && Number(strategy.planned_1r_usd) > 0) {
+    return computeActualR(trade.pnl ?? null, Number(strategy.planned_1r_usd));
   }
+  // 2. Stored stop-based actual R
   if (trade.actual_r != null) {
     return Number(trade.actual_r);
   }
-  // Live fallback: resolve the 1R basis then divide pnl by it
+  // 3. Live stop fallback: pass null for strategy so resolvePlanned1R resolves
+  //    via stop_price only — never via a global/user flat-1R value.
   const resolved = resolvePlanned1R(
     {
       entry_price: trade.entry_price,
@@ -71,8 +81,8 @@ export function tradeR(
       side: trade.side,
       planned_1r_usd: trade.planned_1r_usd,
     },
-    (strategy as StrategyRConfig | null | undefined) ?? null,
-    0, // global 1R is intentionally ignored here (see rResolver comment)
+    null, // null = stop-based resolution only
+    0,    // global 1R intentionally ignored (see rResolver comment)
   );
   return computeActualR(trade.pnl ?? null, resolved.value);
 }
