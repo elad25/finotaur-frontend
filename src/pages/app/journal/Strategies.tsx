@@ -1110,7 +1110,9 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setStandardQuantity(undefined);
       setPsychologicalNotes("");
       setChecklist([]);
-      setComponents([]);
+      // Seed a single empty Entry Condition row so a new strategy opens with
+      // one ready-to-fill input (instead of "No entry conditions yet.").
+      setComponents([{ id: newComponentId(), type: 'entry_condition', label: '', trackAdherence: true }]);
       setCurrentStep(1);
     }
   }, [editingStrategy, isOpen]);
@@ -1234,7 +1236,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       style={{ background: 'rgba(0,0,0,0.8)' }}
     >
       <div 
-        className="relative w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-2xl"
+        className="relative w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden rounded-2xl"
         style={{
           background: 'linear-gradient(135deg, rgba(20,20,20,0.98) 0%, rgba(10,10,10,0.98) 100%)',
           border: '2px solid rgba(201,166,70,0.25)',
@@ -1283,7 +1285,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
           />
         </div>
 
-        <div className="px-6 py-6 max-h-[calc(85vh-180px)] overflow-y-auto">
+        <div className="px-6 py-6 flex-1 min-h-0 overflow-y-auto">
           {currentStep === 1 && (
             <div className="space-y-4">
               <div>
@@ -1375,8 +1377,12 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                   </span>
                 </div>
 
-                {/* Grouped rows by type */}
-                {COMPONENT_TYPES.map(({ type, label: typeLabel }) => {
+                {/* Grouped rows by type — only Entry Conditions + Confirmations
+                    are authored here; checklist/risk_rule were removed from this
+                    step per product decision (existing saved data is preserved). */}
+                {COMPONENT_TYPES
+                  .filter(ct => ct.type === 'entry_condition' || ct.type === 'confirmation')
+                  .map(({ type, label: typeLabel }) => {
                   const typeRows = components.filter(c => c.type === type);
                   return (
                     <div key={type} className="mb-4">

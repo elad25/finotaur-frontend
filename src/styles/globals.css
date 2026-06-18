@@ -4,13 +4,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Hide native number-input spinner arrows on opt-in inputs (.no-spinner).
-   Financial inputs use mono fields, not steppers. */
+/* 🔴 DESIGN IRON RULE — native number-input spinner arrows are removed
+   SITE-WIDE. Hovering any numeric field must NEVER show the up/down
+   steppers; financial inputs use plain mono fields, not steppers.
+   `.no-spinner` is kept as a harmless backward-compatible alias. */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button,
 .no-spinner::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button {
   -webkit-appearance: none;
+  appearance: none;
   margin: 0;
 }
+input[type='number'],
 .no-spinner {
   -moz-appearance: textfield;
   appearance: textfield;
