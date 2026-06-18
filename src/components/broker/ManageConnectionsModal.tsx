@@ -5,6 +5,7 @@
 // entry point for every "Manage Connections" trigger in the Journal.
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link2, Trash2, X, RefreshCw } from 'lucide-react';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
@@ -163,12 +164,14 @@ export function ManageConnectionsModal({
   onOpenChange,
   onAddConnection,
 }: ManageConnectionsModalProps) {
-  const { connections, isLoading, remove } = useBrokerConnections({
+  const { connections, isLoading, remove, syncNow } = useBrokerConnections({
     active: true,
     purpose: 'journal',
   });
+  const queryClient = useQueryClient();
   // Track which connection id is being removed (for per-row loading state)
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   if (!open) return null;
 
@@ -176,6 +179,24 @@ export function ManageConnectionsModal({
     setRemovingId(id);
     await remove(id);
     setRemovingId(null);
+  };
+
+  const handleRefreshAccounts = async () => {
+    if (isRefreshing || connections.length === 0) return;
+    setIsRefreshing(true);
+    try {
+      // Re-sync every connection sequentially. Each Tradovate/NinjaTrader sync
+      // reconciles the live account set server-side (blown/removed accounts get
+      // deactivated), so refreshing here keeps the account picker truthful.
+      for (const conn of connections) {
+        await syncNow(conn.id);
+      }
+      // Refresh the journal portfolio list so deactivated accounts disappear
+      // from the selector immediately (matches ['portfolios', userId] by prefix).
+      await queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleAddNew = () => {
@@ -248,7 +269,20 @@ export function ManageConnectionsModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 flex-shrink-0">
+        <div className="px-5 pb-5 flex-shrink-0 flex flex-col gap-2.5">
+          <button
+            onClick={handleRefreshAccounts}
+            disabled={isRefreshing || isLoading || connections.length === 0}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-[14px] text-sm font-medium transition-all hover:bg-white/[0.06] disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#d4d4d8',
+            }}
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing…' : 'Refresh accounts'}
+          </button>
           <button
             onClick={handleAddNew}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-[14px] text-sm font-semibold transition-all hover:bg-[#C9A646]/10"
