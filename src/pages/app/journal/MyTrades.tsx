@@ -28,6 +28,7 @@ import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
+import { tradeR } from '@/utils/rAggregates';
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
 import { useStrategiesOptimized, useStrategyRConfigs } from "@/hooks/useStrategies";
 import { resolvePlanned1R, detectBehavior } from '@/utils/rResolver';
@@ -1340,7 +1341,9 @@ const stats = useMemo<Stats>(() => {
 
     // 🚀 OPTIMIZED: Single loop instead of multiple passes
     closedTrades.forEach(trade => {
-      const { pnl, actualR, outcome } = getTradeData(trade, oneR, rBasisMode);
+      const { pnl, outcome } = getTradeData(trade, oneR, rBasisMode);
+      // Canonical R: strategy-planned → stop-based, never global user-1R
+      const canonicalR = tradeR(trade);
 
       if (outcome === "WIN") wins++;
       else if (outcome === "LOSS") losses++;
@@ -1348,8 +1351,8 @@ const stats = useMemo<Stats>(() => {
 
       totalPnL += pnl;
 
-      if (actualR !== null && actualR !== undefined) {
-        totalR += actualR;
+      if (canonicalR !== null) {
+        totalR += canonicalR;
         rCount++;
       }
     });
