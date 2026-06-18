@@ -63,6 +63,10 @@ export interface TraderDecision {
   copies: number;         // how many account rows merged into this decision
   rr: number | null;      // contract-weighted average R where available
   session: string | null;
+  /** id of the copy with the largest absolute quantity (the "base" copy). */
+  representativeId: string;
+  /** ids of all raw trade rows merged into this decision. */
+  memberIds: string[];
 }
 
 // ── Output: the stats bundle (subset of DashboardStats, money + quality) ─
@@ -192,6 +196,7 @@ function buildDecision(copies: TraderRawTrade[]): TraderDecision {
   let contracts = 0;
   let realPnl = 0;
   let baseSize = 0;
+  let representativeId = copies[0].id;
   let rrWeighted = 0;
   let rrWeight = 0;
   let entryAt = copies[0].open_at ?? copies[0].close_at ?? '';
@@ -201,7 +206,10 @@ function buildDecision(copies: TraderRawTrade[]): TraderDecision {
     const q = Math.abs(c.quantity ?? 0);
     contracts += q;
     realPnl += c.pnl ?? 0;
-    if (q > baseSize) baseSize = q;
+    if (q > baseSize) {
+      baseSize = q;
+      representativeId = c.id;
+    }
 
     const r = rrOf(c);
     if (r != null && Number.isFinite(r)) {
@@ -221,6 +229,7 @@ function buildDecision(copies: TraderRawTrade[]): TraderDecision {
   }
 
   const perContract = contracts > 0 ? realPnl / contracts : realPnl;
+  const memberIds = copies.map(c => c.id);
 
   return {
     symbol: copies[0].symbol ?? 'N/A',
@@ -234,6 +243,8 @@ function buildDecision(copies: TraderRawTrade[]): TraderDecision {
     copies: copies.length,
     rr: rrWeight > 0 ? rrWeighted / rrWeight : null,
     session: copies[0].session ?? null,
+    representativeId,
+    memberIds,
   };
 }
 

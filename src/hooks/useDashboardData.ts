@@ -20,6 +20,7 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { TRADER_PORTFOLIO_ID, isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import { groupIntoDecisions, computeTraderStats, type TraderRawTrade } from '@/lib/traderDecisions';
+import { fetchActiveConnectionIds } from '@/lib/traderView';
 import dayjs from 'dayjs';
 
 // ================================================
@@ -755,12 +756,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         }
 
         // Fetch active broker connections to exclude burned accounts.
-        const { data: conns } = await client
-          .from('broker_connections')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('is_active', true);
-        const activeConnectionIds = new Set((conns ?? []).map(c => c.id as string));
+        const activeConnectionIds = await fetchActiveConnectionIds(client, userId);
 
         const rows = (data ?? []) as TraderRawTrade[];
         const decisions = groupIntoDecisions(rows, { activeConnectionIds });

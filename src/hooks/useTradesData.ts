@@ -17,6 +17,8 @@ import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMemo, useRef, useEffect } from 'react';
 import { TRADER_PORTFOLIO_ID, isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
+import { groupIntoDecisions, type TraderRawTrade } from '@/lib/traderDecisions';
+import { fetchActiveConnectionIds } from '@/lib/traderView';
 
 // ================================================
 // 🔥 ASSET MULTIPLIERS - For R calculation
@@ -252,7 +254,47 @@ async function fetchAllTrades(
     }
 
     if (portfolioId === TRADER_PORTFOLIO_ID) {
-      return aggregateCopiedTrades(processedTrades, 'trader');
+      // ── Trader lens: canonical decisions, parity with Overview/Dashboard ──
+      // Uses the same groupIntoDecisions + fetchActiveConnectionIds as
+      // useDashboardData so numbers are identical on both pages.
+      const activeConnectionIds = await fetchActiveConnectionIds(client, userId);
+      const decisions = groupIntoDecisions(
+        processedTrades as unknown as TraderRawTrade[],
+        { activeConnectionIds },
+      );
+
+      // Build a lookup so we can copy display fields from the representative.
+      const byId = new Map(processedTrades.map(t => [t.id, t]));
+
+      const decisionRows = decisions.map(d => {
+        // representativeId = copy with the largest abs(quantity); fall back to
+        // the first member if the id was somehow absent from processedTrades.
+        const rep = byId.get(d.representativeId) ?? byId.get(d.memberIds[0]);
+
+        // input_mode 'risk-only' tells MyTrades.getTradeData() to derive
+        // outcome and isClosed from pnl (d.realPnl), NOT from entry/exit
+        // prices — so we preserve prices from rep for display purposes only,
+        // which is safe because price columns are not used for P&L recomputation.
+        return {
+          ...(rep ?? {}),
+          id: d.representativeId,
+          input_mode: 'risk-only' as const,
+          pnl: d.realPnl,
+          quantity: d.contracts,
+          rr: d.rr,
+          actual_r: d.rr,
+          actual_user_r: null,
+          open_at: d.entryAt,
+          close_at: d.exitAt,
+          // Keep rep's symbol, side, session, strategy/strategy_id,
+          // entry_price, exit_price so the table shows real values.
+        } as Trade;
+      });
+
+      // Newest-first, matching aggregateCopiedTrades sort order.
+      return decisionRows.sort(
+        (a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime(),
+      );
     }
 
     return processedTrades;
