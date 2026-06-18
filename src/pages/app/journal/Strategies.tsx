@@ -1057,10 +1057,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [confirmationSignals, setConfirmationSignals] = useState("");
   const [visualExamples, setVisualExamples] = useState<File[]>([]);
   const [components, setComponents] = useState<StrategyComponent[]>([]);
-  const [defaultStopLoss, setDefaultStopLoss] = useState<number | undefined>();
-  const [defaultTakeProfit, setDefaultTakeProfit] = useState<number | undefined>();
-  const [avgRiskPerTrade, setAvgRiskPerTrade] = useState<number | undefined>();
-  const [maxDailyLoss, setMaxDailyLoss] = useState<number | undefined>();
   const [positionSizingRule, setPositionSizingRule] = useState("");
   const [typicalSession, setTypicalSession] = useState("");
   const [expectedWinRate, setExpectedWinRate] = useState<number | undefined>();
@@ -1077,10 +1073,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setAssetClasses(editingStrategy.category ? editingStrategy.category.split(', ') : []);
       setSetupType(editingStrategy.setupType || "");
       setConfirmationSignals(editingStrategy.confirmationSignals?.join(', ') || "");
-      setDefaultStopLoss(editingStrategy.defaultStopLoss);
-      setDefaultTakeProfit(editingStrategy.defaultTakeProfit);
-      setAvgRiskPerTrade(editingStrategy.avgRiskPerTrade);
-      setMaxDailyLoss(editingStrategy.maxDailyLoss);
       setPositionSizingRule(editingStrategy.positionSizingRule || "");
       setTypicalSession(editingStrategy.typicalSession || "");
       setExpectedWinRate(editingStrategy.expectedWinRate);
@@ -1098,10 +1090,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setSetupType("");
       setConfirmationSignals("");
       setVisualExamples([]);
-      setDefaultStopLoss(undefined);
-      setDefaultTakeProfit(undefined);
-      setAvgRiskPerTrade(undefined);
-      setMaxDailyLoss(undefined);
       setPositionSizingRule("");
       setTypicalSession("");
       setExpectedWinRate(undefined);
@@ -1137,9 +1125,9 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const canGoNext = useCallback(() => {
     if (currentStep === 1) return name.trim() !== "";
     if (currentStep === 2) return true;
-    if (currentStep === 3) return defaultStopLoss && defaultTakeProfit;
+    if (currentStep === 3) return true;
     return true;
-  }, [currentStep, name, defaultStopLoss, defaultTakeProfit]);
+  }, [currentStep, name]);
 
   const handleNext = useCallback(() => {
     if (canGoNext() && currentStep < totalSteps) {
@@ -1193,10 +1181,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       checklist: finalComponents.length > 0 ? derivedChecklist : checklist,
       // New canonical components column.
       components: finalComponents,
-      defaultStopLoss,
-      defaultTakeProfit,
-      avgRiskPerTrade,
-      maxDailyLoss,
       positionSizingRule,
       typicalSession,
       expectedWinRate,
@@ -1219,7 +1203,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
     onSave(strategyData);
     onClose();
   }, [name, description, assetClasses, setupType, confirmationSignals, checklist, components,
-      visualExamples, defaultStopLoss, defaultTakeProfit, avgRiskPerTrade, maxDailyLoss,
+      visualExamples,
       positionSizingRule, typicalSession, expectedWinRate, avgRRGoal,
       planned1rUsd, standardQuantity,
       psychologicalNotes, isEditMode, editingStrategy, onSave, onClose]);
@@ -1487,66 +1471,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
           {currentStep === 3 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Default Stop Loss ($) *
-                  </label>
-                  <input
-                    type="number"
-                    value={defaultStopLoss || ''}
-                    onChange={(e) => setDefaultStopLoss(parseFloat(e.target.value) || undefined)}
-                    placeholder="50"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Default Take Profit ($) *
-                  </label>
-                  <input
-                    type="number"
-                    value={defaultTakeProfit || ''}
-                    onChange={(e) => setDefaultTakeProfit(parseFloat(e.target.value) || undefined)}
-                    placeholder="100"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Avg Risk per Trade ($)
-                  </label>
-                  <input
-                    type="number"
-                    value={avgRiskPerTrade || ''}
-                    onChange={(e) => setAvgRiskPerTrade(parseFloat(e.target.value) || undefined)}
-                    placeholder="100"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                    Max Daily Loss ($)
-                  </label>
-                  <input
-                    type="number"
-                    value={maxDailyLoss || ''}
-                    onChange={(e) => setMaxDailyLoss(parseFloat(e.target.value) || undefined)}
-                    placeholder="500"
-                    className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                    style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                  />
-                </div>
-              </div>
-
               <div className="rounded-lg p-4" style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.25)' }}>
                 <label className="flex items-center gap-2 text-sm font-bold mb-2" style={{ color: '#C9A646' }}>
                   <DollarSign size={15} />
@@ -2157,8 +2081,6 @@ const strategiesWithStats = useMemo(() => {
             category: strategyData.category,
             timeframe: strategyData.timeframe,
             setup_type: strategyData.setupType,
-            default_stop_loss: strategyData.defaultStopLoss,
-            default_take_profit: strategyData.defaultTakeProfit,
             confirmation_signals: strategyData.confirmationSignals,
             checklist: strategyData.checklist,
             position_sizing_rule: strategyData.positionSizingRule,
