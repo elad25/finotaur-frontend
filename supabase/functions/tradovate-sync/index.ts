@@ -760,7 +760,7 @@ async function syncCredential(cred: {
   connection_data: { vault_secret_id?: string; env_verified?: boolean } | null;
   account_id: string;
   auth_method?: string | null;
-}, syncMode = 'cron', backfillStops = false): Promise<{ inserted: number; errors: number }> {
+}, syncMode = 'cron', backfillStops = false): Promise<{ inserted: number; errors: number; reconcile?: { userId: string; environment: 'live' | 'demo'; connectionId: string; discoverySucceeded: boolean; liveAccountIds: number[] } }> {
   let resolvedEnvironment: 'live' | 'demo' = cred.environment;
   let base = TRADOVATE_URLS[resolvedEnvironment];
   const syncStartedAt = new Date();
@@ -889,6 +889,8 @@ async function syncCredential(cred: {
   // self-heal pattern: try the userId-qualified URL first for OAuth, then plain
   // as fallback; take the first candidate returning a non-empty array.
   let discoveredAccountIds: number[] = [accountIdNum];
+  let discoveredAccounts: Array<{ id: number; active?: boolean; archived?: boolean }> = [{ id: accountIdNum }];
+  let discoverySucceeded = false;
   try {
     const providerUserId = cred.auth_method === 'oauth'
       ? extractUserIdFromJwt(accessToken)
@@ -922,15 +924,17 @@ async function syncCredential(cred: {
           );
           continue;
         }
-        const parsed = (accountBody as Array<{ id: number }>)
-          .map(a => a.id)
-          .filter(id => typeof id === 'number' && Number.isFinite(id));
+        const parsedAccounts = (accountBody as Array<{ id: number; active?: boolean; archived?: boolean }>)
+          .filter(a => typeof a.id === 'number' && Number.isFinite(a.id));
+        const parsed = parsedAccounts.map(a => a.id);
         if (parsed.length === 0) {
           // Array present but no valid ids — try next candidate.
           continue;
         }
+        discoveredAccounts = parsedAccounts;
         discoveredAccountIds = parsed;
         accountsFound = true;
+        discoverySucceeded = true;
         console.log(JSON.stringify({
           event: 'accounts_discovered',
           connection_id: cred.id,
@@ -958,6 +962,17 @@ async function syncCredential(cred: {
       `falling back to primary account ${accountIdNum}:`, err
     );
   }
+
+  // Compute the set of live (non-archived, non-inactive) account IDs for
+  // portfolio reconciliation. Only populated when discovery actually succeeded;
+  // an empty array means "unknown" and must never trigger reconciliation.
+  // Accounts where `archived` is explicitly true or `active` is explicitly
+  // false are excluded; undefined flags are treated as live (conservative).
+  const liveAccountIds: number[] = discoverySucceeded
+    ? discoveredAccounts
+        .filter(a => a.archived !== true && a.active !== false)
+        .map(a => a.id)
+    : [];
 
   // Step L2: build orderId → accountId attribution map from /order/list.
   // A single call mirrors the single-call assumption of fetchFills — no
@@ -1305,10 +1320,18 @@ async function syncCredential(cred: {
     if (rpcErr) {
       console.error('[tradovate-sync] record_sync_completion failed (legacy no-fills):', rpcErr);
     }
-    return { inserted: 0, errors: 0 };
+    return {
+      inserted: 0,
+      errors: 0,
+      reconcile: { userId: cred.user_id, environment: resolvedEnvironment, connectionId: cred.id, discoverySucceeded, liveAccountIds },
+    };
   }
 
-  return { inserted: legacyInserted, errors: legacyErrors };
+  return {
+    inserted: legacyInserted,
+    errors:   legacyErrors,
+    reconcile: { userId: cred.user_id, environment: resolvedEnvironment, connectionId: cred.id, discoverySucceeded, liveAccountIds },
+  };
 }
 
 // ─── Per-account fill processing ──────────────────────────────
@@ -1621,6 +1644,20 @@ Deno.serve(async (req: Request) => {
 
     let allConnections = credentials ?? [];
 
+    // Reconciliation ownership map: every active account-owning connection grouped
+    // by (user_id, environment). A (user,env) is only reconciled when EVERY one of
+    // its connections here was processed AND returned a successful non-empty account
+    // discovery this run — so a connection skipped by the active-user filter or a
+    // failed discovery never lets another connection wipe its accounts.
+    const expectedByUserEnv = new Map<string, { userId: string; environment: string; connIds: Set<string> }>();
+    for (const bc of allConnections as Array<{ id: string; user_id: string; environment: string }>) {
+      const key = `${bc.user_id}::${bc.environment}`;
+      let entry = expectedByUserEnv.get(key);
+      if (!entry) { entry = { userId: bc.user_id, environment: bc.environment, connIds: new Set<string>() }; expectedByUserEnv.set(key, entry); }
+      entry.connIds.add(bc.id);
+    }
+    const processedByUserEnv = new Map<string, { liveIds: Set<number>; coveredConnIds: Set<string> }>();
+
     // Phase 1B.2 — active-user filter (cron mode only).
     //
     // Skip cron-syncing connections whose owner has had no trade activity in
@@ -1734,6 +1771,15 @@ Deno.serve(async (req: Request) => {
           synced++;
           totalSuccess++;
           totalSynced += result.inserted;
+
+          const rec = result.reconcile;
+          if (rec && rec.discoverySucceeded) {
+            const key = `${rec.userId}::${rec.environment}`;
+            let pe = processedByUserEnv.get(key);
+            if (!pe) { pe = { liveIds: new Set<number>(), coveredConnIds: new Set<string>() }; processedByUserEnv.set(key, pe); }
+            for (const id of rec.liveAccountIds) pe.liveIds.add(id);
+            pe.coveredConnIds.add(rec.connectionId);
+          }
         } else {
           const err = outcome.reason;
           const msg = String(err);
@@ -1774,6 +1820,46 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({ mode: 'refresh' }),
       }).catch(() => {});
+    }
+
+    // ── Live account reconciliation ──────────────────────────────────────────
+    // For each (user, env) whose EVERY owning connection was covered by a
+    // successful non-empty discovery this run, deactivate portfolios whose
+    // account is no longer in the live (non-archived, non-inactive) set. The RPC
+    // has its own empty-array guard; we also skip empty sets here defensively.
+    let reconciledUserEnvs = 0;
+    let reconciledRows = 0;
+    for (const [key, exp] of expectedByUserEnv) {
+      const proc = processedByUserEnv.get(key);
+      if (!proc) continue;
+      let fullyCovered = true;
+      for (const cid of exp.connIds) {
+        if (!proc.coveredConnIds.has(cid)) { fullyCovered = false; break; }
+      }
+      if (!fullyCovered) continue;
+      const liveIds = [...proc.liveIds];
+      if (liveIds.length === 0) continue; // empty-guard (never wipe everything)
+      try {
+        const { data: deactivated, error: rErr } = await supabaseAdmin.rpc(
+          'reconcile_tradovate_portfolios',
+          { p_user_id: exp.userId, p_environment: exp.environment, p_live_account_ids: liveIds },
+        );
+        if (rErr) {
+          console.error('[tradovate-sync] reconcile_portfolios_failed:', key, String(rErr.message ?? rErr).slice(0, 300));
+        } else {
+          const n = typeof deactivated === 'number' ? deactivated : 0;
+          reconciledUserEnvs++;
+          reconciledRows += n;
+          if (n > 0) {
+            console.log(JSON.stringify({ event: 'portfolios_reconciled', user_id: exp.userId, environment: exp.environment, deactivated: n, live_count: liveIds.length }));
+          }
+        }
+      } catch (recErr) {
+        console.error('[tradovate-sync] reconcile_portfolios_exception:', key, String(recErr).slice(0, 300));
+      }
+    }
+    if (reconciledUserEnvs > 0) {
+      console.log(JSON.stringify({ event: 'reconcile_summary', user_envs: reconciledUserEnvs, rows_deactivated: reconciledRows }));
     }
 
     const durationMs = Date.now() - runStart;
