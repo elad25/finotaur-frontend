@@ -1899,21 +1899,21 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </Button>
             )}
 
-            {/* Display-unit toggle: $ | R */}
+            {/* Display-unit toggle: $ | R — premium inset gold pill */}
             <div
               role="group"
               aria-label="Display unit"
-              className="flex h-10 items-center rounded-[12px] border border-[#C9A646]/30 bg-[#0F0F0F] overflow-hidden"
+              className="flex h-10 items-center gap-1 rounded-[12px] border border-gold-primary/30 bg-surface-base p-1"
             >
               {(['$', 'R'] as const).map((u) => (
                 <button
                   key={u}
                   onClick={() => setUnit(u)}
                   aria-pressed={unit === u}
-                  className={`h-full w-10 text-[12px] font-semibold transition-all duration-200 ${
+                  className={`flex h-full w-9 items-center justify-center rounded-[8px] text-[13px] font-semibold tabular-nums transition-all duration-base ease-out ${
                     unit === u
-                      ? 'bg-[#C9A646] text-black'
-                      : 'text-[#A0A0A0] hover:text-white'
+                      ? 'bg-gradient-gold text-black shadow-glow-gold-resting'
+                      : 'text-ink-secondary hover:text-ink-primary hover:bg-white/5'
                   }`}
                 >
                   {u}
