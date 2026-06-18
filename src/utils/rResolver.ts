@@ -45,7 +45,11 @@ export function resolvePlanned1R(
     const stopRisk = Math.abs(entry - stop) * qty * mult;
     if (stopRisk > 0) return { value: stopRisk, source: 'stop' };
   }
-  if (globalOneR > 0) return { value: globalOneR, source: 'global' };
+  // No global fallback: per-trade R requires a real per-trade basis (trade
+  // override / strategy / stop). With none, return null so the UI shows "—"
+  // and offers "Set R". The global 1R is used only in Manual mode (handled
+  // separately in getTradeData), never as a silent per-trade fallback.
+  void globalOneR;
   return { value: null, source: null };
 }
 
