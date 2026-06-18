@@ -109,6 +109,8 @@ export interface Trade {
   actual_user_r?: number;
   user_risk_r?: number;
   user_reward_r?: number;
+  /** Real DB ids of all underlying trades aggregated into this displayed row (copier/all-accounts grouping). */
+  group_trade_ids?: string[];
   metrics?: {
     rr?: number;
     riskUSD?: number;
@@ -842,7 +844,7 @@ function weightedAverage(trades: Trade[], field: keyof Trade, weightField: keyof
 function aggregateTradeGroup(group: Trade[], mode: AggregationMode): Trade {
   const sorted = [...group].sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
   const representative = sorted[0];
-  if (group.length === 1) return representative;
+  if (group.length === 1) return { ...representative, group_trade_ids: [representative.id] };
 
   const totalPnL = numericSum(group, 'pnl');
   const totalQuantity = numericSum(group, 'quantity');
@@ -870,6 +872,7 @@ function aggregateTradeGroup(group: Trade[], mode: AggregationMode): Trade {
     ...representative,
     ...financialFields,
     id: representative.id,
+    group_trade_ids: group.map((t) => t.id),
     entry_price: entry ?? representative.entry_price,
     exit_price: exit ?? representative.exit_price,
     close_at: closeAt ?? representative.close_at,
