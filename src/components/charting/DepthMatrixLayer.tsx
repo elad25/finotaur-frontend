@@ -348,10 +348,28 @@ export function DepthMatrixLayer({
       return lutColor;
     }
 
-    // Fill cells
+    // Fill cells.
+    //
+    // Penetration kill: once price has traded THROUGH a resting level, that
+    // order is consumed — never paint it again, even if a fresh order later
+    // refills the same price. We scan columns left→right (time order) tracking
+    // the running price envelope [seenLo, seenHi] from each column's mid
+    // (anchor). A cell's side is implied by its price vs that column's mid:
+    // below mid = bid, above mid = ask. A bid dies once price has reached down
+    // to it (seenLo <= price); an ask dies once price has reached up to it
+    // (seenHi >= price). Gap columns (anchor 0) never widen the envelope.
+    let seenLo = Infinity;
+    let seenHi = -Infinity;
+
     for (let ci = 0; ci < cols.length; ci++) {
       const col = cols[ci];
       if (col.flags & 1) continue; // gap column — leave transparent
+
+      const mid = col.anchor;
+      if (isFinite(mid) && mid > 0) {
+        if (mid < seenLo) seenLo = mid;
+        if (mid > seenHi) seenHi = mid;
+      }
 
       // Build a map from binFloor(price) → q for bids + asks combined.
       // Bids go on one side, asks on another, but for the heatmap we render
@@ -368,6 +386,13 @@ export function DepthMatrixLayer({
       }
 
       for (const [price, q] of cellMap) {
+        // Suppress any level price has already traded through (see comment above).
+        const penetrated =
+          price < mid ? seenLo <= price :
+          price > mid ? seenHi >= price :
+          false;
+        if (penetrated) continue;
+
         const color = qToColor(q);
         if (color === 0) continue;
 

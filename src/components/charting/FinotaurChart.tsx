@@ -771,6 +771,15 @@ export function FinotaurChart({
    */
   const liquidityBandRef = useRef<{ minPrice: number; maxPrice: number } | null>(liquidityBand);
 
+  // One-time auto-fit guard: token-driven callers (the scanner) fit the visible
+  // time range only on the FIRST load per symbol/interval — NOT on every 30s
+  // window slide, which used to snap the view back and fight the user's pan.
+  const didInitialFitRef = useRef(false);
+  // Tracks whether the liquidity band was active on the previous render so we
+  // only RE-enter price auto-scale on activation (null→band), not on every
+  // 0.5% band drift — which used to make the price axis jump.
+  const bandWasActiveRef = useRef(false);
+
   // ─── Mount / unmount the chart ──────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
@@ -1046,12 +1055,19 @@ export function FinotaurChart({
     if (!series) return;
     try {
       if (liquidityBand) {
-        // Force the price scale back to auto mode so autoscaleInfoProvider
-        // is immediately re-queried and the band range takes effect.
-        // This is what makes the band authoritative regardless of prior manual zoom.
-        series.priceScale().applyOptions({ autoScale: true });
+        // Only RE-enter auto mode on activation (null→band) or right after a
+        // manual deactivation. Re-forcing autoScale on every 0.5% band drift
+        // re-snapped the price axis every few seconds and felt like "jumping".
+        // While the band stays active, autoScale is already on and lw-charts
+        // keeps tracking the band via autoscaleInfoProvider (liquidityBandRef).
+        if (!bandWasActiveRef.current) {
+          series.priceScale().applyOptions({ autoScale: true });
+          bandWasActiveRef.current = true;
+        }
       } else {
-        // Band deactivated — nudge without re-entering auto mode.
+        // Band deactivated — nudge without re-entering auto mode, and remember
+        // so the next activation re-forces a single auto-fit.
+        bandWasActiveRef.current = false;
         series.applyOptions({});
       }
     } catch {
@@ -1109,6 +1125,13 @@ export function FinotaurChart({
     // Re-attach if the callback reference changes.
   }, [onManualPriceScale]);
 
+  // Reset the one-time auto-fit guard whenever the symbol or interval changes so
+  // the new dataset re-fits once. (Window slides keep from/to changing but must
+  // NOT re-fit — see the bar-load effect's token-driven guard.)
+  useEffect(() => {
+    didInitialFitRef.current = false;
+  }, [symbol, interval]);
+
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
     let cancelled = false;
@@ -1140,13 +1163,23 @@ export function FinotaurChart({
         }
 
         if (bars.length > 0) {
-          if (focusRange) {
-            chartRef.current?.timeScale().setVisibleRange({
-              from: focusRange.from as never,
-              to: focusRange.to as never,
-            });
-          } else {
-            chartRef.current?.timeScale().fitContent();
+          // Token-driven callers (the scanner, which passes timeFitToken) fit the
+          // visible range only on the FIRST load per symbol/interval; subsequent
+          // 30s window slides just refresh the data and leave the user's pan/zoom
+          // untouched. The scanner re-centres explicitly via the timeFitToken
+          // effect (Fit button / interval change). Non-token callers (journal /
+          // backtest) keep the original always-fit behaviour.
+          const tokenDriven = timeFitToken !== undefined;
+          if (!tokenDriven || !didInitialFitRef.current) {
+            if (focusRange) {
+              chartRef.current?.timeScale().setVisibleRange({
+                from: focusRange.from as never,
+                to: focusRange.to as never,
+              });
+            } else {
+              chartRef.current?.timeScale().fitContent();
+            }
+            didInitialFitRef.current = true;
           }
         }
         setLoading(false);

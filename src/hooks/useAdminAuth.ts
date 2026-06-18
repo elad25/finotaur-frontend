@@ -32,14 +32,20 @@ const adminAuthCache = new Map<string, AdminAuthState>();
 
 export function useAdminAuth() {
   const { user } = useAuth();
-  const [state, setState] = useState<AdminAuthState>({
-    isAdmin: false,
-    isSuperAdmin: false,
-    hasBetaAccess: false,
-    isLoading: true,
-    error: null,
-    role: null,
-    accountType: null,
+  const [state, setState] = useState<AdminAuthState>(() => {
+    // Lazy-init from the module cache so an already-resolved user renders
+    // immediately — no isLoading skeleton flash on re-mounts (route guards
+    // mount fresh on every navigation). Falls back to the loading default.
+    const cached = user?.id ? adminAuthCache.get(user.id) : undefined;
+    return cached ?? {
+      isAdmin: false,
+      isSuperAdmin: false,
+      hasBetaAccess: false,
+      isLoading: true,
+      error: null,
+      role: null,
+      accountType: null,
+    };
   });
   
   const checkedUserRef = useRef<string | null>(null);
@@ -58,10 +64,13 @@ export function useAdminAuth() {
       return;
     }
 
-    // Check cache first
+    // Check cache first. NOTE: do NOT gate this on checkedUserRef — that ref is
+    // per-instance and null until the first fetch completes, which previously
+    // defeated the cache and forced a Supabase re-fetch on every mount.
     const cached = adminAuthCache.get(user.id);
-    if (cached && checkedUserRef.current === user.id) {
-      setState(cached);
+    if (cached) {
+      checkedUserRef.current = user.id;
+      setState(prev => (prev === cached ? prev : cached));
       return;
     }
 

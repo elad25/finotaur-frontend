@@ -495,8 +495,11 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
   const handleBarsLoad = useCallback((range: { high: number; low: number } | null) => {
     candleRangeRef.current = range;
-    // Snap the time axis to the 6h window once candles are loaded.
-    setTimeFitToken(t => t + 1);
+    // NOTE: we intentionally do NOT bump timeFitToken here anymore. Bars reload
+    // every 30s as the window slides, and bumping the token re-snapped the time
+    // axis each time, fighting the user's pan. FinotaurChart now self-fits the
+    // visible range once on the first load per symbol/interval; explicit
+    // re-centring still happens via the Fit button and interval-change effect.
   }, []);
 
   // ── Liquidity band auto-fit ─────────────────────────────────────────────

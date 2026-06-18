@@ -121,6 +121,11 @@ function maxSpan(res: SliceResolution): number {
   return res === '5s' ? MAX_SPAN_5S : MAX_SPAN_1M;
 }
 
+/** Grid step (ms) for a resolution tier — the uniform spacing between columns. */
+function stepMsFor(res: SliceResolution): number {
+  return res === '5s' ? 5_000 : 60_000;
+}
+
 // ── Dominant bin size ─────────────────────────────────────────────────────────
 
 function dominantBinSize(columns: DecodedColumn[]): number {
@@ -230,21 +235,64 @@ export function useDepthSlices(opts: DepthSlicesOptions): DepthSliceState {
   }, []);
 
   // ── Rebuild state from refs ───────────────────────────────────────────────
+  // Emits columns on a CONTIGUOUS uniform time grid at the active resolution
+  // step. The renderer (DepthMatrixLayer) stretches a single 1px-per-column
+  // bitmap linearly across [firstT, lastT], which is only correct when columns
+  // are uniformly spaced. Historical (5s or 60s) + always-5s live samples +
+  // dropped samples are NOT uniform, so we snap every real column onto its grid
+  // slot and fill missing slots with transparent gap columns (flags bit0). This
+  // is what keeps each liquidity streak aligned to the candle at its real time —
+  // without it, walls drifted in time and appeared to "remain" after price had
+  // already traded through them.
   const rebuildState = useCallback((res: SliceResolution) => {
-    const allRaw = [
-      ...Array.from(historicalRef.current.values()),
-      ...Array.from(liveEdgeRef.current.values()),
-    ].sort((a, b) => a.t - b.t);
+    const stepMs = stepMsFor(res);
 
-    if (allRaw.length === 0) {
+    // Snap every real column onto its resolution grid slot. Live-edge columns
+    // are sampled every 5s regardless of resolution, so at 1m they collapse
+    // into 60s slots — the most recent observation for a slot wins.
+    const bySlot = new Map<number, DecodedColumn>();
+    const placeOnGrid = (col: DecodedColumn) => {
+      const slot = Math.floor(col.t / stepMs) * stepMs;
+      const prev = bySlot.get(slot);
+      if (!prev || col.t >= prev.t) bySlot.set(slot, { ...col, t: slot });
+    };
+    for (const col of historicalRef.current.values()) placeOnGrid(col);
+    for (const col of liveEdgeRef.current.values())   placeOnGrid(col);
+
+    if (bySlot.size === 0) {
       setState({ columns: [], binSize: 1, resolution: res });
       return;
     }
 
-    const domSize = dominantBinSize(allRaw);
-    const normalized = allRaw.map(col => rebucketColumn(col, domSize, floorUsd));
+    const realCols = Array.from(bySlot.values());
+    const domSize = dominantBinSize(realCols);
 
-    setState({ columns: normalized, binSize: domSize, resolution: res });
+    let minSlot = Infinity;
+    let maxSlot = -Infinity;
+    for (const slot of bySlot.keys()) {
+      if (slot < minSlot) minSlot = slot;
+      if (slot > maxSlot) maxSlot = slot;
+    }
+
+    // Safety cap so a stale far-past slot can't allocate an unbounded grid.
+    const MAX_GRID_COLS = 8_640; // 12h @ 5s — well above any real view window
+    const rawCount = Math.floor((maxSlot - minSlot) / stepMs) + 1;
+    const gridStart = rawCount > MAX_GRID_COLS
+      ? maxSlot - (MAX_GRID_COLS - 1) * stepMs
+      : minSlot;
+
+    const columns: DecodedColumn[] = [];
+    for (let t = gridStart; t <= maxSlot; t += stepMs) {
+      const real = bySlot.get(t);
+      if (real) {
+        columns.push(rebucketColumn(real, domSize, floorUsd));
+      } else {
+        // Transparent gap column — DepthMatrixLayer skips it (flags & 1).
+        columns.push({ t, anchor: 0, binSize: domSize, flags: 1, bids: [], asks: [] });
+      }
+    }
+
+    setState({ columns, binSize: domSize, resolution: res });
   }, [floorUsd]);
 
   // ── Fetch historical window ───────────────────────────────────────────────
