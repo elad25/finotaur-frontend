@@ -1,0 +1,6 @@
+# Cloudflare Pages SPA fallback.
+# Any path that is not a real static asset is served index.html (HTTP 200)
+# so React Router can resolve client-side routes on hard-refresh, deep links,
+# and email/OAuth callback URLs. Static files in /assets/* are matched first
+# and served directly, so this rule never shadows real bundles.
+/*    /index.html   200

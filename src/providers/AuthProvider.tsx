@@ -439,6 +439,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password,
         options: {
+          // If email confirmation is ever enabled in Supabase, the confirmation link
+          // lands on /pricing-selection (an allowlisted redirect URL) which forwards to
+          // /welcome. Without this, the link would fall back to the Supabase Site URL and
+          // could 404. Harmless no-op while auto-confirm is on (no email is sent).
+          emailRedirectTo: `${window.location.origin}/pricing-selection`,
           data: {
             display_name: displayName,
             first_name: firstName || null,
