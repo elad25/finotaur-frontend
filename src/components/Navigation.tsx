@@ -43,7 +43,7 @@ const Navigation = () => {
               <Link to="/login">Login</Link>
             </Button>
             <Button variant="default" asChild className="glow-primary">
-              <Link to="/signup">Start Free</Link>
+              <Link to="/register">Start Free</Link>
             </Button>
           </div>
 
@@ -74,7 +74,7 @@ const Navigation = () => {
                 <Link to="/login">Login</Link>
               </Button>
               <Button variant="default" asChild className="w-full glow-primary">
-                <Link to="/signup">Start Free</Link>
+                <Link to="/register">Start Free</Link>
               </Button>
             </div>
           </div>

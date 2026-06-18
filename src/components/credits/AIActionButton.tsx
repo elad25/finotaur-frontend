@@ -259,7 +259,7 @@ export function AIActionButton({
             <Button 
               onClick={() => {
                 setShowInsufficient(false);
-                navigate('/app/credits/purchase');
+                navigate('/app/all-markets/pricing');
               }}
               className="bg-[#C9A646] text-black hover:bg-[#B8963F]"
             >

@@ -146,7 +146,7 @@ export default function UserDetails() {
       {/* Header */}
       <div className="mb-8">
         <button
-          onClick={() => navigate('/app/journal/admin/users')}
+          onClick={() => navigate('/app/admin/users')}
           className="flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -368,7 +368,7 @@ export default function UserDetails() {
               )}
 
               <button
-                onClick={() => navigate(`/app/journal/admin/users/${userId}/trades`)}
+                onClick={() => navigate(`/app/admin/users/${userId}/trades`)}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
               >
                 <FileText className="w-4 h-4" />
@@ -524,7 +524,7 @@ export default function UserDetails() {
         <BanUserModal
           user={user}
           onClose={() => setShowBanUser(false)}
-          onSuccess={() => navigate('/app/journal/admin/users')}
+          onSuccess={() => navigate('/app/admin/users')}
         />
       )}
 
@@ -532,7 +532,7 @@ export default function UserDetails() {
         <DeleteUserModal
           user={user}
           onClose={() => setShowDeleteUser(false)}
-          onSuccess={() => navigate('/app/journal/admin/users')}
+          onSuccess={() => navigate('/app/admin/users')}
         />
       )}
 

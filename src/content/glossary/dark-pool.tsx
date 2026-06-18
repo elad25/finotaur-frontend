@@ -60,9 +60,7 @@ export default function DarkPoolContent() {
 
       <p>
         Finotaur's{' '}
-        <Link to="/app/all-markets/dark-pool" className="text-primary hover:underline">
-          Dark Pool Scanner
-        </Link>{' '}
+        Dark Pool Scanner{' '}
         ranks prints by size relative to the stock's typical book, flags
         clustering across multiple days, and lets you watch specific tickers
         without drowning in the noise from index-level rebalancing flows.

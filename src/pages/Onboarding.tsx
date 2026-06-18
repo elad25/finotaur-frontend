@@ -90,7 +90,7 @@ const Onboarding = () => {
       description: "Now let's activate your trial and get started.",
     });
     // Navigate to billing with user info
-    navigate("/billing", { 
+    navigate("/app/settings?tab=billing", {
       state: { 
         plan: "basic", 
         email: "", 

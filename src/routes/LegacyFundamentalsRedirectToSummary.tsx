@@ -9,9 +9,9 @@ export default function LegacyFundamentalsRedirectToSummary() {
   useEffect(() => {
     const symbol = (symbolFromPath || sp.get('symbol') || '').trim().toUpperCase();
     if (symbol) {
-      navigate(`/stocks/${symbol}?tab=fundamentals`, { replace: true });
+      navigate(`/app/stocks/overview?symbol=${symbol}`, { replace: true });
     } else {
-      navigate('/stocks', { replace: true });
+      navigate('/app/stocks/overview', { replace: true });
     }
   }, [navigate, symbolFromPath, sp]);
   return null;

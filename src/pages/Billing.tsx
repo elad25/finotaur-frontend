@@ -58,7 +58,7 @@ const Billing = () => {
       });
       setLoading(false);
       // Navigate to dashboard
-      navigate("/app/dashboard");
+      navigate("/app/home");
     }, 2000);
   };
 

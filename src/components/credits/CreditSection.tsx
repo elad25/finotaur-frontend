@@ -197,7 +197,7 @@ export function CreditSection() {
             {PACKS.map((p) => (
               <button
                 key={p.id}
-                onClick={() => navigate('/app/credits/purchase')}
+                onClick={() => navigate('/app/all-markets/pricing')}
                 className={`p-3 rounded-lg border text-center transition-all hover:border-[#C9A646]/60
                   ${p.hot ? 'border-[#C9A646]/50 bg-[#C9A646]/5' : 'border-zinc-800 bg-zinc-900/50'}`}
               >

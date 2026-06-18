@@ -901,7 +901,7 @@ function EarningsToday({ earningsData }: { earningsData: any[] }) {
         </div>
 
         <Link
-          to="/app/all-markets/earnings"
+          to="/app/stocks/earnings"
           className="text-xs text-base-500 hover:text-white transition-colors shrink-0 ml-auto"
         >
           Calendar →

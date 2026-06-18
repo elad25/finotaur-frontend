@@ -140,7 +140,7 @@ const Pricing = () => {
                   variant={tier.highlighted ? "default" : "secondary"}
                   asChild
                 >
-                  <Link to="/signup">{tier.cta}</Link>
+                  <Link to="/register">{tier.cta}</Link>
                 </Button>
 
                 <div className="space-y-3 mb-6">
