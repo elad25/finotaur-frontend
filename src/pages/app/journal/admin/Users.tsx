@@ -21,7 +21,7 @@ import {
   WifiOff,
   Users as UsersIcon,
 } from 'lucide-react';
-import { getAllUsers } from '@/services/adminService';
+import { getAllUsers, getNewJoins24h, invalidateUserCaches, invalidateStatsCaches } from '@/services/adminService';
 import { UserWithStats, UserFilters, PaginationParams, ProductFilter } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -97,6 +97,13 @@ export default function AdminUsers() {
   const total = response?.total || 0;
   const totalPages = response?.totalPages || 1;
 
+  // 24h join counts per product (admin-only RPC)
+  const { data: joins24h } = useQuery({
+    queryKey: ['admin', 'new-joins-24h'],
+    queryFn: getNewJoins24h,
+    ...CACHE_CONFIG,
+  });
+
   // ============================================
   // HANDLERS - All memoized
   // ============================================
@@ -112,16 +119,27 @@ export default function AdminUsers() {
   }, []);
 
   const handleUserActionComplete = useCallback(() => {
+    // ⚠️ getAllUsers() is wrapped in a service-level in-memory cache (cachedQuery,
+    // 2-min TTL). Invalidating react-query alone triggers a refetch that still
+    // returns the STALE cached array — so a just-deleted/banned user lingers in
+    // the table. Clear the service cache FIRST, then let react-query refetch
+    // hit fresh data. (Admin action modals call the RPCs directly, bypassing the
+    // service functions that would otherwise invalidate this cache.)
+    invalidateUserCaches();
+    invalidateStatsCaches();
     queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ['admin', 'subscriber-stats'] });
     queryClient.invalidateQueries({ queryKey: ['admin', 'subscribers-list'] });
+    queryClient.invalidateQueries({ queryKey: ['admin', 'new-joins-24h'] });
   }, [queryClient, queryKey]);
 
   const handleManualRefresh = useCallback(async () => {
     toast.info('Refreshing subscribers...');
+    invalidateStatsCaches();
+    queryClient.invalidateQueries({ queryKey: ['admin', 'new-joins-24h'] });
     await refetch();
     toast.success('Subscribers refreshed!');
-  }, [refetch]);
+  }, [refetch, queryClient]);
 
   // ⚡ Prefetch next page for instant navigation
   const prefetchNextPage = useCallback(() => {
@@ -234,6 +252,18 @@ export default function AdminUsers() {
               Use the filter tabs to drill into a specific product. A user can appear in multiple categories.
             </p>
           </div>
+        </div>
+
+        {/* New joins in the last 24h, per product (a user can appear in multiple) */}
+        <div className="mt-3 pt-3 border-t border-blue-500/20 flex flex-wrap items-center gap-2">
+          <span className="text-xs uppercase tracking-wide text-blue-400/60 mr-1">
+            Joined last 24h
+          </span>
+          <JoinChip label="Platform" value={joins24h?.platform} color="gold" />
+          <JoinChip label="Journal" value={joins24h?.journal} color="emerald" />
+          <JoinChip label="Newsletter" value={joins24h?.newsletter} color="blue" />
+          <JoinChip label="Top Secret" value={joins24h?.top_secret} color="purple" />
+          <JoinChip label="Free" value={joins24h?.free} color="gray" />
         </div>
       </div>
 
@@ -416,8 +446,38 @@ const FilterButton = React.memo<{
 });
 FilterButton.displayName = 'FilterButton';
 
-const StatsCard = React.memo<{ 
-  label: string; 
+// Small chip showing how many users joined a product in the last 24h.
+const JoinChip = React.memo<{
+  label: string;
+  value?: number;
+  color: 'blue' | 'emerald' | 'gold' | 'gray' | 'purple';
+}>(({ label, value, color }) => {
+  const count = value ?? 0;
+  const active = count > 0;
+
+  const activeStyle: Record<string, string> = {
+    blue: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+    emerald: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    gold: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30',
+    gray: 'bg-gray-700/40 text-gray-200 border-gray-600',
+    purple: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+        active ? activeStyle[color] : 'bg-[#0A0A0A] text-gray-500 border-gray-800'
+      }`}
+    >
+      {label}
+      <span className={`font-bold ${active ? '' : 'text-gray-600'}`}>+{count}</span>
+    </span>
+  );
+});
+JoinChip.displayName = 'JoinChip';
+
+const StatsCard = React.memo<{
+  label: string;
   value: string | number;
 }>(({ label, value }) => (
   <div className="bg-[#111111] border border-gray-800 rounded-lg p-4">
@@ -473,20 +533,25 @@ const UserRow = React.memo<{
     return names[user.account_type] || user.account_type;
   }, [user.account_type, isInTrial]);
 
+  // platform_plan is stored bare in the DB ('free' | 'finotaur'); tolerate a
+  // legacy 'platform_' prefix too so the badge logic is environment-proof.
+  const platformPlan = (user.platform_plan || '').replace(/^platform_/, '');
+
   // Platform tier label for the Platform badge (Core / FINOTAUR / Enterprise)
   const platformPlanLabel = useMemo(() => {
     const labels: Record<string, string> = {
-      platform_core: 'Core',
-      platform_finotaur: 'FINOTAUR',
-      platform_enterprise: 'Enterprise',
+      core: 'Core',
+      pro: 'Pro',
+      finotaur: 'FINOTAUR',
+      enterprise: 'Enterprise',
     };
-    return user.platform_plan ? labels[user.platform_plan] ?? null : null;
-  }, [user.platform_plan]);
+    return platformPlan ? labels[platformPlan] ?? null : null;
+  }, [platformPlan]);
 
   // FINOTAUR and Enterprise platform tiers already include WAR ZONE + Top Secret,
   // so their separate badges are redundant and should be hidden.
   const platformIncludesNewsletters =
-    user.platform_plan === 'platform_finotaur' || user.platform_plan === 'platform_enterprise';
+    platformPlan === 'finotaur' || platformPlan === 'enterprise';
 
   // Subscription info - now properly typed
   const subscriptionStatus = user.subscription_status || 'active';

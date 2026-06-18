@@ -166,6 +166,7 @@ export function invalidateStatsCaches() {
   supabaseCache.invalidate('user-growth');
   supabaseCache.invalidate('trade-volume');
   supabaseCache.invalidate('subscriber-stats');
+  supabaseCache.invalidate('new-joins-24h');
 }
 
 /**
@@ -453,6 +454,46 @@ export async function getAllUsers(
       };
     },
     CACHE_TTL.USERS_LIST
+  );
+}
+
+/**
+ * Count of users who joined each product in the last 24h.
+ * Each product is counted by its own *_started_at; FREE = new signups (created_at).
+ * A user can appear in multiple categories.
+ */
+export interface NewJoins24h {
+  platform: number;
+  journal: number;
+  newsletter: number;
+  top_secret: number;
+  free: number;
+  since: string;
+}
+
+/**
+ * ⚡ How many users joined each subscription in the last 24h (admin-only RPC).
+ */
+export async function getNewJoins24h(): Promise<NewJoins24h> {
+  return cachedQuery(
+    'new-joins-24h',
+    async () => {
+      const { data, error } = await supabase.rpc('admin_new_joins_24h');
+      if (error) {
+        console.error('❌ Error fetching 24h joins via admin_new_joins_24h RPC:', error);
+        throw error;
+      }
+      const d = (data || {}) as Partial<NewJoins24h>;
+      return {
+        platform: Number(d.platform) || 0,
+        journal: Number(d.journal) || 0,
+        newsletter: Number(d.newsletter) || 0,
+        top_secret: Number(d.top_secret) || 0,
+        free: Number(d.free) || 0,
+        since: d.since || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      };
+    },
+    CACHE_TTL.STATS
   );
 }
 
