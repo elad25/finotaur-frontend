@@ -433,6 +433,16 @@ For "FLAGSHIP" labels, recommended plans. Border accent only.
 }
 ```
 
+#### 🔴 IRON RULE — no native number-input spinners (site-wide)
+`<input type="number">` MUST NEVER show the browser's up/down stepper
+arrows — not on hover, not on focus, anywhere on the platform. Financial
+inputs are plain mono fields; steppers are visual noise and look broken.
+This is enforced globally in `src/styles/globals.css` (a global
+`input[type='number']` rule strips `-webkit-*-spin-button` and sets
+`appearance: textfield`). Do NOT re-enable spinners on any input, and do
+NOT rely on the legacy opt-in `.no-spinner` class — the global rule already
+covers every numeric field.
+
 ### Number display (price/metric)
 Use the React components in `src/components/ui/NumberDisplay.tsx`:
 - `<Price>` — the value itself, always white
