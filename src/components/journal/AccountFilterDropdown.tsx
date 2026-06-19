@@ -68,7 +68,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
 
   // Button label
   const label = useMemo(() => {
-    if (isTraderMode) return 'TRADER';
+    if (isTraderMode) return 'Trader';
     if (isShowingAll) return 'All accounts';
     const count = selectedPortfolioIds.filter(
       id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_SCOPE_ID,
@@ -202,7 +202,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
               {isTraderMode && <Check className="w-2.5 h-2.5 text-[#0A0A0A]" strokeWidth={3} />}
             </span>
             <Layers className="w-3 h-3 flex-shrink-0 text-[#C9A646]" />
-            <span className="flex-1 text-left truncate font-semibold">TRADER</span>
+            <span className="flex-1 text-left truncate font-semibold">Trader</span>
             <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#C9A646]/15 text-[#C9A646]">
               Net decisions
             </span>
