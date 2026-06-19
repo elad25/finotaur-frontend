@@ -5,19 +5,17 @@
  * DATA PROVENANCE — all fields rendered here are redistribution-safe.
  *
  * 1. INSIDER TRANSACTIONS  (Section: "Insider Transactions")
- *    Source: /api/flow/scanner → flow_scanner_cache table (Supabase)
- *    Populated by: flowScannerCron.js which calls SEC EDGAR EFTS + RSS
- *      - efts.sec.gov/LATEST/search-index?forms=4   (public domain)
- *      - sec.gov/cgi-bin/browse-edgar?type=4&output=atom  (public domain)
- *    Fields used: ticker, type (insider_buy/insider_sell/cluster_insider),
- *                 direction, insiderName, insiderTitle, insiderShares,
- *                 form4Type, clusterCount, value, signal, time
- *    ✅ SAFE — SEC EDGAR is public domain; `value` is pre-formatted by cron,
- *              not a raw third-party quote redistribution.
+ *    Source: /api/company-intel/insider/:ticker
+ *    Populated by: insiderTracker.js → SEC EDGAR data.sec.gov (public domain)
+ *    Fields used: insider_name, insider_title, transaction_type, shares,
+ *                 price_per_share, total_value, transaction_date
+ *    ✅ SAFE — SEC EDGAR is public domain.
  *
- * 2. DIRECT EDGAR FORM 4 FEED  (Section: "Recent Form 4 Filings")
- *    Source: Direct browser fetch to https://efts.sec.gov (public domain API).
- *    Fields: entity_name, file_date, period_of_report, form_type (all EDGAR)
+ * 2. FORM 4 FILINGS LIST  (Section: "Recent Form 4 Filings")
+ *    Source: /api/company-intel/insider/:ticker/filings
+ *    Server-side fetch avoids browser CORS block on efts.sec.gov.
+ *    Fields: ticker, accession_number, filed_date, primary_document,
+ *            xml_url, filing_url
  *    ✅ SAFE — SEC EDGAR public domain.
  *
  * 3. INSTITUTIONAL 13F HOLDINGS  (Section: "Institutional Holders — 13F")
@@ -37,7 +35,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { StocksInsiderSkeletonPage } from '@/components/skeletons/StocksInsiderSkeleton';
 import {
@@ -56,8 +54,6 @@ import {
   Clock,
   ExternalLink,
 } from "lucide-react";
-import { useFlowData } from "@/pages/app/ai/flow-scanner/shared/useFlowData";
-import type { FlowItem } from "@/pages/app/ai/flow-scanner/shared/types";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Design tokens (match Flow Scanner / dark glass aesthetic)
@@ -96,6 +92,49 @@ interface Form4State {
   error: string | null;
 }
 
+/** Raw transaction row from /api/company-intel/insider/:ticker */
+interface InsiderTransaction {
+  ticker: string;
+  cik: string;
+  insider_name: string;
+  insider_cik: string | null;
+  insider_title: string | null;
+  is_director: boolean;
+  is_officer: boolean;
+  is_ten_percent_owner: boolean;
+  transaction_type: string; // 'P' = purchase, 'S' = sale, 'A' = award, etc.
+  transaction_code: string;
+  acquisition_disposition: string;
+  shares: number;
+  price_per_share: number | null;
+  total_value: number | null;
+  shares_owned_after: number | null;
+  ownership_type: string;
+  transaction_date: string;
+  filed_date: string;
+  accession_number: string;
+  filing_url: string;
+}
+
+/** Shape returned by /api/company-intel/insider/:ticker */
+interface InsiderSummaryData {
+  ticker: string;
+  period_days: number;
+  total_transactions: number;
+  buys: { count: number; shares: number; value: number };
+  sells: { count: number; shares: number; value: number };
+  net_shares: number;
+  net_value: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+  recent_transactions: InsiderTransaction[];
+}
+
+interface InsiderSummaryState {
+  data: InsiderSummaryData | null;
+  loading: boolean;
+  error: string | null;
+}
+
 /** Shape returned by /api/company-intel/institutional/:ticker */
 interface FundPosition {
   fund_cik: string;
@@ -118,6 +157,10 @@ interface InstitutionalOwnership {
   total_shares?: number;
   total_value?: number;
   report_date?: string;
+  /** True holder count from stock_institutional_ownership.holders_count */
+  holders_count?: number | null;
+  /** Quarter label from stock_institutional_ownership (e.g. "Q1 2026") */
+  quarter?: string | null;
 }
 
 interface InstitutionalState {
@@ -160,61 +203,45 @@ function fmtValue(n: number | null | undefined): string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// EDGAR Form 4 hook (direct public-domain API, no auth required)
-// Source: https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&forms=4
+// Hook: Insider Summary — calls /api/company-intel/insider/:ticker
+// Returns the summary + recent_transactions from the DB (server-side SEC fetch)
 // ──────────────────────────────────────────────────────────────────────────────
 
-const FORM4_CACHE: Record<string, { entries: EdgarForm4Entry[]; ts: number }> = {};
-const FORM4_TTL = 5 * 60 * 1000;
-
-async function fetchEdgarForm4(symbol: string): Promise<EdgarForm4Entry[]> {
-  const cached = FORM4_CACHE[symbol];
-  if (cached && Date.now() - cached.ts < FORM4_TTL) return cached.entries;
-
-  const url =
-    `https://efts.sec.gov/LATEST/search-index` +
-    `?q=%22${encodeURIComponent(symbol)}%22&forms=4&dateRange=custom` +
-    `&startdt=${new Date(Date.now() - 90 * 86400_000).toISOString().split("T")[0]}` +
-    `&enddt=${new Date().toISOString().split("T")[0]}` +
-    `&_source=period_of_report,entity_name,file_date,period_of_report,accession_no`;
-
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Finotaur/1.0 (contact@finotaur.com)",
-      "Accept": "application/json",
-    },
-    signal: AbortSignal.timeout(10_000),
+function useInsiderSummary(symbol: string, refreshKey: number): InsiderSummaryState {
+  const [state, setState] = useState<InsiderSummaryState>({
+    data: null, loading: true, error: null,
   });
 
-  if (!res.ok) throw new Error(`EDGAR EFTS ${res.status}`);
+  useEffect(() => {
+    if (!symbol) return;
+    setState({ data: null, loading: true, error: null });
 
-  const data = await res.json();
-  const hits: Array<{ _id: string; _source: Record<string, string> }> =
-    data?.hits?.hits || [];
+    fetch(`/api/company-intel/insider/${encodeURIComponent(symbol)}?daysBack=90`, {
+      signal: AbortSignal.timeout(20_000),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText);
+          setState({ data: null, loading: false, error: text });
+          return;
+        }
+        const json = await res.json();
+        setState({ data: json as InsiderSummaryData, loading: false, error: null });
+      })
+      .catch((err) => {
+        setState({ data: null, loading: false, error: String(err?.message || err) });
+      });
+  }, [symbol, refreshKey]);
 
-  const entries: EdgarForm4Entry[] = hits.slice(0, 20).map((h) => {
-    const s = h._source || {};
-    const accNo: string = (s.accession_no || h._id || "").replace(/\//g, "");
-    const cikMatch = h._id.match(/\/(\d+)\//);
-    const cik = cikMatch ? cikMatch[1] : "";
-    return {
-      id:             h._id,
-      entityName:     s.entity_name || symbol,
-      fileDate:       s.file_date   || "",
-      periodOfReport: s.period_of_report || null,
-      accessionNo:    accNo,
-      url:
-        cik && accNo
-          ? `https://www.sec.gov/Archives/edgar/data/${cik}/${accNo.replace(/-/g, "")}/${accNo}.txt`
-          : `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${symbol}&type=4&dateb=&owner=include&count=20`,
-    };
-  });
-
-  FORM4_CACHE[symbol] = { entries, ts: Date.now() };
-  return entries;
+  return state;
 }
 
-function useEdgarForm4(symbol: string): Form4State {
+// ──────────────────────────────────────────────────────────────────────────────
+// Hook: Form 4 Filings — calls /api/company-intel/insider/:ticker/filings
+// Server-side avoids CORS block on efts.sec.gov
+// ──────────────────────────────────────────────────────────────────────────────
+
+function useForm4Filings(symbol: string, refreshKey: number): Form4State {
   const [state, setState] = useState<Form4State>({
     entries: [], loading: true, error: null,
   });
@@ -222,10 +249,42 @@ function useEdgarForm4(symbol: string): Form4State {
   useEffect(() => {
     if (!symbol) return;
     setState({ entries: [], loading: true, error: null });
-    fetchEdgarForm4(symbol)
-      .then(entries => setState({ entries, loading: false, error: null }))
-      .catch(err   => setState({ entries: [], loading: false, error: String(err?.message || err) }));
-  }, [symbol]);
+
+    fetch(
+      `/api/company-intel/insider/${encodeURIComponent(symbol)}/filings?daysBack=90&limit=20`,
+      { signal: AbortSignal.timeout(20_000) },
+    )
+      .then(async (res) => {
+        if (!res.ok) {
+          setState({ entries: [], loading: false, error: "Could not load recent filings." });
+          return;
+        }
+        const json = await res.json();
+        // Map backend filing shape → EdgarForm4Entry for the existing render component
+        const entries: EdgarForm4Entry[] = (json?.filings ?? []).map(
+          (f: {
+            cik: string;
+            ticker: string;
+            accession_number: string;
+            filed_date: string;
+            primary_document: string | null;
+            xml_url: string | null;
+            filing_url: string;
+          }) => ({
+            id: f.accession_number,
+            entityName: f.ticker,
+            fileDate: f.filed_date,
+            periodOfReport: null, // not returned by this endpoint
+            accessionNo: f.accession_number,
+            url: f.filing_url,
+          }),
+        );
+        setState({ entries, loading: false, error: null });
+      })
+      .catch(() => {
+        setState({ entries: [], loading: false, error: "Could not load recent filings." });
+      });
+  }, [symbol, refreshKey]);
 
   return state;
 }
@@ -307,16 +366,19 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Single insider transaction card (SEC EDGAR Form 4 — public domain) */
-function InsiderTransactionCard({ item }: { item: FlowItem }) {
-  const isCluster = item.type === "cluster_insider";
-  const isBuy     = item.type === "insider_buy" || isCluster;
-  const accent    = isCluster ? T.purple : isBuy ? T.bullish : T.bearish;
+/** Single insider transaction row sourced from /api/company-intel/insider/:ticker */
+function InsiderTransactionRow({ txn }: { txn: InsiderTransaction }) {
+  const isBuy   = txn.transaction_type === "P";
+  const isSell  = txn.transaction_type === "S";
+  const accent  = isBuy ? T.bullish : isSell ? T.bearish : T.neutral;
 
-  const formBadge =
-    item.form4Type === "open_market" ? { label: "Open Market", color: T.bullish } :
-    item.form4Type === "10b5-1"      ? { label: "10b5-1 Plan", color: T.neutral  } :
-    null;
+  const typeLabel =
+    isBuy  ? "Purchase" :
+    isSell ? "Sale"     :
+    txn.transaction_type === "A" ? "Award"    :
+    txn.transaction_type === "M" ? "Exercise" :
+    txn.transaction_type === "G" ? "Gift"     :
+    "Other";
 
   return (
     <div
@@ -334,79 +396,66 @@ function InsiderTransactionCard({ item }: { item: FlowItem }) {
           className="text-[10px] font-semibold px-2 py-0.5 rounded-lg self-start mt-0.5 shrink-0"
           style={{ background: `${accent}18`, color: accent }}
         >
-          {isCluster
-            ? "Cluster Buy"
-            : item.type === "insider_buy"
-            ? "Insider Buy"
-            : "Insider Sell"}
+          {typeLabel}
         </div>
 
         {/* Insider info */}
         <div className="flex-1 min-w-[130px]">
-          {isCluster ? (
-            <div className="flex items-center gap-1.5">
-              <AlertTriangle className="h-3 w-3" style={{ color: T.purple }} />
-              <span className="text-xs font-bold" style={{ color: T.purple }}>
-                {item.clusterCount} Insiders Buying
-              </span>
-            </div>
-          ) : (
-            <div>
-              <div className="text-xs font-semibold text-white truncate max-w-[200px]">
-                {item.insiderName ?? "Insider"}
-              </div>
-              {item.insiderTitle && (
-                <div className="text-[10px] text-neutral-500">{item.insiderTitle}</div>
-              )}
-            </div>
+          <div className="text-xs font-semibold text-white truncate max-w-[200px]">
+            {txn.insider_name}
+          </div>
+          {txn.insider_title && (
+            <div className="text-[10px] text-neutral-500">{txn.insider_title}</div>
           )}
         </div>
 
         {/* Value + shares */}
         <div className="text-right shrink-0">
-          <div className="text-xs font-bold" style={{ color: T.gold }}>{item.value}</div>
-          {item.insiderShares != null && (
-            <div className="text-[10px] text-neutral-500">
-              {item.insiderShares.toLocaleString()} sh
-            </div>
-          )}
+          <div className="text-xs font-bold" style={{ color: T.gold }}>
+            {fmtValue(txn.total_value)}
+          </div>
+          <div className="text-[10px] text-neutral-500">
+            {fmtShares(txn.shares)} sh
+          </div>
         </div>
 
-        {/* Form type badge */}
-        {formBadge && (
-          <div
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded self-start mt-0.5 hidden sm:block"
-            style={{ background: `${formBadge.color}12`, color: formBadge.color }}
-          >
-            {formBadge.label}
+        {/* Price per share */}
+        {txn.price_per_share != null && (
+          <div className="text-right shrink-0">
+            <div className="text-xs text-neutral-300">
+              @{fmtValue(txn.price_per_share)}
+            </div>
+            <div className="text-[10px] text-neutral-600">per share</div>
           </div>
         )}
 
-        {/* Cluster star */}
-        {isCluster && (
-          <Star className="h-3.5 w-3.5 self-center shrink-0" style={{ color: T.purple }} />
-        )}
-
-        {/* Direction */}
+        {/* Direction arrow */}
         <div className="ml-auto self-center shrink-0">
-          {item.direction === "bullish"
+          {isBuy
             ? <ArrowUpRight   className="h-4 w-4" style={{ color: T.bullish }} />
-            : item.direction === "bearish"
+            : isSell
             ? <ArrowDownRight className="h-4 w-4" style={{ color: T.bearish }} />
-            : <Minus          className="h-4 w-4" style={{ color: T.neutral }} />}
+            : <Minus          className="h-4 w-4" style={{ color: T.neutral  }} />}
         </div>
       </div>
 
-      {/* Time + signal */}
+      {/* Date row */}
       <div className="mt-2 pl-3 flex flex-wrap gap-x-4 gap-y-1 items-center">
-        {item.time && (
-          <div className="flex items-center gap-1 text-[10px] text-neutral-600">
-            <Clock className="h-3 w-3" />
-            {item.time}
-          </div>
-        )}
-        {item.signal && (
-          <p className="text-[11px] text-neutral-500 line-clamp-1 flex-1">{item.signal}</p>
+        <div className="flex items-center gap-1 text-[10px] text-neutral-600">
+          <Clock className="h-3 w-3" />
+          {fmtDate(txn.transaction_date)}
+        </div>
+        {txn.filing_url && (
+          <a
+            href={txn.filing_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-0.5 text-[10px] hover:underline transition-colors"
+            style={{ color: T.gold }}
+          >
+            SEC filing
+            <ExternalLink className="h-2.5 w-2.5 ml-0.5" />
+          </a>
         )}
       </div>
     </div>
@@ -539,38 +588,49 @@ export default function StocksInsider() {
   const { symbol: symbolParam } = useParams<{ symbol?: string }>();
   const symbol = (symbolParam || "AAPL").toUpperCase();
 
+  // Bump this counter to re-trigger all backend hooks simultaneously
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
+
   // ── Data ────────────────────────────────────────────────────────────────────
-  const { flowData, isLoading: flowLoading, error: flowError, refresh } = useFlowData();
-  const edgarState   = useEdgarForm4(symbol);
+  const insiderState       = useInsiderSummary(symbol, refreshKey);
+  const edgarState         = useForm4Filings(symbol, refreshKey);
   const institutionalState = useInstitutionalHoldings(symbol);
 
   // ── Derived ─────────────────────────────────────────────────────────────────
-  const insiderItems = useMemo(
-    () =>
-      flowData
-        .filter(i => i.ticker === symbol)
-        .filter(i => ["insider_buy", "insider_sell", "cluster_insider"].includes(i.type)),
-    [flowData, symbol],
-  );
+  const summary    = insiderState.data;
+  const buyCount   = summary?.buys.count  ?? 0;
+  const sellCount  = summary?.sells.count ?? 0;
 
-  const buyCount     = useMemo(() => insiderItems.filter(i => i.type === "insider_buy" || i.type === "cluster_insider").length, [insiderItems]);
-  const sellCount    = useMemo(() => insiderItems.filter(i => i.type === "insider_sell").length, [insiderItems]);
-  const clusterCount = useMemo(() => insiderItems.filter(i => i.type === "cluster_insider").length, [insiderItems]);
+  /**
+   * Cluster Buys: number of distinct insiders with a 'P' transaction when
+   * there are >=2 distinct buyers (i.e., count them all or 0 if only 1 buyer).
+   */
+  const clusterCount = useMemo(() => {
+    const txns = summary?.recent_transactions ?? [];
+    const buyers = new Set(
+      txns.filter(t => t.transaction_type === "P").map(t => t.insider_name),
+    );
+    return buyers.size >= 2 ? buyers.size : 0;
+  }, [summary]);
 
   const reportDate = institutionalState.holders[0]?.report_date ?? null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
-  if (flowLoading) {
+  if (insiderState.loading) {
     return <StocksInsiderSkeletonPage />;
   }
 
-  if (flowError) {
+  if (insiderState.error) {
     return (
       <div className="p-6 text-red-400 text-sm">
-        Error loading insider data: {flowError}
+        Error loading insider data: {insiderState.error}
       </div>
     );
   }
+
+  const recentTransactions = summary?.recent_transactions ?? [];
+  const totalTransactions  = summary?.total_transactions ?? 0;
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
@@ -599,7 +659,7 @@ export default function StocksInsider() {
           { label: "Insider Buys",   value: buyCount,     color: T.bullish, Icon: TrendingUp   },
           { label: "Insider Sells",  value: sellCount,    color: T.bearish, Icon: TrendingDown  },
           { label: "Cluster Buys",   value: clusterCount, color: T.purple,  Icon: Star         },
-          { label: "13F Holders",    value: institutionalState.loading ? "…" : institutionalState.holders.length, color: T.teal, Icon: Building2 },
+          { label: "13F Holders",    value: institutionalState.loading ? "…" : (institutionalState.ownership?.holders_count ?? institutionalState.holders.length), color: T.teal, Icon: Building2 },
         ].map(({ label, value, color, Icon }) => (
           <div
             key={label}
@@ -625,35 +685,35 @@ export default function StocksInsider() {
             className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
             style={{ background: `${T.purple}18`, color: T.purple }}
           >
-            {insiderItems.length}
+            {totalTransactions}
           </span>
           <span className="text-[10px] text-neutral-600 ml-auto">
             Source: SEC EDGAR Form 4 · public domain
           </span>
         </div>
 
-        {insiderItems.length > 0 ? (
-          <div className="space-y-2.5">
-            {insiderItems.map(item => (
-              <InsiderTransactionCard key={item.id} item={item} />
-            ))}
-          </div>
-        ) : (
+        {totalTransactions === 0 ? (
           <Card>
             <div className="py-10 text-center">
               <Activity className="h-8 w-8 mx-auto mb-2 text-neutral-700" />
               <p className="text-sm text-neutral-500">
-                No recent insider transactions for <strong className="text-neutral-300">{symbol}</strong>.
-              </p>
-              <p className="text-[11px] text-neutral-600 mt-1">
-                Flow scanner covers ~50 high-liquidity tickers. New Form 4 filings are ingested every 15 minutes.
+                No insider transactions for <strong className="text-neutral-300">{symbol}</strong> in the last 90 days.
               </p>
             </div>
           </Card>
+        ) : (
+          <div className="space-y-2.5">
+            {recentTransactions.map((txn, idx) => (
+              <InsiderTransactionRow
+                key={`${txn.accession_number}-${txn.insider_cik}-${txn.transaction_date}-${idx}`}
+                txn={txn}
+              />
+            ))}
+          </div>
         )}
       </div>
 
-      {/* ── Recent Form 4 filings (direct EDGAR, 90 days) ───────────────────── */}
+      {/* ── Recent Form 4 filings (backend-proxied, 90 days) ────────────────── */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <FileText className="h-4 w-4" style={{ color: T.gold }} />
@@ -673,13 +733,13 @@ export default function StocksInsider() {
           {edgarState.loading ? (
             <div className="flex items-center gap-2 py-6 text-neutral-500 text-xs">
               <RefreshCw className="h-3 w-3 animate-spin" />
-              Fetching SEC EDGAR…
+              Loading Form 4 filings…
             </div>
           ) : edgarState.error ? (
             <div className="py-6 text-center">
               <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-yellow-600" />
               <p className="text-xs text-neutral-500">
-                Could not reach SEC EDGAR: {edgarState.error}
+                {edgarState.error}
               </p>
               <a
                 href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${symbol}&type=4&dateb=&owner=include&count=20`}
@@ -731,6 +791,11 @@ export default function StocksInsider() {
               style={{ background: `${T.teal}18`, color: T.teal }}
             >
               Q filing: {fmtDate(reportDate)}
+            </span>
+          )}
+          {institutionalState.ownership?.quarter && (
+            <span className="text-[10px] text-neutral-500">
+              13F · as of {institutionalState.ownership.quarter}
             </span>
           )}
           <span className="text-[10px] text-neutral-600 ml-auto">
