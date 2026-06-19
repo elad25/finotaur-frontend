@@ -157,23 +157,78 @@ export interface TradeStats {
 // 🔥 FETCH ALL TRADES - FIXED: Use supabaseAdmin when impersonating
 // ================================================
 
+// ================================================
+// 🔥 RAW PAGINATED FETCH - For TRADER mode (bypasses aggregateCopiedTrades)
+// ================================================
+
+const RAW_PAGE_SIZE = 1000;
+const RAW_MAX_PAGES = 50; // hard safety cap: 50k rows
+
+async function fetchAllTradesRaw(
+  client: typeof supabase | typeof supabaseAdmin,
+  userId: string,
+): Promise<Trade[]> {
+  const allRows: Trade[] = [];
+  let page = 0;
+
+  while (page < RAW_MAX_PAGES) {
+    const from = page * RAW_PAGE_SIZE;
+    const { data, error } = await client
+      .from('trades')
+      .select(`*, strategies ( name )`)
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .order('open_at', { ascending: false })
+      .range(from, from + RAW_PAGE_SIZE - 1);
+
+    if (error) {
+      console.error('fetchAllTradesRaw page error:', error.message);
+      throw error;
+    }
+
+    const rows = (data ?? []) as any[];
+    allRows.push(...rows);
+    if (rows.length < RAW_PAGE_SIZE) break; // last page
+    page++;
+  }
+
+  if (page >= RAW_MAX_PAGES) {
+    console.warn(
+      `fetchAllTradesRaw: hit safety cap of ${RAW_MAX_PAGES} pages (${allRows.length} rows). Some trades may be excluded.`,
+    );
+  }
+
+  return allRows;
+}
+
 async function fetchAllTrades(
   userId: string,
   isImpersonating: boolean = false,
-  portfolioId?: string | null
+  portfolioId?: string | null,
+  skipCopyAggregation?: boolean,
 ): Promise<Trade[]> {
   if (!userId) {
     console.log('❌ No user ID - skipping trades fetch');
     return [];
   }
 
-  console.log('📊 Fetching trades for user:', userId, '| Impersonating:', isImpersonating, '| Portfolio:', portfolioId ?? 'ALL');
+  console.log('📊 Fetching trades for user:', userId, '| Impersonating:', isImpersonating, '| Portfolio:', portfolioId ?? 'ALL', '| SkipAgg:', skipCopyAggregation ?? false);
 
   try {
     // 🔥 CRITICAL FIX: Use admin client when impersonating to bypass RLS
     const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
-    
+
     console.log(`✅ Using ${isImpersonating ? 'ADMIN' : 'REGULAR'} client for trades fetch`);
+
+    // TRADER mode: skip copy-aggregation, fetch every raw fill via paginated loop
+    // so Supabase's 1000-row default cap doesn't silently truncate the dataset.
+    // The caller (MyTrades) will group fills into decisions via normalizeTraderTrades.
+    if (!portfolioId && skipCopyAggregation) {
+      console.log('🔄 TRADER raw path: paginated fetch (bypassing aggregateCopiedTrades)');
+      const rawRows = await fetchAllTradesRaw(client, userId);
+      console.log(`✅ TRADER raw: fetched ${rawRows.length} fills`);
+      return processRows(rawRows);
+    }
 
     let query = client
       .from('trades')
@@ -205,7 +260,7 @@ async function fetchAllTrades(
     }
 
     console.log(`✅ Fetched ${data?.length || 0} trades`);
-    
+
     // 🔥 בדוק אם screenshots קיים
     if (data && data.length > 0) {
       console.log('📸 Sample trade data:', {
@@ -217,7 +272,22 @@ async function fetchAllTrades(
     }
 
 // 🚀 Process trades with strategy name AND calculate actual_r
-    const processedTrades = (data || []).map(trade => {
+    const processedTrades = processRows(data || []);
+
+    if (!portfolioId) {
+      return aggregateCopiedTrades(processedTrades, 'all-accounts');
+    }
+
+    return processedTrades;
+  } catch (error) {
+    console.error('❌ Failed to fetch trades:', error);
+    throw error;
+  }
+}
+
+/** Shared row-processing: injects strategy_name, multiplier, screenshots, metrics, actual_r. */
+function processRows(data: any[]): Trade[] {
+  return data.map(trade => {
       let metrics = trade.metrics || {};
       
       // 🔥 FIXED: Support both modes correctly
@@ -255,26 +325,21 @@ async function fetchAllTrades(
         actual_user_r: trade.actual_user_r ?? metrics.actual_user_r ?? null,
       };
     }) as Trade[];
-
-    if (!portfolioId) {
-      return aggregateCopiedTrades(processedTrades, 'all-accounts');
-    }
-
-    return processedTrades;
-  } catch (error) {
-    console.error('❌ Failed to fetch trades:', error);
-    throw error;
-  }
 }
 
 // ================================================
 // 🔥 PRIMARY HOOK - All Trades - WITH IMPERSONATION SUPPORT
 // ================================================
 
-export function useTrades(userId?: string, portfolioId?: string | null) {
+export function useTrades(
+  userId?: string,
+  portfolioId?: string | null,
+  options?: { skipCopyAggregation?: boolean },
+) {
   const { id: effectiveUserId } = useEffectiveUser();
   const { isImpersonating } = useImpersonation();
   const qc = useQueryClient();
+  const skipCopyAggregation = options?.skipCopyAggregation ?? false;
 
   // Use provided userId or fallback to effectiveUserId
   const targetUserId = userId || effectiveUserId;
@@ -312,8 +377,9 @@ export function useTrades(userId?: string, portfolioId?: string | null) {
       ...queryKeys.trades(targetUserId || ''),
       isImpersonating ? 'admin' : 'user',
       portfolioId ?? 'all',
+      skipCopyAggregation ? 'raw' : 'agg',
     ],
-    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId),
+    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId, skipCopyAggregation),
     enabled: !!targetUserId,
 
     // Keep the previous account's rows visible while switching portfolios
