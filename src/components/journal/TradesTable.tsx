@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Pencil, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import type { Trade } from '@/lib/journal';
-import { useTrades } from '@/hooks/useTrades';
+import { useDeleteTrade } from '@/hooks/useTradesData';
 import { toast } from 'sonner';
 
 interface TradesTableProps {
@@ -22,7 +22,7 @@ interface TradesTableProps {
 
 export const TradesTable = ({ trades }: TradesTableProps) => {
   const navigate = useNavigate();
-  const { deleteTrade } = useTrades();
+  const { mutateAsync: deleteTrade } = useDeleteTrade();
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -58,13 +58,10 @@ export const TradesTable = ({ trades }: TradesTableProps) => {
     setDeletingId(id);
     
     try {
-      const result = await deleteTrade(id);
-      
-      if (result.ok) {
-        toast.success('Trade deleted successfully');
-      } else {
-        toast.error(result.message || 'Failed to delete trade');
-      }
+      // useDeleteTrade mutation: resolves on success, throws on error,
+      // and handles optimistic cache removal + invalidation internally.
+      await deleteTrade(id);
+      toast.success('Trade deleted successfully');
     } catch (error: any) {
       console.error('Delete error:', error);
       toast.error(error?.message || 'Failed to delete trade');
@@ -205,7 +202,11 @@ export const TradesTable = ({ trades }: TradesTableProps) => {
                   </TableCell>
 
                   <TableCell className="text-right tabular-nums">
-                    {trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined ? (
+                    {trade.risk_class === 'risk_free' ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        Risk-Free
+                      </span>
+                    ) : trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined ? (
                       <span
                         className={`font-semibold ${
                           trade.metrics.actual_r > 0 ? 'text-emerald-400' : 'text-red-400'

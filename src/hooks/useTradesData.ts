@@ -56,8 +56,10 @@ function calculateActualR(trade: any): number | null {
   const grossPnL = priceDiff * quantity * multiplier;
   const netPnL = grossPnL - fees;
 
-  const riskPerPoint = Math.abs(entry - stop);
-  const riskUSD = riskPerPoint * quantity * multiplier;
+  // Signed risk: a stop on the profit side (<= 0) is risk-free → no contract R.
+  const signedRisk = side === 'LONG' ? entry - stop : stop - entry;
+  if (signedRisk <= 0) return null;
+  const riskUSD = signedRisk * quantity * multiplier;
 
   if (riskUSD <= 0) return null;
   return netPnL / riskUSD;
@@ -134,6 +136,12 @@ export interface Trade {
   setup_quality_rating?: number | null;
   mental_state?: number | null;
   checklist_results?: Record<string, boolean> | null;
+  // R-from-frozen-stop fields (populated by DB trigger)
+  r_stop_price?: number | null;
+  r_locked_at?: string | null;
+  r_stop_set_at?: string | null;
+  risk_class?: 'risk_defined' | 'risk_free' | 'no_stop' | null;
+  locked_profit_usd?: number | null;
 }
 export interface TradeStats {
   totalTrades: number;
