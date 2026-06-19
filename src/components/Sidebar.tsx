@@ -64,7 +64,9 @@ import {
   Link2,
   GitCompare,
 } from 'lucide-react';
-import { 
+import {
+  prefetchAdminStats,
+  prefetchAnalytics,
   prefetchSettingsData,
   prefetchStrategies,
   prefetchTrades,
@@ -506,16 +508,31 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   const getPrefetchFunction = (path: string): (() => Promise<void>) | undefined => {
-    if (currentEnvironment !== 'journal') return undefined;
-    
     const prefetchMap: Record<string, () => Promise<void>> = {
-      '/app/journal/settings': prefetchSettingsData,
-      '/app/journal/reports': prefetchTrades,
-      '/app/journal/strategies': prefetchStrategies,
-      '/app/journal/my-trades': prefetchTrades,
-      '/app/journal/performance': prefetchUserProfile,
+      // Journal routes
+      '/app/journal/overview':             prefetchAnalytics,
+      '/app/journal/my-trades':            prefetchTrades,
+      '/app/journal/strategies':           prefetchStrategies,
+      '/app/journal/calendar':             prefetchTrades,
+      '/app/journal/reports':              prefetchTrades,
+      '/app/journal/settings':             prefetchSettingsData,
+      '/app/journal/performance':          prefetchUserProfile,
+      // Backtest sub-routes
+      '/app/journal/backtest/trades':      prefetchTrades,
+      '/app/journal/backtest/analytics':   prefetchAnalytics,
+      // Affiliate sub-routes (profile-based, no userId needed)
+      '/app/journal/affiliate/analytics':  prefetchAnalytics,
+      '/app/journal/affiliate/performance': prefetchUserProfile,
+      // Settings routes
+      '/app/settings':                     prefetchSettingsData,
+      '/app/settings/billing':             prefetchUserProfile,
+      '/app/settings/usage':               prefetchUserProfile,
+      // Admin routes
+      '/app/admin/overview':               prefetchAdminStats,
+      '/app/admin/analytics':              prefetchAdminStats,
+      '/app/admin/users':                  prefetchAdminStats,
     };
-    
+
     return prefetchMap[path];
   };
 
