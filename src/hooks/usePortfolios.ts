@@ -19,6 +19,7 @@ export interface Portfolio {
   environment: 'live' | 'demo' | null;
   source: 'manual' | 'tradovate' | 'broker';
   broker_connection_id?: string;
+  credential_id?: string | null;
   is_active: boolean;
   created_at: string;
   connection_label: string | null;
@@ -65,7 +66,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
   // ── 1. Try portfolios table first ──────────────────────────
   const { data, error } = await supabase
     .from('portfolios')
-    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd')
+    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,credential_id,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd')
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('created_at', { ascending: true });

@@ -48,7 +48,10 @@ export function buildAccountGroups(
     // Map: key → { label, portfolios[] } — preserves first-appearance order per bucket
     const firmMap = new Map<string, { label: string; portfolios: Portfolio[] }>();
     for (const p of tradovatePortfolios) {
-      const { key, label } = detectFirmGroup(p.name);
+      // Scope by credential_id (connection) when available; fall back to firm-name detection.
+      const { key, label } = p.credential_id
+        ? { key: `conn-${p.credential_id}`, label: (p.connection_label?.trim() || detectFirmGroup(p.name).label) }
+        : detectFirmGroup(p.name);
       if (!firmMap.has(key)) {
         firmMap.set(key, { label, portfolios: [] });
       }
