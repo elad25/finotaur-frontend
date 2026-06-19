@@ -6,7 +6,7 @@
 // ══════════════════════════════════════════════════════
 
 import { createContext, useContext, ReactNode } from 'react';
-import { usePortfolios, ALL_PORTFOLIOS_ID, type Portfolio } from '@/hooks/usePortfolios';
+import { usePortfolios, ALL_PORTFOLIOS_ID, TRADER_SCOPE_ID, type Portfolio } from '@/hooks/usePortfolios';
 
 interface PortfolioContextValue {
   portfolios:             Portfolio[];
@@ -25,6 +25,8 @@ interface PortfolioContextValue {
   effectivePortfolioIds:    string[] | null;
   setSelectedPortfolioIds:  (ids: string[]) => void;
   togglePortfolioSelection: (id: string) => void;
+  // ── TRADER scope ─────────────────────────────────────
+  isTraderMode:             boolean;
 }
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
@@ -44,4 +46,4 @@ export function usePortfolioContext(): PortfolioContextValue {
   return ctx;
 }
 
-export { ALL_PORTFOLIOS_ID };
+export { ALL_PORTFOLIOS_ID, TRADER_SCOPE_ID };

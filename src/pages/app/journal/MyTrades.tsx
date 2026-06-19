@@ -24,6 +24,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { usePortfolioContext } from "@/contexts/PortfolioContext";
+import { useTraderMode } from "@/hooks/useTraderMode";
+import { normalizeTraderTrades } from "@/lib/journal/traderNormalization";
 import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
@@ -1231,11 +1233,22 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
-  const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
+  const { effectivePortfolioId, activePortfolio, isTraderMode } = usePortfolioContext();
+  const { traderMode } = useTraderMode();
   // When viewing another user's journal (mentor view), do not apply the
   // logged-in mentor's portfolio filter — show all of the student's trades.
   const mentorPortfolioId = (overrideUserId || isMentorView) ? undefined : effectivePortfolioId;
-  const { data: trades = [], isLoading, error } = useTrades(userId, mentorPortfolioId);
+  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId);
+  // TRADER scope: normalize copier-duplicated rows into one decision per trade.
+  // All downstream stats and the table operate on `trades` (the normalized array).
+  // Non-TRADER: `trades` === `rawTrades` (zero cost, referentially stable).
+  const trades = useMemo(
+    () =>
+      isTraderMode
+        ? normalizeTraderTrades(rawTrades as Parameters<typeof normalizeTraderTrades>[0], traderMode)
+        : rawTrades,
+    [isTraderMode, rawTrades, traderMode],
+  ) as typeof rawTrades;
   const { data: strategies = [] } = useStrategiesOptimized(userId);
   const { data: strategyRConfigs } = useStrategyRConfigs(userId);
 

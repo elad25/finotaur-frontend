@@ -21,6 +21,7 @@ import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
 import { aggregateCopiedTrades } from '@/lib/tradeAggregation';
+import { normalizeTraderTrades, type TraderMode } from '@/lib/journal/traderNormalization';
 
 // ================================================
 // TYPES & INTERFACES
@@ -686,10 +687,89 @@ function composeAggregatedStats(
 }
 
 // ================================================
+// TRADER MODE — paginated all-time fetch
+// ================================================
+
+const TRADER_PAGE_SIZE = 1000;
+const TRADER_MAX_PAGES = 50; // hard safety cap: 50k rows
+
+/**
+ * Fetches ALL trades (no date cutoff) for a given user, paginating through
+ * Supabase's 1000-row limit. Used only when isTraderMode + all-time view.
+ * Respects portfolio scoping identical to the standard overview fetch.
+ */
+async function fetchAllTradesForTrader(
+  client: typeof supabase,
+  userId: string,
+  portfolioIds: string[] | null,
+): Promise<Trade[]> {
+  const select = `
+    id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
+    open_at, close_at, stop_price, entry_price, quantity, exit_price,
+    multiplier, session, input_mode, tags, strategy_id, account_equity_at_entry,
+    portfolio_id, broker_connection_id, side
+  `;
+
+  const buildQuery = (from: number) => {
+    let q = client
+      .from('trades')
+      .select(select)
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .order('open_at', { ascending: true, nullsFirst: false })
+      .range(from, from + TRADER_PAGE_SIZE - 1); // ← pagination loop anchor
+
+    if (portfolioIds && portfolioIds.length > 0) {
+      const { portfolioUUIDs, brokerConnIds } = partitionPortfolioIds(portfolioIds);
+      if (portfolioUUIDs && brokerConnIds) {
+        q = q.or(
+          `portfolio_id.in.(${portfolioUUIDs.join(',')}),broker_connection_id.in.(${brokerConnIds.join(',')})`,
+        );
+      } else if (brokerConnIds) {
+        q = q.in('broker_connection_id', brokerConnIds);
+      } else if (portfolioUUIDs) {
+        q = q.in('portfolio_id', portfolioUUIDs);
+      }
+    }
+    return q;
+  };
+
+  const allRows: Trade[] = [];
+  let page = 0;
+
+  while (page < TRADER_MAX_PAGES) {
+    const { data, error } = await buildQuery(page * TRADER_PAGE_SIZE);
+    if (error) {
+      console.error('fetchAllTradesForTrader page error:', error.message);
+      throw error;
+    }
+    const rows = (data ?? []) as Trade[];
+    allRows.push(...rows);
+    if (rows.length < TRADER_PAGE_SIZE) break; // last page
+    page++;
+  }
+
+  if (page >= TRADER_MAX_PAGES) {
+    console.warn(
+      `fetchAllTradesForTrader: hit safety cap of ${TRADER_MAX_PAGES} pages (${allRows.length} rows). Some trades may be excluded.`,
+    );
+  }
+
+  return allRows;
+}
+
+// ================================================
 // REACT HOOKS WITH ADMIN MODE SUPPORT
 // ================================================
 
-export function useDashboardStats(daysBack?: number, overrideUserId?: string, portfolioId?: string | null, portfolioIds?: string[] | null) {
+export function useDashboardStats(
+  daysBack?: number,
+  overrideUserId?: string,
+  portfolioId?: string | null,
+  portfolioIds?: string[] | null,
+  isTraderMode?: boolean,
+  traderMode?: TraderMode,
+) {
   const { id: effectiveUserId, isImpersonating } = useEffectiveUser();
   const { enableAdminMode } = useImpersonation();
   const queryClient = useQueryClient();
@@ -708,6 +788,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       dashboardPortfolioIds && dashboardPortfolioIds.length > 0
         ? dashboardPortfolioIds.join(',')
         : (dashboardPortfolioId ?? 'all'),
+      isTraderMode ? `trader:${traderMode ?? 'per-contract'}` : 'normal',
     ],
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
@@ -744,6 +825,19 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       const isAllAccounts =
         !dashboardPortfolioId &&
         (!dashboardPortfolioIds || dashboardPortfolioIds.length === 0);
+      // ── TRADER all-time path: paginated fetch + client-side normalization ──
+      // Bypasses the RPC aggregate entirely (it counts raw rows, not decisions).
+      if (isTraderMode && isAllTimeView) {
+        const effectivePortfolioIds = dashboardPortfolioIds && dashboardPortfolioIds.length > 0
+          ? dashboardPortfolioIds
+          : (dashboardPortfolioId ? [dashboardPortfolioId] : null);
+        devLog('🔄 TRADER all-time path: paginated fetch');
+        const allRows = await fetchAllTradesForTrader(client, userId, effectivePortfolioIds);
+        const normalized = normalizeTraderTrades(allRows, traderMode ?? 'per-contract');
+        devLog(`✅ TRADER: ${allRows.length} raw → ${normalized.length} decisions`);
+        return computeStats(normalized);
+      }
+
       if (isAllTimeView && !isAllAccounts) {
         const effectivePortfolioIds = dashboardPortfolioIds && dashboardPortfolioIds.length > 0
           ? dashboardPortfolioIds
@@ -817,9 +911,15 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
 
       // De-duplicate copier trades for the "all accounts" scope so Overview
       // counts match My Trades (single shared aggregation logic).
-      const rows = isAllAccounts
+      let rows = isAllAccounts
         ? aggregateCopiedTrades(data || [], 'all-accounts')
         : (data || []);
+
+      // TRADER short-lookback path: normalize before the existing pipeline.
+      if (isTraderMode) {
+        rows = normalizeTraderTrades(rows, traderMode ?? 'per-contract');
+      }
+
       return computeStats(rows);
     },
     enabled: !!userId,

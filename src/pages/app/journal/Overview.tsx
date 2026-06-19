@@ -85,6 +85,7 @@ import { AccountSwitcher } from '@/components/AccountSwitcher';
 import { AccountFilterDropdown } from '@/components/journal/AccountFilterDropdown';
 import type { FinotaurTrade } from '@/utils/importUtils';
 import { useDisplayUnit } from '@/hooks/useDisplayUnit';
+import { useTraderMode } from '@/hooks/useTraderMode';
 import { aggregateR, tradeR, type TradeForRAgg } from '@/utils/rAggregates';
 import { useStrategyRConfigs } from '@/hooks/useStrategies';
 
@@ -1382,7 +1383,9 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     effectivePortfolioIds,
     setActivePortfolioId,
     hasMultiplePortfolios,
+    isTraderMode,
   } = usePortfolioContext();
+  const { traderMode } = useTraderMode();
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
   const [showImportPopup, setShowImportPopup] = useState(false);
   const [showAddBroker, setShowAddBroker] = useState(false);
@@ -1575,7 +1578,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // logged-in mentor's portfolio filter — show all of the student's data.
   const mentorPortfolioId = bypassPortfolioFilter ? undefined : effectivePortfolioId;
   const mentorPortfolioIds = bypassPortfolioFilter ? undefined : effectivePortfolioIds;
-  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, mentorPortfolioId, mentorPortfolioIds);
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, mentorPortfolioId, mentorPortfolioIds, isTraderMode, traderMode);
   
   // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
   // Covers: create, edit, delete from MyTrades + NewTrade page
