@@ -3,16 +3,15 @@ import { useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent, Crown, ArrowUp, ArrowDown, Clock, Target } from "lucide-react";
+import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, Crown, ArrowUp, ArrowDown, Clock, Target } from "lucide-react";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
-import { formatNumber } from "@/utils/smartCalc";
 
 // 🔥 OPTIMIZED HOOKS
 import { useUserProfile, getPlanDisplay, getNextBillingDate } from "@/hooks/useUserProfile";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
-import { useTrades, useTradeStats } from "@/hooks/useTradesData";
+import { useTrades, type Trade } from "@/hooks/useTradesData";
 
 
 
@@ -1066,21 +1065,58 @@ const CancelSubscriptionModal = ({
 };
 
 // ============================================
-// 🔥 SAFE NUMBER HELPER - Global
+// 🔥 STOP-BASED R — aggregation + formatters
 // ============================================
-const safeNumber = (value: any, fallback: number = 0): number => {
-  if (value === null || value === undefined) return fallback;
-  const num = Number(value);
-  return isNaN(num) ? fallback : num;
-};
+// `actual_r` is realized P&L ÷ the risk implied by the stop distance
+// (|entry−stop|×qty×multiplier, computed at fetch time). A null value means
+// the trade has no usable stop, so it is excluded from every R figure here.
+interface StopRAgg {
+  avgR: number | null;
+  count: number;        // trades that carry a stop-based R
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  bestR: number | null;
+  worstR: number | null;
+}
 
-// ============================================
-// 🔥 SAFE FORMAT - Prevents NaN display
-// ============================================
-const safeFormatNumber = (value: any, decimals: number = 2): string => {
-  const num = safeNumber(value, 0);
-  return formatNumber(num, decimals);
-};
+function aggregateStopR(list: Trade[]): StopRAgg {
+  let sum = 0;
+  let count = 0;
+  let wins = 0;
+  let losses = 0;
+  let bestR: number | null = null;
+  let worstR: number | null = null;
+
+  for (const t of list) {
+    if (t.actual_r === null || t.actual_r === undefined) continue;
+    const v = Number(t.actual_r);
+    if (!Number.isFinite(v)) continue;
+    count++;
+    sum += v;
+    if (v > 0) wins++;
+    else if (v < 0) losses++;
+    bestR = bestR === null ? v : Math.max(bestR, v);
+    worstR = worstR === null ? v : Math.min(worstR, v);
+  }
+
+  const decided = wins + losses;
+  return {
+    avgR: count > 0 ? sum / count : null,
+    count,
+    wins,
+    losses,
+    winRate: decided > 0 ? (wins / decided) * 100 : null,
+    bestR,
+    worstR,
+  };
+}
+
+const fmtR = (r: number | null): string =>
+  r === null ? '—' : `${r >= 0 ? '+' : ''}${r.toFixed(2)}R`;
+
+const rColorClass = (r: number | null): string =>
+  r === null ? 'text-zinc-400' : r > 0 ? 'text-green-400' : r < 0 ? 'text-red-400' : 'text-zinc-300';
 
 // ============================================
 // 🔥 MAIN COMPONENT - Fully Optimized
@@ -1092,11 +1128,9 @@ export default function JournalSettings() {
   const { profile, isLoading: profileLoading } = useUserProfile();
   // 🔥 SYNC FIX: Use subscription for live trade counts (updates after each trade)
   const { limits, isFreeJournal, isUnlimitedUser } = useSubscription();
-  const { settings: riskSettings, oneR, loading: riskLoading } = useRiskSettings();
+  const { loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
-  const { data: trades = [] } = useTrades(); // Pre-cached for export
-
-  const { data: tradeStats } = useTradeStats();
+  const { data: trades = [] } = useTrades(); // Pre-cached for export + R performance
 
   // 🔥 PAYMENT HOOK
   const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
@@ -1123,26 +1157,46 @@ const planInfo = useMemo(() => getPlanDisplay(profile), [profile]);
 const billingDate = useMemo(() => getNextBillingDate(profile), [profile]);
 const loading = profileLoading || riskLoading;
 
-// 🔥 FIXED: P&L from actual trades, NOT from portfolio difference
-const portfolioValues = useMemo(() => {
-  const current = safeNumber(riskSettings?.currentPortfolio || riskSettings?.portfolioSize, 0);
-  const initial = safeNumber(riskSettings?.initialPortfolio, 0);
-  
-  // 🔥 P&L מגיע מהטריידים האמיתיים, לא מהפרש הפורטפוליו!
-  const realPnL = safeNumber(tradeStats?.totalPnL, 0);
-  
-  // 🔥 ROI מחושב על בסיס ה-P&L האמיתי
-  const roi = initial > 0 ? (realPnL / initial * 100) : 0;
-  
+// 🔥 R Performance — stop-based R, overall + per-strategy (replaces the old
+// balance/portfolio block per Elad 2026-06-19: no balance, R by stop size).
+const rPerformance = useMemo(() => {
+  // Closed trades only: risk-only mode stores pnl; summary mode needs an exit.
+  const closed = trades.filter((t) =>
+    t.input_mode === 'risk-only'
+      ? t.pnl !== null && t.pnl !== undefined
+      : t.exit_price != null,
+  );
+
+  const overall = aggregateStopR(closed);
+
+  // Group stop-based trades by strategy (each trade already carries strategy_name).
+  const groups = new Map<string, { name: string; trades: Trade[] }>();
+  for (const t of closed) {
+    if (t.actual_r === null || t.actual_r === undefined) continue;
+    const key = t.strategy_id || '__unassigned__';
+    const name = t.strategy_name || 'Unassigned';
+    const g = groups.get(key) ?? { name, trades: [] };
+    g.trades.push(t);
+    groups.set(key, g);
+  }
+
+  const strategies = Array.from(groups.values())
+    .map((g) => ({ name: g.name, ...aggregateStopR(g.trades) }))
+    .filter((s) => s.count > 0)
+    .sort((a, b) => (b.avgR ?? -Infinity) - (a.avgR ?? -Infinity));
+
+  const strategyMaxAbs = Math.max(
+    ...strategies.map((s) => Math.abs(s.avgR ?? 0)),
+    0.5,
+  );
+
   return {
-    current,
-    initial,
-    pnl: realPnL,  // 🔥 P&L אמיתי מהטריידים
-    roi,
-    hasInitial: initial > 0,
-    hasChanged: realPnL !== 0  // 🔥 יש שינוי רק אם יש טריידים עם P&L
+    overall,
+    strategies,
+    strategyMaxAbs,
+    noStopCount: closed.length - overall.count,
   };
-}, [riskSettings, tradeStats]);  // 🔥 הוספתי tradeStats לדפנדנסיס
+}, [trades]);
   // ============================================
   // 🔥 HANDLERS - All memoized with useCallback
   // ============================================
@@ -1284,12 +1338,12 @@ const portfolioValues = useMemo(() => {
       <div className="w-full max-w-5xl space-y-6">
         <PageTitle title="Journal Settings" subtitle="Manage your account and trading preferences" />
         
-        {/* 🔥 Risk Management - FIXED: No more NaN values */}
+        {/* 🔥 R Performance — stop-based R + per-strategy (no balance) */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-xl font-semibold text-zinc-100">Risk Management</h3>
-              <p className="text-xs text-zinc-500 mt-1">Your portfolio size and risk parameters</p>
+              <h3 className="text-xl font-semibold text-zinc-100">R Performance</h3>
+              <p className="text-xs text-zinc-500 mt-1">Average R based on each trade's stop distance</p>
             </div>
             <button 
               onClick={() => setIsRiskSettingsOpen(true)}
@@ -1299,150 +1353,112 @@ const portfolioValues = useMemo(() => {
             </button>
           </div>
           
-          {/* Main Grid - 2 Columns for better horizontal layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Column - Input Fields */}
-            <div className="space-y-4">
-              {/* 🔥 Portfolio Size - FULLY FIXED */}
-              <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                    <DollarSign className="w-4 h-4 text-blue-400" />
-                  </div>
-                  <span className="text-xs font-medium text-zinc-400">Current Portfolio</span>
-                </div>
-                <div className="text-2xl font-bold text-white">
-                  ${safeFormatNumber(portfolioValues.current, 0)}
-                </div>
-                
-                {/* 🔥 Initial Portfolio + ROI Display - FULLY FIXED */}
-                {portfolioValues.hasInitial && (
-                  <div className="mt-3 pt-3 border-t border-zinc-800/50 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-zinc-500">Initial Portfolio:</span>
-                      <span className="text-sm text-zinc-400 font-medium">
-                        ${safeFormatNumber(portfolioValues.initial, 0)}
-                      </span>
+          {/* R Performance — stop-based R + per-strategy. No balance (Elad 2026-06-19). */}
+          {rPerformance.overall.count === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center mb-3">
+                <Target className="w-6 h-6 text-zinc-500" />
+              </div>
+              <p className="text-sm text-zinc-400 font-medium">No stop-based R yet</p>
+              <p className="text-xs text-zinc-500 mt-1 max-w-sm">
+                Set a stop loss on your trades and R is calculated automatically from the stop distance.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column - Average R (by stop) + key stats */}
+              <div className="space-y-4">
+                <div className="p-6 rounded-xl border-2 border-[#C9A646]/30 bg-gradient-to-br from-[#C9A646]/5 to-[#C9A646]/10 relative overflow-hidden">
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-[#C9A646]/10 rounded-full blur-3xl"></div>
+                  <div className="relative">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#C9A646]/20 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-[#C9A646]" />
+                      </div>
+                      <span className="text-sm font-medium text-zinc-400">Average R (by stop)</span>
                     </div>
-                    
-                    {portfolioValues.hasChanged && (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-zinc-500">Total P&L:</span>
-                          <span className={`text-sm font-semibold ${
-                            portfolioValues.pnl >= 0 ? 'text-green-400' : 'text-red-400'
-                          }`}>
-                            {portfolioValues.pnl >= 0 ? '+' : ''}${safeFormatNumber(portfolioValues.pnl, 2)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-zinc-500">Total ROI:</span>
-                          <span className={`text-base font-bold ${
-                            portfolioValues.roi >= 0 ? 'text-green-400' : 'text-red-400'
-                          }`}>
-                            {portfolioValues.roi >= 0 ? '+' : ''}{safeFormatNumber(portfolioValues.roi, 2)}%
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <div className={`text-5xl font-bold mb-2 ${rColorClass(rPerformance.overall.avgR)}`}>
+                      {fmtR(rPerformance.overall.avgR)}
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      Across {rPerformance.overall.count} trade{rPerformance.overall.count === 1 ? '' : 's'} with a defined stop
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
+                    <span className="text-xs font-medium text-zinc-400">Win Rate</span>
+                    <div className="text-xl font-bold text-white mt-1">
+                      {rPerformance.overall.winRate === null ? '—' : `${rPerformance.overall.winRate.toFixed(0)}%`}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-1">
+                      {rPerformance.overall.wins}W · {rPerformance.overall.losses}L
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
+                    <span className="text-xs font-medium text-zinc-400">Best / Worst</span>
+                    <div className="flex items-center gap-1 mt-1">
+                      <ArrowUp className="w-4 h-4 text-green-400" />
+                      <span className="text-sm font-bold text-green-400">{fmtR(rPerformance.overall.bestR)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <ArrowDown className="w-4 h-4 text-red-400" />
+                      <span className="text-sm font-bold text-red-400">{fmtR(rPerformance.overall.worstR)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {rPerformance.noStopCount > 0 && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-400/90 leading-relaxed">
+                      {rPerformance.noStopCount} closed trade{rPerformance.noStopCount === 1 ? '' : 's'} have no stop set — excluded from R.
+                    </p>
                   </div>
                 )}
               </div>
 
-              {/* Risk Mode & Amount in one row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <span className="text-xs font-medium text-zinc-400">Risk Mode</span>
-                  </div>
-                  <div className="text-xl font-bold text-white capitalize">
-                    {riskSettings?.riskMode === 'percentage' ? 'Percentage' : 'Fixed'}
-                  </div>
-                </div>
-
-                <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                      {riskSettings?.riskMode === 'percentage' ? (
-                        <Percent className="w-4 h-4 text-purple-400" />
-                      ) : (
-                        <DollarSign className="w-4 h-4 text-purple-400" />
-                      )}
-                    </div>
-                    <span className="text-xs font-medium text-zinc-400">Per Trade</span>
-                  </div>
-                  <div className="text-xl font-bold text-white">
-                    {riskSettings?.riskMode === 'percentage'
-                      ? `${safeFormatNumber(riskSettings.riskPerTrade, 0)}%`
-                      : `$${safeFormatNumber(riskSettings?.riskPerTrade, 0)}`
-                    }
-                  </div>
-                </div>
-              </div>
-
-              {/* R Definition display card */}
-              <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/50">
-                <div className="flex items-center gap-2 mb-2">
+              {/* Right Column - R by Strategy */}
+              <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-zinc-700/50 flex items-center justify-center">
-                    <Target className="w-4 h-4 text-zinc-400" />
+                    <Target className="w-4 h-4 text-zinc-300" />
                   </div>
-                  <span className="text-xs font-medium text-zinc-400">R Definition</span>
+                  <span className="text-sm font-medium text-zinc-300">R by Strategy</span>
                 </div>
-                <div className="text-xl font-bold text-white">
-                  {riskSettings?.rBasisMode === 'manual' ? 'Manual' : 'Per Trade'}
-                </div>
-                <div className="text-xs text-zinc-500 mt-1">
-                  {riskSettings?.rBasisMode === 'manual'
-                    ? 'Actual R uses your global 1R'
-                    : "Actual R from each trade's stop"}
-                </div>
+
+                {rPerformance.strategies.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No strategy-tagged trades with a stop yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {rPerformance.strategies.map((s, i) => {
+                      const pct = Math.min(100, (Math.abs(s.avgR ?? 0) / rPerformance.strategyMaxAbs) * 100);
+                      const positive = (s.avgR ?? 0) >= 0;
+                      return (
+                        <div key={i}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm text-zinc-300 font-medium truncate pr-2">{s.name}</span>
+                            <span className={`text-sm font-bold ${rColorClass(s.avgR)}`}>{fmtR(s.avgR)}</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${positive ? 'bg-green-500/70' : 'bg-red-500/70'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="text-xs text-zinc-500 mt-1">
+                            {s.count} trade{s.count === 1 ? '' : 's'} · {s.winRate === null ? '—' : `${s.winRate.toFixed(0)}% win`}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-
-            {/* Right Column - 1R Display (Hero Card) - FULLY FIXED */}
-            <div className="p-6 rounded-xl border-2 border-[#C9A646]/30 bg-gradient-to-br from-[#C9A646]/5 to-[#C9A646]/10 relative overflow-hidden">
-              {/* Background decoration */}
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-[#C9A646]/10 rounded-full blur-3xl"></div>
-              
-              <div className="relative">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#C9A646]/20 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-[#C9A646]" />
-                  </div>
-                  <span className="text-sm font-medium text-zinc-400">Your 1R Value</span>
-                </div>
-                
-                <div className="text-5xl font-bold text-[#C9A646] mb-2">
-                  ${safeFormatNumber(oneR, 2)}
-                </div>
-                
-                <p className="text-xs text-zinc-500 mb-4">
-                  {riskSettings?.riskMode === 'percentage' 
-                    ? `${safeFormatNumber(riskSettings.riskPerTrade, 0)}% of $${safeFormatNumber(riskSettings.portfolioSize, 0)}`
-                    : `Fixed amount per trade`
-                  }
-                </p>
-
-                {/* Info Box */}
-                <div className="p-3 rounded-lg border border-blue-500/20 bg-blue-500/5">
-                  <div className="flex items-start gap-2">
-                    <div className="w-4 h-4 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg className="w-2.5 h-2.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <p className="text-xs text-blue-400 leading-relaxed">
-                      <span className="font-semibold">1R</span> represents your risk per trade. 
-                      For example, if you risk $100 and make $200, that's a +2R win.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* 🔥 Account Information - WITH CANCELLATION NOTICE */}
