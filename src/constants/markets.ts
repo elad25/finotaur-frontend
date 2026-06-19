@@ -146,6 +146,13 @@ export interface MarketFunctionMeta {
   /** Marks this item as compliance price-gated (Polygon redistribution license not held). */
   priceGated?: boolean;
   /**
+   * Restrict the priceGated badge to SPECIFIC assets only. Used for shared functions
+   * like Overview whose raw-price compliance gate applies to stocks + all-markets,
+   * but NOT to crypto/forex/macro (those use non-Polygon data and are fully free).
+   * When omitted, priceGated applies to every asset that has a route.
+   */
+  priceGatedAssets?: AssetClass[];
+  /**
    * When true, clicking this item in the sidebar opens its route in a named popup
    * window (full available screen size) instead of navigating in-app.
    * Re-clicking focuses/reuses the same named window.
@@ -173,6 +180,7 @@ export const MARKET_FUNCTIONS: MarketFunctionMeta[] = [
       macro:       '/app/macro/overview',
     },
     priceGated: true,  // compliance gate: Overview pages render raw Polygon price/chart data for stocks + all-markets
+    priceGatedAssets: ['stocks', 'home'], // ...but ONLY stocks + all-markets — crypto/forex/macro overview are non-Polygon and fully free (no lock badge)
     lockedAssets: ['stocks', 'home'], // Early-access: stocks + all-markets overview are admin/beta only
   },
   {

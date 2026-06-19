@@ -57,6 +57,9 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
 
         const itemLocked = fn.locked === true || (fn.lockedAssets?.includes(selectedAsset) ?? false); // closed to the public (paywall)
         const blocked = itemLocked && !hasBetaAccess;   // regular users cannot open it
+        // priceGated badge: applies to all assets unless restricted to a specific set.
+        // Crypto/forex/macro overview are non-Polygon → not price-gated → no lock badge.
+        const itemPriceGated = fn.priceGated === true && (fn.priceGatedAssets ? fn.priceGatedAssets.includes(selectedAsset) : true);
 
         const active = !blocked &&
           (location.pathname === route || location.pathname.startsWith(route + '/'));
@@ -100,7 +103,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
                     aria-label="Closed to the public"
                   />
                 )}
-                {fn.priceGated && hasBetaAccess && (
+                {itemPriceGated && hasBetaAccess && (
                   <GatedLockBadge />
                 )}
               </>
@@ -117,7 +120,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
                     title="Closed to the public"
                   />
                 )}
-                {fn.priceGated && hasBetaAccess && (
+                {itemPriceGated && hasBetaAccess && (
                   <Lock
                     className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500"
                     title="Price gated"
