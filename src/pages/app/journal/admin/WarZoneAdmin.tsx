@@ -23,7 +23,7 @@
 // =====================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { supabase } from '@/lib/supabase';
 import {
@@ -1501,6 +1501,7 @@ const WarZoneAdmin: React.FC = () => {
     refetch: refetchMentions,
   } = useTimedQuery<PaginatedMentions>({
     queryKey: mentionsQueryKey,
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<PaginatedMentions> => {
       const { column, ascending } = sortDbMap[sortBy];
 
@@ -1560,6 +1561,7 @@ const WarZoneAdmin: React.FC = () => {
     refetch: refetchAggregates,
   } = useTimedQuery<MentionAggregates>({
     queryKey: ['warzone-aggregates', dateFrom, dateTo],
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<MentionAggregates> => {
       const { data: rows, error } = await supabase
         .from('warzone_ticker_mentions')
@@ -1711,6 +1713,7 @@ const WarZoneAdmin: React.FC = () => {
     refetch: refetchFocus,
   } = useTimedQuery<FocusTrackingRow[]>({
     queryKey: ['warzone-focus-tracking', focusStatusFilter],
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<FocusTrackingRow[]> => {
       let q = supabase
         .from('warzone_focus_tracking')

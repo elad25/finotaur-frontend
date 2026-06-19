@@ -9,7 +9,7 @@
 // ✅ FIXED: Use supabaseAdmin when impersonating
 // ================================================
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { tradeR } from '@/utils/rAggregates';
 import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -315,6 +315,10 @@ export function useTrades(userId?: string, portfolioId?: string | null) {
     ],
     queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId),
     enabled: !!targetUserId,
+
+    // Keep the previous account's rows visible while switching portfolios
+    // instead of flashing a skeleton on every change.
+    placeholderData: keepPreviousData,
 
     // 🚀 PERFORMANCE: Aggressive caching
     staleTime: 5 * 60 * 1000,
