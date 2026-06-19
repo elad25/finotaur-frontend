@@ -63,7 +63,13 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
     );
     const representative = sorted[0];
     if (sorted.length === 1) {
-      result.push({ ...representative, quantity: 1 });
+      // Per-contract: a pre-aggregated row with quantity>1 still needs division
+      // (e.g. a copy fill collapsed from 19 contracts → pnl must be /19).
+      // Per-account: a single-account row is already the full decision amount.
+      const qty = representative.quantity != null ? Number(representative.quantity) : 1;
+      const pnl = representative.pnl != null ? Number(representative.pnl) : 0;
+      const normPnl = mode === 'per-contract' ? pnl / Math.max(qty, 1) : pnl;
+      result.push({ ...representative, pnl: normPnl, quantity: 1 });
       continue;
     }
     const totalPnl = sorted.reduce((sum, t) => sum + (t.pnl != null ? Number(t.pnl) : 0), 0);
