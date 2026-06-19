@@ -105,15 +105,15 @@ export interface KeyLevel {
 export interface DarkPoolTrade {
   id: string;
   symbol: string;
-  price: number;
+  stockPrice: number;
   size: number;
   notional: number;
   notionalFmt: string;
   side: 'buy' | 'sell' | 'unknown';
-  exchange: string;
+  volOiRatio?: number;
+  premium?: number;
   timestamp: string;
   timeAgo: string;
-  premiumToNBBO: number;
   blockType: 'block' | 'sweep' | 'cross';
   optionsCorrelation: string;
   sizeCategory: 'mega' | 'large' | 'notable';
@@ -297,10 +297,16 @@ export interface MarketDashboardRow {
 
 export interface OverviewChartsData {
   marketNetFlow: MarketNetFlowPoint[];
+  marketNetFlowModeled?: boolean;
+  marketNetFlowModeledNote?: string;
   odteFlow: OdteFlowPoint[];
+  odteFlowModeled?: boolean;
+  odteFlowModeledNote?: string;
   odteGex: OdteGexData;
   sectorRadar: SectorRadarPoint[];
   sectorFlow: SectorFlowPoint[];
+  sectorFlowModeled?: boolean;
+  sectorFlowModeledNote?: string;
   sectorFlowKeys: string[];
   sectorPremiums: SectorPremiumEntry[];
   callsDashboard: MarketDashboardRow[];
@@ -375,11 +381,38 @@ export interface OptionsData {
   squeezeDetector: SqueezeDetectorData;
   lastUpdated: string;
   cacheExpiry: string;
+  /** Server-injected flag: true for admins (full raw data), false for paying non-admins (spot prices stripped per Polygon Individual license). */
+  licensed?: boolean;
+}
+
+// ——— 10. AI Analysis ———
+
+export interface AiAnalysis {
+  read: string;
+  context: string;
+  counterArgument: string;
+  whatToWatch: string[];
+  riskNote: string;
+}
+
+export interface AiAnalysisMeta {
+  symbol: string;
+  generatedAt: string;
+  cached: boolean;
+  disclaimer: string;
+}
+
+export interface AiAnalysisResult {
+  symbol: string;
+  analysis: AiAnalysis | null;
+  meta: AiAnalysisMeta;
+  /** Present when analysis is null (no-data state). */
+  message?: string;
 }
 
 // ——— UI (Deep Dive removed from tab navigation) ———
 
-export type OptionsTab = 'overview' | 'flow' | 'squeeze' | 'darkpool';
+export type OptionsTab = 'overview' | 'flow' | 'squeeze' | 'darkpool' | 'deepdive';
 export type FilterType = 'all' | 'call' | 'put';
 export type FlowSubTab = 'unusual' | 'blocks' | 'sweeps' | 'heatmap';
 export type BlockTier = 'all' | '100K' | '500K' | '1M';

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Card, SectionHeader, Skeleton, SkeletonCard } from '../ui';
 import { authFetch } from '@/utils/authFetch';
+import { fmtPriceOrDash, fmtPctOrDash } from '../../utils/format';
 
 // ╔══════════════════════════════════════════════════════╗
 // ║  TYPES                                                ║
@@ -32,15 +33,15 @@ import { authFetch } from '@/utils/authFetch';
 export interface DarkPoolTrade {
   id: string;
   symbol: string;
-  price: number;
+  stockPrice: number;
   size: number;                    // daily share volume
   notional: number;                // daily notional (price × volume)
   notionalFmt: string;
   side: 'buy' | 'sell' | 'unknown';
-  exchange: string;
+  volOiRatio?: number;
+  premium?: number;
   timestamp: string;
   timeAgo: string;
-  premiumToNBBO: number;
   blockType: 'block' | 'sweep' | 'cross';
   sizeCategory: 'mega' | 'large' | 'notable';
   isETF: boolean;
@@ -185,12 +186,6 @@ function useDarkPool(): UseDarkPoolResult {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result: DarkPoolData = await res.json();
 
-      // DEBUG: Log first trade to verify longPct/shortPct
-      if (result.trades?.length) {
-        const t0 = result.trades[0] as any;
-        console.log('[DarkPool] First trade:', t0.symbol, 'longPct:', t0.longPct, 'shortPct:', t0.shortPct, 'side:', t0.side, 'blockCount:', t0.blockCount);
-      }
-
       // Enrich trades with computed fields if needed
       const trades = (result.trades || []).map((t: any) => ({
         ...t,
@@ -208,7 +203,7 @@ function useDarkPool(): UseDarkPoolResult {
       setCountdown(REFRESH_INTERVAL_MS / 1000);
     } catch (e: any) {
       if (e.name === 'AbortError') return;
-      setError(e.message || 'Failed to load dark pool data');
+      setError(e.message || 'Failed to load institutional flow data');
     } finally {
       setLoading(false);
     }
@@ -305,9 +300,9 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: DarkPoolTrade
   const side = SIDE_CONFIG[trade.side] || SIDE_CONFIG.unknown;
   const sizeConf = SIZE_CONFIG[trade.sizeCategory] || SIZE_CONFIG.notable;
   const SideIcon = side.icon;
-  const pct = trade.changePercent ?? 0;
-  const price = trade.price ?? 0;
-  const pctColor = pct > 0 ? '#22C55E' : pct < 0 ? '#EF4444' : '#8B8B8B';
+  const pct = trade.changePercent;
+  const price = trade.stockPrice;
+  const pctColor = pct != null && pct > 0 ? '#22C55E' : pct != null && pct < 0 ? '#EF4444' : '#8B8B8B';
   const blockCount = (trade as any).blockCount ?? trade.size ?? 0;
   const longPct = (trade as any).longPct ?? 50;
   const shortPct = (trade as any).shortPct ?? 50;
@@ -341,9 +336,9 @@ const TradeRow = memo(function TradeRow({ trade, index }: { trade: DarkPoolTrade
 
       {/* Price + Change */}
       <div className="hidden sm:block min-w-[85px]">
-        <div className="text-xs text-white font-medium">${price.toFixed(2)}</div>
+        <div className="text-xs text-white font-medium">{fmtPriceOrDash(price)}</div>
         <div className="text-[9px] flex items-center gap-0.5" style={{ color: pctColor }}>
-          {pct > 0 ? '+' : ''}{pct.toFixed(2)}%
+          {fmtPctOrDash(pct)}
         </div>
       </div>
 
@@ -431,7 +426,7 @@ export const DarkPoolTab = memo(function DarkPoolTab() {
       <Card>
         <div className="p-8 text-center">
           <EyeOff className="w-12 h-12 text-[#EF4444] mx-auto mb-4 opacity-50" />
-          <h3 className="text-lg font-semibold text-white mb-2">Dark Pool Feed Unavailable</h3>
+          <h3 className="text-lg font-semibold text-white mb-2">Institutional Flow Feed Unavailable</h3>
           <p className="text-sm text-[#6B6B6B] mb-4">{error}</p>
           <button
             onClick={refresh}
@@ -569,8 +564,8 @@ export const DarkPoolTab = memo(function DarkPoolTab() {
           <div className="flex items-start justify-between mb-1">
             <SectionHeader
               icon={Eye}
-              title="Dark Pool Intelligence"
-              subtitle="Institutional block prints — daily aggregated"
+              title="Institutional Options Flow"
+              subtitle="Large options prints — daily aggregated"
               iconBg="purple"
             />
             <div className="flex items-center gap-3 shrink-0">
@@ -599,7 +594,7 @@ export const DarkPoolTab = memo(function DarkPoolTab() {
           {trades.length === 0 ? (
             <div className="py-12 text-center">
               <EyeOff className="w-10 h-10 text-[#6B6B6B] mx-auto mb-3 opacity-40" />
-              <p className="text-sm text-[#6B6B6B]">No dark pool activity detected today</p>
+              <p className="text-sm text-[#6B6B6B]">No institutional flow activity detected today</p>
               <p className="text-xs text-[#4B4B4B] mt-1">Data will appear once markets open</p>
             </div>
           ) : (

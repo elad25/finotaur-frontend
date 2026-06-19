@@ -6,6 +6,7 @@ import { Flame, Sparkles, Info, TrendingUp, Activity, X } from 'lucide-react';
 import type { OptionsData, SqueezeCandidate, SqueezeSignal } from '../../types/options-ai.types';
 import { SQUEEZE_RISK_CONFIG, SQUEEZE_SIGNAL_CONFIG } from '../../constants/options-ai.constants';
 import { Card, SectionHeader, AIInsight } from '../ui';
+import { fmtPriceOrDash } from '../../utils/format';
 
 
 /* ═══════════════════════════════════════════════════════════
@@ -187,7 +188,7 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-1.5">
                 <span className="text-xl font-bold text-white tracking-tight">{candidate.symbol}</span>
-                <span className="text-sm text-[#8B8B8B] font-medium">{'$'}{candidate.currentPrice}</span>
+                <span className="text-sm text-[#8B8B8B] font-medium">{fmtPriceOrDash(candidate.currentPrice)}</span>
                 <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider" style={{
                   background: `${risk.color}12`,
                   border: `1px solid ${risk.color}25`,
@@ -224,7 +225,7 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
                     background: 'linear-gradient(135deg, #C9A646, #F4D97B)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
-                  }}>{'$'}{candidate.currentPrice.toFixed(2)}</span>
+                  }}>{fmtPriceOrDash(candidate.currentPrice)}</span>
                   <span className="text-xs text-[#6B6B6B]">Current Price</span>
                 </div>
                 <div className="flex items-center gap-6 text-xs">
@@ -269,7 +270,7 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
               {/* Distance to Wall — compact inline */}
               <div className="pt-1">
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] text-[#6B6B6B] whitespace-nowrap">{'$'}{candidate.currentPrice}</span>
+                  <span className="text-[10px] text-[#6B6B6B] whitespace-nowrap">{fmtPriceOrDash(candidate.currentPrice)}</span>
                   <div className="flex-1 relative h-2 bg-white/[0.06] rounded-full overflow-hidden">
                     <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-[#C9A646]" />
                     <div className="h-full rounded-full" style={{

@@ -131,8 +131,6 @@ export function useOptionsIntelligence() {
     finally { if (mountedRef.current) setDeepDiveLoading(false); }
   }, []);
 
-  useEffect(() => { if (activeTab === 'deepdive') loadDeepDive(deepDiveTicker); }, [activeTab]); // eslint-disable-line
-
   // ── Derived ──
   const filteredFlows = useMemo(() => {
     if (!data) return [];

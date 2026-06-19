@@ -3,7 +3,7 @@
 // OPTIONS AI - Tab Navigation (Stock-Analyzer Style)
 // =====================================================
 // Removed Deep Dive, adopted gold-gradient active tab design
-// 4 tabs: Overview | Flow Scanner | Squeeze Detector | Dark Pool
+// 4 tabs: Overview | Flow Scanner | Squeeze Detector | Institutional Flow
 // =====================================================
 
 import { memo } from 'react';
@@ -11,12 +11,12 @@ import { Brain, Layers, Zap, Flame, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { OptionsTab } from '../types/options-ai.types';
 
-const TAB_CONFIG: { id: OptionsTab | 'deepdive'; label: string; icon: typeof Layers; disabled?: boolean }[] = [
+const TAB_CONFIG: { id: OptionsTab; label: string; icon: typeof Layers; disabled?: boolean }[] = [
   { id: 'overview', label: 'Overview',          icon: Layers },
   { id: 'flow',     label: 'Flow Scanner',      icon: Zap },
   { id: 'squeeze',  label: 'Squeeze Detector',  icon: Flame },
-  { id: 'darkpool', label: 'Dark Pool',         icon: Eye },
-  { id: 'deepdive', label: 'AI Analysis',       icon: Brain, disabled: true },
+  { id: 'darkpool', label: 'Institutional Flow', icon: Eye },
+  { id: 'deepdive', label: 'AI Analysis',       icon: Brain },
 ];
 
 export const TabNav = memo(function TabNav({
@@ -42,7 +42,7 @@ export const TabNav = memo(function TabNav({
         return (
           <button
             key={tab.id}
-            onClick={() => !tab.disabled && onTabChange(tab.id as OptionsTab)}
+            onClick={() => !tab.disabled && onTabChange(tab.id)}
             disabled={tab.disabled}
             className={cn(
               'relative flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-3 font-medium transition-all duration-300',

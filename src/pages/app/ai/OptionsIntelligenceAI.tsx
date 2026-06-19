@@ -5,19 +5,21 @@ import { lazy } from '@/lib/lazyWithRetry';
 import { motion, AnimatePresence } from 'framer-motion';
 import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Brain } from 'lucide-react';
 import { SkeletonChart } from '@/components/ds/Skeleton';
-import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { AiOptionsIntelligenceSkeletonPage } from '@/components/skeletons/AiOptionsIntelligenceSkeleton';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
+import { MethodologyFooter } from '@/features/options-ai/components/MethodologyFooter';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ── Lazy tabs (code-split) ──
 const OverviewTab        = lazy(() => import('@/features/options-ai/components/tabs/OverviewTab').then(m => ({ default: m.OverviewTab })));
 const FlowTab            = lazy(() => import('@/features/options-ai/components/tabs/FlowTab').then(m => ({ default: m.FlowTab })));
 const SqueezeDetectorTab = lazy(() => import('@/features/options-ai/components/tabs/SqueezeDetectorTab').then(m => ({ default: m.SqueezeDetectorTab })));
 const DarkPoolTab        = lazy(() => import('@/features/options-ai/components/tabs/DarkPoolTab').then(m => ({ default: m.DarkPoolTab })));
+const AIAnalysisTab      = lazy(() => import('@/features/options-ai/components/tabs/AIAnalysisTab').then(m => ({ default: m.AIAnalysisTab })));
 
 function TabFallback() {
   return (
@@ -33,14 +35,13 @@ function OptionsIntelligenceContent() {
     typeFilter, flowSubTab, setFlowSubTab, blockTier, setBlockTier,
     selectedFlow, data, isLoading, isRefreshing, loadError,
     filteredFlows, filteredBlocks,
-    deepDiveTicker, deepDiveData, deepDiveLoading, loadDeepDive,
     handleFilterChange, handleFlowClick, handleCloseDrawer, handleRefresh,
   } = useOptionsIntelligence();
 
   const featureRail = [
     { label: 'Flow Scanner', icon: Zap },
     { label: 'Squeeze Detector', icon: Flame },
-    { label: 'Dark Pool', icon: Eye },
+    { label: 'Institutional Flow', icon: Eye },
     { label: 'AI Analysis', icon: Brain },
   ];
 
@@ -76,6 +77,12 @@ function OptionsIntelligenceContent() {
           <div className="mt-ds-3 flex justify-center">
             <MarketStatusBadge className="relative top-auto right-auto" />
           </div>
+          {/* License note — shown for paying non-admin users whose spot prices are stripped */}
+          {data && data.licensed === false && (
+            <p className="mt-1 text-xs text-ink-tertiary/70">
+              Spot prices are licensed separately — shown to admins. All flow analytics below are derived and live.
+            </p>
+          )}
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">Institutional Options Flow & Market Intelligence</p>
             {isRefreshing && <Loader2 className="h-4 w-4 text-[#C9A646] animate-spin" />}
@@ -149,10 +156,18 @@ function OptionsIntelligenceContent() {
                 {activeTab === 'flow'       && <FlowTab blockTrades={filteredBlocks} />}
                 {activeTab === 'squeeze'    && <SqueezeDetectorTab data={data} />}
                 {activeTab === 'darkpool'   && <DarkPoolTab />}
+                {activeTab === 'deepdive'   && (
+                  <ErrorBoundary boundary="options-ai-analysis">
+                    <AIAnalysisTab symbol="SPY" />
+                  </ErrorBoundary>
+                )}
               </Suspense>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Methodology & Disclaimers — always visible, collapsible */}
+        <MethodologyFooter />
 
       </div>
 

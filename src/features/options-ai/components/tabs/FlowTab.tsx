@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { AlertCircle, BarChart3, Brain, ChevronRight, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import type { BlockTrade } from '../../types/options-ai.types';
 import { Card } from '../ui';
+import { fmtPriceOrDash } from '../../utils/format';
 
 interface SymbolGroup {
   symbol: string;
@@ -403,7 +404,7 @@ const AlertsPanel = memo(function AlertsPanel({ blocks }: { blocks: BlockTrade[]
                   <span className="truncate text-sm font-semibold text-ink-primary">
                     {block.symbol} {block.strike}{block.type === 'call' ? 'C' : 'P'} {block.expiry}
                   </span>
-                  <span className="shrink-0 text-xs text-ink-tertiary">${Math.round(block.stockPrice || block.strike)}</span>
+                  <span className="shrink-0 text-xs text-ink-tertiary">{block.stockPrice != null ? `$${Math.round(block.stockPrice)}` : fmtPriceOrDash(null)}</span>
                   <span className="shrink-0 text-xs font-semibold capitalize" style={{ color }}>
                     {block.type}
                   </span>
@@ -588,7 +589,7 @@ export const FlowTab = memo(function FlowTab({ blockTrades }: FlowTabProps) {
                         />
                       )) : (
                         <div className="flex min-h-[170px] items-center justify-center text-sm font-semibold text-ink-tertiary">
-                          No {filter} flow signals in this mock set
+                          No {filter} flow signals right now.
                         </div>
                       )}
                     </div>

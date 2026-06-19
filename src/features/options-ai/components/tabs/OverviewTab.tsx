@@ -27,6 +27,7 @@ import {
 import type {
   OptionsData, OverviewChartsData, MarketDashboardRow,
 } from '../../types/options-ai.types';
+import { fmtPriceOrDash } from '../../utils/format';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell,
@@ -394,7 +395,7 @@ const GexProfile = memo(function GexProfile({ data, currentPrice }: { data: Over
   if (gexData.length === 0) return null;
   const currentStrike = gexData.find(d => d.isCurrent)?.strike;
   const subtitle = currentStrike
-    ? `Options gamma profile - SPY ${currentPrice ? `$${currentPrice.toFixed(2)}` : ''} centered at ${currentStrike}`
+    ? `Options gamma profile - SPY ${currentPrice != null ? fmtPriceOrDash(currentPrice) : ''} centered at ${currentStrike}`
     : 'Options gamma profile by strike';
   const maxAbs = Math.max(...gexData.map(d => Math.abs(d.gex)), 1);
   const yBound = maxAbs * 1.22;
@@ -512,7 +513,7 @@ const SectorPulse = memo(function SectorPulse({ data }: { data: OverviewChartsDa
   if (sectors.length === 0) return null;
 
   return (
-    <CC title="Sector Flow Pulse" subtitle="Options premium profile by sector" icon={Target} accentColor={C.gold} delay={0.25}>
+    <CC title="Sector Flow Pulse" subtitle={`Options premium profile by sector${data.sectorFlowModeled ? ' · Modeled intraday shape' : ''}`} icon={Target} accentColor={C.gold} delay={0.25}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{
           display: 'flex',
