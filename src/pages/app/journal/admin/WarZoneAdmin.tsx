@@ -23,7 +23,8 @@
 // =====================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { supabase } from '@/lib/supabase';
 import {
   RefreshCw,
@@ -450,7 +451,7 @@ const DrilldownModal: React.FC<{
     };
   }, [onClose]);
 
-  const { data, isLoading, isError } = useQuery<TickerDrilldown>({
+  const { data, isLoading, isError, refetch } = useTimedQuery<TickerDrilldown>({
     queryKey: ['warzone-drilldown', ticker],
     queryFn: async (): Promise<TickerDrilldown> => {
       // Task 7: include metadata so we can show same-day impact per mention
@@ -556,9 +557,12 @@ const DrilldownModal: React.FC<{
           )}
 
           {isError && (
-            <div className="flex items-center gap-3 p-4 bg-status-error/10 border border-status-error/25 rounded-lg text-status-error">
+            <div className="flex flex-col items-center gap-3 p-6 bg-status-error/10 border border-status-error/25 rounded-lg text-status-error">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <span className="text-small">Failed to load drilldown data.</span>
+              <span className="text-small">Couldn&apos;t load drilldown data. Please try again.</span>
+              <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetch()}>
+                Retry
+              </Button>
             </div>
           )}
 
@@ -808,9 +812,16 @@ const PnlStatusBadge: React.FC<{ status: 'target_hit' | 'stopped' }> = ({ status
 const WarZonePerformanceEdge: React.FC<{
   focusAllData: FocusTrackingRow[] | undefined;
   focusLoading: boolean;
-}> = ({ focusAllData, focusLoading }) => {
+  focusAllError: boolean;
+  refetchFocusAll: () => void;
+}> = ({ focusAllData, focusLoading, focusAllError, refetchFocusAll }) => {
   // ---- Part B: mentions edge query ----------------------------------------
-  const { data: mentionEdgeData, isLoading: mentionEdgeLoading } = useQuery<{
+  const {
+    data: mentionEdgeData,
+    isLoading: mentionEdgeLoading,
+    isError: mentionEdgeError,
+    refetch: refetchMentionEdge,
+  } = useTimedQuery<{
     rows: MentionEdgeRow[];
     maxReportDate: string | null;
   }>({
@@ -1040,6 +1051,14 @@ const WarZonePerformanceEdge: React.FC<{
 
         {focusLoading && !focusAllData ? (
           <SkeletonTable rows={3} cols={4} />
+        ) : focusAllError ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-status-error">
+            <AlertCircle className="w-6 h-6" />
+            <p className="text-small">Couldn&apos;t load focus ideas. Please try again.</p>
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchFocusAll()}>
+              Retry
+            </Button>
+          </div>
         ) : totalClosed === 0 ? (
           /* Empty / thin state */
           <div className="flex flex-col items-center gap-3 py-8 text-ink-tertiary">
@@ -1278,6 +1297,14 @@ const WarZonePerformanceEdge: React.FC<{
 
         {mentionEdgeLoading ? (
           <SkeletonTable rows={4} cols={5} />
+        ) : mentionEdgeError ? (
+          <div className="flex flex-col items-center gap-3 py-10 text-status-error">
+            <AlertCircle className="w-8 h-8" />
+            <p className="text-small">Couldn&apos;t load mention edge data. Please try again.</p>
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchMentionEdge()}>
+              Retry
+            </Button>
+          </div>
         ) : noMentions30dData ? (
           /* No 30d data yet */
           <div className="space-y-3">
@@ -1472,7 +1499,7 @@ const WarZoneAdmin: React.FC = () => {
     isLoading: mentionsLoading,
     isError: mentionsError,
     refetch: refetchMentions,
-  } = useQuery<PaginatedMentions>({
+  } = useTimedQuery<PaginatedMentions>({
     queryKey: mentionsQueryKey,
     queryFn: async (): Promise<PaginatedMentions> => {
       const { column, ascending } = sortDbMap[sortBy];
@@ -1529,7 +1556,9 @@ const WarZoneAdmin: React.FC = () => {
   const {
     data: aggregates,
     isLoading: aggregatesLoading,
-  } = useQuery<MentionAggregates>({
+    isError: aggregatesError,
+    refetch: refetchAggregates,
+  } = useTimedQuery<MentionAggregates>({
     queryKey: ['warzone-aggregates', dateFrom, dateTo],
     queryFn: async (): Promise<MentionAggregates> => {
       const { data: rows, error } = await supabase
@@ -1680,7 +1709,7 @@ const WarZoneAdmin: React.FC = () => {
     isLoading: focusLoading,
     isError: focusError,
     refetch: refetchFocus,
-  } = useQuery<FocusTrackingRow[]>({
+  } = useTimedQuery<FocusTrackingRow[]>({
     queryKey: ['warzone-focus-tracking', focusStatusFilter],
     queryFn: async (): Promise<FocusTrackingRow[]> => {
       let q = supabase
@@ -1707,7 +1736,9 @@ const WarZoneAdmin: React.FC = () => {
   // Focus stats (computed client-side from full unfiltered data — use a separate full-set query for stats)
   const {
     data: focusAllData,
-  } = useQuery<FocusTrackingRow[]>({
+    isError: focusAllError,
+    refetch: refetchFocusAll,
+  } = useTimedQuery<FocusTrackingRow[]>({
     queryKey: ['warzone-focus-tracking-all'],
     queryFn: async (): Promise<FocusTrackingRow[]> => {
       const { data: rows, error } = await supabase
@@ -1919,50 +1950,60 @@ const WarZoneAdmin: React.FC = () => {
         </div>
 
         {/* Stats tiles row */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-          <StatTile
-            label="Open Positions"
-            value={focusAll.length === 0 && !focusAllData ? '—' : focusOpen.toLocaleString()}
-            icon={Target}
-            loading={!focusAllData && focusLoading}
-          />
-          <StatTile
-            label="Closed"
-            value={focusAll.length === 0 && !focusAllData ? '—' : focusClosed.toLocaleString()}
-            icon={Activity}
-            loading={!focusAllData && focusLoading}
-          />
-          <StatTile
-            label="Hit Rate"
-            value={
-              focusHitRate !== null
-                ? `${focusHitRate.toFixed(1)}%`
-                : '—'
-            }
-            icon={TrendingUp}
-            loading={!focusAllData && focusLoading}
-          />
-          <StatTile
-            label="Avg Return 30d"
-            value={
-              <span className={pctColorClass(focusAvgReturn30d)}>
-                {formatPct(focusAvgReturn30d)}
-              </span>
-            }
-            icon={BarChart3}
-            loading={!focusAllData && focusLoading}
-          />
-          <StatTile
-            label="Avg Days to Close"
-            value={
-              focusAvgDaysToOutcome !== null
-                ? `${focusAvgDaysToOutcome.toFixed(1)}d`
-                : '—'
-            }
-            icon={Zap}
-            loading={!focusAllData && focusLoading}
-          />
-        </div>
+        {focusAllError ? (
+          <div className="flex flex-col items-center gap-3 py-6 text-status-error mb-4">
+            <AlertCircle className="w-6 h-6" />
+            <p className="text-small">Couldn&apos;t load focus stats. Please try again.</p>
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchFocusAll()}>
+              Retry
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+            <StatTile
+              label="Open Positions"
+              value={focusAll.length === 0 && !focusAllData ? '—' : focusOpen.toLocaleString()}
+              icon={Target}
+              loading={!focusAllData && focusLoading}
+            />
+            <StatTile
+              label="Closed"
+              value={focusAll.length === 0 && !focusAllData ? '—' : focusClosed.toLocaleString()}
+              icon={Activity}
+              loading={!focusAllData && focusLoading}
+            />
+            <StatTile
+              label="Hit Rate"
+              value={
+                focusHitRate !== null
+                  ? `${focusHitRate.toFixed(1)}%`
+                  : '—'
+              }
+              icon={TrendingUp}
+              loading={!focusAllData && focusLoading}
+            />
+            <StatTile
+              label="Avg Return 30d"
+              value={
+                <span className={pctColorClass(focusAvgReturn30d)}>
+                  {formatPct(focusAvgReturn30d)}
+                </span>
+              }
+              icon={BarChart3}
+              loading={!focusAllData && focusLoading}
+            />
+            <StatTile
+              label="Avg Days to Close"
+              value={
+                focusAvgDaysToOutcome !== null
+                  ? `${focusAvgDaysToOutcome.toFixed(1)}d`
+                  : '—'
+              }
+              icon={Zap}
+              loading={!focusAllData && focusLoading}
+            />
+          </div>
+        )}
 
         {/* Status filter */}
         <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -2176,6 +2217,8 @@ const WarZoneAdmin: React.FC = () => {
       <WarZonePerformanceEdge
         focusAllData={focusAllData}
         focusLoading={focusLoading}
+        focusAllError={focusAllError}
+        refetchFocusAll={refetchFocusAll}
       />
 
       {/* ------------------------------------------------------------------ */}
@@ -2198,6 +2241,14 @@ const WarZoneAdmin: React.FC = () => {
 
         {mentionsLoading ? (
           <SkeletonTable rows={3} cols={4} className="mt-2" />
+        ) : mentionsError ? (
+          <div className="flex flex-col items-center gap-3 py-8 text-status-error">
+            <AlertCircle className="w-6 h-6" />
+            <p className="text-small">Couldn&apos;t load catalyst data. Please try again.</p>
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchMentions()}>
+              Retry
+            </Button>
+          </div>
         ) : todayCatalysts.length === 0 ? (
           <p className="text-small text-ink-tertiary py-2">No tracked catalysts yet today.</p>
         ) : (
@@ -2253,6 +2304,15 @@ const WarZoneAdmin: React.FC = () => {
       {/* ------------------------------------------------------------------ */}
       {/* Section 3 — Stats grid (Task 2)                                     */}
       {/* ------------------------------------------------------------------ */}
+      {aggregatesError ? (
+        <div className="flex flex-col items-center gap-3 py-6 text-status-error">
+          <AlertCircle className="w-6 h-6" />
+          <p className="text-small">Couldn&apos;t load summary stats. Please try again.</p>
+          <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchAggregates()}>
+            Retry
+          </Button>
+        </div>
+      ) : (
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatTile
           label="Total Mentions"
@@ -2318,6 +2378,7 @@ const WarZoneAdmin: React.FC = () => {
           loading={aggregatesLoading}
         />
       </div>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 4 — Heatmap (type × timeframe) — Task 3: 4 columns         */}
@@ -2334,6 +2395,14 @@ const WarZoneAdmin: React.FC = () => {
 
         {aggregatesLoading ? (
           <SkeletonTable rows={5} cols={5} className="mt-2" />
+        ) : aggregatesError ? (
+          <div className="flex flex-col items-center gap-3 py-10 text-status-error">
+            <AlertCircle className="w-8 h-8" />
+            <p className="text-small">Couldn&apos;t load heatmap data. Please try again.</p>
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchAggregates()}>
+              Retry
+            </Button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-small border-collapse">
