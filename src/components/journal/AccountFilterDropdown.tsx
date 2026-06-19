@@ -9,9 +9,10 @@
 // ══════════════════════════════════════════════════════════════
 
 import { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react';
-import { Wallet, ChevronDown, Settings, Check, Minus } from 'lucide-react';
+import { Wallet, ChevronDown, Settings, Check, Minus, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
+import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_SCOPE_ID } from '@/contexts/PortfolioContext';
+import { useTraderMode } from '@/hooks/useTraderMode';
 import { buildAccountGroups } from '@/components/journal/accountGrouping';
 import type { PortfolioGroup } from '@/components/journal/accountGrouping';
 
@@ -32,8 +33,11 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     togglePortfolioSelection,
     setSelectedPortfolioIds,
     isShowingAll,
+    isTraderMode,
     isLoading,
   } = usePortfolioContext();
+
+  const { traderMode, setTraderMode } = useTraderMode();
 
   const [open, setOpen] = useState(false);
   // Groups default collapsed — the whole point is taming the long list.
@@ -64,15 +68,18 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
 
   // Button label
   const label = useMemo(() => {
+    if (isTraderMode) return 'TRADER';
     if (isShowingAll) return 'All accounts';
-    const count = selectedPortfolioIds.filter(id => id !== ALL_PORTFOLIOS_ID).length;
+    const count = selectedPortfolioIds.filter(
+      id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_SCOPE_ID,
+    ).length;
     if (count === 0) return 'All accounts';
     if (count === 1) {
       const match = portfolios.find(p => p.id === selectedPortfolioIds[0]);
       return match?.name ?? 'Account';
     }
     return `${count} accounts`;
-  }, [isShowingAll, selectedPortfolioIds, portfolios]);
+  }, [isTraderMode, isShowingAll, selectedPortfolioIds, portfolios]);
 
   // Build groups: prop-firm buckets (sorted by label) → generic Tradovate →
   //               broker groups (by connection_id) → Manual
@@ -171,6 +178,66 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
         >
           {/* Scrollable account list — capped so it never runs off the viewport */}
           <div className="max-h-[55vh] overflow-y-auto pr-1">
+          {/* ── TRADER row (top, visually distinct) ── */}
+          <button
+            role="option"
+            aria-selected={isTraderMode}
+            onClick={() => setSelectedPortfolioIds([TRADER_SCOPE_ID])}
+            className={cn(
+              'flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium',
+              'transition-colors duration-100 group',
+              isTraderMode
+                ? 'text-[#C9A646] bg-[#C9A646]/5'
+                : 'text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/50',
+            )}
+          >
+            <span
+              className={cn(
+                'flex-shrink-0 w-3.5 h-3.5 rounded border transition-all',
+                isTraderMode
+                  ? 'bg-[#C9A646] border-[#C9A646] flex items-center justify-center'
+                  : 'border-zinc-600 group-hover:border-zinc-400',
+              )}
+            >
+              {isTraderMode && <Check className="w-2.5 h-2.5 text-[#0A0A0A]" strokeWidth={3} />}
+            </span>
+            <Layers className="w-3 h-3 flex-shrink-0 text-[#C9A646]" />
+            <span className="flex-1 text-left truncate font-semibold">TRADER</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#C9A646]/15 text-[#C9A646]">
+              Net decisions
+            </span>
+          </button>
+
+          {/* TRADER sub-toggle: Per contract / Per account — only visible when TRADER active */}
+          {isTraderMode && (
+            <div className="flex gap-1 mx-3 mb-1.5 mt-0.5">
+              <button
+                onClick={() => setTraderMode('per-contract')}
+                className={cn(
+                  'flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all border',
+                  traderMode === 'per-contract'
+                    ? 'bg-[#C9A646]/20 border-[#C9A646]/60 text-[#C9A646]'
+                    : 'bg-transparent border-zinc-700 text-zinc-500 hover:text-zinc-300',
+                )}
+              >
+                Per contract
+              </button>
+              <button
+                onClick={() => setTraderMode('per-account')}
+                className={cn(
+                  'flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all border',
+                  traderMode === 'per-account'
+                    ? 'bg-[#C9A646]/20 border-[#C9A646]/60 text-[#C9A646]'
+                    : 'bg-transparent border-zinc-700 text-zinc-500 hover:text-zinc-300',
+                )}
+              >
+                Per account
+              </button>
+            </div>
+          )}
+
+          <div className="border-t border-zinc-800/60 mx-2 my-1" />
+
           {/* "All accounts" row */}
           <AccountRow
             id={ALL_PORTFOLIOS_ID}
