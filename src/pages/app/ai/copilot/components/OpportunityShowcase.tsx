@@ -5,6 +5,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
+import { Button } from '@/components/ds/Button';
 import {
   AreaChart,
   Area,
@@ -295,7 +297,7 @@ interface PriceChartProps {
 }
 
 function PriceChart({ ticker, range }: PriceChartProps) {
-  const { data: bars, isLoading } = useQuery({
+  const { data: bars, isLoading, isError, refetch } = useTimedQuery({
     queryKey: ['opp-bars', ticker, range],
     queryFn: () => fetchCompareBars(ticker, range),
     staleTime: 5 * 60 * 1000,
@@ -303,6 +305,17 @@ function PriceChart({ ticker, range }: PriceChartProps) {
 
   if (isLoading) {
     return <div className="h-[110px] animate-pulse rounded-[4px] bg-white/[0.04]" />;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-[110px] flex-col items-center justify-center gap-2 text-[11px] text-ink-tertiary">
+        <span>Couldn&apos;t load chart data.</span>
+        <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   if (!bars || bars.length === 0) {

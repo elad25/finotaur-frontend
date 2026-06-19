@@ -4,8 +4,9 @@
 // expandable drivers, and a rotation-story strip.
 
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
+import { AlertCircle, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { Button } from '@/components/ds/Button';
 
 // ---------------------------------------------------------------------------
 // API types
@@ -309,13 +310,27 @@ function SectorOutlookSkeleton() {
 // ---------------------------------------------------------------------------
 
 export function SectorOutlookPanel() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useTimedQuery({
     queryKey: ['sector-outlook'],
     queryFn: fetchSectorOutlook,
     staleTime: 10 * 60 * 1000,
   });
 
   if (isLoading) return <SectorOutlookSkeleton />;
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-[8px] border border-gold-primary/14 bg-[#080808] p-8 text-center">
+        <AlertCircle className="h-5 w-5 text-status-error" />
+        <p className="text-[12px] text-ink-secondary">
+          Couldn&apos;t load sector outlook. Please try again.
+        </p>
+        <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   const outlook = data?.outlook ?? null;
 

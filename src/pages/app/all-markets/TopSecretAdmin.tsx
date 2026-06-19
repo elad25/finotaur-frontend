@@ -16,9 +16,11 @@
 // =====================================================
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { supabase } from '@/lib/supabase';
 import { SkeletonText, SkeletonStat } from '@/components/ds/Skeleton';
+import { Button } from '@/components/ds/Button';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import {
@@ -2812,7 +2814,7 @@ devLog('[ISM] No status returned from API');
   }, []);
 
   // Fetch stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats } = useTimedQuery({
     queryKey: ['top-secret-stats'],
     queryFn: async (): Promise<ReportStats> => {
       const { data, error } = await supabase.rpc('get_top_secret_stats');
@@ -2827,7 +2829,7 @@ devLog('[ISM] No status returned from API');
   });
 
   // Fetch last sent
-  const { data: lastSent, isLoading: lastSentLoading } = useQuery({
+  useTimedQuery({
     queryKey: ['report-last-sent'],
     queryFn: async (): Promise<LastSentInfo | null> => {
       return null;
@@ -2835,16 +2837,16 @@ devLog('[ISM] No status returned from API');
   });
 
   // Fetch inclusion status
-  const { data: inclusionStatus, refetch: refetchInclusion } = useQuery({
+  const { data: inclusionStatus, refetch: refetchInclusion } = useTimedQuery({
     queryKey: ['top-secret-inclusion-status'],
     queryFn: async (): Promise<InclusionStatus> => {
       const { data, error } = await supabase.rpc('get_top_secret_inclusion_status');
       if (error) throw error;
       const row = data?.[0] || {};
-      
+
       setPremiumEnabled(row.premium_included || false);
       setBasicEnabled(row.basic_included || false);
-      
+
       return {
         premium_included: row.premium_included || false,
         basic_included: row.basic_included || false,
@@ -2857,7 +2859,7 @@ devLog('[ISM] No status returned from API');
   });
 
   // Fetch users
-  const { data: allUsers, isLoading: usersLoading, refetch, error: usersError } = useQuery({
+  const { data: allUsers, isLoading: usersLoading, refetch, isError: usersIsError } = useTimedQuery({
     queryKey: ['top-secret-users'],
     queryFn: async (): Promise<ReportUser[]> => {
       const { data, error } = await supabase.rpc('get_top_secret_users');
@@ -3830,22 +3832,19 @@ const getDownloadHandler = (reportId: string) => {
     </div>
   );
 
-  if (usersError) {
+  if (usersIsError) {
     return (
       <div className="p-6 min-h-screen bg-[#080812]">
         <div className="bg-[#0d0d18] rounded-xl p-8 border border-red-500/30">
-          <div className="flex flex-col items-center text-center">
-            <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-            <h3 className="text-white font-medium mb-2">Failed to load report users</h3>
-            <p className="text-gray-500 text-sm mb-4">
+          <div className="flex flex-col items-center text-center gap-3">
+            <AlertCircle className="w-12 h-12 text-red-400" />
+            <h3 className="text-white font-medium">Failed to load report users</h3>
+            <p className="text-gray-500 text-sm">
               Make sure the SQL migration has been run
             </p>
-            <button
-              onClick={() => refetch()}
-              className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500"
-            >
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetch()}>
               Try Again
-            </button>
+            </Button>
           </div>
         </div>
       </div>
