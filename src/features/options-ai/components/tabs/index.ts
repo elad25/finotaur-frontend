@@ -3,3 +3,4 @@ export { OverviewTab } from './OverviewTab';
 export { FlowTab } from './FlowTab';
 export { SqueezeDetectorTab } from './SqueezeDetectorTab';
 export { DarkPoolTab } from './DarkPoolTab';
+export { AIAnalysisTab } from './AIAnalysisTab';
