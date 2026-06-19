@@ -41,6 +41,17 @@ if (!rawSupabaseAnonKey || rawSupabaseAnonKey === PLACEHOLDER_KEY) {
     'Set it in the Cloudflare Pages environment for the production project.'
   );
 }
+// Defense-in-depth: the Vite build plugin (apply: 'build') blocks this at CI
+// time, but dev mode bypasses it. Catch it at runtime too so a local `npm run
+// dev` with a wrongly-configured key fails loudly instead of silently using a
+// privileged key against production data.
+if (rawSupabaseAnonKey.startsWith('sb_secret_')) {
+  throw new Error(
+    '[Supabase] VITE_SUPABASE_ANON_KEY contains a Supabase SECRET key. ' +
+    'Use the sb_publishable_... key instead. ' +
+    'If this secret key was ever deployed, rotate it immediately in the Supabase dashboard.'
+  );
+}
 
 const supabaseUrl = rawSupabaseUrl;
 const supabaseAnonKey = rawSupabaseAnonKey;

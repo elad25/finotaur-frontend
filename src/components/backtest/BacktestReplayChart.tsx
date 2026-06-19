@@ -35,6 +35,31 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts';
+
+// BT_DEBUG (temporary — strip before merge)
+declare global {
+  interface Window {
+    __BT_DEBUG?: {
+      addPendingCount: number;
+      updatePendingCount: number;
+      chartMounts: number;
+      pendingCount: () => number;
+      pillCount: () => number;
+      positionLineCount: () => number;
+    };
+  }
+}
+if (typeof window !== 'undefined') {
+  window.__BT_DEBUG = {
+    addPendingCount: 0,
+    updatePendingCount: 0,
+    chartMounts: 0,
+    pendingCount: () => 0,
+    pillCount: () => document.querySelectorAll('[data-bt-pill]').length,
+    positionLineCount: () => 0,
+  };
+}
+// END BT_DEBUG
 import { Scissors, X } from 'lucide-react';
 import { OrderLinesOverlay } from './OrderLinesOverlay';
 import dayjs from 'dayjs';
@@ -244,6 +269,25 @@ export function BacktestReplayChart({
   const setCursorRef = useRef<((c: number) => void) | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
   const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // BUG B fix: native price lines for active position (entry/SL/TP).
+  // Kept in a separate map so they don't interfere with pending-order lines.
+  const positionLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+
+  // BUG A fix: pill element refs so syncOverlayPositions() can imperatively
+  // reposition pills during price-scale drag without a React re-render.
+  const pillRefsMap = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // BT_DEBUG (temporary — strip before merge): keep pendingCount getter in sync.
+  useEffect(() => {
+    if (window.__BT_DEBUG) {
+      window.__BT_DEBUG.pendingCount = () => pendingOrders.length;
+    }
+  }, [pendingOrders]);
+
+  // Ref to the rAF loop handle for price-scale drag sync (pill position sync).
+  const priceScaleDragRafRef = useRef<number>(0);
+  const priceScaleDragActiveRef = useRef(false);
 
   // ─── Replay cursor overlay state ─────────────────────────────
   // X pixel position of the vertical cut line (null = hidden / out of range).
@@ -688,27 +732,69 @@ export function BacktestReplayChart({
     };
     container.addEventListener('contextmenu', handleContextMenu);
 
-    // Click-to-place LIMIT: left mousedown while placeOrderArmed. We use
-    // mousedown (not click) so we can call preventDefault/stopPropagation
-    // before lightweight-charts' own pointer-up click fires — otherwise
-    // subscribeClick would still fire for the same event.
-    const handlePlaceOrderMousedown = (e: MouseEvent) => {
+    // BUG A fix: Click-to-place LIMIT — plot-area guard + click-vs-drag semantics.
+    // We convert to a click (pointerdown+up with <4px movement) so that a
+    // price-scale drag while armed does NOT create a spurious pending order.
+    // Additionally we guard against axis regions: right price scale and bottom
+    // time scale are excluded so dragging them never triggers order placement.
+    let placeDownX = 0;
+    let placeDownY = 0;
+
+    const handlePlaceOrderPointerdown = (e: PointerEvent) => {
       if (e.button !== 0) return; // left button only
-      // Drawing tool active: let the DrawingLayer handle this pointer event.
       if (currentToolRef.current !== 'cursor') return;
       if (!placeOrderArmedRef.current || !onPlaceLimitAtPriceRef.current) return;
-      if (!seriesRef.current || !containerRef.current) return;
+      if (!seriesRef.current || !containerRef.current || !chartRef.current) return;
+
+      // Guard: reject clicks in the price-scale gutter or the time-scale bar.
+      const rect = containerRef.current.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      const priceScaleW = chartRef.current.priceScale('right').width();
+      const timeScaleH = chartRef.current.timeScale().height();
+      const isInPlotArea =
+        localX < rect.width - priceScaleW &&
+        localY < rect.height - timeScaleH;
+      if (!isInPlotArea) return;
+
+      // Record pointerdown position for click-vs-drag discrimination.
+      placeDownX = e.clientX;
+      placeDownY = e.clientY;
+    };
+
+    const handlePlaceOrderPointerup = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (currentToolRef.current !== 'cursor') return;
+      if (!placeOrderArmedRef.current || !onPlaceLimitAtPriceRef.current) return;
+      if (!seriesRef.current || !containerRef.current || !chartRef.current) return;
+
+      // Guard: reject releases in the axis regions.
+      const rect = containerRef.current.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      const priceScaleW = chartRef.current.priceScale('right').width();
+      const timeScaleH = chartRef.current.timeScale().height();
+      const isInPlotArea =
+        localX < rect.width - priceScaleW &&
+        localY < rect.height - timeScaleH;
+      if (!isInPlotArea) return;
+
+      // Click-vs-drag: only place if total pointer movement < 4px (not a drag).
+      const dx = e.clientX - placeDownX;
+      const dy = e.clientY - placeDownY;
+      if (Math.sqrt(dx * dx + dy * dy) >= 4) return;
+
       e.preventDefault();
       e.stopPropagation();
-      const rect = containerRef.current.getBoundingClientRect();
-      const localY = e.clientY - rect.top;
       const price = seriesRef.current.coordinateToPrice(localY);
       if (price == null || !Number.isFinite(price)) return;
       const currentPrice = bars[lastUpdatedIdxRef.current]?.close;
       if (currentPrice == null) return;
       onPlaceLimitAtPriceRef.current(Number(price), currentPrice);
     };
-    container.addEventListener('mousedown', handlePlaceOrderMousedown);
+
+    container.addEventListener('pointerdown', handlePlaceOrderPointerdown);
+    container.addEventListener('pointerup', handlePlaceOrderPointerup);
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -755,15 +841,90 @@ export function BacktestReplayChart({
 
     chart.timeScale().subscribeVisibleTimeRangeChange(updateCursorX);
 
+    // BUG A fix: rAF-based pill position sync during price-scale drags.
+    // subscribeVisibleTimeRangeChange does NOT fire during price-scale drags,
+    // so pills go stale. We start a rAF loop on any pointerdown in the container
+    // (captures phase) and stop it on window pointerup/cancel.
+    const syncPillPositions = () => {
+      const series = seriesRef.current;
+      if (!series) return;
+      for (const [id, el] of pillRefsMap.current) {
+        if (!el.isConnected) {
+          pillRefsMap.current.delete(id);
+          continue;
+        }
+        // data-price attribute is set by the pill div (added below in render).
+        const priceAttr = el.getAttribute('data-price');
+        if (!priceAttr) continue;
+        const price = parseFloat(priceAttr);
+        if (!Number.isFinite(price)) continue;
+        const y = series.priceToCoordinate(price);
+        if (y == null) continue;
+        el.style.top = `${y - 10}px`;
+      }
+    };
+
+    const startDragSyncLoop = () => {
+      priceScaleDragActiveRef.current = true;
+      const loop = () => {
+        if (!priceScaleDragActiveRef.current) return;
+        syncPillPositions();
+        priceScaleDragRafRef.current = requestAnimationFrame(loop);
+      };
+      priceScaleDragRafRef.current = requestAnimationFrame(loop);
+    };
+
+    const stopDragSyncLoop = () => {
+      priceScaleDragActiveRef.current = false;
+      if (priceScaleDragRafRef.current) {
+        cancelAnimationFrame(priceScaleDragRafRef.current);
+        priceScaleDragRafRef.current = 0;
+      }
+    };
+
+    // Run briefly after a wheel event too (handles zoom which may not trigger
+    // visibleTimeRangeChange synchronously for price-scale zoom).
+    let wheelSyncTimer = 0;
+    const handleWheelSync = () => {
+      syncPillPositions();
+      if (wheelSyncTimer) clearTimeout(wheelSyncTimer);
+      wheelSyncTimer = window.setTimeout(() => {
+        wheelSyncTimer = 0;
+        syncPillPositions();
+      }, 320);
+    };
+
+    // Capture-phase pointerdown starts the sync loop (covers price-scale gutter too).
+    container.addEventListener('pointerdown', startDragSyncLoop, { capture: true });
+    container.addEventListener('wheel', handleWheelSync, { passive: true });
+
+    const handleWindowPointerupForSync = () => stopDragSyncLoop();
+    window.addEventListener('pointerup', handleWindowPointerupForSync);
+    window.addEventListener('pointercancel', handleWindowPointerupForSync);
+
+    // BT_DEBUG (temporary — strip before merge)
+    if (window.__BT_DEBUG) {
+      window.__BT_DEBUG.chartMounts += 1;
+      window.__BT_DEBUG.positionLineCount = () => positionLinesRef.current.size;
+    }
+    // END BT_DEBUG
+
     return () => {
       cancelled = true;
       if (coalesceRaf) cancelAnimationFrame(coalesceRaf);
+      stopDragSyncLoop();
+      if (wheelSyncTimer) clearTimeout(wheelSyncTimer);
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
-      container.removeEventListener('mousedown', handlePlaceOrderMousedown);
+      container.removeEventListener('pointerdown', handlePlaceOrderPointerdown);
+      container.removeEventListener('pointerup', handlePlaceOrderPointerup);
       container.removeEventListener('mouseleave', handleMouseLeave);
       container.removeEventListener('mousemove', handleAxisCursor);
       container.removeEventListener('mouseleave', handleAxisLeave);
+      container.removeEventListener('pointerdown', startDragSyncLoop, { capture: true });
+      container.removeEventListener('wheel', handleWheelSync);
+      window.removeEventListener('pointerup', handleWindowPointerupForSync);
+      window.removeEventListener('pointercancel', handleWindowPointerupForSync);
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.timeScale().unsubscribeVisibleTimeRangeChange(updateCursorX);
       if (jumpTimerRef.current !== null) {
@@ -771,6 +932,11 @@ export function BacktestReplayChart({
         jumpTimerRef.current = null;
       }
       priceLinesRef.current.clear();
+      // Clean up position lines on unmount.
+      for (const line of positionLinesRef.current.values()) {
+        try { series.removePriceLine(line); } catch { /* already removed */ }
+      }
+      positionLinesRef.current.clear();
       // Destroy the drawings controller (unsubscribes + detaches all primitives).
       drawingControllerRef.current?.destroy();
       drawingControllerRef.current = null;
@@ -907,6 +1073,9 @@ export function BacktestReplayChart({
           color,
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
+          // lineVisible:false — the HTML overlay draws the half-width dashed line;
+          // the native line is hidden but its axis label is preserved.
+          lineVisible: false,
           axisLabelVisible: true,
           title: '',
         });
@@ -914,6 +1083,109 @@ export function BacktestReplayChart({
       }
     }
   }, [pendingOrders]);
+
+  // ─── BUG B fix: native price lines for active position (entry/SL/TP) ─────
+  // Creates/updates/removes IPriceLine objects on the candlestick series so the
+  // entry, SL, and TP levels are always visible with axis labels regardless of
+  // whether the HTML overlay has mounted. This is the single visual source of
+  // truth for these lines; the OrderLinesOverlay HTML overlay provides drag
+  // handles and hover labels on top, but its always-visible line divs are now
+  // redundant for these three levels (they will remain as drag-handle hit zones).
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    const existing = positionLinesRef.current;
+
+    const ENTRY_COLOR = '#C9A646'; // brand gold — matches THEME-adjacent value
+    const SL_COLOR    = '#ef4444'; // red — matches OrderLinesOverlay COLOR.sl
+    const TP_COLOR    = '#22c55e'; // green — matches OrderLinesOverlay COLOR.tp
+
+    const desired = new Map<string, { price: number; color: string; title: string; style: number }>();
+
+    if (activePosition) {
+      // Entry line: title says "Avg Entry" when scale-ins happened.
+      const hasScaleIns =
+        (activePosition.fills ?? []).filter((f) => f.kind === 'entry').length > 1;
+      desired.set('pos_entry', {
+        price: activePosition.entryPrice,
+        color: ENTRY_COLOR,
+        title: hasScaleIns ? 'Avg Entry' : 'Entry',
+        style: LineStyle.Solid,
+      });
+
+      if (activePosition.stopLoss != null) {
+        desired.set('pos_sl', {
+          price: activePosition.stopLoss,
+          color: SL_COLOR,
+          title: 'SL',
+          style: LineStyle.Solid,
+        });
+      }
+
+      // Single TP (only when no multi-leg schedule).
+      const hasMultiLeg = (activePosition.takeProfits ?? []).length > 0;
+      if (!hasMultiLeg && activePosition.takeProfit != null) {
+        desired.set('pos_tp', {
+          price: activePosition.takeProfit,
+          color: TP_COLOR,
+          title: 'TP',
+          style: LineStyle.Solid,
+        });
+      }
+
+      // Multi-leg TP lines.
+      if (hasMultiLeg) {
+        (activePosition.takeProfits ?? []).forEach((leg, idx) => {
+          desired.set(`pos_tp_leg_${leg.id}`, {
+            price: leg.price,
+            color: leg.filled ? 'rgba(34,197,94,0.35)' : TP_COLOR,
+            title: `TP${idx + 1}`,
+            style: LineStyle.Solid,
+          });
+        });
+      }
+    }
+
+    // Remove lines no longer needed.
+    for (const [key, line] of existing) {
+      if (!desired.has(key)) {
+        try { series.removePriceLine(line); } catch { /* series may be gone */ }
+        existing.delete(key);
+      }
+    }
+
+    // Add or update desired lines.
+    for (const [key, opts] of desired) {
+      const cached = existing.get(key);
+      if (cached) {
+        cached.applyOptions({
+          price: opts.price,
+          color: opts.color,
+          title: opts.title,
+          lineStyle: opts.style,
+        });
+      } else {
+        const line = series.createPriceLine({
+          price: opts.price,
+          color: opts.color,
+          lineWidth: 2,
+          lineStyle: opts.style,
+          // lineVisible:false — the HTML overlay (OrderLinesOverlay) draws the
+          // half-width line; native line is hidden but axis label is preserved.
+          lineVisible: false,
+          axisLabelVisible: true,
+          title: opts.title,
+        });
+        existing.set(key, line);
+      }
+    }
+
+    // BT_DEBUG (temporary — strip before merge)
+    if (window.__BT_DEBUG) {
+      window.__BT_DEBUG.positionLineCount = () => positionLinesRef.current.size;
+    }
+    // END BT_DEBUG
+  }, [activePosition]);
 
   // ─── Replay cursor X: recompute on every cursor/bar advance ─
   useEffect(() => {
@@ -1027,12 +1299,16 @@ export function BacktestReplayChart({
             Each pill shows the order label text with a hover-only ✕ cancel
             button on the LEFT side. The outer container is pointer-events-none
             so it never blocks chart pan/zoom; only the pill itself (and the ✕
-            button inside it on hover) gets pointer-events. Re-evaluates on
-            overlayTick so pills stay glued after pan / zoom / resize. ── */}
+            button inside it on hover) gets pointer-events.
+            BUG A fix: removed key={overlayTick} from the outer container — that
+            was remounting all pills on every pan/zoom, killing in-flight pointer
+            captures. Pills are now keyed only by o.id (React diffing is stable).
+            Position sync during price-scale drags is handled imperatively by the
+            rAF loop (syncPillPositions) via pillRefsMap. overlayTick still
+            triggers a React re-render for the initial Y calculation on pan/zoom,
+            but the rAF loop keeps positions fresh BETWEEN renders. ── */}
         {onCancelPending && seriesRef.current && chartRef.current && pendingOrders.length > 0 && (
-          // key={overlayTick} forces React to re-evaluate coordinate math on
-          // every pan / zoom / resize — same pattern used by DrawingLayer above.
-          <div key={overlayTick} className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+          <div className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
             {pendingOrders.map((o) => {
               const y = seriesRef.current!.priceToCoordinate(o.triggerPrice);
               const containerHeight = containerRef.current?.clientHeight ?? 0;
@@ -1043,6 +1319,18 @@ export function BacktestReplayChart({
               return (
                 <div
                   key={o.id}
+                  // BUG A fix: callback ref registers this pill's DOM element in
+                  // pillRefsMap so the rAF sync loop can imperatively reposition it
+                  // during price-scale drags without triggering React re-renders.
+                  ref={(el) => {
+                    if (el) {
+                      pillRefsMap.current.set(o.id, el);
+                    } else {
+                      pillRefsMap.current.delete(o.id);
+                    }
+                  }}
+                  data-bt-pill
+                  data-price={o.triggerPrice}
                   className="group pointer-events-auto absolute flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow cursor-grab active:cursor-grabbing"
                   style={{
                     top: y - 10,
@@ -1059,12 +1347,18 @@ export function BacktestReplayChart({
                     e.preventDefault();
                     e.stopPropagation();
                     const pillEl = e.currentTarget;
+                    // Guard: reject if element is no longer connected.
+                    if (!pillEl.isConnected) return;
                     pillEl.setPointerCapture(e.pointerId);
                     // Store start state in closure-local refs so we can update
                     // position without React state (avoids a re-render loop).
                     let latestPrice = o.triggerPrice;
 
                     const handleMove = (ev: PointerEvent) => {
+                      if (!pillEl.isConnected) {
+                        cleanup();
+                        return;
+                      }
                       if (!seriesRef.current || !containerRef.current) return;
                       const rect = containerRef.current.getBoundingClientRect();
                       const localY = ev.clientY - rect.top;
@@ -1073,19 +1367,18 @@ export function BacktestReplayChart({
                       latestPrice = raw;
                       // Visual feedback: move the pill to follow the pointer.
                       pillEl.style.top = `${localY - 10}px`;
+                      // Keep data-price in sync for the rAF loop.
+                      pillEl.setAttribute('data-price', String(latestPrice));
                     };
 
                     const cleanup = () => {
                       pillEl.removeEventListener('pointermove', handleMove);
                       pillEl.removeEventListener('pointerup', handleUp);
                       pillEl.removeEventListener('pointercancel', handleCancel);
-                      // Reset visual position — overlayTick re-render will
-                      // recompute the correct pixel coord from the new price.
-                      pillEl.style.top = '';
                     };
 
                     const handleUp = (ev: PointerEvent) => {
-                      pillEl.releasePointerCapture(ev.pointerId);
+                      if (pillEl.isConnected) pillEl.releasePointerCapture(ev.pointerId);
                       cleanup();
                       onUpdatePendingPrice(o.id, latestPrice);
                     };
@@ -1130,10 +1423,13 @@ export function BacktestReplayChart({
             Active only in cursor mode (draggingEnabled=false when a draw tool
             is selected) so drawing creation is never intercepted.
             Only mounted when at least one callback is wired so legacy callers
-            that don't pass onUpdateSL/TP are unaffected. ── */}
+            that don't pass onUpdateSL/TP are unaffected.
+            BUG A fix: removed key={overlayTick} — that was remounting the overlay
+            on every pan/zoom, killing any in-flight SL/TP drag (pointer capture
+            was lost on remount). The overlay now re-renders via viewVersion prop
+            which it handles internally via forceRepaint. ── */}
         {(onUpdateSL || onUpdateTP || onUpdatePendingPrice) && seriesRef.current && containerRef.current && (
           <OrderLinesOverlay
-            key={overlayTick}
             series={seriesRef.current}
             container={containerRef.current}
             activePosition={activePosition}

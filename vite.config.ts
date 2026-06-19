@@ -22,7 +22,12 @@ import { resolve as pathResolve } from 'node:path'
 // instead. Production-only — local `vite dev` may legitimately use the
 // `.env.local` defaults.
 function assertCriticalEnvAtBuild(opts: {
-  required: Array<{ name: string; placeholder: string }>
+  required: Array<{
+    name: string
+    placeholder: string
+    /** Return an error string if the value is invalid, or null if it is OK. */
+    validate?: (value: string) => string | null
+  }>
   env: Record<string, string>
 }): Plugin {
   return {
@@ -30,7 +35,35 @@ function assertCriticalEnvAtBuild(opts: {
     apply: 'build',
     buildStart() {
       const failures: string[] = []
-      for (const { name, placeholder } of opts.required) {
+
+      // ── Sweep 1: check all VITE_* variables for embedded Supabase secret keys.
+      // This catches the exact incident that triggered this guard: a Cloudflare
+      // Pages Preview env had VITE_SUPABASE_ANON_KEY set to an `sb_secret_*`
+      // (server-side secret) key. Vite baked it into the public JS bundle,
+      // exposing a privileged credential to every browser that loaded the page.
+      // We check ALL VITE_ vars — not just the Supabase one — so the same
+      // mistake cannot sneak in through any other variable name.
+      // IMPORTANT: we log only the VARIABLE NAME, never the value.
+      const allEnvKeys = new Set([
+        ...Object.keys(process.env),
+        ...Object.keys(opts.env),
+      ])
+      for (const key of allEnvKeys) {
+        if (!key.startsWith('VITE_')) continue
+        const val = process.env[key] ?? opts.env[key] ?? ''
+        if (val.startsWith('sb_secret_')) {
+          failures.push(
+            `  • SECURITY: ${key} contains a Supabase SECRET key (sb_secret_*).` +
+            ` Secret keys are server-side only and MUST NEVER be placed in any` +
+            ` VITE_* variable — they get baked into the public JS bundle and` +
+            ` are readable by anyone. Build blocked. If this key was ever` +
+            ` deployed, rotate it immediately in the Supabase dashboard.`
+          )
+        }
+      }
+
+      // ── Sweep 2: check each required variable for presence and validity.
+      for (const { name, placeholder, validate } of opts.required) {
         const value = process.env[name] ?? opts.env[name]
         if (!value || value.trim().length === 0) {
           failures.push(`  • ${name} is missing (not set in process.env or .env files)`)
@@ -38,8 +71,16 @@ function assertCriticalEnvAtBuild(opts: {
         }
         if (value === placeholder) {
           failures.push(`  • ${name} is the placeholder value (${placeholder}) — replace with the real value`)
+          continue
+        }
+        if (validate) {
+          const msg = validate(value)
+          if (msg !== null) {
+            failures.push(`  • ${name}: ${msg}`)
+          }
         }
       }
+
       if (failures.length > 0) {
         this.error(
           [
@@ -137,7 +178,23 @@ export default defineConfig(({ mode }) => {
       env,
       required: [
         { name: 'VITE_SUPABASE_URL', placeholder: 'https://your-project.supabase.co' },
-        { name: 'VITE_SUPABASE_ANON_KEY', placeholder: 'your-anon-key' },
+        {
+          name: 'VITE_SUPABASE_ANON_KEY',
+          placeholder: 'your-anon-key',
+          validate: (value: string) => {
+            if (!value.startsWith('sb_publishable_')) {
+              return (
+                'The client anon key must be a Supabase PUBLISHABLE key' +
+                ' (starts with sb_publishable_...). ' +
+                'sb_secret_* keys are server-side only and MUST NEVER be' +
+                ' placed in any VITE_* variable — they get baked into the' +
+                ' public JS bundle and are readable by anyone. Rotate the' +
+                ' secret key immediately if it was ever deployed here.'
+              )
+            }
+            return null
+          },
+        },
       ],
     }),
     assertLazyImportsHaveDefault({ entry: appEntry, srcRoot }),

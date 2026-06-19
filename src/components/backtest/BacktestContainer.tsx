@@ -24,6 +24,10 @@ import {
 } from 'lucide-react';
 import type { PlaybackSpeed, Timeframe } from '../../types';
 
+/** Prevent mouse-wheel from incrementing/decrementing a focused number input. */
+const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) =>
+  (e.target as HTMLInputElement).blur();
+
 export const BacktestContainer: React.FC = () => {
   const {
     symbol,
@@ -312,6 +316,7 @@ export const BacktestContainer: React.FC = () => {
                 type="number"
                 value={positionSize}
                 onChange={(e) => setPositionSize(Number(e.target.value))}
+                onWheel={blurOnWheel}
                 className="w-full bg-[#1E222D] border border-[#2B2B43] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646]"
                 min="0.01"
                 step="0.1"
@@ -327,6 +332,7 @@ export const BacktestContainer: React.FC = () => {
                     type="number"
                     value={slInput}
                     onChange={(e) => setSlInput(e.target.value)}
+                    onWheel={blurOnWheel}
                     placeholder="Set SL"
                     className="flex-1 bg-[#1E222D] border border-[#2B2B43] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#ef5350]"
                     step="0.01"
@@ -349,6 +355,7 @@ export const BacktestContainer: React.FC = () => {
                     type="number"
                     value={tpInput}
                     onChange={(e) => setTpInput(e.target.value)}
+                    onWheel={blurOnWheel}
                     placeholder="Set TP"
                     className="flex-1 bg-[#1E222D] border border-[#2B2B43] rounded px-3 py-2 text-sm focus:outline-none focus:border-[#26a69a]"
                     step="0.01"

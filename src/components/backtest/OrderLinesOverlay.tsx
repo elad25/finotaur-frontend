@@ -78,10 +78,11 @@ export interface OrderLinesOverlayProps {
 // ─── Visual constants ─────────────────────────────────────────────
 
 const COLOR = {
-  entry: '#C9A646',   // brand gold — entry line (non-draggable)
-  sl: '#ef4444',      // red
-  tp: '#22c55e',      // green
-  pending: '#f59e0b', // amber
+  entry: '#C9A646',         // brand gold — entry line (non-draggable)
+  sl: '#ef4444',            // red
+  tp: '#22c55e',            // green
+  pendingLong: '#22c55e',   // green for BUY/LONG pending orders
+  pendingShort: '#ef4444',  // red for SELL/SHORT pending orders
   previewLine: 'rgba(255,255,255,0.30)',
 } as const;
 
@@ -103,15 +104,18 @@ interface OrderLineProps {
   color: string;
   draggable: boolean;
   isPreview?: boolean;
+  /** When true the visible line is rendered dashed (pending orders). */
+  dashed?: boolean;
   onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
 }
 
-function OrderLine({ y, label, color, draggable, isPreview = false, onPointerDown }: OrderLineProps) {
+function OrderLine({ y, label, color, draggable, isPreview = false, dashed = false, onPointerDown }: OrderLineProps) {
   return (
     <div
       style={{
         position: 'absolute',
         top: y - HIT_ZONE_PX,
+        // Hit zone spans full width so drag captures don't miss on fast moves.
         left: 0,
         right: 0,
         height: HIT_ZONE_PX * 2,
@@ -122,21 +126,24 @@ function OrderLine({ y, label, color, draggable, isPreview = false, onPointerDow
       }}
       onPointerDown={draggable ? onPointerDown : undefined}
     >
-      {/* Visible line */}
+      {/* Visible line — right half only (TradingView style: left:50%, right:0).
+          Native IPriceLine axis labels are kept via lineVisible:false on the
+          series price-lines; this HTML line provides the visible half-width line. */}
       <div
         style={{
           position: 'absolute',
           top: HIT_ZONE_PX - 1,
-          left: 0,
+          left: '50%',
           right: 0,
           height: 2,
-          backgroundColor: isPreview ? COLOR.previewLine : color,
+          backgroundColor: isPreview || dashed ? 'transparent' : color,
           opacity: isPreview ? 0.6 : 1,
-          borderTop: isPreview ? `1px dashed ${color}` : 'none',
+          // Dashed lines (pending orders) and preview use a CSS border trick.
+          borderTop: (dashed || isPreview) ? `2px dashed ${isPreview ? COLOR.previewLine : color}` : 'none',
           pointerEvents: 'none',
         }}
       />
-      {/* Price label */}
+      {/* Price label — positioned just left of the right axis area */}
       <div
         style={{
           position: 'absolute',
@@ -352,7 +359,7 @@ export function OrderLinesOverlay({
     }
   }
 
-  // Pending order trigger lines
+  // Pending order trigger lines — dashed, colored by side (BUY=green, SELL=red)
   for (const order of pendingOrders) {
     const isDraggingThis = drag?.kind === 'pending' && drag.pendingId === order.id;
     const pendingY = isDraggingThis
@@ -361,13 +368,15 @@ export function OrderLinesOverlay({
     const pendingPrice = isDraggingThis ? drag.previewPrice : order.triggerPrice;
     if (pendingY == null || pendingY <= 0) continue;
     const sideLabel = order.side === 'LONG' ? 'BUY' : 'SELL';
+    const pendingColor = order.side === 'LONG' ? COLOR.pendingLong : COLOR.pendingShort;
     lines.push(
       <OrderLine
         key={`pending-${order.id}`}
         y={pendingY}
         label={`${sideLabel} ${order.type} ${pendingPrice.toFixed(2)}`}
-        color={COLOR.pending}
+        color={pendingColor}
         draggable={draggingEnabled}
+        dashed={true}
         isPreview={isDraggingThis}
         onPointerDown={(e) => startDrag(e, 'pending', order.triggerPrice, order.id)}
       />,

@@ -5,7 +5,11 @@
 // (and, when a date→index map is available, a specific date). Pure UI; the
 // parent wires the jump into the replay engine via onGoToIndex.
 
-import { useState } from 'react';
+import React, { useState } from 'react';
+
+/** Prevent mouse-wheel from incrementing/decrementing a focused number input. */
+const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) =>
+  (e.target as HTMLInputElement).blur();
 import { Crosshair } from 'lucide-react';
 import {
   Popover,
@@ -66,6 +70,7 @@ export function GoToControl({
             max={totalCandles}
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onWheel={blurOnWheel}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();

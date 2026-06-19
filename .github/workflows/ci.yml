@@ -23,7 +23,8 @@ jobs:
         run: npm run build
         env:
           VITE_SUPABASE_URL: https://example.supabase.co
-          VITE_SUPABASE_ANON_KEY: dummy_key_for_ci_build_only
+          # Must pass the assert-critical-env key-class guard (sb_publishable_ prefix)
+          VITE_SUPABASE_ANON_KEY: sb_publishable_dummy_key_for_ci_build_only
 
   typecheck:
     name: typecheck (tsc)
