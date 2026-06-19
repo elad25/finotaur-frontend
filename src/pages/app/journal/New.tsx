@@ -1559,10 +1559,16 @@ if (hasResult && directRiskUSD > 0) {
           : st.exitPrice;
         
         // Calculate risk in USD (for actual_r calculation)
-        const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
-        const calculatedRiskUSD = riskPerPoint * st.quantity * finalMultiplier + st.fees;
-        
-        // actual_r: Contract R-multiple = PnL / Risk
+        // SIGNED risk: LONG = entry - stop; SHORT = stop - entry
+        // When signedRisk <= 0, stop is on the profit side → risk-free, actual_r stays null
+        const signedRisk = st.side === 'LONG'
+          ? st.entryPrice - st.stopPrice
+          : st.stopPrice - st.entryPrice;
+        const calculatedRiskUSD = signedRisk > 0
+          ? signedRisk * st.quantity * finalMultiplier + st.fees
+          : 0;
+
+        // actual_r: Contract R-multiple = PnL / Risk (null when risk-free)
         let actual_r: number | null = null;
         if (hasExitPrice && calculatedRiskUSD > 0) {
           actual_r = calculatedPnL / calculatedRiskUSD;
@@ -2911,6 +2917,31 @@ if (hasResult && directRiskUSD > 0) {
                       />
                     </div>
                   </div>
+
+                  {/* 🔥 RISK-FREE BANNER — shown when stop is on the profit side */}
+                  {(() => {
+                    if (!st.entryPrice || !st.stopPrice || !st.quantity) return null;
+                    const signedRisk = st.side === 'LONG'
+                      ? st.entryPrice - st.stopPrice
+                      : st.stopPrice - st.entryPrice;
+                    if (signedRisk >= 0) return null; // normal risk-defined
+                    // Stop is in profit territory → risk-free
+                    const effectiveMultiplier = normalizeAssetClass(st.assetClass) === 'options'
+                      ? 100
+                      : getAssetMultiplier(st.symbol);
+                    const lockedProfit = Math.abs(signedRisk) * st.quantity * effectiveMultiplier - st.fees;
+                    return (
+                      <div className="mt-4 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span className="text-sm font-semibold text-emerald-400">Risk-Free — Locked Profit {lockedProfit >= 0 ? `$${formatNumber(lockedProfit, 2)}` : '—'}</span>
+                        </div>
+                        <p className="text-xs text-emerald-300/70 ml-6">
+                          Your stop is in profit territory. This trade carries no downside risk.
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* 🔥 USER'S PERSONAL R DISPLAY - Trade Summary Mode */}
                   {oneRValue > 0 && userRiskR !== undefined && (

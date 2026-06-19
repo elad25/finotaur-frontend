@@ -87,6 +87,12 @@ interface Trade {
   quote_rate?: number;
   pip_size?: number;
   lot_size?: number;
+  // R-from-frozen-stop fields (populated by DB trigger)
+  r_stop_price?: number | null;
+  r_locked_at?: string | null;
+  r_stop_set_at?: string | null;
+  risk_class?: 'risk_defined' | 'risk_free' | 'no_stop' | null;
+  locked_profit_usd?: number | null;
 }
 
 // Expiration-outcome values for single-leg options. Empty string = "normal
@@ -557,6 +563,13 @@ export default function JournalTradeDetail() {
                 {trade.outcome}
               </span>
             )}
+
+            {/* Risk-Free Badge */}
+            {trade.risk_class === 'risk_free' && (
+              <span className="px-3 py-1 rounded-lg text-sm font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                Risk-Free
+              </span>
+            )}
           </div>
           <p className="text-zinc-400 mt-1">{formatTradeDateFull(trade.open_at, timezone)}</p>
         </div>
@@ -605,7 +618,11 @@ export default function JournalTradeDetail() {
           durationStr = days > 0 ? `${days}d ${hours % 24}h` : `${hours}h`;
         }
 
-        const rValue = trade.actual_user_r != null ? trade.actual_user_r : trade.actual_r;
+        const isRiskFree = trade.risk_class === 'risk_free';
+        const rValue = isRiskFree ? null : (trade.actual_user_r != null ? trade.actual_user_r : trade.actual_r);
+
+        // Format locked profit using same currency style as the rest of the panel
+        const fmtUSD = (v: number) => `$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
         // Build rows — only include rows that have a real value
         const rows: StatRow[] = [
@@ -614,8 +631,15 @@ export default function JournalTradeDetail() {
           ...(trade.outcome && trade.outcome !== 'OPEN'
             ? [{ label: 'Outcome', value: trade.outcome, tone: (trade.outcome === 'WIN' ? 'positive' : trade.outcome === 'LOSS' ? 'negative' : 'muted') as StatRow['tone'] }]
             : []),
-          ...(rValue != null
-            ? [{ label: 'R-Multiple', value: `${rValue > 0 ? '+' : ''}${rValue.toFixed(2)}R`, tone: (rValue > 0 ? 'positive' : 'negative') as StatRow['tone'] }]
+          // R-Multiple: show "Risk-Free" label when risk_class === 'risk_free'; otherwise show the number
+          ...(isRiskFree
+            ? [{ label: 'R-Multiple', value: 'Risk-Free', tone: 'positive' as StatRow['tone'] }]
+            : rValue != null
+              ? [{ label: 'R-Multiple', value: `${rValue > 0 ? '+' : ''}${rValue.toFixed(2)}R`, tone: (rValue > 0 ? 'positive' : 'negative') as StatRow['tone'] }]
+              : []),
+          // Locked Profit: only for risk-free trades
+          ...(isRiskFree && trade.locked_profit_usd != null
+            ? [{ label: 'Locked Profit', value: fmtUSD(trade.locked_profit_usd), tone: 'positive' as StatRow['tone'] }]
             : []),
           ...(trade.rr
             ? [{ label: 'Risk:Reward', value: `1:${trade.rr.toFixed(2)}` }]

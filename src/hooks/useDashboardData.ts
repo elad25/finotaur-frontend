@@ -47,6 +47,12 @@ export interface Trade {
   session?: TradingSession;
   input_mode?: 'summary' | 'risk-only';
   tags?: string[] | null;
+  // R-from-frozen-stop fields (populated by DB trigger)
+  r_stop_price?: number | null;
+  r_locked_at?: string | null;
+  r_stop_set_at?: string | null;
+  risk_class?: 'risk_defined' | 'risk_free' | 'no_stop' | null;
+  locked_profit_usd?: number | null;
 }
 
 export interface DashboardStats {

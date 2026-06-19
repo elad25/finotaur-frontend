@@ -10,7 +10,7 @@ export interface TradeMetrics {
   rewardUSD?: number;
   riskPts?: number;
   rewardPts?: number;
-  actual_r?: number;
+  actual_r?: number | null;
 }
 
 export interface Trade {
@@ -50,6 +50,12 @@ export interface Trade {
   expiration_date?: string;
   option_outcome?: string;
   underlying_symbol?: string;
+  // R-from-frozen-stop fields (populated by DB trigger)
+  r_stop_price?: number | null;
+  r_locked_at?: string | null;
+  r_stop_set_at?: string | null;
+  risk_class?: 'risk_defined' | 'risk_free' | 'no_stop' | null;
+  locked_profit_usd?: number | null;
 }
 
 // ================================================
@@ -125,13 +131,14 @@ const getAssetMultiplier = (symbol: string): number => {
 /**
  * Calculate P&L and outcome for a trade
  * 🔥 FIXED: Proper actual_r calculation with multiplier consideration
+ * 🔥 UPDATED: Signed risk — stop on profit side → risk_free, actual_r = null
  */
 function calculateTradeOutcome(trade: Partial<Trade>) {
   if (!trade.exit_price) {
     return {
       outcome: 'OPEN' as const,
       pnl: 0,
-      actual_r: 0
+      actual_r: null as number | null
     };
   }
 
@@ -147,7 +154,7 @@ function calculateTradeOutcome(trade: Partial<Trade>) {
   const multiplier = getAssetMultiplier(trade.symbol || '');
 
   // Calculate P&L
-  const priceDiff = side === 'LONG' 
+  const priceDiff = side === 'LONG'
     ? exit - entry
     : entry - exit;
 
@@ -164,18 +171,22 @@ function calculateTradeOutcome(trade: Partial<Trade>) {
     outcome = 'BE';
   }
 
-  // 🔥 CRITICAL FIX: Calculate actual_r with proper multiplier
-  let actual_r = 0;
+  // 🔥 SIGNED RISK: LONG risk = entry - stop; SHORT risk = stop - entry
+  // When signedRisk <= 0, stop is on the PROFIT side → risk-free trade, actual_r = null
+  let actual_r: number | null = null;
   let calculatedRiskUSD = 0;
-  
+
   if (entry && stop && quantity) {
-    // Recalculate riskUSD with proper multiplier
-    const riskPerPoint = Math.abs(entry - stop);
-    calculatedRiskUSD = riskPerPoint * quantity * multiplier + fees;
-    
-    if (calculatedRiskUSD > 0) {
-      actual_r = netPnL / calculatedRiskUSD;
+    const signedRisk = side === 'LONG' ? entry - stop : stop - entry;
+
+    if (signedRisk > 0) {
+      // Normal risk-defined trade
+      calculatedRiskUSD = signedRisk * quantity * multiplier + fees;
+      if (calculatedRiskUSD > 0) {
+        actual_r = netPnL / calculatedRiskUSD;
+      }
     }
+    // signedRisk <= 0 → risk-free (stop in profit) → actual_r stays null
   }
 
   console.log('💰 calculateTradeOutcome:', {
@@ -191,7 +202,7 @@ function calculateTradeOutcome(trade: Partial<Trade>) {
     fees,
     netPnL,
     riskUSD: calculatedRiskUSD,
-    actual_r: actual_r.toFixed(2) + 'R'
+    actual_r: actual_r != null ? actual_r.toFixed(2) + 'R' : 'risk-free'
   });
 
   return {
@@ -265,7 +276,7 @@ export async function createTrade(payload: Partial<Trade>) {
     const { outcome, pnl, actual_r } = calculateTradeOutcome(payload);
 
     const metrics = payload.metrics || {};
-    if (payload.exit_price && actual_r !== 0) {
+    if (payload.exit_price && actual_r != null) {
       metrics.actual_r = actual_r;
     }
 
@@ -387,11 +398,12 @@ const processedData = (data || []).map(trade => {
       processedTrade.pnl = pnl;
     }
     
-    // 🔥 ALWAYS ensure actual_r is calculated and available
+    // 🔥 ALWAYS ensure actual_r is calculated and available (may be null for risk-free)
     processedTrade.metrics = {
       ...trade.metrics,
       actual_r
     };
+
   }
   
   return processedTrade;
@@ -453,7 +465,7 @@ export async function updateTrade(id: string, payload: Partial<Trade>) {
         symbol: mergedTrade.symbol,
         outcome,
         pnl,
-        actual_r: actual_r.toFixed(2) + 'R'
+        actual_r: actual_r != null ? actual_r.toFixed(2) + 'R' : 'risk-free'
       });
     }
 

@@ -74,7 +74,11 @@ export default function DayTradesTable({ trades, isLoading }: DayTradesTableProp
                   <Change value={pnl} format="currency" decimals={2} />
                 </td>
                 <td className="px-3 py-2.5 text-ink-secondary">
-                  {rMultiple !== undefined && rMultiple !== null
+                  {t.risk_class === 'risk_free' ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      Risk-Free
+                    </span>
+                  ) : rMultiple !== undefined && rMultiple !== null
                     ? `${rMultiple >= 0 ? "+" : ""}${rMultiple.toFixed(2)}R`
                     : "—"}
                 </td>
