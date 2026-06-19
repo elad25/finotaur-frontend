@@ -36,7 +36,6 @@ export function useStrategiesOptimized(userId?: string) {
         checklist: row.checklist ?? null,
         avgRRGoal: row.avg_rr_goal ?? null,
         confirmationSignals: row.confirmation_signals ?? null,
-        psychologicalNotes: row.psychological_notes ?? null,
         expectedWinRate: row.expected_win_rate ?? null,
         defaultStopLoss: row.default_stop_loss ?? null,
         defaultTakeProfit: row.default_take_profit ?? null,
@@ -44,6 +43,11 @@ export function useStrategiesOptimized(userId?: string) {
         components: (row.components ?? null) as StrategyComponent[] | null,
         planned1rUsd: row.planned_1r_usd ?? null,
         standardQuantity: row.standard_quantity ?? null,
+        // Percent-of-equity risk fields.
+        planned1rPercent: row.planned_1r_percent ?? null,
+        planned1rMode: (row.planned_1r_mode ?? 'fixed') as 'fixed' | 'percent',
+        // camelCase alias for positionSizingRule so the edit modal restores the toggle correctly.
+        positionSizingRule: row.position_sizing_rule ?? null,
       }));
     },
     enabled: !!userId,
@@ -129,8 +133,8 @@ export function useCreateStrategyOptimized() {
           position_sizing_rule: strategy.positionSizingRule || null,
           expected_win_rate: strategy.expectedWinRate || null,
           avg_rr_goal: strategy.avgRRGoal || null,
-          psychological_notes: strategy.psychologicalNotes || null,
-          typical_session: strategy.typicalSession || null,
+          planned_1r_percent: strategy.planned1rPercent ?? null,
+          planned_1r_mode: strategy.planned1rMode ?? 'fixed',
         }])
         .select()
         .single();
@@ -231,17 +235,31 @@ export function useUpdateStrategyOptimized() {
 export function useStrategyRConfigs(userId?: string) {
   return useQuery({
     queryKey: ['strategyRConfigs', userId ?? 'me'],
-    queryFn: async (): Promise<Map<string, { planned_1r_usd: number | null; standard_quantity: number | null; default_stop_loss: number | null }>> => {
+    queryFn: async (): Promise<Map<string, {
+      planned_1r_usd: number | null;
+      standard_quantity: number | null;
+      default_stop_loss: number | null;
+      planned_1r_mode: 'fixed' | 'percent' | null;
+      planned_1r_percent: number | null;
+    }>> => {
       const { data, error } = await supabase
         .from('strategies')
-        .select('id, planned_1r_usd, standard_quantity, default_stop_loss')
+        .select('id, planned_1r_usd, standard_quantity, default_stop_loss, planned_1r_mode, planned_1r_percent')
         .is('deleted_at', null);
       if (error) throw error;
-      const map = new Map<string, { planned_1r_usd: number | null; standard_quantity: number | null; default_stop_loss: number | null }>();
+      const map = new Map<string, {
+        planned_1r_usd: number | null;
+        standard_quantity: number | null;
+        default_stop_loss: number | null;
+        planned_1r_mode: 'fixed' | 'percent' | null;
+        planned_1r_percent: number | null;
+      }>();
       (data ?? []).forEach((r: any) => map.set(r.id, {
         planned_1r_usd: r.planned_1r_usd ?? null,
         standard_quantity: r.standard_quantity ?? null,
         default_stop_loss: r.default_stop_loss ?? null,
+        planned_1r_mode: (r.planned_1r_mode ?? 'fixed') as 'fixed' | 'percent',
+        planned_1r_percent: r.planned_1r_percent ?? null,
       }));
       return map;
     },

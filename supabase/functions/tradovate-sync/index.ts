@@ -343,6 +343,7 @@ async function processFill(
   base: string,
   accessToken: string,
   stopOrders: StopOrder[] = [],
+  accountEquityAtEntry: number | null = null,
 ): Promise<'inserted' | 'updated' | 'skipped' | 'error'> {
 
   const fillSide  = fill.action === 'Buy' ? 'LONG' : 'SHORT';
@@ -696,6 +697,11 @@ async function processFill(
         timestamp: fillAt,
         fill_id:   fill.id,
       }],
+      // Captured once per account per sync run via /cashBalance/getCashBalanceSnapshot.
+      // Enables "% of equity" risk strategies to compute dynamic 1R at trade open time.
+      // null when the snapshot fetch failed or account_id was unavailable — strategies
+      // must treat null as "unknown equity" and fall back gracefully.
+      account_equity_at_entry: accountEquityAtEntry ?? null,
     })
     .select('id')
     .single();
@@ -1226,18 +1232,18 @@ async function syncCredential(cred: {
 
     const portfolioId = portfolioMap.get(acctId) ?? null;
     const result = await processAccountFills({
-      connectionId:       cred.id,
-      userId:             cred.user_id,
-      accountIdNum:       acctId,
-      environment:        resolvedEnvironment,
+      connectionId:          cred.id,
+      userId:                cred.user_id,
+      accountIdNum:          acctId,
+      environment:           resolvedEnvironment,
       portfolioId,
       base,
       accessToken,
-      fills:              accountFills, // pre-sorted, pre-filtered
+      fills:                 accountFills, // pre-sorted, pre-filtered
       syncMode,
       syncStartedAt,
       attribution,
-      prevFillsProcessed: cursor.fills_processed,
+      prevFillsProcessed:    cursor.fills_processed,
       stopOrders,
     });
     legacyInserted += result.inserted;
@@ -1351,25 +1357,60 @@ async function syncCredential(cred: {
 //     stamp portfolio_id on each trade row — the RPC doesn't accept it)
 //   - record_sync_completion + scheduleRetry-on-errors
 async function processAccountFills(args: {
-  connectionId:       string;
-  userId:             string;
-  accountIdNum:       number;
-  environment:        'live' | 'demo';
-  portfolioId:        string | null;
-  base:               string;
-  accessToken:        string;
-  fills:              TradovateFill[];
-  syncMode:           string;
-  syncStartedAt:      Date;
-  attribution:        { userId: string; connectionId: string };
-  prevFillsProcessed: number;
-  stopOrders?:        StopOrder[];
+  connectionId:          string;
+  userId:                string;
+  accountIdNum:          number;
+  environment:           'live' | 'demo';
+  portfolioId:           string | null;
+  base:                  string;
+  accessToken:           string;
+  fills:                 TradovateFill[];
+  syncMode:              string;
+  syncStartedAt:         Date;
+  attribution:           { userId: string; connectionId: string };
+  prevFillsProcessed:    number;
+  stopOrders?:           StopOrder[];
 }): Promise<{ inserted: number; errors: number }> {
   const {
     connectionId, userId, accountIdNum, environment, portfolioId,
     base, accessToken, fills, syncMode, syncStartedAt, attribution,
     prevFillsProcessed, stopOrders = [],
   } = args;
+
+  // ─── Cash balance snapshot (once per account, using THIS account's own id) ──
+  // Fetched here so every account in a multi-account credential gets its OWN
+  // equity snapshot — not the primary credential account's balance (bug fix).
+  // Pattern mirrors /order/list fetch (plain fetch + Bearer token, non-critical).
+  // Any failure → null + warn + CONTINUE (must never break the sync).
+  let accountEquityAtEntry: number | null = null;
+  try {
+    const balanceRes = await fetch(
+      `${base}/cashBalance/getCashBalanceSnapshot?accountId=${accountIdNum}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (balanceRes.ok) {
+      const balanceBody = await balanceRes.json();
+      const n = Number(balanceBody?.amount);
+      accountEquityAtEntry = Number.isFinite(n) ? n : null;
+      if (accountEquityAtEntry === null) {
+        console.warn(
+          `[tradovate-sync] cash_balance_parse_failed: accountId=${accountIdNum} ` +
+          `connection=${connectionId} amount_type=${typeof balanceBody?.amount}`,
+        );
+      }
+    } else {
+      console.warn(
+        `[tradovate-sync] cash_balance_non_ok: accountId=${accountIdNum} ` +
+        `connection=${connectionId} status=${balanceRes.status}`,
+      );
+    }
+  } catch (balanceErr) {
+    console.warn(
+      `[tradovate-sync] cash_balance_fetch_error: accountId=${accountIdNum} ` +
+      `connection=${connectionId}`,
+      balanceErr,
+    );
+  }
 
   let inserted = 0;
   let errors   = 0;
@@ -1504,6 +1545,7 @@ async function processAccountFills(args: {
           contract.name, contract.fullPointValue,
           base, accessToken,
           stopOrders,
+          accountEquityAtEntry,
         );
 
         if (result === 'inserted' || result === 'updated') inserted++;

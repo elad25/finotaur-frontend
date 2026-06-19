@@ -6,6 +6,10 @@ export interface StrategyRConfig {
   planned_1r_usd?: number | null;
   standard_quantity?: number | null;
   default_stop_loss?: number | null;
+  /** 'fixed' = use planned_1r_usd; 'percent' = use planned_1r_percent × account_equity_at_entry */
+  planned_1r_mode?: 'fixed' | 'percent' | string | null;
+  /** Risk as a percent of account equity (e.g. 1 = 1%). Used when planned_1r_mode === 'percent'. */
+  planned_1r_percent?: number | null;
 }
 
 export interface TradeForR {
@@ -17,6 +21,8 @@ export interface TradeForR {
   pnl?: number | null;
   side?: string | null;
   planned_1r_usd?: number | null;
+  /** Account equity at trade entry — required for percent-of-equity 1R calculation. */
+  account_equity_at_entry?: number | null;
 }
 
 export interface Resolved1R {
@@ -31,6 +37,17 @@ export function resolvePlanned1R(
 ): Resolved1R {
   if (trade.planned_1r_usd != null && Number(trade.planned_1r_usd) > 0) {
     return { value: Number(trade.planned_1r_usd), source: 'trade' };
+  }
+  // Percent-of-equity branch: 1R($) = (percent / 100) * account_equity_at_entry
+  if (
+    strategy?.planned_1r_mode === 'percent' &&
+    strategy.planned_1r_percent != null &&
+    Number(strategy.planned_1r_percent) > 0 &&
+    trade.account_equity_at_entry != null &&
+    Number(trade.account_equity_at_entry) > 0
+  ) {
+    const value = (Number(strategy.planned_1r_percent) / 100) * Number(trade.account_equity_at_entry);
+    if (value > 0) return { value, source: 'strategy' };
   }
   if (strategy?.planned_1r_usd != null && Number(strategy.planned_1r_usd) > 0) {
     return { value: Number(strategy.planned_1r_usd), source: 'strategy' };
