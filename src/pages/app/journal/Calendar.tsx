@@ -12,7 +12,7 @@
  * ===============================================
  */
 
-import { useEffect, useState, useMemo, memo, useRef } from "react";
+import { useEffect, useState, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageTitle from "@/components/PageTitle";
 import { Button } from "@/components/ui/button";
@@ -53,8 +53,6 @@ import {
   Activity,
   ArrowUp,
   ArrowDown,
-  Layers,
-  ChevronDown
 } from "lucide-react";
 import { formatNumber } from "@/utils/smartCalc";
 import { toast } from "sonner";
@@ -63,10 +61,11 @@ import { toast } from "sonner";
 import { useTrades, Trade } from "@/hooks/useTradesData";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { usePortfolioContext } from "@/contexts/PortfolioContext";
-import { AccountSwitcher } from "@/components/AccountSwitcher";
+import { AccountFilterDropdown } from "@/components/journal/AccountFilterDropdown";
+import { useTraderMode } from "@/hooks/useTraderMode";
+import { normalizeTraderTrades } from "@/lib/journal/traderNormalization";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import { useTimezone } from '@/contexts/TimezoneContext';
-import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 
 import {
@@ -398,12 +397,26 @@ export default function JournalCalendar() {
   
   // 🔥 CRITICAL: Same hooks as MyTrades!
   const { id: userId, isImpersonating, isLoading: userLoading } = useEffectiveUser();
-  const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
+  const { effectivePortfolioId, activePortfolio, isTraderMode } = usePortfolioContext();
+  const { traderMode } = useTraderMode();
   const timezone = useTimezone();
   const { oneR, loading: riskLoading } = useRiskSettings();
-  
+
   // 🔥 CRITICAL: Use the same useTrades hook as MyTrades!
-  const { data: trades = [], isLoading: tradesLoading, error } = useTrades(userId, effectivePortfolioId);
+  // In TRADER mode, fetch raw per-account fills (skipCopyAggregation) so that
+  // normalizeTraderTrades can collapse them into one decision per trade.
+  const { data: rawTrades = [], isLoading: tradesLoading, error } = useTrades(userId, effectivePortfolioId, { skipCopyAggregation: isTraderMode });
+
+  // TRADER scope: normalize copier-duplicated rows into one decision per trade.
+  // All downstream stats (activeTrades, dayDataMap, monthStats, charts) consume
+  // `trades` — non-TRADER path is a zero-cost identity (rawTrades reference is stable).
+  const trades = useMemo(
+    () =>
+      isTraderMode
+        ? normalizeTraderTrades(rawTrades as Parameters<typeof normalizeTraderTrades>[0], traderMode ?? 'per-contract')
+        : rawTrades,
+    [isTraderMode, rawTrades, traderMode],
+  ) as typeof rawTrades;
   
   // Date navigation
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -431,17 +444,6 @@ export default function JournalCalendar() {
   const [hoveredWeek, setHoveredWeek] = useState<number | null>(null);
   const [showStrategyBreakdown, setShowStrategyBreakdown] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
-  const [showBrokerPanel, setShowBrokerPanel] = useState(false);
-  const brokerPanelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (brokerPanelRef.current && !brokerPanelRef.current.contains(e.target as Node)) {
-        setShowBrokerPanel(false);
-      }
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
 
   // Animations
   const [isVisible, setIsVisible] = useState(false);
@@ -1071,35 +1073,10 @@ export default function JournalCalendar() {
         <div className="flex items-center gap-4">
           <PageTitle title="Performance Calendar" subtitle="Track your trading journey day by day" />
 
-          {/* Account Switcher Dropdown — same pattern as MyTrades */}
-          <div className="relative" ref={brokerPanelRef}>
-            <button
-              onClick={() => setShowBrokerPanel(v => !v)}
-              className="flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-700/50 hover:border-[#C9A646]/30 rounded-xl px-3 py-2 transition-all duration-200 text-xs font-medium text-zinc-300"
-            >
-              <Layers className="w-3.5 h-3.5 text-[#C9A646]" />
-              <span>{activePortfolio?.name ?? 'All Accounts'}</span>
-              <ChevronDown className="w-3 h-3 text-zinc-500" />
-            </button>
-
-            {showBrokerPanel && (
-              <div
-                className="absolute left-0 top-11 z-50 w-64 rounded-2xl shadow-2xl overflow-hidden"
-                style={{
-                  background: 'rgba(14,14,14,0.98)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  backdropFilter: 'blur(20px)',
-                }}
-              >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60">
-                  <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Select Account</span>
-                </div>
-                <div className="p-2 max-h-72 overflow-y-auto custom-scrollbar">
-                  <AccountSwitcher />
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Account filter — shared dropdown identical to Overview/Dashboard */}
+          <AccountFilterDropdown
+            onManage={() => navigate('/app/journal')}
+          />
         </div>
         
         <div className="flex items-center gap-3">
