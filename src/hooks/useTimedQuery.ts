@@ -18,7 +18,7 @@
  *   });
  */
 import { useQuery } from '@tanstack/react-query';
-import type { UseQueryOptions, UseQueryResult, QueryKey } from '@tanstack/react-query';
+import type { UseQueryOptions, UseQueryResult, QueryKey, QueryFunctionContext } from '@tanstack/react-query';
 import { withTimeout, TIMEOUTS } from '@/lib/withTimeout';
 
 // ---------------------------------------------------------------------------
@@ -74,9 +74,15 @@ export function useTimedQuery<
   })();
 
   // Wrap the queryFn only when one is provided and timeout is meaningful.
+  // Capture into a const so TypeScript's narrowing survives inside the closure.
+  const fn = typeof queryFn === 'function' ? queryFn : null;
+  // Cast to QueryFunction so useQuery accepts the wrapped fn — the generics
+  // are already constrained by the outer signature; the cast is only needed
+  // because react-query's queryFn union includes the non-callable skipToken.
   const wrappedQueryFn: typeof queryFn =
-    queryFn && timeout > 0 && isFinite(timeout)
-      ? (ctx) => withTimeout(queryFn(ctx) as Promise<TQueryFnData>, timeout, label)
+    fn && timeout > 0 && isFinite(timeout)
+      ? (ctx: QueryFunctionContext<TQueryKey>) =>
+          withTimeout(Promise.resolve(fn(ctx)) as Promise<TQueryFnData>, timeout, label)
       : queryFn;
 
   return useQuery<TQueryFnData, TError, TData, TQueryKey>({

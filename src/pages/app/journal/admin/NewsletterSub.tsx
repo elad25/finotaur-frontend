@@ -11,7 +11,8 @@
 // =====================================================
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { supabase } from '@/lib/supabase';
 import {
   Mail,
@@ -51,6 +52,7 @@ import { lazy } from '@/lib/lazyWithRetry';
 import { SkeletonCard, Skeleton } from "@/components/ds/Skeleton";
 import { Spinner } from '@/components/ds/Spinner';
 import { RouteSkeleton } from "@/components/ds/RouteSkeleton";
+import { Button } from '@/components/ds/Button';
 
 const WarZoneLandingSimple = lazy(() => import("@/pages/app/all-markets/WarzoneComponents/Warzonelanding"));
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
@@ -928,7 +930,7 @@ const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null
   }, []);
 
   // Fetch stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useTimedQuery({
     queryKey: ['newsletter-stats'],
     queryFn: async (): Promise<NewsletterStats> => {
       const { data, error } = await supabase.rpc('get_newsletter_stats');
@@ -945,7 +947,7 @@ const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null
   });
 
   // Fetch last sent
-  const { data: lastSent, isLoading: lastSentLoading } = useQuery({
+  const { data: lastSent, isLoading: lastSentLoading, isError: lastSentError, refetch: refetchLastSent } = useTimedQuery({
     queryKey: ['newsletter-last-sent'],
     queryFn: async (): Promise<LastSentInfo | null> => {
       const { data, error } = await supabase
@@ -954,12 +956,12 @@ const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null
         .order('sent_at', { ascending: false })
         .limit(1)
         .single();
-      
+
       if (error) {
         if (error.code === 'PGRST116') return null;
         throw error;
       }
-      
+
       return data ? {
         sent_at: data.sent_at,
         recipient_count: data.recipient_count,
@@ -971,7 +973,7 @@ const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null
   });
 
   // Fetch users
-  const { data: allUsers, isLoading: usersLoading, refetch, error: usersError } = useQuery({
+  const { data: allUsers, isLoading: usersLoading, refetch, isError: usersIsError } = useTimedQuery({
     queryKey: ['newsletter-users'],
     queryFn: async (): Promise<NewsletterUser[]> => {
       const { data, error } = await supabase.rpc('get_newsletter_users');
@@ -1437,22 +1439,19 @@ const clearPreview = () => {
     </div>
   );
 
-  if (usersError) {
+  if (usersIsError) {
     return (
       <div className="p-6 min-h-screen bg-[#080812]">
         <div className="bg-[#0d0d18] rounded-xl p-8 border border-red-500/30">
-          <div className="flex flex-col items-center text-center">
-            <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-            <h3 className="text-white font-medium mb-2">Failed to load newsletter users</h3>
-            <p className="text-gray-500 text-sm mb-4">
+          <div className="flex flex-col items-center text-center gap-3">
+            <AlertCircle className="w-12 h-12 text-red-400" />
+            <h3 className="text-white font-medium">Failed to load newsletter users</h3>
+            <p className="text-gray-500 text-sm">
               Make sure the SQL migration has been run
             </p>
-            <button
-              onClick={() => refetch()}
-              className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500"
-            >
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetch()}>
               Try Again
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1626,42 +1625,64 @@ const clearPreview = () => {
       {/* Stats + Last Sent Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard 
-            title="Total Subscribers" 
-            value={stats?.total_subscribers || 0} 
-            icon={Users} 
-            iconBg="bg-red-600"
-            valueColor="text-red-400"
-            loading={statsLoading}
-          />
-          <StatCard 
-            title="Active (Paid)" 
-            value={stats?.active_subscribers || 0} 
-            icon={CheckCircle} 
-            iconBg="bg-emerald-600"
-            valueColor="text-emerald-400"
-            loading={statsLoading}
-          />
-          <StatCard 
-            title="In Trial" 
-            value={stats?.trial_subscribers || 0} 
-            icon={Clock} 
-            iconBg="bg-blue-600"
-            valueColor="text-blue-400"
-            loading={statsLoading}
-          />
-          <StatCard 
-            title="Cancelled" 
-            value={stats?.cancelled_subscribers || 0} 
-            icon={XCircle} 
-            iconBg="bg-gray-600"
-            valueColor="text-gray-400"
-            loading={statsLoading}
-          />
+          {statsError ? (
+            <div className="col-span-2 sm:col-span-4 flex flex-col items-center gap-3 p-6 bg-[#0d0d18] border border-red-500/30 rounded-xl text-red-400">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="text-sm">Couldn&apos;t load subscriber stats.</span>
+              <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchStats()}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              <StatCard
+                title="Total Subscribers"
+                value={stats?.total_subscribers || 0}
+                icon={Users}
+                iconBg="bg-red-600"
+                valueColor="text-red-400"
+                loading={statsLoading}
+              />
+              <StatCard
+                title="Active (Paid)"
+                value={stats?.active_subscribers || 0}
+                icon={CheckCircle}
+                iconBg="bg-emerald-600"
+                valueColor="text-emerald-400"
+                loading={statsLoading}
+              />
+              <StatCard
+                title="In Trial"
+                value={stats?.trial_subscribers || 0}
+                icon={Clock}
+                iconBg="bg-blue-600"
+                valueColor="text-blue-400"
+                loading={statsLoading}
+              />
+              <StatCard
+                title="Cancelled"
+                value={stats?.cancelled_subscribers || 0}
+                icon={XCircle}
+                iconBg="bg-gray-600"
+                valueColor="text-gray-400"
+                loading={statsLoading}
+              />
+            </>
+          )}
         </div>
 
         <div className="lg:col-span-1">
-          <LastSentStatus lastSent={lastSent || null} isLoading={lastSentLoading} />
+          {lastSentError ? (
+            <div className="flex flex-col items-center gap-3 p-6 bg-[#0d0d18] border border-red-500/30 rounded-xl text-red-400">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="text-sm">Couldn&apos;t load last sent info.</span>
+              <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchLastSent()}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <LastSentStatus lastSent={lastSent || null} isLoading={lastSentLoading} />
+          )}
         </div>
       </div>
 

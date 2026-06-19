@@ -6,7 +6,8 @@
 // =====================================================
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
 import {
   Clock,
   Calendar,
@@ -16,6 +17,7 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  AlertCircle,
   Loader2,
   Zap,
   History,
@@ -24,6 +26,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SkeletonCard } from '@/components/ds/Skeleton';
+import { Button } from '@/components/ds/Button';
 import { supabase } from '@/lib/supabase';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -96,7 +99,7 @@ const CronStatusSection: React.FC = () => {
   const [isTriggering, setIsTriggering] = useState(false);
   
   // Fetch CRON status
-  const { data: cronStatus, isLoading: statusLoading } = useQuery({
+  const { data: cronStatus, isLoading: statusLoading, isError: statusError, refetch: refetchStatus } = useTimedQuery({
     queryKey: ['newsletter-cron-status'],
     queryFn: async (): Promise<CronStatus> => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -113,7 +116,7 @@ const CronStatusSection: React.FC = () => {
   });
 
   // Fetch CRON logs
-  const { data: cronLogs } = useQuery({
+  const { data: cronLogs, isError: logsError, refetch: refetchLogs } = useTimedQuery({
     queryKey: ['newsletter-cron-logs'],
     queryFn: async (): Promise<CronLog[]> => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -181,6 +184,18 @@ const CronStatusSection: React.FC = () => {
   
   if (statusLoading) {
     return <SkeletonCard lines={3} className="mt-2" />;
+  }
+
+  if (statusError) {
+    return (
+      <div className="flex flex-col items-center gap-3 p-6 bg-status-error/10 border border-status-error/25 rounded-xl text-status-error">
+        <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <span className="text-small">Couldn&apos;t load cron status. Please try again.</span>
+        <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchStatus()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   const isEnabled = cronStatus?.enabled ?? false;
@@ -308,7 +323,16 @@ const CronStatusSection: React.FC = () => {
         </p>
 
         {/* Recent CRON Logs */}
-        {cronLogs && cronLogs.length > 0 && (
+        {logsError && (
+          <div className="flex flex-col items-center gap-3 p-4 bg-status-error/10 border border-status-error/25 rounded-xl text-status-error">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span className="text-small">Couldn&apos;t load recent runs.</span>
+            <Button variant="goldOutline" size="compact" showArrow={false} onClick={() => refetchLogs()}>
+              Retry
+            </Button>
+          </div>
+        )}
+        {!logsError && cronLogs && cronLogs.length > 0 && (
           <div className="border-t border-gray-800 pt-4">
             <div className="flex items-center gap-2 mb-3">
               <History className="w-4 h-4 text-gray-500" />
