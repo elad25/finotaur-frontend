@@ -123,10 +123,8 @@ export interface Strategy {
   avgRiskPerTrade?: number;
   maxDailyLoss?: number;
   positionSizingRule?: string;
-  typicalSession?: string;
   expectedWinRate?: number;
   avgRRGoal?: number;
-  psychologicalNotes?: string;
   status: 'active' | 'archived';
   createdAt: string;
   userId?: string; // ✅ NEW: Track which user owns this strategy

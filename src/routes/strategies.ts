@@ -139,8 +139,6 @@ export async function createStrategy(payload: any) {
         avg_rr_goal: payload.avgRRGoal || null,
         planned_1r_usd: payload.planned1rUsd ?? null,
         standard_quantity: payload.standardQuantity ?? null,
-        psychological_notes: payload.psychologicalNotes || null,
-        typical_session: payload.typicalSession || null,
         status: 'active',
         deleted_at: null  // ✅ Ensure it's not deleted
       })
@@ -195,8 +193,6 @@ export async function updateStrategy(id: string, payload: any) {
         avg_rr_goal: payload.avgRRGoal ?? null,
         planned_1r_usd: payload.planned1rUsd ?? null,
         standard_quantity: payload.standardQuantity ?? null,
-        psychological_notes: payload.psychologicalNotes ?? null,
-        typical_session: payload.typicalSession ?? null,
         status: payload.status,
         updated_at: new Date().toISOString()
       })

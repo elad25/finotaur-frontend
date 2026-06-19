@@ -35,7 +35,6 @@ import {
 import { toast } from "sonner";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateShort } from '@/utils/dateFormatter';
-import { formatSessionDisplay } from '@/constants/tradingSessions';
 
 // ==========================================
 // 🎯 TYPES
@@ -58,11 +57,11 @@ interface ExtendedStrategy {
   avgRiskPerTrade?: number;
   maxDailyLoss?: number;
   positionSizingRule?: string;
-  typicalSession?: string;
   expectedWinRate?: number;
   avgRRGoal?: number;
-  psychologicalNotes?: string;
   planned1rUsd?: number;
+  planned1rPercent?: number;
+  planned1rMode?: 'fixed' | 'percent';
   standardQuantity?: number;
   status: 'active' | 'archived';
   createdAt: string;
@@ -984,22 +983,7 @@ const strategyTrades = useMemo(() => {
                   <p style={{ color: '#9A9A9A' }}>Setup Type:</p>
                   <p className="font-semibold" style={{ color: '#EAEAEA' }}>{strategy.setupType || 'Not specified'}</p>
                 </div>
-                {/* ✅ Session Display עם Timezone Support */}
-                <div>
-                  <p style={{ color: '#9A9A9A' }}>Typical Session:</p>
-                  <p className="font-semibold" style={{ color: '#EAEAEA' }}>
-                    {strategy.typicalSession 
-                      ? formatSessionDisplay(strategy.typicalSession)
-                      : 'Not specified'}
-                  </p>
-                </div>
               </div>
-              {strategy.psychologicalNotes && (
-                <div className="mt-4 p-4 rounded-lg" style={{ background: 'rgba(201,166,70,0.05)', border: '1px solid rgba(201,166,70,0.15)' }}>
-                  <p className="text-xs mb-1" style={{ color: '#9A9A9A' }}>Notes:</p>
-                  <p className="text-sm" style={{ color: '#EAEAEA' }}>{strategy.psychologicalNotes}</p>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -1048,7 +1032,7 @@ interface StrategyModalProps {
 const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: StrategyModalProps) => {
   const isEditMode = !!editingStrategy;
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 4;
+  const totalSteps = 3;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -1058,12 +1042,11 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [visualExamples, setVisualExamples] = useState<File[]>([]);
   const [components, setComponents] = useState<StrategyComponent[]>([]);
   const [positionSizingRule, setPositionSizingRule] = useState("");
-  const [typicalSession, setTypicalSession] = useState("");
   const [expectedWinRate, setExpectedWinRate] = useState<number | undefined>();
   const [avgRRGoal, setAvgRRGoal] = useState<number | undefined>();
   const [planned1rUsd, setPlanned1rUsd] = useState<number | undefined>();
+  const [planned1rPercent, setPlanned1rPercent] = useState<number | undefined>();
   const [standardQuantity, setStandardQuantity] = useState<number | undefined>();
-  const [psychologicalNotes, setPsychologicalNotes] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
 
   useEffect(() => {
@@ -1074,12 +1057,11 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setSetupType(editingStrategy.setupType || "");
       setConfirmationSignals(editingStrategy.confirmationSignals?.join(', ') || "");
       setPositionSizingRule(editingStrategy.positionSizingRule || "");
-      setTypicalSession(editingStrategy.typicalSession || "");
       setExpectedWinRate(editingStrategy.expectedWinRate);
       setAvgRRGoal(editingStrategy.avgRRGoal);
       setPlanned1rUsd(editingStrategy.planned1rUsd);
+      setPlanned1rPercent(editingStrategy.planned1rPercent);
       setStandardQuantity(editingStrategy.standardQuantity);
-      setPsychologicalNotes(editingStrategy.psychologicalNotes || "");
       setChecklist(editingStrategy.checklist || []);
       // Load components from the canonical field; fall back to legacy derivation.
       setComponents(getStrategyComponents(editingStrategy));
@@ -1091,12 +1073,11 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setConfirmationSignals("");
       setVisualExamples([]);
       setPositionSizingRule("");
-      setTypicalSession("");
       setExpectedWinRate(undefined);
       setAvgRRGoal(undefined);
       setPlanned1rUsd(undefined);
+      setPlanned1rPercent(undefined);
       setStandardQuantity(undefined);
-      setPsychologicalNotes("");
       setChecklist([]);
       // Seed a single empty Entry Condition row so a new strategy opens with
       // one ready-to-fill input (instead of "No entry conditions yet.").
@@ -1182,12 +1163,12 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       // New canonical components column.
       components: finalComponents,
       positionSizingRule,
-      typicalSession,
       expectedWinRate,
       avgRRGoal,
       planned1rUsd,
+      planned1rPercent,
+      planned1rMode: positionSizingRule === '% of Equity' ? 'percent' : 'fixed',
       standardQuantity,
-      psychologicalNotes,
       visualExamples: uploadedURLs,
       status: 'active' as const,
     };
@@ -1204,14 +1185,14 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
     onClose();
   }, [name, description, assetClasses, setupType, confirmationSignals, checklist, components,
       visualExamples,
-      positionSizingRule, typicalSession, expectedWinRate, avgRRGoal,
-      planned1rUsd, standardQuantity,
-      psychologicalNotes, isEditMode, editingStrategy, onSave, onClose]);
+      positionSizingRule, expectedWinRate, avgRRGoal,
+      planned1rUsd, planned1rPercent, standardQuantity,
+      isEditMode, editingStrategy, onSave, onClose]);
 
   if (!isOpen) return null;
 
-  const stepTitles = ["Overview", "Entry", "Risk", "Logic"];
-  const stepIcons = [TrendingUp, Target, Shield, Brain];
+  const stepTitles = ["Overview", "Entry", "Risk"];
+  const stepIcons = [TrendingUp, Target, Shield];
   const StepIcon = stepIcons[currentStep - 1];
 
   return (
@@ -1472,23 +1453,56 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
           {currentStep === 3 && (
             <div className="space-y-4">
               <div className="rounded-lg p-4" style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.25)' }}>
-                <label className="flex items-center gap-2 text-sm font-bold mb-2" style={{ color: '#C9A646' }}>
-                  <DollarSign size={15} />
-                  Risk per trade ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={planned1rUsd || ''}
-                  onChange={(e) => setPlanned1rUsd(parseFloat(e.target.value) || undefined)}
-                  placeholder="e.g. 200"
-                  className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
-                  style={{ borderColor: 'rgba(201,166,70,0.35)', color: '#EAEAEA' }}
-                />
-                <p className="mt-2 text-xs" style={{ color: '#9A9A9A' }}>
-                  Your planned 1R for this strategy. Used to measure trades in R. If left empty, R is calculated from your stop loss.
-                </p>
+                {positionSizingRule === '% of Equity' ? (
+                  <>
+                    <label className="flex items-center gap-2 text-sm font-bold mb-2" style={{ color: '#C9A646' }}>
+                      <Percent size={15} />
+                      Risk per trade (% of portfolio)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={planned1rPercent || ''}
+                        onChange={(e) => setPlanned1rPercent(parseFloat(e.target.value) || undefined)}
+                        placeholder="e.g. 1"
+                        className="w-full px-4 py-3 pr-10 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                        style={{ borderColor: 'rgba(201,166,70,0.35)', color: '#EAEAEA' }}
+                      />
+                      <span
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold pointer-events-none"
+                        style={{ color: '#C9A646' }}
+                      >
+                        %
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs" style={{ color: '#9A9A9A' }}>
+                      Risk as a percent of your connected broker equity. 1R is calculated dynamically per trade from your account balance at entry.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2 text-sm font-bold mb-2" style={{ color: '#C9A646' }}>
+                      <DollarSign size={15} />
+                      Risk per trade ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={planned1rUsd || ''}
+                      onChange={(e) => setPlanned1rUsd(parseFloat(e.target.value) || undefined)}
+                      placeholder="e.g. 200"
+                      className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                      style={{ borderColor: 'rgba(201,166,70,0.35)', color: '#EAEAEA' }}
+                    />
+                    <p className="mt-2 text-xs" style={{ color: '#9A9A9A' }}>
+                      Your planned 1R for this strategy. Used to measure trades in R. If left empty, R is calculated from your stop loss.
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1532,41 +1546,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                       }}
                     >
                       {rule}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {currentStep === 4 && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                  Typical Session
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: 'asia', label: '🌏 Asia' },
-                    { value: 'london', label: '🇬🇧 London' },
-                    { value: 'ny', label: '🇺🇸 New York' },
-                    { value: 'overlap', label: '🌍 Overlap' },
-                  ].map(s => (
-                    <button
-                      key={s.value}
-                      onClick={() => setTypicalSession(s.value)}
-                      className="px-4 py-3 rounded-lg text-sm font-medium transition-all"
-                      style={typicalSession === s.value ? {
-                        background: 'rgba(201,166,70,0.15)',
-                        color: '#C9A646',
-                        border: '2px solid rgba(201,166,70,0.3)'
-                      } : {
-                        background: 'rgba(255,255,255,0.03)',
-                        color: '#9A9A9A',
-                        border: '2px solid rgba(255,255,255,0.08)'
-                      }}
-                    >
-                      {s.label}
                     </button>
                   ))}
                 </div>
@@ -1615,20 +1594,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                     />
                   </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
-                  Notes
-                </label>
-                <textarea
-                  value={psychologicalNotes}
-                  onChange={(e) => setPsychologicalNotes(e.target.value)}
-                  placeholder="Trading rules, psychological reminders..."
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 resize-none transition-all focus:outline-none focus:border-[#C9A646]"
-                  style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
-                />
               </div>
             </div>
           )}
@@ -2087,9 +2052,9 @@ const strategiesWithStats = useMemo(() => {
             expected_win_rate: strategyData.expectedWinRate,
             avg_rr_goal: strategyData.avgRRGoal,
             planned_1r_usd: strategyData.planned1rUsd ?? null,
+            planned_1r_percent: strategyData.planned1rPercent ?? null,
+            planned_1r_mode: strategyData.planned1rMode ?? 'fixed',
             standard_quantity: strategyData.standardQuantity ?? null,
-            psychological_notes: strategyData.psychologicalNotes,
-            typical_session: strategyData.typicalSession,
             status: strategyData.status,
           },
         });

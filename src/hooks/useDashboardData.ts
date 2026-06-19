@@ -53,6 +53,9 @@ export interface Trade {
   r_stop_set_at?: string | null;
   risk_class?: 'risk_defined' | 'risk_free' | 'no_stop' | null;
   locked_profit_usd?: number | null;
+  // Strategy + equity fields needed for percent-of-equity 1R calculation
+  strategy_id?: string | null;
+  account_equity_at_entry?: number | null;
 }
 
 export interface DashboardStats {
@@ -575,7 +578,7 @@ async function fetchTradesForOverview(
     .select(`
       id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
       open_at, close_at, stop_price, entry_price, quantity, exit_price,
-      multiplier, session, input_mode, tags
+      multiplier, session, input_mode, tags, strategy_id, account_equity_at_entry
     `)
     .eq('user_id', userId)
     .is('deleted_at', null)
@@ -764,7 +767,8 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         .select(`
           id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
           open_at, close_at, stop_price, entry_price, quantity, exit_price,
-          multiplier, session, input_mode, tags, side, fees, portfolio_id
+          multiplier, session, input_mode, tags, side, fees, portfolio_id,
+          strategy_id, account_equity_at_entry
         `)
         .eq('user_id', userId)
         .is('deleted_at', null)

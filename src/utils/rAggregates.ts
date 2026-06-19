@@ -21,6 +21,8 @@ export interface TradeForRAgg {
   side?: string | null | undefined;
   planned_1r_usd?: number | null | undefined;
   strategy_id?: string | null | undefined;
+  /** Account equity at trade entry — needed for percent-of-equity 1R calculation. */
+  account_equity_at_entry?: number | null | undefined;
 }
 
 /**
@@ -32,6 +34,10 @@ export interface StrategyLike {
   planned_1r_usd?: number | null;
   standard_quantity?: number | null;
   default_stop_loss?: number | null;
+  /** 'fixed' = use planned_1r_usd; 'percent' = use planned_1r_percent × account_equity_at_entry */
+  planned_1r_mode?: 'fixed' | 'percent' | string | null;
+  /** Risk as a percent of account equity (e.g. 1 = 1%). Used when planned_1r_mode === 'percent'. */
+  planned_1r_percent?: number | null;
 }
 
 // ----------------------------------------------------------------
@@ -60,9 +66,35 @@ export function tradeR(
   trade: TradeForRAgg,
   strategy?: StrategyRConfig | StrategyLike | null,
 ): number | null {
-  // 1. Strategy-planned 1R (ready for when strategies get assigned)
-  if (strategy?.planned_1r_usd != null && Number(strategy.planned_1r_usd) > 0) {
-    return computeActualR(trade.pnl ?? null, Number(strategy.planned_1r_usd));
+  // 1. Strategy-planned 1R.
+  //    For percent-of-equity strategies delegate to resolvePlanned1R so the
+  //    percent branch runs (it needs account_equity_at_entry from the trade).
+  //    For fixed strategies, short-circuit here as before.
+  if (strategy != null) {
+    if (strategy.planned_1r_mode === 'percent') {
+      // Delegate to resolver — percent branch needs trade.account_equity_at_entry.
+      const resolvedPct = resolvePlanned1R(
+        {
+          entry_price: trade.entry_price,
+          stop_price: trade.stop_price,
+          quantity: trade.quantity,
+          multiplier: trade.multiplier,
+          symbol: trade.symbol,
+          pnl: trade.pnl,
+          side: trade.side,
+          planned_1r_usd: trade.planned_1r_usd,
+          account_equity_at_entry: trade.account_equity_at_entry,
+        },
+        strategy,
+        0,
+      );
+      if (resolvedPct.value != null) {
+        return computeActualR(trade.pnl ?? null, resolvedPct.value);
+      }
+      // Fall through to stored actual_r / stop fallback below.
+    } else if (strategy.planned_1r_usd != null && Number(strategy.planned_1r_usd) > 0) {
+      return computeActualR(trade.pnl ?? null, Number(strategy.planned_1r_usd));
+    }
   }
   // 2. Stored stop-based actual R
   if (trade.actual_r != null) {
@@ -80,6 +112,7 @@ export function tradeR(
       pnl: trade.pnl,
       side: trade.side,
       planned_1r_usd: trade.planned_1r_usd,
+      account_equity_at_entry: trade.account_equity_at_entry,
     },
     null, // null = stop-based resolution only
     0,    // global 1R intentionally ignored (see rResolver comment)

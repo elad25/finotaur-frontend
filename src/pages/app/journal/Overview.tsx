@@ -86,6 +86,7 @@ import { AccountFilterDropdown } from '@/components/journal/AccountFilterDropdow
 import type { FinotaurTrade } from '@/utils/importUtils';
 import { useDisplayUnit } from '@/hooks/useDisplayUnit';
 import { aggregateR, tradeR, type TradeForRAgg } from '@/utils/rAggregates';
+import { useStrategyRConfigs } from '@/hooks/useStrategies';
 
 // ================================================
 // LOADING SKELETONS
@@ -1622,9 +1623,15 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // Display-unit toggle ($ vs R)
   const { unit, setUnit } = useDisplayUnit();
 
+  // Strategy config map — feeds percent-of-equity 1R resolution in aggregateR.
+  const { data: strategyRConfigs } = useStrategyRConfigs(userId);
+
   const rAgg = useMemo(
-    () => aggregateR((stats?.trades ?? []) as unknown as import('@/utils/rAggregates').TradeForRAgg[]),
-    [stats?.trades],
+    () => aggregateR(
+      (stats?.trades ?? []) as unknown as import('@/utils/rAggregates').TradeForRAgg[],
+      strategyRConfigs ?? null,
+    ),
+    [stats?.trades, strategyRConfigs],
   );
 
   // ✅ Check if Trade Duration chart should be locked
