@@ -37,8 +37,16 @@ import {
   TrendingUp,
   Shield,
   HelpCircle,
+  ListFilter,
 } from 'lucide-react';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -109,69 +117,6 @@ function fmtDate(iso: string): string {
 
 function fmtPrice(v: number): string {
   return `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-// ─── Trade selector ───────────────────────────────────────────────────────────
-
-interface TradeSelectorProps {
-  trades: Trade[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}
-
-function TradeSelector({ trades, selectedId, onSelect }: TradeSelectorProps) {
-  return (
-    <div className={`${JOURNAL_PANEL}`}>
-      {/* Panel header */}
-      <div className="flex items-center gap-2 border-b border-white/[0.06] px-ds-4 py-3">
-        <span className="text-[13px] font-semibold text-white/90">Select a closed trade</span>
-        <ShadowInfoIcon label="Pick any closed trade to run the what-if analysis against it." />
-      </div>
-      <div className="p-ds-3 max-h-[480px] overflow-y-auto space-y-1 pr-1">
-        {trades.map((t) => {
-          const isSelected = t.id === selectedId;
-          const pnl = t.pnl ?? 0;
-          const positive = pnl >= 0;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onSelect(t.id)}
-              className={`flex w-full items-center gap-ds-3 rounded-[8px] px-ds-3 py-ds-2 text-left transition-colors ${
-                isSelected
-                  ? 'bg-[#C9A646]/15 ring-1 ring-[#C9A646]/40'
-                  : 'hover:bg-white/[0.04]'
-              }`}
-            >
-              {/* Color dot: LONG=blue, SHORT=red */}
-              <span
-                className="h-2 w-2 flex-shrink-0 rounded-full"
-                style={{ background: t.side === 'LONG' ? COLOR_BLUE : COLOR_RED }}
-              />
-              <span className="flex-1 min-w-0">
-                <span className="font-data font-semibold text-sm text-white/90">
-                  {t.symbol}
-                </span>
-                <span className="ml-1.5 text-xs text-white/42">
-                  {t.side}
-                </span>
-                <span className="ml-1.5 text-xs text-white/28">
-                  {fmtDate(t.close_at ?? t.open_at)}
-                </span>
-              </span>
-              <span
-                className={`font-data text-xs font-semibold tabular-nums flex-shrink-0 ${
-                  positive ? 'text-[#4AD295]' : 'text-[#F87171]'
-                }`}
-              >
-                {fmtPnl(pnl)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 // ─── Price chart (schematic OR real bars) ────────────────────────────────────
@@ -558,6 +503,22 @@ function ScenarioCard({ scenario, isBaseline, hasBars }: ScenarioCardProps) {
   );
 }
 
+// ─── Compact trade label for the header button ───────────────────────────────
+
+function fmtTradeButtonLabel(trade: Trade): string {
+  const date = new Date(trade.close_at ?? trade.open_at).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+  const pnl = trade.pnl ?? 0;
+  const sign = pnl >= 0 ? '+' : '-';
+  const abs = Math.abs(pnl).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+  return `${trade.symbol} · ${trade.side} · ${date}  ${sign}$${abs}`;
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function TradeCompare() {
@@ -576,6 +537,7 @@ export default function TradeCompare() {
 
   // Default to the most recent closed trade
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const effectiveId: string | null = selectedId ?? (closedTrades[0]?.id ?? null);
 
@@ -613,7 +575,7 @@ export default function TradeCompare() {
   return (
     <div className="w-full py-ds-7 px-ds-4 flex flex-col gap-ds-5">
 
-      {/* ── Page header (matches Overview "Welcome back" header treatment) ── */}
+      {/* ── Page header ─────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div className="pt-0.5">
           <h1 className="text-2xl font-bold text-white">Shadow</h1>
@@ -621,7 +583,95 @@ export default function TradeCompare() {
             See what your trades could have been.
           </p>
         </div>
+
+        {/* Trade picker button — disabled when no closed trades */}
+        {!isLoading && (
+          <div className="pt-0.5 shrink-0">
+            <button
+              type="button"
+              disabled={closedTrades.length === 0}
+              onClick={() => setDialogOpen(true)}
+              className={[
+                'flex items-center gap-2 rounded-[9px] border px-3 py-2 text-[13px] font-medium transition-colors',
+                closedTrades.length === 0
+                  ? 'cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/28'
+                  : 'border-[#C9A646]/30 bg-[rgba(20,20,20,0.88)] text-white/82 hover:border-[#C9A646]/55 hover:bg-[rgba(30,28,20,0.92)] hover:text-white',
+              ].join(' ')}
+            >
+              <ListFilter className="h-3.5 w-3.5 shrink-0 text-[#C9A646]" />
+              {closedTrades.length === 0
+                ? 'No closed trades'
+                : selectedTrade
+                  ? fmtTradeButtonLabel(selectedTrade)
+                  : 'Select trade'}
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* ── Trade picker dialog ──────────────────────────────────────────── */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent
+          className="max-w-md border-white/[0.08] bg-[rgba(12,12,12,0.97)] p-0 text-white shadow-[0_24px_64px_rgba(0,0,0,0.6)]"
+        >
+          <DialogHeader className="border-b border-white/[0.06] px-5 pb-4 pt-5">
+            <DialogTitle className="text-[15px] font-semibold text-white">
+              Select a trade
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-[12px] text-white/50">
+              Pick any closed trade from My Trades to run the what-if analysis.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Scrollable trade list */}
+          <div className="max-h-[60vh] overflow-y-auto px-3 py-3 space-y-1">
+            {closedTrades.map((t) => {
+              const isSelected = t.id === effectiveId;
+              const pnl = t.pnl ?? 0;
+              const positive = pnl >= 0;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(t.id);
+                    setDialogOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left transition-colors ${
+                    isSelected
+                      ? 'bg-[#C9A646]/15 ring-1 ring-[#C9A646]/40'
+                      : 'hover:bg-white/[0.05]'
+                  }`}
+                >
+                  {/* Color dot: LONG=blue, SHORT=red */}
+                  <span
+                    className="h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ background: t.side === 'LONG' ? COLOR_BLUE : COLOR_RED }}
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="font-data font-semibold text-sm text-white/90">
+                      {t.symbol}
+                    </span>
+                    <span className="ml-1.5 text-xs text-white/42">
+                      {t.side}
+                    </span>
+                    <span className="ml-1.5 text-xs text-white/28">
+                      {fmtDate(t.close_at ?? t.open_at)}
+                    </span>
+                  </span>
+                  <span
+                    className={`font-data text-xs font-semibold tabular-nums flex-shrink-0 ${
+                      positive ? 'text-[#4AD295]' : 'text-[#F87171]'
+                    }`}
+                  >
+                    {fmtPnl(pnl)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Loading state */}
       {isLoading && (
@@ -647,22 +697,15 @@ export default function TradeCompare() {
 
       {!isLoading && closedTrades.length > 0 && (
         <>
-          {/* Two-column layout on md+: selector left, chart right */}
-          <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-ds-4">
-            <TradeSelector
-              trades={closedTrades}
-              selectedId={effectiveId}
-              onSelect={(id) => setSelectedId(id)}
+          {/* Full-width price chart */}
+          {selectedTrade && (
+            <PriceChart
+              trade={selectedTrade}
+              bars={bars}
+              mfe={whatIfResult?.mfe ?? null}
+              mae={whatIfResult?.mae ?? null}
             />
-            {selectedTrade && (
-              <PriceChart
-                trade={selectedTrade}
-                bars={bars}
-                mfe={whatIfResult?.mfe ?? null}
-                mae={whatIfResult?.mae ?? null}
-              />
-            )}
-          </div>
+          )}
 
           {/* Bars loading indicator */}
           {barsLoading && (
@@ -708,7 +751,7 @@ export default function TradeCompare() {
                   </p>
                 </div>
               </div>
-              {/* Confidence confidence guard badge (inline in the strip) */}
+              {/* Confidence guard badge (inline in the strip) */}
               {whatIfResult.confidence !== 'high' && !hasBars && (
                 <div className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[11px] text-white/42">
                   <Info className="h-3.5 w-3.5 flex-shrink-0" />
