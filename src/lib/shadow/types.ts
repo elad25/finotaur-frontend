@@ -10,9 +10,8 @@ export type ScenarioKey =
   | 'actual'
   | 'held_original_stop'
   | 'original_target_hit'
-  | 'scale_out_half'
-  | 'moved_stop_to_breakeven'
   | 'held_loser_past_stop'
+  | 'moved_stop_to_breakeven'
   | 'no_trade';
 
 /** OHLC price bar. t = ms epoch. */
@@ -44,8 +43,6 @@ export interface ShadowTradeInput {
 export interface EngineConfig {
   /** R multiple at which the stop moves to breakeven. Default 1.0. */
   breakevenTriggerR?: number;
-  /** Fraction of position banked at target in scale_out_half. Default 0.5. */
-  scaleOutFraction?: number;
 }
 
 export interface ScenarioResult {
@@ -60,6 +57,8 @@ export interface ScenarioResult {
   note: string;
   /** false when required levels are missing for this scenario. */
   available: boolean;
+  /** true when the scenario is estimated/simulated rather than derived from real captured data. */
+  simulated?: boolean;
 }
 
 export interface ShadowEngineResult {

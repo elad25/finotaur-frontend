@@ -73,7 +73,6 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
 
   const cfg: Required<EngineConfig> = {
     breakevenTriggerR: config?.breakevenTriggerR ?? 1.0,
-    scaleOutFraction: config?.scaleOutFraction ?? 0.5,
   };
 
   const dir = side === 'LONG' ? 1 : -1;
@@ -212,6 +211,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
       confidence: 'high',
       note: 'What you actually did.',
       available: true,
+      simulated: false,
     });
   }
 
@@ -247,6 +247,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
         confidence: confidenceFor(w.collided),
         note,
         available: true,
+        simulated: false,
       });
     }
   }
@@ -283,55 +284,29 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
         confidence: confidenceFor(w.collided),
         note,
         available: true,
+        simulated: false,
       });
     }
   }
 
-  // 4. scale_out_half ─────────────────────────────────────────────────────────
+  // 4. held_loser_past_stop ───────────────────────────────────────────────────
   {
-    const hasTarget = originalTarget != null && originalTarget > 0;
-    if (!hasTarget) {
-      scenarios.push(
-        makeUnavailable(
-          'scale_out_half',
-          'Scaled out half at target',
-          'No target defined.',
-        ),
-      );
-    } else {
-      const frac = cfg.scaleOutFraction;
-      // Walk ignoring stop for the banked leg (simplified v1).
-      // If target is touched → bank at target; else bank at lastClose.
-      const wTarget = walkToExit({ stop: null, target: originalTarget! });
-      const bankedExit = wTarget.hitTarget ? originalTarget! : lastClose;
-      const bankedQty = qty * frac;
-      const runnerQty = qty * (1 - frac);
-
-      const pnlUsd = pnlAt(bankedExit, bankedQty) + pnlAt(lastClose, runnerQty);
-      const weightedExit =
-        (bankedExit * bankedQty + lastClose * runnerQty) / qty;
-
-      const fracPct = Math.round(frac * 100);
-      const note = wTarget.hitTarget
-        ? `Banked ${fracPct}% at target, held the rest to close.`
-        : `Target not reached — banked ${fracPct}% at close, held rest to close.`;
-
-      scenarios.push({
-        key: 'scale_out_half',
-        label: 'Scaled out half at target',
-        pnlUsd,
-        rMultiple: rOf(pnlUsd),
-        exitPrice: weightedExit,
-        exitTime: wTarget.hitTarget ? wTarget.exitTime : lastTime,
-        // v1 simplification: no stop interaction in this scenario → always high.
-        confidence: 'high',
-        note,
-        available: true,
-      });
-    }
+    const pnlUsd = pnlAt(lastClose, qty);
+    scenarios.push({
+      key: 'held_loser_past_stop',
+      label: 'Held past the stop',
+      pnlUsd,
+      rMultiple: rOf(pnlUsd),
+      exitPrice: lastClose,
+      exitTime: lastTime,
+      confidence: 'high',
+      note: 'Ignored the stop and held to close.',
+      available: true,
+      simulated: false,
+    });
   }
 
-  // 5. moved_stop_to_breakeven ────────────────────────────────────────────────
+  // 5. moved_stop_to_breakeven (FALLBACK / simulated) ─────────────────────────
   {
     const hasStop = originalStop != null && originalStop > 0;
     if (!hasStop) {
@@ -370,7 +345,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
           pnlUsd = pnlAt(originalStop!, qty);
           exitPrice = originalStop!;
           exitTime = bar.t;
-          finalNote = 'Stopped out before reaching breakeven trigger.';
+          finalNote = 'Estimated — stopped out before reaching breakeven trigger (will use your real stop moves once captured).';
           break;
         }
 
@@ -386,7 +361,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
         pnlUsd = pnlAt(lastClose, qty);
         exitPrice = lastClose;
         exitTime = lastTime;
-        finalNote = 'BE trigger never reached.';
+        finalNote = 'Estimated — BE trigger never reached (will use your real stop moves once captured).';
       }
 
       if (pnlUsd == null && beArmedAtIndex >= 0) {
@@ -405,7 +380,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
             pnlUsd = pnlAt(beStop, qty);
             exitPrice = beStop;
             exitTime = bar.t;
-            finalNote = 'Choked at breakeven — price ran without you.';
+            finalNote = 'Estimated — choked at breakeven — price ran without you (will use your real stop moves once captured).';
             hadCollision = true;
             phase2Done = true;
             break;
@@ -414,7 +389,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
             pnlUsd = pnlAt(beStop, qty);
             exitPrice = beStop;
             exitTime = bar.t;
-            finalNote = 'Choked at breakeven — price ran without you.';
+            finalNote = 'Estimated — choked at breakeven — price ran without you (will use your real stop moves once captured).';
             phase2Done = true;
             break;
           }
@@ -422,7 +397,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
             pnlUsd = pnlAt(beTarget!, qty);
             exitPrice = beTarget!;
             exitTime = bar.t;
-            finalNote = 'Moved to BE then hit target.';
+            finalNote = 'Estimated — moved to BE then hit target (will use your real stop moves once captured).';
             phase2Done = true;
             break;
           }
@@ -433,7 +408,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
           pnlUsd = pnlAt(lastClose, qty);
           exitPrice = lastClose;
           exitTime = lastTime;
-          finalNote = 'Moved to BE — neither BE stop nor target reached; exit at close.';
+          finalNote = 'Estimated — moved to BE — neither BE stop nor target reached; exit at close (will use your real stop moves once captured).';
         }
       }
 
@@ -447,27 +422,12 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
         confidence: hadCollision ? 'ambiguous' : 'high',
         note: finalNote,
         available: true,
+        simulated: true,
       });
     }
   }
 
-  // 6. held_loser_past_stop ───────────────────────────────────────────────────
-  {
-    const pnlUsd = pnlAt(lastClose, qty);
-    scenarios.push({
-      key: 'held_loser_past_stop',
-      label: 'Held past the stop',
-      pnlUsd,
-      rMultiple: rOf(pnlUsd),
-      exitPrice: lastClose,
-      exitTime: lastTime,
-      confidence: 'high',
-      note: 'Ignored the stop and held to close.',
-      available: true,
-    });
-  }
-
-  // 7. no_trade ───────────────────────────────────────────────────────────────
+  // 6. no_trade ───────────────────────────────────────────────────────────────
   {
     scenarios.push({
       key: 'no_trade',
@@ -479,6 +439,7 @@ export function runScenarios(input: ShadowTradeInput): ShadowEngineResult {
       confidence: 'high',
       note: 'Sat it out.',
       available: true,
+      simulated: false,
     });
   }
 

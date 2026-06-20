@@ -35,8 +35,6 @@ function getScenario(
 //   held_original_stop: bar2 hitTarget  → exit=110, pnl=(110-100)*2*50=1000, rM=2.0
 //   original_target_hit: same walk      → exit=110, pnl=1000, rM=2.0
 //   held_loser_past_stop: exit=lastClose=108, pnl=(108-100)*2*50=800, rM=1.6
-//   scale_out_half: target hit at bar2; banked 1 unit@110, runner 1 unit@108
-//     pnl=(110-100)*1*50+(108-100)*1*50=500+400=900, rM=900/500=1.8
 // ---------------------------------------------------------------------------
 
 describe('Fixture 1 — LONG winner, exited early', () => {
@@ -98,13 +96,6 @@ describe('Fixture 1 — LONG winner, exited early', () => {
     expect(s.pnlUsd).toBeCloseTo(800);
     expect(s.exitPrice).toBeCloseTo(108);
     expect(s.rMultiple).toBeCloseTo(1.6);
-  });
-
-  it('scale_out_half: banked half at 110, runner at 108, pnlUsd=900', () => {
-    const s = getScenario(scenarios, 'scale_out_half');
-    expect(s.available).toBe(true);
-    expect(s.pnlUsd).toBeCloseTo(900);
-    expect(s.rMultiple).toBeCloseTo(1.8);
   });
 
   it('no_trade: pnlUsd=0, rMultiple=0', () => {
@@ -284,6 +275,10 @@ describe('Fixture 4 — moved_stop_to_breakeven (choke at entry)', () => {
     // rOf(0) = 0 / 5 = 0
     expect(s.rMultiple).toBeCloseTo(0);
   });
+
+  it('moved_stop_to_breakeven: simulated=true', () => {
+    expect(getScenario(scenarios, 'moved_stop_to_breakeven').simulated).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -313,12 +308,6 @@ describe('Fixture 5 — no target defined', () => {
     expect(s.available).toBe(false);
     expect(s.pnlUsd).toBeNull();
     expect(s.rMultiple).toBeNull();
-  });
-
-  it('scale_out_half.available === false', () => {
-    const s = getScenario(scenarios, 'scale_out_half');
-    expect(s.available).toBe(false);
-    expect(s.pnlUsd).toBeNull();
   });
 
   it('held_original_stop is still available (stop exists)', () => {
@@ -535,10 +524,10 @@ describe('Fixture 10 — empty actualExits', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Fixture 11: All 7 scenarios always present in the output
+// Fixture 11: All 6 scenarios always present in the output
 // ---------------------------------------------------------------------------
 
-describe('Fixture 11 — all 7 scenarios always present', () => {
+describe('Fixture 11 — all 6 scenarios always present', () => {
   const input: ShadowTradeInput = {
     side: 'LONG',
     entryPrice: 100,
@@ -554,17 +543,16 @@ describe('Fixture 11 — all 7 scenarios always present', () => {
 
   const { scenarios } = runScenarios(input);
 
-  it('output contains exactly 7 scenarios', () => {
-    expect(scenarios).toHaveLength(7);
+  it('output contains exactly 6 scenarios', () => {
+    expect(scenarios).toHaveLength(6);
   });
 
   const expectedKeys: string[] = [
     'actual',
     'held_original_stop',
     'original_target_hit',
-    'scale_out_half',
-    'moved_stop_to_breakeven',
     'held_loser_past_stop',
+    'moved_stop_to_breakeven',
     'no_trade',
   ];
 
