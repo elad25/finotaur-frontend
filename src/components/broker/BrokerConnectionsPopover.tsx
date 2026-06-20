@@ -709,24 +709,32 @@ function PopoverBody({
 
 export default function BrokerConnectionsPopover({ children, onAddConnection, onManage }: Props) {
   const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+
+  // Close this popover/sheet before opening the Manage modal or the add-connection
+  // flow, so it doesn't linger visible behind the modal that opens on top of it.
+  const handleManage = onManage ? () => { setOpen(false); onManage(); } : undefined;
+  const handleAddConnection = onAddConnection
+    ? () => { setOpen(false); onAddConnection(); }
+    : undefined;
 
   if (isMobile) {
     return (
-      <Sheet>
+      <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>{children}</SheetTrigger>
         <SheetContent
           side="bottom"
           className="max-h-[85vh] overflow-y-auto rounded-t-[20px] border-t bg-[#141414] p-4"
           style={{ borderColor: BORDER_LIGHT }}
         >
-          <PopoverBody onAddConnection={onAddConnection} onManage={onManage} />
+          <PopoverBody onAddConnection={handleAddConnection} onManage={handleManage} />
         </SheetContent>
       </Sheet>
     );
   }
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent
         align="end"
@@ -734,7 +742,7 @@ export default function BrokerConnectionsPopover({ children, onAddConnection, on
         className="w-[360px] rounded-[16px] border bg-[#141414] p-3 shadow-[0_0_30px_rgba(201,166,70,0.15)]"
         style={{ borderColor: BORDER_LIGHT }}
       >
-        <PopoverBody onAddConnection={onAddConnection} onManage={onManage} />
+        <PopoverBody onAddConnection={handleAddConnection} onManage={handleManage} />
       </PopoverContent>
     </Popover>
   );
