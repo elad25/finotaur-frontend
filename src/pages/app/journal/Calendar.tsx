@@ -71,6 +71,7 @@ import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { analyzeEmotions, type EmotionTradeInput } from '@/utils/emotionDetection';
 import { computeConsistencyIndex, type ConsistencyTradeInput } from '@/utils/consistencyIndex';
+import { computeFinotaurScore } from '@/utils/finotaurScore';
 
 import {
   XAxis,
@@ -99,6 +100,7 @@ interface DayData {
   winRate: number;
   avgRR: number;
   avgR: number; // 🔥 NEW: Average actual R
+  sumR: number; // Total R for the day (avgR × closed-trade count) — for the $/R calendar toggle
   emotionScore: number;
   violations: string[];
   topMistake?: string;
@@ -435,8 +437,11 @@ export default function JournalCalendar() {
   const [filterEmotion, setFilterEmotion] = useState<string>("all");
   const [filterResult, setFilterResult] = useState<string>("all");
   
-  // Display mode
-  const [displayMode, setDisplayMode] = useState<"performance" | "emotion" | "consistency" | "strategy">("performance");
+  // Display mode — tabs now: Performance | Finotaur Score (emotion + consistency merged into the FINO breakdown)
+  const [displayMode, setDisplayMode] = useState<"performance" | "emotion" | "consistency" | "strategy" | "finotaur">("performance");
+
+  // Calendar value unit toggle: dollars or R-multiple per day tile
+  const [calendarUnit, setCalendarUnit] = useState<"$" | "R">("$");
   
   // Modal
   const [selectedDay, setSelectedDay] = useState<DayData | null>(null);
@@ -654,6 +659,7 @@ export default function JournalCalendar() {
           winRate: 0,
           avgRR: 0,
           avgR: 0,
+          sumR: 0,
           emotionScore: 0,
           violations: [],
           sessions: [],
@@ -696,6 +702,8 @@ export default function JournalCalendar() {
           closedTrades as unknown as TradeForRAgg[],
           strategyById ?? null,
         ).avgR ?? 0;
+        // Total R for the day = average R × number of closed trades (used by the $/R toggle)
+        dayData.sumR = dayData.avgR * closedTrades.length;
       }
       
       dayData.emotionScore = calculateEmotionScore(dayData.trades);
@@ -764,32 +772,27 @@ export default function JournalCalendar() {
     };
   }, [activeTrades, strategyById, emotionConsistency]);
 
-  // Calculate Finotaur Score
-  const finotaurScore = useMemo(() => {
-    const normalizedWinRate = Math.min(monthStats.winRate / 100, 1);
-    const normalizedRR = Math.min(monthStats.avgRR / 3, 1);
-    const normalizedPF = Math.min(monthStats.profitFactor / 3, 1);
-    const normalizedConsistency = monthStats.consistencyScore / 100;
-    const normalizedEmotional = monthStats.emotionalStability / 100;
-    
-    return Math.round(
-      normalizedWinRate * 25 +
-      normalizedRR * 25 +
-      normalizedPF * 20 +
-      normalizedConsistency * 20 +
-      normalizedEmotional * 10
-    );
-  }, [monthStats]);
-  
+  // Calculate Finotaur Score — 3-pillar composite (performance + consistency + behavioral)
+  const finotaurScore = useMemo(
+    () =>
+      computeFinotaurScore({
+        expectancyR: monthStats.expectancyR,
+        profitFactor: monthStats.profitFactor,
+        consistencySubScores: emotionConsistency.consistency.subScores,
+        behavioralStability: emotionConsistency.behavioralStability,
+      }),
+    [monthStats, emotionConsistency],
+  );
+
   // Animate Finotaur Score
   useEffect(() => {
-    if (isVisible && finotaurScore > 0) {
+    if (isVisible && finotaurScore.score > 0) {
       let current = 0;
-      const increment = finotaurScore / 60;
+      const increment = finotaurScore.score / 60;
       const timer = setInterval(() => {
         current += increment;
-        if (current >= finotaurScore) {
-          setFinotaurScoreAnimated(finotaurScore);
+        if (current >= finotaurScore.score) {
+          setFinotaurScoreAnimated(finotaurScore.score);
           clearInterval(timer);
         } else {
           setFinotaurScoreAnimated(Math.floor(current));
@@ -1158,6 +1161,17 @@ export default function JournalCalendar() {
         return "bg-red-500/10 border-red-500/30 hover:bg-red-500/20";
       }
       
+      case "finotaur": {
+        // Day health = blend of behavioral stability and process adherence.
+        const ecDayF = emotionConsistency.byDate.get(dayData.date);
+        const stabilityF = ecDayF && ecDayF.total > 0 ? 1 - ecDayF.negative / ecDayF.total : 1;
+        const adherenceF = ecDayF && ecDayF.total > 0 ? ecDayF.adherent / ecDayF.total : 1;
+        const health = stabilityF * 0.5 + adherenceF * 0.5;
+        if (health >= 0.8) return "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20";
+        if (health >= 0.5) return "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20";
+        return "bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20";
+      }
+
       case "strategy":
         return "bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20";
       
@@ -1538,8 +1552,28 @@ export default function JournalCalendar() {
                   }
                 </p>
               </div>
+
+              {/* FINO Score breakdown — 3 pillars feeding the composite */}
+              <div className="grid grid-cols-3 gap-3 mt-4 max-w-md">
+                {[
+                  { label: 'Performance', value: finotaurScore.pillars.performance, weight: '40%' },
+                  { label: 'Consistency', value: finotaurScore.pillars.consistency, weight: '30%' },
+                  { label: 'Behavioral', value: finotaurScore.pillars.behavioral, weight: '30%' },
+                ].map(({ label, value, weight }) => (
+                  <div key={label}>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">{label}</span>
+                      <span className="text-[9px] text-zinc-600">{weight}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                      <div className="h-full rounded-full bg-yellow-500/70" style={{ width: `${value}%` }} />
+                    </div>
+                    <div className="text-xs text-white font-semibold mt-1">{value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            
+
             <div className="text-right">
               <div className="text-6xl font-black bg-gradient-to-br from-yellow-500 via-yellow-400 to-yellow-600 bg-clip-text text-transparent"
                 style={{
@@ -1588,7 +1622,7 @@ export default function JournalCalendar() {
             </Button>
           </div>
 
-          {/* Display Mode */}
+          {/* Display Mode + value unit toggle */}
           <div className="flex items-center gap-2">
             <Button
               variant={displayMode === "performance" ? "default" : "ghost"}
@@ -1599,21 +1633,30 @@ export default function JournalCalendar() {
               Performance
             </Button>
             <Button
-              variant={displayMode === "emotion" ? "default" : "ghost"}
+              variant={displayMode === "finotaur" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setDisplayMode("emotion")}
-              className={displayMode === "emotion" ? "bg-yellow-500/20 text-yellow-500" : ""}
+              onClick={() => setDisplayMode("finotaur")}
+              className={displayMode === "finotaur" ? "bg-yellow-500/20 text-yellow-500" : ""}
             >
-              Emotion
+              Finotaur Score
             </Button>
-            <Button
-              variant={displayMode === "consistency" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setDisplayMode("consistency")}
-              className={displayMode === "consistency" ? "bg-yellow-500/20 text-yellow-500" : ""}
-            >
-              Consistency
-            </Button>
+
+            {/* $ / R calendar unit toggle */}
+            <div className="ml-2 flex items-center rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
+              {(["$", "R"] as const).map(u => (
+                <button
+                  key={u}
+                  onClick={() => setCalendarUnit(u)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                    calendarUnit === u
+                      ? "bg-yellow-500/20 text-yellow-500"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Filters */}
@@ -1648,8 +1691,8 @@ export default function JournalCalendar() {
         </div>
       </Card>
 
-      {/* Emotion + Consistency Summary Panel — switches on displayMode */}
-      {(displayMode === "performance" || displayMode === "emotion" || displayMode === "consistency") && (
+      {/* Summary Panel — switches on displayMode (Performance row / Finotaur Score breakdown) */}
+      {(displayMode === "performance" || displayMode === "finotaur") && (
         <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 mb-4">
           {displayMode === "performance" && (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -1698,10 +1741,11 @@ export default function JournalCalendar() {
             </div>
           )}
 
-          {displayMode === "emotion" && (() => {
-            const { summary, behavioralStability, calmAvgR, emotionalAvgR } = emotionConsistency;
+          {displayMode === "finotaur" && (() => {
+            const { summary, behavioralStability, calmAvgR, emotionalAvgR, consistency, followedAvgR, violatedAvgR } = emotionConsistency;
             const { counts } = summary;
             const emotionalPct = Math.round(summary.negativeRate * 100);
+            const { subScores, stats } = consistency;
             const chips: Array<{ key: keyof typeof counts; label: string; color: string }> = [
               { key: 'disciplined', label: 'Disciplined', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
               { key: 'revenge',     label: 'Revenge',     color: 'bg-red-500/20 text-red-400 border-red-500/30' },
@@ -1715,109 +1759,126 @@ export default function JournalCalendar() {
             const delta = calmAvgR !== null && emotionalAvgR !== null
               ? calmAvgR - emotionalAvgR
               : null;
-            return (
-              <div className="space-y-4">
-                <div className="flex items-center gap-6 flex-wrap">
-                  <div>
-                    <div className="text-sm text-zinc-400">Behavioral Stability</div>
-                    <div className="text-2xl font-bold text-white">{behavioralStability}<span className="text-base text-zinc-400 font-normal">/100</span></div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-zinc-400">Emotional trades</div>
-                    <div className="text-white font-semibold">{emotionalPct}%</div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {activeChips.length > 0 ? activeChips.map(c => (
-                    <span key={c.key} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${c.color}`}>
-                      {c.label} <span className="font-bold">{counts[c.key]}</span>
-                    </span>
-                  )) : (
-                    <span className="text-xs text-zinc-500">No emotional patterns detected</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-6 flex-wrap border-t border-zinc-800 pt-3">
-                  <div>
-                    <div className="text-xs text-zinc-400">Avg R · Calm</div>
-                    <div className={`font-semibold ${calmAvgR !== null && calmAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {calmAvgR === null ? '—' : formatRValue(calmAvgR)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-zinc-400">Avg R · Emotional</div>
-                    <div className={`font-semibold ${emotionalAvgR !== null && emotionalAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {emotionalAvgR === null ? '—' : formatRValue(emotionalAvgR)}
-                    </div>
-                  </div>
-                  {delta !== null && (
-                    <div>
-                      <div className="text-xs text-zinc-400">Cost of emotion per trade</div>
-                      <div className={`font-semibold ${delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {formatRValue(delta)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-
-          {displayMode === "consistency" && (() => {
-            const { consistency, followedAvgR, violatedAvgR } = emotionConsistency;
-            const { index, subScores, stats } = consistency;
-            const subScoreItems: Array<{ label: string; value: number }> = [
-              { label: 'Risk Consistency',    value: subScores.riskConsistency },
-              { label: 'Process Adherence',   value: subScores.processAdherence },
-              { label: 'Behavioral Stability', value: subScores.behavioralStability },
-              { label: 'Outcome Consistency', value: subScores.outcomeConsistency },
+            const pillarItems: Array<{ label: string; value: number; weight: string }> = [
+              { label: 'Performance', value: finotaurScore.pillars.performance, weight: '40%' },
+              { label: 'Consistency', value: finotaurScore.pillars.consistency, weight: '30%' },
+              { label: 'Behavioral',  value: finotaurScore.pillars.behavioral,  weight: '30%' },
             ];
             return (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-sm text-zinc-400">Consistency Index</div>
-                  <div className="text-2xl font-bold text-white">{index}<span className="text-base text-zinc-400 font-normal">/100</span></div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {subScoreItems.map(({ label, value }) => (
-                    <div key={label}>
-                      <div className="text-xs text-zinc-400 mb-1">{label}</div>
-                      <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-yellow-500/70"
-                          style={{ width: `${value}%` }}
-                        />
+              <div className="space-y-5">
+                {/* Headline score + the 3 pillars that compose it */}
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div className="min-w-[110px]">
+                    <div className="text-sm text-zinc-400">Finotaur Score</div>
+                    <div className="text-3xl font-black text-yellow-500">{finotaurScore.score}<span className="text-base text-zinc-400 font-normal">/100</span></div>
+                  </div>
+                  <div className="flex-1 grid grid-cols-3 gap-4 min-w-[260px]">
+                    {pillarItems.map(({ label, value, weight }) => (
+                      <div key={label}>
+                        <div className="flex items-baseline justify-between mb-1">
+                          <span className="text-xs text-zinc-400">{label}</span>
+                          <span className="text-[9px] text-zinc-600">{weight}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-yellow-500/70" style={{ width: `${value}%` }} />
+                        </div>
+                        <div className="text-xs text-white font-semibold mt-1">{value}</div>
                       </div>
-                      <div className="text-xs text-white font-semibold mt-1">{value}</div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-                <div className="flex items-center gap-6 flex-wrap border-t border-zinc-800 pt-3">
-                  <div>
-                    <div className="text-xs text-zinc-400">CV of Risk</div>
-                    <div className="text-white font-semibold">
-                      {stats.cvRisk === null ? '—' : stats.cvRisk.toFixed(2)}
+
+                {/* Behavioral / emotion breakdown */}
+                <div className="border-t border-zinc-800 pt-4 space-y-3">
+                  <div className="text-xs text-yellow-500/80 uppercase tracking-wider font-semibold">Behavioral</div>
+                  <div className="flex items-center gap-6 flex-wrap">
+                    <div>
+                      <div className="text-xs text-zinc-400">Behavioral Stability</div>
+                      <div className="text-white font-semibold">{behavioralStability}<span className="text-xs text-zinc-500 font-normal">/100</span></div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-zinc-400">Adherence</div>
-                    <div className="text-white font-semibold">{Math.round(stats.adherenceRate * 100)}%</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-zinc-400">Expectancy</div>
-                    <div className="text-white font-semibold">
-                      {stats.expectancyR === null ? '—' : formatRValue(stats.expectancyR)}
+                    <div>
+                      <div className="text-xs text-zinc-400">Emotional trades</div>
+                      <div className="text-white font-semibold">{emotionalPct}%</div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-zinc-400">Avg R · Rules Followed</div>
-                    <div className={`font-semibold ${followedAvgR !== null && followedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {followedAvgR === null ? '—' : formatRValue(followedAvgR)}
+                    <div>
+                      <div className="text-xs text-zinc-400">Avg R · Calm</div>
+                      <div className={`font-semibold ${calmAvgR !== null && calmAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {calmAvgR === null ? '—' : formatRValue(calmAvgR)}
+                      </div>
                     </div>
+                    <div>
+                      <div className="text-xs text-zinc-400">Avg R · Emotional</div>
+                      <div className={`font-semibold ${emotionalAvgR !== null && emotionalAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {emotionalAvgR === null ? '—' : formatRValue(emotionalAvgR)}
+                      </div>
+                    </div>
+                    {delta !== null && (
+                      <div>
+                        <div className="text-xs text-zinc-400">Cost of emotion per trade</div>
+                        <div className={`font-semibold ${delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {formatRValue(delta)}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <div className="text-xs text-zinc-400">Avg R · Rules Violated</div>
-                    <div className={`font-semibold ${violatedAvgR !== null && violatedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {violatedAvgR === null ? '—' : formatRValue(violatedAvgR)}
+                  <div className="flex flex-wrap gap-2">
+                    {activeChips.length > 0 ? activeChips.map(c => (
+                      <span key={c.key} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${c.color}`}>
+                        {c.label} <span className="font-bold">{counts[c.key]}</span>
+                      </span>
+                    )) : (
+                      <span className="text-xs text-zinc-500">No emotional patterns detected</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Consistency breakdown */}
+                <div className="border-t border-zinc-800 pt-4 space-y-3">
+                  <div className="text-xs text-yellow-500/80 uppercase tracking-wider font-semibold">Consistency</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {([
+                      { label: 'Risk Consistency',     value: subScores.riskConsistency },
+                      { label: 'Process Adherence',    value: subScores.processAdherence },
+                      { label: 'Behavioral Stability', value: subScores.behavioralStability },
+                      { label: 'Outcome Consistency',  value: subScores.outcomeConsistency },
+                    ] as Array<{ label: string; value: number }>).map(({ label, value }) => (
+                      <div key={label}>
+                        <div className="text-xs text-zinc-400 mb-1">{label}</div>
+                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-yellow-500/70" style={{ width: `${value}%` }} />
+                        </div>
+                        <div className="text-xs text-white font-semibold mt-1">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-6 flex-wrap">
+                    <div>
+                      <div className="text-xs text-zinc-400">CV of Risk</div>
+                      <div className="text-white font-semibold">
+                        {stats.cvRisk === null ? '—' : stats.cvRisk.toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-400">Adherence</div>
+                      <div className="text-white font-semibold">{Math.round(stats.adherenceRate * 100)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-400">Expectancy</div>
+                      <div className="text-white font-semibold">
+                        {stats.expectancyR === null ? '—' : formatRValue(stats.expectancyR)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-400">Avg R · Rules Followed</div>
+                      <div className={`font-semibold ${followedAvgR !== null && followedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {followedAvgR === null ? '—' : formatRValue(followedAvgR)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-zinc-400">Avg R · Rules Violated</div>
+                      <div className={`font-semibold ${violatedAvgR !== null && violatedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {violatedAvgR === null ? '—' : formatRValue(violatedAvgR)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1895,13 +1956,15 @@ export default function JournalCalendar() {
                     {/* Day content */}
                     {dayData && dayData.tradeCount > 0 ? (
                       <>
-                        {/* P&L */}
+                        {/* P&L — dollars or R-multiple per the calendar unit toggle */}
                         <div className={`text-sm font-bold mb-1 ${
                           dayData.netPnL > 0 ? 'text-emerald-400' :
                           dayData.netPnL < 0 ? 'text-red-400' :
                           'text-zinc-400'
                         }`}>
-                          {dayData.netPnL > 0 ? '+' : ''}${formatNumber(dayData.netPnL, 0)}
+                          {calendarUnit === '$'
+                            ? `${dayData.netPnL > 0 ? '+' : ''}$${formatNumber(dayData.netPnL, 0)}`
+                            : `${dayData.sumR > 0 ? '+' : ''}${dayData.sumR.toFixed(1)}R`}
                         </div>
 
                         {/* Trade count */}
