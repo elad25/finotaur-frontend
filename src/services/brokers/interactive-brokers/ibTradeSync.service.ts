@@ -221,7 +221,20 @@ class IBTradeSyncService {
       return new Set();
     }
 
-    return new Set((data || []).map(t => t.external_id));
+    const ids = new Set((data || []).map(t => t.external_id));
+
+    // Treat user-deleted (tombstoned) trades as already-existing so we never
+    // re-import a trade the user intentionally deleted. The DB also enforces
+    // this via a BEFORE INSERT trigger; this keeps the client-side skip count
+    // honest and avoids a pointless insert round-trip.
+    const { data: tombstones } = await supabase
+      .from('deleted_synced_trades')
+      .select('external_id')
+      .eq('user_id', userId)
+      .eq('broker', broker);
+    for (const t of tombstones || []) ids.add(t.external_id);
+
+    return ids;
   }
 
   /**

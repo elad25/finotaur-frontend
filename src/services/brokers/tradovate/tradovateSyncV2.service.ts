@@ -479,7 +479,20 @@ class TradovateSyncV2Service {
       .eq('broker', 'tradovate')
       .not('external_id', 'is', null);
 
-    return new Set(data?.map(t => t.external_id).filter(Boolean) ?? []);
+    const ids = new Set(data?.map(t => t.external_id).filter(Boolean) ?? []);
+
+    // Treat user-deleted (tombstoned) trades as already-existing so we never
+    // re-import a trade the user intentionally deleted. The DB also enforces
+    // this via a BEFORE INSERT trigger; this keeps the client-side skip count
+    // honest and avoids a pointless insert round-trip.
+    const { data: tombstones } = await supabase
+      .from('deleted_synced_trades')
+      .select('external_id')
+      .eq('user_id', this.userId)
+      .eq('broker', 'tradovate');
+    for (const t of tombstones || []) ids.add(t.external_id);
+
+    return ids;
   }
 
   private async enrichFillsWithDetails(fills: TradovateFill[]): Promise<FillWithDetails[]> {
