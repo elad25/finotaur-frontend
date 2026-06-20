@@ -1512,19 +1512,19 @@ export default function JournalCalendar() {
 
           {/* Calendar value unit toggle */}
           <div className="flex items-center gap-2">
-            {/* $ / R calendar unit toggle */}
+            {/* Performance ($) / Risk (R) calendar unit toggle */}
             <div className="ml-2 flex items-center rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
-              {(["$", "R"] as const).map(u => (
+              {([["$", "Performance"], ["R", "Risk"]] as const).map(([unit, label]) => (
                 <button
-                  key={u}
-                  onClick={() => setCalendarUnit(u)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
-                    calendarUnit === u
+                  key={unit}
+                  onClick={() => setCalendarUnit(unit)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                    calendarUnit === unit
                       ? "bg-yellow-500/20 text-yellow-500"
                       : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  {u}
+                  {label}
                 </button>
               ))}
             </div>
