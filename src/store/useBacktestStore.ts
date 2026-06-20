@@ -20,6 +20,7 @@ import { StatisticsEngine } from '../core/engines/StatisticsEngine';
 import { udfClient } from '../services/api/udfClient';
 import { supabaseClient } from '../services/api/supabaseClient';
 import { indexedDBService } from '../services/cache/indexedDBService';
+import type { ReplayHandoff } from '../core/auto/replayBridge';
 
 // ============================================================================
 // INITIAL STATE
@@ -42,6 +43,11 @@ const initialState = {
   // Data
   candles: [] as Candle[],
   visibleCandles: [] as Candle[],
+
+  // Handoff overlay — set when arriving from the automated backtest via
+  // loadHandoff(). The chart layer may optionally read this to draw the
+  // originating pattern zone / entry-stop-target. Undefined on a normal load.
+  handoffOverlay: undefined as ReplayHandoff | undefined,
   
   // Positions & Orders
   activePosition: undefined as Position | undefined,
@@ -494,7 +500,41 @@ export const useBacktestStore = create<BacktestStore>()(
           draft.timeframe = timeframe;
         });
       },
-      
+
+      // Load a replay context handed off from the automated backtest. Reuses
+      // the existing load/symbol/timeframe/jump actions — no new fetch logic.
+      // The cursor is positioned on the candle whose time is nearest focusTime,
+      // and the handoff is stashed in handoffOverlay for an optional chart draw.
+      loadHandoff: async (handoff: ReplayHandoff) => {
+        const { symbol, timeframe, windowFrom, windowTo, focusTime } = handoff;
+
+        // Keep the visible config in sync with the loaded window.
+        get().setSymbol(symbol);
+        get().setTimeframe(timeframe as Timeframe);
+
+        // Reuse the canonical loader (handles cache + UDF fetch + state set).
+        await get().loadCandles(symbol, timeframe as Timeframe, windowFrom, windowTo);
+
+        // Find the candle whose time is closest to focusTime. Candle.time is in
+        // SECONDS (UDF convention); focusTime is ms — compare in the same unit.
+        const focusSec = focusTime / 1000;
+        const candles = get().candles;
+        let nearestIndex = 0;
+        let nearestDelta = Infinity;
+        for (let i = 0; i < candles.length; i++) {
+          const delta = Math.abs(candles[i].time - focusSec);
+          if (delta < nearestDelta) {
+            nearestDelta = delta;
+            nearestIndex = i;
+          }
+        }
+        get().jumpToCandle(nearestIndex);
+
+        set((draft) => {
+          draft.handoffOverlay = handoff;
+        });
+      },
+
       // ========================================================================
       // STATISTICS ACTIONS
       // ========================================================================

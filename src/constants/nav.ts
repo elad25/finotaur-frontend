@@ -294,8 +294,7 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard',          path: '/app/stocks/overview',     icon: LayoutDashboard, priceGated: true },
       // Screener moved to the all-markets (home) level — see constants/markets.ts.
-      // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
-      { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
+      { label: 'Market Pulse',        path: '/app/stocks/market-pulse', icon: Activity,   locked: false },
       { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp,  locked: true, priceGated: true },
       { label: 'News',               path: '/app/stocks/news',         icon: Newspaper },
       { label: 'Sector Analysis',    path: '/app/stocks/sectors',      icon: Target },
@@ -439,12 +438,14 @@ export const domains: Record<string, Domain> = {
     locked: false,
     beta: false,
     subNav: [
+      { label: 'Auto Backtest', path: '/app/backtest/auto', locked: true },
       { label: 'Dashboard',   path: '/app/journal/backtest/overview' },
       { label: 'My Trades',   path: '/app/journal/backtest/trades' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
       { label: 'Results',     path: '/app/journal/backtest/results' },
     ],
     sidebar: [
+      { label: 'Auto Backtest',    path: '/app/backtest/auto',             icon: FlaskConical, locked: true },
       { label: 'Dashboard',        path: '/app/journal/backtest/overview', icon: LayoutDashboard },
       { label: 'Chart',            path: '/app/journal/backtest/chart',    icon: FlaskConical },
       { label: 'My Trades',        path: '/app/journal/backtest/trades',   icon: BarChart3 },
