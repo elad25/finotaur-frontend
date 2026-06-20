@@ -276,7 +276,7 @@ const ETFNews       = lazy(() => import("@/pages/app/etfs/News"));
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
-const StocksEarnings = lazy(() => import("@/pages/app/stocks/Earnings"));
+const StocksMarketPulse = lazy(() => import("@/pages/app/stocks/MarketPulse"));
 const StocksMovers = lazy(() => import("@/pages/app/stocks/Movers"));
 const StocksNews = lazy(() => import("@/pages/app/stocks/News"));
 const StocksSectors = lazy(() => import("@/pages/app/stocks/Sectors"));
@@ -558,9 +558,10 @@ function AppContent() {
           {/* Screener now lives at the all-markets (home) level — see all-markets/screener below.
               Redirect keeps old bookmarks/links working. */}
           <Route path="stocks/screener" element={<Navigate to="/app/all-markets/screener" replace />} />
-          {/* Stocks Earnings — sealed: earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
-              To re-enable: restore <LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute> and remove locked:true from nav.ts. */}
-          <Route path="stocks/earnings" element={<OptionsComingSoon title="Earnings" description="Earnings calendar data is coming soon — we're securing a commercially licensed data feed." />} />
+          {/* Stocks Earnings retired → Market Pulse (market breadth / sentiment / macro, free derived data).
+              Old path redirects so existing links/bookmarks don't 404. */}
+          <Route path="stocks/earnings" element={<Navigate to="/app/stocks/market-pulse" replace />} />
+          <Route path="stocks/market-pulse" element={<LockedRoute domainId="stocks"><StocksMarketPulse /></LockedRoute>} />
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />
