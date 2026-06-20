@@ -71,6 +71,7 @@ const BrokerReconnectModal = lazy(() =>
   import("@/components/broker/BrokerReconnectModal").then((m) => ({ default: m.BrokerReconnectModal })),
 );
 import AddBrokerPopup from "@/components/broker/AddBrokerPopup";
+import { UpgradeLimitDialog } from '@/components/upgrade/UpgradeLimitDialog';
 import { ManageConnectionsModal } from '@/components/broker/ManageConnectionsModal';
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
@@ -1391,6 +1392,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
   const [showImportPopup, setShowImportPopup] = useState(false);
   const [showAddBroker, setShowAddBroker] = useState(false);
+  const [showBrokerUpgrade, setShowBrokerUpgrade] = useState(false);
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
@@ -1474,6 +1476,11 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
       && localStorage.getItem('finotaur_journal_empty_state_dismissed') === 'true',
   );
 
+  // Hoisted above openAddBrokerPopup — isPremium is read in the callback body.
+  // Matches the pattern documented above (emptyStateDismissed, queryClient):
+  // declaration order must match usage order to avoid TDZ after minification.
+  const { limits, loading: subscriptionLoading, isPremium } = useSubscription();
+
   const openAddBrokerPopup = useCallback(() => {
     // Engagement signal: ANY path that opens the AddBroker popup (header
     // "Connect Broker" → popover → "+ Add new connection", AccountFilterDropdown
@@ -1485,8 +1492,13 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
       }
       return true;
     });
+    // Gate: free/basic users may only have 1 active journal connection.
+    if (!isPremium && allBrokerConnections.length >= 1) {
+      setShowBrokerUpgrade(true);
+      return;
+    }
     setShowAddBroker(true);
-  }, []);
+  }, [isPremium, allBrokerConnections]);
 
   const handoffToAddBrokerPopup = useCallback(() => {
     setShowAddBroker(true);
@@ -1574,7 +1586,6 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     return 30;
   }, [dateStart, dateEnd]);
   
-  const { limits, loading: subscriptionLoading } = useSubscription();
   const canUseSnapTrade = false; // disabled during SnapTrade removal (Phase A1)
   // When viewing another user's journal (mentor view), do not apply the
   // logged-in mentor's portfolio filter — show all of the student's data.
@@ -2229,6 +2240,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
       <ErrorBoundary>
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
       </ErrorBoundary>
+      <UpgradeLimitDialog open={showBrokerUpgrade} onOpenChange={setShowBrokerUpgrade} reason="broker-limit" />
 
       {/* Phase 1B.4 — BrokerReconnectModal driven by the degraded-connection banner above. */}
       {reconnectModalOpen && degradedConnection && (
