@@ -3,13 +3,9 @@
 // JOURNAL — Trade Compare (What-If Analysis) — "Shadow"
 // =====================================================
 // Route: /app/journal/trade-compare
-// Loads user's closed trades, lets them select one, runs
-// analyzeWhatIf() from whatIfEngine, and renders:
-//   - A price chart: real close-path when bars exist, else 2-point schematic
-//   - MFE/MAE markers (green/red dots) overlaid when bars are available
-//   - Scenario cards grid (plan, best_possible, held_stop vs actual)
-//   - Insight strip with a lightbulb icon
-//   - Confidence/sample guard note when confidence is not 'high'
+// Two tabs:
+//   - Total: cumulative P&L line chart across all closed trades, one line per scenario.
+//   - Specific trade: trade picker dialog + Price Path chart + planned-level scenario cards.
 // =====================================================
 
 import { useState, useMemo } from 'react';
@@ -23,12 +19,18 @@ import {
   Tooltip,
   ReferenceLine,
   ReferenceDot,
+  LineChart,
+  Line,
+  Legend,
 } from 'recharts';
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
 import { analyzeWhatIf } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar } from '@/lib/journal/whatIfEngine';
 import { useTradeReconcile, useTradeBars } from '@/hooks/useTradeBars';
+import { computePlannedScenarios, buildAggregate } from '@/lib/journal/plannedScenarios';
+import type { PlannedScenario } from '@/lib/journal/plannedScenarios';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Lightbulb,
   Info,
@@ -420,18 +422,23 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
 function scenarioIcon(key: string) {
   const cls = 'h-5 w-5';
   switch (key) {
-    case 'actual':       return <Activity className={cls} />;
-    case 'held_to_plan': return <Target className={cls} />;
-    case 'best_possible':return <TrendingUp className={cls} />;
-    case 'held_stop':    return <Shield className={cls} />;
-    default:             return <Activity className={cls} />;
+    case 'actual':    return <Activity className={cls} />;
+    case 'stop':      return <Shield className={cls} />;
+    case 'target':    return <Target className={cls} />;
+    case 'breakeven': return <Activity className={cls} />;
+    // legacy keys (kept for backwards compat with whatIfEngine usage)
+    case 'held_to_plan':   return <Target className={cls} />;
+    case 'best_possible':  return <TrendingUp className={cls} />;
+    case 'held_stop':      return <Shield className={cls} />;
+    default:               return <Activity className={cls} />;
   }
 }
 
 // ─── Scenario card ────────────────────────────────────────────────────────────
 
+// Accepts both PlannedScenario and WhatIfScenario — they share the same shape.
 interface ScenarioCardProps {
-  scenario: WhatIfScenario;
+  scenario: PlannedScenario | WhatIfScenario;
   isBaseline: boolean;
   hasBars: boolean;
 }
@@ -520,7 +527,7 @@ function ScenarioCard({ scenario, isBaseline, hasBars }: ScenarioCardProps) {
         {/* Detail line */}
         <p className="text-[11px] text-white/38 leading-relaxed mt-auto">
           {scenario.detail}
-          {!scenario.available && scenario.requires && !hasBars && (
+          {'requires' in scenario && !scenario.available && scenario.requires && !hasBars && (
             <span className="block mt-0.5 italic text-white/28">
               {scenario.requires === 'bars'
                 ? 'Needs price tracking'
@@ -528,6 +535,200 @@ function ScenarioCard({ scenario, isBaseline, hasBars }: ScenarioCardProps) {
             </span>
           )}
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Total tab ────────────────────────────────────────────────────────────────
+
+/** Custom tooltip for the cumulative P&L line chart */
+interface TotalTooltipProps {
+  active?: boolean;
+  payload?: Array<{ color: string; name: string; value: number }>;
+  label?: string;
+}
+
+function TotalTooltip({ active, payload, label }: TotalTooltipProps) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-[8px] border border-white/[0.08] bg-[rgba(10,10,10,0.96)] px-3 py-2 text-[12px] shadow-lg space-y-1">
+      <p className="text-white/42 mb-1">{label}</p>
+      {payload.map((p) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span style={{ color: p.color }} className="font-data font-semibold text-[11px]">
+            {p.name}
+          </span>
+          <span className="font-data tabular-nums text-white/82">
+            {fmtPnl(p.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TotalView({ trades }: { trades: Trade[] }) {
+  const agg = useMemo(() => buildAggregate(trades), [trades]);
+
+  if (agg.points.length === 0) {
+    return (
+      <div className={`${JOURNAL_PANEL} p-ds-5`}>
+        <div className="flex flex-col items-center gap-ds-3 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.04] text-white/28">
+            <Info className="h-7 w-7" />
+          </div>
+          <p className="text-sm font-medium text-white/60">No closed trades yet</p>
+          <p className="text-xs text-white/38 max-w-[320px]">
+            Close trades in your journal to see the cumulative scenario comparison here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const { totals, coverage, points } = agg;
+  const xInterval = points.length > 10 ? Math.floor(points.length / 8) : 0;
+
+  // Summary stat cards
+  const statCards: Array<{
+    label: string;
+    value: number;
+    caption?: string;
+    isGold?: boolean;
+  }> = [
+    {
+      label: 'Actual',
+      value: totals.actual,
+      isGold: true,
+    },
+    {
+      label: 'If held to stop',
+      value: totals.stop,
+      caption: `${coverage.withStop} of ${coverage.total} trades have a stop`,
+    },
+    {
+      label: 'If held to target',
+      value: totals.target,
+      caption: `${coverage.withTarget} of ${coverage.total} have a target`,
+    },
+    {
+      label: 'Break-even baseline',
+      value: totals.breakeven,
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-ds-5">
+      {/* Summary stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-ds-3">
+        {statCards.map((card) => {
+          const positive = card.value >= 0;
+          const valueColor = card.isGold
+            ? 'text-[#F2C85F]'
+            : positive
+              ? 'text-[#3BC76E]'
+              : 'text-[#EF4444]';
+          return (
+            <div
+              key={card.label}
+              className={[
+                JOURNAL_PANEL,
+                'min-h-[110px] px-ds-4 py-ds-4',
+                card.isGold ? 'ring-1 ring-[#C9A646]/30' : '',
+              ].join(' ')}
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_50%,rgba(255,255,255,0.025),transparent_32%)]" />
+              <div className="relative flex flex-col gap-ds-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[1.2px] text-white/50 leading-snug">
+                  {card.label}
+                </span>
+                <p className={`font-data text-[clamp(22px,1.55vw,28px)] font-semibold leading-none tabular-nums ${valueColor}`}>
+                  {fmtPnl(card.value)}
+                </p>
+                {card.caption && (
+                  <p className="text-[11px] text-white/38 leading-relaxed mt-auto">
+                    {card.caption}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cumulative P&L line chart */}
+      <div className={JOURNAL_PANEL}>
+        <div className="flex items-start justify-between gap-ds-3 border-b border-white/[0.06] px-ds-5 py-ds-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[14px] font-semibold text-white">Cumulative P&amp;L by scenario</span>
+            <ShadowInfoIcon label="Each line shows cumulative P&L across all closed trades. When a stop or target is missing for a trade, that trade's actual P&L is used instead so all lines span the same set of trades." />
+          </div>
+        </div>
+        <div className="px-ds-5 pb-ds-5 pt-ds-4" style={{ width: '100%', height: 420 }}>
+          <ResponsiveContainer>
+            <LineChart data={points} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
+              <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval={xInterval}
+              />
+              <YAxis
+                tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v: number) =>
+                  `${v >= 0 ? '+' : '-'}$${Math.round(Math.abs(v)).toLocaleString('en-US')}`
+                }
+                width={72}
+              />
+              <Tooltip content={<TotalTooltip />} />
+              <Legend
+                wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="actual"
+                name="Actual"
+                stroke={COLOR_GOLD}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="stop"
+                name="Held to stop"
+                stroke={COLOR_RED}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="target"
+                name="Held to target"
+                stroke={COLOR_GREEN}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="breakeven"
+                name="Break-even"
+                stroke="rgba(255,255,255,0.35)"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
@@ -564,7 +765,7 @@ export default function TradeCompare() {
   const { bars, isLoading: barsLoading } = useTradeBars(effectiveId ?? undefined);
   const hasBars = bars.length > 0;
 
-  // Run the what-if engine — passes real bars when available.
+  // Run the what-if engine — passes real bars when available (for MFE/MAE on PriceChart).
   const whatIfResult = useMemo(() => {
     if (!selectedTrade || !selectedTrade.exit_price) return null;
     return analyzeWhatIf(
@@ -584,6 +785,26 @@ export default function TradeCompare() {
     );
   }, [selectedTrade, bars, hasBars]);
 
+  // Planned-level scenarios for the Specific trade tab (no bars needed).
+  const planned = useMemo(
+    () => (selectedTrade ? computePlannedScenarios(selectedTrade) : null),
+    [selectedTrade],
+  );
+
+  // Insight string derived from planned scenarios.
+  const plannedInsight = useMemo<string>(() => {
+    if (!planned) return '';
+    const targetSc = planned.scenarios.find((s) => s.key === 'target');
+    const stopSc   = planned.scenarios.find((s) => s.key === 'stop');
+    if (targetSc?.available && targetSc.deltaVsActual != null) {
+      return `Held to your target would have changed this trade by ${fmtDelta(targetSc.deltaVsActual)}.`;
+    }
+    if (stopSc?.available && stopSc.pnl != null && stopSc.deltaVsActual != null) {
+      return `Exiting at your original stop would have been ${fmtPnl(stopSc.pnl)} (${fmtDelta(stopSc.deltaVsActual)}).`;
+    }
+    return 'Add a stop or target to this trade to compare scenarios.';
+  }, [planned]);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -597,27 +818,145 @@ export default function TradeCompare() {
             See what your trades could have been.
           </p>
         </div>
-
-        {/* Trade picker button — disabled when no closed trades */}
-        {!isLoading && (
-          <div className="pt-0.5 shrink-0">
-            <button
-              type="button"
-              disabled={closedTrades.length === 0}
-              onClick={() => setDialogOpen(true)}
-              className={[
-                'flex items-center gap-2 rounded-[9px] border px-3 py-2 text-[13px] font-medium transition-colors',
-                closedTrades.length === 0
-                  ? 'cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/28'
-                  : 'border-[#C9A646]/30 bg-[rgba(20,20,20,0.88)] text-white/82 hover:border-[#C9A646]/55 hover:bg-[rgba(30,28,20,0.92)] hover:text-white',
-              ].join(' ')}
-            >
-              <ListFilter className="h-3.5 w-3.5 shrink-0 text-[#C9A646]" />
-              {closedTrades.length === 0 ? 'No closed trades' : 'Select trade'}
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* ── Tabs ─────────────────────────────────────────────────────────── */}
+      <Tabs defaultValue="total">
+        <TabsList className="bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
+          <TabsTrigger
+            value="total"
+            className="data-[state=active]:bg-[#C9A646]/15 data-[state=active]:text-white data-[state=active]:shadow-none text-white/55 rounded-[8px] px-4 py-1.5 text-[13px] font-medium transition-colors"
+          >
+            Total
+          </TabsTrigger>
+          <TabsTrigger
+            value="specific"
+            className="data-[state=active]:bg-[#C9A646]/15 data-[state=active]:text-white data-[state=active]:shadow-none text-white/55 rounded-[8px] px-4 py-1.5 text-[13px] font-medium transition-colors"
+          >
+            Specific trade
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── Total tab ─────────────────────────────────────────────────── */}
+        <TabsContent value="total" className="mt-ds-5">
+          {isLoading ? (
+            <div className={`${JOURNAL_PANEL} p-ds-5`}>
+              <p className="text-center text-sm text-white/42 py-8">Loading your trades…</p>
+            </div>
+          ) : (
+            <TotalView trades={closedTrades} />
+          )}
+        </TabsContent>
+
+        {/* ── Specific trade tab ────────────────────────────────────────── */}
+        <TabsContent value="specific" className="mt-ds-5">
+          <div className="flex flex-col gap-ds-5">
+
+            {/* Trade picker button — right-aligned, near the top */}
+            {!isLoading && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  disabled={closedTrades.length === 0}
+                  onClick={() => setDialogOpen(true)}
+                  className={[
+                    'flex items-center gap-2 rounded-[9px] border px-3 py-2 text-[13px] font-medium transition-colors',
+                    closedTrades.length === 0
+                      ? 'cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/28'
+                      : 'border-[#C9A646]/30 bg-[rgba(20,20,20,0.88)] text-white/82 hover:border-[#C9A646]/55 hover:bg-[rgba(30,28,20,0.92)] hover:text-white',
+                  ].join(' ')}
+                >
+                  <ListFilter className="h-3.5 w-3.5 shrink-0 text-[#C9A646]" />
+                  {closedTrades.length === 0 ? 'No closed trades' : 'Select trade'}
+                </button>
+              </div>
+            )}
+
+            {/* Loading state */}
+            {isLoading && (
+              <div className={`${JOURNAL_PANEL} p-ds-5`}>
+                <p className="text-center text-sm text-white/42 py-8">Loading your trades…</p>
+              </div>
+            )}
+
+            {/* Empty state — no closed trades */}
+            {!isLoading && closedTrades.length === 0 && (
+              <div className={`${JOURNAL_PANEL} p-ds-5`}>
+                <div className="flex flex-col items-center gap-ds-3 py-12 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.04] text-white/28">
+                    <Info className="h-7 w-7" />
+                  </div>
+                  <p className="text-sm font-medium text-white/60">No closed trades yet</p>
+                  <p className="text-xs text-white/38 max-w-[320px]">
+                    Add and close trades in your journal to unlock what-if analysis here.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isLoading && closedTrades.length > 0 && (
+              <>
+                {/* Full-width price chart */}
+                {selectedTrade && (
+                  <PriceChart
+                    trade={selectedTrade}
+                    bars={bars}
+                    mfe={whatIfResult?.mfe ?? null}
+                    mae={whatIfResult?.mae ?? null}
+                  />
+                )}
+
+                {/* Bars loading indicator */}
+                {barsLoading && (
+                  <p className="text-[11px] text-white/38 flex items-center gap-1.5">
+                    <Info className="h-3.5 w-3.5 flex-shrink-0" />
+                    Loading price bars…
+                  </p>
+                )}
+
+                {/* ── Planned scenario cards ──────────────────────────────── */}
+                {planned && (
+                  <div className="flex flex-col gap-ds-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-[1.2px] text-white/50">
+                        What-if scenarios
+                      </span>
+                      <ShadowInfoIcon label="Four alternate outcomes computed from your recorded price levels — no price bars required." />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-ds-3">
+                      {planned.scenarios.map((scenario) => (
+                        <ScenarioCard
+                          key={scenario.key}
+                          scenario={scenario}
+                          isBaseline={scenario.key === 'actual'}
+                          hasBars={hasBars}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Insight strip ──────────────────────────────────────── */}
+                {planned && (
+                  <div className={`${JOURNAL_PANEL} grid min-h-[74px] items-center gap-4 px-ds-5 py-ds-4 sm:grid-cols-[minmax(0,1fr)_auto]`}>
+                    <div className="flex min-w-0 items-center gap-ds-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/10 text-[#E8C766] shadow-[0_0_26px_rgba(201,166,70,0.18)]">
+                        <Lightbulb className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="mb-1 text-[13px] font-semibold text-[#E8C766]">Key Takeaway</div>
+                        <p className="text-[13px] leading-relaxed text-white/78">
+                          {plannedInsight}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* ── Trade picker dialog ──────────────────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -682,96 +1021,6 @@ export default function TradeCompare() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Loading state */}
-      {isLoading && (
-        <div className={`${JOURNAL_PANEL} p-ds-5`}>
-          <p className="text-center text-sm text-white/42 py-8">Loading your trades…</p>
-        </div>
-      )}
-
-      {/* Empty state — no closed trades */}
-      {!isLoading && closedTrades.length === 0 && (
-        <div className={`${JOURNAL_PANEL} p-ds-5`}>
-          <div className="flex flex-col items-center gap-ds-3 py-12 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.04] text-white/28">
-              <Info className="h-7 w-7" />
-            </div>
-            <p className="text-sm font-medium text-white/60">No closed trades yet</p>
-            <p className="text-xs text-white/38 max-w-[320px]">
-              Add and close trades in your journal to unlock what-if analysis here.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {!isLoading && closedTrades.length > 0 && (
-        <>
-          {/* Full-width price chart */}
-          {selectedTrade && (
-            <PriceChart
-              trade={selectedTrade}
-              bars={bars}
-              mfe={whatIfResult?.mfe ?? null}
-              mae={whatIfResult?.mae ?? null}
-            />
-          )}
-
-          {/* Bars loading indicator */}
-          {barsLoading && (
-            <p className="text-[11px] text-white/38 flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5 flex-shrink-0" />
-              Loading price bars…
-            </p>
-          )}
-
-          {/* ── What-if scenario cards ────────────────────────────────────── */}
-          {whatIfResult && (
-            <div className="flex flex-col gap-ds-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[1.2px] text-white/50">
-                  What-if scenarios
-                </span>
-                <ShadowInfoIcon label="Four alternate outcomes for this trade. Scenarios requiring price bar data are unlocked automatically when bar tracking is active." />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-ds-3">
-                {whatIfResult.scenarios.map((scenario) => (
-                  <ScenarioCard
-                    key={scenario.key}
-                    scenario={scenario}
-                    isBaseline={scenario.key === 'actual'}
-                    hasBars={hasBars}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Insight strip ─────────────────────────────────────────────── */}
-          {whatIfResult && (
-            <div className={`${JOURNAL_PANEL} grid min-h-[74px] items-center gap-4 px-ds-5 py-ds-4 sm:grid-cols-[minmax(0,1fr)_auto]`}>
-              <div className="flex min-w-0 items-center gap-ds-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/10 text-[#E8C766] shadow-[0_0_26px_rgba(201,166,70,0.18)]">
-                  <Lightbulb className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="mb-1 text-[13px] font-semibold text-[#E8C766]">Key Takeaway</div>
-                  <p className="text-[13px] leading-relaxed text-white/78">
-                    {whatIfResult.insight}
-                  </p>
-                </div>
-              </div>
-              {/* Confidence guard badge (inline in the strip) */}
-              {whatIfResult.confidence !== 'high' && !hasBars && (
-                <div className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[11px] text-white/42">
-                  <Info className="h-3.5 w-3.5 flex-shrink-0" />
-                  Estimate — enable price tracking for exact what-if
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
