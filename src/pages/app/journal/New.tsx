@@ -43,6 +43,7 @@ import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
 import { useSubscription } from '@/hooks/useSubscription';
+import { UpgradeLimitDialog } from '@/components/upgrade/UpgradeLimitDialog';
 import { UsageWarningModal } from '@/components/subscription/UsageWarningModal';
 import { useRiskSettings } from '@/hooks/useRiskSettings';
 import { useCommissions } from '@/hooks/useRiskSettings';
@@ -3504,12 +3505,12 @@ if (hasResult && directRiskUSD > 0) {
       )}
 
       {/* 🔥 Compact Trade Limit Modal (Free & Basic) */}
-      <TradeLimitModal
+      <UpgradeLimitDialog
         open={showLimitModal}
-        onClose={() => setShowLimitModal(false)}
-        planType="free"
-        tradesUsed={limits?.trade_count ?? 0}
-        maxTrades={15}
+        onOpenChange={setShowLimitModal}
+        reason="free-trade-limit"
+        used={limits?.trade_count ?? 0}
+        max={15}
       />
       <TradeLimitModal
         open={showBasicLimitModal}
