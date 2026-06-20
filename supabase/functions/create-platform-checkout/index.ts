@@ -36,12 +36,13 @@ const PLATFORM_PRODUCTS = {
   pro_yearly: 'prod_3AyUOETP3CoK6',
 } as const;
 
-// Redirect paths by product
+// Redirect paths by product — platform purchases land on the app HOME page
+// (journal purchases redirect back to the journal; handled in create-whop-checkout).
 const PLAN_REDIRECT_PATHS: Record<string, string> = {
-  'prod_HDYzeNp6WOJwh': '/platform-pricing?payment=success&source=whop&plan=core',
-  'prod_YAdXQrHtt72Gd': '/platform-pricing?payment=success&source=whop&plan=core',
-  'prod_lhe19l7l48lKW': '/platform-pricing?payment=success&source=whop&plan=pro',
-  'prod_3AyUOETP3CoK6': '/platform-pricing?payment=success&source=whop&plan=pro',
+  'prod_HDYzeNp6WOJwh': '/app/home?payment=success&source=whop&plan=core',
+  'prod_YAdXQrHtt72Gd': '/app/home?payment=success&source=whop&plan=core',
+  'prod_lhe19l7l48lKW': '/app/home?payment=success&source=whop&plan=pro',
+  'prod_3AyUOETP3CoK6': '/app/home?payment=success&source=whop&plan=pro',
 };
 
 // ============================================
@@ -239,7 +240,7 @@ serve(async (req: Request) => {
     let finalRedirectUrl = redirect_url;
     
     if (!finalRedirectUrl) {
-      const planPath = PLAN_REDIRECT_PATHS[plan_id] || '/platform-pricing?payment=success&source=whop';
+      const planPath = PLAN_REDIRECT_PATHS[plan_id] || '/app/home?payment=success&source=whop';
       finalRedirectUrl = `${BASE_REDIRECT_URL}${planPath}`;
     }
 

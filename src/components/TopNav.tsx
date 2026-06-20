@@ -18,7 +18,7 @@ import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Button as DSButton } from '@/components/ds/Button';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
@@ -46,29 +46,45 @@ export const TopNav = () => {
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
 
-  // Get platform plan
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (!user?.id) return;
+  // Get platform plan + journal tier for the subscription badge
+  const fetchUserData = useCallback(async () => {
+    if (!user?.id) return;
 
-      try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('platform_plan, account_type')
-          .eq('id', user.id)
-          .maybeSingle();
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('platform_plan, account_type')
+        .eq('id', user.id)
+        .maybeSingle();
 
-        if (data) {
-          setPlatformPlan(data.platform_plan);
-          setAccountType(data.account_type);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
+      if (data) {
+        setPlatformPlan(data.platform_plan);
+        setAccountType(data.account_type);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  }, [user?.id]);
 
+  // Initial load + refresh whenever the user returns to the tab, so a tier
+  // change made elsewhere (e.g. right after checkout) shows up without a reload.
+  useEffect(() => {
     fetchUserData();
-  }, [user]);
+    const onFocus = () => fetchUserData();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchUserData]);
+
+  // After returning from Whop checkout (?payment=success), the webhook that
+  // assigns the new tier is processed asynchronously — poll a few times so the
+  // badge reflects the new subscription without a manual reload.
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('payment')) return;
+    const timers = [0, 3000, 8000, 15000].map((delay) =>
+      setTimeout(() => { fetchUserData(); }, delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [location.search, fetchUserData]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
