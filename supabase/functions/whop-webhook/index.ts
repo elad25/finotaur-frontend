@@ -267,7 +267,12 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 function verifyWebhookSignature(payload: string, signature: string | null): boolean {
   if (!signature || !WHOP_WEBHOOK_SECRET) {
-    console.warn("⚠️ Missing signature or webhook secret");
+    // Non-secret diagnostics: tells us whether Whop sent a signature header at
+    // all, and whether the WHOP_WEBHOOK_SECRET env var is even configured.
+    console.warn("⚠️ Signature check skipped:", {
+      hasSignatureHeader: !!signature,
+      hasWebhookSecret: !!WHOP_WEBHOOK_SECRET,
+    });
     return false;
   }
 
@@ -280,7 +285,18 @@ function verifyWebhookSignature(payload: string, signature: string | null): bool
     const isValid = timingSafeEqual(cleanSignature, expectedSignature);
 
     if (!isValid) {
-      console.error("❌ Signature mismatch");
+      // Non-secret diagnostics only: lengths + 6-char prefixes (never the full
+      // secret or full signatures). Lets us distinguish a secret mismatch
+      // (lengths equal, prefixes differ) from a header-format mismatch
+      // (lengths differ — e.g. Whop sending base64 instead of hex) without
+      // leaking credentials into the logs.
+      console.error("❌ Signature mismatch", {
+        receivedLen: cleanSignature.length,
+        expectedLen: expectedSignature.length,
+        receivedPrefix: cleanSignature.slice(0, 6),
+        expectedPrefix: expectedSignature.slice(0, 6),
+        secretLen: WHOP_WEBHOOK_SECRET.length,
+      });
     }
 
     return isValid;
