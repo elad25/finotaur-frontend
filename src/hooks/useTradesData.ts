@@ -18,6 +18,7 @@ import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMemo, useRef, useEffect } from 'react';
 import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
+import { excludeHiddenWhenAllAccounts } from '@/lib/journal/hiddenAccounts';
 
 // ================================================
 // 🔥 ASSET MULTIPLIERS - For R calculation
@@ -167,17 +168,21 @@ const RAW_MAX_PAGES = 50; // hard safety cap: 50k rows
 async function fetchAllTradesRaw(
   client: typeof supabase | typeof supabaseAdmin,
   userId: string,
+  excludePortfolioIds?: string[],
 ): Promise<Trade[]> {
   const allRows: Trade[] = [];
   let page = 0;
 
   while (page < RAW_MAX_PAGES) {
     const from = page * RAW_PAGE_SIZE;
-    const { data, error } = await client
+    let q = client
       .from('trades')
       .select(`*, strategies ( name )`)
       .eq('user_id', userId)
-      .is('deleted_at', null)
+      .is('deleted_at', null);
+    // all-accounts (TRADER raw) path: exclude hidden portfolios (e.g. WHISPER) — null-safe no-op when empty
+    q = excludeHiddenWhenAllAccounts(q, true, excludePortfolioIds ?? []);
+    const { data, error } = await q
       .order('open_at', { ascending: false })
       .range(from, from + RAW_PAGE_SIZE - 1);
 
@@ -206,6 +211,7 @@ async function fetchAllTrades(
   isImpersonating: boolean = false,
   portfolioId?: string | null,
   skipCopyAggregation?: boolean,
+  excludePortfolioIds?: string[],
 ): Promise<Trade[]> {
   if (!userId) {
     console.log('❌ No user ID - skipping trades fetch');
@@ -225,7 +231,7 @@ async function fetchAllTrades(
     // The caller (MyTrades) will group fills into decisions via normalizeTraderTrades.
     if (!portfolioId && skipCopyAggregation) {
       console.log('🔄 TRADER raw path: paginated fetch (bypassing aggregateCopiedTrades)');
-      const rawRows = await fetchAllTradesRaw(client, userId);
+      const rawRows = await fetchAllTradesRaw(client, userId, excludePortfolioIds);
       console.log(`✅ TRADER raw: fetched ${rawRows.length} fills`);
       return processRows(rawRows);
     }
@@ -250,6 +256,9 @@ async function fetchAllTrades(
       } else {
         query = query.eq('portfolio_id', portfolioId);
       }
+    } else {
+      // all-accounts case: exclude hidden portfolios
+      query = excludeHiddenWhenAllAccounts(query, true, excludePortfolioIds ?? []);
     }
 
     const { data, error } = await query;
@@ -335,6 +344,7 @@ export function useTrades(
   userId?: string,
   portfolioId?: string | null,
   options?: { skipCopyAggregation?: boolean },
+  excludePortfolioIds?: string[],
 ) {
   const { id: effectiveUserId } = useEffectiveUser();
   const { isImpersonating } = useImpersonation();
@@ -378,8 +388,9 @@ export function useTrades(
       isImpersonating ? 'admin' : 'user',
       portfolioId ?? 'all',
       skipCopyAggregation ? 'raw' : 'agg',
+      excludePortfolioIds && excludePortfolioIds.length > 0 ? `excl:${excludePortfolioIds.join(',')}` : 'excl:none',
     ],
-    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId, skipCopyAggregation),
+    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId, skipCopyAggregation, excludePortfolioIds),
     enabled: !!targetUserId,
 
     // Keep the previous account's rows visible while switching portfolios

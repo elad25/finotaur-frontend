@@ -74,6 +74,7 @@ function TradeChartSkeleton() {
   );
 }
 import { AccountFilterDropdown } from '@/components/journal/AccountFilterDropdown';
+import WhisperSetupsPanel from '@/components/journal/WhisperSetupsPanel';
 import { ManageConnectionsModal } from '@/components/broker/ManageConnectionsModal';
 import { toast } from "sonner";
 import {
@@ -1238,7 +1239,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
-  const { effectivePortfolioId, activePortfolio, isTraderMode } = usePortfolioContext();
+  const { effectivePortfolioId, activePortfolio, isTraderMode, isShowingAll, hiddenPortfolioIds } = usePortfolioContext();
   const { traderMode } = useTraderMode();
   // When viewing another user's journal (mentor view), do not apply the
   // logged-in mentor's portfolio filter — show all of the student's trades.
@@ -1246,7 +1247,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   // TRADER mode: pass skipCopyAggregation so we receive raw per-account fills
   // instead of copy-aggregated rows. normalizeTraderTrades (below) then groups
   // them into decisions, matching Dashboard behaviour.
-  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode });
+  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, isShowingAll ? hiddenPortfolioIds : undefined);
   // TRADER scope: normalize copier-duplicated rows into one decision per trade.
   // All downstream stats and the table operate on `trades` (the normalized array).
   // Non-TRADER: `trades` === `rawTrades` (zero cost, referentially stable).
@@ -1822,6 +1823,8 @@ const stats = useMemo<Stats>(() => {
           </div>
         </div>
       </div>
+
+      <WhisperSetupsPanel />
 
       {/* Trades Table */}
       <div className="flex-1 overflow-auto">
