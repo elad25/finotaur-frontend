@@ -141,6 +141,84 @@ function getRankColor(rank: number): string {
 }
 
 // =====================================================
+// 🐂 FINO'S TAKE — deterministic, data-driven signal engine
+// Pure computation — no AI calls, no dictionary, no fallback filler.
+// Composes one readable English sentence from real numbers on the holding.
+// =====================================================
+
+/**
+ * Builds a concise, data-driven sentence for a mover card.
+ * Uses only fields already present on `h` (SectorHolding) and `sector`.
+ * Never produces a generic filler — falls back to a terse factual line.
+ */
+function buildFinoTake(
+  h: SectorHolding & { volumeVsAvg: number; score: number },
+  sector: Pick<Sector, 'name' | 'changePercent' | 'sentiment'>,
+): string {
+  const changePct = h.change;
+  const sign = changePct >= 0 ? '+' : '';
+  const changeStr = `${sign}${changePct.toFixed(1)}%`;
+
+  // Direction vs sector
+  const sectorDelta = changePct - sector.changePercent;
+  const vsLabel =
+    sectorDelta > 1.5
+      ? `outpacing the ${sector.name} sector`
+      : sectorDelta < -1.5
+      ? `lagging the ${sector.name} sector`
+      : `in line with the sector`;
+
+  // Volume signal (only when meaningfully elevated)
+  const volClause =
+    h.volumeVsAvg >= 1.4
+      ? `on ${h.volumeVsAvg.toFixed(1)}× average volume`
+      : null;
+
+  // Optional flavour: insider activity
+  const insiderClause =
+    h.insiderActivity === 'buy'
+      ? 'with recent insider buying'
+      : h.insiderActivity === 'sell'
+      ? 'amid insider selling'
+      : null;
+
+  // Optional flavour: valuation vs sector (notable divergence only)
+  const peClause =
+    h.peVsSector !== undefined && h.peVsSector < 0.75
+      ? 'trading at a discount to peers'
+      : h.peVsSector !== undefined && h.peVsSector > 1.35
+      ? 'at a premium to sector peers'
+      : null;
+
+  // Optional flavour: momentum score (only flag strong cases)
+  const momentumClause = h.score >= 80 ? 'strong momentum' : null;
+
+  // --- Build sentence from most-salient signals (max 3 clauses) ---
+  // Priority: change% (always) + volume (if elevated) + best contextual extra
+  const extras: string[] = [];
+
+  if (volClause) extras.push(volClause);
+
+  // Pick ONE contextual extra in priority order: insider > pe > momentum > vsLabel
+  if (insiderClause) {
+    extras.push(insiderClause);
+  } else if (peClause) {
+    extras.push(peClause);
+  } else if (momentumClause) {
+    extras.push(momentumClause);
+  } else {
+    extras.push(vsLabel);
+  }
+
+  // Compose final sentence
+  if (extras.length === 0) {
+    return `${changeStr}, ${vsLabel}.`;
+  }
+  const tail = extras.join(', ');
+  return `${changeStr} — ${tail}.`;
+}
+
+// =====================================================
 // 🔌 DATA LAYER — In-memory cache + server fetch
 // =====================================================
 // In-memory cache survives tab switches
@@ -148,50 +226,6 @@ function getRankColor(rank: number): string {
 // ZERO AI calls per user request
 
 const sectorMoversCache = new Map<string, SectorTopMoversCache>();
-
-// AI one-liners — pre-generated server-side in production
-const AI_ONE_LINERS: Record<string, string> = {
-  'NVDA': 'AI capex cycle accelerating; data center revenue beat driving momentum',
-  'AAPL': 'Services revenue mix improving margins; iPhone cycle nearing peak',
-  'MSFT': 'Azure growth re-accelerating on AI workloads; Copilot monetization early',
-  'AVGO': 'VMware integration ahead of schedule; AI networking demand surging',
-  'AMD': 'MI300 ramp competitive but pricing pressure from NVDA dominance',
-  'CRM': 'Agentforce adoption better than expected; margin expansion continues',
-  'ADBE': 'Firefly AI integration boosting Creative Cloud retention and ARPU',
-  'INTC': 'Foundry losses widening; 18A process delays raising execution concerns',
-  'LLY': 'Mounjaro/Zepbound supply constraints easing; tirzepatide dominates',
-  'UNH': 'Medical cost ratio trending higher; Medicare Advantage margin pressure',
-  'JNJ': 'MedTech showing resilience; Stelara biosimilar competition priced in',
-  'JPM': 'NII guidance raised; investment banking pipeline strongest since 2021',
-  'BRK.B': 'Insurance float deployment disciplined; cash pile signals patience',
-  'GS': 'Capital markets recovery accelerating; asset management scale building',
-  'XOM': 'Pioneer integration synergies tracking; Permian output at record levels',
-  'CVX': 'Hess acquisition unlocking Guyana exposure; shareholder returns steady',
-  'AMZN': 'AWS AI inference demand explosive; retail margins expanding meaningfully',
-  'TSLA': 'FSD v13 nearing robotaxi viability; energy storage scaling rapidly',
-  'CAT': 'Non-residential construction holding; dealer inventory normalization positive',
-  'GE': 'LEAP engine service revenue visibility excellent through 2030+',
-  'LIN': 'Industrial gas pricing power intact; clean hydrogen projects on track',
-  'FCX': 'Copper deficit widening 2025; Grasberg underground ramp-up on schedule',
-  'NEE': 'Regulated utility earnings stable; renewables PPA pipeline record high',
-  'VST': 'Nuclear uprating underway; data center PPA contracts at premium rates',
-  'PLD': 'Logistics real estate fundamentals stabilizing; re-leasing spreads positive',
-  'EQIX': 'AI infrastructure demand driving record leasing; xScale expanding',
-  'PG': 'Volume growth returning; premium innovation driving category share gains',
-  'COST': 'Membership renewal rate 93%; e-commerce penetration inflecting higher',
-  'META': 'Reels monetization closing gap with Stories; AI-driven ad targeting improving',
-  'GOOGL': 'Search resilience from AI Overviews; Cloud margins expanding rapidly',
-  'BKNG': 'Connected trip strategy improving attach rates; alt accommodations growing',
-  'VRTX': 'Pain franchise optionality undervalued; CF cash flows funding pipeline',
-  'CRWD': 'Falcon platform consolidation winning deals; net retention expanding',
-  'EOG': 'Double premium inventory supports returns through $55 oil floor',
-  'HD': 'Housing turnover recovery thesis intact; Pro segment outperforming',
-  'MCD': 'Value menu driving traffic recovery; international comps strong',
-  'NKE': 'Innovation pipeline rebuilding under new leadership; DTC margin focus',
-  'LOW': 'Home improvement cycle bottoming; Pro penetration driving share gains',
-  'SLB': 'International activity resilient; digital solutions margin accretive',
-  'COP': 'Marathon Oil integration adding scale; Permian and Alaska assets strong',
-};
 
 function generateTopMoversFromSector(sector: Sector): SectorTopMoversCache {
   // Check cache first
@@ -220,7 +254,7 @@ function generateTopMoversFromSector(sector: Sector): SectorTopMoversCache {
     volumeVsAvg: h.volumeVsAvg ?? 1.0,
     score: h.score,
     signal: calculateSignal(h.score),
-    aiOneLiner: h.aiInsight || AI_ONE_LINERS[h.ticker] || `Strong positioning within ${sector.name} sector`,
+    aiOneLiner: buildFinoTake({ ...h, volumeVsAvg: h.volumeVsAvg ?? 1.0, score: h.score }, sector),
     weekChange: undefined,
     monthChange: undefined,
     pe: undefined,
@@ -455,10 +489,23 @@ const MoverCard = memo<MoverCardProps>(({ mover, isExpanded, onToggle }) => {
               className="mx-4 mb-3 px-4 py-3.5 rounded-xl"
               style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.06)' }}
             >
-              {/* AI Insight */}
+              {/* FINO's Take */}
               <div className="flex items-start gap-2 mb-3">
-                <Sparkles className="h-3.5 w-3.5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                <p className="text-[13px] text-[#B0B0B0] leading-relaxed">{mover.aiOneLiner}</p>
+                <img
+                  src="/fino-avatar.png"
+                  alt="FINO"
+                  className="h-5 w-5 rounded-full flex-shrink-0 mt-0.5 object-cover"
+                  style={{ border: '1px solid rgba(201,166,70,0.35)' }}
+                />
+                <div className="min-w-0">
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-widest block mb-0.5"
+                    style={{ color: '#C9A646' }}
+                  >
+                    FINO&apos;S TAKE
+                  </span>
+                  <p className="text-[13px] text-[#B0B0B0] leading-relaxed">{mover.aiOneLiner}</p>
+                </div>
               </div>
 
               {/* Extra Metrics Grid */}
@@ -634,8 +681,8 @@ export const HeatMapTab = memo<HeatMapTabProps>(({ sector }) => {
           {/* Footer */}
           <div className="mt-5 pt-4 border-t border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[11px] text-[#6B6B6B]">
-              <Sparkles className="h-3.5 w-3.5 text-[#C9A646]/50" />
-              <span>AI insights pre-computed — zero per-user cost</span>
+              <img src="/fino-avatar.png" alt="FINO" className="h-3.5 w-3.5 rounded-full object-cover opacity-60" />
+              <span>FINO&apos;s Take — computed from live data, zero per-user cost</span>
             </div>
             <div className="text-[11px] text-[#6B6B6B]">
               Showing top {sortedMovers.length} of {cachedData.summary.totalStocks} stocks
