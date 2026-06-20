@@ -321,27 +321,30 @@ export function usePortfolios() {
   }, [multiKey, storageKey]);
 
   const togglePortfolioSelection = useCallback((id: string) => {
-    setSelectedIdsState(prev => {
-      let next: string[];
-      if (id === ALL_PORTFOLIOS_ID || id === TRADER_SCOPE_ID) {
-        // Sentinel views are exclusive — selecting one clears everything else.
-        next = [id];
+    // Compute the next selection from the current one, then route through
+    // setSelectedPortfolioIds so the legacy activePortfolioId stays in sync.
+    // (Previously this only updated selectedIds and left activePortfolioId stale —
+    // e.g. stuck on __TRADER__ — which made effectivePortfolioId resolve to null
+    // = ALL ACCOUNTS even when a single specific account was selected, leaking other
+    // accounts' trades + stats into that account's view.)
+    let next: string[];
+    if (id === ALL_PORTFOLIOS_ID || id === TRADER_SCOPE_ID) {
+      // Sentinel views are exclusive — selecting one clears everything else.
+      next = [id];
+    } else {
+      const withoutSentinels = selectedIds.filter(
+        x => x !== ALL_PORTFOLIOS_ID && x !== TRADER_SCOPE_ID,
+      );
+      if (withoutSentinels.includes(id)) {
+        // Deselect — but never go empty; fall back to ALL
+        const remaining = withoutSentinels.filter(x => x !== id);
+        next = remaining.length > 0 ? remaining : [ALL_PORTFOLIOS_ID];
       } else {
-        const withoutSentinels = prev.filter(
-          x => x !== ALL_PORTFOLIOS_ID && x !== TRADER_SCOPE_ID,
-        );
-        if (withoutSentinels.includes(id)) {
-          // Deselect — but never go empty; fall back to ALL
-          const remaining = withoutSentinels.filter(x => x !== id);
-          next = remaining.length > 0 ? remaining : [ALL_PORTFOLIOS_ID];
-        } else {
-          next = [...withoutSentinels, id];
-        }
+        next = [...withoutSentinels, id];
       }
-      localStorage.setItem(multiKey, JSON.stringify(next));
-      return next;
-    });
-  }, [multiKey]);
+    }
+    setSelectedPortfolioIds(next);
+  }, [selectedIds, setSelectedPortfolioIds]);
 
   // ── Derived values ────────────────────────────────────────────
   const isTraderMode = selectedIds.includes(TRADER_SCOPE_ID);

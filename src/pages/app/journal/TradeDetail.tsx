@@ -16,6 +16,7 @@ import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Sk
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
 import OptionPayoffChart from '@/components/journal/OptionPayoffChart';
+import TradeChart from '@/components/journal/TradeChart';
 import { TradeScorecard } from '@/pages/app/journal/finotaur-ai/components/TradeScorecard';
 import { TradeStatsList } from '@/components/journal/TradeStatsList';
 import type { StatRow } from '@/components/journal/TradeStatsList';
@@ -889,6 +890,9 @@ export default function JournalTradeDetail() {
           </div>
         );
       })()}
+
+      {/* Price chart — the trade plotted with entry/exit markers */}
+      {trade && <TradeChart trade={trade} />}
 
       {/* Trade Scorecard */}
       {id && <TradeScorecard tradeId={id} />}
