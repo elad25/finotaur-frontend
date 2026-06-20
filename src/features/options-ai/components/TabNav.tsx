@@ -15,7 +15,7 @@ const TAB_CONFIG: { id: OptionsTab; label: string; icon: typeof Layers; disabled
   { id: 'overview', label: 'Overview',          icon: Layers },
   { id: 'flow',     label: 'Flow Scanner',      icon: Zap },
   { id: 'squeeze',  label: 'Squeeze Detector',  icon: Flame },
-  { id: 'darkpool', label: 'Institutional Flow', icon: Eye },
+  { id: 'darkpool', label: 'Options Flow',        icon: Eye },
   { id: 'deepdive', label: 'AI Analysis',       icon: Brain },
 ];
 

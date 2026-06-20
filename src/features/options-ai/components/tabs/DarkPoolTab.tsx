@@ -565,7 +565,7 @@ export const DarkPoolTab = memo(function DarkPoolTab() {
             <SectionHeader
               icon={Eye}
               title="Institutional Options Flow"
-              subtitle="Large options prints — daily aggregated"
+              subtitle="Large options premium flows by symbol — daily aggregated"
               iconBg="purple"
             />
             <div className="flex items-center gap-3 shrink-0">
@@ -579,6 +579,9 @@ export const DarkPoolTab = memo(function DarkPoolTab() {
               </button>
             </div>
           </div>
+          <p className="text-[11px] text-[#6B6B6B] mt-1 ml-[52px]">
+            Options premium concentration — not equity dark-pool prints.
+          </p>
 
           {/* Last updated */}
           {data?.lastUpdated && (

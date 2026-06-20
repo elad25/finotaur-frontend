@@ -254,7 +254,7 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
             }}>
               <Brain style={{ width: 12, height: 12 }} />
             </span>
-            AI Insight
+            Dealer Read
           </div>
           <div style={{ color: '#D7D2C7', fontSize: 10, lineHeight: 1.45 }}>
             {ng?.soWhat || (isNeg ? 'Dealers are short gamma and positioning for amplified moves.' : 'Dealers are long gamma and positioning for stability.')}
