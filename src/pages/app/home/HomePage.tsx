@@ -142,9 +142,11 @@ export default function HomePage() {
               visible seam between clips or across the loop. Locked-off camera
               (same framing/zoom throughout), bipedal (2 legs + 2 arms),
               anchored to the canonical bipedal FINO still. Framing cropped
-              tighter than v3 so FINO fills more of the square. */}
+              tighter than v3 so FINO fills more of the square. v5 fixes the
+              alpha key (tight colorkey) so the dark cape + legs are no longer
+              clipped. */}
           <img
-            src="/fino/fino-home-loop-v4.webp"
+            src="/fino/fino-home-loop-v5.webp"
             alt=""
             aria-hidden="true"
             draggable={false}
