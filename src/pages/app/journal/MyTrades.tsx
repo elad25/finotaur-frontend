@@ -44,7 +44,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Moon, Sun, Maximize2 } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Moon, Sun, Maximize2, Upload, X, Brain } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -89,7 +89,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // 🔥 IMPORT CENTRALIZED TRADE OPERATIONS
-import { updateTrade, deleteTrade, bulkDeleteTrades } from "@/lib/trades";
+import { updateTrade, deleteTrade, bulkDeleteTrades, uploadScreenshot } from "@/lib/trades";
+import { compressImage } from "@/utils/imageCompression";
 
 // 🔥 NEW: Import timezone utilities + session formatting
 import { useTimezone } from '@/contexts/TimezoneContext';
@@ -116,6 +117,7 @@ interface Trade {
   strategy_id?: string;
   strategy_name?: string;
   setup?: string;
+  emotion?: string;
   notes?: string;
   tags?: string[];
   screenshot_url?: string;
@@ -1285,9 +1287,14 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [tradeDetailTab, setTradeDetailTab] = useState('chart');
   const [detailChartTheme, setDetailChartTheme] = useChartTheme('light');
   const [detailChartFullscreen, setDetailChartFullscreen] = useState(false);
-  // Editable per-trade notes (seeded when a trade opens, saved on demand).
+  // Editable per-trade reflection (seeded when a trade opens, saved on demand).
+  const [setupDraft, setSetupDraft] = useState('');
+  const [emotionDraft, setEmotionDraft] = useState('');
   const [notesDraft, setNotesDraft] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  // Screenshot upload in the trade-detail modal.
+  const [uploadingShots, setUploadingShots] = useState(false);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
 
   // ── Bulk selection state ───────────────────────────────────────────────────
   const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(() => new Set());
@@ -1431,6 +1438,8 @@ const stats = useMemo<Stats>(() => {
   // ✅ 6. All useCallback handlers
   const openTrade = useCallback((trade: Trade) => {
     setSelectedTrade(trade);
+    setSetupDraft(trade.setup ?? '');
+    setEmotionDraft(trade.emotion ?? '');
     setNotesDraft(trade.notes ?? '');
     setTradeDetailTab('chart');
     setDrawerOpen(true);
@@ -1442,17 +1451,83 @@ const stats = useMemo<Stats>(() => {
     try {
       const updated = await updateTradeMutation({
         id: selectedTrade.id,
-        data: { notes: notesDraft.trim() ? notesDraft : null },
+        data: {
+          setup: setupDraft.trim() || null,
+          emotion: emotionDraft.trim() || null,
+          notes: notesDraft.trim() ? notesDraft : null,
+        },
       });
       if (updated) setSelectedTrade(updated as Trade);
-      toast.success('Notes saved');
+      toast.success('Saved');
     } catch (err) {
       console.error('Failed to save notes', err);
-      toast.error('Could not save notes');
+      toast.error('Could not save');
     } finally {
       setSavingNotes(false);
     }
-  }, [selectedTrade, notesDraft, updateTradeMutation]);
+  }, [selectedTrade, setupDraft, emotionDraft, notesDraft, updateTradeMutation]);
+
+  const handleUploadScreenshots = useCallback(async (files: FileList | null) => {
+    if (!selectedTrade || !files || files.length === 0) return;
+    const existing = selectedTrade.screenshots ?? (selectedTrade.screenshot_url ? [selectedTrade.screenshot_url] : []);
+    const MAX = 4;
+    const room = MAX - existing.length;
+    if (room <= 0) {
+      toast.error(`Up to ${MAX} screenshots per trade`);
+      return;
+    }
+    const picked = Array.from(files).slice(0, room);
+    setUploadingShots(true);
+    try {
+      const urls: string[] = [];
+      for (const file of picked) {
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error(`${file.name}: max 5MB`);
+          continue;
+        }
+        let toUpload = file;
+        try {
+          toUpload = await compressImage(file);
+        } catch {
+          /* compression failed — upload the original */
+        }
+        const url = await uploadScreenshot(toUpload);
+        if (url) urls.push(url);
+      }
+      if (urls.length > 0) {
+        const next = [...existing, ...urls];
+        const updated = await updateTradeMutation({
+          id: selectedTrade.id,
+          data: { screenshots: next, screenshot_url: null },
+        });
+        if (updated) setSelectedTrade(updated as Trade);
+        toast.success(`${urls.length} screenshot${urls.length > 1 ? 's' : ''} added`);
+      }
+    } catch (err) {
+      console.error('Screenshot upload failed', err);
+      toast.error('Upload failed');
+    } finally {
+      setUploadingShots(false);
+      if (screenshotInputRef.current) screenshotInputRef.current.value = '';
+    }
+  }, [selectedTrade, updateTradeMutation]);
+
+  const handleRemoveScreenshot = useCallback(async (index: number) => {
+    if (!selectedTrade) return;
+    const existing = selectedTrade.screenshots ?? (selectedTrade.screenshot_url ? [selectedTrade.screenshot_url] : []);
+    const next = existing.filter((_, i) => i !== index);
+    try {
+      const updated = await updateTradeMutation({
+        id: selectedTrade.id,
+        data: { screenshots: next, screenshot_url: null },
+      });
+      if (updated) setSelectedTrade(updated as Trade);
+      toast.success('Screenshot removed');
+    } catch (err) {
+      console.error('Failed to remove screenshot', err);
+      toast.error('Could not remove screenshot');
+    }
+  }, [selectedTrade, updateTradeMutation]);
 
   const toggleDayExpanded = useCallback((dayKey: string) => {
     setExpandedDayKeys((previous) => {
@@ -2604,6 +2679,40 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       📸 TRADE SCREENSHOT{(selectedTrade.screenshots && selectedTrade.screenshots.length > 1) ? 'S' : ''}
                     </h3>
                     
+                    {!effectiveReadOnly && (selectedTrade.screenshots?.length ?? (selectedTrade.screenshot_url ? 1 : 0)) < 4 && (
+                      <div
+                        onClick={() => !uploadingShots && screenshotInputRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => { e.preventDefault(); handleUploadScreenshots(e.dataTransfer.files); }}
+                        className="mb-4 flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-500/40 bg-zinc-950/50 p-8 text-center transition-all hover:border-blue-400/60 hover:bg-blue-900/10"
+                      >
+                        <input
+                          ref={screenshotInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => handleUploadScreenshots(e.target.files)}
+                        />
+                        {uploadingShots ? (
+                          <>
+                            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10">
+                              <Upload className="h-10 w-10 animate-pulse text-blue-400" />
+                            </div>
+                            <div className="text-sm font-medium text-blue-300">Uploading...</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10">
+                              <Upload className="h-10 w-10 text-blue-400" />
+                            </div>
+                            <div className="mb-1 text-sm font-medium text-zinc-200">Drop screenshots here — or click to upload</div>
+                            <div className="text-xs text-zinc-500">PNG, JPG or WebP · up to 5MB · auto-compressed</div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     {(selectedTrade.screenshots && selectedTrade.screenshots.length > 0) || selectedTrade.screenshot_url ? (
                       <div className="space-y-4">
                         {/* 🔥 תמיכה לאחור - אם יש רק screenshot_url ישן */}
@@ -2643,29 +2752,40 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                             'grid-cols-3'
                           }`}>
                             {selectedTrade.screenshots.map((url, idx) => (
-                              <div 
+                              <div
                                 key={idx}
-                                className="relative bg-zinc-950 rounded-xl border-2 border-blue-500/30 overflow-hidden shadow-2xl group cursor-pointer"
-                                onClick={() => window.open(url, '_blank')}
+                                className="relative bg-zinc-950 rounded-xl border-2 border-blue-500/30 overflow-hidden shadow-2xl group"
                               >
                                 {/* Screenshot Number Badge */}
                                 <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-full bg-yellow-500 text-black text-xs font-bold">
                                   {idx + 1}/{selectedTrade.screenshots.length}
                                 </div>
-                                
+
+                                {!effectiveReadOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveScreenshot(idx); }}
+                                    className="absolute top-2 right-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-red-600/90 opacity-0 transition-all hover:bg-red-600 group-hover:opacity-100"
+                                    aria-label="Remove screenshot"
+                                  >
+                                    <X className="h-4 w-4 text-white" />
+                                  </button>
+                                )}
+
                                 {/* Image */}
-                                <img 
-                                  src={url} 
+                                <img
+                                  src={url}
                                   alt={`Screenshot ${idx + 1}`}
-                                  className="w-full h-auto transition-all duration-300 hover:scale-105"
+                                  className="max-h-[420px] w-full object-contain cursor-zoom-in transition-all duration-300"
+                                  onClick={() => window.open(url, '_blank')}
                                   loading="lazy"
                                   onError={(e) => {
                                     e.currentTarget.src = '/placeholder-chart.png';
                                   }}
                                 />
-                                
+
                                 {/* Hover overlay */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                               </div>
                             ))}
                           </div>
@@ -2675,17 +2795,14 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           📸 {selectedTrade.screenshots?.length || 1} screenshot(s) • Click to enlarge
                         </div>
                       </div>
-                    ) : (
-                      <div className="bg-zinc-950/50 rounded-xl border border-dashed border-zinc-700/50 p-10 text-center">
+                    ) : effectiveReadOnly ? (
+                      <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-700/50 bg-zinc-950/40 p-10 text-center">
                         <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
                           <Image className="w-8 h-8 text-blue-400/50" />
                         </div>
-                        <div className="text-zinc-500 text-sm font-medium mb-2">No screenshots added</div>
-                        <div className="text-zinc-600 text-xs max-w-sm mx-auto leading-relaxed">
-                          📸 Visual documentation helps you identify patterns
-                        </div>
+                        <div className="text-zinc-500 text-sm font-medium">No screenshots added</div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   </TabsContent>
 
@@ -2705,33 +2822,83 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                     </div>
                     
                     {!effectiveReadOnly ? (
-                      <div className="space-y-3">
-                        <Textarea
-                          value={notesDraft}
-                          onChange={(e) => setNotesDraft(e.target.value)}
-                          placeholder="Write your own notes about this trade — your thesis, emotions, what worked, and what to improve next time…"
-                          className="min-h-[180px] resize-y bg-zinc-950/70 border-yellow-500/20 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-yellow-500/30"
-                        />
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs text-zinc-500">
-                            {notesDraft.trim()
-                              ? `${notesDraft.trim().split(/\s+/).length} words`
-                              : 'No notes yet'}
-                          </span>
+                      <div className="space-y-4">
+                        {/* Top half — structured reflection */}
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-yellow-400/90">
+                              <Target className="h-3.5 w-3.5" />
+                              Setup
+                            </label>
+                            <Textarea
+                              value={setupDraft}
+                              onChange={(e) => setSetupDraft(e.target.value)}
+                              placeholder="What was the setup? Why did you take this trade?"
+                              className="min-h-[96px] resize-y bg-zinc-950/70 border-yellow-500/20 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-yellow-500/30"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-yellow-400/90">
+                              <Brain className="h-3.5 w-3.5" />
+                              Emotion / Mindset
+                            </label>
+                            <Textarea
+                              value={emotionDraft}
+                              onChange={(e) => setEmotionDraft(e.target.value)}
+                              placeholder="How did you feel before, during and after? (confident, FOMO, hesitant…)"
+                              className="min-h-[96px] resize-y bg-zinc-950/70 border-yellow-500/20 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-yellow-500/30"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bottom half — free notes */}
+                        <div className="space-y-1.5">
+                          <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-yellow-400/90">
+                            <FileText className="h-3.5 w-3.5" />
+                            Notes
+                          </label>
+                          <Textarea
+                            value={notesDraft}
+                            onChange={(e) => setNotesDraft(e.target.value)}
+                            placeholder="Anything else you want to remember about this trade…"
+                            className="min-h-[150px] resize-y bg-zinc-950/70 border-yellow-500/20 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-yellow-500/30"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end">
                           <Button
                             onClick={handleSaveNotes}
-                            disabled={savingNotes || notesDraft === (selectedTrade.notes ?? '')}
+                            disabled={
+                              savingNotes ||
+                              (setupDraft === (selectedTrade.setup ?? '') &&
+                                emotionDraft === (selectedTrade.emotion ?? '') &&
+                                notesDraft === (selectedTrade.notes ?? ''))
+                            }
                             className="h-8 bg-yellow-500 text-xs font-semibold text-black hover:bg-yellow-400 disabled:opacity-40"
                           >
-                            {savingNotes ? 'Saving...' : 'Save notes'}
+                            {savingNotes ? 'Saving...' : 'Save'}
                           </Button>
                         </div>
                       </div>
-                    ) : selectedTrade.notes ? (
-                      <div className="bg-zinc-950/70 rounded-xl border border-yellow-500/20 p-5 shadow-inner">
-                        <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed font-medium">
-                          {selectedTrade.notes}
-                        </p>
+                    ) : (selectedTrade.setup || selectedTrade.emotion || selectedTrade.notes) ? (
+                      <div className="space-y-3">
+                        {selectedTrade.setup && (
+                          <div className="bg-zinc-950/70 rounded-xl border border-yellow-500/20 p-4">
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-yellow-400/80">Setup</div>
+                            <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{selectedTrade.setup}</p>
+                          </div>
+                        )}
+                        {selectedTrade.emotion && (
+                          <div className="bg-zinc-950/70 rounded-xl border border-yellow-500/20 p-4">
+                            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-yellow-400/80">Emotion / Mindset</div>
+                            <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{selectedTrade.emotion}</p>
+                          </div>
+                        )}
+                        {selectedTrade.notes && (
+                          <div className="bg-zinc-950/70 rounded-xl border border-yellow-500/20 p-5 shadow-inner">
+                            <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed font-medium">{selectedTrade.notes}</p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="bg-zinc-950/50 rounded-xl border border-dashed border-zinc-700/50 p-8 text-center">
@@ -2743,18 +2910,8 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                     )}
                     
                     {/* Additional Details */}
-                    {(selectedTrade.setup || selectedTrade.mistake || selectedTrade.next_time) && (
+                    {(selectedTrade.mistake || selectedTrade.next_time) && (
                       <div className="mt-4 pt-4 border-t border-yellow-500/10 space-y-3">
-                        {selectedTrade.setup && (
-                          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
-                            <div className="text-xs font-semibold text-blue-400 mb-1.5 flex items-center gap-1">
-                              <Target className="w-3 h-3" />
-                              SETUP PATTERN
-                            </div>
-                            <div className="text-sm text-zinc-300 font-medium">{selectedTrade.setup}</div>
-                          </div>
-                        )}
-                        
                         {selectedTrade.mistake && (
                           <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
                             <div className="text-xs font-semibold text-red-400 mb-1.5 flex items-center gap-1">

@@ -90,6 +90,7 @@ export interface Trade {
   strategy_id?: string;
   strategy_name?: string;
   setup?: string;
+  emotion?: string;
   notes?: string;
   mistake?: string;
   next_time?: string;
