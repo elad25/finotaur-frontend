@@ -15,8 +15,8 @@
 import { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -222,9 +222,29 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
             <span className="text-[14px] font-semibold text-white">Price Path</span>
             <ShadowInfoIcon label="Entry → exit with what-if markers. Green dot = maximum favourable excursion (MFE); red dot = maximum adverse excursion (MAE)." />
           </div>
-          <span className="text-[11px] text-white/42">
-            {hasBars ? 'Close per bar — real intra-trade path' : 'Entry → exit schematic only'}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-white/42">
+              {hasBars ? 'Close per bar — real intra-trade path' : 'Entry → exit schematic only'}
+            </span>
+            {/* Selected trade summary */}
+            <span className="text-[11px] text-white/28">·</span>
+            <span className="font-data text-[11px] font-medium text-white/62">
+              {trade.symbol}
+            </span>
+            <span className="text-[11px] text-white/42">{trade.side}</span>
+            <span className="text-[11px] text-white/28">
+              {new Date(trade.close_at ?? trade.open_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
+            {trade.pnl != null && (
+              <span
+                className={`font-data text-[11px] font-semibold tabular-nums ${
+                  (trade.pnl ?? 0) >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'
+                }`}
+              >
+                {fmtPnl(trade.pnl)}
+              </span>
+            )}
+          </div>
         </div>
         {/* Legend */}
         <div className="flex items-center gap-ds-3 text-[11px] text-white/42 flex-wrap justify-end">
@@ -258,7 +278,15 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
       {/* ── Chart ───────────────────────────────────────────────────────────── */}
       <div className="px-ds-5 pb-ds-5 pt-ds-4" style={{ width: '100%', height: 480 }}>
         <ResponsiveContainer>
-          <LineChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
+          <AreaChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
+            <defs>
+              {/* Gradient fill under the price line — gold fading to transparent */}
+              <linearGradient id="shadowPriceFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(201,166,70,0.25)" />
+                <stop offset="100%" stopColor="rgba(201,166,70,0)" />
+              </linearGradient>
+            </defs>
+
             <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
             <XAxis
               dataKey="time"
@@ -331,13 +359,15 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
 
             <Tooltip content={<SchematicTooltip />} />
 
-            {/* Price line — gold */}
-            <Line
+            {/* Price area — gradient fill + crisp gold line on top */}
+            <Area
               type={hasBars ? 'monotone' : 'linear'}
               dataKey="price"
               name="Price"
               stroke={COLOR_GOLD}
               strokeWidth={hasBars ? 1.5 : 2.5}
+              fill="url(#shadowPriceFill)"
+              fillOpacity={1}
               dot={hasBars
                 ? false
                 : (props: { cx?: number; cy?: number; index?: number }) => {
@@ -371,7 +401,7 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
               }
               activeDot={{ r: 5 }}
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
 
@@ -503,22 +533,6 @@ function ScenarioCard({ scenario, isBaseline, hasBars }: ScenarioCardProps) {
   );
 }
 
-// ─── Compact trade label for the header button ───────────────────────────────
-
-function fmtTradeButtonLabel(trade: Trade): string {
-  const date = new Date(trade.close_at ?? trade.open_at).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-  const pnl = trade.pnl ?? 0;
-  const sign = pnl >= 0 ? '+' : '-';
-  const abs = Math.abs(pnl).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-  return `${trade.symbol} · ${trade.side} · ${date}  ${sign}$${abs}`;
-}
-
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function TradeCompare() {
@@ -599,11 +613,7 @@ export default function TradeCompare() {
               ].join(' ')}
             >
               <ListFilter className="h-3.5 w-3.5 shrink-0 text-[#C9A646]" />
-              {closedTrades.length === 0
-                ? 'No closed trades'
-                : selectedTrade
-                  ? fmtTradeButtonLabel(selectedTrade)
-                  : 'Select trade'}
+              {closedTrades.length === 0 ? 'No closed trades' : 'Select trade'}
             </button>
           </div>
         )}
