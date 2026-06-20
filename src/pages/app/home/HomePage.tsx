@@ -78,6 +78,14 @@ export default function HomePage() {
 
   const [inputValue, setInputValue] = useState('');
 
+  // FINO mascot codec pick: Safari / iOS WebKit can't render VP9-alpha WebM
+  // transparently, so those browsers get the animated-WebP-with-alpha fallback
+  // instead. Everything Chromium/Gecko keeps the smaller, smoother VP9 WebM.
+  const finoUsesWebpFallback =
+    typeof navigator !== 'undefined' &&
+    /AppleWebKit/.test(navigator.userAgent) &&
+    !/Chrome|Chromium|Android/.test(navigator.userAgent);
+
   function askFino(prompt: string) {
     const trimmed = prompt.trim();
     if (!trimmed) return;
@@ -144,17 +152,27 @@ export default function HomePage() {
               VP9 alpha, which preserves the dark fur and cape folds. The poster
               keeps a still FINO visible if the browser can't play VP9-alpha
               (e.g. Safari). Replaces the v8 animated-webp loop. */}
-          <video
-            src="/fino/fino-home-natural-v4.webm"
-            poster="/fino/fino-home-natural-v4-poster.png"
-            autoPlay
-            muted
-            loop
-            playsInline
-            aria-hidden="true"
-            draggable={false}
-            className="h-40 w-40 flex-shrink-0 self-center object-contain"
-          />
+          {finoUsesWebpFallback ? (
+            <img
+              src="/fino/fino-safari-v4.webp"
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="h-40 w-40 flex-shrink-0 self-center object-contain"
+            />
+          ) : (
+            <video
+              src="/fino/fino-home-natural-v4.webm"
+              poster="/fino/fino-home-natural-v4-poster.png"
+              autoPlay
+              muted
+              loop
+              playsInline
+              aria-hidden="true"
+              draggable={false}
+              className="h-40 w-40 flex-shrink-0 self-center object-contain"
+            />
+          )}
 
           {/* Right column — title, compact input, chips */}
           <div className="flex-1 min-w-0">
