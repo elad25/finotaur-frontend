@@ -1687,7 +1687,7 @@ function Top5Content() {
 
           {/* Admin Mode Toggle */}
           {isAdmin && (
-            <div className="absolute top-0 right-0 flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{
+            <div className="absolute top-14 right-0 flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{
               background: adminModeEnabled ? `${GOLD.dim}0.08)` : 'rgba(255,255,255,0.03)',
               border: `1px solid ${adminModeEnabled ? `${GOLD.dim}0.2)` : 'rgba(255,255,255,0.06)'}`,
             }}>
