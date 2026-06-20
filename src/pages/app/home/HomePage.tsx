@@ -142,13 +142,15 @@ export default function HomePage() {
               visible seam between clips or across the loop. Locked-off camera
               (same framing/zoom throughout), bipedal (2 legs + 2 arms),
               anchored to the canonical bipedal FINO still. Framing cropped
-              tighter than v3 so FINO fills more of the square. v7 derives the
-              alpha by border-connected flood-fill that only removes ACHROMATIC
-              black (colour-protected), so the dark-red cape — chromatic, never
-              background — and the legs are fully preserved. Verified: 0 of
-              ~23M cape-red pixels across the loop are transparent. */}
+              tighter than v3 so FINO fills more of the square. The background
+              remover outputs FINO on EXACT (0,0,0) black, so v8 derives alpha
+              from a luminance ramp on the brightest channel (anything brighter
+              than ~0 is kept). This preserves even the darkest cape folds —
+              earlier colour/threshold approaches (v4–v7) dropped folds that
+              were as dark as the background. Verified across all 424 frames:
+              0 of ~28M source-content pixels are transparent. */}
           <img
-            src="/fino/fino-home-loop-v7.webp"
+            src="/fino/fino-home-loop-v8.webp"
             alt=""
             aria-hidden="true"
             draggable={false}
