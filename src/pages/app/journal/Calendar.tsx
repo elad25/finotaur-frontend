@@ -1562,56 +1562,6 @@ export default function JournalCalendar() {
         </div>
       </Card>
 
-      {/* Performance summary row */}
-      {displayMode === "performance" && (
-        <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 mb-4">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <div>
-                <div className="text-xs text-zinc-400">Net P&amp;L</div>
-                <div className={`text-white font-semibold ${monthStats.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {monthStats.netPnL >= 0 ? '+' : ''}${formatNumber(monthStats.netPnL, 0)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Win Rate</div>
-                <div className="text-white font-semibold">{monthStats.winRate.toFixed(0)}%</div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Profit Factor</div>
-                <div className="text-white font-semibold">
-                  {monthStats.profitFactor === 999 ? '∞' : monthStats.profitFactor.toFixed(2)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Avg R</div>
-                <div className="text-white font-semibold">{formatRValue(monthStats.avgR)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Expectancy</div>
-                <div className="text-white font-semibold">
-                  {monthStats.expectancyR === null ? '—' : formatRValue(monthStats.expectancyR)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Best R</div>
-                <div className="text-emerald-400 font-semibold">
-                  {monthStats.bestR === null ? '—' : formatRValue(monthStats.bestR)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Worst R</div>
-                <div className="text-red-400 font-semibold">
-                  {monthStats.worstR === null ? '—' : formatRValue(monthStats.worstR)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400">Trades</div>
-                <div className="text-white font-semibold">{monthStats.totalTrades}</div>
-              </div>
-            </div>
-        </Card>
-      )}
-
       {/* Calendar Grid with Weekly Summary */}
       <div
         className={`transition-all duration-700 delay-300 transform ${
