@@ -215,6 +215,7 @@ const JournalSettings = lazy(async () => {
 });
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
+const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
@@ -732,6 +733,7 @@ function AppContent() {
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 {/* Mentor Mode — must be before journal/:id to avoid wildcard match */}
 <Route path="journal/mentor" element={<JournalRoute><Mentor /></JournalRoute>} />
+<Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
