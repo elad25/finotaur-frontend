@@ -794,7 +794,7 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
   const tickerRef = useRef(data.ticker);
 
   const generate = useCallback(async (force = false) => {
-    if (!PROPRIETARY_DATA_ENABLED) return;
+    if (!PROPRIETARY_DATA_ENABLED && !ANTHROPIC_WALLSTREET_ENABLED) return;
     const ticker = data.ticker;
     if (!force && wallStreetCache.has(ticker)) {
       setAiData(wallStreetCache.get(ticker)!.data);
@@ -885,23 +885,133 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
 
   // ── Proprietary-data gate: all hooks have run — safe to return early ──
   if (!PROPRIETARY_DATA_ENABLED) {
+    // State 3: both flags off — full tab locked, nothing to show
+    if (!ANTHROPIC_WALLSTREET_ENABLED) {
+      return (
+        <LockedOverlay
+          title="Unlocking soon"
+          subtitle="Premium analyst data — commercial license in progress"
+          className="min-h-[320px]"
+        >
+          {/* Decorative placeholder so blur has something to show */}
+          <div className="space-y-4 p-6">
+            {[1, 2, 3].map(i => (
+              <div
+                key={i}
+                className="rounded-2xl h-36"
+                style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
+              />
+            ))}
+          </div>
+        </LockedOverlay>
+      );
+    }
+
+    // State 2: proprietary off, Anthropic on — show AI bull/bear + locked overlay below
+    const raw = (aiData as any)?._anthropicRaw as AnthropicWallStreetResult | undefined;
     return (
-      <LockedOverlay
-        title="Unlocking soon"
-        subtitle="Premium analyst data — commercial license in progress"
-        className="min-h-[320px]"
-      >
-        {/* Decorative placeholder so blur has something to show */}
-        <div className="space-y-4 p-6">
-          {[1, 2, 3].map(i => (
-            <div
-              key={i}
-              className="rounded-2xl h-36"
-              style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
-            />
-          ))}
-        </div>
-      </LockedOverlay>
+      <div className="space-y-4">
+        {/* Loading state */}
+        {isLoading && !aiData && (
+          <div className="space-y-4">
+            <SkeletonText lines={2} className="py-3" />
+            <WallStreetLoadingSkeleton />
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && !aiData && (
+          <Card>
+            <div className="p-6 text-center">
+              <p className="text-sm text-[#EF4444] mb-3">{error}</p>
+              <button
+                onClick={() => generate(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium"
+                style={{ background: 'rgba(201,166,70,0.08)', border: '1px solid rgba(201,166,70,0.15)', color: '#C9A646' }}
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          </Card>
+        )}
+
+        {/* AI Bull / Bear card — rendered once aiData is available */}
+        {aiData && (aiData.topBull || aiData.topBear) && (
+          <Card gold>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-5">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #B8963F, #C9A646)' }}
+                >
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-semibold text-white">AI Bull &amp; Bear Analysis</h3>
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#C9A646]/10 text-[#C9A646] border border-[#C9A646]/20">
+                      FINOTAUR AI
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#6B6B6B]">Powered by Anthropic · AI-generated thesis</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {aiData.topBull && (
+                  <div className="p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.1)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#22C55E]" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#22C55E]">Bull Case</span>
+                    </div>
+                    <p className="text-[11px] text-[#8B8B8B] leading-relaxed">{aiData.topBull.thesis}</p>
+                  </div>
+                )}
+                {aiData.topBear && (
+                  <div className="p-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.1)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <TrendingDown className="w-3.5 h-3.5 text-[#EF4444]" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#EF4444]">Bear Case</span>
+                    </div>
+                    <p className="text-[11px] text-[#8B8B8B] leading-relaxed">{aiData.topBear.thesis}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* FINOTAUR score explanation — Anthropic pipeline only */}
+              {raw?.finotaur_score_explanation && (
+                <div
+                  className="mt-4 p-4 rounded-xl"
+                  style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#C9A646]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A646]">FINOTAUR AI Score Explanation</span>
+                  </div>
+                  <p className="text-[13px] text-[#A0A0A0] leading-[1.85]">{raw.finotaur_score_explanation}</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Proprietary data sections locked below the AI card */}
+        <LockedOverlay
+          title="Unlocking soon — Premium analyst data"
+          subtitle="Analyst consensus, price targets & ratings detail — commercial license in progress"
+          className="min-h-[240px]"
+        >
+          <div className="space-y-4 p-6">
+            {[1, 2, 3].map(i => (
+              <div
+                key={i}
+                className="rounded-2xl h-28"
+                style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
+              />
+            ))}
+          </div>
+        </LockedOverlay>
+      </div>
     );
   }
 
