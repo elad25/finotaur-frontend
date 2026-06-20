@@ -69,6 +69,8 @@ import { aggregateR, tradeR, type TradeForRAgg } from "@/utils/rAggregates";
 import { useStrategyRConfigs } from "@/hooks/useStrategies";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+import { analyzeEmotions, type EmotionTradeInput } from '@/utils/emotionDetection';
+import { computeConsistencyIndex, type ConsistencyTradeInput } from '@/utils/consistencyIndex';
 
 import {
   XAxis,
@@ -114,6 +116,12 @@ interface MonthStats {
   losses: number;
   totalTrades: number;
   emotionalStability: number;
+  // Extended R stats from aggregateR
+  expectancyR: number | null;
+  avgWinR: number | null;
+  avgLossR: number | null;
+  bestR: number | null;
+  worstR: number | null;
 }
 
 // ================================================
@@ -487,6 +495,149 @@ export default function JournalCalendar() {
     });
   }, [trades, isCustomRange, dateRangeStart, dateRangeEnd, currentDate]);
 
+  // ================================================
+  // 🧠 EMOTION + CONSISTENCY ANALYTICS
+  // Declared before monthStats / getDayColor consumers so they can read it.
+  // Uses the same `activeTrades` array (post Trader-scope normalization + filters).
+  // ================================================
+  const emotionConsistency = useMemo(() => {
+    /** Null-safe arithmetic mean; returns null on empty input. */
+    const nullMean = (vals: (number | null)[]): number | null => {
+      const nums = vals.filter((v): v is number => v !== null);
+      return nums.length === 0 ? null : nums.reduce((a, b) => a + b, 0) / nums.length;
+    };
+
+    const closed = activeTrades.filter(isTradeClosed);
+
+    // Map trades to EmotionTradeInput
+    const emotionInputs: EmotionTradeInput[] = activeTrades.map(t => ({
+      id: t.id,
+      open_at: t.open_at,
+      close_at: (t as { close_at?: string | null }).close_at ?? null,
+      quantity: t.quantity ?? null,
+      outcome: t.outcome as EmotionTradeInput['outcome'],
+      pnl: t.pnl ?? null,
+      session: t.session ?? null,
+      mistake: t.mistake ?? null,
+      mental_state: (t as { mental_state?: number | null }).mental_state ?? null,
+      stop_price: t.stop_price ?? null,
+      risk_usd: (t as { risk_usd?: number | null }).risk_usd
+        ?? (t as { metrics?: { riskUSD?: number | null } }).metrics?.riskUSD
+        ?? null,
+    }));
+
+    const summary = analyzeEmotions(emotionInputs);
+
+    // Map trades to ConsistencyTradeInput
+    const consistencyInputs: ConsistencyTradeInput[] = activeTrades.map(t => ({
+      id: t.id,
+      outcome: t.outcome as ConsistencyTradeInput['outcome'],
+      stop_price: t.stop_price ?? null,
+      session: t.session ?? null,
+      strategy_id: (t as { strategy_id?: string | null }).strategy_id ?? null,
+      risk_usd: (t as { risk_usd?: number | null }).risk_usd
+        ?? (t as { metrics?: { riskUSD?: number | null } }).metrics?.riskUSD
+        ?? null,
+      quantity: t.quantity ?? null,
+      entry_price: (t as { entry_price?: number | null }).entry_price ?? null,
+      multiplier: (t as { multiplier?: number | null }).multiplier ?? null,
+    }));
+
+    // Canonical per-trade R values for closed trades (same basis as aggregateR)
+    const rValues: number[] = closed
+      .map(t => {
+        const strategy = (t as { strategy_id?: string | null }).strategy_id
+          ? (strategyById?.get((t as { strategy_id: string }).strategy_id) ?? null)
+          : null;
+        return tradeR(t as unknown as TradeForRAgg, strategy);
+      })
+      .filter((r): r is number => r !== null);
+
+    const rAgg = aggregateR(closed as unknown as TradeForRAgg[], strategyById ?? null);
+
+    const consistency = computeConsistencyIndex(consistencyInputs, {
+      rValues,
+      expectancyR: rAgg.expectancyR,
+      emotionalRate: summary.negativeRate,
+    });
+
+    // Per-day map with shape required by getDayColor and the summary panel.
+    // Key: YYYY-MM-DD via getLocalDateString (same helper the calendar grid uses).
+    const byDateEC = new Map<string, { total: number; negative: number; adherent: number }>();
+    for (const t of activeTrades) {
+      const key = getLocalDateString(new Date(t.open_at));
+      if (!byDateEC.has(key)) byDateEC.set(key, { total: 0, negative: 0, adherent: 0 });
+      const entry = byDateEC.get(key)!;
+      entry.total++;
+      const er = summary.perTrade.get(t.id);
+      if (er?.negativeFlag) entry.negative++;
+
+      // Adherent: stop set AND session non-empty AND strategy present (or none in batch)
+      const anyStrategy = activeTrades.some(
+        x => !!(x as { strategy_id?: string | null }).strategy_id,
+      );
+      const hasStop = !!t.stop_price;
+      const hasSession = typeof t.session === 'string' && t.session.trim().length > 0;
+      const hasStrat = anyStrategy
+        ? !!(t as { strategy_id?: string | null }).strategy_id
+        : true;
+      if (hasStop && hasSession && hasStrat) entry.adherent++;
+    }
+
+    // R split by emotional flag (closed trades only)
+    const calmRs: (number | null)[] = [];
+    const emotionalRs: (number | null)[] = [];
+    closed.forEach(t => {
+      const strategy = (t as { strategy_id?: string | null }).strategy_id
+        ? (strategyById?.get((t as { strategy_id: string }).strategy_id) ?? null)
+        : null;
+      const r = tradeR(t as unknown as TradeForRAgg, strategy);
+      const er = summary.perTrade.get(t.id);
+      if (er?.negativeFlag) {
+        emotionalRs.push(r);
+      } else {
+        calmRs.push(r);
+      }
+    });
+
+    // R split by adherence flag (closed trades only)
+    const followedRs: (number | null)[] = [];
+    const violatedRs: (number | null)[] = [];
+    closed.forEach(t => {
+      const strategy = (t as { strategy_id?: string | null }).strategy_id
+        ? (strategyById?.get((t as { strategy_id: string }).strategy_id) ?? null)
+        : null;
+      const r = tradeR(t as unknown as TradeForRAgg, strategy);
+      const anyStrategy = activeTrades.some(
+        x => !!(x as { strategy_id?: string | null }).strategy_id,
+      );
+      const hasStop = !!t.stop_price;
+      const hasSession = typeof t.session === 'string' && t.session.trim().length > 0;
+      const hasStrat = anyStrategy
+        ? !!(t as { strategy_id?: string | null }).strategy_id
+        : true;
+      const adherent = hasStop && hasSession && hasStrat;
+      if (adherent) {
+        followedRs.push(r);
+      } else {
+        violatedRs.push(r);
+      }
+    });
+
+    const behavioralStability = Math.round((1 - summary.negativeRate) * 100);
+
+    return {
+      summary,
+      consistency,
+      byDate: byDateEC,
+      calmAvgR: nullMean(calmRs),
+      emotionalAvgR: nullMean(emotionalRs),
+      followedAvgR: nullMean(followedRs),
+      violatedAvgR: nullMean(violatedRs),
+      behavioralStability,
+    };
+  }, [activeTrades, strategyById]);
+
   // 🔥 Process trades with proper data (using same logic as MyTrades)
   const dayDataMap = useMemo(() => {
     const map = new Map<string, DayData>();
@@ -564,40 +715,36 @@ export default function JournalCalendar() {
   // 🔥 Month statistics with proper R calculation
   const monthStats = useMemo((): MonthStats => {
     const monthTrades = activeTrades;
-    
+
     const closedTrades = monthTrades.filter(isTradeClosed);
     const wins = closedTrades.filter(t => t.outcome === "WIN");
     const losses = closedTrades.filter(t => t.outcome === "LOSS");
-    
+
     // 🔥 Use pnl directly from trades
     const grossProfit = wins.reduce((sum, t) => sum + (t.pnl || 0), 0);
     const grossLoss = Math.abs(losses.reduce((sum, t) => sum + (t.pnl || 0), 0));
-    
+
     const totalPnL = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
     const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
-    
+
     // 🔥 Calculate average RR AND canonical actual R (same basis as Overview)
     let totalRR = 0;
     closedTrades.forEach(t => { if (t.metrics?.rr) totalRR += t.metrics.rr; });
     const avgRR = closedTrades.length > 0 ? totalRR / closedTrades.length : 0;
     // Use the same aggregateR call Overview uses — canonical per-trade R with strategy config.
-    const avgR = aggregateR(
+    // Keep the full RAggregates result to populate extended R stats.
+    const rAgg = aggregateR(
       closedTrades as unknown as TradeForRAgg[],
       strategyById ?? null,
-    ).avgR ?? 0;
-    
-    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
-    
-    // Consistency score
-    const emotionalTrades = monthTrades.filter(t => 
-      t.mistake && ["revenge", "fomo", "emotional", "overtrading"].includes(t.mistake)
     );
-    const consistencyScore = monthTrades.length > 0 
-      ? Math.round((1 - emotionalTrades.length / monthTrades.length) * 100)
-      : 100;
-    
-    const emotionalStability = calculateEmotionScore(monthTrades);
-    
+    const avgR = rAgg.avgR ?? 0;
+
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
+
+    // Repoint to real emotion/consistency scores from emotionConsistency memo.
+    const consistencyScore = emotionConsistency.consistency.index;
+    const emotionalStability = emotionConsistency.behavioralStability;
+
     return {
       netPnL: totalPnL,
       profitFactor,
@@ -609,8 +756,13 @@ export default function JournalCalendar() {
       losses: losses.length,
       totalTrades: closedTrades.length,
       emotionalStability,
+      expectancyR: rAgg.expectancyR,
+      avgWinR: rAgg.avgWinR,
+      avgLossR: rAgg.avgLossR,
+      bestR: rAgg.bestR,
+      worstR: rAgg.worstR,
     };
-  }, [activeTrades, strategyById]);
+  }, [activeTrades, strategyById, emotionConsistency]);
 
   // Calculate Finotaur Score
   const finotaurScore = useMemo(() => {
@@ -774,9 +926,9 @@ export default function JournalCalendar() {
     const avgRText = monthStats.avgR !== 0 ? ` Avg R: ${formatRValue(monthStats.avgR)}.` : '';
     
     return `Traded ${tradedDays} days with ${monthStats.winRate.toFixed(0)}% win rate.${avgRText} ${
-      monthStats.consistencyScore >= 70 ? `${consistencyChange}${Math.round(Math.random() * 15)}% higher consistency.` : 'Focus on emotional control.'
+      monthStats.consistencyScore >= 70 ? `${consistencyChange}${emotionConsistency.behavioralStability}% behavioral stability.` : 'Focus on emotional control.'
     } Top performance: ${bestDay} in ${formatSessionDisplay(bestSession)} session.`;
-  }, [activeTrades, monthStats]);
+  }, [activeTrades, monthStats, emotionConsistency]);
 
   // 🔥 Trades Chart Data - per day trade breakdown with individual trade details
   const tradesChartData = useMemo((): TradesChartDataPoint[] => {
@@ -986,16 +1138,25 @@ export default function JournalCalendar() {
         if (dayData.netPnL < 0) return "bg-red-500/10 border-red-500/40 hover:bg-red-500/20";
         return "bg-zinc-700/20 border-zinc-600/30";
       
-      case "emotion":
-        if (dayData.emotionScore >= 80) return "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20";
-        if (dayData.emotionScore >= 60) return "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20";
+      case "emotion": {
+        const ecDay = emotionConsistency.byDate.get(dayData.date);
+        const stability = ecDay && ecDay.total > 0
+          ? 1 - ecDay.negative / ecDay.total
+          : 1;
+        if (stability >= 0.8) return "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20";
+        if (stability >= 0.5) return "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20";
         return "bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20";
-      
-      case "consistency":
-        const hasViolations = dayData.violations.length > 0;
-        if (!hasViolations) return "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20";
-        if (dayData.violations.length <= 2) return "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20";
+      }
+
+      case "consistency": {
+        const ecDayC = emotionConsistency.byDate.get(dayData.date);
+        const adherence = ecDayC && ecDayC.total > 0
+          ? ecDayC.adherent / ecDayC.total
+          : 1;
+        if (adherence >= 0.8) return "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20";
+        if (adherence >= 0.5) return "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20";
         return "bg-red-500/10 border-red-500/30 hover:bg-red-500/20";
+      }
       
       case "strategy":
         return "bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20";
@@ -1487,8 +1648,187 @@ export default function JournalCalendar() {
         </div>
       </Card>
 
+      {/* Emotion + Consistency Summary Panel — switches on displayMode */}
+      {(displayMode === "performance" || displayMode === "emotion" || displayMode === "consistency") && (
+        <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 mb-4">
+          {displayMode === "performance" && (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <div>
+                <div className="text-xs text-zinc-400">Net P&amp;L</div>
+                <div className={`text-white font-semibold ${monthStats.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {monthStats.netPnL >= 0 ? '+' : ''}${formatNumber(monthStats.netPnL, 0)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Win Rate</div>
+                <div className="text-white font-semibold">{monthStats.winRate.toFixed(0)}%</div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Profit Factor</div>
+                <div className="text-white font-semibold">
+                  {monthStats.profitFactor === 999 ? '∞' : monthStats.profitFactor.toFixed(2)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Avg R</div>
+                <div className="text-white font-semibold">{formatRValue(monthStats.avgR)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Expectancy</div>
+                <div className="text-white font-semibold">
+                  {monthStats.expectancyR === null ? '—' : formatRValue(monthStats.expectancyR)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Best R</div>
+                <div className="text-emerald-400 font-semibold">
+                  {monthStats.bestR === null ? '—' : formatRValue(monthStats.bestR)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Worst R</div>
+                <div className="text-red-400 font-semibold">
+                  {monthStats.worstR === null ? '—' : formatRValue(monthStats.worstR)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400">Trades</div>
+                <div className="text-white font-semibold">{monthStats.totalTrades}</div>
+              </div>
+            </div>
+          )}
+
+          {displayMode === "emotion" && (() => {
+            const { summary, behavioralStability, calmAvgR, emotionalAvgR } = emotionConsistency;
+            const { counts } = summary;
+            const emotionalPct = Math.round(summary.negativeRate * 100);
+            const chips: Array<{ key: keyof typeof counts; label: string; color: string }> = [
+              { key: 'disciplined', label: 'Disciplined', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+              { key: 'revenge',     label: 'Revenge',     color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+              { key: 'fomo',        label: 'FOMO',        color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+              { key: 'tilt',        label: 'Tilt',        color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+              { key: 'fear',        label: 'Fear',        color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+              { key: 'greed',       label: 'Greed',       color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+              { key: 'overtrading', label: 'Overtrading', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+            ];
+            const activeChips = chips.filter(c => counts[c.key] > 0);
+            const delta = calmAvgR !== null && emotionalAvgR !== null
+              ? calmAvgR - emotionalAvgR
+              : null;
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div>
+                    <div className="text-sm text-zinc-400">Behavioral Stability</div>
+                    <div className="text-2xl font-bold text-white">{behavioralStability}<span className="text-base text-zinc-400 font-normal">/100</span></div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-400">Emotional trades</div>
+                    <div className="text-white font-semibold">{emotionalPct}%</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {activeChips.length > 0 ? activeChips.map(c => (
+                    <span key={c.key} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${c.color}`}>
+                      {c.label} <span className="font-bold">{counts[c.key]}</span>
+                    </span>
+                  )) : (
+                    <span className="text-xs text-zinc-500">No emotional patterns detected</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-6 flex-wrap border-t border-zinc-800 pt-3">
+                  <div>
+                    <div className="text-xs text-zinc-400">Avg R · Calm</div>
+                    <div className={`font-semibold ${calmAvgR !== null && calmAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {calmAvgR === null ? '—' : formatRValue(calmAvgR)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-400">Avg R · Emotional</div>
+                    <div className={`font-semibold ${emotionalAvgR !== null && emotionalAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {emotionalAvgR === null ? '—' : formatRValue(emotionalAvgR)}
+                    </div>
+                  </div>
+                  {delta !== null && (
+                    <div>
+                      <div className="text-xs text-zinc-400">Cost of emotion per trade</div>
+                      <div className={`font-semibold ${delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {formatRValue(delta)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {displayMode === "consistency" && (() => {
+            const { consistency, followedAvgR, violatedAvgR } = emotionConsistency;
+            const { index, subScores, stats } = consistency;
+            const subScoreItems: Array<{ label: string; value: number }> = [
+              { label: 'Risk Consistency',    value: subScores.riskConsistency },
+              { label: 'Process Adherence',   value: subScores.processAdherence },
+              { label: 'Behavioral Stability', value: subScores.behavioralStability },
+              { label: 'Outcome Consistency', value: subScores.outcomeConsistency },
+            ];
+            return (
+              <div className="space-y-4">
+                <div>
+                  <div className="text-sm text-zinc-400">Consistency Index</div>
+                  <div className="text-2xl font-bold text-white">{index}<span className="text-base text-zinc-400 font-normal">/100</span></div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {subScoreItems.map(({ label, value }) => (
+                    <div key={label}>
+                      <div className="text-xs text-zinc-400 mb-1">{label}</div>
+                      <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-yellow-500/70"
+                          style={{ width: `${value}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-white font-semibold mt-1">{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-6 flex-wrap border-t border-zinc-800 pt-3">
+                  <div>
+                    <div className="text-xs text-zinc-400">CV of Risk</div>
+                    <div className="text-white font-semibold">
+                      {stats.cvRisk === null ? '—' : stats.cvRisk.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-400">Adherence</div>
+                    <div className="text-white font-semibold">{Math.round(stats.adherenceRate * 100)}%</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-400">Expectancy</div>
+                    <div className="text-white font-semibold">
+                      {stats.expectancyR === null ? '—' : formatRValue(stats.expectancyR)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-400">Avg R · Rules Followed</div>
+                    <div className={`font-semibold ${followedAvgR !== null && followedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {followedAvgR === null ? '—' : formatRValue(followedAvgR)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-400">Avg R · Rules Violated</div>
+                    <div className={`font-semibold ${violatedAvgR !== null && violatedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {violatedAvgR === null ? '—' : formatRValue(violatedAvgR)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+      )}
+
       {/* Calendar Grid with Weekly Summary */}
-      <div 
+      <div
         className={`transition-all duration-700 delay-300 transform ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
         }`}
