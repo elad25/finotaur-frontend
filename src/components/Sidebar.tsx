@@ -298,7 +298,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Trades Journal', path: '/app/journal/my-trades', icon: BookOpen },
     { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
-    { label: 'Trade Compare', path: '/app/journal/trade-compare', icon: GitCompare },
+    { label: 'Shadow', path: '/app/journal/trade-compare', icon: GitCompare },
     { label: 'Reports & Stats', path: '/app/journal/reports', icon: FileBarChart },
     { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
