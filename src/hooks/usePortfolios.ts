@@ -4,7 +4,7 @@
 // Uses React Query for caching — 10k users ready.
 // ═══════════════════════════════════════════════════════════════
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -63,13 +63,40 @@ function buildBrokerPortfolioName(c: {
 export const MANUAL_PORTFOLIO_ID = 'manual-default';
 
 async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
+  // ── Fire all three independent reads in parallel ────────────
+  const [
+    portfoliosResult,
+    tvConnsResult,
+    brokerConnsResult,
+  ] = await Promise.all([
+    // (1) Main portfolios table
+    supabase
+      .from('portfolios')
+      .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,credential_id,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: true }),
+    // (2) Active Tradovate/NinjaTrader environments — errors resolve to empty
+    supabase
+      .from('broker_connections')
+      .select('environment')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .in('broker', ['tradovate', 'ninja_trader'])
+      .then(r => r, () => ({ data: null })),
+    // (3) Non-Tradovate broker journal connections — errors resolve to empty
+    supabase
+      .from('broker_connections')
+      .select('id,broker,connection_name,account_name,account_id,environment,is_active')
+      .eq('user_id', userId)
+      .eq('purpose', 'journal')
+      .eq('is_active', true)
+      .neq('broker', 'tradovate')
+      .then(r => r, () => ({ data: null, error: null })),
+  ]);
+
   // ── 1. Try portfolios table first ──────────────────────────
-  const { data, error } = await supabase
-    .from('portfolios')
-    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,credential_id,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: true });
+  const { data, error } = portfoliosResult;
 
   if (error && error.code !== '42P01') throw error;
 
@@ -127,12 +154,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
   // Used to filter out orphaned tradovate-source portfolio rows whose broker
   // connection was disconnected (is_active=false) but whose portfolios row
   // persists (real row, not derived). Read-side filter — no rows deleted.
-  const { data: tvConns } = await supabase
-    .from('broker_connections')
-    .select('environment')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .in('broker', ['tradovate', 'ninja_trader']);
+  const tvConns = tvConnsResult.data;
   const activeTvEnvs = new Set((tvConns ?? []).map(c => c.environment));
 
   // Apply filter: hide tradovate-source portfolios whose environment has no active connection.
@@ -145,13 +167,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
   // Query broker_connections with purpose='journal', is_active=true, broker != 'tradovate'.
   // Errors are swallowed so a broken broker_connections query never breaks the hook.
   try {
-    const { data: brokerConns, error: brokerError } = await supabase
-      .from('broker_connections')
-      .select('id,broker,connection_name,account_name,account_id,environment,is_active')
-      .eq('user_id', userId)
-      .eq('purpose', 'journal')
-      .eq('is_active', true)
-      .neq('broker', 'tradovate');
+    const { data: brokerConns, error: brokerError } = brokerConnsResult;
 
     if (!brokerError && brokerConns && brokerConns.length > 0) {
       const brokerPortfolios: Portfolio[] = brokerConns.map(c => ({
@@ -240,6 +256,7 @@ export function usePortfolios() {
     enabled:  !!userId,
     staleTime: 2 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const portfolios = query.data ?? [];
