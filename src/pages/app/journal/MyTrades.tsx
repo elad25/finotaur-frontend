@@ -36,6 +36,7 @@ import { useStrategiesOptimized, useStrategyRConfigs } from "@/hooks/useStrategi
 import { resolvePlanned1R, detectBehavior } from '@/utils/rResolver';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -1283,6 +1284,9 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [tradeDetailTab, setTradeDetailTab] = useState('chart');
   const [detailChartTheme, setDetailChartTheme] = useChartTheme('light');
   const [detailChartFullscreen, setDetailChartFullscreen] = useState(false);
+  // Editable per-trade notes (seeded when a trade opens, saved on demand).
+  const [notesDraft, setNotesDraft] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
 
   // ── Bulk selection state ───────────────────────────────────────────────────
   const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(() => new Set());
@@ -1426,8 +1430,28 @@ const stats = useMemo<Stats>(() => {
   // ✅ 6. All useCallback handlers
   const openTrade = useCallback((trade: Trade) => {
     setSelectedTrade(trade);
+    setNotesDraft(trade.notes ?? '');
+    setTradeDetailTab('chart');
     setDrawerOpen(true);
   }, []);
+
+  const handleSaveNotes = useCallback(async () => {
+    if (!selectedTrade) return;
+    setSavingNotes(true);
+    try {
+      const updated = await updateTradeMutation({
+        id: selectedTrade.id,
+        data: { notes: notesDraft.trim() ? notesDraft : null },
+      });
+      if (updated) setSelectedTrade(updated as Trade);
+      toast.success('Notes saved');
+    } catch (err) {
+      console.error('Failed to save notes', err);
+      toast.error('Could not save notes');
+    } finally {
+      setSavingNotes(false);
+    }
+  }, [selectedTrade, notesDraft, updateTradeMutation]);
 
   const toggleDayExpanded = useCallback((dayKey: string) => {
     setExpandedDayKeys((previous) => {
@@ -2557,7 +2581,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                   </div>
 
                   {/* 📊 CHART TAB */}
-                  <TabsContent value="chart" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3">
+                  <TabsContent value="chart" className="mt-0 min-h-0 flex-1 overflow-hidden px-4 pb-4 pt-3 data-[state=active]:flex data-[state=active]:flex-col">
                     <Suspense fallback={<TradeChartSkeleton />}>
                       <TradeChart
                         trade={selectedTrade}
@@ -2677,23 +2701,34 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       )}
                     </div>
                     
-                    {selectedTrade.notes ? (
+                    {!effectiveReadOnly ? (
                       <div className="space-y-3">
-                        <div className="bg-zinc-950/70 rounded-xl border border-yellow-500/20 p-5 shadow-inner">
-                          <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed font-medium">
-                            {selectedTrade.notes}
-                          </p>
+                        <Textarea
+                          value={notesDraft}
+                          onChange={(e) => setNotesDraft(e.target.value)}
+                          placeholder="Write your own notes about this trade — your thesis, emotions, what worked, and what to improve next time…"
+                          className="min-h-[180px] resize-y bg-zinc-950/70 border-yellow-500/20 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-yellow-500/30"
+                        />
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs text-zinc-500">
+                            {notesDraft.trim()
+                              ? `${notesDraft.trim().split(/\s+/).length} words`
+                              : 'No notes yet'}
+                          </span>
+                          <Button
+                            onClick={handleSaveNotes}
+                            disabled={savingNotes || notesDraft === (selectedTrade.notes ?? '')}
+                            className="h-8 bg-yellow-500 text-xs font-semibold text-black hover:bg-yellow-400 disabled:opacity-40"
+                          >
+                            {savingNotes ? 'Saving...' : 'Save notes'}
+                          </Button>
                         </div>
-                        <div className="text-xs text-zinc-500 flex items-center gap-2">
-                          <Clock className="w-3 h-3" />
-                          Added on {new Date(selectedTrade.created_at || selectedTrade.open_at).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
+                      </div>
+                    ) : selectedTrade.notes ? (
+                      <div className="bg-zinc-950/70 rounded-xl border border-yellow-500/20 p-5 shadow-inner">
+                        <p className="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed font-medium">
+                          {selectedTrade.notes}
+                        </p>
                       </div>
                     ) : (
                       <div className="bg-zinc-950/50 rounded-xl border border-dashed border-zinc-700/50 p-8 text-center">
@@ -2701,9 +2736,6 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           <FileText className="w-6 h-6 text-yellow-400/50" />
                         </div>
                         <div className="text-zinc-500 text-sm font-medium mb-1">No notes added yet</div>
-                        <div className="text-zinc-600 text-xs max-w-xs mx-auto leading-relaxed">
-                          💡 Document your thesis, emotions, and what worked
-                        </div>
                       </div>
                     )}
                     
