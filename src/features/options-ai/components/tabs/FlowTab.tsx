@@ -35,7 +35,8 @@ interface FlowTabProps {
 type FlowFilter = 'all' | 'long' | 'short';
 type FlowSort = 'premium' | 'symbol' | 'time';
 
-const GREEN = '#35B765';
+const GREEN = '#3F9E6B';
+const GREEN_DEEP = '#1C7A4A';
 const RED = '#E24B4A';
 const GOLD = '#C9A646';
 const GOLD_LIGHT = '#F4D97B';
@@ -353,11 +354,23 @@ const DistributionPanel = memo(function DistributionPanel({ groups }: { groups: 
   return (
     <SidePanel title="Flow Distribution">
       <div className="flex items-center gap-7 pt-3">
-        <div
-          className="relative flex h-[138px] w-[138px] shrink-0 items-center justify-center rounded-full"
-          style={{ background: `conic-gradient(${GREEN} 0 ${totals.longPct}%, ${RED} ${totals.longPct}% 100%)` }}
-        >
-          <div className="flex h-[98px] w-[98px] flex-col items-center justify-center rounded-full bg-[#0A0A09]">
+        <div className="relative flex h-[138px] w-[138px] shrink-0 items-center justify-center">
+          <svg viewBox="0 0 150 150" className="absolute inset-0 h-full w-full">
+            <circle cx="75" cy="75" r="64" fill="none" stroke={GOLD} strokeOpacity={0.35} strokeWidth={1} />
+            <g transform="rotate(-90 75 75)">
+              <circle cx="75" cy="75" r="55" fill="none" stroke="#181818" strokeWidth={10} />
+              <circle
+                cx="75" cy="75" r="55" fill="none" stroke={GREEN_DEEP} strokeWidth={10} strokeLinecap="butt"
+                strokeDasharray={`${(totals.longPct / 100) * 345.575} 345.575`}
+              />
+              <circle
+                cx="75" cy="75" r="55" fill="none" stroke={RED} strokeWidth={10} strokeLinecap="butt"
+                strokeDasharray={`${(totals.shortPct / 100) * 345.575} 345.575`}
+                strokeDashoffset={`${-(totals.longPct / 100) * 345.575}`}
+              />
+            </g>
+          </svg>
+          <div className="relative flex flex-col items-center justify-center">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-tertiary">Total</span>
             <span className="text-xl font-black tabular-nums text-ink-primary">{formatPremium(totals.total)}</span>
           </div>
