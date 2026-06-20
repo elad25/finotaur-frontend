@@ -71,7 +71,6 @@ import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { analyzeEmotions, type EmotionTradeInput } from '@/utils/emotionDetection';
 import { computeConsistencyIndex, type ConsistencyTradeInput } from '@/utils/consistencyIndex';
-import { computeFinotaurScore } from '@/utils/finotaurScore';
 
 import {
   XAxis,
@@ -457,7 +456,6 @@ export default function JournalCalendar() {
   const [isVisible, setIsVisible] = useState(false);
   
   // Enhanced animations and features
-  const [finotaurScoreAnimated, setFinotaurScoreAnimated] = useState(0);
   const [momentumChange] = useState(+7);
   const [traderLevel] = useState("ELITE TRADER");
   const [emotionalStabilityChange] = useState(+12);
@@ -772,36 +770,6 @@ export default function JournalCalendar() {
     };
   }, [activeTrades, strategyById, emotionConsistency]);
 
-  // Calculate Finotaur Score — 3-pillar composite (performance + consistency + behavioral)
-  const finotaurScore = useMemo(
-    () =>
-      computeFinotaurScore({
-        expectancyR: monthStats.expectancyR,
-        profitFactor: monthStats.profitFactor,
-        consistencySubScores: emotionConsistency.consistency.subScores,
-        behavioralStability: emotionConsistency.behavioralStability,
-      }),
-    [monthStats, emotionConsistency],
-  );
-
-  // Animate Finotaur Score
-  useEffect(() => {
-    if (isVisible && finotaurScore.score > 0) {
-      let current = 0;
-      const increment = finotaurScore.score / 60;
-      const timer = setInterval(() => {
-        current += increment;
-        if (current >= finotaurScore.score) {
-          setFinotaurScoreAnimated(finotaurScore.score);
-          clearInterval(timer);
-        } else {
-          setFinotaurScoreAnimated(Math.floor(current));
-        }
-      }, 20);
-      return () => clearInterval(timer);
-    }
-  }, [isVisible, finotaurScore]);
-  
   // Cumulative P&L data with actual R
   const cumulativePnLData = useMemo(() => {
     const monthTrades = activeTrades
@@ -1161,17 +1129,6 @@ export default function JournalCalendar() {
         return "bg-red-500/10 border-red-500/30 hover:bg-red-500/20";
       }
       
-      case "finotaur": {
-        // Day health = blend of behavioral stability and process adherence.
-        const ecDayF = emotionConsistency.byDate.get(dayData.date);
-        const stabilityF = ecDayF && ecDayF.total > 0 ? 1 - ecDayF.negative / ecDayF.total : 1;
-        const adherenceF = ecDayF && ecDayF.total > 0 ? ecDayF.adherent / ecDayF.total : 1;
-        const health = stabilityF * 0.5 + adherenceF * 0.5;
-        if (health >= 0.8) return "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20";
-        if (health >= 0.5) return "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20";
-        return "bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20";
-      }
-
       case "strategy":
         return "bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20";
       
@@ -1522,75 +1479,6 @@ export default function JournalCalendar() {
           </div>
         </div>
 
-        {/* Enhanced Finotaur Score Banner */}
-        <div className="rounded-xl border border-yellow-500/40 bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 p-6 relative overflow-hidden"
-          style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.05), 0 4px 20px rgba(201,166,70,0.2)' }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 via-transparent to-yellow-500/5 opacity-50"></div>
-          
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="rounded-full bg-gradient-to-br from-yellow-500/30 to-yellow-600/20 p-2 shadow-lg shadow-yellow-500/20">
-                  <Zap className="w-6 h-6 text-yellow-500" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white">Finotaur Score</h3>
-                  <p className="text-[10px] text-yellow-500/70 uppercase tracking-widest font-medium">Your Trading Edge</p>
-                </div>
-              </div>
-              <div className="inline-flex items-start gap-2.5 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                <Lightbulb className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-zinc-300 leading-relaxed">
-                  {monthStats.winRate >= 50 && monthStats.profitFactor >= 1
-                    ? `Your system is profitable — ${monthStats.wins}W / ${monthStats.losses}L with ${monthStats.profitFactor.toFixed(2)} profit factor. Protect it by staying consistent and avoiding overtrading.`
-                    : monthStats.winRate >= 50 && monthStats.profitFactor < 1
-                    ? `Win rate is solid at ${monthStats.winRate.toFixed(0)}% but profit factor is below 1. Your losers are too large — tighten stops or cut early.`
-                    : monthStats.totalTrades === 0
-                    ? `No closed trades this month yet. Start logging to unlock your performance insights.`
-                    : `Win rate is ${monthStats.winRate.toFixed(0)}% this month. Focus on high-probability setups only — fewer, better trades beat volume every time.`
-                  }
-                </p>
-              </div>
-
-              {/* FINO Score breakdown — 3 pillars feeding the composite */}
-              <div className="grid grid-cols-3 gap-3 mt-4 max-w-md">
-                {[
-                  { label: 'Performance', value: finotaurScore.pillars.performance, weight: '40%' },
-                  { label: 'Consistency', value: finotaurScore.pillars.consistency, weight: '30%' },
-                  { label: 'Behavioral', value: finotaurScore.pillars.behavioral, weight: '30%' },
-                ].map(({ label, value, weight }) => (
-                  <div key={label}>
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">{label}</span>
-                      <span className="text-[9px] text-zinc-600">{weight}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                      <div className="h-full rounded-full bg-yellow-500/70" style={{ width: `${value}%` }} />
-                    </div>
-                    <div className="text-xs text-white font-semibold mt-1">{value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-right">
-              <div className="text-6xl font-black bg-gradient-to-br from-yellow-500 via-yellow-400 to-yellow-600 bg-clip-text text-transparent"
-                style={{
-                  filter: 'drop-shadow(0 4px 12px rgba(201,166,70,0.5))',
-                  lineHeight: '1'
-                }}
-              >
-                {finotaurScoreAnimated}
-              </div>
-              <div className="text-xs text-zinc-400 mt-2 font-medium">out of 100</div>
-              
-              <button className="mt-3 text-[10px] text-yellow-500 hover:text-yellow-400 font-bold uppercase tracking-wider underline transition-colors">
-                View Global Leaderboard →
-              </button>
-            </div>
-          </div>
-        </div>
       </Card>
       </div>
 
@@ -1622,25 +1510,8 @@ export default function JournalCalendar() {
             </Button>
           </div>
 
-          {/* Display Mode + value unit toggle */}
+          {/* Calendar value unit toggle */}
           <div className="flex items-center gap-2">
-            <Button
-              variant={displayMode === "performance" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setDisplayMode("performance")}
-              className={displayMode === "performance" ? "bg-yellow-500/20 text-yellow-500" : ""}
-            >
-              Performance
-            </Button>
-            <Button
-              variant={displayMode === "finotaur" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setDisplayMode("finotaur")}
-              className={displayMode === "finotaur" ? "bg-yellow-500/20 text-yellow-500" : ""}
-            >
-              Finotaur Score
-            </Button>
-
             {/* $ / R calendar unit toggle */}
             <div className="ml-2 flex items-center rounded-lg border border-zinc-800 bg-zinc-900/60 p-0.5">
               {(["$", "R"] as const).map(u => (
@@ -1691,11 +1562,10 @@ export default function JournalCalendar() {
         </div>
       </Card>
 
-      {/* Summary Panel — switches on displayMode (Performance row / Finotaur Score breakdown) */}
-      {(displayMode === "performance" || displayMode === "finotaur") && (
+      {/* Performance summary row */}
+      {displayMode === "performance" && (
         <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 mb-4">
-          {displayMode === "performance" && (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <div>
                 <div className="text-xs text-zinc-400">Net P&amp;L</div>
                 <div className={`text-white font-semibold ${monthStats.netPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -1739,152 +1609,6 @@ export default function JournalCalendar() {
                 <div className="text-white font-semibold">{monthStats.totalTrades}</div>
               </div>
             </div>
-          )}
-
-          {displayMode === "finotaur" && (() => {
-            const { summary, behavioralStability, calmAvgR, emotionalAvgR, consistency, followedAvgR, violatedAvgR } = emotionConsistency;
-            const { counts } = summary;
-            const emotionalPct = Math.round(summary.negativeRate * 100);
-            const { subScores, stats } = consistency;
-            const chips: Array<{ key: keyof typeof counts; label: string; color: string }> = [
-              { key: 'disciplined', label: 'Disciplined', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-              { key: 'revenge',     label: 'Revenge',     color: 'bg-red-500/20 text-red-400 border-red-500/30' },
-              { key: 'fomo',        label: 'FOMO',        color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-              { key: 'tilt',        label: 'Tilt',        color: 'bg-red-500/20 text-red-400 border-red-500/30' },
-              { key: 'fear',        label: 'Fear',        color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-              { key: 'greed',       label: 'Greed',       color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-              { key: 'overtrading', label: 'Overtrading', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-            ];
-            const activeChips = chips.filter(c => counts[c.key] > 0);
-            const delta = calmAvgR !== null && emotionalAvgR !== null
-              ? calmAvgR - emotionalAvgR
-              : null;
-            const pillarItems: Array<{ label: string; value: number; weight: string }> = [
-              { label: 'Performance', value: finotaurScore.pillars.performance, weight: '40%' },
-              { label: 'Consistency', value: finotaurScore.pillars.consistency, weight: '30%' },
-              { label: 'Behavioral',  value: finotaurScore.pillars.behavioral,  weight: '30%' },
-            ];
-            return (
-              <div className="space-y-5">
-                {/* Headline score + the 3 pillars that compose it */}
-                <div className="flex items-center gap-6 flex-wrap">
-                  <div className="min-w-[110px]">
-                    <div className="text-sm text-zinc-400">Finotaur Score</div>
-                    <div className="text-3xl font-black text-yellow-500">{finotaurScore.score}<span className="text-base text-zinc-400 font-normal">/100</span></div>
-                  </div>
-                  <div className="flex-1 grid grid-cols-3 gap-4 min-w-[260px]">
-                    {pillarItems.map(({ label, value, weight }) => (
-                      <div key={label}>
-                        <div className="flex items-baseline justify-between mb-1">
-                          <span className="text-xs text-zinc-400">{label}</span>
-                          <span className="text-[9px] text-zinc-600">{weight}</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                          <div className="h-full rounded-full bg-yellow-500/70" style={{ width: `${value}%` }} />
-                        </div>
-                        <div className="text-xs text-white font-semibold mt-1">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Behavioral / emotion breakdown */}
-                <div className="border-t border-zinc-800 pt-4 space-y-3">
-                  <div className="text-xs text-yellow-500/80 uppercase tracking-wider font-semibold">Behavioral</div>
-                  <div className="flex items-center gap-6 flex-wrap">
-                    <div>
-                      <div className="text-xs text-zinc-400">Behavioral Stability</div>
-                      <div className="text-white font-semibold">{behavioralStability}<span className="text-xs text-zinc-500 font-normal">/100</span></div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Emotional trades</div>
-                      <div className="text-white font-semibold">{emotionalPct}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Avg R · Calm</div>
-                      <div className={`font-semibold ${calmAvgR !== null && calmAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {calmAvgR === null ? '—' : formatRValue(calmAvgR)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Avg R · Emotional</div>
-                      <div className={`font-semibold ${emotionalAvgR !== null && emotionalAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {emotionalAvgR === null ? '—' : formatRValue(emotionalAvgR)}
-                      </div>
-                    </div>
-                    {delta !== null && (
-                      <div>
-                        <div className="text-xs text-zinc-400">Cost of emotion per trade</div>
-                        <div className={`font-semibold ${delta >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {formatRValue(delta)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {activeChips.length > 0 ? activeChips.map(c => (
-                      <span key={c.key} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${c.color}`}>
-                        {c.label} <span className="font-bold">{counts[c.key]}</span>
-                      </span>
-                    )) : (
-                      <span className="text-xs text-zinc-500">No emotional patterns detected</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Consistency breakdown */}
-                <div className="border-t border-zinc-800 pt-4 space-y-3">
-                  <div className="text-xs text-yellow-500/80 uppercase tracking-wider font-semibold">Consistency</div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {([
-                      { label: 'Risk Consistency',     value: subScores.riskConsistency },
-                      { label: 'Process Adherence',    value: subScores.processAdherence },
-                      { label: 'Behavioral Stability', value: subScores.behavioralStability },
-                      { label: 'Outcome Consistency',  value: subScores.outcomeConsistency },
-                    ] as Array<{ label: string; value: number }>).map(({ label, value }) => (
-                      <div key={label}>
-                        <div className="text-xs text-zinc-400 mb-1">{label}</div>
-                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                          <div className="h-full rounded-full bg-yellow-500/70" style={{ width: `${value}%` }} />
-                        </div>
-                        <div className="text-xs text-white font-semibold mt-1">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-6 flex-wrap">
-                    <div>
-                      <div className="text-xs text-zinc-400">CV of Risk</div>
-                      <div className="text-white font-semibold">
-                        {stats.cvRisk === null ? '—' : stats.cvRisk.toFixed(2)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Adherence</div>
-                      <div className="text-white font-semibold">{Math.round(stats.adherenceRate * 100)}%</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Expectancy</div>
-                      <div className="text-white font-semibold">
-                        {stats.expectancyR === null ? '—' : formatRValue(stats.expectancyR)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Avg R · Rules Followed</div>
-                      <div className={`font-semibold ${followedAvgR !== null && followedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {followedAvgR === null ? '—' : formatRValue(followedAvgR)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-zinc-400">Avg R · Rules Violated</div>
-                      <div className={`font-semibold ${violatedAvgR !== null && violatedAvgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {violatedAvgR === null ? '—' : formatRValue(violatedAvgR)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
         </Card>
       )}
 
