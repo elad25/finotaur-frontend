@@ -1333,10 +1333,8 @@ if (riskInputMode === 'risk-only') {
   });
 } else {
       // TRADE SUMMARY MODE VALIDATION
-      if (!st.assetClass) {
-        toast.error("Asset class is required");
-        return;
-      }
+      // Asset class is auto-detected from the symbol (no manual selector).
+      // Unrecognized symbols fall back to 'stock' on save — never block here.
       if (!st.quantity || st.quantity <= 0) {
         toast.error("Quantity must be positive");
         return;
@@ -1600,7 +1598,7 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           // OPTIONAL TRADE FIELDS
           // ═══════════════════════════════════════════
-          asset_class: normalizeAssetClass(st.assetClass) ?? (st.assetClass || null),
+          asset_class: normalizeAssetClass(st.assetClass) ?? (st.assetClass || 'stock'),
           take_profit_price: st.takeProfitPrice || null,
           exit_price: hasExitPrice ? finalExitPrice : null,
           fees: st.fees || 0,
@@ -2065,26 +2063,10 @@ if (hasResult && directRiskUSD > 0) {
               )}
             </div>
 
-            {/* Asset Class Selector */}
-            <div className="mb-6">
-              <Label className="text-xs text-zinc-400 mb-2 block">Asset Class</Label>
-              <div className="flex flex-wrap gap-2">
-                {(['stock', 'futures', 'options', 'crypto', 'forex'] as const).map((cls) => (
-                  <button
-                    key={cls}
-                    type="button"
-                    onClick={() => st.setAssetClass(cls as any)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 border ${
-                      normalizeAssetClass(st.assetClass) === cls
-                        ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 shadow-[0_0_12px_rgba(201,166,70,0.15)]'
-                        : 'bg-zinc-900 text-zinc-400 border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600'
-                    }`}
-                  >
-                    {cls === 'stock' ? 'Stock' : cls.charAt(0).toUpperCase() + cls.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Asset Class is auto-detected from the symbol (see the Auto Multiplier
+                detection effect + handleTickerSelect). No manual selector — the
+                detected class is surfaced next to the Symbol label. Falls back to
+                'stock' on save when the symbol is unrecognized. */}
 
             {/* Grid: Symbol, Date/Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
