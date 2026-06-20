@@ -43,6 +43,7 @@ const plans: Plan[] = [
     description: "Start your trading journey",
     features: [
       "15 trades to uncover your first leak",
+      "1 broker connection",
       "Trade journal (manual + auto-import)",
       "Core performance stats",
       "Community access",
@@ -83,6 +84,7 @@ const plans: Plan[] = [
     features: [
       "Everything in Basic, plus:",
       "Unlimited trades — never hit a cap",
+      "Unlimited broker connections — sync all your accounts",
       "Your FINOTAUR Score — one number that grades your real edge",
       "Daily AI briefing — ranked insights on what to fix first",
       "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
