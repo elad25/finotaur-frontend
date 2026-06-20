@@ -64,7 +64,9 @@ import { usePortfolioContext } from "@/contexts/PortfolioContext";
 import { AccountFilterDropdown } from "@/components/journal/AccountFilterDropdown";
 import { useTraderMode } from "@/hooks/useTraderMode";
 import { normalizeTraderTrades } from "@/lib/journal/traderNormalization";
-import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
+import { formatRValue } from "@/hooks/useRiskSettings";
+import { aggregateR, tradeR, type TradeForRAgg } from "@/utils/rAggregates";
+import { useStrategyRConfigs } from "@/hooks/useStrategies";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 
@@ -147,24 +149,15 @@ const getLocalDateString = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-// 🔥 NEW: Get trade data consistently (same logic as MyTrades)
-const getTradeData = (trade: Trade, oneR: number) => {
-  const pnl = trade.pnl ?? 0;
-  const outcome = trade.outcome ?? 'OPEN';
-  
-  // Calculate actual R based on global 1R
-  const actualR = trade.exit_price && oneR > 0 
-    ? calculateActualR(pnl, oneR)
-    : (trade.metrics?.actual_r ?? null);
-  
-  return {
-    pnl,
-    actualR,
-    riskUSD: trade.metrics?.riskUSD ?? 0,
-    outcome,
-    multiplier: trade.multiplier ?? 1,
-    rr: trade.metrics?.rr ?? 0,
-  };
+/** Resolve canonical per-trade R — same basis as Overview / rAggregates. */
+const getCanonicalR = (
+  trade: Trade,
+  strategyById?: Map<string, any> | null,
+): number | null => {
+  const strategy = trade.strategy_id
+    ? strategyById?.get(trade.strategy_id) ?? null
+    : null;
+  return tradeR(trade as unknown as TradeForRAgg, strategy);
 };
 
 // ================================================
@@ -400,7 +393,9 @@ export default function JournalCalendar() {
   const { effectivePortfolioId, activePortfolio, isTraderMode } = usePortfolioContext();
   const { traderMode } = useTraderMode();
   const timezone = useTimezone();
-  const { oneR, loading: riskLoading } = useRiskSettings();
+
+  // Strategy config map — feeds canonical per-trade R (same as Overview).
+  const { data: strategyById } = useStrategyRConfigs(userId);
 
   // 🔥 CRITICAL: Use the same useTrades hook as MyTrades!
   // In TRADER mode, fetch raw per-account fills (skipCopyAggregation) so that
@@ -463,9 +458,8 @@ export default function JournalCalendar() {
       tradesCount: trades.length,
       tradesLoading,
       userLoading,
-      oneR,
     });
-  }, [userId, isImpersonating, trades.length, tradesLoading, userLoading, oneR]);
+  }, [userId, isImpersonating, trades.length, tradesLoading, userLoading]);
   
   useEffect(() => {
     setIsVisible(true);
@@ -526,8 +520,7 @@ export default function JournalCalendar() {
       dayData.tradeCount++;
       
       // 🔥 Use pnl directly from trade (already calculated correctly)
-      const { pnl } = getTradeData(trade, oneR);
-      dayData.netPnL += pnl;
+      dayData.netPnL += trade.pnl ?? 0;
       
       if (trade.session && !dayData.sessions.includes(trade.session)) {
         dayData.sessions.push(trade.session);
@@ -544,22 +537,14 @@ export default function JournalCalendar() {
         const wins = closedTrades.filter(t => t.outcome === "WIN").length;
         dayData.winRate = (wins / closedTrades.length) * 100;
         
-        // 🔥 Calculate average RR AND actual R
+        // 🔥 Calculate average RR AND canonical actual R (same basis as Overview)
         let totalRR = 0;
-        let totalR = 0;
-        let rCount = 0;
-        
-        closedTrades.forEach(t => {
-          const { actualR } = getTradeData(t, oneR);
-          if (t.metrics?.rr) totalRR += t.metrics.rr;
-          if (actualR !== null && actualR !== undefined) {
-            totalR += actualR;
-            rCount++;
-          }
-        });
-        
+        closedTrades.forEach(t => { if (t.metrics?.rr) totalRR += t.metrics.rr; });
         dayData.avgRR = closedTrades.length > 0 ? totalRR / closedTrades.length : 0;
-        dayData.avgR = rCount > 0 ? totalR / rCount : 0;
+        dayData.avgR = aggregateR(
+          closedTrades as unknown as TradeForRAgg[],
+          strategyById ?? null,
+        ).avgR ?? 0;
       }
       
       dayData.emotionScore = calculateEmotionScore(dayData.trades);
@@ -574,7 +559,7 @@ export default function JournalCalendar() {
     });
     
     return map;
-  }, [activeTrades, filterStrategy, filterSession, filterResult, oneR]);
+  }, [activeTrades, filterStrategy, filterSession, filterResult, strategyById]);
 
   // 🔥 Month statistics with proper R calculation
   const monthStats = useMemo((): MonthStats => {
@@ -591,22 +576,15 @@ export default function JournalCalendar() {
     const totalPnL = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
     const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
     
-    // 🔥 Calculate average RR AND actual R
+    // 🔥 Calculate average RR AND canonical actual R (same basis as Overview)
     let totalRR = 0;
-    let totalR = 0;
-    let rCount = 0;
-    
-    closedTrades.forEach(t => {
-      if (t.metrics?.rr) totalRR += t.metrics.rr;
-      const { actualR } = getTradeData(t, oneR);
-      if (actualR !== null && actualR !== undefined) {
-        totalR += actualR;
-        rCount++;
-      }
-    });
-    
+    closedTrades.forEach(t => { if (t.metrics?.rr) totalRR += t.metrics.rr; });
     const avgRR = closedTrades.length > 0 ? totalRR / closedTrades.length : 0;
-    const avgR = rCount > 0 ? totalR / rCount : 0;
+    // Use the same aggregateR call Overview uses — canonical per-trade R with strategy config.
+    const avgR = aggregateR(
+      closedTrades as unknown as TradeForRAgg[],
+      strategyById ?? null,
+    ).avgR ?? 0;
     
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
     
@@ -632,7 +610,7 @@ export default function JournalCalendar() {
       totalTrades: closedTrades.length,
       emotionalStability,
     };
-  }, [activeTrades, oneR]);
+  }, [activeTrades, strategyById]);
 
   // Calculate Finotaur Score
   const finotaurScore = useMemo(() => {
@@ -707,18 +685,12 @@ export default function JournalCalendar() {
       const losses = dayTrades.filter(t => t.outcome === "LOSS").length;
       const emotionScore = calculateEmotionScore(dayTrades);
       
-      // Calculate average R for the day
-      let totalR = 0;
-      let rCount = 0;
-      dayTrades.forEach(t => {
-        const { actualR } = getTradeData(t, oneR);
-        if (actualR !== null && actualR !== undefined) {
-          totalR += actualR;
-          rCount++;
-        }
-      });
-      const avgR = rCount > 0 ? totalR / rCount : 0;
-      
+      // Calculate canonical average R for the day (same basis as Overview)
+      const avgR = aggregateR(
+        dayTrades as unknown as TradeForRAgg[],
+        strategyById ?? null,
+      ).avgR ?? 0;
+
       data.push({
         date,
         dateDisplay: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -730,9 +702,9 @@ export default function JournalCalendar() {
         avgR,
       });
     });
-    
+
     return data;
-  }, [activeTrades, oneR]);
+  }, [activeTrades, strategyById]);
   
   // Radar data
   const radarData = useMemo(() => {
@@ -825,16 +797,15 @@ export default function JournalCalendar() {
         wins: dayTrades.filter(t => t.outcome === 'WIN').length,
         losses: dayTrades.filter(t => t.outcome === 'LOSS').length,
         trades: dayTrades.map(t => {
-          const { actualR } = getTradeData(t, oneR);
           return {
             symbol: (t as any).symbol || (t as any).asset || '',
             pnl: t.pnl || 0,
             outcome: t.outcome || 'OPEN',
-            avgR: actualR ?? null,
+            avgR: getCanonicalR(t, strategyById),
           };
         }),
       }));
-  }, [activeTrades, oneR]);
+  }, [activeTrades, strategyById]);
 
   // Calendar grid generation
   const calendarDays = useMemo(() => {
@@ -1038,14 +1009,13 @@ export default function JournalCalendar() {
   // 🎯 LOADING STATE
   // ================================================
 
-  if (!userId || userLoading || tradesLoading || riskLoading) {
+  if (!userId || userLoading || tradesLoading) {
     return (
       <div className="p-6 space-y-6">
         <PageTitle title="Calendar" subtitle="" />
         <div className="flex items-center justify-center h-96">
           <div className="text-zinc-400">
-            {!userId || userLoading ? 'Authenticating...' : 
-             riskLoading ? 'Loading settings...' : 'Loading calendar...'}
+            {!userId || userLoading ? 'Authenticating...' : 'Loading calendar...'}
           </div>
         </div>
       </div>
@@ -1080,10 +1050,6 @@ export default function JournalCalendar() {
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="text-xs text-zinc-500 bg-zinc-800/50 px-3 py-1.5 rounded-lg">
-            1R = ${formatNumber(oneR, 2)}
-          </div>
-
           {isCustomRange && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-400 font-medium">
               <CalendarDays className="w-3.5 h-3.5" />
@@ -1856,8 +1822,8 @@ export default function JournalCalendar() {
                   </h4>
                   <div className="space-y-2">
                     {selectedDay.trades.map(trade => {
-                      const { actualR } = getTradeData(trade, oneR);
-                      
+                      const actualR = getCanonicalR(trade, strategyById);
+
                       return (
                         <div 
                           key={trade.id}
