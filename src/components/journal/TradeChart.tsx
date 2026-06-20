@@ -51,6 +51,16 @@ export interface TradeChartTrade {
 
 interface TradeChartProps {
   trade: TradeChartTrade;
+  /**
+   * Controlled chrome. When `theme` + `onToggleTheme` + `onFullscreenChange`
+   * are supplied, the parent owns the theme toggle and fullscreen trigger
+   * (rendered up on the tab row), so TradeChart hides its own header row and
+   * lets the chart fill the reclaimed vertical space.
+   */
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
+  fullscreen?: boolean;
+  onFullscreenChange?: (open: boolean) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -395,9 +405,14 @@ function MarkerChips({ trade }: { trade: TradeChartTrade }) {
 // ═══════════════════════════════════════════════════════════════
 // Main component
 // ═══════════════════════════════════════════════════════════════
-export function TradeChart({ trade }: TradeChartProps) {
-  const [fullscreen, setFullscreen] = useState(false);
-  const [chartTheme, setChartTheme] = useChartTheme('light');
+export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreenProp, onFullscreenChange }: TradeChartProps) {
+  const controlled = theme !== undefined && !!onToggleTheme && !!onFullscreenChange;
+  const [localFullscreen, setLocalFullscreen] = useState(false);
+  const [localTheme, setLocalTheme] = useChartTheme('light');
+  const chartTheme = theme ?? localTheme;
+  const fullscreen = fullscreenProp ?? localFullscreen;
+  const setFullscreen = onFullscreenChange ?? setLocalFullscreen;
+  const toggleTheme = onToggleTheme ?? (() => setLocalTheme(localTheme === 'light' ? 'dark' : 'light'));
   const [indicatorSettings, setIndicatorSettings] = useIndicatorPreferences();
 
   // Interval is the same calculation ChartBody does internally — recomputed
@@ -432,36 +447,38 @@ export function TradeChart({ trade }: TradeChartProps) {
   }, [indicatorSettings, interval]);
 
   return (
-    <div className="rounded-xl border border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-3 sm:p-4 shadow-2xl">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-300">
-          <TrendingUp className="h-5 w-5" />
-          Price Chart
-        </h3>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setChartTheme(chartTheme === 'light' ? 'dark' : 'light')}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-            aria-label="Toggle chart theme"
-            title={`Switch to ${chartTheme === 'light' ? 'dark' : 'light'} theme`}
-          >
-            {chartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-            {chartTheme === 'light' ? 'Dark' : 'Light'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setFullscreen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-            aria-label="Expand chart"
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-            Fullscreen
-          </button>
+    <div className={`rounded-xl border border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-3 sm:p-4 shadow-2xl ${controlled ? 'flex h-full w-full flex-col' : ''}`}>
+      {!controlled && (
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-300">
+            <TrendingUp className="h-5 w-5" />
+            Price Chart
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+              aria-label="Toggle chart theme"
+              title={`Switch to ${chartTheme === 'light' ? 'dark' : 'light'} theme`}
+            >
+              {chartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+              {chartTheme === 'light' ? 'Dark' : 'Light'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFullscreen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+              aria-label="Expand chart"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Fullscreen
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="h-[640px] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+      <div className={`w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl ${controlled ? 'min-h-0 flex-1' : 'h-[640px]'}`}>
         <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} />
       </div>
 

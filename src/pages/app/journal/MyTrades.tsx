@@ -40,9 +40,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Moon, Sun, Maximize2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -1277,6 +1278,12 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [showManageConnections, setShowManageConnections] = useState(false);
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
 
+  // Trade-detail modal: tab + chart chrome lifted up so the Dark/Fullscreen
+  // controls share one row with the tabs (chart owns the reclaimed height).
+  const [tradeDetailTab, setTradeDetailTab] = useState('chart');
+  const [detailChartTheme, setDetailChartTheme] = useChartTheme('light');
+  const [detailChartFullscreen, setDetailChartFullscreen] = useState(false);
+
   // ── Bulk selection state ───────────────────────────────────────────────────
   const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(() => new Set());
 
@@ -2503,8 +2510,9 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
 
               {/* Right Side - Tabbed: Chart / Screenshots / Notes */}
               <div className="flex-1 flex flex-col min-h-0 bg-zinc-950/30">
-                <Tabs defaultValue="chart" className="flex flex-1 flex-col min-h-0">
-                  <TabsList className="shrink-0 mx-4 mt-3 h-auto w-fit justify-start gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
+                <Tabs value={tradeDetailTab} onValueChange={setTradeDetailTab} className="flex flex-1 flex-col min-h-0">
+                  <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3">
+                  <TabsList className="h-auto w-fit justify-start gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
                     <TabsTrigger value="chart" className="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-zinc-400 transition data-[state=active]:bg-zinc-800 data-[state=active]:text-yellow-300 data-[state=active]:shadow-none hover:text-zinc-200">
                       <TrendingUp className="h-3.5 w-3.5" />
                       Chart
@@ -2523,11 +2531,41 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       Notes
                     </TabsTrigger>
                   </TabsList>
+                    {tradeDetailTab === 'chart' && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+                          aria-label="Toggle chart theme"
+                          title={`Switch to ${detailChartTheme === 'light' ? 'dark' : 'light'} theme`}
+                        >
+                          {detailChartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+                          {detailChartTheme === 'light' ? 'Dark' : 'Light'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDetailChartFullscreen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+                          aria-label="Expand chart"
+                        >
+                          <Maximize2 className="h-3.5 w-3.5" />
+                          Fullscreen
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* 📊 CHART TAB */}
-                  <TabsContent value="chart" className="mt-0 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-3 custom-scrollbar">
+                  <TabsContent value="chart" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3">
                     <Suspense fallback={<TradeChartSkeleton />}>
-                      <TradeChart trade={selectedTrade} />
+                      <TradeChart
+                        trade={selectedTrade}
+                        theme={detailChartTheme}
+                        onToggleTheme={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
+                        fullscreen={detailChartFullscreen}
+                        onFullscreenChange={setDetailChartFullscreen}
+                      />
                     </Suspense>
                   </TabsContent>
 
