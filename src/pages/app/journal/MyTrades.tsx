@@ -1281,6 +1281,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showManageConnections, setShowManageConnections] = useState(false);
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
+  const [autoLinkLoading, setAutoLinkLoading] = useState(false);
 
   // Trade-detail modal: tab + chart chrome lifted up so the Dark/Fullscreen
   // controls share one row with the tabs (chart owns the reclaimed height).
@@ -1709,6 +1710,27 @@ const stats = useMemo<Stats>(() => {
     await queryClient.invalidateQueries({ queryKey: ['trades'] });
   }, [filteredTrades, updateTradeMutation, queryClient]);
 
+  const handleAutoLink = useCallback(async () => {
+    if (autoLinkLoading) return;
+    setAutoLinkLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('auto_link_user_trades');
+      if (error) {
+        toast.error('Auto-link failed: ' + error.message);
+      } else {
+        const n = typeof data === 'number' ? data : 0;
+        toast.success(
+          n > 0
+            ? `Linked ${n} trade${n === 1 ? '' : 's'} to strategies`
+            : 'No new trades matched your strategy rules',
+        );
+        await queryClient.invalidateQueries({ queryKey: ['trades'] });
+      }
+    } finally {
+      setAutoLinkLoading(false);
+    }
+  }, [autoLinkLoading, queryClient]);
+
   const exportTrades = useCallback(() => {
     if (filteredTrades.length === 0) {
       toast.error("No trades to export");
@@ -1871,12 +1893,31 @@ const stats = useMemo<Stats>(() => {
           </div>
 
           <div className="flex items-center gap-3">
+            {!effectiveReadOnly && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="border-zinc-800 bg-zinc-900/50"
+                      onClick={handleAutoLink}
+                      disabled={autoLinkLoading}
+                      title="Link unlinked trades to strategies whose match rules fit them."
+                    >
+                      <RefreshCw className={`w-4 h-4 ${autoLinkLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Auto-link strategies</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
+                  <Button
+                    variant="outline"
+                    size="icon"
                     className="border-zinc-800 bg-zinc-900/50"
                     onClick={exportTrades}
                   >

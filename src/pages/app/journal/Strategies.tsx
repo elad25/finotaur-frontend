@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
+import ConditionEditor from "@/components/journal/autotag/ConditionEditor";
+import type { AutoTagCondition } from "@/lib/journal/autotag";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useSmartRefresh } from "@/hooks/useSmartRefresh";
 import { useNavigate, useParams } from "react-router-dom";
@@ -63,6 +65,7 @@ interface ExtendedStrategy {
   planned1rPercent?: number;
   planned1rMode?: 'fixed' | 'percent';
   standardQuantity?: number;
+  matchRules?: AutoTagCondition[];
   status: 'active' | 'archived';
   createdAt: string;
 }
@@ -357,9 +360,21 @@ const strategyTrades = useMemo(() => {
             <h1 className="text-4xl font-bold" style={{ color: '#EAEAEA' }}>
               {strategy.name}
             </h1>
-            <p className="text-sm mt-1" style={{ color: '#9A9A9A' }}>
-              {strategy.description || 'No description'}
-            </p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-sm" style={{ color: '#9A9A9A' }}>
+                {strategy.description || 'No description'}
+              </p>
+              <span
+                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                style={{
+                  background: 'rgba(201,166,70,0.12)',
+                  border: '1px solid rgba(201,166,70,0.25)',
+                  color: '#C9A646',
+                }}
+              >
+                {strategyTrades.length} {strategyTrades.length === 1 ? 'trade' : 'trades'} linked
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1048,6 +1063,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [planned1rPercent, setPlanned1rPercent] = useState<number | undefined>();
   const [standardQuantity, setStandardQuantity] = useState<number | undefined>();
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [matchRules, setMatchRules] = useState<AutoTagCondition[]>([]);
 
   useEffect(() => {
     if (editingStrategy) {
@@ -1063,6 +1079,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setPlanned1rPercent(editingStrategy.planned1rPercent);
       setStandardQuantity(editingStrategy.standardQuantity);
       setChecklist(editingStrategy.checklist || []);
+      setMatchRules(editingStrategy.matchRules ?? []);
       // Load components from the canonical field; fall back to legacy derivation.
       setComponents(getStrategyComponents(editingStrategy));
     } else {
@@ -1079,6 +1096,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setPlanned1rPercent(undefined);
       setStandardQuantity(undefined);
       setChecklist([]);
+      setMatchRules([]);
       // Seed a single empty Entry Condition row so a new strategy opens with
       // one ready-to-fill input (instead of "No entry conditions yet.").
       setComponents([{ id: newComponentId(), type: 'entry_condition', label: '', trackAdherence: true }]);
@@ -1169,6 +1187,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       planned1rPercent,
       planned1rMode: positionSizingRule === '% of Equity' ? 'percent' : 'fixed',
       standardQuantity,
+      matchRules,
       visualExamples: uploadedURLs,
       status: 'active' as const,
     };
@@ -1186,7 +1205,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   }, [name, description, assetClasses, setupType, confirmationSignals, checklist, components,
       visualExamples,
       positionSizingRule, expectedWinRate, avgRRGoal,
-      planned1rUsd, planned1rPercent, standardQuantity,
+      planned1rUsd, planned1rPercent, standardQuantity, matchRules,
       isEditMode, editingStrategy, onSave, onClose]);
 
   if (!isOpen) return null;
@@ -1310,6 +1329,57 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* ── Auto-Match Rules ── */}
+              <div
+                className="rounded-lg p-4 space-y-3"
+                style={{ background: 'rgba(201,166,70,0.04)', border: '1px solid rgba(201,166,70,0.2)' }}
+              >
+                <div>
+                  <label className="block text-sm font-semibold mb-0.5" style={{ color: '#EAEAEA' }}>
+                    Auto-Match Rules
+                  </label>
+                  <p className="text-xs" style={{ color: '#9A9A9A' }}>
+                    Trades matching ALL of these conditions are automatically linked to this strategy.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {matchRules.map((cond, idx) => (
+                    <ConditionEditor
+                      key={idx}
+                      condition={cond}
+                      onChange={(updated) =>
+                        setMatchRules(prev => prev.map((c, i) => (i === idx ? updated : c)))
+                      }
+                      onRemove={() =>
+                        setMatchRules(prev => prev.filter((_, i) => i !== idx))
+                      }
+                    />
+                  ))}
+
+                  {matchRules.length === 0 && (
+                    <p className="text-xs italic" style={{ color: '#6A6A6A' }}>
+                      No conditions yet — trades will not be auto-linked.
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMatchRules(prev => [
+                      ...prev,
+                      { field: 'symbol', op: 'contains', value: '' },
+                    ])
+                  }
+                  className="flex items-center gap-1 text-xs font-medium transition-all hover:opacity-80"
+                  style={{ color: '#C9A646' }}
+                >
+                  <Plus className="w-3 h-3" />
+                  Add condition
+                </button>
               </div>
             </div>
           )}
@@ -2056,6 +2126,7 @@ const strategiesWithStats = useMemo(() => {
             planned_1r_mode: strategyData.planned1rMode ?? 'fixed',
             standard_quantity: strategyData.standardQuantity ?? null,
             status: strategyData.status,
+            match_rules: strategyData.matchRules ?? [],
           },
         });
         toast.success('Strategy updated successfully!');

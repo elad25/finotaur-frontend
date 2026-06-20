@@ -60,7 +60,6 @@ import {
   Coins,
   Flame,
   FileBarChart,
-  Sparkles, // נ”¥ For beta items
   Link2,
   GitCompare,
 } from 'lucide-react';
@@ -301,7 +300,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
     { label: 'Reports & Stats', path: '/app/journal/reports', icon: FileBarChart },
     { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
-    { label: 'Auto-Tagger', path: '/app/journal/auto-tagger', icon: Sparkles },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },

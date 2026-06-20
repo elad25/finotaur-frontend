@@ -48,6 +48,8 @@ export function useStrategiesOptimized(userId?: string) {
         planned1rMode: (row.planned_1r_mode ?? 'fixed') as 'fixed' | 'percent',
         // camelCase alias for positionSizingRule so the edit modal restores the toggle correctly.
         positionSizingRule: row.position_sizing_rule ?? null,
+        // Auto-match rules: array of AutoTagCondition stored in match_rules jsonb.
+        matchRules: (row.match_rules ?? []) as import('@/lib/journal/autotag').AutoTagCondition[],
       }));
     },
     enabled: !!userId,
@@ -135,6 +137,7 @@ export function useCreateStrategyOptimized() {
           avg_rr_goal: strategy.avgRRGoal || null,
           planned_1r_percent: strategy.planned1rPercent ?? null,
           planned_1r_mode: strategy.planned1rMode ?? 'fixed',
+          match_rules: strategy.matchRules ?? [],
         }])
         .select()
         .single();
