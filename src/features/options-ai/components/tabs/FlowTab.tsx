@@ -372,7 +372,7 @@ const DistributionPanel = memo(function DistributionPanel({ groups }: { groups: 
           </svg>
           <div className="relative flex flex-col items-center justify-center">
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-tertiary">Total</span>
-            <span className="text-xl font-black tabular-nums text-ink-primary">{formatPremium(totals.total)}</span>
+            <span className="text-base font-bold tabular-nums text-ink-primary">{formatPremium(totals.total)}</span>
           </div>
         </div>
         <div className="flex-1 space-y-5">
