@@ -808,21 +808,19 @@ export default function TradeCompare() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="w-full py-ds-7 px-ds-4 flex flex-col gap-ds-5">
+    <div className="w-full max-w-[1200px] mx-auto py-ds-7 px-ds-4 flex flex-col gap-ds-5">
 
-      {/* ── Page header ─────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="pt-0.5">
-          <h1 className="text-2xl font-bold text-white">Shadow</h1>
-          <p className="mt-1.5 text-[11px] text-white/62">
-            See what your trades could have been.
-          </p>
-        </div>
+      {/* ── Page header (centered) ──────────────────────────────────────── */}
+      <div className="flex flex-col items-center text-center gap-1">
+        <h1 className="text-2xl font-bold text-white">Shadow</h1>
+        <p className="text-[11px] text-white/62">
+          See what your trades could have been.
+        </p>
       </div>
 
       {/* ── Tabs ─────────────────────────────────────────────────────────── */}
       <Tabs defaultValue="total">
-        <TabsList className="bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
+        <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
           <TabsTrigger
             value="total"
             className="data-[state=active]:bg-[#C9A646]/15 data-[state=active]:text-white data-[state=active]:shadow-none text-white/55 rounded-[8px] px-4 py-1.5 text-[13px] font-medium transition-colors"
