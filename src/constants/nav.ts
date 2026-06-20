@@ -294,8 +294,8 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard',          path: '/app/stocks/overview',     icon: LayoutDashboard, priceGated: true },
       // Screener moved to the all-markets (home) level — see constants/markets.ts.
-      // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
-      { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
+      // Market Pulse — market-wide breadth / sentiment / macro built on free derived data (Yahoo + FRED). Not price-gated.
+      { label: 'Market Pulse',       path: '/app/stocks/market-pulse', icon: Activity,   locked: false },
       { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp,  locked: true, priceGated: true },
       { label: 'News',               path: '/app/stocks/news',         icon: Newspaper },
       { label: 'Sector Analysis',    path: '/app/stocks/sectors',      icon: Target },
