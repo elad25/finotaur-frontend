@@ -23,6 +23,7 @@ import { C } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader, BarMeter } from '../ui';
 import { fmtPct, fmtBig, isValid, getBusinessModelType } from '@/utils/stock-analyzer.utils';
 import { authFetch } from '@/utils/authFetch';
+import { filterOutSelfCompetitors } from '@/lib/competitorFilter';
 
 // =====================================================
 // FINOTAUR AI BADGE
@@ -264,10 +265,10 @@ Rules:
     const parsed: CompetitorData[] = JSON.parse(text);
 
     // Validate
-    const valid = parsed.filter(c =>
+    const valid = filterOutSelfCompetitors(parsed.filter(c =>
       c.name && c.ticker && c.description &&
       ['HIGH THREAT', 'MEDIUM', 'LOW'].includes(c.threat)
-    ).slice(0, 5);
+    ).slice(0, 5), data);
 
     if (valid.length > 0) {
       competitorCache.set(cacheKey, { data: valid, timestamp: Date.now() });
@@ -684,13 +685,13 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
         if (ANTHROPIC_BUSINESS_ENABLED) {
           const anthropicResult = await fetchBusinessAnalysisAI(data, controller.signal);
           if (anthropicResult?.competitors && anthropicResult.competitors.length > 0) {
-            setCompetitors(anthropicResult.competitors.map(normalizeAnthropicCompetitor));
+            setCompetitors(filterOutSelfCompetitors(anthropicResult.competitors.map(normalizeAnthropicCompetitor), data));
             return;
           }
         }
         // Fall back to existing OpenAI/aiProxy path
         const fallback = await fetchCompetitorsAI(data, controller.signal);
-        setCompetitors(fallback);
+        setCompetitors(filterOutSelfCompetitors(fallback, data));
       } finally {
         setCompetitorsLoading(false);
       }
