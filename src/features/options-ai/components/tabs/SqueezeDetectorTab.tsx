@@ -256,7 +256,7 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
                     intensity={candidate.callWallOI > 100000 ? 'high' : candidate.callWallOI > 50000 ? 'medium' : 'low'} />
                   <CompactMetric rationaleKey="gexValue" label="GEX Exposure" value={`${candidate.gexValue > 0 ? '+' : ''}${candidate.gexValue}B`}
                     intensity={gexIntensity} />
-                  <CompactMetric rationaleKey="shortInterest" label="Short Interest" value={`${candidate.shortInterest}%`}
+                  <CompactMetric rationaleKey="shortInterest" label="Short Interest" value={candidate.shortInterest === 0 ? 'N/A' : `${candidate.shortInterest}%`}
                     intensity={candidate.shortInterest > 15 ? 'high' : candidate.shortInterest > 8 ? 'medium' : 'low'} />
                 </div>
                 <div className="divide-y divide-white/[0.04]">
