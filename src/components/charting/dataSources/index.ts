@@ -104,7 +104,10 @@ const FUTURES_ROOT_TO_YAHOO: Record<string, string> = {
  *   ^NDX    → ^NDX    (index passthrough)
  *   BTCUSDT → null    (crypto — caller should route to Binance instead)
  */
-export function toYahooSymbol(raw: string | null | undefined): string | null {
+export function toYahooSymbol(
+  raw: string | null | undefined,
+  assetClass?: string | null,
+): string | null {
   if (!raw) return null;
   const symbol = raw.trim().toUpperCase();
   if (!symbol) return null;
@@ -129,6 +132,15 @@ export function toYahooSymbol(raw: string | null | undefined): string | null {
     if (mapped) return mapped;
     // Unknown root — try `<ROOT>=F` and let Yahoo's resolver decide
     return `${root}=F`;
+  }
+
+  // Bare futures root with no month/year code (e.g. the WHISPER tracker's
+  // "RTY" / "NQ" / "GC") — map to the continuous front-month "<ROOT>=F".
+  // Gated on a futures asset_class so equities that collide with a root
+  // (e.g. CL=Colgate, SI, NG, GC) are NOT mis-mapped.
+  const ac = (assetClass ?? '').toLowerCase();
+  if ((ac === 'futures' || ac === 'future') && FUTURES_ROOT_TO_YAHOO[symbol]) {
+    return FUTURES_ROOT_TO_YAHOO[symbol];
   }
 
   // Equity / index / anything else → passthrough
