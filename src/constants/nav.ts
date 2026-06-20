@@ -29,6 +29,7 @@ import {
   Link, Gift, Swords, Crown, Shield, Copy, Droplet, Grid3x3, Calculator,
   GitCompare,
   ScanLine,
+  Crosshair,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -226,6 +227,26 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
+  // TRADING ARENA — admin + beta only (Phase 0 scaffold).
+  // Full-screen workstation: Chart, Order Flow, locked tabs (Options/Futures/Forex).
+  // Hidden from regular users via beta: true (same mechanism as copy-trade).
+  // ===========================================================================
+  'trading-arena': {
+    id: 'trading-arena',
+    label: 'Trading Arena',
+    locked: false,
+    beta: true, // 🔒 hidden from non-beta users (same gate as copy-trade)
+    defaultPath: '/app/trading-arena/chart',
+    subNav: [
+      { label: 'Trading Arena', path: '/app/trading-arena/chart', beta: true },
+    ],
+    sidebar: [
+      { label: 'Chart',       path: '/app/trading-arena/chart',      icon: Crosshair, beta: true },
+      { label: 'Order Flow',  path: '/app/trading-arena/order-flow', icon: Activity,  beta: true },
+    ],
+  },
+
+  // ===========================================================================
   // LEGACY DOMAINS — KEPT IN FULL so Sidebar environment detection, route
   // guards, and DomainGuard still work. Removed from domainOrder so they no
   // longer appear in the Product Drawer. Routes in App.tsx are untouched.
@@ -273,8 +294,7 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard',          path: '/app/stocks/overview',     icon: LayoutDashboard, priceGated: true },
       // Screener moved to the all-markets (home) level — see constants/markets.ts.
-      // Earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
-      { label: 'Earnings',           path: '/app/stocks/earnings',     icon: Calendar,   locked: true },
+      { label: 'Market Pulse',        path: '/app/stocks/market-pulse', icon: Activity,   locked: false },
       { label: 'Top Movers',         path: '/app/stocks/movers',       icon: TrendingUp,  locked: true, priceGated: true },
       { label: 'News',               path: '/app/stocks/news',         icon: Newspaper },
       { label: 'Sector Analysis',    path: '/app/stocks/sectors',      icon: Target },
@@ -309,7 +329,7 @@ export const domains: Record<string, Domain> = {
       { label: 'DeFi TVL',        path: '/app/crypto/defi-tvl',   icon: Coins },
       { label: 'Stablecoins',     path: '/app/crypto/stablecoins', icon: DollarSign },
       { label: 'Block Trades',    path: '/app/crypto/whales/trades', icon: Layers },
-      { label: 'Market Scanner',  path: '/app/crypto/scanner',       icon: ScanLine },
+      { label: 'Market Scanner',  path: '/app/crypto/scanner',       icon: ScanLine, beta: true },
       { label: 'Heatmap',         path: '/app/crypto/heatmap',     icon: Map },
       { label: 'Watchlist',       path: '/app/crypto/watchlist',   icon: Bell },
       // Academy removed from sidebar (route /app/crypto/academy still exists)
@@ -418,12 +438,14 @@ export const domains: Record<string, Domain> = {
     locked: false,
     beta: false,
     subNav: [
+      { label: 'Auto Backtest', path: '/app/backtest/auto', locked: true },
       { label: 'Dashboard',   path: '/app/journal/backtest/overview' },
       { label: 'My Trades',   path: '/app/journal/backtest/trades' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
       { label: 'Results',     path: '/app/journal/backtest/results' },
     ],
     sidebar: [
+      { label: 'Auto Backtest',    path: '/app/backtest/auto',             icon: FlaskConical, locked: true },
       { label: 'Dashboard',        path: '/app/journal/backtest/overview', icon: LayoutDashboard },
       { label: 'Chart',            path: '/app/journal/backtest/chart',    icon: FlaskConical },
       { label: 'My Trades',        path: '/app/journal/backtest/trades',   icon: BarChart3 },
@@ -527,7 +549,8 @@ export const domainOrder = [
   'war-zone',
   'top-secret',
   'journal',
-  'copy-trade', // hidden for non-beta; admin-only in practice
+  'copy-trade',     // hidden for non-beta; admin-only in practice
+  'trading-arena',  // hidden for non-beta; full-screen workstation (Phase 0)
   // Removed from Drawer (routes/pages/domain defs preserved):
   //   'all-markets', 'stocks', 'crypto', 'futures', 'forex',
   //   'commodities', 'macro', 'funding'

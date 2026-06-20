@@ -225,6 +225,7 @@ const BacktestResults = lazy(() => import("@/pages/app/journal/backtest/Results"
 const BacktestBuilder = lazy(() => import("@/pages/app/journal/backtest/Builder"));
 const BacktestAnalytics = lazy(() => import("@/pages/app/journal/backtest/Analytics"));
 const BacktestTrades = lazy(() => import("@/pages/app/journal/backtest/BacktestTrades"));
+const AutoBacktest = lazy(() => import("@/pages/app/journal/backtest/AutoBacktest"));
 
 // Affiliate Center Pages
 const AffiliateOverview = lazy(() => import("@/features/affiliate/pages/Affiliateoverview"));
@@ -276,7 +277,7 @@ const ETFNews       = lazy(() => import("@/pages/app/etfs/News"));
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
-const StocksEarnings = lazy(() => import("@/pages/app/stocks/Earnings"));
+const StocksMarketPulse = lazy(() => import("@/pages/app/stocks/MarketPulse"));
 const StocksMovers = lazy(() => import("@/pages/app/stocks/Movers"));
 const StocksNews = lazy(() => import("@/pages/app/stocks/News"));
 const StocksSectors = lazy(() => import("@/pages/app/stocks/Sectors"));
@@ -304,6 +305,9 @@ const CryptoStablecoins = lazy(() => import("@/pages/app/crypto/Stablecoins"));
 const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
 const CryptoWhales = lazy(() => import("@/pages/app/crypto/whales/WhalesHub"));
 const CryptoMarketScanner = lazy(() => import("@/pages/app/crypto/scanner/MarketScanner"));
+
+// Trading Arena — admin + beta only, full-screen workstation (Phase 0)
+const TradingArenaPage = lazy(() => import("@/pages/app/trading-arena/TradingArena"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -388,9 +392,9 @@ const FundingTransactions = lazy(() => import("@/pages/app/funding/Transactions"
 // LOADING COMPONENT — imported from @/components/ds/Spinner
 
 // WRAPPERS
-const SuspenseRoute = memo(({ children }: { children: React.ReactNode }) => (
+const SuspenseRoute = memo(({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) => (
   <ErrorBoundary boundary="suspense-route">
-    <Suspense fallback={<RouteSkeleton />}>{children}</Suspense>
+    <Suspense fallback={fallback ?? <RouteSkeleton />}>{children}</Suspense>
   </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
@@ -552,9 +556,10 @@ function AppContent() {
           {/* Screener now lives at the all-markets (home) level — see all-markets/screener below.
               Redirect keeps old bookmarks/links working. */}
           <Route path="stocks/screener" element={<Navigate to="/app/all-markets/screener" replace />} />
-          {/* Stocks Earnings — sealed: earnings calendar source (Finnhub) not commercially licensed. Sealed pending licensed source.
-              To re-enable: restore <LockedRoute domainId="stocks"><StocksEarnings /></LockedRoute> and remove locked:true from nav.ts. */}
-          <Route path="stocks/earnings" element={<OptionsComingSoon title="Earnings" description="Earnings calendar data is coming soon — we're securing a commercially licensed data feed." />} />
+          {/* stocks/earnings — redirect to Market Pulse so old bookmarks / route-guard don't 404 */}
+          <Route path="stocks/earnings" element={<Navigate to="/app/stocks/market-pulse" replace />} />
+          {/* Market Pulse — breadth, sentiment, macro (replaces the sealed Earnings Coming-Soon) */}
+          <Route path="stocks/market-pulse" element={<LockedRoute domainId="stocks"><StocksMarketPulse /></LockedRoute>} />
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
           <Route path="stocks/sectors" element={<LockedRoute domainId="stocks"><StocksSectors /></LockedRoute>} />
@@ -586,7 +591,12 @@ function AppContent() {
           <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
           <Route path="crypto/whales" element={<LockedRoute domainId="crypto"><Navigate to="/app/crypto/whales/trades" replace /></LockedRoute>} />
           <Route path="crypto/whales/:signal" element={<LockedRoute domainId="crypto"><CryptoWhales /></LockedRoute>} />
-          <Route path="crypto/scanner" element={<LockedRoute domainId="crypto"><AdminBetaGate><CryptoMarketScanner /></AdminBetaGate></LockedRoute>} />
+          {/* Market Scanner is a fullscreen overlay — use a fullscreen-black loading
+              fallback (chunk + auth) so the transition never flashes an app-shell skeleton. */}
+          <Route path="crypto/scanner" element={<SuspenseRoute fallback={<div className="fixed inset-0 z-[100] bg-black" />}><AdminBetaGate fallback={<div className="fixed inset-0 z-[100] bg-black" />}><CryptoMarketScanner /></AdminBetaGate></SuspenseRoute>} />
+
+          {/* TRADING ARENA — admin + beta only, full-screen workstation (Phase 0) */}
+          <Route path="trading-arena/:section?" element={<SuspenseRoute><AdminBetaGate><TradingArenaPage /></AdminBetaGate></SuspenseRoute>} />
 
           {/* FUTURES: licensed-data-safe workspace only. No live CME quotes/charts/DOM/OI fetches. */}
           <Route path="futures" element={<Navigate to="/app/futures/overview" replace />} />
@@ -724,6 +734,7 @@ function AppContent() {
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
+          <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
           <Route path="journal/backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
@@ -754,6 +765,7 @@ function AppContent() {
           )}
 
           {/* BACKTEST BACKWARD COMPAT */}
+          <Route path="backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
           <Route path="backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
