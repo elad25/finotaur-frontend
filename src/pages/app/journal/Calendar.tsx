@@ -1424,35 +1424,6 @@ export default function JournalCalendar() {
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-zinc-400" />
-            
-            <Select value={filterSession} onValueChange={setFilterSession}>
-              <SelectTrigger className="w-[140px] h-9 bg-zinc-900 border-zinc-800">
-                <SelectValue placeholder="Session" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sessions</SelectItem>
-                <SelectItem value="asia">Asia</SelectItem>
-                <SelectItem value="london">London</SelectItem>
-                <SelectItem value="ny_am">NY AM</SelectItem>
-                <SelectItem value="ny_pm">NY PM</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filterResult} onValueChange={setFilterResult}>
-              <SelectTrigger className="w-[140px] h-9 bg-zinc-900 border-zinc-800">
-                <SelectValue placeholder="Result" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Results</SelectItem>
-                <SelectItem value="WIN">Wins</SelectItem>
-                <SelectItem value="LOSS">Losses</SelectItem>
-                <SelectItem value="BE">Break-even</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
       </Card>
 
