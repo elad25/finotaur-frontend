@@ -202,8 +202,10 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
                   <span className="text-[#555]">({candidate.distanceToWall.toFixed(1)}%)</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: candidate.shortInterest > 15 ? '#F59E0B' : '#555' }} />
-                  SI: <span className="font-medium" style={{ color: candidate.shortInterest > 15 ? '#F59E0B' : '#8B8B8B' }}>{candidate.shortInterest}%</span>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: candidate.shortInterest === 0 ? '#555' : candidate.shortInterest > 15 ? '#F59E0B' : '#555' }} />
+                  SI: <span className="font-medium" style={{ color: candidate.shortInterest === 0 ? '#6B6B6B' : candidate.shortInterest > 15 ? '#F59E0B' : '#8B8B8B' }}>
+                    {candidate.shortInterest === 0 ? 'N/A' : `${candidate.shortInterest}%`}
+                  </span>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: candidate.gexStatus === 'negative' ? '#F59E0B' : '#555' }} />
@@ -262,8 +264,9 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
                     intensity={candidate.callVolumeSpike > 3 ? 'high' : candidate.callVolumeSpike > 1.5 ? 'medium' : 'low'} />
                   <CompactMetric rationaleKey="putCallRatio" label="P/C Ratio" value={candidate.putCallRatio.toFixed(2)}
                     intensity={candidate.putCallRatio < 0.5 ? 'high' : candidate.putCallRatio < 0.7 ? 'medium' : 'low'} />
-                  <CompactMetric rationaleKey="floatSize" label="Float" value={candidate.floatSize.charAt(0).toUpperCase() + candidate.floatSize.slice(1)}
-                    intensity={candidate.floatSize === 'small' ? 'high' : candidate.floatSize === 'medium' ? 'medium' : 'low'} />
+                  <CompactMetric rationaleKey="floatSize" label="Float"
+                    value={candidate.floatSize === 'medium' ? 'N/A' : candidate.floatSize.charAt(0).toUpperCase() + candidate.floatSize.slice(1)}
+                    intensity={candidate.floatSize === 'small' ? 'high' : candidate.floatSize === 'medium' ? 'low' : 'low'} />
                 </div>
               </div>
 
