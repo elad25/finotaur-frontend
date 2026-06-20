@@ -1550,8 +1550,19 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // after a successful broker OAuth flow. We read the param here, invalidate
   // all broker/portfolio/trade caches, show a success toast, then strip the
   // params so a manual refresh does not re-trigger.
+  // When the server blocks a 2nd-broker attempt for non-premium users it
+  // redirects to ?oauth_error=upgrade_required_for_multiple_brokers — we open
+  // the UpgradeLimitDialog for that specific error value.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get('oauth_error');
+    if (oauthError === 'upgrade_required_for_multiple_brokers') {
+      setShowBrokerUpgrade(true);
+      // Strip the param so a manual refresh does not re-open the dialog.
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+
     const oauthStatus = params.get('oauth_status');
     if (oauthStatus !== 'connected') return;
     // Wait until userId resolves before invalidating per-user query keys.
