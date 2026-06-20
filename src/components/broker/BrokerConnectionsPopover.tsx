@@ -433,6 +433,10 @@ function PopoverBody({
         return connId ? allConnections.find(c => c.id === connId) : undefined;
       }
       if (portfolio.source === 'tradovate') {
+        if (portfolio.credential_id) {
+          const byCred = allConnections.find(c => c.id === portfolio.credential_id);
+          if (byCred) return byCred;
+        }
         return allConnections.find(
           c =>
             (c.broker === 'tradovate' || c.broker === 'ninja_trader') &&
