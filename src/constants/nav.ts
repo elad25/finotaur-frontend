@@ -439,12 +439,14 @@ export const domains: Record<string, Domain> = {
     locked: false,
     beta: false,
     subNav: [
+      { label: 'Auto Backtest', path: '/app/backtest/auto', locked: true },
       { label: 'Dashboard',   path: '/app/journal/backtest/overview' },
       { label: 'My Trades',   path: '/app/journal/backtest/trades' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
       { label: 'Results',     path: '/app/journal/backtest/results' },
     ],
     sidebar: [
+      { label: 'Auto Backtest',    path: '/app/backtest/auto',             icon: FlaskConical, locked: true },
       { label: 'Dashboard',        path: '/app/journal/backtest/overview', icon: LayoutDashboard },
       { label: 'Chart',            path: '/app/journal/backtest/chart',    icon: FlaskConical },
       { label: 'My Trades',        path: '/app/journal/backtest/trades',   icon: BarChart3 },
