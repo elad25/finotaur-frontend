@@ -616,12 +616,7 @@ export default function TradeCompare() {
       {/* ── Page header (matches Overview "Welcome back" header treatment) ── */}
       <div className="flex items-start justify-between gap-4">
         <div className="pt-0.5">
-          <span className="text-[11px] font-medium tracking-[1.5px] uppercase text-[#C9A646]/70">
-            Trade Journal
-          </span>
-          <h1 className="mt-1 text-[17px] font-semibold leading-tight tracking-normal text-white">
-            Shadow
-          </h1>
+          <h1 className="text-2xl font-bold text-white">Shadow</h1>
           <p className="mt-1.5 text-[11px] text-white/62">
             See what your trades could have been.
           </p>
