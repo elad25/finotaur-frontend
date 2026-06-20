@@ -22,6 +22,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
+import { excludeHiddenWhenAllAccounts } from '@/lib/journal/hiddenAccounts';
 
 // ────────────────────────────────────────────────────────────────────────
 // Shape returned by the projection query — slim subset of `trades` row.
@@ -59,6 +60,8 @@ interface UseTradesProjectionOptions {
   to?: string | null;
   /** Hard cap, defaults to 5000 — covers heavy users without OOM in JSON parse. */
   limit?: number;
+  /** Portfolio UUIDs to exclude in the all-accounts case (null-safe, see hiddenAccounts.ts). */
+  excludePortfolioIds?: string[];
 }
 
 export function useTradesProjection(opts: UseTradesProjectionOptions = {}) {
@@ -71,6 +74,7 @@ export function useTradesProjection(opts: UseTradesProjectionOptions = {}) {
   const from = opts.from ?? null;
   const to = opts.to ?? null;
   const limit = opts.limit ?? 5000;
+  const excludePortfolioIds = opts.excludePortfolioIds ?? [];
 
   useEffect(() => {
     if (!targetUserId) return;
@@ -103,6 +107,7 @@ export function useTradesProjection(opts: UseTradesProjectionOptions = {}) {
       from ?? 'beginning',
       to ?? 'now',
       limit,
+      excludePortfolioIds.length > 0 ? `excl:${excludePortfolioIds.join(',')}` : 'excl:none',
     ],
     queryFn: async (): Promise<TradeProjectionRow[]> => {
       if (!targetUserId) return [];
@@ -121,6 +126,9 @@ export function useTradesProjection(opts: UseTradesProjectionOptions = {}) {
         } else {
           q = q.eq('portfolio_id', portfolioId);
         }
+      } else {
+        // All-accounts case: exclude hidden portfolios (null-safe)
+        q = excludeHiddenWhenAllAccounts(q, true, excludePortfolioIds);
       }
       if (from) q = q.gte('open_at', from);
       if (to) q = q.lt('open_at', to);
@@ -158,6 +166,8 @@ export interface TradesPage {
 interface UseTradesPageOptions {
   portfolioId?: string | null;
   pageSize?: number;
+  /** Portfolio UUIDs to exclude in the all-accounts case (null-safe, see hiddenAccounts.ts). */
+  excludePortfolioIds?: string[];
 }
 
 export function useTradesPage(opts: UseTradesPageOptions = {}) {
@@ -167,6 +177,7 @@ export function useTradesPage(opts: UseTradesPageOptions = {}) {
   const targetUserId = userId;
   const portfolioId = opts.portfolioId ?? null;
   const pageSize = opts.pageSize ?? 50;
+  const excludePortfolioIds = opts.excludePortfolioIds ?? [];
 
   useEffect(() => {
     if (!targetUserId) return;
@@ -197,6 +208,7 @@ export function useTradesPage(opts: UseTradesPageOptions = {}) {
       isImpersonating ? 'admin' : 'user',
       portfolioId ?? 'all',
       pageSize,
+      excludePortfolioIds.length > 0 ? `excl:${excludePortfolioIds.join(',')}` : 'excl:none',
     ],
     initialPageParam: null as TradesPage['nextCursor'],
     queryFn: async ({ pageParam }): Promise<TradesPage> => {
@@ -218,6 +230,9 @@ export function useTradesPage(opts: UseTradesPageOptions = {}) {
         } else {
           q = q.eq('portfolio_id', portfolioId);
         }
+      } else {
+        // All-accounts case: exclude hidden portfolios (null-safe)
+        q = excludeHiddenWhenAllAccounts(q, true, excludePortfolioIds);
       }
       if (pageParam) {
         // (open_at, id) lexicographic cursor — covers the equal-timestamp case.
