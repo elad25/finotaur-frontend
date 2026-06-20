@@ -413,8 +413,19 @@ function PopoverBody({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const groups = useMemo<PortfolioGroup[]>(
-    () => buildAccountGroups(tradovatePortfolios, brokerPortfolios, manualPortfolios),
-    [tradovatePortfolios, brokerPortfolios, manualPortfolios],
+    () =>
+      buildAccountGroups(tradovatePortfolios, brokerPortfolios, manualPortfolios).map(g => {
+        // Label a per-connection tradovate group by the connection's OWN name
+        // (e.g. "APEX") — the name set at creation — not the firm-detected
+        // fallback derived from the first account's spec.
+        if (g.key.startsWith('conn-')) {
+          const conn = allConnections.find(c => c.id === g.key.slice(5));
+          const nm = conn?.connection_name?.trim();
+          if (nm) return { ...g, label: nm };
+        }
+        return g;
+      }),
+    [tradovatePortfolios, brokerPortfolios, manualPortfolios, allConnections],
   );
 
   /**
