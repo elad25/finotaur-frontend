@@ -22,6 +22,7 @@ import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
 import { aggregateCopiedTrades } from '@/lib/tradeAggregation';
 import { normalizeTraderTrades, type TraderMode } from '@/lib/journal/traderNormalization';
+import { excludeHiddenWhenAllAccounts } from '@/lib/journal/hiddenAccounts';
 
 // ================================================
 // TYPES & INTERFACES
@@ -418,6 +419,7 @@ async function fetchAggregatedStats(
   client: typeof supabase,
   userId: string,
   portfolioIds: string[] | null,
+  excludePortfolioIds?: string[],
 ): Promise<{
   user_id: string;
   total_closed: number;
@@ -438,6 +440,7 @@ async function fetchAggregatedStats(
       client.rpc('get_user_portfolio_stats', {
         p_user_id: userId,
         p_portfolio_ids: portfolioIds && portfolioIds.length > 0 ? portfolioIds : null,
+        p_exclude_portfolio_ids: excludePortfolioIds && excludePortfolioIds.length > 0 ? excludePortfolioIds : null,
       }),
       TIMEOUTS.SUPABASE_RPC,
       'useDashboardData.fetchAggregatedStats'
@@ -478,11 +481,13 @@ async function fetchBestWorst(
   userId: string,
   cutoffDate: string,
   portfolioIds: string[] | null,
+  excludePortfolioIds?: string[],
 ): Promise<{
   best: DashboardStats['bestTrade'];
   worst: DashboardStats['worstTrade'];
 }> {
   const baseSelect = 'id, pnl, open_at, close_at, symbol, session, rr, actual_r, actual_user_r, risk_usd, input_mode, stop_price, entry_price, quantity';
+  const isAllAccounts = !portfolioIds || portfolioIds.length === 0;
   const buildBase = () => {
     let q = client
       .from('trades')
@@ -505,6 +510,7 @@ async function fetchBestWorst(
         q = q.in('portfolio_id', portfolioUUIDs);
       }
     }
+    q = excludeHiddenWhenAllAccounts(q, isAllAccounts, excludePortfolioIds ?? []);
     return q;
   };
   const [bestRes, worstRes] = await Promise.all([
@@ -541,7 +547,9 @@ async function fetchDailyPnL(
   userId: string,
   cutoffDate: string,
   portfolioIds: string[] | null,
+  excludePortfolioIds?: string[],
 ): Promise<DailyPnLRow[]> {
+  const isAllAccounts = !portfolioIds || portfolioIds.length === 0;
   let q = client
     .from('user_daily_pnl_v')
     .select('trade_date, portfolio_id, day_trades, day_pnl')
@@ -555,6 +563,7 @@ async function fetchDailyPnL(
     // If selection is broker-only, filter to nothing (no portfolio_id match possible).
     else q = q.in('portfolio_id', [] as string[]);
   }
+  q = excludeHiddenWhenAllAccounts(q, isAllAccounts, excludePortfolioIds ?? []);
   const { data, error } = await q.order('trade_date', { ascending: true });
   if (error) {
     console.error('user_daily_pnl_v query error:', error.message);
@@ -573,7 +582,9 @@ async function fetchTradesForOverview(
   userId: string,
   cutoffDate: string,
   portfolioIds: string[] | null,
+  excludePortfolioIds?: string[],
 ): Promise<Trade[]> {
+  const isAllAccounts = !portfolioIds || portfolioIds.length === 0;
   let q = client
     .from('trades')
     .select(`
@@ -597,6 +608,7 @@ async function fetchTradesForOverview(
       q = q.in('portfolio_id', portfolioUUIDs);
     }
   }
+  q = excludeHiddenWhenAllAccounts(q, isAllAccounts, excludePortfolioIds ?? []);
   const { data, error } = await q;
   if (error) {
     console.error('fetchTradesForOverview error:', error.message);
@@ -702,6 +714,7 @@ async function fetchAllTradesForTrader(
   client: typeof supabase,
   userId: string,
   portfolioIds: string[] | null,
+  excludePortfolioIds?: string[],
 ): Promise<Trade[]> {
   const select = `
     id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
@@ -710,6 +723,7 @@ async function fetchAllTradesForTrader(
     portfolio_id, broker_connection_id, side
   `;
 
+  const isAllAccounts = !portfolioIds || portfolioIds.length === 0;
   const buildQuery = (from: number) => {
     let q = client
       .from('trades')
@@ -731,6 +745,7 @@ async function fetchAllTradesForTrader(
         q = q.in('portfolio_id', portfolioUUIDs);
       }
     }
+    q = excludeHiddenWhenAllAccounts(q, isAllAccounts, excludePortfolioIds ?? []);
     return q;
   };
 
@@ -769,6 +784,7 @@ export function useDashboardStats(
   portfolioIds?: string[] | null,
   isTraderMode?: boolean,
   traderMode?: TraderMode,
+  excludePortfolioIds?: string[],
 ) {
   const { id: effectiveUserId, isImpersonating } = useEffectiveUser();
   const { enableAdminMode } = useImpersonation();
@@ -789,6 +805,7 @@ export function useDashboardStats(
         ? dashboardPortfolioIds.join(',')
         : (dashboardPortfolioId ?? 'all'),
       isTraderMode ? `trader:${traderMode ?? 'per-contract'}` : 'normal',
+      excludePortfolioIds && excludePortfolioIds.length > 0 ? `excl:${excludePortfolioIds.join(',')}` : 'excl:none',
     ],
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
@@ -832,7 +849,7 @@ export function useDashboardStats(
           ? dashboardPortfolioIds
           : (dashboardPortfolioId ? [dashboardPortfolioId] : null);
         devLog('🔄 TRADER all-time path: paginated fetch');
-        const allRows = await fetchAllTradesForTrader(client, userId, effectivePortfolioIds);
+        const allRows = await fetchAllTradesForTrader(client, userId, effectivePortfolioIds, excludePortfolioIds);
         const normalized = normalizeTraderTrades(allRows, traderMode ?? 'per-contract');
         devLog(`✅ TRADER: ${allRows.length} raw → ${normalized.length} decisions`);
         return computeStats(normalized);
@@ -845,10 +862,10 @@ export function useDashboardStats(
         // RPC get_user_portfolio_stats only understands portfolio_id — pass only plain UUIDs.
         const { portfolioUUIDs: rpcPortfolioIds } = partitionPortfolioIds(effectivePortfolioIds);
         const [agg, bestWorst, dailyRows, tradesForOverview] = await Promise.all([
-          fetchAggregatedStats(client, userId, rpcPortfolioIds),
-          fetchBestWorst(client, userId, cutoffDate, effectivePortfolioIds),
-          fetchDailyPnL(client, userId, cutoffDate, effectivePortfolioIds),
-          fetchTradesForOverview(client, userId, cutoffDate, effectivePortfolioIds),
+          fetchAggregatedStats(client, userId, rpcPortfolioIds, excludePortfolioIds),
+          fetchBestWorst(client, userId, cutoffDate, effectivePortfolioIds, excludePortfolioIds),
+          fetchDailyPnL(client, userId, cutoffDate, effectivePortfolioIds, excludePortfolioIds),
+          fetchTradesForOverview(client, userId, cutoffDate, effectivePortfolioIds, excludePortfolioIds),
         ]);
         devLog('✅ Aggregated path: RPC + view scalars + trades for Overview (2.D-2 will drop trades)');
         return composeAggregatedStats(agg, bestWorst, dailyRows, tradesForOverview);
@@ -892,6 +909,8 @@ export function useDashboardStats(
       // Cutoff is always set (defaults to MAX_LOOKBACK_DAYS for "all time").
       // 🔥 Use open_at for date filtering (works for both modes).
       queryBuilder = queryBuilder.gte('open_at', cutoffDate);
+      // Exclude hidden portfolios when showing all accounts.
+      queryBuilder = excludeHiddenWhenAllAccounts(queryBuilder, isAllAccounts, excludePortfolioIds ?? []);
 
       const { data, error } = await queryBuilder;
 
