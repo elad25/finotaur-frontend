@@ -400,7 +400,7 @@ export default function JournalCalendar() {
   // 🔥 CRITICAL: Use the same useTrades hook as MyTrades!
   // In TRADER mode, fetch raw per-account fills (skipCopyAggregation) so that
   // normalizeTraderTrades can collapse them into one decision per trade.
-  const { data: rawTrades = [], isLoading: tradesLoading, error } = useTrades(userId, effectivePortfolioId, { skipCopyAggregation: isTraderMode }, isShowingAll ? hiddenPortfolioIds : undefined);
+  const { data: rawTrades = [], isLoading: tradesLoading, error } = useTrades(userId, effectivePortfolioId, { skipCopyAggregation: isTraderMode }, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
 
   // TRADER scope: normalize copier-duplicated rows into one decision per trade.
   // All downstream stats (activeTrades, dayDataMap, monthStats, charts) consume

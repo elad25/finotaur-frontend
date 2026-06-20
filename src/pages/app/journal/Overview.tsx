@@ -1580,7 +1580,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // logged-in mentor's portfolio filter — show all of the student's data.
   const mentorPortfolioId = bypassPortfolioFilter ? undefined : effectivePortfolioId;
   const mentorPortfolioIds = bypassPortfolioFilter ? undefined : effectivePortfolioIds;
-  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, mentorPortfolioId, mentorPortfolioIds, isTraderMode, traderMode, isShowingAll ? hiddenPortfolioIds : undefined);
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, mentorPortfolioId, mentorPortfolioIds, isTraderMode, traderMode, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
   
   // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
   // Covers: create, edit, delete from MyTrades + NewTrade page

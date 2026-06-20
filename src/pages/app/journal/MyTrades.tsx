@@ -1249,7 +1249,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   // TRADER mode: pass skipCopyAggregation so we receive raw per-account fills
   // instead of copy-aggregated rows. normalizeTraderTrades (below) then groups
   // them into decisions, matching Dashboard behaviour.
-  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, isShowingAll ? hiddenPortfolioIds : undefined);
+  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
   // TRADER scope: normalize copier-duplicated rows into one decision per trade.
   // All downstream stats and the table operate on `trades` (the normalized array).
   // Non-TRADER: `trades` === `rawTrades` (zero cost, referentially stable).
