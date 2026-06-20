@@ -47,6 +47,7 @@ export interface TradeChartTrade {
   close_at?: string | null;
   outcome?: 'WIN' | 'LOSS' | 'BE' | 'OPEN' | null;
   pnl?: number | null;
+  asset_class?: string | null;
 }
 
 interface TradeChartProps {
@@ -228,7 +229,7 @@ function computeWindow(trade: TradeChartTrade): { from: number; to: number; dura
 export function prewarmTradeChart(trade: TradeChartTrade): void {
   try {
     const isCrypto = isCryptoSymbol(trade.symbol ?? '');
-    const resolvedSymbol = isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol);
+    const resolvedSymbol = isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol, trade.asset_class);
     if (!resolvedSymbol) return;
     const dataSource = pickDataSource(trade.symbol);
     const { from, to, durationMs } = computeWindow(trade);
@@ -256,8 +257,8 @@ function ChartBody({
   // Resolve symbol once per render — pure function of raw symbol
   const isCrypto = useMemo(() => isCryptoSymbol(trade.symbol ?? ''), [trade.symbol]);
   const resolvedSymbol = useMemo(
-    () => (isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol)),
-    [trade.symbol, isCrypto],
+    () => (isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol, trade.asset_class)),
+    [trade.symbol, isCrypto, trade.asset_class],
   );
 
   const window = useMemo(() => computeWindow(trade), [trade]);
