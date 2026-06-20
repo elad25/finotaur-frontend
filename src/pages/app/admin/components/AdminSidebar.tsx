@@ -24,7 +24,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
     <aside className="w-64 shrink-0 bg-[#0E0E0E] border-r border-gray-800 min-h-screen">
       <div className="px-5 py-5 border-b border-gray-800">
         <a
-          href="/app/all-markets/warzone"
+          href="/app/home"
           className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#D4AF37] transition-colors mb-3"
         >
           <ArrowLeft className="w-3 h-3" />
