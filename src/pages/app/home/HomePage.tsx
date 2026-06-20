@@ -133,25 +133,24 @@ export default function HomePage() {
       {/* ── 2. ASK FINO CARD ────────────────────────────────────────── */}
       <Card variant="featured" padding="default">
         <div className="flex items-center gap-ds-4">
-          {/* Big FINO — real animated asset (native alpha, transparent).
-              ~35s seamless home-hub loop: seven gentle expression beats
-              (idle, curious, thinking, idea, wave hello, welcome, thumbs-up).
-              Each beat starts AND ends on the exact same neutral standing pose
-              (image-to-video with start_image === end_image === the canonical
-              still), so the beats chain into one continuous motion with no
-              visible seam between clips or across the loop. Locked-off camera
-              (same framing/zoom throughout), bipedal (2 legs + 2 arms),
-              anchored to the canonical bipedal FINO still. Framing cropped
-              tighter than v3 so FINO fills more of the square. The background
-              remover outputs FINO on EXACT (0,0,0) black, so v8 derives alpha
-              from a luminance ramp on the brightest channel (anything brighter
-              than ~0 is kept). This preserves even the darkest cape folds —
-              earlier colour/threshold approaches (v4–v7) dropped folds that
-              were as dark as the background. Verified across all 424 frames:
-              0 of ~28M source-content pixels are transparent. */}
-          <img
-            src="/fino/fino-home-loop-v8.webp"
-            alt=""
+          {/* Big FINO — real animated video, transparent (VP9 alpha WebM).
+              90s natural idle: subtle breathing/blink + occasional wave hello
+              and a thinking beat, woven from eight 15s beats that each start
+              AND end on the same neutral anchor pose (arms relaxed at sides),
+              so the loop is seamless and FINO never "snaps". Locked-off camera,
+              same framing throughout, bipedal (2 legs + 2 arms), anchored to
+              the canonical full-body FINO still via image-to-video. Transparency
+              from the bg-remover's exact (0,0,0) matte → ffmpeg colorkey 0.01 →
+              VP9 alpha, which preserves the dark fur and cape folds. The poster
+              keeps a still FINO visible if the browser can't play VP9-alpha
+              (e.g. Safari). Replaces the v8 animated-webp loop. */}
+          <video
+            src="/fino/fino-home-natural-v4.webm"
+            poster="/fino/fino-home-natural-v4-poster.png"
+            autoPlay
+            muted
+            loop
+            playsInline
             aria-hidden="true"
             draggable={false}
             className="h-40 w-40 flex-shrink-0 self-center object-contain"
