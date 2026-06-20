@@ -192,7 +192,6 @@ const JournalReportsOverview = lazy(() => import("@/pages/app/journal/reports/Ov
 const JournalReportsSummary = lazy(() => import("@/pages/app/journal/reports/Summary"));
 const JournalReportsPerformance = lazy(() => import("@/pages/app/journal/reports/Performance"));
 const JournalReportsOptions = lazy(() => import("@/pages/app/journal/reports/OptionsAnalytics"));
-const JournalAutoTagger = lazy(() => import("@/pages/app/journal/AutoTagger"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
 const Strategies = lazy(() => import("@/pages/app/journal/Strategies"));
@@ -724,7 +723,6 @@ function AppContent() {
   <Route path="recaps" element={<JournalReportsRecaps />} />
   <Route path="performance" element={<JournalReportsPerformance />} />
 </Route>
-<Route path="journal/auto-tagger" element={<JournalRoute><JournalAutoTagger /></JournalRoute>} />
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />

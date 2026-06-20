@@ -27,6 +27,7 @@ import { useTradeTags } from '@/hooks/useTradeTags';
 import { useJournalTags } from '@/hooks/useJournalTags';
 import { useStrategiesOptimized } from '@/hooks/useStrategies';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { tradeMatchesRule } from '@/lib/journal/autotag';
 
 interface PartialLeg {
   // Common fields written by both the Tradovate edge fn (v48+) and the
@@ -904,28 +905,87 @@ export default function JournalTradeDetail() {
         {/* Strategy picker */}
         <div className="mb-4">
           <label className="text-sm text-zinc-400 mb-1.5 block font-medium">Strategy</label>
-          {isEditing && draft ? (
-            <select
-              value={draft.strategyId ?? ''}
-              onChange={(e) =>
-                setDraft({ ...draft, strategyId: e.target.value || null })
-              }
-              className="w-full rounded-lg bg-zinc-800 border border-zinc-700 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646] transition-colors"
-            >
-              <option value="">— No setup —</option>
-              {strategies.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="text-white text-sm">
-              {trade.strategy_id
-                ? (strategies.find((s) => s.id === trade.strategy_id)?.name ?? '—')
-                : '—'}
-            </p>
-          )}
+          {(() => {
+            // Determine auto-match status for the currently linked strategy.
+            const linkedStrategy = strategies.find((s) => s.id === trade.strategy_id);
+            const isAutoMatched =
+              !!linkedStrategy &&
+              Array.isArray((linkedStrategy as any).matchRules) &&
+              (linkedStrategy as any).matchRules.length > 0 &&
+              // trade cast to any because local Trade type may not match the matcher's Trade type
+              tradeMatchesRule(trade as any, (linkedStrategy as any).matchRules);
+
+            if (isEditing && draft) {
+              // Suggestion chip: first strategy whose rules match this trade (only when none selected).
+              const suggested = !draft.strategyId
+                ? strategies.find(
+                    (s) =>
+                      Array.isArray((s as any).matchRules) &&
+                      (s as any).matchRules.length > 0 &&
+                      tradeMatchesRule(trade as any, (s as any).matchRules),
+                  )
+                : undefined;
+
+              return (
+                <>
+                  <select
+                    value={draft.strategyId ?? ''}
+                    onChange={(e) =>
+                      setDraft({ ...draft, strategyId: e.target.value || null })
+                    }
+                    className="w-full rounded-lg bg-zinc-800 border border-zinc-700 text-white px-3 py-2 text-sm focus:outline-none focus:border-[#C9A646] transition-colors"
+                  >
+                    <option value="">— No setup —</option>
+                    {strategies.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Helper text */}
+                  <p className="mt-1.5 text-xs text-zinc-500">
+                    Auto-linked to the strategy whose match rules fit this trade. Pick a different
+                    strategy to override.
+                  </p>
+
+                  {/* Suggestion chip (only when no strategy is selected) */}
+                  {suggested && (
+                    <button
+                      type="button"
+                      onClick={() => setDraft({ ...draft, strategyId: suggested.id })}
+                      className="mt-2 inline-flex items-center gap-1 rounded-full border border-[#C9A646] px-2.5 py-0.5 text-xs text-[#C9A646] hover:bg-[#C9A646]/10 transition-colors"
+                    >
+                      Suggested: {suggested.name}
+                    </button>
+                  )}
+                </>
+              );
+            }
+
+            // Read-only display
+            return (
+              <p className="text-white text-sm flex items-center gap-2">
+                {trade.strategy_id
+                  ? (strategies.find((s) => s.id === trade.strategy_id)?.name ?? '—')
+                  : '—'}
+                {trade.strategy_id && (
+                  isAutoMatched ? (
+                    <span
+                      title="Linked automatically because this trade matches the strategy's rules."
+                      className="inline-flex items-center rounded-full border border-[#C9A646]/40 bg-[#C9A646]/10 px-2 py-0.5 text-[11px] font-medium text-[#C9A646]"
+                    >
+                      Auto-matched
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full border border-zinc-600 bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
+                      Manual
+                    </span>
+                  )
+                )}
+              </p>
+            );
+          })()}
         </div>
 
         {/*
