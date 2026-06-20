@@ -225,6 +225,7 @@ const BacktestResults = lazy(() => import("@/pages/app/journal/backtest/Results"
 const BacktestBuilder = lazy(() => import("@/pages/app/journal/backtest/Builder"));
 const BacktestAnalytics = lazy(() => import("@/pages/app/journal/backtest/Analytics"));
 const BacktestTrades = lazy(() => import("@/pages/app/journal/backtest/BacktestTrades"));
+const AutoBacktest = lazy(() => import("@/pages/app/journal/backtest/AutoBacktest"));
 
 // Affiliate Center Pages
 const AffiliateOverview = lazy(() => import("@/features/affiliate/pages/Affiliateoverview"));
@@ -736,6 +737,7 @@ function AppContent() {
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
+          <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
           <Route path="journal/backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
@@ -766,6 +768,7 @@ function AppContent() {
           )}
 
           {/* BACKTEST BACKWARD COMPAT */}
+          <Route path="backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
           <Route path="backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
