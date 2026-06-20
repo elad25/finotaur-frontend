@@ -432,7 +432,7 @@ export function TradeChart({ trade }: TradeChartProps) {
   }, [indicatorSettings, interval]);
 
   return (
-    <div className="rounded-xl border-2 border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-6 shadow-2xl">
+    <div className="rounded-xl border border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-3 sm:p-4 shadow-2xl">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-zinc-300">
           <TrendingUp className="h-5 w-5" />
@@ -461,7 +461,7 @@ export function TradeChart({ trade }: TradeChartProps) {
         </div>
       </div>
 
-      <div className="h-[600px] w-full overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950 shadow-2xl">
+      <div className="h-[640px] w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
         <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} />
       </div>
 

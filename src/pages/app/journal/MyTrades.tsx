@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
@@ -93,6 +94,8 @@ import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { TradeGradeBadge } from '@/pages/app/journal/finotaur-ai/components/TradeGradeBadge';
 import { FinoExplains } from '@/components/fino/FinoExplains';
+import { normalizeTraderTrades } from '@/lib/journal/traderNormalization';
+import { useTraderMode } from '@/hooks/useTraderMode';
 
 interface Trade {
   id: string;
@@ -1336,10 +1339,20 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
       });
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // TRADER scope: normalise to one row per decision before stat/table computation
+  const displayTrades = useMemo(() => {
+    if (!isTraderMode) return trades;
+    // normalizeTraderTrades expects ascending order; useTrades returns descending
+    const ascending = [...trades].reverse();
+    const normalized = normalizeTraderTrades(ascending, traderMode);
+    // Return descending to match the rest of the page's expectations
+    return [...normalized].reverse();
+  }, [trades, isTraderMode, traderMode]);
+
   // ✅ 4. 🚀 OPTIMIZED: Stats calculation - single pass, memoized
 const stats = useMemo<Stats>(() => {
   // 🔥 Support both modes for closed trades detection
-  const closedTrades = trades.filter(t => {
+  const closedTrades = displayTrades.filter(t => {
     if (t.input_mode === 'risk-only') {
       // 🔥 Risk-Only: closed ONLY if has result (pnl is not null)
       return t.pnl !== null && t.pnl !== undefined;
@@ -1382,13 +1395,13 @@ const stats = useMemo<Stats>(() => {
       losses,
       breakeven,
     };
-  }, [trades, oneR, rBasisMode]);
+  }, [displayTrades, oneR, rBasisMode]);
 
   // ✅ 5. 🚀 OPTIMIZED: Filtered trades - memoized
   const filteredTrades = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    
-    return trades.filter(trade => {
+
+    return displayTrades.filter(trade => {
       return (
         trade.symbol.toLowerCase().includes(query) ||
         (trade.strategy_name && trade.strategy_name.toLowerCase().includes(query)) ||
@@ -1397,7 +1410,7 @@ const stats = useMemo<Stats>(() => {
         (trade.session && formatSessionDisplay(trade.session).toLowerCase().includes(query))
       );
     });
-  }, [trades, searchQuery]);
+  }, [displayTrades, searchQuery]);
 
   const periodSummaries = useMemo<DaySummary[]>(() => (
     buildTradeSummaries(filteredTrades, oneR, timezone, summaryPeriod)
@@ -2488,16 +2501,38 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                 </div>
               </div>
 
-              {/* Right Side - Chart & Notes Area - ENHANCED! */}
-              <div className="flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950/30 min-h-0 custom-scrollbar">
-                <div className="p-6 space-y-5 min-h-full">
-                  
-                  {/* 📊 CHART SECTION - FIRST */}
-                  <Suspense fallback={<TradeChartSkeleton />}>
-                    <TradeChart trade={selectedTrade} />
-                  </Suspense>
+              {/* Right Side - Tabbed: Chart / Screenshots / Notes */}
+              <div className="flex-1 flex flex-col min-h-0 bg-zinc-950/30">
+                <Tabs defaultValue="chart" className="flex flex-1 flex-col min-h-0">
+                  <TabsList className="shrink-0 mx-4 mt-3 h-auto w-fit justify-start gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
+                    <TabsTrigger value="chart" className="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-zinc-400 transition data-[state=active]:bg-zinc-800 data-[state=active]:text-yellow-300 data-[state=active]:shadow-none hover:text-zinc-200">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Chart
+                    </TabsTrigger>
+                    <TabsTrigger value="screenshots" className="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-zinc-400 transition data-[state=active]:bg-zinc-800 data-[state=active]:text-yellow-300 data-[state=active]:shadow-none hover:text-zinc-200">
+                      <Image className="h-3.5 w-3.5" />
+                      Screenshots
+                      {(selectedTrade.screenshots?.length || (selectedTrade.screenshot_url ? 1 : 0)) > 0 && (
+                        <span className="ml-0.5 rounded-full bg-blue-500/20 px-1.5 text-[10px] font-bold text-blue-300">
+                          {selectedTrade.screenshots?.length || 1}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="notes" className="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-zinc-400 transition data-[state=active]:bg-zinc-800 data-[state=active]:text-yellow-300 data-[state=active]:shadow-none hover:text-zinc-200">
+                      <FileText className="h-3.5 w-3.5" />
+                      Notes
+                    </TabsTrigger>
+                  </TabsList>
 
-                  {/* 📸 SCREENSHOT SECTION - SECOND (BLUE) - 🔥 UPDATED! */}
+                  {/* 📊 CHART TAB */}
+                  <TabsContent value="chart" className="mt-0 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-3 custom-scrollbar">
+                    <Suspense fallback={<TradeChartSkeleton />}>
+                      <TradeChart trade={selectedTrade} />
+                    </Suspense>
+                  </TabsContent>
+
+                  {/* 📸 SCREENSHOTS TAB */}
+                  <TabsContent value="screenshots" className="mt-0 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-3 custom-scrollbar">
                   <div className="rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-900/20 via-zinc-900/60 to-zinc-900/30 p-5 shadow-xl">
                     <h3 className="text-sm font-bold text-blue-400 mb-4 uppercase tracking-wider flex items-center gap-2">
                       <Image className="w-5 h-5" />
@@ -2587,8 +2622,10 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       </div>
                     )}
                   </div>
+                  </TabsContent>
 
-                  {/* 📝 NOTES SECTION - THIRD */}
+                  {/* 📝 NOTES TAB */}
+                  <TabsContent value="notes" className="mt-0 flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-3 custom-scrollbar">
                   <div className="rounded-xl border-2 border-yellow-500/30 bg-gradient-to-br from-yellow-900/20 via-zinc-900/60 to-zinc-900/30 p-5 shadow-xl">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-bold text-yellow-400 uppercase tracking-wider flex items-center gap-2">
@@ -2667,9 +2704,8 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       </div>
                     )}
                   </div>
-                  
-                  <div className="h-16"></div>
-                </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
             );
