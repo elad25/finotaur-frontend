@@ -263,7 +263,7 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
       </div>
 
       {/* ── Chart ───────────────────────────────────────────────────────────── */}
-      <div style={{ width: '100%', height: 260 }}>
+      <div style={{ width: '100%', height: 480 }}>
         <ResponsiveContainer>
           <LineChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
             <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
@@ -524,13 +524,13 @@ export default function TradeCompare() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="mx-auto max-w-[960px] py-ds-7 px-ds-4 flex flex-col gap-ds-5">
+    <div className="w-full py-ds-7 px-ds-4 flex flex-col gap-ds-5">
       {/* Header */}
       <div className="space-y-ds-1">
         <span className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted">
           Trade Journal
         </span>
-        <h1 className="text-h2 font-medium text-ink-primary">Trade Compare</h1>
+        <h1 className="text-h2 font-medium text-ink-primary">Shadow</h1>
         <p className="text-body text-ink-secondary">
           See what your trades could have been.
         </p>
