@@ -14,7 +14,9 @@ import {
   useSpaceAnalyticsSummary,
   useSpaceMemberPerformance,
 } from '@/hooks/useSpaceAnalytics';
+import { useUserDisciplineScores } from '@/hooks/useUserDisciplineScore';
 import type { RoomPeriod, MemberPerformanceRow } from '@/types/mentorship';
+import type { UserDisciplineScore } from '@/types/community';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,6 +48,23 @@ function formatPnl(value: number): string {
 /** Formats a 0..1 win rate as a percentage with 1 decimal. */
 function formatWinRate(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
+}
+
+/**
+ * Derives a short human-readable reason for the attention indicator.
+ * Precedence: discipline < 50 → behavioral_stability < 50 → emotional_rate > 0.5 → generic underperforming.
+ */
+function attentionReason(
+  s: UserDisciplineScore | undefined,
+  needs_attention: boolean,
+): string | null {
+  if (s && s.trade_count > 0) {
+    if (s.discipline_score < 50) return 'Low discipline';
+    if (s.behavioral_stability < 50) return 'Revenge / tilt risk';
+    if (s.emotional_rate > 0.5) return 'Emotional';
+  }
+  if (needs_attention) return 'Underperforming';
+  return null;
 }
 
 // ── Monogram avatar ───────────────────────────────────────────────────────────
@@ -140,30 +159,56 @@ interface MemberBarProps {
   row: MemberPerformanceRow;
   /** The maximum |net_pnl| in the current data set — used to scale bars. */
   maxAbs: number;
+  /** Optional behavioral score for this member — undefined while loading or unavailable. */
+  disciplineScore?: UserDisciplineScore;
 }
 
-function MemberPerformanceBar({ row, maxAbs }: MemberBarProps) {
+function MemberPerformanceBar({ row, maxAbs, disciplineScore }: MemberBarProps) {
   const isNegative = row.net_pnl < 0;
   const displayName = row.display_name ?? 'Anonymous';
   // Width as a percentage of the bar track, floor at 4px so 0 is still visible.
   const pct = maxAbs > 0 ? Math.round((Math.abs(row.net_pnl) / maxAbs) * 100) : 0;
 
+  const showDiscipline = disciplineScore != null && disciplineScore.trade_count > 0;
+  const reason = attentionReason(disciplineScore, row.needs_attention);
+
   return (
     <div className="flex items-center gap-ds-3 py-[10px] border-b border-border-ds-subtle last:border-0">
-      {/* Left: avatar + name + warning */}
+      {/* Left: avatar + name + warning + behavioral chips */}
       <div className="flex items-center gap-ds-2 min-w-0 w-[140px] shrink-0">
         <MonogramAvatar name={displayName} size={7} />
-        <div className="flex items-center gap-[4px] min-w-0">
-          <span className="font-sans text-[13px] text-ink-secondary truncate">
-            {displayName}
-          </span>
-          {row.needs_attention && (
-            <AlertTriangle
-              size={12}
-              className="shrink-0 text-status-warning"
-              aria-label="Needs attention"
-            />
-          )}
+        <div className="flex flex-col gap-[2px] min-w-0">
+          <div className="flex items-center gap-[4px] min-w-0">
+            <span className="font-sans text-[13px] text-ink-secondary truncate">
+              {displayName}
+            </span>
+            {row.needs_attention && (
+              <AlertTriangle
+                size={12}
+                className="shrink-0 text-status-warning"
+                aria-label="Needs attention"
+              />
+            )}
+          </div>
+          <div className="flex items-center gap-[4px] flex-wrap">
+            {showDiscipline && (
+              <span className="font-sans text-[10px] text-ink-tertiary">
+                Discipline {Math.round(disciplineScore!.discipline_score)}
+              </span>
+            )}
+            {reason && (
+              <span
+                className={cn(
+                  'inline-flex items-center',
+                  'rounded-[3px] border-[0.5px] border-[rgba(251,191,36,0.3)] bg-[rgba(251,191,36,0.08)]',
+                  'px-[5px] py-[1px]',
+                  'font-sans text-[10px] font-medium text-amber-400',
+                )}
+              >
+                {reason}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -222,6 +267,10 @@ export function RoomAnalytics({ spaceId }: RoomAnalyticsProps) {
     if (memberRows.length === 0) return 0;
     return Math.max(...memberRows.map((r) => Math.abs(r.net_pnl)));
   }, [memberRows]);
+
+  /** Behavioral scores for all visible members (batched, SECURITY DEFINER — safe for any user_id). */
+  const memberIds = useMemo(() => memberRows.map((r) => r.user_id), [memberRows]);
+  const { byUser: disciplineByUser } = useUserDisciplineScores(memberIds, period);
 
   return (
     <div className="flex flex-col gap-ds-5 px-ds-5 py-ds-5">
@@ -294,7 +343,12 @@ export function RoomAnalytics({ spaceId }: RoomAnalyticsProps) {
             {(rows) => (
               <div>
                 {rows.map((row) => (
-                  <MemberPerformanceBar key={row.user_id} row={row} maxAbs={maxAbs} />
+                  <MemberPerformanceBar
+                    key={row.user_id}
+                    row={row}
+                    maxAbs={maxAbs}
+                    disciplineScore={disciplineByUser.get(row.user_id)}
+                  />
                 ))}
               </div>
             )}

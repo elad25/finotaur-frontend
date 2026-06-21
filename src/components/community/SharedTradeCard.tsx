@@ -24,6 +24,7 @@ import {
   useAddGlobalComment,
   type GlobalReactionKind,
 } from '@/hooks/useGlobalFeed';
+import { useUserDisciplineScore } from '@/hooks/useUserDisciplineScore';
 import type { GlobalFeedItem, GlobalComment } from '@/types/community';
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
@@ -53,6 +54,11 @@ function relativeTime(iso: string): string {
 /** Short date: "Jun 20". */
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** Title-cases a single word or short phrase: "revenge" → "Revenge". */
+function titleCase(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
 // ── Monogram avatar — matches RoomFeed / RoomLeaderboard exactly ───────────────
@@ -426,6 +432,10 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
   const currentUserId = user?.id ?? '';
   const canDelete = item.author_id === currentUserId;
 
+  // Behavioral score for the post author — loaded async, renders nothing until ready.
+  const { score } = useUserDisciplineScore(item.author_id);
+  const showBehavioralBadge = score != null && score.trade_count > 0;
+
   return (
     <Card variant="default" padding="default" className="flex flex-col gap-ds-3">
       {/* Header: monogram + author + time + delete */}
@@ -446,6 +456,38 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
         </div>
         {canDelete && <DeleteKebab postId={item.id} />}
       </div>
+
+      {/* Trader Model tags — emotion chip + author behavioral badge */}
+      {(item.trade_emotion || showBehavioralBadge) && (
+        <div className="flex items-center gap-[6px] flex-wrap">
+          {item.trade_emotion && (
+            <span
+              className={cn(
+                'inline-flex items-center',
+                'rounded-[4px] border-[0.5px] border-border-ds-subtle bg-surface-2',
+                'px-[6px] py-[2px]',
+                'font-sans text-[11px] font-medium text-ink-secondary',
+              )}
+            >
+              {titleCase(item.trade_emotion)}
+            </span>
+          )}
+          {showBehavioralBadge && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-[5px]',
+                'rounded-[4px] border-[0.5px] border-border-ds-subtle bg-surface-2',
+                'px-[6px] py-[2px]',
+                'font-sans text-[11px] text-ink-tertiary',
+              )}
+            >
+              <span>Discipline {Math.round(score!.discipline_score)}</span>
+              <span className="text-border-ds-subtle">·</span>
+              <span>Emotion {Math.round(score!.emotional_rate * 100)}%</span>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Caption / body */}
       {item.body && (
