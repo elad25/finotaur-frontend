@@ -2503,6 +2503,56 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                           </div>
                         )}
 
+                        {/* DISCIPLINE TAX — shown only when both plannedR and realizedR exist */}
+                        {(() => {
+                          const rawRR = selectedTrade.rr;
+                          const tp = selectedTrade.take_profit_price;
+                          const sp = selectedTrade.stop_price;
+                          const ep = selectedTrade.entry_price;
+                          const plannedR: number | null =
+                            rawRR != null && rawRR !== 0
+                              ? Number(rawRR)
+                              : (tp != null && sp != null && ep != null && Math.abs(Number(ep) - Number(sp)) > 0)
+                                ? Math.abs(Number(tp) - Number(ep)) / Math.abs(Number(ep) - Number(sp))
+                                : null;
+                          const realizedR: number | null =
+                            selectedTrade.exit_price != null && displayR != null ? displayR : null;
+                          if (plannedR == null || realizedR == null) return null;
+                          const disciplineTax = plannedR - realizedR;
+                          const taxColor =
+                            disciplineTax > 0.05
+                              ? 'text-amber-400'
+                              : disciplineTax < -0.05
+                                ? 'text-emerald-400'
+                                : 'text-zinc-400';
+                          const taxTip = 'Planned R − Realized R. Positive = you left R on the table vs your plan; negative = you let it run past target.';
+                          return (
+                            <div className="border-t border-zinc-800/60 pt-2.5">
+                              <div className="grid grid-cols-3 gap-x-3">
+                                <div>
+                                  <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-0.5">Planned R</div>
+                                  <div className="text-sm font-semibold tabular-nums text-zinc-300 font-mono">{plannedR.toFixed(2)}R</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-0.5">Realized R</div>
+                                  <div className={`text-sm font-semibold tabular-nums font-mono ${realizedR > 0 ? 'text-emerald-400' : realizedR < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                                    {realizedR > 0 ? '+' : ''}{realizedR.toFixed(2)}R
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] text-zinc-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                                    Discipline Tax
+                                    <span title={taxTip} className="cursor-help text-zinc-600">ⓘ</span>
+                                  </div>
+                                  <div className={`text-sm font-semibold tabular-nums font-mono ${taxColor}`}>
+                                    {disciplineTax >= 0 ? '+' : ''}{disciplineTax.toFixed(2)}R
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         {/* Risk-Only mode calculation display */}
                         {selectedTrade.input_mode === 'risk-only' && (
                           <div className="mt-3 pt-3 border-t border-zinc-800/50">
@@ -2520,15 +2570,21 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                           </div>
                         )}
 
-                        {/* MAX DRAWDOWN */}
+                        {/* MAX DRAWDOWN + MAX RUNUP */}
                         {(() => {
                           const isApprox = typeof selectedTrade.bars_status === 'string' && selectedTrade.bars_status.startsWith('backfill_yahoo');
                           const ddTitle = selectedTrade.mae == null
-                            ? 'Not available — no market data for this trade’s window.'
+                            ? 'Not available — no market data for this trade window.'
                             : isApprox
                               ? 'Worst adverse excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.'
                               : 'Worst adverse excursion during the trade.';
+                          const mfeTitle = selectedTrade.mfe == null
+                            ? 'Not available — no market data for this trade window.'
+                            : isApprox
+                              ? 'Maximum favorable excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.'
+                              : 'Maximum favorable excursion during the trade.';
                           return (
+                            <>
                         <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
                           <span className="text-[11px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
                             Max Drawdown
@@ -2542,6 +2598,20 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                             )}
                           </span>
                         </div>
+                        <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
+                          <span className="text-[11px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                            Max Runup
+                            <span title={mfeTitle} className="cursor-help text-zinc-600">ⓘ</span>
+                          </span>
+                          <span className="text-sm font-semibold tabular-nums">
+                            {selectedTrade.mfe != null ? (
+                              <span className="text-emerald-400">{isApprox ? '≈ ' : ''}+${formatNumber(Math.abs(Number(selectedTrade.mfe)), 2)}</span>
+                            ) : (
+                              <span className="text-zinc-500">N/A</span>
+                            )}
+                          </span>
+                        </div>
+                            </>
                           );
                         })()}
                       </div>
