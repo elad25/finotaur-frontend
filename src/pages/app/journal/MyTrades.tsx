@@ -96,10 +96,8 @@ import { compressImage } from "@/utils/imageCompression";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
-import { TradeGradeBadge } from '@/pages/app/journal/finotaur-ai/components/TradeGradeBadge';
+import { StarRating } from '@/components/journal/StarRating';
 import { FinoExplains } from '@/components/fino/FinoExplains';
-import { normalizeTraderTrades } from '@/lib/journal/traderNormalization';
-import { useTraderMode } from '@/hooks/useTraderMode';
 
 interface Trade {
   id: string;
@@ -126,6 +124,7 @@ interface Trade {
   outcome?: "WIN" | "LOSS" | "BE" | "OPEN";
   pnl?: number;
   quality_tag?: string;
+  trade_rating?: number | null;
   multiplier?: number;
   created_at?: string;
   mistake?: string;
@@ -617,6 +616,7 @@ const TradeRow = memo(({
   onEdit,
   onDelete,
   onAssignStrategy,
+  onRateTrade,
   isSelected,
   onToggleSelect,
   readOnly = false,
@@ -629,6 +629,7 @@ const TradeRow = memo(({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onAssignStrategy: (trade: Trade, strategyId: string) => void;
+  onRateTrade: (tradeId: string, value: number) => void;
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
   readOnly?: boolean;
@@ -739,9 +740,9 @@ const TradeRow = memo(({
         )}
       </TableCell>
 
-      {/* Grade badge */}
-      <TableCell className="w-10">
-        <TradeGradeBadge tradeId={trade.id} />
+      {/* Rating */}
+      <TableCell className="w-32" onClick={(e) => e.stopPropagation()}>
+        <StarRating value={trade.trade_rating ?? null} onChange={(v) => onRateTrade(trade.id, v)} size="sm" />
       </TableCell>
 
       {/* Side */}
@@ -1571,6 +1572,17 @@ const stats = useMemo<Stats>(() => {
     }
   }, [strategies, updateTradeMutation]);
 
+  const handleRateTrade = useCallback(async (tradeId: string, value: number) => {
+    const newRating = value === 0 ? null : value;
+    try {
+      const { error } = await supabase.from('trades').update({ trade_rating: newRating }).eq('id', tradeId);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['trades'] });
+    } catch {
+      toast.error('Could not save rating');
+    }
+  }, [queryClient]);
+
   const handleSetR = useCallback(async () => {
     if (!selectedTrade) return;
     const stop = Number(stopInput);
@@ -2062,7 +2074,7 @@ const stats = useMemo<Stats>(() => {
     </TableHead>
     <TableHead className="text-zinc-500">Date</TableHead>
     <TableHead className="text-zinc-500">Symbol</TableHead>
-    <TableHead className="text-zinc-500 w-10">Grade</TableHead>
+    <TableHead className="text-zinc-500 w-32">Rating</TableHead>
     <TableHead className="text-zinc-500">Side</TableHead>
     <TableHead className="text-zinc-500">Session</TableHead>
     <TableHead className="text-zinc-500">Entry / Risk</TableHead>
@@ -2086,6 +2098,7 @@ const stats = useMemo<Stats>(() => {
                   onEdit={handleEditTrade}
                   onDelete={handleDeleteClick}
                   onAssignStrategy={handleAssignStrategy}
+                  onRateTrade={handleRateTrade}
                   isSelected={selectedTradeIds.has(trade.id)}
                   onToggleSelect={handleToggleTradeSelection}
                   readOnly={effectiveReadOnly}

@@ -22,7 +22,7 @@ export interface StarRatingProps {
   /** Omit to make the component read-only */
   onChange?: (value: number) => void;
   readOnly?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   /** Optional caption rendered to the right of the stars */
   label?: string;
   /** Clicking the currently active star again fires onChange(0). Default true. */
@@ -33,22 +33,25 @@ export interface StarRatingProps {
 // Size maps
 // ---------------------------------------------------------------------------
 
-const ICON_SIZE: Record<'sm' | 'md' | 'lg', number> = {
+const ICON_SIZE: Record<'sm' | 'md' | 'lg' | 'xl', number> = {
   sm: 14,
   md: 18,
   lg: 24,
+  xl: 32,
 };
 
-const LABEL_CLASS: Record<'sm' | 'md' | 'lg', string> = {
+const LABEL_CLASS: Record<'sm' | 'md' | 'lg' | 'xl', string> = {
   sm: 'text-[11px]',
   md: 'text-xs',
   lg: 'text-sm',
+  xl: 'text-base',
 };
 
-const GAP_CLASS: Record<'sm' | 'md' | 'lg', string> = {
+const GAP_CLASS: Record<'sm' | 'md' | 'lg' | 'xl', string> = {
   sm: 'gap-0.5',
   md: 'gap-1',
   lg: 'gap-1.5',
+  xl: 'gap-2',
 };
 
 // ---------------------------------------------------------------------------
