@@ -189,7 +189,7 @@ RETURNS TABLE (
   id           uuid,
   title        text,
   description  text,
-  position     int,
+  "position"   int,
   lesson_count int,
   created_at   timestamptz
 )
