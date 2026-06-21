@@ -94,11 +94,16 @@ interface WhopCheckoutResponse {
 // ============================================
 
  const PLAN_REDIRECT_PATHS: Record<string, string> = {
-  // Journal plans
+  // Journal plans — legacy IDs (pre 2026-06-17)
   'plan_2hIXaJbGP1tYN': '/app/journal/overview?payment=success&source=whop',
   'plan_x0jTFLe9qNv8i': '/app/journal/overview?payment=success&source=whop',
   'plan_v7QKxkvKIZooe': '/app/journal/overview?payment=success&source=whop',
   'plan_gBG436aeJxaHU': '/app/journal/overview?payment=success&source=whop',
+  // Journal plans — current IDs (2026-06-17, synced with src/lib/whop-config.ts)
+  'plan_H0VDCb6iD1dYQ': '/app/journal/overview?payment=success&source=whop',  // Basic Monthly ($24.99)
+  'plan_80ZhPpre3iRU2': '/app/journal/overview?payment=success&source=whop',  // Basic Yearly ($229)
+  'plan_N33S1p5Y3dHrK': '/app/journal/overview?payment=success&source=whop',  // Premium Monthly ($44.99)
+  'plan_WrjUcvrRhwWPL': '/app/journal/overview?payment=success&source=whop',  // Premium Yearly ($409)
   // Newsletter (War Zone) - ALL PLAN IDS
    'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly ($69.99)
   'plan_bp2QTGuwfpj0A': '/app/settings?tab=billing&upgrade=newsletter_yearly_success',  // War Zone Yearly ($699) - upgrade redirect
@@ -268,7 +273,13 @@ serve(async (req: Request) => {
     let finalRedirectUrl = redirect_url;
     
     if (!finalRedirectUrl) {
-      const planPath = PLAN_REDIRECT_PATHS[plan_id] || '/app/settings?tab=billing&payment=success&source=whop';
+      // Journal purchases always return to the journal; only fall back to
+      // billing settings for unmapped non-journal products. This guards
+      // against plan-ID drift (new plan IDs not yet in PLAN_REDIRECT_PATHS).
+      const fallbackPath = subscription_category === 'journal'
+        ? '/app/journal/overview?payment=success&source=whop'
+        : '/app/settings?tab=billing&payment=success&source=whop';
+      const planPath = PLAN_REDIRECT_PATHS[plan_id] || fallbackPath;
       finalRedirectUrl = `${BASE_REDIRECT_URL}${planPath}`;
     }
 

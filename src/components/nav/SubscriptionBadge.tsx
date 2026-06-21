@@ -17,7 +17,7 @@ import {
 
 // ── Types ────────────────────────────────────────────────────
 
-export type TierKey = 'elite' | 'finotaur' | 'pro' | 'premium' | 'basic' | 'free';
+export type TierKey = 'admin' | 'vip' | 'elite' | 'finotaur' | 'pro' | 'premium' | 'basic' | 'free';
 
 interface TierConfig {
   label: string;
@@ -25,7 +25,7 @@ interface TierConfig {
   color: string;
   icon: LucideIcon;
   description: string;
-  group: 'Platform' | 'Journal' | 'Free';
+  group: 'Platform' | 'Journal' | 'Free' | 'Admin';
   /** Short uppercase tag shown as a pill next to the tier name */
   tag: string;
   /** Gradient edge color (darkest stop, 0% and 100%) */
@@ -74,6 +74,32 @@ function glossyStyle(tier: TierKey): GlossyResult {
 // ── Tier configuration (single source of truth) ──────────────
 
 const TIER_CONFIG: Record<TierKey, TierConfig> = {
+  admin: {
+    label: 'ADMIN',
+    color: '#F8FAFC',
+    icon: Gem,
+    description: 'Full administrative access',
+    group: 'Admin',
+    tag: 'STAFF',
+    edge: '#9CA8BC',
+    peak: '#FFFFFF',
+    onColor: '#1F2937',
+    labelColor: '#F8FAFC',
+    useGoldClass: false,
+  },
+  vip: {
+    label: 'VIP',
+    color: '#E2E8F0',
+    icon: Gem,
+    description: 'Complimentary full access',
+    group: 'Admin',
+    tag: 'COMPLIMENTARY',
+    edge: '#94A3B8',
+    peak: '#F1F5F9',
+    onColor: '#1F2937',
+    labelColor: '#E2E8F0',
+    useGoldClass: false,
+  },
   elite: {
     label: 'ELITE',
     color: '#34D399',
@@ -170,6 +196,10 @@ export function resolveTier(
   platformPlan: string | null,
   accountType: string | null,
 ): TierKey {
+  // Internal staff / complimentary accounts take precedence over everything
+  if (accountType === 'admin') return 'admin';
+  if (accountType === 'vip') return 'vip';
+
   // Normalize: strip leading 'platform_' prefix
   const normalized = platformPlan?.replace(/^platform_/, '') ?? null;
 
@@ -181,6 +211,7 @@ export function resolveTier(
   // Journal tier
   if (accountType === 'premium') return 'premium';
   if (accountType === 'basic') return 'basic';
+  if (accountType === 'trial') return 'basic';
 
   return 'free';
 }

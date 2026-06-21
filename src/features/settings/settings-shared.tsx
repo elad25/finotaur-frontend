@@ -229,7 +229,7 @@ export function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 
   if (type === 'journal') {
     const plans: Record<string, { name: string; price: string; color: string }> = {
       free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-      basic: { name: 'Basic', price: '$30/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+      basic: { name: 'Basic', price: '$24.99/mo', color: 'bg-[#A85B1E]/20 text-[#CD7F32] border-[#CD7F32]/30' },
       premium: { name: 'Premium', price: '$39.99/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
     };
     return plans[plan || 'free'] || plans.free;
