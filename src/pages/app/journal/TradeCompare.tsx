@@ -64,6 +64,7 @@ const COLOR_GOLD   = '#C9A646';
 const COLOR_BLUE   = '#60A5FA';
 const COLOR_RED    = '#F87171';
 const COLOR_GREEN  = '#4AD295';
+const COLOR_SILVER = '#C2C8D2';
 
 /** Matches JOURNAL_PANEL from Overview.tsx */
 const JOURNAL_PANEL =
@@ -804,7 +805,7 @@ function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
               <Legend
                 wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}
               />
-              {/* Gold = actual (hero line). White/neutral dashes = counterfactuals. */}
+              {/* ETF-chart style: solid lines, gold / green / silver. Break-even = faint baseline. */}
               <Line
                 type="monotone"
                 dataKey="actual"
@@ -816,21 +817,19 @@ function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
               />
               <Line
                 type="monotone"
-                dataKey="stop"
-                name="Held to stop"
-                stroke="rgba(255,255,255,0.55)"
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
+                dataKey="target"
+                name="Held to target"
+                stroke={COLOR_GREEN}
+                strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
               <Line
                 type="monotone"
-                dataKey="target"
-                name="Held to target"
-                stroke="rgba(255,255,255,0.38)"
-                strokeWidth={1.5}
-                strokeDasharray="8 3"
+                dataKey="stop"
+                name="Held to stop"
+                stroke={COLOR_SILVER}
+                strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
@@ -839,8 +838,8 @@ function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
                 dataKey="breakeven"
                 name="Break-even"
                 stroke="rgba(255,255,255,0.22)"
-                strokeWidth={1.5}
-                strokeDasharray="3 5"
+                strokeWidth={1}
+                strokeDasharray="2 4"
                 dot={false}
                 activeDot={{ r: 4 }}
               />
