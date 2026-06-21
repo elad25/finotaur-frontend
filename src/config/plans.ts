@@ -48,6 +48,7 @@ export const PLANS: Plan[] = [
       '14-day free trial',
       'Automatic broker sync — leading brokers supported',
       '25 trades / month',
+      '1 broker connection',
       'Full FINOTAUR Academy (300+ lessons)',
       'Full performance analytics & equity curve',
       'Strategy builder & playbooks',
@@ -71,6 +72,7 @@ export const PLANS: Plan[] = [
     features: [
       'Everything in Basic, plus:',
       'Unlimited trades — never hit a cap',
+      'Connect multiple brokers',
       'Your FINOTAUR Score — one number that grades your real edge',
       'Daily AI briefing — ranked insights on what to fix first',
       'Pattern of the Week — your biggest recurring edge or leak, surfaced automatically',
