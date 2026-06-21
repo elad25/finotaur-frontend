@@ -131,6 +131,7 @@ interface Trade {
   next_time?: string;
   mae?: number | null;
   mfe?: number | null;
+  bars_status?: string | null;
   // 🔥 Direct DB fields (risk-only mode support)
   risk_usd?: number;
   reward_usd?: number;
@@ -2520,19 +2521,29 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                         )}
 
                         {/* MAX DRAWDOWN */}
+                        {(() => {
+                          const isApprox = typeof selectedTrade.bars_status === 'string' && selectedTrade.bars_status.startsWith('backfill_yahoo');
+                          const ddTitle = selectedTrade.mae == null
+                            ? 'Not available — no market data for this trade’s window.'
+                            : isApprox
+                              ? 'Worst adverse excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.'
+                              : 'Worst adverse excursion during the trade.';
+                          return (
                         <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
                           <span className="text-[11px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
                             Max Drawdown
-                            <span title="Maximum adverse excursion — requires intra-trade price data (coming soon)" className="cursor-help text-zinc-600">ⓘ</span>
+                            <span title={ddTitle} className="cursor-help text-zinc-600">ⓘ</span>
                           </span>
                           <span className="text-sm font-semibold tabular-nums">
                             {selectedTrade.mae != null ? (
-                              <span className="text-red-400">-${formatNumber(Math.abs(Number(selectedTrade.mae)), 2)}</span>
+                              <span className="text-red-400">{isApprox ? '≈ ' : ''}-${formatNumber(Math.abs(Number(selectedTrade.mae)), 2)}</span>
                             ) : (
                               <span className="text-zinc-500">N/A</span>
                             )}
                           </span>
                         </div>
+                          );
+                        })()}
                       </div>
 
 
