@@ -29,6 +29,7 @@ import {
   formatDate,
   computeNextBilling,
 } from "../settings-shared";
+import { resolveTier, TIER_CONFIG } from "@/components/nav/SubscriptionBadge";
 
 // ============================================
 // 🔥 API HELPER: Manage Product Subscription
@@ -135,6 +136,16 @@ export const BillingTab = () => {
   const journalInfo = getPlanInfo(journalPlan, 'journal');
   const journalIsActive = ['active', 'trial'].includes(journalStatus);
   const journalIsFree = journalPlan === 'free' || !journalPlan;
+
+  // Resolve the user's unified membership tier (same logic as the TopNav badge)
+  // and derive accent colors for the tier-themed subscriptions card.
+  const currentTier = resolveTier(profile?.platform_plan ?? null, profile?.account_type ?? null);
+  const tierConfig = TIER_CONFIG[currentTier];
+  const TierIcon = tierConfig.icon;
+  const isFreeTier = currentTier === 'free';
+  // FREE's edge is near-black (invisible on the dark card) -> fall back to neutral zinc.
+  const tierAccent = isFreeTier ? '#3F3F46' : tierConfig.edge;
+  const tierGlow = isFreeTier ? '#52525B' : tierConfig.peak;
 
   // Newsletter subscription (War Zone)
   const newsletterEnabled = profile?.newsletter_enabled ?? false;
@@ -634,21 +645,58 @@ export const BillingTab = () => {
         </div>
       </div>
 
-      {/* Subscriptions Card — compact single-card layout */}
-      <Card className="p-4 bg-zinc-900/50 border-zinc-700/50">
+      {/* Subscriptions Card — tier-colored, War-Zone-sized layout */}
+      <Card
+        className="p-6 relative overflow-hidden shadow-xl border"
+        style={{
+          background: `linear-gradient(135deg, ${tierAccent}29 0%, rgba(24,24,27,0.88) 55%, rgba(24,24,27,0.94) 100%)`,
+          borderColor: `${tierAccent}4D`,
+          boxShadow: `0 20px 50px -12px rgba(0,0,0,0.55), 0 0 40px -10px ${tierAccent}33`,
+        }}
+      >
+        {/* Tier glow */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: `linear-gradient(110deg, transparent 45%, ${tierAccent}1A 100%)` }}
+        />
+        {/* Top light bar */}
+        <div
+          className="absolute top-0 left-0 right-0 h-px"
+          style={{ background: `linear-gradient(to right, transparent, ${tierGlow}80, transparent)` }}
+        />
 
-        {/* Card header */}
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Active Plans</span>
-          <a
-            href="https://whop.com/@me/settings/orders/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
-          >
-            Manage on Whop <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
+        <div className="relative">
+          {/* Card header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg border"
+                style={{
+                  background: `linear-gradient(135deg, ${tierAccent}5C, ${tierAccent}24)`,
+                  borderColor: `${tierAccent}80`,
+                }}
+              >
+                <TierIcon className="w-5 h-5" style={{ color: tierConfig.labelColor }} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-white text-lg">Active Plans</h2>
+                <p className="text-xs font-medium" style={{ color: tierConfig.labelColor }}>
+                  {tierConfig.label} membership
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://whop.com/@me/settings/orders/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
+            >
+              Manage on Whop <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          {/* Plan rows — inner panel */}
+          <div className="px-4 py-1 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
 
         {/* Row 1 — Platform */}
         <div className="flex items-center gap-2 py-2.5 border-b border-zinc-800/60">
@@ -757,6 +805,8 @@ export const BillingTab = () => {
             })()}
           </span>
         </div>
+          </div>
+          {/* /Plan rows inner panel */}
 
         {/* Platform Downgrade Info Dialog — preserved */}
         {showPlatformDowngradeInfoDialog && (
@@ -811,6 +861,8 @@ export const BillingTab = () => {
             </div>
           </div>
         )}
+        </div>
+        {/* /relative */}
       </Card>
 
       {/* 🔥 WAR ZONE NEWSLETTER CARD - Hide if user has Finotaur/Enterprise Platform */}
