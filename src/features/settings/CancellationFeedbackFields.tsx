@@ -1,8 +1,17 @@
 // src/features/settings/CancellationFeedbackFields.tsx
 // Reusable required-feedback fields shown inside each subscription cancel dialog.
 // Wired to the existing subscription_cancellation_feedback pipeline.
+// Uses the Radix Select (dark, site-matching) instead of a native <select>
+// so the open dropdown isn't an OS-rendered light-grey list.
 
 import type { CancellationReason } from "@/services/accountLifecycleService";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CancellationFeedbackFieldsProps {
   reasons: CancellationReason[];
@@ -25,16 +34,22 @@ export function CancellationFeedbackFields({
         <label className="block text-sm font-medium text-zinc-300 mb-1.5">
           Why are you cancelling? <span className="text-red-400">*</span>
         </label>
-        <select
-          value={reasonId}
-          onChange={(e) => onReasonChange(e.target.value)}
-          className="w-full bg-zinc-800/60 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
-        >
-          <option value="" disabled>Select a reason…</option>
-          {reasons.map((r) => (
-            <option key={r.id} value={r.id}>{r.label_en}</option>
-          ))}
-        </select>
+        <Select value={reasonId} onValueChange={onReasonChange}>
+          <SelectTrigger className="w-full h-auto bg-zinc-800/60 border-zinc-700 text-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-zinc-500 data-[placeholder]:text-zinc-500">
+            <SelectValue placeholder="Select a reason…" />
+          </SelectTrigger>
+          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-200">
+            {reasons.map((r) => (
+              <SelectItem
+                key={r.id}
+                value={r.id}
+                className="text-sm text-zinc-200 focus:bg-zinc-800 focus:text-white cursor-pointer"
+              >
+                {r.label_en}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <label className="block text-sm font-medium text-zinc-300 mb-1.5">
