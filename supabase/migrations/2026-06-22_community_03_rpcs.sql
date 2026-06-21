@@ -407,33 +407,32 @@ BEGIN
     gp.body,
     gp.attached_trade_id,
 
-    -- ── Trade snapshot — always-visible fields ──────────────────────────────
-    -- symbol, side, setup: never redacted; shown regardless of privacy flags.
+    -- ── Trade snapshot ──────────────────────────────────────────────────────
+    -- IMPORTANT: this column order MUST match the RETURNS TABLE declaration
+    -- exactly (RETURN QUERY maps by position): symbol, side, pnl, size, setup,
+    -- entry, exit, close_at.
+    -- symbol, side, setup, close_at: never redacted. pnl/size/entry/exit are
+    -- redacted by the CASE expressions below — the sole field-level privacy
+    -- enforcement layer (RLS does not redact individual columns).
     t.symbol                                                   AS trade_symbol,
     t.side                                                     AS trade_side,
-    -- setup column: always visible so the reader understands the trade context.
-    t.setup                                                    AS trade_setup,
 
-    -- ── Redacted fields ─────────────────────────────────────────────────────
-    -- CRITICAL: these CASE expressions are the sole enforcement layer for
-    -- field-level privacy. RLS does not redact individual columns.
-    --
     -- trade_pnl: hidden when hide_pnl=true OR show_setup_only=true.
-    --   show_setup_only implies "show only the setup, not the result".
     CASE
       WHEN gp.hide_pnl OR gp.show_setup_only THEN NULL
       ELSE t.pnl
     END                                                        AS trade_pnl,
 
-    -- trade_size (quantity): shown only when the author explicitly opted in
-    --   by setting reveal_size=true. Default is NULL (hidden).
+    -- trade_size (quantity): shown only when reveal_size=true; NULL otherwise.
     CASE
       WHEN gp.reveal_size THEN t.quantity
       ELSE NULL
     END                                                        AS trade_size,
 
+    -- setup: always visible so the reader understands the trade context.
+    t.setup                                                    AS trade_setup,
+
     -- trade_entry / trade_exit: hidden when show_setup_only=true.
-    --   show_setup_only means "show the setup/direction but not exact prices".
     CASE
       WHEN gp.show_setup_only THEN NULL
       ELSE t.entry_price
@@ -444,7 +443,7 @@ BEGIN
       ELSE t.exit_price
     END                                                        AS trade_exit,
 
-    -- trade_close_at: always visible (gives temporal context without P&L).
+    -- trade_close_at: always visible (temporal context without P&L).
     t.close_at                                                 AS trade_close_at,
 
     -- ── Privacy flag echo ────────────────────────────────────────────────────
