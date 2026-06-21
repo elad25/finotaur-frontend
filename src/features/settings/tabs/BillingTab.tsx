@@ -111,6 +111,10 @@ export const BillingTab = () => {
   const [showPlatformCancelDialog, setShowPlatformCancelDialog] = useState(false);
   const [cancellingPlatform, setCancellingPlatform] = useState(false);
   const [showPlatformDowngradeInfoDialog, setShowPlatformDowngradeInfoDialog] = useState(false);
+  // Journal cancel states
+  const [showJournalCancelDialog, setShowJournalCancelDialog] = useState(false);
+  const [cancellingJournal, setCancellingJournal] = useState(false);
+  const [reactivatingJournal, setReactivatingJournal] = useState(false);
 
   // Platform subscription (main website)
   // Canonical DB value is the BARE form ('core'|'finotaur'|'enterprise'); normalize to the
@@ -506,6 +510,81 @@ export const BillingTab = () => {
     }
   };
 
+  // Handle Journal subscription cancellation
+  const handleCancelJournal = async () => {
+    if (!user) return;
+
+    setCancellingJournal(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "cancel",
+            product: "journal",
+            reason: "User requested cancellation",
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to cancel journal subscription");
+
+      await refreshProfile();
+      setShowJournalCancelDialog(false);
+      toast.success(data.message || 'Trading Journal subscription will be cancelled at period end');
+    } catch (error) {
+      console.error('Error cancelling journal:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel journal subscription');
+    } finally {
+      setCancellingJournal(false);
+    }
+  };
+
+  // Handle Journal subscription reactivation
+  const handleReactivateJournal = async () => {
+    setReactivatingJournal(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "reactivate",
+            product: "journal",
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Trading Journal subscription reactivated!');
+        await refreshProfile();
+      } else {
+        toast.error(data.error || 'Failed to reactivate journal subscription');
+      }
+    } catch (error) {
+      toast.error('Failed to reactivate journal subscription');
+    } finally {
+      setReactivatingJournal(false);
+    }
+  };
+
   // 🔥 Handle Platform reactivation
   const handleReactivatePlatform = async () => {
     setCancellingPlatform(true);
@@ -846,15 +925,48 @@ export const BillingTab = () => {
           </div>
         </div>
 
-        {journalIsFree && (
+        {journalIsFree ? (
           <div className="mt-4">
-<Button
-  onClick={() => navigate('/app/journal/overview')}
-  size="sm"
-  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
->
-  Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
-</Button>
+            <Button
+              onClick={() => navigate('/app/journal/overview')}
+              size="sm"
+              className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+            >
+              Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        ) : journalIsActive && (
+          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
+            {profile?.subscription_cancel_at_period_end ? (
+              <>
+                <span className="text-sm text-amber-400 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  Cancelling — access until {formatDate(profile?.subscription_expires_at)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReactivateJournal}
+                  disabled={reactivatingJournal}
+                  className="ml-auto border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50"
+                >
+                  {reactivatingJournal ? (
+                    <><Spinner size="sm" className="mr-1.5" />Restoring...</>
+                  ) : (
+                    <>Undo Cancellation</>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowJournalCancelDialog(true)}
+                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
+              >
+                Unsubscribe
+              </Button>
+            )}
           </div>
         )}
       </Card>
@@ -1553,6 +1665,82 @@ export const BillingTab = () => {
 
             <p className="text-center text-xs text-zinc-500">
               You'll retain access until {formatDate(profile?.platform_subscription_expires_at)}
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Journal Cancel Confirmation Dialog */}
+      <Dialog open={showJournalCancelDialog} onOpenChange={setShowJournalCancelDialog}>
+        <DialogContent className="sm:max-w-md p-0 gap-0 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 shadow-2xl shadow-black/50 overflow-hidden">
+          <div className="relative px-6 pt-6 pb-4">
+            <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl" />
+            <div className="relative">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/20 to-zinc-500/20 border border-blue-500/30 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
+                <BookOpen className="w-6 h-6 text-blue-400" />
+              </div>
+              <DialogTitle className="text-xl font-semibold text-white mb-1">
+                Cancel Trading Journal?
+              </DialogTitle>
+              <DialogDescription className="text-zinc-400 text-sm">
+                Your {journalInfo.name} Trading Journal subscription will be cancelled at the end of your billing period. You'll keep full access until {formatDate(profile?.subscription_expires_at)}.
+              </DialogDescription>
+            </div>
+          </div>
+
+          <div className="mx-6 mb-4">
+            <div className="relative p-4 rounded-xl bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5 border border-amber-500/20">
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <p className="text-sm font-medium text-amber-300">What you'll lose</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>Unlimited trade logging</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>Advanced performance analytics</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>Strategy tracking & tagging</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>Broker sync & auto-import</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 pt-2 space-y-3">
+            <button
+              onClick={() => setShowJournalCancelDialog(false)}
+              disabled={cancellingJournal}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Keep My Journal Subscription
+            </button>
+
+            <button
+              onClick={handleCancelJournal}
+              disabled={cancellingJournal}
+              className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {cancellingJournal ? (
+                <><Spinner size="sm" /><span>Cancelling...</span></>
+              ) : (
+                <><X className="w-4 h-4" /><span>Yes, Cancel My Subscription</span></>
+              )}
+            </button>
+
+            <p className="text-center text-xs text-zinc-500">
+              You'll retain access until {formatDate(profile?.subscription_expires_at)}
             </p>
           </div>
         </DialogContent>
