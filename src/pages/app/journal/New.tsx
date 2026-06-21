@@ -2072,9 +2072,50 @@ if (hasResult && directRiskUSD > 0) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               {/* 🎯 TickerAutocomplete */}
               <div>
-                <Label htmlFor="symbol" className="text-xs text-zinc-400 mb-2 block">
-                  Symbol * {st.assetClass && <span className="text-yellow-400 ml-1">({st.assetClass})</span>}
-                  {st.multiplier > 1 && riskInputMode === 'summary' && <span className="text-emerald-400 ml-1">x{st.multiplier}</span>}
+                <Label htmlFor="symbol" className="text-xs text-zinc-400 mb-2 flex items-center justify-between gap-2">
+                  <span>Symbol *</span>
+                  {st.symbol && (
+                    <span className="flex items-center gap-2">
+                      {/* Asset class indicator. Futures/crypto/forex/etf are unambiguous
+                          from the ticker → static chip. Equity tickers are ambiguous
+                          (stock vs option share the same underlying symbol) → small
+                          Stock|Option toggle so the user can pick and reveal the
+                          option-specific fields (strike/expiration/type). */}
+                      {(() => {
+                        const cls = normalizeAssetClass(st.assetClass);
+                        const isFixed = cls === 'futures' || cls === 'crypto' || cls === 'forex' || cls === 'etf';
+                        if (isFixed) {
+                          return (
+                            <span className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-yellow-300">
+                              {cls}
+                            </span>
+                          );
+                        }
+                        const isOption = cls === 'options';
+                        return (
+                          <span className="inline-flex overflow-hidden rounded-md border border-yellow-500/30 text-[10px] font-medium">
+                            <button
+                              type="button"
+                              onClick={() => st.setAssetClass('stock')}
+                              className={`px-2 py-0.5 transition-colors ${!isOption ? 'bg-yellow-500/20 text-yellow-300' : 'text-zinc-400 hover:bg-zinc-800'}`}
+                            >
+                              Stock
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => st.setAssetClass('options')}
+                              className={`border-l border-yellow-500/30 px-2 py-0.5 transition-colors ${isOption ? 'bg-yellow-500/20 text-yellow-300' : 'text-zinc-400 hover:bg-zinc-800'}`}
+                            >
+                              Option
+                            </button>
+                          </span>
+                        );
+                      })()}
+                      {st.multiplier > 1 && riskInputMode === 'summary' && (
+                        <span className="text-emerald-400">x{st.multiplier}</span>
+                      )}
+                    </span>
+                  )}
                 </Label>
                 <TickerAutocomplete
                   value={st.symbol}
