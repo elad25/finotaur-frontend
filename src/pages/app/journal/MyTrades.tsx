@@ -2313,6 +2313,29 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                         </select>
                       </div>
 
+                      {/* PLAYBOOK SECTION */}
+                      <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
+                        <span className="text-[11px] text-zinc-500 uppercase tracking-wider">Playbook</span>
+                        <select
+                          value={selectedTrade.strategy_id ?? ''}
+                          onChange={(e) => {
+                            const sid = e.target.value;
+                            if (!sid) return;
+                            const name = strategies.find((s) => s.id === sid)?.name ?? null;
+                            setSelectedTrade((prev) =>
+                              prev && prev.id === selectedTrade.id ? { ...prev, strategy_id: sid, strategy_name: name } : prev
+                            );
+                            handleAssignStrategy(selectedTrade, sid);
+                          }}
+                          className="rounded-md bg-zinc-800 border border-zinc-700 text-white text-xs px-2 py-1 max-w-[160px] focus:outline-none focus:border-[#C9A646]"
+                        >
+                          <option value="">--</option>
+                          {strategies.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* PRICES SECTION */}
                       <div className="border-t border-zinc-800/60 pt-2.5">
                         <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 flex items-center gap-2">
