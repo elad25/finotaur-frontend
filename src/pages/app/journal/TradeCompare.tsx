@@ -4,12 +4,9 @@
 // =====================================================
 // Route: /app/journal/trade-compare
 //
-// Non-beta users: two tabs (Total → renamed "Day", Specific trade → renamed "Trade")
-//   with the existing planned-level scenarios — behaviour UNCHANGED.
-//
-// Beta/admin users: three tabs — Trade · Day · Distribution
-//   Trade     → engine scenarios when bars exist; planned fallback when no bars.
-//   Day       → planned cumulative chart + summary cards + Discipline Tax hero card.
+// Three tabs — Day · Distribution · Trade
+//   Trade        → engine scenarios when bars exist; planned fallback when no bars.
+//   Day          → planned cumulative chart + summary cards + Discipline Tax hero card.
 //   Distribution → per-rule stat blocks + histogram; building state until N≥20.
 // =====================================================
 
@@ -36,10 +33,9 @@ import type { Trade } from '@/hooks/useTradesData';
 import { analyzeWhatIf } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar } from '@/lib/journal/whatIfEngine';
 import { useTradeReconcile, useTradeBars } from '@/hooks/useTradeBars';
-import { computePlannedScenarios, buildAggregate } from '@/lib/journal/plannedScenarios';
+import { buildAggregate } from '@/lib/journal/plannedScenarios';
 import type { PlannedScenario } from '@/lib/journal/plannedScenarios';
 import { useShadowTrade, useShadowAggregate } from '@/hooks/useShadow';
-import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Lightbulb,
@@ -1157,76 +1153,6 @@ function TradeEngineView({
   );
 }
 
-// ─── Non-beta trade tab (preserved existing "Specific trade" behaviour) ────────
-
-interface NonBetaTradeViewProps {
-  trade: Trade;
-  bars: PriceBar[];
-  barsLoading: boolean;
-  mfe: WhatIfResult['mfe'];
-  mae: WhatIfResult['mae'];
-  hasBars: boolean;
-}
-
-function NonBetaTradeView({ trade, bars, barsLoading, mfe, mae, hasBars }: NonBetaTradeViewProps) {
-  const planned = useMemo(() => computePlannedScenarios(trade), [trade]);
-
-  const plannedInsight = useMemo<string>(() => {
-    const targetSc = planned.scenarios.find((s) => s.key === 'target');
-    const stopSc   = planned.scenarios.find((s) => s.key === 'stop');
-    if (targetSc?.available && targetSc.deltaVsActual != null) {
-      return `Held to your target would have changed this trade by ${fmtDelta(targetSc.deltaVsActual)}.`;
-    }
-    if (stopSc?.available && stopSc.pnl != null && stopSc.deltaVsActual != null) {
-      return `Exiting at your original stop would have been ${fmtPnl(stopSc.pnl)} (${fmtDelta(stopSc.deltaVsActual)}).`;
-    }
-    return 'Add a stop or target to this trade to compare scenarios.';
-  }, [planned]);
-
-  return (
-    <div className="flex flex-col gap-ds-5">
-      <PriceChart trade={trade} bars={bars} mfe={mfe} mae={mae} />
-      {barsLoading && (
-        <p className="text-[11px] text-white/38 flex items-center gap-1.5">
-          <Info className="h-3.5 w-3.5 flex-shrink-0" />
-          Loading price bars…
-        </p>
-      )}
-      <div className="flex flex-col gap-ds-3">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-[1.2px] text-white/50">
-            What-if scenarios
-          </span>
-          <ShadowInfoIcon label="Four alternate outcomes computed from your recorded price levels — no price bars required." />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-ds-3">
-          {planned.scenarios.map((sc) => (
-            <PlannedScenarioCard
-              key={sc.key}
-              scenario={sc}
-              isBaseline={sc.key === 'actual'}
-              hasBars={hasBars}
-            />
-          ))}
-        </div>
-      </div>
-      <div className={`${JOURNAL_PANEL} grid min-h-[74px] items-center gap-4 px-ds-5 py-ds-4 sm:grid-cols-[minmax(0,1fr)_auto]`}>
-        <div className="flex min-w-0 items-center gap-ds-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/10 text-[#E8C766] shadow-[0_0_26px_rgba(201,166,70,0.18)]">
-            <Lightbulb className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="mb-1 text-[13px] font-semibold text-[#E8C766]">Key Takeaway</div>
-            <p className="text-[13px] leading-relaxed text-white/78">
-              {plannedInsight}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Trade picker ─────────────────────────────────────────────────────────────
 
 interface TradePickerProps {
@@ -1327,7 +1253,6 @@ export default function TradeCompare() {
   useTradeReconcile();
 
   const { data: allTrades, isLoading } = useTrades();
-  const { hasBetaAccess } = useAdminAuth();
 
   const closedTrades = useMemo<Trade[]>(() => {
     if (!allTrades) return [];
@@ -1396,8 +1321,6 @@ export default function TradeCompare() {
   );
 
   // ── Tab config ─────────────────────────────────────────────────────────────
-  // Beta: 3 tabs (Trade / Day / Distribution)
-  // Non-beta: 2 tabs (Total / Specific trade) — original names preserved
   const triggerClass =
     'data-[state=active]:bg-[#C9A646]/15 data-[state=active]:text-white data-[state=active]:shadow-none text-white/55 rounded-[8px] px-4 py-1.5 text-[13px] font-medium transition-colors';
 
@@ -1413,102 +1336,58 @@ export default function TradeCompare() {
         </p>
       </div>
 
-      {/* ── NON-BETA: original 2-tab experience, unchanged ── */}
-      {!hasBetaAccess && (
-        <Tabs defaultValue="total">
-          <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
-            <TabsTrigger value="total" className={triggerClass}>Total</TabsTrigger>
-            <TabsTrigger value="specific" className={triggerClass}>Specific trade</TabsTrigger>
-          </TabsList>
+      {/* Shadow — 3-tab experience */}
+      <Tabs defaultValue="day">
+        <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
+          <TabsTrigger value="day" className={triggerClass}>Day</TabsTrigger>
+          <TabsTrigger value="distribution" className={triggerClass}>Distribution</TabsTrigger>
+          <TabsTrigger value="trade" className={triggerClass}>Trade</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="total" className="mt-ds-5">
-            {isLoading ? loadingEl : <DayView trades={closedTrades} isBeta={false} />}
-          </TabsContent>
-
-          <TabsContent value="specific" className="mt-ds-5">
-            <div className="flex flex-col gap-ds-5">
-              {!isLoading && (
-                <TradePicker
-                  closedTrades={closedTrades}
-                  selectedId={selectedId}
-                  effectiveId={effectiveId}
-                  dialogOpen={dialogOpen}
-                  setDialogOpen={setDialogOpen}
-                  setSelectedId={setSelectedId}
-                  disabled={closedTrades.length === 0}
-                />
-              )}
-              {isLoading && loadingEl}
-              {!isLoading && closedTrades.length === 0 && noTradesEl}
-              {!isLoading && closedTrades.length > 0 && selectedTrade && (
-                <NonBetaTradeView
-                  trade={selectedTrade}
-                  bars={bars}
-                  barsLoading={barsLoading}
-                  mfe={whatIfResult?.mfe ?? null}
-                  mae={whatIfResult?.mae ?? null}
-                  hasBars={hasBars}
-                />
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
-      )}
-
-      {/* ── BETA: 3-tab Shadow v2 experience ── */}
-      {hasBetaAccess && (
-        <Tabs defaultValue="day">
-          <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
-            <TabsTrigger value="day" className={triggerClass}>Day</TabsTrigger>
-            <TabsTrigger value="distribution" className={triggerClass}>Distribution</TabsTrigger>
-            <TabsTrigger value="trade" className={triggerClass}>Trade</TabsTrigger>
-          </TabsList>
-
-          {/* ── Trade tab ── */}
-          <TabsContent value="trade" className="mt-ds-5">
-            <div className="flex flex-col gap-ds-5">
-              {!isLoading && (
-                <TradePicker
-                  closedTrades={closedTrades}
-                  selectedId={selectedId}
-                  effectiveId={effectiveId}
-                  dialogOpen={dialogOpen}
-                  setDialogOpen={setDialogOpen}
-                  setSelectedId={setSelectedId}
-                  disabled={closedTrades.length === 0}
-                />
-              )}
-              {isLoading && loadingEl}
-              {!isLoading && closedTrades.length === 0 && noTradesEl}
-              {!isLoading && closedTrades.length > 0 && selectedTrade && (
-                <TradeEngineView
-                  trade={selectedTrade}
-                  bars={bars}
-                  mfe={whatIfResult?.mfe ?? null}
-                  mae={whatIfResult?.mae ?? null}
-                  distributionTracked={aggregate.tracked}
-                  distributionTotal={aggregate.total}
-                />
-              )}
-            </div>
-          </TabsContent>
-
-          {/* ── Day tab ── */}
-          <TabsContent value="day" className="mt-ds-5">
-            {isLoading ? loadingEl : <DayView trades={closedTrades} isBeta={true} />}
-          </TabsContent>
-
-          {/* ── Distribution tab ── */}
-          <TabsContent value="distribution" className="mt-ds-5">
-            {isLoading ? loadingEl : (
-              <DistributionView
-                tracked={aggregate.tracked}
-                total={aggregate.total}
+        {/* ── Trade tab ── */}
+        <TabsContent value="trade" className="mt-ds-5">
+          <div className="flex flex-col gap-ds-5">
+            {!isLoading && (
+              <TradePicker
+                closedTrades={closedTrades}
+                selectedId={selectedId}
+                effectiveId={effectiveId}
+                dialogOpen={dialogOpen}
+                setDialogOpen={setDialogOpen}
+                setSelectedId={setSelectedId}
+                disabled={closedTrades.length === 0}
               />
             )}
-          </TabsContent>
-        </Tabs>
-      )}
+            {isLoading && loadingEl}
+            {!isLoading && closedTrades.length === 0 && noTradesEl}
+            {!isLoading && closedTrades.length > 0 && selectedTrade && (
+              <TradeEngineView
+                trade={selectedTrade}
+                bars={bars}
+                mfe={whatIfResult?.mfe ?? null}
+                mae={whatIfResult?.mae ?? null}
+                distributionTracked={aggregate.tracked}
+                distributionTotal={aggregate.total}
+              />
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ── Day tab ── */}
+        <TabsContent value="day" className="mt-ds-5">
+          {isLoading ? loadingEl : <DayView trades={closedTrades} isBeta={true} />}
+        </TabsContent>
+
+        {/* ── Distribution tab ── */}
+        <TabsContent value="distribution" className="mt-ds-5">
+          {isLoading ? loadingEl : (
+            <DistributionView
+              tracked={aggregate.tracked}
+              total={aggregate.total}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
