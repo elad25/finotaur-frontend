@@ -2,6 +2,7 @@
 // 🔥 v7.0 FIX: BacktestRoute & AffiliateRoute moved to separate files to fix useAuth context error
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { PlanChangeConfirmHost } from "@/components/billing/PlanChangeConfirm";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppQueryProvider } from "@/providers/QueryProvider";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
@@ -192,6 +193,7 @@ const JournalReportsOverview = lazy(() => import("@/pages/app/journal/reports/Ov
 const JournalReportsSummary = lazy(() => import("@/pages/app/journal/reports/Summary"));
 const JournalReportsPerformance = lazy(() => import("@/pages/app/journal/reports/Performance"));
 const JournalReportsOptions = lazy(() => import("@/pages/app/journal/reports/OptionsAnalytics"));
+const JournalAutoTagger = lazy(() => import("@/pages/app/journal/AutoTagger"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
 const Strategies = lazy(() => import("@/pages/app/journal/Strategies"));
@@ -479,10 +481,7 @@ function AppContent() {
         <Route path="/legal/affiliate-disclosure" element={<SuspenseRoute><AffiliateDisclosure /></SuspenseRoute>} />
         <Route path="/legal/refund" element={<SuspenseRoute><RefundPolicy /></SuspenseRoute>} />
         <Route path="/legal/dmca" element={<SuspenseRoute><DMCA /></SuspenseRoute>} />
-        {/* Post-OAuth / post-email-confirmation landing. Supabase redirects here (allowlisted URL),
-            then we forward to the proven onboarding screen. Was "/onboarding" — a route that never
-            existed, which 404'd every Google sign-in/up. Unified with the email-signup destination. */}
-        <Route path="/pricing-selection" element={<Navigate to="/welcome" replace />} />
+        <Route path="/pricing-selection" element={<Navigate to="/onboarding" replace />} />
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><MentorViewProvider><SuspenseRoute><ProtectedAppLayout /></SuspenseRoute></MentorViewProvider></ProtectedRoute>}>
@@ -559,9 +558,9 @@ function AppContent() {
           {/* Screener now lives at the all-markets (home) level — see all-markets/screener below.
               Redirect keeps old bookmarks/links working. */}
           <Route path="stocks/screener" element={<Navigate to="/app/all-markets/screener" replace />} />
-          {/* Stocks Earnings retired → Market Pulse (market breadth / sentiment / macro, free derived data).
-              Old path redirects so existing links/bookmarks don't 404. */}
+          {/* stocks/earnings — redirect to Market Pulse so old bookmarks / route-guard don't 404 */}
           <Route path="stocks/earnings" element={<Navigate to="/app/stocks/market-pulse" replace />} />
+          {/* Market Pulse — breadth, sentiment, macro (replaces the sealed Earnings Coming-Soon) */}
           <Route path="stocks/market-pulse" element={<LockedRoute domainId="stocks"><StocksMarketPulse /></LockedRoute>} />
           <Route path="stocks/movers" element={<LockedRoute domainId="stocks"><StocksMovers /></LockedRoute>} />
           <Route path="stocks/news" element={<LockedRoute domainId="stocks"><StocksNews /></LockedRoute>} />
@@ -724,6 +723,7 @@ function AppContent() {
   <Route path="recaps" element={<JournalReportsRecaps />} />
   <Route path="performance" element={<JournalReportsPerformance />} />
 </Route>
+<Route path="journal/auto-tagger" element={<JournalRoute><JournalAutoTagger /></JournalRoute>} />
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
@@ -835,6 +835,7 @@ export const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <PlanChangeConfirmHost />
           <BrowserRouter>
             <ScrollToTop />
             <AuthProvider>
