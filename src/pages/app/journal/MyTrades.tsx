@@ -2572,17 +2572,17 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
 
                         {/* MAX DRAWDOWN + MAX RUNUP */}
                         {(() => {
-                          const isApprox = typeof selectedTrade.bars_status === ‘string’ && selectedTrade.bars_status.startsWith(‘backfill_yahoo’);
+                          const isApprox = typeof selectedTrade.bars_status === 'string' && selectedTrade.bars_status.startsWith('backfill_yahoo');
                           const ddTitle = selectedTrade.mae == null
-                            ? ‘Not available — no market data for this trade’s window.’
+                            ? 'Not available — no market data for this trade window.'
                             : isApprox
-                              ? ‘Worst adverse excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.’
-                              : ‘Worst adverse excursion during the trade.’;
+                              ? 'Worst adverse excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.'
+                              : 'Worst adverse excursion during the trade.';
                           const mfeTitle = selectedTrade.mfe == null
-                            ? ‘Not available — no market data for this trade’s window.’
+                            ? 'Not available — no market data for this trade window.'
                             : isApprox
-                              ? ‘Maximum favorable excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.’
-                              : ‘Maximum favorable excursion during the trade.’;
+                              ? 'Maximum favorable excursion during the trade. Estimated from continuous front-month market data — not the exact contract month.'
+                              : 'Maximum favorable excursion during the trade.';
                           return (
                             <>
                         <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
@@ -2592,7 +2592,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                           </span>
                           <span className="text-sm font-semibold tabular-nums">
                             {selectedTrade.mae != null ? (
-                              <span className="text-red-400">{isApprox ? ‘≈ ‘ : ‘’}-${formatNumber(Math.abs(Number(selectedTrade.mae)), 2)}</span>
+                              <span className="text-red-400">{isApprox ? '≈ ' : ''}-${formatNumber(Math.abs(Number(selectedTrade.mae)), 2)}</span>
                             ) : (
                               <span className="text-zinc-500">N/A</span>
                             )}
@@ -2605,7 +2605,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                           </span>
                           <span className="text-sm font-semibold tabular-nums">
                             {selectedTrade.mfe != null ? (
-                              <span className="text-emerald-400">{isApprox ? ‘≈ ‘ : ‘’}+${formatNumber(Math.abs(Number(selectedTrade.mfe)), 2)}</span>
+                              <span className="text-emerald-400">{isApprox ? '≈ ' : ''}+${formatNumber(Math.abs(Number(selectedTrade.mfe)), 2)}</span>
                             ) : (
                               <span className="text-zinc-500">N/A</span>
                             )}
