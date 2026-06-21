@@ -2125,7 +2125,7 @@ const stats = useMemo<Stats>(() => {
           {selectedTrade && (() => {
   const selStrategyCfg = strategyRConfigs?.get?.(selectedTrade.strategy_id ?? '') ?? null;
   const resolved1R = resolvePlanned1R(selectedTrade as any, selStrategyCfg, oneR);
-const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(selectedTrade, oneR, rBasisMode, resolved1R.value);
+const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade, oneR, rBasisMode, resolved1R.value);
   const displayR = actualR;
   const canSetR =
     isClosed &&
@@ -2345,11 +2345,6 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                               Risk-Only Mode
                             </Badge>
                           )}
-                          {multiplier && multiplier !== 1 && selectedTrade.input_mode !== 'risk-only' && (
-                            <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400 bg-blue-500/10">
-                              {multiplier}x Multiplier
-                            </Badge>
-                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                           {selectedTrade.input_mode === 'risk-only' ? (
@@ -2386,35 +2381,15 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           ) : (
                             <>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-0.5">Risk per Point</div>
-                                <div className="text-base font-semibold text-red-400">
-                                  {selectedTrade.stop_price
-                                    ? `$${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}`
-                                    : '—'}
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[11px] text-zinc-500 mb-0.5">Multiplier</div>
-                                <div className="text-base font-bold text-blue-400">
-                                  {multiplier}x
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-[11px] text-zinc-500 mb-0.5">Quantity</div>
-                                <div className="text-base font-semibold text-white">
-                                  {selectedTrade.quantity}
-                                </div>
-                              </div>
-                              <div>
                                 <div className="text-[11px] text-zinc-500 mb-0.5">Total Risk</div>
                                 <div className="text-base font-bold text-red-400">
                                   ${formatNumber(riskUSD, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-0.5">Fees</div>
-                                <div className="text-base font-semibold text-zinc-300">
-                                  ${formatNumber(selectedTrade.fees, 2)}
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Contracts</div>
+                                <div className="text-base font-semibold text-white">
+                                  {selectedTrade.quantity}
                                 </div>
                               </div>
                             </>
