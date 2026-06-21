@@ -12,6 +12,8 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useTrades, type Trade } from "@/hooks/useTradesData";
+import { usePortfolios } from "@/hooks/usePortfolios";
+import { resolveHiddenPortfolioIds } from "@/lib/journal/hiddenAccounts";
 
 
 
@@ -1172,6 +1174,7 @@ export default function JournalSettings() {
   const { loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
   const { data: trades = [] } = useTrades(); // Pre-cached for export + R performance
+  const { portfolios } = usePortfolios(); // exclude hidden accounts (WHISPER paper) from R Performance
 
   // 🔥 PAYMENT HOOK
   const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
@@ -1201,11 +1204,15 @@ const loading = profileLoading || riskLoading;
 // 🔥 R Performance — stop-based R, overall + per-strategy (replaces the old
 // balance/portfolio block per Elad 2026-06-19: no balance, R by stop size).
 const rPerformance = useMemo(() => {
+  // Exclude hidden accounts (e.g. WHISPER paper) — same convention as the rest
+  // of the journal's all-accounts views; they only show when explicitly picked.
+  const hiddenIds = new Set(resolveHiddenPortfolioIds(portfolios));
   // Closed trades only: risk-only mode stores pnl; summary mode needs an exit.
   const closed = trades.filter((t) =>
-    t.input_mode === 'risk-only'
+    !hiddenIds.has(t.portfolio_id ?? '') &&
+    (t.input_mode === 'risk-only'
       ? t.pnl !== null && t.pnl !== undefined
-      : t.exit_price != null,
+      : t.exit_price != null),
   );
 
   // Per-account $ value of 1R, consistent with the displayed R. All-accounts
@@ -1253,7 +1260,7 @@ const rPerformance = useMemo(() => {
     strategyMaxAbs,
     noStopCount: closed.length - overall.count,
   };
-}, [trades]);
+}, [trades, portfolios]);
   // ============================================
   // 🔥 HANDLERS - All memoized with useCallback
   // ============================================
