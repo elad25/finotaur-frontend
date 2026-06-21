@@ -2,7 +2,7 @@
 // Extracted from SettingsLayout.tsx — BillingTab + billing helpers + 3 cancel Dialogs.
 // Pure move: no logic or UI changes.
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ import {
   computeNextBilling,
 } from "../settings-shared";
 import { resolveTier, TIER_CONFIG } from "@/components/nav/SubscriptionBadge";
+import { fetchCancellationReasons, submitCancellationFeedback, type CancellationReason } from "@/services/accountLifecycleService";
+import { CancellationFeedbackFields } from "@/features/settings/CancellationFeedbackFields";
 
 // ============================================
 // 🔥 API HELPER: Manage Product Subscription
@@ -116,6 +118,11 @@ export const BillingTab = () => {
   const [showJournalCancelDialog, setShowJournalCancelDialog] = useState(false);
   const [cancellingJournal, setCancellingJournal] = useState(false);
   const [reactivatingJournal, setReactivatingJournal] = useState(false);
+
+  // Cancellation feedback (wired to the existing subscription_cancellation_feedback infra)
+  const [cancelReasons, setCancelReasons] = useState<CancellationReason[]>([]);
+  const [cancelReasonId, setCancelReasonId] = useState('');
+  const [cancelFeedbackText, setCancelFeedbackText] = useState('');
 
   // Platform subscription (main website)
   // Canonical DB value is the BARE form ('core'|'finotaur'|'enterprise'); normalize to the
@@ -245,6 +252,27 @@ export const BillingTab = () => {
 
   const isLifetime = profile?.is_lifetime ?? false;
 
+  // ── Cancellation feedback wiring ──────────────────────────────
+  useEffect(() => {
+    fetchCancellationReasons().then(setCancelReasons).catch(() => { /* non-fatal */ });
+  }, []);
+
+  const canSubmitCancelFeedback = !!cancelReasonId && cancelFeedbackText.trim().length >= 3;
+
+  const submitCancelFeedbackSafe = async (planCancelled: string, subscriptionType: string) => {
+    try {
+      await submitCancellationFeedback({
+        reasonId: cancelReasonId,
+        feedbackText: cancelFeedbackText.trim(),
+        planCancelled,
+        subscriptionType,
+        sourceAction: 'user_initiated_in_app',
+      });
+    } catch (e) {
+      console.error('Failed to submit cancellation feedback:', e);
+    }
+  };
+
   const handleCancelNewsletter = async (cancelBothProducts?: boolean, confirmPriceIncrease?: boolean) => {
     if (!user) return;
 
@@ -283,6 +311,9 @@ export const BillingTab = () => {
       // Refresh profile to get updated state from DB
       await refreshProfile();
 
+      await submitCancelFeedbackSafe('War Zone', 'newsletter');
+      setCancelReasonId('');
+      setCancelFeedbackText('');
       setShowNewsletterCancelDialog(false);
       toast.success(data.message || 'Newsletter subscription will be cancelled at period end');
     } catch (error) {
@@ -355,6 +386,9 @@ export const BillingTab = () => {
       // Refresh profile to get updated state from DB
       await refreshProfile();
 
+      await submitCancelFeedbackSafe('Top Secret', 'top_secret');
+      setCancelReasonId('');
+      setCancelFeedbackText('');
       setShowTopSecretCancelDialog(false);
       toast.success(data.message || 'Top Secret subscription will be cancelled at period end');
     } catch (error) {
@@ -511,6 +545,9 @@ export const BillingTab = () => {
       if (!response.ok) throw new Error(data.error || "Failed to cancel platform subscription");
 
       await refreshProfile();
+      await submitCancelFeedbackSafe(platformInfo.name, 'platform');
+      setCancelReasonId('');
+      setCancelFeedbackText('');
       setShowPlatformCancelDialog(false);
       toast.success(data.message || 'Platform subscription will be cancelled at period end');
     } catch (error) {
@@ -550,6 +587,9 @@ export const BillingTab = () => {
       if (!response.ok) throw new Error(data.error || "Failed to cancel journal subscription");
 
       await refreshProfile();
+      await submitCancelFeedbackSafe(journalInfo.name, 'journal');
+      setCancelReasonId('');
+      setCancelFeedbackText('');
       setShowJournalCancelDialog(false);
       toast.success(data.message || 'Trading Journal subscription will be cancelled at period end');
     } catch (error) {
@@ -1535,6 +1575,7 @@ export const BillingTab = () => {
             </div>
           </div>
 
+          <CancellationFeedbackFields reasons={cancelReasons} reasonId={cancelReasonId} onReasonChange={setCancelReasonId} text={cancelFeedbackText} onTextChange={setCancelFeedbackText} />
           <div className="p-6 pt-2 space-y-3">
             <button
               onClick={() => setShowPlatformCancelDialog(false)}
@@ -1547,7 +1588,7 @@ export const BillingTab = () => {
 
             <button
               onClick={handleCancelPlatform}
-              disabled={cancellingPlatform}
+              disabled={cancellingPlatform || !canSubmitCancelFeedback}
               className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancellingPlatform ? (
@@ -1611,6 +1652,7 @@ export const BillingTab = () => {
             </div>
           </div>
 
+          <CancellationFeedbackFields reasons={cancelReasons} reasonId={cancelReasonId} onReasonChange={setCancelReasonId} text={cancelFeedbackText} onTextChange={setCancelFeedbackText} />
           <div className="p-6 pt-2 space-y-3">
             <button
               onClick={() => setShowJournalCancelDialog(false)}
@@ -1623,7 +1665,7 @@ export const BillingTab = () => {
 
             <button
               onClick={handleCancelJournal}
-              disabled={cancellingJournal}
+              disabled={cancellingJournal || !canSubmitCancelFeedback}
               className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancellingJournal ? (
@@ -1703,6 +1745,7 @@ export const BillingTab = () => {
       </div>
     </div>
 
+    <CancellationFeedbackFields reasons={cancelReasons} reasonId={cancelReasonId} onReasonChange={setCancelReasonId} text={cancelFeedbackText} onTextChange={setCancelFeedbackText} />
     {/* Action Buttons */}
     <div className="p-6 pt-2 space-y-3">
       {/* Keep Subscription - Primary CTA */}
@@ -1718,7 +1761,7 @@ export const BillingTab = () => {
       {/* Cancel - Secondary/Destructive */}
       <button
         onClick={() => handleCancelNewsletter()}
-        disabled={cancellingNewsletter}
+        disabled={cancellingNewsletter || !canSubmitCancelFeedback}
         className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30 disabled:hover:text-zinc-400"
       >
         {cancellingNewsletter ? (
@@ -1796,6 +1839,7 @@ export const BillingTab = () => {
       </div>
     </div>
 
+    <CancellationFeedbackFields reasons={cancelReasons} reasonId={cancelReasonId} onReasonChange={setCancelReasonId} text={cancelFeedbackText} onTextChange={setCancelFeedbackText} />
     {/* Action Buttons */}
     <div className="p-6 pt-2 space-y-3">
       {/* Keep Subscription - Primary CTA */}
@@ -1811,7 +1855,7 @@ export const BillingTab = () => {
       {/* Cancel - Secondary/Destructive */}
       <button
         onClick={() => handleCancelTopSecret()}
-        disabled={cancellingTopSecret}
+        disabled={cancellingTopSecret || !canSubmitCancelFeedback}
         className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30 disabled:hover:text-zinc-400"
       >
         {cancellingTopSecret ? (
