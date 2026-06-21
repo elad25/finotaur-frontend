@@ -19,6 +19,13 @@ import { isMarketsPath } from '@/constants/markets';
 
 const WAR_ZONE_PATHS   = ['/app/all-markets/warzone', '/app/warzone'];
 const TOP_SECRET_PATHS = ['/app/top-secret'];
+// The Floor (/app/floor/*) is a sub-area of the Journal product, surfaced via
+// the beta-gated "The Floor" tab in the Journal subNav. Without this mapping
+// productId would be extracted as 'floor' (the 2nd path segment), miss the
+// 'mentorship'-keyed domain, fall back to 'markets', and wrongly highlight the
+// Markets/Stocks nav while on The Floor. Map it to 'journal' so the Journal
+// subNav (with "The Floor" active) renders instead.
+const FLOOR_PATHS = ['/app/floor'];
 
 export const useDomain = () => {
   const location = useLocation();
@@ -34,6 +41,9 @@ export const useDomain = () => {
     productId = 'war-zone';
   } else if (TOP_SECRET_PATHS.some((p) => pathname.startsWith(p))) {
     productId = 'top-secret';
+  } else if (FLOOR_PATHS.some((p) => pathname.startsWith(p))) {
+    // The Floor lives under the Journal product (see FLOOR_PATHS note above).
+    productId = 'journal';
   } else if (isMarketsPath(pathname)) {
     // /app/etfs is now part of the Markets product (MARKETS_PATH_PREFIXES includes /app/etfs).
     productId = 'markets';
