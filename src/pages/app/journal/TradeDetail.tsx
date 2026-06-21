@@ -11,7 +11,8 @@ import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
-import { Loader2, ArrowLeft, AlertCircle, Pencil, X, ClipboardList } from 'lucide-react';
+import { Loader2, ArrowLeft, AlertCircle, Pencil, X, ClipboardList, Share2 } from 'lucide-react';
+import { ShareTradeDialog } from '@/components/community/ShareTradeDialog';
 import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Skeleton';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';
@@ -218,6 +219,7 @@ export default function JournalTradeDetail() {
   const { id: userId } = useEffectiveUser();
 
   const [trade, setTrade] = useState<Trade | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   // FINO page context — this trade (incl. the trader's own reflections) + summary.
   const finoEntity = useMemo(
@@ -583,15 +585,24 @@ export default function JournalTradeDetail() {
           <p className="text-zinc-400 mt-1">{formatTradeDateFull(trade.open_at, timezone)}</p>
         </div>
 
-        {/* Edit / Save / Cancel buttons */}
+        {/* Edit / Share / Save / Cancel buttons */}
         {!isEditing ? (
-          <button
-            onClick={handleEditClick}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
-          >
-            <Pencil className="w-4 h-4" />
-            Edit
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShareDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
+            >
+              <Share2 className="w-4 h-4" style={{ color: '#C9A646' }} />
+              Share
+            </button>
+            <button
+              onClick={handleEditClick}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit
+            </button>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <button
@@ -1285,6 +1296,25 @@ export default function JournalTradeDetail() {
             </div>
           </div>
         )
+      )}
+
+      {/* Share trade dialog — mounted here so it overlays the full page */}
+      {trade && (
+        <ShareTradeDialog
+          trade={{
+            id: trade.id,
+            symbol: trade.symbol,
+            side: trade.side,
+            pnl: trade.pnl,
+            entry_price: trade.entry_price,
+            exit_price: trade.exit_price,
+            quantity: trade.quantity,
+            close_at: trade.close_at,
+            setup: trade.setup,
+          }}
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+        />
       )}
     </div>
   );
