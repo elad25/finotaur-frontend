@@ -38,7 +38,7 @@ export function CancellationFeedbackFields({
           <SelectTrigger className="w-full h-auto bg-zinc-800/60 border-zinc-700 text-zinc-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-zinc-500 data-[placeholder]:text-zinc-500">
             <SelectValue placeholder="Select a reason…" />
           </SelectTrigger>
-          <SelectContent className="bg-zinc-900 border-zinc-700 text-zinc-200">
+          <SelectContent className="z-[10000] bg-zinc-900 border-zinc-700 text-zinc-200">
             {reasons.map((r) => (
               <SelectItem
                 key={r.id}
