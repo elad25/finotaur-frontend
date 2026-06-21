@@ -1576,14 +1576,27 @@ const stats = useMemo<Stats>(() => {
 
   const handleRateTrade = useCallback(async (tradeId: string, value: number) => {
     const newRating = value === 0 ? null : value;
-    // useUpdateTrade's onMutate patches the trades cache synchronously, so the
-    // star fills instantly; the DB write + rollback-on-error run in the background.
+    // Optimistic, instant in BOTH surfaces:
+    //  - the table reads from the ['trades', ...] query cache. useUpdateTrade's
+    //    own onMutate misses it (its key has fewer segments than useTrades'),
+    //    so we prefix-match every ['trades'] list here and patch by id.
+    //  - the detail panel reads from `selectedTrade` (separate state), so patch
+    //    it too. The DB write runs in the background; resync on failure.
+    queryClient.setQueriesData<Trade[]>({ queryKey: ['trades'] }, (old) =>
+      Array.isArray(old)
+        ? old.map((t) => (t.id === tradeId ? { ...t, trade_rating: newRating } : t))
+        : old
+    );
+    setSelectedTrade((prev) =>
+      prev && prev.id === tradeId ? { ...prev, trade_rating: newRating } : prev
+    );
     try {
       await updateTradeMutation({ id: tradeId, data: { trade_rating: newRating } });
     } catch {
       toast.error('Could not save rating');
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
     }
-  }, [updateTradeMutation]);
+  }, [updateTradeMutation, queryClient]);
 
   const handleSetR = useCallback(async () => {
     if (!selectedTrade) return;
