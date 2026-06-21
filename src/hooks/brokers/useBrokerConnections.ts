@@ -13,7 +13,8 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { toast } from 'sonner';
@@ -60,7 +61,10 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
   const { id: userId } = useEffectiveUser();
   const qc = useQueryClient();
 
-  const { data: connections = [], isLoading, isError, error } = useQuery({
+  // useTimedQuery: a hung Supabase request (e.g. during the post-OAuth token
+  // settle) rejects after the timeout → global retry re-issues → recovers,
+  // instead of leaving the popover stuck on "Loading..." forever.
+  const { data: connections = [], isLoading, isError, error } = useTimedQuery({
     queryKey: queryKey(userId ?? '', opts),
     queryFn: () => fetchConnections(userId!, opts),
     enabled: !!userId,
