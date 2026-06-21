@@ -634,22 +634,12 @@ export const BillingTab = () => {
         </div>
       </div>
 
-      {/* Subscriptions Card — Platform + Trading Journal */}
-      <Card className="p-5 bg-zinc-900/50 border-zinc-700/50">
+      {/* Subscriptions Card — compact single-card layout */}
+      <Card className="p-4 bg-zinc-900/50 border-zinc-700/50">
 
-        {/* Platform Subscription Section */}
-        <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            {platformIsFree ? (
-              <Zap className="w-4 h-4 text-zinc-400" />
-            ) : ['platform_core'].includes(platformPlan) ? (
-              <Crown className="w-4 h-4 text-blue-400" />
-            ) : (
-              <Crown className="w-4 h-4 text-[#C9A646]" />
-            )}
-            <h2 className="font-medium text-white">Finotaur Platform</h2>
-          </div>
+        {/* Card header */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Active Plans</span>
           <a
             href="https://whop.com/@me/settings/orders/"
             target="_blank"
@@ -660,315 +650,167 @@ export const BillingTab = () => {
           </a>
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-semibold text-white">{platformInfo.name}</span>
-              <Badge variant="outline" className={cn(
-                profile?.platform_cancel_at_period_end
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                  : platformInfo.color
-              )}>
-                {isLifetime ? (
-                  <><Crown className="w-3 h-3 mr-1" />Lifetime</>
-                ) : profile?.platform_cancel_at_period_end ? (
-                  <><Clock className="w-3 h-3 mr-1" />Cancelling</>
-                ) : platformIsActive ? (
-                  <><CheckCircle2 className="w-3 h-3 mr-1" />{profile?.platform_is_in_trial ? 'Trial' : 'Active'}</>
-                ) : (
-                  <><AlertCircle className="w-3 h-3 mr-1" />{platformStatus}</>
-                )}
-              </Badge>
-            </div>
-            <span className="text-lg font-semibold text-white">
-              {isLifetime ? 'Lifetime' : platformInfo.price}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-zinc-500">Billing cycle</p>
-              <p className="capitalize text-zinc-300">
-                {isLifetime ? 'Never expires' : (profile?.platform_billing_interval || 'N/A')}
-              </p>
-            </div>
-            <div>
-              <p className="text-zinc-500">
-                {profile?.platform_cancel_at_period_end
-                  ? 'Access ends'
-                  : profile?.platform_is_in_trial
-                    ? 'Trial ends'
-                    : 'Next billing'}
-              </p>
-              <p className="flex items-center gap-1 text-zinc-300">
-                {isLifetime ? (
-                  <><Crown className="w-3 h-3 text-[#C9A646]" />Forever</>
-                ) : profile?.platform_is_in_trial ? (
-                  <><Clock className="w-3 h-3 text-amber-400" />{formatDate(profile?.platform_trial_ends_at)}</>
-                ) : (
-                  <><Calendar className="w-3 h-3" />{formatDate(profile?.platform_subscription_expires_at)}</>
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Included Products for Finotaur/Enterprise */}
-          {['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
-            <div className="mt-4 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-              <p className="text-xs text-emerald-400 font-medium mb-2">✅ Included in your plan:</p>
-              <div className="flex flex-wrap gap-2">
-                <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
-                  <Mail className="w-3 h-3 mr-1" /> War Zone Newsletter
-                </Badge>
-                <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-xs">
-                  <Flame className="w-3 h-3 mr-1" /> Top Secret Reports
-                </Badge>
-                <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">
-                  <BookOpen className="w-3 h-3 mr-1" /> Journal Premium
-                </Badge>
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          {(platformIsFree || platformPlan === 'free') ? (
-            <Button
-              size="sm"
-              onClick={() => navigate('/app/all-markets/pricing')}
-              className="mt-4 w-full bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-            >
-              <Crown className="w-3.5 h-3.5 mr-1.5" />
-              Upgrade Plan
-            </Button>
-          ) : platformIsActive && !isLifetime && (
-            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
-              {!profile?.platform_cancel_at_period_end && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => navigate('/app/all-markets/pricing')}
-                    className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-                  >
-                    <Crown className="w-3.5 h-3.5 mr-1.5" />
-                    {profile?.platform_billing_interval === 'monthly' ? 'Upgrade to Yearly (Save 17%)' : 'Upgrade Plan'}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowPlatformDowngradeInfoDialog(true)}
-                    className="text-zinc-400 hover:text-zinc-300 hover:bg-zinc-700/50 border border-zinc-700/50"
-                  >
-                    Change Plan
-                  </Button>
-                </>
-              )}
-              {profile?.platform_cancel_at_period_end ? (
-                <Button
-                  variant="outline"
-                  size="sm"
+        {/* Row 1 — Platform */}
+        <div className="flex items-center gap-2 py-2.5 border-b border-zinc-800/60">
+          <Zap className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          <span className="text-xs text-zinc-500 w-20 shrink-0">Platform</span>
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', platformInfo.color)}>
+            {platformInfo.name}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {(platformIsFree || platformPlan === 'free') ? (
+              <button
+                onClick={() => navigate('/app/all-markets/pricing')}
+                className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-medium transition-colors"
+              >
+                Upgrade
+              </button>
+            ) : profile?.platform_cancel_at_period_end ? (
+              <>
+                <span className="text-xs text-amber-400">
+                  Cancelling · access until {formatDate(profile?.platform_subscription_expires_at)}
+                </span>
+                <button
                   onClick={handleReactivatePlatform}
                   disabled={cancellingPlatform}
-                  className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors disabled:opacity-50"
                 >
-                  {cancellingPlatform ? (
-                    <><Spinner size="sm" className="mr-1.5" />Restoring...</>
-                  ) : (
-                    <>Undo Cancellation</>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPlatformCancelDialog(true)}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
-                >
-                  Unsubscribe
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* 🔥 Platform Downgrade Info Dialog */}
-          {showPlatformDowngradeInfoDialog && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
-                <div className="p-6 border-b border-zinc-800">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-blue-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold text-zinc-100">Plan Change Not Available</h3>
-                      <p className="text-sm text-zinc-400">Mid-cycle plan changes</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-6 space-y-4">
-                  <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                    <p className="text-blue-200 text-sm leading-relaxed">
-                      Downgrading mid-cycle isn't supported. You've already paid for your current{' '}
-                      <strong>{profile?.platform_plan?.replace('platform_', '')?.charAt(0).toUpperCase() + (profile?.platform_plan?.replace('platform_', '')?.slice(1) || '')}</strong>{' '}
-                      plan through{' '}
-                      <strong>
-                        {profile?.platform_subscription_expires_at
-                          ? new Date(profile.platform_subscription_expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-                          : 'the end of your billing period'}
-                      </strong>.
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-xl bg-zinc-800/60 border border-zinc-700/50 space-y-2">
-                    <p className="text-zinc-300 text-sm font-medium">What you can do instead:</p>
-                    <p className="text-zinc-400 text-sm leading-relaxed">
-                      Keep your current plan until it expires, then choose a different plan from the pricing page when your cycle ends.
-                    </p>
-                  </div>
-                </div>
-                <div className="px-5 py-4 border-t border-zinc-800 flex gap-3">
-                  <button
-                    onClick={() => setShowPlatformDowngradeInfoDialog(false)}
-                    className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Stay on Current Plan
-                  </button>
-                  <button
-                    onClick={() => { setShowPlatformDowngradeInfoDialog(false); navigate('/app/all-markets/pricing'); }}
-                    className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    View Plans
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        </div>
-
-        {/* Divider */}
-        <div className="border-t border-zinc-800/70 my-5" />
-
-        {/* Trading Journal Subscription Section */}
-        <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-blue-400" />
-            <h2 className="font-medium text-white">Trading Journal</h2>
-          </div>
-          <a
-            href="https://whop.com/@me/settings/orders/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
-          >
-            Manage on Whop <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-semibold text-white">{journalInfo.name}</span>
-              <Badge variant="outline" className={journalInfo.color}>
-                {journalIsActive ? (
-                  <><CheckCircle2 className="w-3 h-3 mr-1" />{profile?.is_in_trial ? 'Trial' : 'Active'}</>
-                ) : (
-                  <><AlertCircle className="w-3 h-3 mr-1" />{journalStatus}</>
-                )}
-              </Badge>
-            </div>
-            <span className="text-lg font-semibold text-white">
-              {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing')
-                ? 'Free Trial'
-                : journalInfo.price}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-zinc-500">Billing cycle</p>
-              <p className="capitalize text-zinc-300">
-                {profile?.subscription_interval || 'N/A'}
-              </p>
-            </div>
-            <div>
-              <p className="text-zinc-500">
-                {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') ? 'Trial ends' : 'Next billing'}
-              </p>
-              <p className="flex items-center gap-1 text-zinc-300">
-                {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') ? (
-                  <><Clock className="w-3 h-3 text-amber-400" />{formatDate(profile?.trial_ends_at)}</>
-                ) : (
-                  <><Calendar className="w-3 h-3" />{formatDate(profile?.subscription_expires_at)}</>
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Trade limits info */}
-          <div className="mt-4 pt-4 border-t border-zinc-700/50">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-500">
-                {profile?.account_type === 'free' ? 'Lifetime trades used' : 'Monthly trades used'}
-              </span>
-              <span className="text-zinc-300">
-                {profile?.account_type === 'free'
-                  ? `${profile?.trade_count || 0} / 15`
-                  : `${profile?.current_month_trades_count || 0} / ${profile?.max_trades === 999999 ? '∞' : profile?.max_trades || 15}`
-                }
-              </span>
-            </div>
-            {profile?.account_type === 'free' && (
-              <p className="text-xs text-zinc-500 mt-1">Free tier: 15 trades total (never resets)</p>
-            )}
-          </div>
-        </div>
-
-        {journalIsFree ? (
-          <div className="mt-4">
-            <Button
-              onClick={() => navigate('/app/journal/overview')}
-              size="sm"
-              className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
-            >
-              Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        ) : journalIsActive && (
-          <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
-            {profile?.subscription_cancel_at_period_end ? (
-              <>
-                <span className="text-sm text-amber-400 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" />
-                  Cancelling — access until {formatDate(profile?.subscription_expires_at)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleReactivateJournal}
-                  disabled={reactivatingJournal}
-                  className="ml-auto border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50"
-                >
-                  {reactivatingJournal ? (
-                    <><Spinner size="sm" className="mr-1.5" />Restoring...</>
-                  ) : (
-                    <>Undo Cancellation</>
-                  )}
-                </Button>
+                  {cancellingPlatform ? 'Restoring…' : 'Undo'}
+                </button>
               </>
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowJournalCancelDialog(true)}
-                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
-              >
-                Unsubscribe
-              </Button>
+              <>
+                {platformInfo.price && (
+                  <span className="text-xs text-zinc-500">
+                    {platformInfo.price}{profile?.platform_subscription_expires_at ? ` · ${formatDate(profile.platform_subscription_expires_at)}` : ''}
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowPlatformCancelDialog(true)}
+                  className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Unsubscribe
+                </button>
+              </>
             )}
           </div>
-        )}
         </div>
+
+        {/* Row 2 — Trading Journal */}
+        <div className="flex items-center gap-2 py-2.5 border-b border-zinc-800/60">
+          <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          <span className="text-xs text-zinc-500 w-20 shrink-0">Journal</span>
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold border', journalInfo.color)}>
+            {journalInfo.name}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {journalIsFree ? (
+              <button
+                onClick={() => navigate('/app/journal/overview')}
+                className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-medium transition-colors"
+              >
+                Upgrade
+              </button>
+            ) : profile?.subscription_cancel_at_period_end ? (
+              <>
+                <span className="text-xs text-amber-400">
+                  Cancelling · access until {formatDate(profile?.subscription_expires_at)}
+                </span>
+                <button
+                  onClick={handleReactivateJournal}
+                  disabled={reactivatingJournal}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors disabled:opacity-50"
+                >
+                  {reactivatingJournal ? 'Restoring…' : 'Undo'}
+                </button>
+              </>
+            ) : (
+              <>
+                {journalInfo.price && (
+                  <span className="text-xs text-zinc-500">
+                    {journalInfo.price}{profile?.subscription_expires_at ? ` · ${formatDate(profile.subscription_expires_at)}` : ''}
+                  </span>
+                )}
+                {journalIsActive && (
+                  <button
+                    onClick={() => setShowJournalCancelDialog(true)}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Unsubscribe
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Row 3 — Newsletters */}
+        <div className="flex items-center gap-2 py-2.5">
+          <Mail className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+          <span className="text-xs text-zinc-500 w-20 shrink-0">Newsletters</span>
+          <span className="text-xs text-zinc-300">
+            {(() => {
+              const active: string[] = [];
+              if (newsletterStatus === 'active' || newsletterStatus === 'trial') active.push('War Zone');
+              if (topSecretStatus === 'active' || topSecretStatus === 'trial') active.push('Top Secret');
+              return active.length > 0 ? active.join(', ') : 'None';
+            })()}
+          </span>
+        </div>
+
+        {/* Platform Downgrade Info Dialog — preserved */}
+        {showPlatformDowngradeInfoDialog && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+              <div className="p-6 border-b border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <Shield className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-zinc-100">Plan Change Not Available</h3>
+                    <p className="text-sm text-zinc-400">Mid-cycle plan changes</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-blue-200 text-sm leading-relaxed">
+                    Downgrading mid-cycle isn't supported. You've already paid for your current{' '}
+                    <strong>{profile?.platform_plan?.replace('platform_', '')?.charAt(0).toUpperCase() + (profile?.platform_plan?.replace('platform_', '')?.slice(1) || '')}</strong>{' '}
+                    plan through{' '}
+                    <strong>
+                      {profile?.platform_subscription_expires_at
+                        ? new Date(profile.platform_subscription_expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                        : 'the end of your billing period'}
+                    </strong>.
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-zinc-800/60 border border-zinc-700/50 space-y-2">
+                  <p className="text-zinc-300 text-sm font-medium">What you can do instead:</p>
+                  <p className="text-zinc-400 text-sm leading-relaxed">
+                    Keep your current plan until it expires, then choose a different plan from the pricing page when your cycle ends.
+                  </p>
+                </div>
+              </div>
+              <div className="px-5 py-4 border-t border-zinc-800 flex gap-3">
+                <button
+                  onClick={() => setShowPlatformDowngradeInfoDialog(false)}
+                  className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Stay on Current Plan
+                </button>
+                <button
+                  onClick={() => { setShowPlatformDowngradeInfoDialog(false); navigate('/app/all-markets/pricing'); }}
+                  className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Plans
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* 🔥 WAR ZONE NEWSLETTER CARD - Hide if user has Finotaur/Enterprise Platform */}
