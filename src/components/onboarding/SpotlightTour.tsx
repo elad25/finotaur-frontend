@@ -59,6 +59,8 @@ interface TourStep {
   isLast?: boolean;
 }
 
+// Order mirrors the sidebar top-to-bottom (Home → Markets → AI Arena →
+// War Zone → Top Secret → Journal), bookended by the menu intro and Fino last.
 const STEPS: TourStep[] = [
   {
     key: 'menu',
@@ -67,22 +69,16 @@ const STEPS: TourStep[] = [
     breadcrumb: 'Top bar → Menu',
   },
   {
+    key: 'drawer-home',
+    title: 'Home',
+    body: 'Your command center — jump into any product, ask Fino, and pick up where you left off.',
+    breadcrumb: 'Open the menu → Home',
+  },
+  {
     key: 'drawer-product-markets',
     title: 'Markets',
     body: 'Your command center for every market — indices, movers, sentiment and the macro picture, all in one hub.',
     breadcrumb: 'Open the menu → Markets',
-  },
-  {
-    key: 'drawer-product-top-secret',
-    title: 'Top Secret',
-    body: 'Your monthly edge. Deep institutional analysis and the hidden setups most traders never see.',
-    breadcrumb: 'Open the menu → Top Secret',
-  },
-  {
-    key: 'drawer-product-war-zone',
-    title: 'War Zone',
-    body: 'Start every session ready — a pre-market briefing with global macro and the key levels that matter.',
-    breadcrumb: 'Open the menu → War Zone',
   },
   {
     key: 'drawer-product-ai',
@@ -91,10 +87,16 @@ const STEPS: TourStep[] = [
     breadcrumb: 'Open the menu → AI Arena',
   },
   {
-    key: 'fino',
-    title: 'Meet Fino',
-    body: 'Ask me anything — a ticker, a setup, or a macro question — and get an instant, grounded answer.',
-    breadcrumb: 'Top bar → Ask Fino',
+    key: 'drawer-product-war-zone',
+    title: 'War Zone',
+    body: 'Start every session ready — a pre-market briefing with global macro and the key levels that matter.',
+    breadcrumb: 'Open the menu → War Zone',
+  },
+  {
+    key: 'drawer-product-top-secret',
+    title: 'Top Secret',
+    body: 'Your monthly edge. Deep institutional analysis and the hidden setups most traders never see.',
+    breadcrumb: 'Open the menu → Top Secret',
   },
   {
     key: 'drawer-product-journal',
@@ -103,10 +105,10 @@ const STEPS: TourStep[] = [
     breadcrumb: 'Open the menu → Journal',
   },
   {
-    key: 'drawer-home',
-    title: 'Home',
-    body: 'Your command center — jump into any product, ask Fino, and pick up where you left off.',
-    breadcrumb: 'Open the menu → Home',
+    key: 'fino',
+    title: 'Meet Fino',
+    body: 'Ask me anything — a ticker, a setup, or a macro question — and get an instant, grounded answer.',
+    breadcrumb: 'Top bar → Ask Fino',
     isLast: true,
   },
 ];
