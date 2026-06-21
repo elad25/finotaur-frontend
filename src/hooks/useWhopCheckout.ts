@@ -109,6 +109,8 @@ export interface CheckoutParams {
   planName: PlanName;
   billingInterval: BillingInterval;
   discountCode?: string;
+  /** Set true after the user confirms forfeiting prepaid annual time on an upgrade. */
+  acknowledgeForfeit?: boolean;
 }
 
 export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
@@ -128,8 +130,9 @@ const createCheckoutSession = useCallback(async (params: {
     email?: string;
     userId?: string;
     discountCode?: string;
-  }): Promise<{ checkout_url: string } | { blocked: true; message: string } | null> => {
-    const { planId, affiliateCode, clickId, subscriptionCategory, email, userId, discountCode } = params;
+    acknowledgeForfeit?: boolean;
+  }): Promise<{ checkout_url: string } | { blocked: true; message: string } | { requires_confirmation: true; message: string } | null> => {
+    const { planId, affiliateCode, clickId, subscriptionCategory, email, userId, discountCode, acknowledgeForfeit } = params;
 
     try {
       console.log('🔐 Creating checkout session via Edge Function...', { email, userId });
@@ -151,6 +154,7 @@ const createCheckoutSession = useCallback(async (params: {
           email: email,
           user_id: userId,
           discount_code: discountCode,
+          acknowledge_forfeit: acknowledgeForfeit,
         },
       });
 
@@ -165,6 +169,14 @@ const createCheckoutSession = useCallback(async (params: {
         return {
           blocked: true,
           message: (response.data.message as string) || 'Plan change is not available right now.',
+        };
+      }
+
+      // 🛡️ Yearly-upgrade forfeit — server wants explicit confirmation first.
+      if (response.data?.requires_confirmation) {
+        return {
+          requires_confirmation: true,
+          message: (response.data.message as string) || 'Please confirm this plan change.',
         };
       }
 
@@ -273,6 +285,7 @@ const checkoutSession = await createCheckoutSession({
         email: user?.email || undefined,
         userId: user?.id || undefined,
         discountCode: discountCode || undefined,
+        acknowledgeForfeit: params.acknowledgeForfeit,
       });
 
       // 🛡️ Downgrade guard: the server blocked this plan change. Inform the
@@ -284,6 +297,21 @@ const checkoutSession = await createCheckoutSession({
           duration: 9000,
         });
         setIsLoading(false);
+        return;
+      }
+
+      // 🛡️ Yearly-upgrade forfeit — ask the user to confirm. On confirm, retry the
+      // same upgrade with acknowledgeForfeit so the server lets it through.
+      if (checkoutSession && 'requires_confirmation' in checkoutSession && checkoutSession.requires_confirmation) {
+        setIsLoading(false);
+        toast.warning('Confirm plan change', {
+          description: checkoutSession.message,
+          duration: 20000,
+          action: {
+            label: 'Continue anyway',
+            onClick: () => { void initiateCheckout({ ...params, acknowledgeForfeit: true }); },
+          },
+        });
         return;
       }
 

@@ -199,6 +199,7 @@ serve(async (req: Request) => {
       subscription_category,
       email: clientEmail,
       discount_code,
+      acknowledge_forfeit,
     } = body;
 
     if (!plan_id) {
@@ -238,7 +239,7 @@ serve(async (req: Request) => {
       if (requestedTier > 0) {
         const { data: currentProfile } = await supabase
           .from('profiles')
-          .select('account_type, subscription_status, subscription_expires_at')
+          .select('account_type, subscription_status, subscription_interval, subscription_expires_at')
           .eq('id', user.id)
           .maybeSingle();
         const currentTier = currentProfile?.account_type === 'premium' ? 2
@@ -259,6 +260,28 @@ serve(async (req: Request) => {
               current_plan: currentProfile?.account_type,
               expires_at: currentProfile?.subscription_expires_at,
               message: `You're on the ${currentName} plan, paid through ${renewsOn}. You'll keep it until then — you can switch to a lower plan when your current period ends. No action needed now.`,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // (b) UPGRADE FROM AN ACTIVE YEARLY PLAN — warn & confirm. Switching to a
+        // higher tier forfeits the prepaid annual time (Whop has no cross-membership
+        // proration). Require an explicit acknowledgement before proceeding.
+        if (isActive && notExpired && currentTier > 0 && requestedTier > currentTier
+            && currentProfile?.subscription_interval === 'yearly' && !acknowledge_forfeit) {
+          const renewsOn = new Date(currentProfile.subscription_expires_at as string)
+            .toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          const daysLeft = Math.max(0, Math.ceil(
+            (new Date(currentProfile.subscription_expires_at as string).getTime() - Date.now()) / 86400000));
+          console.log(`🛡️ Yearly upgrade forfeit warning: ${daysLeft} days left, paid through ${renewsOn}`);
+          return new Response(
+            JSON.stringify({
+              requires_confirmation: true,
+              code: 'CONFIRM_YEARLY_FORFEIT',
+              expires_at: currentProfile.subscription_expires_at,
+              days_left: daysLeft,
+              message: `You have ${daysLeft} days left on your annual plan (paid through ${renewsOn}). Upgrading now starts a new plan and that prepaid time won't carry over. Continue?`,
             }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
