@@ -192,7 +192,6 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
-      { label: 'Mentor Mode', path: '/app/journal/mentor' },
     ],
     sidebar: [
       { label: 'Dashboard',     path: '/app/journal/overview',    icon: LayoutDashboard },
@@ -219,9 +218,11 @@ export const domains: Record<string, Domain> = {
     defaultPath: '/app/floor/rooms',
     subNav: [
       { label: 'Rooms', path: '/app/floor/rooms' },
+      { label: 'Mentor Mode', path: '/app/floor/mentor' },
     ],
     sidebar: [
       { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
+      { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users },
     ],
   },
 
