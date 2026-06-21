@@ -358,13 +358,13 @@ const plans = [
   {
     id: "basic", name: "Basic", monthlyPrice: "$24.99", yearlyPrice: "$229", yearlyMonthlyEquivalent: "$19.08",
     description: "Essential tools + automatic broker sync", trialDays: 14,
-    features: ["14-day free trial", "Automatic broker sync — leading brokers supported", "25 trades / month", "Full FINOTAUR Academy (300+ lessons)", "Full performance analytics & equity curve", "Strategy builder & playbooks", "Trading sessions & tagging", "Advanced statistics & metrics", "Risk/Reward calculator", "Trade screenshots & notes", "Email support"],
+    features: ["14-day free trial", "Automatic broker sync — leading brokers supported", "25 trades / month", "1 broker connection", "Full FINOTAUR Academy (300+ lessons)", "Full performance analytics & equity curve", "Strategy builder & playbooks", "Trading sessions & tagging", "Advanced statistics & metrics", "Risk/Reward calculator", "Trade screenshots & notes", "Email support"],
     cta: "Start 14-Day Free Trial", featured: false, savings: "Yearly — save ~3 months",
   },
   {
     id: "premium", name: "Premium", monthlyPrice: "$44.99", yearlyPrice: "$409", yearlyMonthlyEquivalent: "$34.08",
     description: "Unlimited trades + your AI trading coach",
-    features: ["Everything in Basic, plus:", "Unlimited trades — never hit a cap", "Your FINOTAUR Score — one number that grades your real edge", "Daily AI briefing — ranked insights on what to fix first", "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically", "Leak Finder — AI names the exact mistake costing you money", "Behavioral & risk alerts before you tilt", "Custom AI reports & backtesting", "Priority support", "Early access to new features"],
+    features: ["Everything in Basic, plus:", "Unlimited trades — never hit a cap", "Connect multiple brokers", "Your FINOTAUR Score — one number that grades your real edge", "Daily AI briefing — ranked insights on what to fix first", "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically", "Leak Finder — AI names the exact mistake costing you money", "Behavioral & risk alerts before you tilt", "Custom AI reports & backtesting", "Priority support", "Early access to new features"],
     cta: "Get Premium", featured: true, savings: "Yearly — save ~3 months",
   },
 ];

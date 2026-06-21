@@ -58,6 +58,7 @@ const plans: Plan[] = [
     features: [
       "14-day free trial",
       "25 trades / month",
+      "1 broker connection",
       "Full performance analytics & equity curve",
       "Strategy builder & playbooks",
       "Trading sessions & tagging",
@@ -87,6 +88,7 @@ const plans: Plan[] = [
     features: [
       "Everything in Basic, plus:",
       "Unlimited trades — never hit a cap",
+      "Connect multiple brokers",
       "Your FINOTAUR Score — one number that grades your real edge",
       "Daily AI briefing — ranked insights on what to fix first",
       "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",

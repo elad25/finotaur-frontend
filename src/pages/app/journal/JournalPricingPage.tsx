@@ -34,6 +34,7 @@ const plans: Plan[] = [
     description: 'Start your trading journey',
     features: [
       'Automatic broker sync — leading brokers supported',
+      '1 broker connection',
       '15 trades to uncover your first leak',
       'Trade journal (manual + auto-import)',
       'Core performance stats',
@@ -54,6 +55,7 @@ const plans: Plan[] = [
     features: [
       'Everything in Free, plus:',
       '25 trades / month',
+      '1 broker connection',
       'Full performance analytics & equity curve',
       'Strategy builder & playbooks',
       'Trading sessions & tagging',
@@ -77,6 +79,7 @@ const plans: Plan[] = [
     features: [
       'Everything in Basic, plus:',
       'Unlimited trades — never hit a cap',
+      'Connect multiple brokers',
       'Your FINOTAUR Score — one number that grades your real edge',
       'Daily AI briefing — ranked insights on what to fix first',
       'Pattern of the Week — your biggest recurring edge or leak, surfaced automatically',
