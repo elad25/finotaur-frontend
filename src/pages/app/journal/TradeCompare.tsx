@@ -742,7 +742,7 @@ function ScenarioCaseCard({
 
 // ─── Day tab (was "Total" — includes Discipline Tax card for beta) ─────────────
 
-function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
+function DayView({ trades }: { trades: Trade[] }) {
   const agg = useMemo(() => buildAggregate(trades), [trades]);
 
   if (agg.points.length === 0) {
@@ -822,32 +822,6 @@ function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
           );
         })}
       </div>
-
-      {/* Beta only: Discipline Tax hero card */}
-      {isBeta && (
-        <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-5`}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_50%,rgba(201,166,70,0.06),transparent_40%)]" />
-          <div className="relative flex flex-col gap-ds-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold text-white">Discipline Tax</span>
-                <ShadowInfoIcon label="How much your stop adjustments cost you across all tracked trades. Positive = stop-discipline improved your outcome vs holding the original stop." />
-              </div>
-              <p className="text-[11px] text-white/42 max-w-[380px]">
-                Captures as you trade — activates once price tracking records your first intra-trade path.
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <p className="font-data text-[clamp(28px,2vw,36px)] font-semibold leading-none text-white/28 tabular-nums">
-                —
-              </p>
-              <span className="rounded-[4px] bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/38">
-                Building — captures as you trade
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Cumulative P&L line chart */}
       <div className={JOURNAL_PANEL}>
@@ -1486,7 +1460,7 @@ export default function TradeCompare() {
 
         {/* ── Day tab ── */}
         <TabsContent value="day" className="mt-ds-5">
-          {isLoading ? loadingEl : <DayView trades={closedTrades} isBeta={true} />}
+          {isLoading ? loadingEl : <DayView trades={closedTrades} />}
         </TabsContent>
 
         {/* ── Distribution tab ── */}
