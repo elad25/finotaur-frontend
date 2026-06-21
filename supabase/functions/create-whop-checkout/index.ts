@@ -199,6 +199,7 @@ serve(async (req: Request) => {
       subscription_category,
       email: clientEmail,
       discount_code,
+      acknowledge_forfeit,
     } = body;
 
     if (!plan_id) {
@@ -218,6 +219,74 @@ serve(async (req: Request) => {
         JSON.stringify({ error: "Valid email is required for checkout" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ============================================
+    // 🛡️ JOURNAL MID-CYCLE DOWNGRADE GUARD
+    // Block switching to a LOWER journal tier while a higher tier is still
+    // paid/active. Prevents (a) losing paid time on the higher plan and
+    // (b) a second membership overlapping the old one = double charge.
+    // The customer keeps their current plan until it renews, then switches.
+    // ============================================
+    if (subscription_category === 'journal') {
+      const JOURNAL_PLAN_TIER: Record<string, number> = {
+        // Basic (tier 1) — current + legacy IDs
+        'plan_H0VDCb6iD1dYQ': 1, 'plan_80ZhPpre3iRU2': 1, 'plan_2hIXaJbGP1tYN': 1, 'plan_x0jTFLe9qNv8i': 1,
+        // Premium (tier 2) — current + legacy IDs
+        'plan_N33S1p5Y3dHrK': 2, 'plan_WrjUcvrRhwWPL': 2, 'plan_v7QKxkvKIZooe': 2, 'plan_gBG436aeJxaHU': 2,
+      };
+      const requestedTier = JOURNAL_PLAN_TIER[plan_id] ?? 0;
+      if (requestedTier > 0) {
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('account_type, subscription_status, subscription_interval, subscription_expires_at')
+          .eq('id', user.id)
+          .maybeSingle();
+        const currentTier = currentProfile?.account_type === 'premium' ? 2
+          : currentProfile?.account_type === 'basic' ? 1 : 0;
+        const isActive = ['active', 'trialing', 'trial'].includes(currentProfile?.subscription_status || '');
+        const notExpired = currentProfile?.subscription_expires_at
+          ? new Date(currentProfile.subscription_expires_at) > new Date()
+          : false;
+        if (isActive && notExpired && currentTier > requestedTier) {
+          const renewsOn = new Date(currentProfile!.subscription_expires_at as string)
+            .toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          const currentName = currentProfile?.account_type === 'premium' ? 'Premium' : 'Basic';
+          console.log(`🛡️ Journal downgrade blocked: ${currentProfile?.account_type} (tier ${currentTier}) → requested tier ${requestedTier}, paid through ${renewsOn}`);
+          return new Response(
+            JSON.stringify({
+              blocked: true,
+              code: 'DOWNGRADE_BLOCKED',
+              current_plan: currentProfile?.account_type,
+              expires_at: currentProfile?.subscription_expires_at,
+              message: `You're on the ${currentName} plan, paid through ${renewsOn}. You'll keep it until then — you can switch to a lower plan when your current period ends. No action needed now.`,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // (b) UPGRADE FROM AN ACTIVE YEARLY PLAN — warn & confirm. Switching to a
+        // higher tier forfeits the prepaid annual time (Whop has no cross-membership
+        // proration). Require an explicit acknowledgement before proceeding.
+        if (isActive && notExpired && currentTier > 0 && requestedTier > currentTier
+            && currentProfile?.subscription_interval === 'yearly' && !acknowledge_forfeit) {
+          const renewsOn = new Date(currentProfile.subscription_expires_at as string)
+            .toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          const daysLeft = Math.max(0, Math.ceil(
+            (new Date(currentProfile.subscription_expires_at as string).getTime() - Date.now()) / 86400000));
+          console.log(`🛡️ Yearly upgrade forfeit warning: ${daysLeft} days left, paid through ${renewsOn}`);
+          return new Response(
+            JSON.stringify({
+              requires_confirmation: true,
+              code: 'CONFIRM_YEARLY_FORFEIT',
+              expires_at: currentProfile.subscription_expires_at,
+              days_left: daysLeft,
+              message: `You have ${daysLeft} days left on your annual plan (paid through ${renewsOn}). Upgrading now starts a new plan and that prepaid time won't carry over. Continue?`,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
     }
 
     // 🔥 v1.4.0: Check if this plan should get intro discount
