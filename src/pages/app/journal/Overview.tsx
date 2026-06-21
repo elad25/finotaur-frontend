@@ -1573,16 +1573,50 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
       ? rawBroker.charAt(0).toUpperCase() + rawBroker.slice(1)
       : 'Broker';
 
-    void queryClient.invalidateQueries({ queryKey: ['tradovate_credentials', userId] });
-    void queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
-    void queryClient.invalidateQueries({ queryKey: ['portfolios', userId] });
-    void queryClient.invalidateQueries({ queryKey: ['trades'] });
-    void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-
+    // Strip the OAuth params up-front so a manual refresh never re-triggers.
+    window.history.replaceState(null, '', window.location.pathname);
     toast.success(`${brokerLabel} connected — syncing your accounts…`);
 
-    // Strip the OAuth params so a manual refresh does not re-trigger.
-    window.history.replaceState(null, '', window.location.pathname);
+    // The server writes the broker_connections row asynchronously AFTER this
+    // redirect (hence the "syncing…" copy). A single invalidate is a race: the
+    // row may not exist yet, the popover may be closed, and with
+    // refetchOnMount:false a stale cache would not refetch on open — so the new
+    // connection would not appear until a manual page refresh. Instead we poll:
+    // force a real refetch every few seconds until an active journal connection
+    // lands (or we hit the cap). refetchQueries refreshes inactive queries too,
+    // and combined with the useTimedQuery timeout it also recovers from a
+    // request that hung during the post-OAuth token settle.
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const MAX_ATTEMPTS = 10;   // ~25s ceiling
+    const INTERVAL_MS = 2500;
+
+    const hasActiveConnection = () =>
+      queryClient
+        .getQueriesData<unknown>({ queryKey: ['broker_connections', userId] })
+        .some(([, data]) => Array.isArray(data) && data.some((c: any) => c?.is_active));
+
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      await Promise.allSettled([
+        queryClient.refetchQueries({ queryKey: ['broker_connections', userId] }),
+        queryClient.refetchQueries({ queryKey: ['portfolios', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['tradovate_credentials', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['trades'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      if (cancelled) return;
+      if (hasActiveConnection() || attempts >= MAX_ATTEMPTS) return;
+      timer = setTimeout(tick, INTERVAL_MS);
+    };
+    timer = setTimeout(tick, 0);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [userId, queryClient]);
 
   // Convert date range to days for useDashboardStats (null = ALL TIME)

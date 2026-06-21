@@ -4,7 +4,8 @@
 // Uses React Query for caching — 10k users ready.
 // ═══════════════════════════════════════════════════════════════
 
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { keepPreviousData } from '@tanstack/react-query';
+import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -250,7 +251,7 @@ export const TRADER_SCOPE_ID = '__TRADER__';
 export function usePortfolios() {
   const { id: userId } = useEffectiveUser();
 
-  const query = useQuery({
+  const query = useTimedQuery({
     queryKey: ['portfolios', userId],
     queryFn:  () => fetchPortfolios(userId!),
     enabled:  !!userId,
