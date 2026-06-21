@@ -141,6 +141,7 @@ const AccountTab = lazy(() => import("@/features/settings/tabs/AccountTab"));
 const BillingTab = lazy(() => import("@/features/settings/tabs/BillingTab"));
 const NotificationsTab = lazy(() => import("@/features/settings/tabs/NotificationsTab"));
 const SecurityTab = lazy(() => import("@/features/settings/tabs/SecurityTab"));
+const CommunityTab = lazy(() => import("@/features/settings/tabs/CommunityTab"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
@@ -813,6 +814,7 @@ function AppContent() {
             <Route path="billing" element={<SuspenseRoute><BillingTab /></SuspenseRoute>} />
             <Route path="notifications" element={<SuspenseRoute><NotificationsTab /></SuspenseRoute>} />
             <Route path="security" element={<SuspenseRoute><SecurityTab /></SuspenseRoute>} />
+            <Route path="community" element={<SuspenseRoute><CommunityTab /></SuspenseRoute>} />
           </Route>
         </Route>
 

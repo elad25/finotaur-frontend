@@ -39,6 +39,8 @@ export interface GlobalFeedItem {
   repost_count: number;
   /** The caller's current reaction, or null if none. */
   my_reaction: 'up' | 'down' | 'repost' | null;
+  /** The trader's self-tagged emotion for the attached trade; NULL when not tagged. */
+  trade_emotion: string | null;
 }
 
 /** Row returned by list_global_comments(p_post, p_limit). */
@@ -76,6 +78,17 @@ export interface DisciplineLeaderboardRow {
   emotional_rate: number; // 0..1
   trade_count: number;
   rank: number;
+}
+
+/** Row returned by user_discipline_score(p_user, p_period). Sub-indices 0..100; emotional_rate 0..1. */
+export interface UserDisciplineScore {
+  discipline_score: number;
+  risk_consistency: number;
+  process_adherence: number;
+  behavioral_stability: number;
+  outcome_consistency: number;
+  emotional_rate: number;
+  trade_count: number;
 }
 
 // ── Shared Note ───────────────────────────────────────────────────────────────
