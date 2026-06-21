@@ -73,7 +73,7 @@ function glossyStyle(tier: TierKey): GlossyResult {
 
 // ── Tier configuration (single source of truth) ──────────────
 
-const TIER_CONFIG: Record<TierKey, TierConfig> = {
+export const TIER_CONFIG: Record<TierKey, TierConfig> = {
   admin: {
     label: 'ADMIN',
     color: '#F8FAFC',
