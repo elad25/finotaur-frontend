@@ -13,7 +13,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Hash, Users, Megaphone, Trophy, BarChart2 } from 'lucide-react';
+import { ArrowLeft, Hash, Users, Megaphone, Trophy, BarChart2, Newspaper, ClipboardCheck, BookOpen } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import {
@@ -30,18 +30,24 @@ import { MemberList } from '@/components/mentorship/MemberList';
 import { InviteDialog } from '@/components/mentorship/InviteDialog';
 import { RoomLeaderboard } from '@/components/mentorship/RoomLeaderboard';
 import { RoomAnalytics } from '@/components/mentorship/RoomAnalytics';
+import { RoomFeed } from '@/components/mentorship/RoomFeed';
+import { RoomReviews } from '@/components/mentorship/RoomReviews';
+import { RoomCourses } from '@/components/mentorship/RoomCourses';
 import { toast } from '@/hooks/use-toast';
 import type { SpaceChannel, SpaceMember } from '@/types/mentorship';
 import { cn } from '@/lib/utils';
 
 // ── Top-level room tabs ───────────────────────────────────────────────────────
 
-type RoomTab = 'community' | 'leaderboard' | 'analytics';
+type RoomTab = 'community' | 'feed' | 'leaderboard' | 'analytics' | 'reviews' | 'courses';
 
 const ROOM_TABS: { id: RoomTab; label: string; icon: React.ElementType }[] = [
   { id: 'community', label: 'Community', icon: Hash },
+  { id: 'feed', label: 'Feed', icon: Newspaper },
   { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
   { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+  { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
+  { id: 'courses', label: 'Courses', icon: BookOpen },
 ];
 
 // ── Mobile tabs (inside Community tab) ───────────────────────────────────────
@@ -285,6 +291,27 @@ export default function SpaceDetail() {
       {activeRoomTab === 'analytics' && (
         <div className="flex-1 overflow-y-auto">
           <RoomAnalytics spaceId={id!} />
+        </div>
+      )}
+
+      {/* ── Feed tab ── */}
+      {activeRoomTab === 'feed' && (
+        <div className="flex-1 overflow-y-auto">
+          <RoomFeed spaceId={id!} isManager={isManager} />
+        </div>
+      )}
+
+      {/* ── Reviews tab ── */}
+      {activeRoomTab === 'reviews' && (
+        <div className="flex-1 overflow-y-auto">
+          <RoomReviews spaceId={id!} isManager={isManager} />
+        </div>
+      )}
+
+      {/* ── Courses tab ── */}
+      {activeRoomTab === 'courses' && (
+        <div className="flex-1 overflow-y-auto">
+          <RoomCourses spaceId={id!} isManager={isManager} />
         </div>
       )}
 
