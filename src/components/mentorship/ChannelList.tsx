@@ -93,7 +93,7 @@ export function ChannelList({
   onInvite,
 }: ChannelListProps) {
   return (
-    <nav aria-label="Space channels" className="flex flex-col gap-ds-5 py-ds-4">
+    <nav aria-label="Room channels" className="flex flex-col gap-ds-5 py-ds-4">
       {/* Invite button — managers only */}
       {isManager && (
         <div className="px-ds-2">

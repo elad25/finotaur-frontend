@@ -740,10 +740,10 @@ function AppContent() {
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
-        {/* MENTORSHIP — beta/admin-only (AdminBetaGate); spaces before :id to avoid wildcard clash */}
-        <Route path="mentorship" element={<Navigate to="/app/mentorship/spaces" replace />} />
-        <Route path="mentorship/spaces" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="mentorship/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+        {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
+        <Route path="floor" element={<Navigate to="/app/floor/rooms" replace />} />
+        <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />

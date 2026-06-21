@@ -59,9 +59,9 @@ function InviteBanner({ token }: InviteBannerProps) {
   async function handleAccept() {
     try {
       await mutateAsync(token);
-      toast({ title: 'Invite accepted', description: 'You have joined the space.' });
+      toast({ title: 'Invite accepted', description: 'You have joined the Room.' });
       // Clear invite param and stay on the page (list will refetch via onSuccess).
-      navigate('/app/mentorship/spaces', { replace: true });
+      navigate('/app/floor/rooms', { replace: true });
     } catch (err) {
       toast({ title: 'Could not accept invite', description: mapSpaceError(err) });
       setDismissed(true);
@@ -76,10 +76,10 @@ function InviteBanner({ token }: InviteBannerProps) {
     >
       <div className="flex-1 min-w-0">
         <p className="text-[15px] font-semibold text-ink-primary">
-          You&apos;ve been invited to a mentor space
+          You&apos;ve been invited to a Room
         </p>
         <p className="text-[13px] text-ink-secondary mt-ds-1">
-          Accept to join the space and start collaborating.
+          Accept to join the Room and start collaborating.
         </p>
       </div>
       <div className="flex items-center gap-ds-2 shrink-0">
@@ -87,7 +87,7 @@ function InviteBanner({ token }: InviteBannerProps) {
           type="button"
           onClick={() => {
             setDismissed(true);
-            navigate('/app/mentorship/spaces', { replace: true });
+            navigate('/app/floor/rooms', { replace: true });
           }}
           className="text-[13px] text-ink-tertiary hover:text-ink-secondary transition-colors duration-base"
         >
@@ -124,9 +124,9 @@ function EmptySpaces({ onCreateClick }: { onCreateClick: () => void }) {
         strokeWidth={1.5}
         aria-hidden="true"
       />
-      <p className="text-[15px] font-medium text-ink-primary">No spaces yet</p>
+      <p className="text-[15px] font-medium text-ink-primary">No Rooms yet</p>
       <p className="mt-ds-2 text-[13px] text-ink-secondary max-w-xs">
-        Create your first mentor space to start coaching, broadcasting, and building your community.
+        Create your first Room to start coaching, broadcasting, and building your community.
       </p>
       <button
         type="button"
@@ -136,7 +136,7 @@ function EmptySpaces({ onCreateClick }: { onCreateClick: () => void }) {
           'hover:text-gold-hover transition-colors duration-base',
         )}
       >
-        Create a space
+        Create a Room
       </button>
     </div>
   );
@@ -160,10 +160,10 @@ export default function Spaces() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-ds-4 mb-ds-7">
         <div>
           <h1 className="text-2xl font-bold text-ink-primary leading-tight">
-            Mentorship
+            The Floor
           </h1>
           <p className="mt-ds-2 text-[14px] text-ink-secondary">
-            Your mentoring spaces — run a community, broadcast, and coach.
+            Your trading communities — run a Room, broadcast, and coach.
           </p>
         </div>
 
@@ -175,7 +175,7 @@ export default function Spaces() {
           onClick={() => setDialogOpen(true)}
           className="self-start sm:self-auto shrink-0"
         >
-          Create a space
+          Create a Room
         </Button>
       </div>
 
@@ -188,7 +188,7 @@ export default function Spaces() {
           id="spaces-heading"
           className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted mb-ds-4"
         >
-          Your spaces
+          Your Rooms
         </h2>
 
         {isLoading ? (
@@ -202,7 +202,7 @@ export default function Spaces() {
               <SpaceCard
                 key={space.space_id}
                 space={space}
-                onClick={() => navigate(`/app/mentorship/${space.space_id}`)}
+                onClick={() => navigate(`/app/floor/rooms/${space.space_id}`)}
               />
             ))}
           </div>

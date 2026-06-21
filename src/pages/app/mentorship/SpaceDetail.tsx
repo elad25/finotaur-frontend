@@ -13,7 +13,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Hash, Users, Megaphone } from 'lucide-react';
+import { ArrowLeft, Hash, Users, Megaphone, Trophy, BarChart2 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import {
@@ -28,11 +28,23 @@ import { ChannelList } from '@/components/mentorship/ChannelList';
 import { MessageList } from '@/components/mentorship/MessageList';
 import { MemberList } from '@/components/mentorship/MemberList';
 import { InviteDialog } from '@/components/mentorship/InviteDialog';
+import { RoomLeaderboard } from '@/components/mentorship/RoomLeaderboard';
+import { RoomAnalytics } from '@/components/mentorship/RoomAnalytics';
 import { toast } from '@/hooks/use-toast';
 import type { SpaceChannel, SpaceMember } from '@/types/mentorship';
 import { cn } from '@/lib/utils';
 
-// ── Mobile tabs ───────────────────────────────────────────────────────────────
+// ── Top-level room tabs ───────────────────────────────────────────────────────
+
+type RoomTab = 'community' | 'leaderboard' | 'analytics';
+
+const ROOM_TABS: { id: RoomTab; label: string; icon: React.ElementType }[] = [
+  { id: 'community', label: 'Community', icon: Hash },
+  { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
+  { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+];
+
+// ── Mobile tabs (inside Community tab) ───────────────────────────────────────
 
 type MobileTab = 'channels' | 'messages' | 'members';
 
@@ -91,6 +103,7 @@ export default function SpaceDetail() {
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('messages');
+  const [activeRoomTab, setActiveRoomTab] = useState<RoomTab>('community');
 
   // Set default channel once channels load.
   useEffect(() => {
@@ -153,10 +166,10 @@ export default function SpaceDetail() {
           {spaceError ? mapSpaceError(spaceError) : 'Space not found.'}
         </p>
         <Link
-          to="/app/mentorship/spaces"
+          to="/app/floor/rooms"
           className="text-[13px] text-gold-primary hover:text-gold-hover underline underline-offset-2 transition-colors duration-base"
         >
-          Back to spaces
+          Back to Rooms
         </Link>
       </div>
     );
@@ -216,9 +229,9 @@ export default function SpaceDetail() {
         )}
       >
         <Link
-          to="/app/mentorship/spaces"
+          to="/app/floor/rooms"
           className="flex items-center justify-center h-8 w-8 rounded-[6px] text-ink-tertiary hover:text-ink-primary hover:bg-surface-2 transition-colors duration-base"
-          aria-label="Back to spaces"
+          aria-label="Back to Rooms"
         >
           <ArrowLeft size={16} aria-hidden="true" />
         </Link>
@@ -235,78 +248,123 @@ export default function SpaceDetail() {
         </div>
       </header>
 
-      {/* ── Desktop: 3-column layout ── */}
-      <div className="flex-1 hidden md:grid grid-cols-[220px_1fr_220px] overflow-hidden">
-        {/* LEFT — Channel rail */}
-        <aside
-          className="overflow-y-auto border-r border-border-ds-subtle px-ds-2"
-          aria-label="Channel list"
-        >
-          {channelListPanel}
-        </aside>
+      {/* ── Room-level tab bar (Community / Leaderboard / Analytics) ── */}
+      <nav
+        className="shrink-0 flex items-center border-b border-border-ds-subtle px-ds-4"
+        aria-label="Room sections"
+      >
+        {ROOM_TABS.map(({ id: tabId, label, icon: Icon }) => (
+          <button
+            key={tabId}
+            type="button"
+            onClick={() => setActiveRoomTab(tabId)}
+            className={cn(
+              'flex items-center gap-[6px] px-ds-3 py-[10px]',
+              'font-sans text-[13px] font-medium',
+              'transition-colors duration-base ease-out',
+              'border-b-2 -mb-[1px]',
+              activeRoomTab === tabId
+                ? 'text-ink-primary border-gold-primary'
+                : 'text-ink-tertiary border-transparent hover:text-ink-secondary',
+            )}
+          >
+            <Icon size={14} aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </nav>
 
-        {/* CENTER — Messages */}
-        <main className="flex flex-col overflow-hidden">
-          {activeChannel && (
-            <div className="shrink-0 flex items-center gap-ds-2 px-ds-4 py-[10px] border-b border-border-ds-subtle">
-              <span className="text-[13px] font-medium text-ink-secondary">
-                {activeChannel.name}
-              </span>
-            </div>
-          )}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {messagePanel}
-          </div>
-        </main>
-
-        {/* RIGHT — Members */}
-        <aside
-          className="overflow-y-auto border-l border-border-ds-subtle"
-          aria-label="Member list"
-        >
-          {memberPanel}
-        </aside>
-      </div>
-
-      {/* ── Mobile: tabbed layout ── */}
-      <div className="flex-1 flex flex-col overflow-hidden md:hidden">
-        {/* Tab bar */}
-        <nav
-          className="shrink-0 flex border-b border-border-ds-subtle"
-          aria-label="Space navigation"
-        >
-          {MOBILE_TABS.map(({ id: tabId, label, icon: Icon }) => (
-            <button
-              key={tabId}
-              type="button"
-              onClick={() => setMobileTab(tabId)}
-              className={cn(
-                'flex-1 flex flex-col items-center gap-[2px] py-[10px]',
-                'text-[11px] font-medium transition-colors duration-base ease-out',
-                mobileTab === tabId
-                  ? 'text-gold-primary border-b-2 border-gold-primary -mb-[1px]'
-                  : 'text-ink-tertiary hover:text-ink-secondary',
-              )}
-            >
-              <Icon size={14} aria-hidden="true" />
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Active tab content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {mobileTab === 'channels' && (
-            <div className="overflow-y-auto px-ds-2">{channelListPanel}</div>
-          )}
-          {mobileTab === 'messages' && (
-            <div className="flex-1 flex flex-col overflow-hidden">{messagePanel}</div>
-          )}
-          {mobileTab === 'members' && (
-            <div className="overflow-y-auto">{memberPanel}</div>
-          )}
+      {/* ── Leaderboard tab ── */}
+      {activeRoomTab === 'leaderboard' && (
+        <div className="flex-1 overflow-y-auto">
+          <RoomLeaderboard spaceId={id!} />
         </div>
-      </div>
+      )}
+
+      {/* ── Analytics tab ── */}
+      {activeRoomTab === 'analytics' && (
+        <div className="flex-1 overflow-y-auto">
+          <RoomAnalytics spaceId={id!} />
+        </div>
+      )}
+
+      {/* ── Community tab: existing 3-column + mobile layout ── */}
+      {activeRoomTab === 'community' && (
+        <>
+          {/* ── Desktop: 3-column layout ── */}
+          <div className="flex-1 hidden md:grid grid-cols-[220px_1fr_220px] overflow-hidden">
+            {/* LEFT — Channel rail */}
+            <aside
+              className="overflow-y-auto border-r border-border-ds-subtle px-ds-2"
+              aria-label="Channel list"
+            >
+              {channelListPanel}
+            </aside>
+
+            {/* CENTER — Messages */}
+            <main className="flex flex-col overflow-hidden">
+              {activeChannel && (
+                <div className="shrink-0 flex items-center gap-ds-2 px-ds-4 py-[10px] border-b border-border-ds-subtle">
+                  <span className="text-[13px] font-medium text-ink-secondary">
+                    {activeChannel.name}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {messagePanel}
+              </div>
+            </main>
+
+            {/* RIGHT — Members */}
+            <aside
+              className="overflow-y-auto border-l border-border-ds-subtle"
+              aria-label="Member list"
+            >
+              {memberPanel}
+            </aside>
+          </div>
+
+          {/* ── Mobile: tabbed layout ── */}
+          <div className="flex-1 flex flex-col overflow-hidden md:hidden">
+            {/* Tab bar */}
+            <nav
+              className="shrink-0 flex border-b border-border-ds-subtle"
+              aria-label="Space navigation"
+            >
+              {MOBILE_TABS.map(({ id: tabId, label, icon: Icon }) => (
+                <button
+                  key={tabId}
+                  type="button"
+                  onClick={() => setMobileTab(tabId)}
+                  className={cn(
+                    'flex-1 flex flex-col items-center gap-[2px] py-[10px]',
+                    'text-[11px] font-medium transition-colors duration-base ease-out',
+                    mobileTab === tabId
+                      ? 'text-gold-primary border-b-2 border-gold-primary -mb-[1px]'
+                      : 'text-ink-tertiary hover:text-ink-secondary',
+                  )}
+                >
+                  <Icon size={14} aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </nav>
+
+            {/* Active tab content */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {mobileTab === 'channels' && (
+                <div className="overflow-y-auto px-ds-2">{channelListPanel}</div>
+              )}
+              {mobileTab === 'messages' && (
+                <div className="flex-1 flex flex-col overflow-hidden">{messagePanel}</div>
+              )}
+              {mobileTab === 'members' && (
+                <div className="overflow-y-auto">{memberPanel}</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Invite dialog ── */}
       <InviteDialog

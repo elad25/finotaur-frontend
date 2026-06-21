@@ -78,3 +78,36 @@ export interface SpaceInvite {
   expires_at: string;
   used_at: string | null;
 }
+
+// ── Analytics / Leaderboard types ─────────────────────────────────────────────
+
+/** Period options for space analytics and leaderboard RPCs. */
+export type RoomPeriod = 'this_month' | 'this_year' | 'all';
+
+/** Row returned by space_leaderboard(p_space, p_period) */
+export interface LeaderboardRow {
+  user_id: string;
+  display_name: string | null;
+  net_pnl: number;
+  win_rate: number;  // 0..1
+  trade_count: number;
+  rank: number;
+}
+
+/** Single row returned by space_analytics_summary(p_space, p_period) — take [0] */
+export interface AnalyticsSummary {
+  space_net_pnl: number;
+  avg_win_rate: number;  // 0..1
+  member_count: number;
+  needs_attention: number;
+}
+
+/** Row returned by space_member_performance(p_space, p_period) */
+export interface MemberPerformanceRow {
+  user_id: string;
+  display_name: string | null;
+  net_pnl: number;
+  win_rate: number;  // 0..1
+  trade_count: number;
+  needs_attention: boolean;
+}

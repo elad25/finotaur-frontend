@@ -35,7 +35,7 @@ import type {
 export function mapSpaceError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? '');
   if (message.includes('not_premium'))
-    return 'A Premium (FINOTAUR) plan is required to create a mentor space.';
+    return 'A Premium (FINOTAUR) plan is required to create a Room.';
   if (message.includes('slug_taken')) return 'That space URL is already taken.';
   if (message.includes('access_denied')) return 'You do not have access to do that.';
   if (message.includes('invite_not_found')) return 'Invite not found.';

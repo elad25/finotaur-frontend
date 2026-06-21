@@ -158,7 +158,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
         slug: slug.trim(),
         description: description.trim() || undefined,
       });
-      toast({ title: 'Space created', description: `"${name.trim()}" is ready.` });
+      toast({ title: 'Room created', description: `"${name.trim()}" is ready.` });
       onOpenChange(false);
     } catch (err) {
       setSubmitError(mapSpaceError(err));
@@ -180,10 +180,10 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
       >
         <DialogHeader>
           <DialogTitle className="text-[18px] font-semibold text-ink-primary">
-            Create a mentor space
+            Create a Room
           </DialogTitle>
           <DialogDescription className="text-[14px] text-ink-secondary mt-ds-1">
-            A space is your community hub — channels, announcements, and coaching in one place.
+            A Room is your community hub — channels, announcements, and coaching in one place.
           </DialogDescription>
         </DialogHeader>
 
@@ -198,7 +198,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
             <p className="text-[13px] text-ink-secondary">
               A{' '}
               <span className="text-gold-primary font-medium">FINOTAUR (Premium) plan</span>{' '}
-              is required to create a mentor space.{' '}
+              is required to create a Room.{' '}
               <Link
                 to="/app/all-markets/pricing"
                 className="text-gold-primary underline underline-offset-2 hover:text-gold-hover transition-colors duration-base"
@@ -214,7 +214,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
         <form onSubmit={handleSubmit} className="mt-ds-5 flex flex-col gap-ds-4" noValidate>
           {/* Name */}
           <Field
-            label="Space name"
+            label="Room name"
             id={nameId}
             error={nameError}
           >
@@ -307,7 +307,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
               disabled={isPending}
               showArrow={false}
             >
-              {isPending ? 'Creating…' : 'Create space'}
+              {isPending ? 'Creating…' : 'Create Room'}
             </Button>
           </DialogFooter>
         </form>

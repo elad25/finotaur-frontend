@@ -135,7 +135,7 @@ export function MemberList({
   async function handleRemove(member: SpaceMember) {
     const label = member.display_name || member.email;
     const confirmed = window.confirm(
-      `Remove ${label} from this space? This action cannot be undone.`,
+      `Remove ${label} from this Room? This action cannot be undone.`,
     );
     if (!confirmed) return;
     try {

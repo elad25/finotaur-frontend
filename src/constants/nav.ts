@@ -213,15 +213,15 @@ export const domains: Record<string, Domain> = {
   // ===========================================================================
   mentorship: {
     id: 'mentorship',
-    label: 'Mentorship',
+    label: 'The Floor',
     locked: false,
     beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
-    defaultPath: '/app/mentorship/spaces',
+    defaultPath: '/app/floor/rooms',
     subNav: [
-      { label: 'Spaces', path: '/app/mentorship/spaces' },
+      { label: 'Rooms', path: '/app/floor/rooms' },
     ],
     sidebar: [
-      { label: 'Spaces', path: '/app/mentorship/spaces', icon: GraduationCap },
+      { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
     ],
   },
 

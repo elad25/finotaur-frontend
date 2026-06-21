@@ -335,7 +335,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'mentorship': [
-    { label: 'Spaces', path: '/app/mentorship/spaces', icon: GraduationCap, beta: true },
+    { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
   ],
 
   admin: [
@@ -471,7 +471,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
     if (path.startsWith('/app/connections')) return 'connections';
-    if (path.startsWith('/app/mentorship')) return 'mentorship';
+    if (path.startsWith('/app/floor')) return 'mentorship';
     if (path.startsWith('/app/journal')) return 'journal';
 
     // Default
