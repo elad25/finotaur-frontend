@@ -27,6 +27,7 @@ import {
   type SubscriptionCategory,
 } from '@/lib/whop-config';
 import { toast } from 'sonner';
+import { confirmPlanChange } from '@/components/billing/PlanChangeConfirm';
 
 // ============================================
 // STORAGE KEYS - Must match useAffiliateDiscount!
@@ -292,11 +293,13 @@ const checkoutSession = await createCheckoutSession({
       // user their current plan stays active until renewal, and STOP here —
       // do not fall through to the direct-URL fallback below.
       if (checkoutSession && 'blocked' in checkoutSession && checkoutSession.blocked) {
-        toast.info('No change needed yet', {
-          description: checkoutSession.message,
-          duration: 9000,
-        });
         setIsLoading(false);
+        void confirmPlanChange({
+          title: 'Keep your current plan',
+          message: checkoutSession.message,
+          tone: 'info',
+          cancelLabel: 'Got it',
+        });
         return;
       }
 
@@ -304,14 +307,16 @@ const checkoutSession = await createCheckoutSession({
       // same upgrade with acknowledgeForfeit so the server lets it through.
       if (checkoutSession && 'requires_confirmation' in checkoutSession && checkoutSession.requires_confirmation) {
         setIsLoading(false);
-        toast.warning('Confirm plan change', {
-          description: checkoutSession.message,
-          duration: 20000,
-          action: {
-            label: 'Continue anyway',
-            onClick: () => { void initiateCheckout({ ...params, acknowledgeForfeit: true }); },
-          },
+        const confirmed = await confirmPlanChange({
+          title: 'Confirm plan change',
+          message: checkoutSession.message,
+          confirmLabel: 'Continue anyway',
+          cancelLabel: 'Keep my annual plan',
+          tone: 'warn',
         });
+        if (confirmed) {
+          void initiateCheckout({ ...params, acknowledgeForfeit: true });
+        }
         return;
       }
 

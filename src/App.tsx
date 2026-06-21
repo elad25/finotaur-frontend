@@ -2,6 +2,7 @@
 // 🔥 v7.0 FIX: BacktestRoute & AffiliateRoute moved to separate files to fix useAuth context error
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { PlanChangeConfirmHost } from "@/components/billing/PlanChangeConfirm";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppQueryProvider } from "@/providers/QueryProvider";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
@@ -835,6 +836,7 @@ export const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <PlanChangeConfirmHost />
           <BrowserRouter>
             <ScrollToTop />
             <AuthProvider>
