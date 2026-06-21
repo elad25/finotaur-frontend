@@ -1457,10 +1457,10 @@ export default function TradeCompare() {
 
       {/* ── BETA: 3-tab Shadow v2 experience ── */}
       {hasBetaAccess && (
-        <Tabs defaultValue="distribution">
+        <Tabs defaultValue="day">
           <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
-            <TabsTrigger value="distribution" className={triggerClass}>Distribution</TabsTrigger>
             <TabsTrigger value="day" className={triggerClass}>Day</TabsTrigger>
+            <TabsTrigger value="distribution" className={triggerClass}>Distribution</TabsTrigger>
             <TabsTrigger value="trade" className={triggerClass}>Trade</TabsTrigger>
           </TabsList>
 
