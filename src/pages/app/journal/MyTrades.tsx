@@ -1574,14 +1574,14 @@ const stats = useMemo<Stats>(() => {
 
   const handleRateTrade = useCallback(async (tradeId: string, value: number) => {
     const newRating = value === 0 ? null : value;
+    // useUpdateTrade's onMutate patches the trades cache synchronously, so the
+    // star fills instantly; the DB write + rollback-on-error run in the background.
     try {
-      const { error } = await supabase.from('trades').update({ trade_rating: newRating }).eq('id', tradeId);
-      if (error) throw error;
-      await queryClient.invalidateQueries({ queryKey: ['trades'] });
+      await updateTradeMutation({ id: tradeId, data: { trade_rating: newRating } });
     } catch {
       toast.error('Could not save rating');
     }
-  }, [queryClient]);
+  }, [updateTradeMutation]);
 
   const handleSetR = useCallback(async () => {
     if (!selectedTrade) return;
