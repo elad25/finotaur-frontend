@@ -128,7 +128,7 @@ const createCheckoutSession = useCallback(async (params: {
     email?: string;
     userId?: string;
     discountCode?: string;
-  }): Promise<{ checkout_url: string } | null> => {
+  }): Promise<{ checkout_url: string } | { blocked: true; message: string } | null> => {
     const { planId, affiliateCode, clickId, subscriptionCategory, email, userId, discountCode } = params;
 
     try {
@@ -157,6 +157,15 @@ const createCheckoutSession = useCallback(async (params: {
       if (response.error) {
         console.error('❌ Edge Function error:', response.error);
         return null;
+      }
+
+      // 🛡️ Mid-cycle downgrade blocked by the server — surface the message and
+      // do NOT proceed (caller must not fall back to a direct checkout URL).
+      if (response.data?.blocked) {
+        return {
+          blocked: true,
+          message: (response.data.message as string) || 'Plan change is not available right now.',
+        };
       }
 
       if (response.data?.checkout_url) {
@@ -265,6 +274,18 @@ const checkoutSession = await createCheckoutSession({
         userId: user?.id || undefined,
         discountCode: discountCode || undefined,
       });
+
+      // 🛡️ Downgrade guard: the server blocked this plan change. Inform the
+      // user their current plan stays active until renewal, and STOP here —
+      // do not fall through to the direct-URL fallback below.
+      if (checkoutSession && 'blocked' in checkoutSession && checkoutSession.blocked) {
+        toast.info('No change needed yet', {
+          description: checkoutSession.message,
+          duration: 9000,
+        });
+        setIsLoading(false);
+        return;
+      }
 
       let checkoutUrl: string;
 
