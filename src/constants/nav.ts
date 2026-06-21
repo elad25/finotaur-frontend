@@ -569,7 +569,9 @@ export const domainOrder = [
   'war-zone',
   'top-secret',
   'journal',
-  'mentorship',     // hidden for non-beta; Early Access (AdminBetaGate)
+  // 'mentorship' (The Floor) intentionally NOT in the Drawer — it is reached
+  // via the beta-gated "The Floor" tab in the Journal subNav. Domain def,
+  // routes, subNav, sidebar, and AdminBetaGate all remain intact.
   'copy-trade',     // hidden for non-beta; admin-only in practice
   'trading-arena',  // hidden for non-beta; full-screen workstation (Phase 0)
   // Removed from Drawer (routes/pages/domain defs preserved):
