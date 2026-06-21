@@ -2185,12 +2185,12 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                   <div className="rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-900/70 to-zinc-900/40 shadow-lg overflow-hidden">
                     {/* gold top accent */}
                     <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#C9A646]/70 to-transparent" />
-                    <div className="p-4 space-y-4">
+                    <div className="p-3.5 space-y-2.5">
 
                       {/* HERO ROW */}
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                         <div>
-                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                          <div className="text-[11px] text-zinc-500 mb-0.5 flex items-center gap-1">
                             <DollarSign className="w-3 h-3" />
                             P&L
                           </div>
@@ -2206,7 +2206,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                          <div className="text-[11px] text-zinc-500 mb-0.5 flex items-center gap-1">
                             <Target className="w-3 h-3" />
                             Outcome
                           </div>
@@ -2220,7 +2220,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                          <div className="text-[11px] text-zinc-500 mb-0.5 flex items-center gap-1">
                             <Award className="w-3 h-3" />
                             Actual R
                           </div>
@@ -2233,7 +2233,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                          <div className="text-[11px] text-zinc-500 mb-0.5 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             Duration
                           </div>
@@ -2243,7 +2243,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                         </div>
                         {selectedTrade.quality_tag && (
                           <div>
-                            <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                            <div className="text-[11px] text-zinc-500 mb-0.5 flex items-center gap-1">
                               <Award className="w-3 h-3" />
                               Quality
                             </div>
@@ -2257,37 +2257,43 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                         )}
                       </div>
 
+                      {/* RATING SECTION */}
+                      <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
+                        <span className="text-[11px] text-zinc-500 uppercase tracking-wider">Rating</span>
+                        <StarRating value={selectedTrade.trade_rating ?? null} onChange={(v) => handleRateTrade(selectedTrade.id, v)} size="md" />
+                      </div>
+
                       {/* PRICES SECTION */}
-                      <div className="border-t border-zinc-800/60 pt-3">
+                      <div className="border-t border-zinc-800/60 pt-2.5">
                         <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 flex items-center gap-2">
                           {selectedTrade.input_mode === 'risk-only' ? 'Risk Details' : 'Prices'}
                           {selectedTrade.input_mode === 'risk-only' && (
                             <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">RISK-ONLY</span>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                           {selectedTrade.input_mode === 'risk-only' ? (
                             <>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Risk Amount</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Risk Amount</div>
                                 <div className="text-base font-semibold text-red-400">
                                   ${formatNumber(selectedTrade.risk_usd || 0, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Target Amount</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Target Amount</div>
                                 <div className="text-base font-semibold text-emerald-400">
                                   ${formatNumber(selectedTrade.reward_usd || 0, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Actual Result</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Actual Result</div>
                                 <div className={`text-base font-semibold ${(selectedTrade.pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                   {(selectedTrade.pnl || 0) >= 0 ? '+' : ''}${formatNumber(selectedTrade.pnl || 0, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">R:R Ratio</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">R:R Ratio</div>
                                 <div className="text-base font-semibold text-yellow-400">
                                   1:{formatNumber(selectedTrade.rr || 0, 2)}
                                 </div>
@@ -2296,13 +2302,13 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           ) : (
                             <>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Entry Price</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Entry Price</div>
                                 <div className="text-base font-semibold text-white">
                                   ${formatNumber(selectedTrade.entry_price, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Stop Loss</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Stop Loss</div>
                                 <div className="text-base font-semibold text-red-400">
                                   {selectedTrade.stop_price
                                     ? `$${formatNumber(selectedTrade.stop_price, 2)}`
@@ -2310,7 +2316,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Take Profit</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Take Profit</div>
                                 <div className="text-base font-semibold text-emerald-400">
                                   {selectedTrade.take_profit_price
                                     ? `$${formatNumber(selectedTrade.take_profit_price, 2)}`
@@ -2318,7 +2324,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Exit Price</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Exit Price</div>
                                 <div className="text-base font-semibold text-zinc-300">
                                   {selectedTrade.exit_price
                                     ? `$${formatNumber(selectedTrade.exit_price, 2)}`
@@ -2331,7 +2337,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                       </div>
 
                       {/* RISK SECTION */}
-                      <div className="border-t border-zinc-800/60 pt-3">
+                      <div className="border-t border-zinc-800/60 pt-2.5">
                         <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 flex items-center gap-2">
                           Risk
                           {selectedTrade.input_mode === 'risk-only' && (
@@ -2345,29 +2351,29 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                             </Badge>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                           {selectedTrade.input_mode === 'risk-only' ? (
                             <>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Risk (USD)</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Risk (USD)</div>
                                 <div className="text-base font-bold text-red-400">
                                   ${formatNumber(selectedTrade.risk_usd || 0, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Target (USD)</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Target (USD)</div>
                                 <div className="text-base font-bold text-emerald-400">
                                   ${formatNumber(selectedTrade.reward_usd || 0, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Planned R:R</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Planned R:R</div>
                                 <div className="text-base font-semibold text-yellow-400">
                                   1:{formatNumber(selectedTrade.rr || 0, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Actual R</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Actual R</div>
                                 <div className={`text-base font-bold ${
                                   actualR && actualR > 0 ? 'text-emerald-400' :
                                   actualR && actualR < 0 ? 'text-red-400' :
@@ -2380,7 +2386,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                           ) : (
                             <>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Risk per Point</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Risk per Point</div>
                                 <div className="text-base font-semibold text-red-400">
                                   {selectedTrade.stop_price
                                     ? `$${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}`
@@ -2388,25 +2394,25 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Multiplier</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Multiplier</div>
                                 <div className="text-base font-bold text-blue-400">
                                   {multiplier}x
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Quantity</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Quantity</div>
                                 <div className="text-base font-semibold text-white">
                                   {selectedTrade.quantity}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Total Risk</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Total Risk</div>
                                 <div className="text-base font-bold text-red-400">
                                   ${formatNumber(riskUSD, 2)}
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[11px] text-zinc-500 mb-1">Fees</div>
+                                <div className="text-[11px] text-zinc-500 mb-0.5">Fees</div>
                                 <div className="text-base font-semibold text-zinc-300">
                                   ${formatNumber(selectedTrade.fees, 2)}
                                 </div>
@@ -2526,7 +2532,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                         )}
 
                         {/* MAX DRAWDOWN */}
-                        <div className="border-t border-zinc-800/60 pt-3 mt-3 flex items-center justify-between">
+                        <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
                           <span className="text-[11px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
                             Max Drawdown
                             <span title="Maximum adverse excursion — requires intra-trade price data (coming soon)" className="cursor-help text-zinc-600">ⓘ</span>
@@ -2541,11 +2547,6 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                         </div>
                       </div>
 
-                      {/* RATING SECTION */}
-                      <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
-                        <span className="text-[11px] text-zinc-500 uppercase tracking-wider">Rating</span>
-                        <StarRating value={selectedTrade.trade_rating ?? null} onChange={(v) => handleRateTrade(selectedTrade.id, v)} size="md" />
-                      </div>
 
                     </div>
                   </div>
