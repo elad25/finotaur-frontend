@@ -47,6 +47,7 @@ export interface ProfileData {
   subscription_status: string | null;
   subscription_interval: string | null;
   subscription_expires_at: string | null;
+  subscription_cancel_at_period_end: boolean;
   is_in_trial: boolean;
   trial_ends_at: string | null;
 
@@ -159,6 +160,7 @@ export const PROFILE_SELECT = `
           subscription_status,
           subscription_interval,
           subscription_expires_at,
+          subscription_cancel_at_period_end,
           is_in_trial,
           trial_ends_at,
           newsletter_enabled,
@@ -228,9 +230,9 @@ export function computeNextBilling(anchorISO: string | null | undefined, interva
 export function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platform') {
   if (type === 'journal') {
     const plans: Record<string, { name: string; price: string; color: string }> = {
-      free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-      basic: { name: 'Basic', price: '$24.99/mo', color: 'bg-[#A85B1E]/20 text-[#CD7F32] border-[#CD7F32]/30' },
-      premium: { name: 'Premium', price: '$39.99/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
+      free: { name: 'Free', price: '$0', color: 'bg-black/60 text-zinc-300 border-zinc-600/50' },
+      basic: { name: 'Basic', price: '$24.99/mo', color: 'bg-[#CD7F32]/15 text-[#CD7F32] border-[#CD7F32]/40' },
+      premium: { name: 'Premium', price: '$39.99/mo', color: 'bg-[#D4D4D8]/15 text-[#D4D4D8] border-[#D4D4D8]/40' },
     };
     return plans[plan || 'free'] || plans.free;
   }
@@ -239,10 +241,10 @@ export function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 
   const normalizedPlan = (plan || 'free').replace('platform_', '');
 
   const plans: Record<string, { name: string; price: string; color: string }> = {
-    free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-    core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
-    enterprise: { name: 'Enterprise', price: '$500/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
+    free: { name: 'Free', price: '$0', color: 'bg-black/60 text-zinc-300 border-zinc-600/50' },
+    core: { name: 'Core', price: '$59/mo', color: 'bg-[#A855F7]/15 text-[#A855F7] border-[#A855F7]/40' },
+    finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-[#C9A646]/15 text-[#C9A646] border-[#C9A646]/40' },
+    enterprise: { name: 'Enterprise', price: '$500/mo', color: 'bg-[#34D399]/15 text-[#34D399] border-[#34D399]/40' },
   };
   return plans[normalizedPlan] || plans.free;
 }
