@@ -16,7 +16,7 @@ export function MentorViewBanner() {
 
   const handleExit = () => {
     exitMentorView();
-    navigate('/app/journal/mentor');
+    navigate('/app/floor/mentor');
   };
 
   return (
