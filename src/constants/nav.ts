@@ -209,6 +209,23 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
+  // MENTORSHIP — beta/admin-only (Early Access)
+  // ===========================================================================
+  mentorship: {
+    id: 'mentorship',
+    label: 'The Floor',
+    locked: false,
+    beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
+    defaultPath: '/app/floor/rooms',
+    subNav: [
+      { label: 'Rooms', path: '/app/floor/rooms' },
+    ],
+    sidebar: [
+      { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
+    ],
+  },
+
+  // ===========================================================================
   // TRADE COPIER — hidden from drawer (beta/admin-only); kept for DomainGuard
   // ===========================================================================
   'copy-trade': {
@@ -550,6 +567,7 @@ export const domainOrder = [
   'war-zone',
   'top-secret',
   'journal',
+  'mentorship',     // hidden for non-beta; Early Access (AdminBetaGate)
   'copy-trade',     // hidden for non-beta; admin-only in practice
   'trading-arena',  // hidden for non-beta; full-screen workstation (Phase 0)
   // Removed from Drawer (routes/pages/domain defs preserved):

@@ -108,7 +108,8 @@ type EnvironmentType =
   | 'markets'
   | 'war-zone'
   | 'top-secret'
-  | 'trading-arena';
+  | 'trading-arena'
+  | 'mentorship';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -333,6 +334,10 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Transactions', path: '/app/funding/transactions', icon: FileText },
   ],
 
+  'mentorship': [
+    { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
+  ],
+
   admin: [
     // Admin nav migrated from the retired /app/journal/admin/* prefix to the
     // unified Admin CRM at /app/admin/* (AdminCRMShell). Each target verified
@@ -466,8 +471,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
     if (path.startsWith('/app/connections')) return 'connections';
+    if (path.startsWith('/app/floor')) return 'mentorship';
     if (path.startsWith('/app/journal')) return 'journal';
-    
+
     // Default
     return 'journal';
   };

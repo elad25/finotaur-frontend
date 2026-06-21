@@ -218,6 +218,10 @@ const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 
+// Mentorship
+const MentorshipSpaces = lazy(() => import("@/pages/app/mentorship/Spaces"));
+const SpaceDetail = lazy(() => import("@/pages/app/mentorship/SpaceDetail"));
+
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
 const BacktestOverview = lazy(() => import("@/pages/app/journal/backtest/Overview"));
@@ -736,6 +740,11 @@ function AppContent() {
 <Route path="journal/mentor" element={<JournalRoute><Mentor /></JournalRoute>} />
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
+
+        {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
+        <Route path="floor" element={<Navigate to="/app/floor/rooms" replace />} />
+        <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
