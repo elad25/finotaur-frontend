@@ -664,6 +664,82 @@ function TotalTooltip({ active, payload, label }: TotalTooltipProps) {
   );
 }
 
+// ─── Scenario case card (small-multiple for DayView) ─────────────────────────
+
+interface ScenarioCaseCardProps {
+  title: string;
+  color: string;
+  isActual: boolean;
+  endValue: number;
+  deltaVsActual: number;
+  points: Array<{ label: string; actual: number; stop: number; target: number; breakeven: number }>;
+  dataKey: 'actual' | 'stop' | 'target' | 'breakeven';
+}
+
+function ScenarioCaseCard({
+  title,
+  color,
+  isActual,
+  endValue,
+  deltaVsActual,
+  points,
+  dataKey,
+}: ScenarioCaseCardProps) {
+  return (
+    <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4 flex flex-col gap-ds-3`}>
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[13px] font-semibold text-white leading-snug">{title}</span>
+        <div className="flex flex-col items-end gap-0.5 shrink-0">
+          <span className="font-data text-[13px] font-semibold tabular-nums text-white/82">
+            {fmtPnl(endValue)}
+          </span>
+          {!isActual && (
+            <span className="text-[11px] text-white/55">
+              {fmtDelta(deltaVsActual)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Mini chart */}
+      <div style={{ width: '100%', height: 150 }}>
+        <ResponsiveContainer>
+          <LineChart data={points} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeWidth={1} />
+            <XAxis dataKey="label" hide />
+            <YAxis hide />
+            <Tooltip content={<TotalTooltip />} />
+            {/* For non-actual cards: faint gold actual reference line */}
+            {!isActual && (
+              <Line
+                type="monotone"
+                dataKey="actual"
+                stroke={COLOR_GOLD}
+                strokeOpacity={0.28}
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={true}
+              />
+            )}
+            {/* The case's own line */}
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke={color}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 3 }}
+              isAnimationActive={true}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 // ─── Day tab (was "Total" — includes Discipline Tax card for beta) ─────────────
 
 function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
@@ -845,6 +921,42 @@ function DayView({ trades, isBeta }: { trades: Trade[]; isBeta: boolean }) {
               />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Scenario cases — small-multiples grid */}
+      <div className="flex flex-col gap-ds-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] font-semibold text-white">
+            What if you&apos;d managed every trade one way
+          </span>
+          <ShadowInfoIcon label="Each card replays all your closed trades under a single management rule, against what you actually did." />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-ds-4">
+          {(
+            [
+              { key: 'actual',    title: 'What you actually did',       color: COLOR_GOLD,              isActual: true  },
+              { key: 'target',    title: 'If you held to target',        color: COLOR_GREEN,             isActual: false },
+              { key: 'stop',      title: 'If you held to stop',          color: COLOR_SILVER,            isActual: false },
+              { key: 'breakeven', title: 'If you broke even each time',  color: 'rgba(255,255,255,0.45)', isActual: false },
+            ] as Array<{
+              key: 'actual' | 'stop' | 'target' | 'breakeven';
+              title: string;
+              color: string;
+              isActual: boolean;
+            }>
+          ).map((c) => (
+            <ScenarioCaseCard
+              key={c.key}
+              title={c.title}
+              color={c.color}
+              isActual={c.isActual}
+              endValue={totals[c.key]}
+              deltaVsActual={totals[c.key] - totals.actual}
+              points={points}
+              dataKey={c.key}
+            />
+          ))}
         </div>
       </div>
     </div>
