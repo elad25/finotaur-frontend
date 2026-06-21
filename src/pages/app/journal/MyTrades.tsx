@@ -129,6 +129,8 @@ interface Trade {
   created_at?: string;
   mistake?: string;
   next_time?: string;
+  mae?: number | null;
+  mfe?: number | null;
   // 🔥 Direct DB fields (risk-only mode support)
   risk_usd?: number;
   reward_usd?: number;
@@ -2179,346 +2181,373 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                 </div>
 
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-h-0 custom-scrollbar">
-                  {/* Trade Outcome Section */}
-                  <div className="rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 p-3 shadow-lg">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider">Trade Outcome</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
-                          <Target className="w-3 h-3" />
-                          Outcome
+                  {/* Engineered Summary Card — replaces Trade Outcome + Price Details + Risk/Reward */}
+                  <div className="rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-900/70 to-zinc-900/40 shadow-lg overflow-hidden">
+                    {/* gold top accent */}
+                    <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#C9A646]/70 to-transparent" />
+                    <div className="p-4 space-y-4">
+
+                      {/* HERO ROW */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" />
+                            P&L
+                          </div>
+                          <div className={`text-base font-bold ${
+                            !isClosed ? 'text-zinc-500' :
+                            pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                          }`}>
+                            {isClosed ? (
+                              <>{pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 2)}</>
+                            ) : (
+                              '—'
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge 
-                            variant={outcome === "WIN" ? "outline" : outcome === "LOSS" ? "destructive" : "secondary"}
-                            className={`text-xs font-semibold ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
-                          >
-                            {outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open"}
-                          </Badge>
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                            <Target className="w-3 h-3" />
+                            Outcome
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={outcome === "WIN" ? "outline" : outcome === "LOSS" ? "destructive" : "secondary"}
+                              className={`text-xs font-semibold ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
+                            >
+                              {outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open"}
+                            </Badge>
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
-  <DollarSign className="w-3 h-3" />
-  P&L
-</div>
-<div className={`text-base font-bold ${
-  !isClosed ? 'text-zinc-500' :
-  pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
-}`}>
-  {isClosed ? (
-    <>{pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 2)}</>
-  ) : (
-    '—'
-  )}
-</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
-                          <Award className="w-3 h-3" />
-                          Actual R
-                        </div>
-                        <div className={`text-base font-bold ${
-                          displayR && displayR > 0 ? 'text-emerald-400' :
-                          displayR && displayR < 0 ? 'text-red-400' :
-                          'text-zinc-400'
-                        }`}>
-                          {displayR !== null && displayR !== undefined ? formatRValue(displayR) : '—'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Duration
-                        </div>
-                        <div className="text-base font-semibold text-white">
-                          {calculateDuration(selectedTrade.open_at, selectedTrade.close_at)}
-                        </div>
-                      </div>
-                      {selectedTrade.quality_tag && (
                         <div>
                           <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
                             <Award className="w-3 h-3" />
-                            Quality
+                            Actual R
                           </div>
-                          <Badge 
-                            variant="outline" 
-                            className="text-xs font-semibold border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
-                          >
-                            {selectedTrade.quality_tag}
-                          </Badge>
+                          <div className={`text-base font-bold ${
+                            displayR && displayR > 0 ? 'text-emerald-400' :
+                            displayR && displayR < 0 ? 'text-red-400' :
+                            'text-zinc-400'
+                          }`}>
+                            {displayR !== null && displayR !== undefined ? formatRValue(displayR) : '—'}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                        <div>
+                          <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Duration
+                          </div>
+                          <div className="text-base font-semibold text-white">
+                            {calculateDuration(selectedTrade.open_at, selectedTrade.close_at)}
+                          </div>
+                        </div>
+                        {selectedTrade.quality_tag && (
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
+                              <Award className="w-3 h-3" />
+                              Quality
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="text-xs font-semibold border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                            >
+                              {selectedTrade.quality_tag}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
 
-                  {/* Price Details - 🔥 UPDATED: Handle Risk-Only mode */}
-                  <div className="rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 p-3 shadow-lg">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider flex items-center gap-2">
-                      {selectedTrade.input_mode === 'risk-only' ? 'Risk Details' : 'Price Details'}
-                      {selectedTrade.input_mode === 'risk-only' && (
-                        <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">RISK-ONLY</span>
-                      )}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {selectedTrade.input_mode === 'risk-only' ? (
-                        <>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Risk Amount</div>
-                            <div className="text-base font-semibold text-red-400">
-                              ${formatNumber(selectedTrade.risk_usd || 0, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Target Amount</div>
-                            <div className="text-base font-semibold text-emerald-400">
-                              ${formatNumber(selectedTrade.reward_usd || 0, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Actual Result</div>
-                            <div className={`text-base font-semibold ${(selectedTrade.pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {(selectedTrade.pnl || 0) >= 0 ? '+' : ''}${formatNumber(selectedTrade.pnl || 0, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">R:R Ratio</div>
-                            <div className="text-base font-semibold text-yellow-400">
-                              1:{formatNumber(selectedTrade.rr || 0, 2)}
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Entry Price</div>
-                            <div className="text-base font-semibold text-white">
-                              ${formatNumber(selectedTrade.entry_price, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Stop Loss</div>
-                            <div className="text-base font-semibold text-red-400">
-                              {selectedTrade.stop_price
-                                ? `$${formatNumber(selectedTrade.stop_price, 2)}`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Take Profit</div>
-                            <div className="text-base font-semibold text-emerald-400">
-                              {selectedTrade.take_profit_price 
-                                ? `$${formatNumber(selectedTrade.take_profit_price, 2)}` 
-                                : "—"}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Exit Price</div>
-                            <div className="text-base font-semibold text-zinc-300">
-                              {selectedTrade.exit_price 
-                                ? `$${formatNumber(selectedTrade.exit_price, 2)}` 
-                                : "—"}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Risk/Reward - 🔥 UPDATED: Handle Risk-Only mode */}
-                  <div className="rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 p-3 shadow-lg">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider flex items-center gap-2">
-                      Risk/Reward
-                      {selectedTrade.input_mode === 'risk-only' && (
-                        <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-400 bg-yellow-500/10">
-                          Risk-Only Mode
-                        </Badge>
-                      )}
-                      {multiplier && multiplier !== 1 && selectedTrade.input_mode !== 'risk-only' && (
-                        <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400 bg-blue-500/10">
-                          {multiplier}x Multiplier
-                        </Badge>
-                      )}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {selectedTrade.input_mode === 'risk-only' ? (
-                        <>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Risk (USD)</div>
-                            <div className="text-base font-bold text-red-400">
-                              ${formatNumber(selectedTrade.risk_usd || 0, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Target (USD)</div>
-                            <div className="text-base font-bold text-emerald-400">
-                              ${formatNumber(selectedTrade.reward_usd || 0, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Planned R:R</div>
-                            <div className="text-base font-semibold text-yellow-400">
-                              1:{formatNumber(selectedTrade.rr || 0, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Actual R</div>
-                            <div className={`text-base font-bold ${
-                              actualR && actualR > 0 ? 'text-emerald-400' : 
-                              actualR && actualR < 0 ? 'text-red-400' : 
-                              'text-zinc-400'
-                            }`}>
-                              {actualR !== null && actualR !== undefined ? formatRValue(actualR) : '—'}
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Risk per Point</div>
-                            <div className="text-base font-semibold text-red-400">
-                              {selectedTrade.stop_price
-                                ? `$${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}`
-                                : '—'}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Multiplier</div>
-                            <div className="text-base font-bold text-blue-400">
-                              {multiplier}x
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Quantity</div>
-                            <div className="text-base font-semibold text-white">
-                              {selectedTrade.quantity}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Total Risk</div>
-                            <div className="text-base font-bold text-red-400">
-                              ${formatNumber(riskUSD, 2)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11px] text-zinc-500 mb-1">Fees</div>
-                            <div className="text-base font-semibold text-zinc-300">
-                              ${formatNumber(selectedTrade.fees, 2)}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Risk basis: real contract R when a stop/risk exists; otherwise prompt to Set R */}
-                    {selectedTrade.input_mode !== 'risk-only' && (
-                      <div className="mt-3 pt-3 border-t border-zinc-800/50">
-                        {rBasisMode === 'manual' ? (
-                          <div className="text-xs text-zinc-500 space-y-1">
-                            <div className="font-mono">
-                              Trade Risk = ${formatNumber(riskUSD, 2)}
-                            </div>
-                            <div className="font-mono text-blue-400">
-                              Your 1R (Settings) = ${formatNumber(oneR, 2)}
-                            </div>
-                            {selectedTrade.exit_price && displayR !== null && (
-                              <div className={`font-mono font-semibold ${displayR > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                Actual R = ${formatNumber(Math.abs(pnl), 2)} ÷ ${formatNumber(oneR, 2)} = {displayR.toFixed(2)}R
+                      {/* PRICES SECTION */}
+                      <div className="border-t border-zinc-800/60 pt-3">
+                        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+                          {selectedTrade.input_mode === 'risk-only' ? 'Risk Details' : 'Prices'}
+                          {selectedTrade.input_mode === 'risk-only' && (
+                            <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">RISK-ONLY</span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {selectedTrade.input_mode === 'risk-only' ? (
+                            <>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Risk Amount</div>
+                                <div className="text-base font-semibold text-red-400">
+                                  ${formatNumber(selectedTrade.risk_usd || 0, 2)}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        ) : resolved1R.value != null ? (
-                          <div className="text-xs text-zinc-500 space-y-2">
-                            <div className="font-mono">
-                              1R = ${formatNumber(resolved1R.value, 2)} <span className="text-zinc-600">({oneRLabel})</span>
-                            </div>
-                            {selectedTrade.exit_price != null && displayR !== null && (
-                              <div className={`font-mono font-semibold ${displayR > 0 ? 'text-emerald-400' : displayR < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
-                                Actual R = ${formatNumber(Math.abs(Number(selectedTrade.pnl) || 0), 2)} ÷ ${formatNumber(resolved1R.value, 2)} = {displayR.toFixed(2)}R
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Target Amount</div>
+                                <div className="text-base font-semibold text-emerald-400">
+                                  ${formatNumber(selectedTrade.reward_usd || 0, 2)}
+                                </div>
                               </div>
-                            )}
-                            {behaviorTags.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 pt-1">
-                                {behaviorTags.map((t) => (
-                                  <span
-                                    key={t.kind}
-                                    title={t.detail || ''}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                      t.kind === 'stop_not_honored'
-                                        ? 'border-red-500/40 text-red-400 bg-red-500/10'
-                                        : 'border-amber-500/40 text-amber-400 bg-amber-500/10'
-                                    }`}
-                                  >
-                                    {t.label}
-                                  </span>
-                                ))}
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Actual Result</div>
+                                <div className={`text-base font-semibold ${(selectedTrade.pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  {(selectedTrade.pnl || 0) >= 0 ? '+' : ''}${formatNumber(selectedTrade.pnl || 0, 2)}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        ) : canSetR ? (
-                          isSettingR ? (
-                            <div className="space-y-2">
-                              <div className="text-[11px] text-zinc-400">
-                                Enter the stop price you placed for this trade — R is computed from it.
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">R:R Ratio</div>
+                                <div className="text-base font-semibold text-yellow-400">
+                                  1:{formatNumber(selectedTrade.rr || 0, 2)}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  value={stopInput}
-                                  onChange={(e) => setStopInput(e.target.value)}
-                                  placeholder="Stop price"
-                                  className="w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
-                                />
-                                <button
-                                  onClick={handleSetR}
-                                  disabled={savingR}
-                                  className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-                                >
-                                  {savingR ? 'Saving…' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={() => { setIsSettingR(false); setStopInput(''); }}
-                                  disabled={savingR}
-                                  className="rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
+                            </>
                           ) : (
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="text-xs text-zinc-500">
-                                No risk defined for this trade (no stop synced).
+                            <>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Entry Price</div>
+                                <div className="text-base font-semibold text-white">
+                                  ${formatNumber(selectedTrade.entry_price, 2)}
+                                </div>
                               </div>
-                              <button
-                                onClick={() => { setIsSettingR(true); setStopInput(''); }}
-                                className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500"
-                              >
-                                Set R
-                              </button>
-                            </div>
-                          )
-                        ) : null}
-                      </div>
-                    )}
-                    
-                    {/* 🔥 NEW: Risk-Only mode calculation display */}
-                    {selectedTrade.input_mode === 'risk-only' && (
-                      <div className="mt-3 pt-3 border-t border-zinc-800/50">
-                        <div className="text-xs text-zinc-500 space-y-1">
-                          <div className="font-mono">
-                            Risk = ${formatNumber(selectedTrade.risk_usd || 0, 2)}
-                          </div>
-                          <div className="font-mono">
-                            Target = ${formatNumber(selectedTrade.reward_usd || 0, 2)}
-                          </div>
-                          <div className={`font-mono font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            Result = {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)} ({actualR !== null ? formatRValue(actualR) : '—'})
-                          </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Stop Loss</div>
+                                <div className="text-base font-semibold text-red-400">
+                                  {selectedTrade.stop_price
+                                    ? `$${formatNumber(selectedTrade.stop_price, 2)}`
+                                    : '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Take Profit</div>
+                                <div className="text-base font-semibold text-emerald-400">
+                                  {selectedTrade.take_profit_price
+                                    ? `$${formatNumber(selectedTrade.take_profit_price, 2)}`
+                                    : "—"}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Exit Price</div>
+                                <div className="text-base font-semibold text-zinc-300">
+                                  {selectedTrade.exit_price
+                                    ? `$${formatNumber(selectedTrade.exit_price, 2)}`
+                                    : "—"}
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
-                    )}
+
+                      {/* RISK SECTION */}
+                      <div className="border-t border-zinc-800/60 pt-3">
+                        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+                          Risk
+                          {selectedTrade.input_mode === 'risk-only' && (
+                            <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-400 bg-yellow-500/10">
+                              Risk-Only Mode
+                            </Badge>
+                          )}
+                          {multiplier && multiplier !== 1 && selectedTrade.input_mode !== 'risk-only' && (
+                            <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400 bg-blue-500/10">
+                              {multiplier}x Multiplier
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {selectedTrade.input_mode === 'risk-only' ? (
+                            <>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Risk (USD)</div>
+                                <div className="text-base font-bold text-red-400">
+                                  ${formatNumber(selectedTrade.risk_usd || 0, 2)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Target (USD)</div>
+                                <div className="text-base font-bold text-emerald-400">
+                                  ${formatNumber(selectedTrade.reward_usd || 0, 2)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Planned R:R</div>
+                                <div className="text-base font-semibold text-yellow-400">
+                                  1:{formatNumber(selectedTrade.rr || 0, 2)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Actual R</div>
+                                <div className={`text-base font-bold ${
+                                  actualR && actualR > 0 ? 'text-emerald-400' :
+                                  actualR && actualR < 0 ? 'text-red-400' :
+                                  'text-zinc-400'
+                                }`}>
+                                  {actualR !== null && actualR !== undefined ? formatRValue(actualR) : '—'}
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Risk per Point</div>
+                                <div className="text-base font-semibold text-red-400">
+                                  {selectedTrade.stop_price
+                                    ? `$${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}`
+                                    : '—'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Multiplier</div>
+                                <div className="text-base font-bold text-blue-400">
+                                  {multiplier}x
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Quantity</div>
+                                <div className="text-base font-semibold text-white">
+                                  {selectedTrade.quantity}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Total Risk</div>
+                                <div className="text-base font-bold text-red-400">
+                                  ${formatNumber(riskUSD, 2)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-zinc-500 mb-1">Fees</div>
+                                <div className="text-base font-semibold text-zinc-300">
+                                  ${formatNumber(selectedTrade.fees, 2)}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Risk basis: real contract R when a stop/risk exists; otherwise prompt to Set R */}
+                        {selectedTrade.input_mode !== 'risk-only' && (
+                          <div className="mt-3 pt-3 border-t border-zinc-800/50">
+                            {rBasisMode === 'manual' ? (
+                              <div className="text-xs text-zinc-500 space-y-1">
+                                <div className="font-mono">
+                                  Trade Risk = ${formatNumber(riskUSD, 2)}
+                                </div>
+                                <div className="font-mono text-blue-400">
+                                  Your 1R (Settings) = ${formatNumber(oneR, 2)}
+                                </div>
+                                {selectedTrade.exit_price && displayR !== null && (
+                                  <div className={`font-mono font-semibold ${displayR > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    Actual R = ${formatNumber(Math.abs(pnl), 2)} ÷ ${formatNumber(oneR, 2)} = {displayR.toFixed(2)}R
+                                  </div>
+                                )}
+                              </div>
+                            ) : resolved1R.value != null ? (
+                              <div className="text-xs text-zinc-500 space-y-2">
+                                <div className="font-mono">
+                                  1R = ${formatNumber(resolved1R.value, 2)} <span className="text-zinc-600">({oneRLabel})</span>
+                                </div>
+                                {selectedTrade.exit_price != null && displayR !== null && (
+                                  <div className={`font-mono font-semibold ${displayR > 0 ? 'text-emerald-400' : displayR < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                                    Actual R = ${formatNumber(Math.abs(Number(selectedTrade.pnl) || 0), 2)} ÷ ${formatNumber(resolved1R.value, 2)} = {displayR.toFixed(2)}R
+                                  </div>
+                                )}
+                                {behaviorTags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {behaviorTags.map((t) => (
+                                      <span
+                                        key={t.kind}
+                                        title={t.detail || ''}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                          t.kind === 'stop_not_honored'
+                                            ? 'border-red-500/40 text-red-400 bg-red-500/10'
+                                            : 'border-amber-500/40 text-amber-400 bg-amber-500/10'
+                                        }`}
+                                      >
+                                        {t.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ) : canSetR ? (
+                              isSettingR ? (
+                                <div className="space-y-2">
+                                  <div className="text-[11px] text-zinc-400">
+                                    Enter the stop price you placed for this trade — R is computed from it.
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={stopInput}
+                                      onChange={(e) => setStopInput(e.target.value)}
+                                      placeholder="Stop price"
+                                      className="w-32 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
+                                    />
+                                    <button
+                                      onClick={handleSetR}
+                                      disabled={savingR}
+                                      className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                                    >
+                                      {savingR ? 'Saving…' : 'Save'}
+                                    </button>
+                                    <button
+                                      onClick={() => { setIsSettingR(false); setStopInput(''); }}
+                                      disabled={savingR}
+                                      className="rounded-md border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-xs text-zinc-500">
+                                    No risk defined for this trade (no stop synced).
+                                  </div>
+                                  <button
+                                    onClick={() => { setIsSettingR(true); setStopInput(''); }}
+                                    className="rounded-md bg-blue-600 px-3 py-1 text-sm font-semibold text-white hover:bg-blue-500"
+                                  >
+                                    Set R
+                                  </button>
+                                </div>
+                              )
+                            ) : null}
+                          </div>
+                        )}
+
+                        {/* Risk-Only mode calculation display */}
+                        {selectedTrade.input_mode === 'risk-only' && (
+                          <div className="mt-3 pt-3 border-t border-zinc-800/50">
+                            <div className="text-xs text-zinc-500 space-y-1">
+                              <div className="font-mono">
+                                Risk = ${formatNumber(selectedTrade.risk_usd || 0, 2)}
+                              </div>
+                              <div className="font-mono">
+                                Target = ${formatNumber(selectedTrade.reward_usd || 0, 2)}
+                              </div>
+                              <div className={`font-mono font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                Result = {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)} ({actualR !== null ? formatRValue(actualR) : '—'})
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* MAX DRAWDOWN */}
+                        <div className="border-t border-zinc-800/60 pt-3 mt-3 flex items-center justify-between">
+                          <span className="text-[11px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                            Max Drawdown
+                            <span title="Maximum adverse excursion — requires intra-trade price data (coming soon)" className="cursor-help text-zinc-600">ⓘ</span>
+                          </span>
+                          <span className="text-sm font-semibold tabular-nums">
+                            {selectedTrade.mae != null ? (
+                              <span className="text-red-400">-${formatNumber(Math.abs(Number(selectedTrade.mae)), 2)}</span>
+                            ) : (
+                              <span className="text-zinc-500">N/A</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* RATING SECTION */}
+                      <div className="border-t border-zinc-800/60 pt-3 flex items-center justify-between">
+                        <span className="text-[11px] text-zinc-500 uppercase tracking-wider">Rating</span>
+                        <StarRating value={selectedTrade.trade_rating ?? null} onChange={(v) => handleRateTrade(selectedTrade.id, v)} size="md" />
+                      </div>
+
+                    </div>
                   </div>
 
                   {/* Position Details - 🔥 UPDATED WITH SESSION */}
