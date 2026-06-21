@@ -436,7 +436,7 @@ export default function JournalCalendar() {
   const [filterEmotion, setFilterEmotion] = useState<string>("all");
   const [filterResult, setFilterResult] = useState<string>("all");
   
-  // Display mode — tabs now: Performance | Finotaur Score (emotion + consistency merged into the FINO breakdown)
+  // Display mode — calendar heatmap lens (only "performance" is used)
   const [displayMode, setDisplayMode] = useState<"performance" | "emotion" | "consistency" | "strategy" | "finotaur">("performance");
 
   // Calendar value unit toggle: dollars or R-multiple per day tile
