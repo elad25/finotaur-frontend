@@ -79,8 +79,7 @@ interface Trade {
   strategy_type?: string;
   // Annotation panel fields
   strategy_id?: string | null;
-  setup_quality_rating?: number | null;
-  mental_state?: number | null;
+  trade_rating?: number | null;
   checklist_results?: Record<string, boolean> | null;
   // Forex — populated only when asset_class === 'forex'
   base_currency?: string;
@@ -123,8 +122,6 @@ interface EditDraft {
   // Annotation panel fields
   strategyId: string | null;
   checklistResults: Record<string, boolean>;
-  setupQualityRating: number | null;
-  mentalState: number | null;
 }
 
 // Local mirror of MultiUploadZone's internal Screenshot shape (not exported from that module).
@@ -210,8 +207,6 @@ function tradeToEditDraft(trade: Trade): EditDraft {
     expiration_date: trade.expiration_date ?? '',
     strategyId: trade.strategy_id ?? null,
     checklistResults: trade.checklist_results ?? {},
-    setupQualityRating: trade.setup_quality_rating ?? null,
-    mentalState: trade.mental_state ?? null,
   };
 }
 
@@ -428,8 +423,6 @@ export default function JournalTradeDetail() {
       screenshots: string[];
       strategy_id: string | null;
       checklist_results: Record<string, boolean> | null;
-      setup_quality_rating: number | null;
-      mental_state: number | null;
       option_outcome?: string | null;
       expiration_date?: string | null;
     } = {
@@ -444,8 +437,6 @@ export default function JournalTradeDetail() {
       strategy_id: draft.strategyId || null,
       checklist_results:
         Object.keys(draft.checklistResults).length > 0 ? draft.checklistResults : null,
-      setup_quality_rating: draft.setupQualityRating || null,
-      mental_state: draft.mentalState || null,
     };
 
     // Options-only: persist the expiration outcome and expiration date
@@ -492,6 +483,22 @@ export default function JournalTradeDetail() {
     }
   };
 
+  async function handleRateTrade(value: number) {
+    if (!trade) return;
+    const newRating = value === 0 ? null : value;
+    const prev = trade.trade_rating ?? null;
+    setTrade({ ...trade, trade_rating: newRating });
+    try {
+      const { error } = await supabase.from('trades').update({ trade_rating: newRating }).eq('id', trade.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: queryKeys.tradeDetail(trade.id) });
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+    } catch {
+      setTrade({ ...trade, trade_rating: prev });
+      toast({ title: 'Could not save rating', description: 'Please try again.' });
+    }
+  }
+
   if (loading) {
     return <JournalTradeDetailSkeletonPage />;
   }
@@ -513,7 +520,7 @@ export default function JournalTradeDetail() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Header with Back Button */}
       <div className="flex items-center gap-4 mb-6">
         <button
@@ -609,6 +616,20 @@ export default function JournalTradeDetail() {
         )}
       </div>
 
+      {/* ── Trade Rating (prominent, instant-save) ──────────────────── */}
+      <div className="rounded-[12px] border border-[#C9A646]/30 bg-gradient-to-br from-[#C9A646]/[0.10] to-transparent px-5 py-4 flex flex-wrap items-center justify-between gap-4 shadow-[0_0_24px_rgba(201,166,70,0.08)]">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C9A646]">Trade Rating</p>
+          <p className="text-xs text-zinc-500 mt-0.5">How well did you execute this trade?</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <StarRating value={trade.trade_rating ?? null} onChange={handleRateTrade} size="xl" />
+          <span className="text-base font-bold tabular-nums text-white min-w-[3rem] text-right">
+            {trade.trade_rating != null ? `${trade.trade_rating}/5` : '—'}
+          </span>
+        </div>
+      </div>
+
       {/* ── Stats Panel (TradeZella-style flat list) ─────────────────────── */}
       {(() => {
         // Build the duration string (reuse same calc from old Duration card)
@@ -677,8 +698,8 @@ export default function JournalTradeDetail() {
         const scaled = entries.length > 1 || exits.length > 1;
         if (!scaled) return null;
         return (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Execution Legs</h3>
+          <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Execution Legs</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {entries.length >= 1 ? (
                 <LegsList legs={entries} label="Entries" tone="entry" />
@@ -704,8 +725,8 @@ export default function JournalTradeDetail() {
         const fmtExtremum = (e: { value: number | null; unlimited: boolean }) =>
           e.unlimited ? 'Unlimited' : e.value != null ? `$${e.value.toFixed(2)}` : '—';
         return (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Option Details</h3>
+          <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Option Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {trade.option_type && (
                 <div>
@@ -770,7 +791,7 @@ export default function JournalTradeDetail() {
         const rate = trade.quote_rate ?? 1;
         const crossCurrency = !!quote && quote !== acct.toUpperCase();
         return (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-semibold text-white">Forex Details</h3>
               <ForexMarketStatusChip />
@@ -820,8 +841,8 @@ export default function JournalTradeDetail() {
 
       {/* Multi-Leg Spread — shown only when leg_count > 1 */}
       {trade.leg_count && trade.leg_count > 1 && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <h3 className="text-xl font-semibold text-white mb-4">
+        <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">
             {getStrategyLabel(trade.strategy_type) ?? 'Multi-Leg'} &middot; {trade.leg_count} legs
           </h3>
           {legs.length === 0 ? (
@@ -881,8 +902,8 @@ export default function JournalTradeDetail() {
         const chartLegs: TradeLeg[] = isMulti ? legs : (single ? [single] : []);
         if (!chartLegs.length) return null;
         return (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Payoff at Expiration</h3>
+          <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Payoff at Expiration</h3>
             <OptionPayoffChart legs={chartLegs} />
             <p className="mt-4 text-xs text-zinc-600">
               Theoretical net P&amp;L if the underlying settles at each price on expiration day.
@@ -899,8 +920,8 @@ export default function JournalTradeDetail() {
       {id && <TradeScorecard tradeId={id} />}
 
       {/* ── Setup & Verification ─────────────────────────────────────────── */}
-      <div ref={setupPanelRef} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Setup & Verification</h3>
+      <div ref={setupPanelRef} className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Setup & Verification</h3>
 
         {/* Strategy picker */}
         <div className="mb-4">
@@ -1026,8 +1047,8 @@ export default function JournalTradeDetail() {
       </div>
 
       {/* ── Tags ─────────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Tags</h3>
+      <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Tags</h3>
         <div className="space-y-4">
           <TagMultiSelect
             category="mistake"
@@ -1046,34 +1067,9 @@ export default function JournalTradeDetail() {
         </div>
       </div>
 
-      {/* ── Ratings ──────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Ratings</h3>
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-zinc-400 font-medium w-36 shrink-0">Setup Quality</span>
-            <StarRating
-              value={isEditing && draft ? draft.setupQualityRating : trade.setup_quality_rating}
-              onChange={(v) => draft && setDraft({ ...draft, setupQualityRating: v === 0 ? null : v })}
-              readOnly={!isEditing}
-              size="md"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-zinc-400 font-medium w-36 shrink-0">Mental State</span>
-            <StarRating
-              value={isEditing && draft ? draft.mentalState : trade.mental_state}
-              onChange={(v) => draft && setDraft({ ...draft, mentalState: v === 0 ? null : v })}
-              readOnly={!isEditing}
-              size="md"
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Trade Notes — view mode or edit mode */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Trade Notes</h3>
+      <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Trade Notes</h3>
 
         {/* Save error banner */}
         {isEditing && saveError && (
@@ -1233,8 +1229,8 @@ export default function JournalTradeDetail() {
 
       {/* Screenshots */}
       {isEditing ? (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <h3 className="text-xl font-semibold text-white mb-4">Screenshots</h3>
+        <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Screenshots</h3>
 
           {/* Existing screenshot thumbnails with remove control */}
           {existingScreenshots.length > 0 && (
@@ -1275,8 +1271,8 @@ export default function JournalTradeDetail() {
         </div>
       ) : (
         (trade.screenshots && trade.screenshots.length > 0) && (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
-            <h3 className="text-xl font-semibold text-white mb-4">Screenshots</h3>
+          <div className="rounded-[12px] border border-zinc-800 bg-zinc-900/40 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-3">Screenshots</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {trade.screenshots.map((url, index) => (
                 <img
