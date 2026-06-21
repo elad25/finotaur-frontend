@@ -125,6 +125,7 @@ interface Trade {
   pnl?: number;
   quality_tag?: string;
   trade_rating?: number | null;
+  exit_reason?: string | null;
   multiplier?: number;
   created_at?: string;
   mistake?: string;
@@ -1599,6 +1600,24 @@ const stats = useMemo<Stats>(() => {
     }
   }, [updateTradeMutation, queryClient]);
 
+  const handleSetExitReason = useCallback(async (tradeId: string, value: string) => {
+    const newReason = value === '' ? null : value;
+    queryClient.setQueriesData<Trade[]>({ queryKey: ['trades'] }, (old) =>
+      Array.isArray(old)
+        ? old.map((t) => (t.id === tradeId ? { ...t, exit_reason: newReason } : t))
+        : old
+    );
+    setSelectedTrade((prev) =>
+      prev && prev.id === tradeId ? { ...prev, exit_reason: newReason } : prev
+    );
+    try {
+      await updateTradeMutation({ id: tradeId, data: { exit_reason: newReason } });
+    } catch {
+      toast.error('Could not save exit reason');
+      queryClient.invalidateQueries({ queryKey: ['trades'] });
+    }
+  }, [updateTradeMutation, queryClient]);
+
   const handleSetR = useCallback(async () => {
     if (!selectedTrade) return;
     const stop = Number(stopInput);
@@ -2275,6 +2294,23 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                       <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
                         <span className="text-[11px] text-zinc-500 uppercase tracking-wider">Rating</span>
                         <StarRating value={selectedTrade.trade_rating ?? null} onChange={(v) => handleRateTrade(selectedTrade.id, v)} size="md" />
+                      </div>
+
+                      {/* EXIT REASON SECTION */}
+                      <div className="border-t border-zinc-800/60 pt-2.5 flex items-center justify-between">
+                        <span className="text-[11px] text-zinc-500 uppercase tracking-wider">Exit Reason</span>
+                        <select
+                          value={selectedTrade.exit_reason ?? ''}
+                          onChange={(e) => handleSetExitReason(selectedTrade.id, e.target.value)}
+                          className="rounded-md bg-zinc-800 border border-zinc-700 text-white text-xs px-2 py-1 focus:outline-none focus:border-[#C9A646]"
+                        >
+                          <option value="">--</option>
+                          <option value="target">Target</option>
+                          <option value="stop">Stop</option>
+                          <option value="trailing">Trailing</option>
+                          <option value="manual">Manual</option>
+                          <option value="signal">Signal</option>
+                        </select>
                       </div>
 
                       {/* PRICES SECTION */}
