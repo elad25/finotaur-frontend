@@ -265,45 +265,74 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function verifyWebhookSignature(payload: string, signature: string | null): boolean {
-  if (!signature || !WHOP_WEBHOOK_SECRET) {
-    // Non-secret diagnostics: tells us whether Whop sent a signature header at
-    // all, and whether the WHOP_WEBHOOK_SECRET env var is even configured.
-    console.warn("⚠️ Signature check skipped:", {
-      hasSignatureHeader: !!signature,
-      hasWebhookSecret: !!WHOP_WEBHOOK_SECRET,
-    });
-    return false;
-  }
+// Verify a Standard Webhooks signature — the scheme Whop migrated to. The HMAC
+// is taken over `${webhook-id}.${webhook-timestamp}.${body}`, base64-encoded,
+// and delivered in the `webhook-signature` header as a space-separated list of
+// `v1,<sig>` entries. The secret is base64 (optionally `whsec_`-prefixed) and is
+// decoded to raw key bytes before signing.
+function verifyStandardWebhook(body: string, headers: Headers, secret: string): boolean {
+  const id = headers.get("webhook-id");
+  const timestamp = headers.get("webhook-timestamp");
+  const sigHeader = headers.get("webhook-signature");
+  if (!id || !timestamp || !sigHeader) return false;
 
+  const rawSecret = secret.startsWith("whsec_") ? secret.slice(6) : secret;
+  let keyBytes: Uint8Array;
   try {
-    const hmac = createHmac("sha256", WHOP_WEBHOOK_SECRET);
-    hmac.update(payload);
-    const expectedSignature = hmac.digest("hex");
+    keyBytes = Uint8Array.from(atob(rawSecret), (c) => c.charCodeAt(0));
+  } catch {
+    // Secret wasn't valid base64 — fall back to treating it as a raw UTF-8 key.
+    keyBytes = new TextEncoder().encode(rawSecret);
+  }
 
-    const cleanSignature = signature.replace('sha256=', '');
-    const isValid = timingSafeEqual(cleanSignature, expectedSignature);
+  const hmac = createHmac("sha256", keyBytes);
+  hmac.update(`${id}.${timestamp}.${body}`);
+  const expected = hmac.digest("base64");
 
-    if (!isValid) {
-      // Non-secret diagnostics only: lengths + 6-char prefixes (never the full
-      // secret or full signatures). Lets us distinguish a secret mismatch
-      // (lengths equal, prefixes differ) from a header-format mismatch
-      // (lengths differ — e.g. Whop sending base64 instead of hex) without
-      // leaking credentials into the logs.
-      console.error("❌ Signature mismatch", {
-        receivedLen: cleanSignature.length,
-        expectedLen: expectedSignature.length,
-        receivedPrefix: cleanSignature.slice(0, 6),
-        expectedPrefix: expectedSignature.slice(0, 6),
-        secretLen: WHOP_WEBHOOK_SECRET.length,
-      });
-    }
+  // Each entry is `v<version>,<base64-signature>`; any match passes.
+  return sigHeader.split(" ").some((entry) => {
+    const comma = entry.indexOf(",");
+    const sig = comma >= 0 ? entry.slice(comma + 1) : entry;
+    return timingSafeEqual(sig, expected);
+  });
+}
 
-    return isValid;
-  } catch (error) {
-    console.error("❌ Signature verification error:", error);
+// Legacy scheme (pre-migration Whop): hex HMAC-SHA256 of the raw body delivered
+// in `x-whop-signature`. Kept as a fallback so older-style deliveries don't break.
+function verifyLegacySignature(payload: string, signature: string | null, secret: string): boolean {
+  if (!signature) return false;
+  const hmac = createHmac("sha256", secret);
+  hmac.update(payload);
+  const expected = hmac.digest("hex");
+  return timingSafeEqual(signature.replace("sha256=", ""), expected);
+}
+
+function verifyWebhookSignature(payload: string, headers: Headers): boolean {
+  if (!WHOP_WEBHOOK_SECRET) {
+    console.warn("⚠️ Signature check skipped: WHOP_WEBHOOK_SECRET not configured");
     return false;
   }
+
+  // Standard Webhooks first (current Whop scheme), then the legacy fallback.
+  if (verifyStandardWebhook(payload, headers, WHOP_WEBHOOK_SECRET)) return true;
+
+  const legacySig = headers.get("x-whop-signature") ||
+                    headers.get("whop-signature") ||
+                    headers.get("X-Whop-Signature");
+  if (verifyLegacySignature(payload, legacySig, WHOP_WEBHOOK_SECRET)) return true;
+
+  // Non-secret diagnostics only (which header families + secret format were
+  // present) so we can see WHY a delivery failed without leaking credentials.
+  const stdSig = headers.get("webhook-signature");
+  console.error("❌ Signature mismatch", {
+    hasStandardHeaders: !!(headers.get("webhook-id") && headers.get("webhook-timestamp") && stdSig),
+    hasLegacyHeader: !!legacySig,
+    standardSigLen: stdSig?.length ?? 0,
+    legacySigLen: legacySig?.length ?? 0,
+    secretLen: WHOP_WEBHOOK_SECRET.length,
+    secretLooksB64: /^(whsec_)?[A-Za-z0-9+/=]+$/.test(WHOP_WEBHOOK_SECRET),
+  });
+  return false;
 }
 
 // ============================================
@@ -1026,12 +1055,8 @@ serve(async (req: Request) => {
 
   try {
     const rawBody = await req.text();
-    
-    const signature = req.headers.get("x-whop-signature") || 
-                      req.headers.get("whop-signature") ||
-                      req.headers.get("X-Whop-Signature");
 
-    if (!verifyWebhookSignature(rawBody, signature)) {
+    if (!verifyWebhookSignature(rawBody, req.headers)) {
       console.error("❌ Invalid webhook signature");
       return new Response(
         JSON.stringify({ error: "Invalid signature" }),
