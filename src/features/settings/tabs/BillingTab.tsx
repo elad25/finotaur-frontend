@@ -638,14 +638,7 @@ export const BillingTab = () => {
       <Card className="p-5 bg-zinc-900/50 border-zinc-700/50">
 
         {/* Platform Subscription Section */}
-        <div className={cn(
-          "p-4 rounded-xl relative overflow-hidden",
-          platformPlan === 'platform_core'
-            ? "bg-gradient-to-br from-blue-950/30 via-zinc-900/80 to-zinc-900/90 border border-blue-500/30"
-            : ['platform_finotaur', 'platform_enterprise'].includes(platformPlan)
-            ? "bg-gradient-to-br from-yellow-950/40 via-amber-950/30 to-zinc-900/90 border-2 border-[#C9A646]/40 shadow-xl shadow-amber-900/20"
-            : "bg-zinc-800/30 border border-zinc-700/40"
-        )}>
+        <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             {platformIsFree ? (
@@ -667,7 +660,7 @@ export const BillingTab = () => {
           </a>
         </div>
 
-        <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+        <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <span className="text-lg font-semibold text-white">{platformInfo.name}</span>
@@ -856,7 +849,7 @@ export const BillingTab = () => {
         <div className="border-t border-zinc-800/70 my-5" />
 
         {/* Trading Journal Subscription Section */}
-        <div className="bg-zinc-800/30 border border-zinc-700/40 p-4 rounded-xl">
+        <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-blue-400" />
@@ -872,7 +865,7 @@ export const BillingTab = () => {
           </a>
         </div>
 
-        <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+        <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <span className="text-lg font-semibold text-white">{journalInfo.name}</span>
