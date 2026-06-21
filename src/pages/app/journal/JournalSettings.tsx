@@ -12,8 +12,6 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useTrades, type Trade } from "@/hooks/useTradesData";
-import { useStrategyRConfigs } from "@/hooks/useStrategies";
-import { resolvePlanned1R } from "@/utils/rResolver";
 
 
 
@@ -1081,15 +1079,16 @@ interface StopRAgg {
   bestR: number | null;
   worstR: number | null;
   // 💵 dollar layer — what each R is actually worth
-  avg1RUsd: number | null;  // average per-trade $ value of 1R (the stop size)
-  netPnl: number;           // realized $ summed across the counted trades
-  avgPnl: number | null;    // netPnl / count — the $ value of the average R
-  bestPnl: number | null;   // realized $ of the best-R trade
-  worstPnl: number | null;  // realized $ of the worst-R trade
+  avg1RUsd: number | null;  // avg per-account $ value of 1R (single-account stop)
+  netPnl: number;           // per-account realized $ summed across counted trades
+  avgPnl: number | null;    // netPnl / count — per-account $ of the average R
+  bestPnl: number | null;   // per-account realized $ of the best-R trade
+  worstPnl: number | null;  // per-account realized $ of the worst-R trade
 }
 
-// `oneRUsdOf` resolves the dollar value of 1R for a trade (trade override →
-// strategy config → stop distance). Returns null when no basis exists.
+// `oneRUsdOf` returns the PER-ACCOUNT dollar value of 1R for a trade. Every $
+// figure here is normalized per account, because all-accounts rows sum pnl &
+// risk across each copied account (copier replication).
 function aggregateStopR(list: Trade[], oneRUsdOf: (t: Trade) => number | null): StopRAgg {
   let sum = 0;
   let count = 0;
@@ -1112,7 +1111,11 @@ function aggregateStopR(list: Trade[], oneRUsdOf: (t: Trade) => number | null): 
     if (v > 0) wins++;
     else if (v < 0) losses++;
 
-    const pnl = t.pnl != null && Number.isFinite(Number(t.pnl)) ? Number(t.pnl) : null;
+    // Per-account P&L: all-accounts rows sum pnl across every copied account;
+    // divide by the number of copied legs so $ figures reflect ONE account.
+    const ac = Math.max(1, t.group_trade_ids?.length ?? 1);
+    const rawPnl = t.pnl != null && Number.isFinite(Number(t.pnl)) ? Number(t.pnl) : null;
+    const pnl = rawPnl !== null ? rawPnl / ac : null;
     if (pnl !== null) netPnl += pnl;
 
     if (bestR === null || v > bestR) { bestR = v; bestPnl = pnl; }
@@ -1166,10 +1169,9 @@ export default function JournalSettings() {
   const { profile, isLoading: profileLoading } = useUserProfile();
   // 🔥 SYNC FIX: Use subscription for live trade counts (updates after each trade)
   const { limits, isFreeJournal, isUnlimitedUser } = useSubscription();
-  const { loading: riskLoading, oneR } = useRiskSettings();
+  const { loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
   const { data: trades = [] } = useTrades(); // Pre-cached for export + R performance
-  const { data: strategyRConfigs } = useStrategyRConfigs(); // per-strategy 1R($) config for dollar values
 
   // 🔥 PAYMENT HOOK
   const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
@@ -1206,10 +1208,20 @@ const rPerformance = useMemo(() => {
       : t.exit_price != null,
   );
 
-  // $ value of 1R per trade: trade override → strategy config → stop distance.
+  // Per-account $ value of 1R, consistent with the displayed R. All-accounts
+  // rows sum pnl & risk across every copied account; actual_r is the same per
+  // account (scale-invariant), so pnl/actual_r recovers the summed 1R — divide
+  // by the number of copied legs to land on a single-account figure. Falls back
+  // to the summed stop risk (risk_usd) for break-even trades (actual_r ≈ 0).
   const oneRUsdOf = (t: Trade): number | null => {
-    const cfg = strategyRConfigs?.get(t.strategy_id ?? '') ?? null;
-    return resolvePlanned1R(t as any, cfg, oneR).value;
+    const ac = Math.max(1, t.group_trade_ids?.length ?? 1);
+    const pnl = t.pnl != null ? Number(t.pnl) : null;
+    const r = t.actual_r != null ? Number(t.actual_r) : null;
+    if (pnl != null && r != null && Number.isFinite(pnl) && Number.isFinite(r) && r !== 0) {
+      return Math.abs(pnl / r) / ac;
+    }
+    const risk = t.risk_usd != null ? Number(t.risk_usd) : null;
+    return risk != null && Number.isFinite(risk) && risk > 0 ? risk / ac : null;
   };
 
   const overall = aggregateStopR(closed, oneRUsdOf);
@@ -1241,7 +1253,7 @@ const rPerformance = useMemo(() => {
     strategyMaxAbs,
     noStopCount: closed.length - overall.count,
   };
-}, [trades, strategyRConfigs, oneR]);
+}, [trades]);
   // ============================================
   // 🔥 HANDLERS - All memoized with useCallback
   // ============================================
@@ -1388,7 +1400,7 @@ const rPerformance = useMemo(() => {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-xl font-semibold text-zinc-100">R Performance</h3>
-              <p className="text-xs text-zinc-500 mt-1">Average R by stop distance — and what each R is worth in dollars</p>
+              <p className="text-xs text-zinc-500 mt-1">Average R by stop distance — and what each R is worth in dollars, per account</p>
             </div>
             <button 
               onClick={() => setIsRiskSettingsOpen(true)}
