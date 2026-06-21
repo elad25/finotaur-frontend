@@ -336,6 +336,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
 
   'mentorship': [
     { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
+    { label: 'Community', path: '/app/floor/community', icon: Users, beta: true },
     { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users, beta: true },
   ],
 

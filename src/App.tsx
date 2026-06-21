@@ -221,6 +221,7 @@ const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 // Mentorship
 const MentorshipSpaces = lazy(() => import("@/pages/app/mentorship/Spaces"));
 const SpaceDetail = lazy(() => import("@/pages/app/mentorship/SpaceDetail"));
+const Community = lazy(() => import("@/pages/app/community/Community"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
@@ -745,6 +746,7 @@ function AppContent() {
         <Route path="floor" element={<Navigate to="/app/floor/rooms" replace />} />
         <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/mentor" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/community" element={<SuspenseRoute><AdminBetaGate><Community /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
 
           {/* BACKTEST */}

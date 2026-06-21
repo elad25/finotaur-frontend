@@ -30,6 +30,7 @@ import {
   useSetReviewStatus,
   useMyRecentClosedTrades,
 } from '@/hooks/useSpaceReviews';
+import { SharedNotePanel } from '@/components/community/SharedNotePanel';
 import type {
   TradeReview,
   ReviewComment,
@@ -388,11 +389,18 @@ function ReviewCard({ review, spaceId, isManager, currentUserId }: ReviewCardPro
 
       {/* inline thread */}
       {threadOpen && (
-        <CommentThread
-          reviewId={review.id}
-          spaceId={spaceId}
-          currentUserId={currentUserId}
-        />
+        <>
+          <CommentThread
+            reviewId={review.id}
+            spaceId={spaceId}
+            currentUserId={currentUserId}
+          />
+
+          {/* Shared living note — co-edited by mentor and student in real-time */}
+          <div className="mt-ds-3">
+            <SharedNotePanel reviewId={review.id} />
+          </div>
+        </>
       )}
     </Card>
   );

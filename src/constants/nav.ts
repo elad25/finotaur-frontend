@@ -219,10 +219,12 @@ export const domains: Record<string, Domain> = {
     defaultPath: '/app/floor/rooms',
     subNav: [
       { label: 'Rooms', path: '/app/floor/rooms' },
+      { label: 'Community', path: '/app/floor/community' },
       { label: 'Mentor Mode', path: '/app/floor/mentor' },
     ],
     sidebar: [
       { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
+      { label: 'Community', path: '/app/floor/community', icon: Users },
       { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users },
     ],
   },
