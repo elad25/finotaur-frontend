@@ -220,11 +220,13 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Global', path: '/app/floor/community' },
       { label: 'Rooms', path: '/app/floor/rooms' },
+      { label: 'DM', path: '/app/floor/dm' },
       { label: 'Mentor Mode', path: '/app/floor/mentor' },
     ],
     sidebar: [
       { label: 'Global', path: '/app/floor/community', icon: Globe },
       { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
+      { label: 'DM', path: '/app/floor/dm', icon: MessageSquare },
       { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users },
     ],
   },

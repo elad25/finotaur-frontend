@@ -2,37 +2,29 @@
 // Route: /app/floor/community
 //
 // "The Floor — Community" page.
-// Three tabs: Feed (GlobalFeed), Leaderboard (GlobalLeaderboard), Messages (MessagesPanel).
+// Two tabs: Feed (GlobalFeed), Leaderboard (GlobalLeaderboard).
 // Tab strip follows the same SpaceDetail pattern: border-b-2 + gold active indicator.
-// Default tab: Feed. If ?dm=<userId> is present in the URL, defaults to Messages tab.
+// Default tab: Feed. Direct Messages moved to /app/floor/dm.
 
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Newspaper, Trophy, MessageSquare } from 'lucide-react';
+import { Newspaper, Trophy } from 'lucide-react';
 import { GlobalFeed } from '@/components/community/GlobalFeed';
 import { GlobalLeaderboard } from '@/components/community/GlobalLeaderboard';
-import { MessagesPanel } from '@/components/community/MessagesPanel';
 import { cn } from '@/lib/utils';
 
 // ── Tab config ─────────────────────────────────────────────────────────────────
 
-type CommunityTab = 'feed' | 'leaderboard' | 'messages';
+type CommunityTab = 'feed' | 'leaderboard';
 
 const TABS: { id: CommunityTab; label: string; icon: React.ElementType }[] = [
   { id: 'feed', label: 'Feed', icon: Newspaper },
   { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
-  { id: 'messages', label: 'Messages', icon: MessageSquare },
 ];
 
 // ── Page component ─────────────────────────────────────────────────────────────
 
 export default function Community() {
-  const [searchParams] = useSearchParams();
-  const dmUser = searchParams.get('dm');
-
-  const [activeTab, setActiveTab] = useState<CommunityTab>(
-    dmUser ? 'messages' : 'feed',
-  );
+  const [activeTab, setActiveTab] = useState<CommunityTab>('feed');
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
@@ -88,9 +80,6 @@ export default function Community() {
           <div className="h-full overflow-y-auto">
             <GlobalLeaderboard />
           </div>
-        )}
-        {activeTab === 'messages' && (
-          <MessagesPanel initialUserId={dmUser ?? undefined} />
         )}
       </div>
     </div>

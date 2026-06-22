@@ -461,7 +461,7 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
           {canMessage && (
             <button
               type="button"
-              onClick={() => navigate(`/app/floor/community?dm=${item.author_id}`)}
+              onClick={() => navigate(`/app/floor/dm?dm=${item.author_id}`)}
               aria-label={`Message ${item.author_name}`}
               className={cn(
                 'p-[5px] rounded-[6px]',
