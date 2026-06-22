@@ -47,7 +47,10 @@ import {
   HelpCircle,
   ListFilter,
   BarChart2,
+  Sparkles,
 } from 'lucide-react';
+import { buildShadowInsights } from '@/lib/journal/shadowInsight';
+import type { ShadowInsight } from '@/lib/journal/shadowInsight';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import {
   Dialog,
@@ -1054,7 +1057,84 @@ function DistributionRuleStat({
   );
 }
 
-function DistributionView({ tracked, total }: { tracked: number; total: number }) {
+// ─── Shadow Insight Card ──────────────────────────────────────────────────────
+
+const SEVERITY_DOT: Record<ShadowInsight['severity'], string> = {
+  high:   '#C9A646',
+  medium: 'rgba(255,255,255,0.5)',
+  low:    'rgba(255,255,255,0.3)',
+};
+
+function ShadowInsightCard({ trades }: { trades: Trade[] }) {
+  const insights = useMemo(() => buildShadowInsights(trades), [trades]);
+
+  if (insights.length === 0) {
+    return (
+      <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
+        <p className="text-[12px] text-white/38 leading-relaxed">
+          Close a few trades with stops and targets and Shadow will read your decisions here.
+        </p>
+      </div>
+    );
+  }
+
+  const top3 = insights.slice(0, 3);
+
+  return (
+    <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
+      {/* Subtle gold radial backdrop */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_50%,rgba(201,166,70,0.05),transparent_40%)]" />
+
+      <div className="relative flex flex-col gap-ds-4">
+        {/* Header */}
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/08 text-[#E8C766]">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-white">Shadow Insight</p>
+            <p className="text-[12px] text-white/42 mt-0.5">
+              Read on your {trades.length} closed-trade decision{trades.length === 1 ? '' : 's'}.
+            </p>
+          </div>
+        </div>
+
+        {/* Insights */}
+        <div className="flex flex-col gap-ds-3">
+          {top3.map((insight, idx) => (
+            <div
+              key={`${insight.angle}-${idx}`}
+              className="flex gap-3"
+              style={
+                idx === 0
+                  ? { borderLeft: '2px solid #C9A646', paddingLeft: '12px' }
+                  : { paddingLeft: '14px' }
+              }
+            >
+              {/* Severity dot — only for non-first items (first uses gold border) */}
+              {idx > 0 && (
+                <span
+                  className="mt-[5px] h-[6px] w-[6px] shrink-0 rounded-full"
+                  style={{ backgroundColor: SEVERITY_DOT[insight.severity] }}
+                />
+              )}
+              <div className={idx > 0 ? '' : ''}>
+                <p className="text-[13px] font-semibold text-white leading-snug">
+                  {insight.headline}
+                </p>
+                <p className="text-[12px] leading-relaxed text-white/62 mt-0.5">
+                  {insight.detail}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DistributionView({ tracked, total, trades }: { tracked: number; total: number; trades: Trade[] }) {
   const rules: Array<{ key: ScenarioKey; label: string; description: string }> = [
     {
       key: 'held_original_stop',
@@ -1075,6 +1155,9 @@ function DistributionView({ tracked, total }: { tracked: number; total: number }
 
   return (
     <div className="flex flex-col gap-ds-5">
+      {/* Shadow Insight coaching card */}
+      <ShadowInsightCard trades={trades} />
+
       {/* Header note */}
       <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_50%,rgba(201,166,70,0.05),transparent_40%)]" />
@@ -1469,6 +1552,7 @@ export default function TradeCompare() {
             <DistributionView
               tracked={aggregate.tracked}
               total={aggregate.total}
+              trades={closedTrades}
             />
           )}
         </TabsContent>
