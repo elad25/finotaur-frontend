@@ -40,6 +40,7 @@ import { buildAggregate } from '@/lib/journal/plannedScenarios';
 import type { PlannedScenario } from '@/lib/journal/plannedScenarios';
 import { useShadowTrade, useShadowAggregate } from '@/hooks/useShadow';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 import {
   Lightbulb,
   Info,
@@ -1053,9 +1054,6 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         </div>
       </div>
 
-      {/* ── FINO EXPLAINS ────────────────────────────────────────────────── */}
-      <FinoExplainsInline />
-
       {/* ── BOTTOM: Combined cumulative P&L chart (4 lines) ──────────────── */}
       <div className={JOURNAL_PANEL}>
         <div className="flex items-start justify-between gap-ds-3 border-b border-white/[0.06] px-ds-5 py-ds-4">
@@ -1683,38 +1681,6 @@ function LabCard({
   );
 }
 
-/**
- * FINO EXPLAINS — inline branded explainer card.
- * Uses /fino-avatar.png (same asset as FinoExplains.tsx).
- * This is a visual on-page card, distinct from useRegisterJournalFinoContext
- * which feeds data to FINO chat.
- */
-function FinoExplainsInline() {
-  return (
-    <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4`}>
-      <div className="flex items-start gap-ds-3">
-        <img
-          src="/fino-avatar.png"
-          alt="FINO"
-          className="h-8 w-8 flex-shrink-0 rounded-full object-cover ring-1 ring-[#C9A646]/50 mt-0.5"
-        />
-        <div className="flex flex-col gap-ds-1">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.15em] text-[#C9A646]">
-            FINO EXPLAINS
-          </p>
-          <p className="text-[13px] text-white/70 leading-relaxed">
-            This lab replays every closed trade as if you had applied one fixed rule — a set
-            R target, or a stop moved to break-even — using the real favorable and adverse
-            extremes each trade reached. No guesses: if price bars are stored, the replay
-            is exact; otherwise it uses your recorded excursion R values. Use the toggles
-            to find the risk-reward ratio that fits how your trades actually behave.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Trade picker ─────────────────────────────────────────────────────────────
 
 interface TradePickerProps {
@@ -1904,6 +1870,18 @@ export default function TradeCompare() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[1200px] mx-auto py-ds-7 px-ds-4 flex flex-col gap-ds-5">
+
+      {/* FINO EXPLAINS — canonical collapsible explainer (top-right) */}
+      <div className="flex justify-end -mb-ds-3">
+        <FinoExplains title="What is Shadow?" className="w-fit">
+          Shadow replays your closed trades as if you had managed each one by a single fixed
+          rule — held your target, moved your stop to break-even, or used a set R target — so
+          you can see which rule actually makes you more money. It reads the real favorable and
+          adverse extremes each trade reached (exact when price bars are stored, otherwise your
+          recorded excursion R values), not guesses. Use the toggles in Performance to find the
+          risk-reward that fits how your trades actually behave.
+        </FinoExplains>
+      </div>
 
       {/* Page header */}
       <div className="flex flex-col items-center text-center gap-1">
