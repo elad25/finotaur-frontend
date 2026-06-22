@@ -90,8 +90,13 @@ export default function FinotaurAI() {
   const mentorHistory = useMentorChatHistory(effectiveUserId, isMentorView);
 
   // First name for the empty-state greeting ("Good morning, Elad").
+  // Use the real profile name only (user_metadata.name) — never the
+  // email-derived fallback in useAuth's `user.name`. That fallback caused the
+  // greeting to briefly flash the email prefix on load before the real name
+  // resolved. With this, the greeting shows just "Good evening" until the name
+  // is available, then the name — the email is never shown.
   const { user } = useAuth();
-  const rawName = (user?.name ?? '').trim().split(/\s+/)[0];
+  const rawName = ((user?.user_metadata?.name as string | undefined) ?? '').trim().split(/\s+/)[0];
   const firstName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : undefined;
 
   const [prefillRequest, setPrefillRequest] = useState<string | null>(null);
