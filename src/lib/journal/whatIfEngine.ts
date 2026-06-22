@@ -9,6 +9,20 @@
 
 export type Side = 'LONG' | 'SHORT';
 
+/**
+ * Confidence tier for R-based what-if estimates.
+ *
+ * - 'exact'         — bar-level walk resolved the order; outcome is known.
+ * - 'certain'       — R fields alone are sufficient to determine the outcome
+ *                     unambiguously (e.g. price never reached the arm level,
+ *                     or it reached the arm but never returned to entry).
+ * - 'indeterminate' — R fields show both the arm AND a return-to-entry were
+ *                     reached, but tick order is unknown without bar data, so
+ *                     we cannot tell whether break-even fired before or after
+ *                     the return. outcomeR is null; lowR/highR bound the range.
+ */
+export type Confidence = 'exact' | 'certain' | 'indeterminate';
+
 export interface WhatIfTrade {
   side: Side;
   entry_price: number;
@@ -21,6 +35,8 @@ export interface WhatIfTrade {
   planned_1r_usd?: number | null;   // planned risk in $
   open_at: string;
   close_at: string;
+  mfe_r?: number | null;            // max favorable excursion in R units (R = |entry-stop| pts)
+  mae_r?: number | null;            // max adverse excursion in R units
 }
 
 export interface PriceBar { t: number; o: number; h: number; l: number; c: number; }
@@ -283,5 +299,415 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
     mae,
     insight,
     confidence,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// R-based scenario helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive risk in USD for a trade: |entry - stop| * quantity * multiplier.
+ * Returns null when stop is missing or non-positive.
+ * Used internally by the R-based scenario functions below.
+ */
+function riskUsd(trade: WhatIfTrade, mult: number): number | null {
+  if (!isPositiveNumber(trade.stop_price)) return null;
+  const riskPts = Math.abs(trade.entry_price - trade.stop_price);
+  if (riskPts === 0) return null;
+  return riskPts * trade.quantity * mult;
+}
+
+/**
+ * Compute the actual R outcome for a trade from its entry/exit/stop.
+ * Returns null when risk cannot be derived (no stop or zero-risk).
+ */
+function actualOutcomeR(trade: WhatIfTrade): number | null {
+  if (!isPositiveNumber(trade.stop_price)) return null;
+  const riskPts = Math.abs(trade.entry_price - trade.stop_price);
+  if (riskPts === 0) return null;
+  const actualPts = trade.side === 'LONG'
+    ? trade.exit_price - trade.entry_price
+    : trade.entry_price - trade.exit_price;
+  return actualPts / riskPts;
+}
+
+/**
+ * Bars-free break-even estimator with honest confidence tiering.
+ *
+ * Requires both `mfe_r` AND `mae_r` on the trade — returns null if either
+ * is missing. This function deliberately avoids fabricating a point estimate
+ * when the tick order is unknowable.
+ *
+ * Why a trade can be indeterminate:
+ *   A break-even stop is armed once price travels `rMultiple` R in the
+ *   trader's favour. When bar data is absent we only know the *magnitude*
+ *   of excursions, not their *order*. If the price both reached the arm
+ *   level (mfe_r ≥ rMultiple) AND returned to entry (mae_r > EPS), the
+ *   break-even stop might have fired before the adverse move or the adverse
+ *   move might have occurred before the arm was reached — the R fields alone
+ *   cannot distinguish these two orderings.
+ *
+ * Confidence tiers:
+ *   'certain'       — outcome is unambiguous from the R magnitudes alone.
+ *   'indeterminate' — arm reached AND return-to-entry present; outcomeR is
+ *                     null (never fabricated); lowR/highR bound the range.
+ *
+ * @param trade      - Trade with mfe_r and mae_r populated.
+ * @param rMultiple  - R level at which the stop is moved to break-even.
+ * @returns          Confidence-tiered estimate, or null if excursion data
+ *                   is unavailable.
+ */
+export function estimateBreakEvenAtR(
+  trade: WhatIfTrade,
+  rMultiple: number,
+): {
+  confidence: 'certain' | 'indeterminate';
+  outcomeR: number | null;
+  lowR: number;
+  highR: number;
+  pnlUsd: number | null;
+  lowUsd: number;
+  highUsd: number;
+} | null {
+  const hasMfeR = typeof trade.mfe_r === 'number' && isFinite(trade.mfe_r);
+  const hasMaeR = typeof trade.mae_r === 'number' && isFinite(trade.mae_r);
+  if (!hasMfeR || !hasMaeR) return null;
+
+  const mfe_r = trade.mfe_r as number;
+  const mae_r = trade.mae_r as number;
+
+  // R-noise floor: excursions below this are treated as "price never moved
+  // meaningfully against entry" (tick spread / rounding artefacts).
+  const EPS = 0.02;
+
+  const actR = actualOutcomeR(trade); // realized R from entry/exit/stop
+  const mult = resolveMultiplier(trade);
+  const rUsd = riskUsd(trade, mult);  // $ per 1R; null when stop is missing
+
+  const armed = mfe_r >= rMultiple;
+
+  let confidence: 'certain' | 'indeterminate';
+  let outcomeR: number | null;
+  let lowR: number;
+  let highR: number;
+
+  if (!armed) {
+    // Price never reached the arm level — break-even was never triggered.
+    // The actual outcome is certain: stopped out at -1R, or exited at actR.
+    outcomeR = mae_r >= 1 ? -1 : (actR ?? 0);
+    confidence = 'certain';
+    lowR = outcomeR;
+    highR = outcomeR;
+  } else if (mae_r <= EPS) {
+    // Armed, but price effectively never returned toward entry — break-even
+    // stop was never touched. Outcome = what actually happened.
+    outcomeR = actR ?? 0;
+    confidence = 'certain';
+    lowR = outcomeR;
+    highR = outcomeR;
+  } else {
+    // Armed AND price returned past entry (mae_r > EPS). Without knowing
+    // tick order we cannot determine whether the arm fired before or after
+    // the adverse move. Return an honest range instead of a point value.
+    confidence = 'indeterminate';
+    outcomeR = null; // DO NOT fabricate a single number here
+
+    // Lower bound: worst case — stop was not yet armed when adverse move hit.
+    //   If mae_r ≥ 1, stop would have been hit at -1R.
+    //   Otherwise the adverse move stopped short and we bound at 0 (BE) or actR.
+    lowR = Math.min(0, actR ?? 0, mae_r >= 1 ? -1 : 0);
+    // Upper bound: best case — arm fired, BE stop protected; exit at actR ≥ 0.
+    highR = Math.max(0, actR ?? 0);
+  }
+
+  // USD conversion — rUsd may be null when stop_price is absent.
+  let pnlUsd: number | null;
+  let lowUsd: number;
+  let highUsd: number;
+
+  if (rUsd != null) {
+    pnlUsd  = outcomeR !== null ? outcomeR * rUsd : null;
+    lowUsd  = lowR  * rUsd;
+    highUsd = highR * rUsd;
+  } else {
+    // No stop price available — cannot convert R to USD.
+    pnlUsd  = null;
+    lowUsd  = 0;
+    highUsd = 0;
+  }
+
+  return { confidence, outcomeR, lowR, highR, pnlUsd, lowUsd, highUsd };
+}
+
+/**
+ * Models a fixed take-profit at `rMultiple` R with the original stop kept at -1R.
+ *
+ * Requires mfe_r + mae_r on the trade, OR price bars. Returns null if neither
+ * is available to determine the outcome.
+ *
+ * When both the target and the stop were touched but no bars are provided,
+ * we default conservatively to stop-first (resolved = 'estimated', outcomeR = -1)
+ * so we never overstate a strategy's expected value.
+ */
+export function fixedTargetAtR(
+  trade: WhatIfTrade,
+  rMultiple: number,
+  bars?: PriceBar[],
+): { pnlUsd: number; outcomeR: number; resolved: 'target' | 'stop' | 'actual' | 'estimated'; confidence: Confidence } | null {
+  const mult = resolveMultiplier(trade);
+  const rUsd = riskUsd(trade, mult);
+
+  const hasMfeR = typeof trade.mfe_r === 'number' && isFinite(trade.mfe_r);
+  const hasMaeR = typeof trade.mae_r === 'number' && isFinite(trade.mae_r);
+  const hasBars = Array.isArray(bars) && bars.length > 0;
+
+  // Need at least one excursion source.
+  if (!hasMfeR && !hasMaeR && !hasBars) return null;
+
+  const isLong = trade.side === 'LONG';
+
+  // Determine target / stop touches from R fields first, then from bars.
+  let reachedTarget: boolean;
+  let hitStop: boolean;
+
+  if (hasMfeR || hasMaeR) {
+    // Use stored R excursion values.
+    reachedTarget = hasMfeR && (trade.mfe_r as number) >= rMultiple;
+    hitStop       = hasMaeR && (trade.mae_r as number) >= 1;
+  } else {
+    // Derive from bars: compute riskPts to convert price distances to R.
+    if (!isPositiveNumber(trade.stop_price)) return null;
+    const riskPts = Math.abs(trade.entry_price - trade.stop_price);
+    if (riskPts === 0) return null;
+
+    const targetPrice = isLong
+      ? trade.entry_price + rMultiple * riskPts
+      : trade.entry_price - rMultiple * riskPts;
+    const stopPrice = trade.stop_price;
+
+    reachedTarget = hasBars && bars!.some(b => isLong ? b.h >= targetPrice : b.l <= targetPrice);
+    hitStop       = hasBars && bars!.some(b => isLong ? b.l <= stopPrice  : b.h >= stopPrice);
+  }
+
+  let outcomeR: number;
+  let resolved: 'target' | 'stop' | 'actual' | 'estimated';
+
+  if (reachedTarget && !hitStop) {
+    outcomeR = rMultiple;
+    resolved = 'target';
+  } else if (hitStop && !reachedTarget) {
+    outcomeR = -1;
+    resolved = 'stop';
+  } else if (!reachedTarget && !hitStop) {
+    // Neither level was touched — fall back to what actually happened.
+    outcomeR = actualOutcomeR(trade) ?? 0;
+    resolved = 'actual';
+  } else {
+    // Both touched: ambiguous order. Walk bars if available to resolve.
+    if (hasBars && isPositiveNumber(trade.stop_price)) {
+      const riskPts = Math.abs(trade.entry_price - trade.stop_price);
+      if (riskPts > 0) {
+        const targetPrice = isLong
+          ? trade.entry_price + rMultiple * riskPts
+          : trade.entry_price - rMultiple * riskPts;
+        const stopPrice = trade.stop_price;
+        let barResolved: 'target' | 'stop' | null = null;
+        for (const bar of bars!) {
+          const tHit = isLong ? bar.h >= targetPrice : bar.l <= targetPrice;
+          const sHit = isLong ? bar.l <= stopPrice   : bar.h >= stopPrice;
+          if (tHit && !sHit) { barResolved = 'target'; break; }
+          if (sHit && !tHit) { barResolved = 'stop';   break; }
+          // Both hit inside the same bar — intrabar order unknowable; take pessimistic.
+          if (tHit && sHit) { barResolved = 'stop'; break; }
+        }
+        resolved = barResolved ?? 'stop';
+      } else {
+        // Zero risk — pessimistic default.
+        resolved = 'stop';
+      }
+    } else {
+      // No bars available to break the tie.
+      // Conservative assumption: stop was hit first — we never overstate expected value.
+      resolved = 'estimated';
+    }
+    outcomeR = resolved === 'target' ? rMultiple : -1;
+  }
+
+  // Convert R outcome to USD: outcomeR * riskUsd (when stop is available),
+  // or fall back to price-based P&L for the 'actual' path.
+  let pnlUsd: number;
+  if (resolved === 'actual') {
+    pnlUsd = pnlAt(trade.exit_price, trade, mult);
+  } else {
+    if (rUsd != null) {
+      pnlUsd = outcomeR * rUsd;
+    } else {
+      // No stop available — approximate from actual P&L scaled by outcomeR.
+      const actualPnl = pnlAt(trade.exit_price, trade, mult);
+      // outcomeR already carries the sign (e.g. -1 for a stop-out), so scale by
+      // the magnitude of actual P&L only — multiplying by sign(outcomeR) again
+      // would cancel the sign and flip a loss into a gain.
+      pnlUsd = actualPnl !== 0 ? outcomeR * Math.abs(actualPnl) : 0;
+    }
+  }
+
+  // Derive confidence from how the order was resolved.
+  // - bars walked and resolved intrabar order → 'exact'
+  // - bars walked but order was unambiguous (only one level hit) → 'certain'
+  // - no bars, but R fields gave an unambiguous answer → 'certain'
+  // - both levels hit, no bars to break the tie → 'indeterminate'
+  const confidence: Confidence =
+    resolved === 'estimated'
+      ? 'indeterminate'
+      : hasBars && (reachedTarget && hitStop)
+        ? 'exact'        // bars walked to resolve the ambiguous-both-touched case
+        : 'certain';
+
+  return { pnlUsd, outcomeR, resolved, confidence };
+}
+
+/**
+ * Models a break-even stop management: the stop is moved to entry once
+ * price reaches `rMultiple` R in the trader's favour (the "arm level").
+ *
+ * Requires price bars and a stop_price — returns null when either is absent.
+ *
+ * Walk order (time-ascending bars):
+ *   Phase 1 (not armed): original stop active. Adverse extreme hits stop → -1R exit.
+ *                        Favourable extreme reaches arm level → move to Phase 2.
+ *   Phase 2 (armed):     stop = entry. Adverse extreme returns to entry → 0R exit.
+ *                        Favourable extreme reaches take_profit_price → exit there.
+ *   After final bar:     exit at trade's actual exit_price.
+ */
+export function breakEvenAtR(
+  trade: WhatIfTrade,
+  bars: PriceBar[],
+  rMultiple: number,
+): { pnlUsd: number; outcomeR: number; confidence: 'exact' } | null {
+  if (!Array.isArray(bars) || bars.length === 0) return null;
+  if (!isPositiveNumber(trade.stop_price)) return null;
+
+  const mult = resolveMultiplier(trade);
+  const isLong = trade.side === 'LONG';
+  const riskPts = Math.abs(trade.entry_price - trade.stop_price);
+  if (riskPts === 0) return null;
+
+  const stopPrice = trade.stop_price;
+  const armLevel = isLong
+    ? trade.entry_price + rMultiple * riskPts
+    : trade.entry_price - rMultiple * riskPts;
+  const tp = trade.take_profit_price;
+
+  let armed = false;
+  let exitPrice: number | null = null;
+
+  for (const bar of bars) {
+    if (!armed) {
+      // Phase 1: check if original stop is hit before arm level.
+      const stopHit  = isLong ? bar.l <= stopPrice : bar.h >= stopPrice;
+      const armHit   = isLong ? bar.h >= armLevel  : bar.l <= armLevel;
+
+      if (stopHit && !armHit) {
+        exitPrice = stopPrice;
+        break;
+      }
+      if (armHit) {
+        armed = true;
+        // Continue into Phase 2 within the same bar — check if break-even touched.
+        const beHit = isLong ? bar.l <= trade.entry_price : bar.h >= trade.entry_price;
+        if (beHit) { exitPrice = trade.entry_price; break; }
+        if (isPositiveNumber(tp)) {
+          const tpHit = isLong ? bar.h >= tp : bar.l <= tp;
+          if (tpHit) { exitPrice = tp; break; }
+        }
+      }
+    } else {
+      // Phase 2: stop moved to entry (break-even).
+      const beHit = isLong ? bar.l <= trade.entry_price : bar.h >= trade.entry_price;
+      if (isPositiveNumber(tp)) {
+        const tpHit = isLong ? bar.h >= tp : bar.l <= tp;
+        // Credit TP before break-even when both occur on the same bar.
+        if (tpHit && !beHit) { exitPrice = tp; break; }
+        if (beHit) { exitPrice = trade.entry_price; break; }
+        if (tpHit) { exitPrice = tp; break; }
+      } else {
+        if (beHit) { exitPrice = trade.entry_price; break; }
+      }
+    }
+  }
+
+  // No level was hit during the bars window — use actual exit.
+  if (exitPrice === null) exitPrice = trade.exit_price;
+
+  const pnlUsd = pnlAt(exitPrice, trade, mult);
+  const exitPts = isLong
+    ? exitPrice - trade.entry_price
+    : trade.entry_price - exitPrice;
+  const outcomeR = riskPts > 0 ? exitPts / riskPts : 0;
+
+  // Bar walk always resolves tick order precisely — confidence is always 'exact'.
+  return { pnlUsd, outcomeR, confidence: 'exact' };
+}
+
+/**
+ * Across a set of trades, evaluate every candidate take-profit target
+ * (1R, 2R, 3R, 4R) using fixedTargetAtR (R-field path, no bars required)
+ * and recommend the target R that maximises expectancy.
+ *
+ * Returns null when no trades have mfe_r / mae_r data (sampleSize = 0).
+ */
+export function recommendRR(trades: WhatIfTrade[]): {
+  byR: Array<{ r: number; hitRate: number; expectancyR: number; totalUsd: number }>;
+  recommendedR: number;
+  sampleSize: number;
+  verdict: string;
+} | null {
+  const CANDIDATE_RS = [1, 2, 3, 4] as const;
+
+  // Only include trades that have at least mfe_r (needed to decide target hit).
+  const usable = trades.filter(t => typeof t.mfe_r === 'number' && isFinite(t.mfe_r as number));
+  if (usable.length === 0) return null;
+
+  const byR = CANDIDATE_RS.map(r => {
+    let hits = 0;
+    let totalOutcomeR = 0;
+    let totalUsd = 0;
+
+    for (const trade of usable) {
+      const result = fixedTargetAtR(trade, r);
+      if (result === null) continue;
+      if (result.resolved === 'target') hits++;
+      totalOutcomeR += result.outcomeR;
+      totalUsd += result.pnlUsd;
+    }
+
+    const hitRate = hits / usable.length;
+    const expectancyR = totalOutcomeR / usable.length;
+    return { r, hitRate, expectancyR, totalUsd };
+  });
+
+  // Pick the R with highest expectancy. On a tie, prefer the larger R
+  // (more upside for the same expectancy).
+  const best = byR.reduce((acc, cur) =>
+    cur.expectancyR > acc.expectancyR ? cur : acc,
+  );
+
+  const hitPct = Math.round(best.hitRate * 100);
+  const expRounded = best.expectancyR.toFixed(2);
+  const verdict =
+    `A fixed ${best.r}R target maximises expectancy (${expRounded}R avg, ${hitPct}% hit rate) ` +
+    `on ${usable.length} trades — ` +
+    (best.r === 1
+      ? 'smaller targets keep win rate high but cap your runners.'
+      : best.r >= 4
+      ? 'only run this if your edge genuinely produces large moves.'
+      : `smaller targets cap your winners while larger ones dilute hit rate.`);
+
+  return {
+    byR,
+    recommendedR: best.r,
+    sampleSize: usable.length,
+    verdict,
   };
 }

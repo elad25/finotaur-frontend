@@ -114,6 +114,11 @@ export interface Trade {
   actual_user_r?: number;
   user_risk_r?: number;
   user_reward_r?: number;
+  // Excursion data (backfilled / live-captured) — used by whatIfEngine RR + break-even scenarios
+  mfe?: number | null;
+  mae?: number | null;
+  mfe_r?: number | null;
+  mae_r?: number | null;
   /** Real DB ids of all underlying trades aggregated into this displayed row (copier/all-accounts grouping). */
   group_trade_ids?: string[];
   metrics?: {
