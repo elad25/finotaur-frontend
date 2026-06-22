@@ -33,9 +33,9 @@ import type { Trade } from '@/hooks/useTradesData';
 import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { resolveHiddenPortfolioIds } from '@/lib/journal/hiddenAccounts';
-import { analyzeWhatIf } from '@/lib/journal/whatIfEngine';
-import type { WhatIfScenario, WhatIfResult, PriceBar } from '@/lib/journal/whatIfEngine';
-import { useTradeReconcile, useTradeBars } from '@/hooks/useTradeBars';
+import { analyzeWhatIf, fixedTargetAtR, breakEvenAtR, estimateBreakEvenAtR, recommendRR } from '@/lib/journal/whatIfEngine';
+import type { WhatIfScenario, WhatIfResult, PriceBar, WhatIfTrade } from '@/lib/journal/whatIfEngine';
+import { useTradeReconcile, useTradeBars, useAllTradeBars } from '@/hooks/useTradeBars';
 import { buildAggregate } from '@/lib/journal/plannedScenarios';
 import type { PlannedScenario } from '@/lib/journal/plannedScenarios';
 import { useShadowTrade, useShadowAggregate } from '@/hooks/useShadow';
@@ -1324,6 +1324,528 @@ function TradeEngineView({
   );
 }
 
+// ─── Risk-reward lab ──────────────────────────────────────────────────────────
+// Self-contained aggregate section: replays ALL closed trades under fixed
+// management rules (target-at-R, break-even stop) and surfaces the best-fit
+// R-multiple for this user's historical trade behaviour.
+
+/** Compact sparkline — no axes, just the curve shape. */
+interface MiniCurveProps {
+  data: number[];
+  color: string;
+}
+function MiniCurve({ data, color }: MiniCurveProps) {
+  if (data.length < 2) return <div className="h-14" />;
+  const pts = data.map((v, i) => ({ i, v }));
+  return (
+    <div style={{ width: '100%', height: 56 }}>
+      <ResponsiveContainer width="100%" height={56}>
+        <LineChart data={pts} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+          <Line
+            type="monotone"
+            dataKey="v"
+            stroke={color}
+            strokeWidth={1.5}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Segmented R-multiple toggle. */
+interface SegmentToggleProps<T extends number> {
+  options: T[];
+  value: T;
+  onChange: (v: T) => void;
+  formatLabel?: (v: T) => string;
+  disabled?: boolean;
+}
+function SegmentToggle<T extends number>({
+  options,
+  value,
+  onChange,
+  formatLabel = (v) => `${v}R`,
+  disabled = false,
+}: SegmentToggleProps<T>) {
+  return (
+    <div className="flex gap-0.5 rounded-[8px] bg-white/[0.06] p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(opt)}
+          className={`rounded-[6px] px-2 py-0.5 text-[11px] font-semibold tabular-nums transition-colors ${
+            disabled
+              ? 'cursor-not-allowed text-white/28'
+              : opt === value
+                ? 'bg-[rgba(20,20,20,0.88)] text-[#C9A646] shadow-sm'
+                : 'text-white/42 hover:text-white/70'
+          }`}
+        >
+          {formatLabel(opt)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Lab card — one hypothesis at a time. */
+interface LabCardProps {
+  title: string;
+  subtitle?: string;
+  totalPnl: number | null;
+  deltaVsActual: number | null;
+  curve: number[];
+  curveColor: string;
+  isBaseline?: boolean;
+  isInert?: boolean;
+  inertMessage?: string;
+  badge?: string;
+  children?: React.ReactNode;
+}
+function LabCard({
+  title,
+  subtitle,
+  totalPnl,
+  deltaVsActual,
+  curve,
+  curveColor,
+  isBaseline = false,
+  isInert = false,
+  inertMessage,
+  badge,
+  children,
+}: LabCardProps) {
+  const pnlPositive = (totalPnl ?? 0) >= 0;
+  const deltaPositive = (deltaVsActual ?? 0) >= 0;
+  return (
+    <div
+      className={`rounded-[14px] border p-ds-4 flex flex-col gap-ds-3 transition-colors ${
+        isInert
+          ? 'border-white/[0.06] bg-white/[0.02] opacity-60'
+          : isBaseline
+            ? 'border-2 border-[#60A5FA]/60 bg-[rgba(22,22,22,0.90)]'
+            : 'border-[0.5px] border-white/[0.08] bg-[rgba(22,22,22,0.90)] hover:border-white/[0.14]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-ds-2">
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[13px] font-semibold text-white leading-snug">{title}</p>
+          {subtitle && (
+            <p className="text-[11px] text-white/42 leading-relaxed">{subtitle}</p>
+          )}
+        </div>
+        {isBaseline && (
+          <span className="flex-shrink-0 rounded-[4px] bg-[#60A5FA]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#60A5FA]">
+            Baseline
+          </span>
+        )}
+      </div>
+
+      <MiniCurve data={curve} color={curveColor} />
+
+      {isInert ? (
+        <p className="font-data text-xl font-bold text-white/28">—</p>
+      ) : totalPnl != null ? (
+        <p
+          className={`font-data text-xl font-bold tabular-nums ${
+            pnlPositive ? 'text-[#4AD295]' : 'text-[#F87171]'
+          }`}
+        >
+          {fmtPnl(totalPnl)}
+        </p>
+      ) : (
+        <p className="font-data text-xl font-bold text-white/28">—</p>
+      )}
+
+      {!isBaseline && !isInert && deltaVsActual != null && (
+        <span
+          className={`self-start rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
+            deltaPositive
+              ? 'bg-[#4AD295]/10 text-[#4AD295]'
+              : 'bg-[#F87171]/10 text-[#F87171]'
+          }`}
+        >
+          {fmtDelta(deltaVsActual)}
+        </span>
+      )}
+
+      {isInert && inertMessage && (
+        <p className="text-[11px] text-white/38 italic">{inertMessage}</p>
+      )}
+
+      {badge && !isInert && (
+        <p className="text-[11px] text-white/42">{badge}</p>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/**
+ * FINO EXPLAINS — inline branded explainer card.
+ * Uses /fino-avatar.png (same asset as FinoExplains.tsx).
+ * This is a visual on-page card, distinct from useRegisterJournalFinoContext
+ * which feeds data to FINO chat.
+ */
+function FinoExplainsInline() {
+  return (
+    <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4`}>
+      <div className="flex items-start gap-ds-3">
+        <img
+          src="/fino-avatar.png"
+          alt="FINO"
+          className="h-8 w-8 flex-shrink-0 rounded-full object-cover ring-1 ring-[#C9A646]/50 mt-0.5"
+        />
+        <div className="flex flex-col gap-ds-1">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.15em] text-[#C9A646]">
+            FINO EXPLAINS
+          </p>
+          <p className="text-[13px] text-white/70 leading-relaxed">
+            This lab replays every closed trade as if you had applied one fixed rule — a set
+            R target, or a stop moved to break-even — using the real favorable and adverse
+            extremes each trade reached. No guesses: if price bars are stored, the replay
+            is exact; otherwise it uses your recorded excursion R values. Use the toggles
+            to find the risk-reward ratio that fits how your trades actually behave.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ScenarioLab — aggregate risk-reward lab section.
+ * Mounted as a new "Lab" tab on the Shadow page.
+ * Does NOT modify or replace any existing tab.
+ */
+interface ScenarioLabProps {
+  closedTrades: Trade[];
+  barsByTrade: Map<string, PriceBar[]>;
+}
+
+function ScenarioLab({ closedTrades, barsByTrade }: ScenarioLabProps) {
+  const [targetR, setTargetR] = useState<1 | 2 | 3 | 4>(2);
+  const [beR, setBeR] = useState<1 | 2 | 3>(1);
+
+  // Build WhatIfTrade array (sorted ascending by close time for cumulative curves).
+  const allWhatIfTrades = useMemo<WhatIfTrade[]>(() => {
+    const sorted = [...closedTrades].sort(
+      (a, b) => new Date(a.close_at ?? a.open_at).getTime() - new Date(b.close_at ?? b.open_at).getTime(),
+    );
+    return sorted.map((t): WhatIfTrade => ({
+      side: t.side,
+      entry_price: t.entry_price,
+      exit_price: t.exit_price ?? t.entry_price,
+      quantity: t.quantity,
+      multiplier: t.multiplier ?? null,
+      symbol: t.symbol,
+      stop_price: t.stop_price ?? null,
+      take_profit_price: t.take_profit_price ?? null,
+      open_at: t.open_at,
+      close_at: t.close_at ?? t.open_at,
+      mfe_r: t.mfe_r ?? null,
+      mae_r: t.mae_r ?? null,
+    }));
+  }, [closedTrades]);
+
+  // Parallel sorted closed list (same order as allWhatIfTrades).
+  const sortedClosed = useMemo(() => {
+    return [...closedTrades].sort(
+      (a, b) => new Date(a.close_at ?? a.open_at).getTime() - new Date(b.close_at ?? b.open_at).getTime(),
+    );
+  }, [closedTrades]);
+
+  // Actual (baseline) cumulative curve.
+  const actualCurve = useMemo<number[]>(() => {
+    let cum = 0;
+    return sortedClosed.map((t) => {
+      cum += t.pnl ?? 0;
+      return cum;
+    });
+  }, [sortedClosed]);
+  const actualTotal = actualCurve[actualCurve.length - 1] ?? 0;
+
+  // Target-at-R curve (reactive to targetR toggle).
+  const targetData = useMemo(() => {
+    let cum = 0;
+    let hits = 0;
+    const curve = sortedClosed.map((t, i) => {
+      const wt = allWhatIfTrades[i];
+      const result = fixedTargetAtR(wt, targetR);
+      let tradePnl: number;
+      if (result !== null) {
+        tradePnl = result.pnlUsd;
+        if (result.resolved === 'target') hits++;
+      } else {
+        tradePnl = t.pnl ?? 0;
+      }
+      cum += tradePnl;
+      return cum;
+    });
+    const total = curve[curve.length - 1] ?? 0;
+    const hitRate = sortedClosed.length > 0 ? Math.round((hits / sortedClosed.length) * 100) : 0;
+    return { curve, total, delta: total - actualTotal, hitRate };
+  }, [sortedClosed, allWhatIfTrades, targetR, actualTotal]);
+
+  // Count indeterminate trades for the current targetR (for the note under the card).
+  const targetIndeterminateN = useMemo(() => {
+    let n = 0;
+    for (let i = 0; i < sortedClosed.length; i++) {
+      const wt = allWhatIfTrades[i];
+      if (!wt) continue;
+      const result = fixedTargetAtR(wt, targetR);
+      if (result !== null && result.confidence === 'indeterminate') n++;
+    }
+    return n;
+  }, [sortedClosed, allWhatIfTrades, targetR]);
+
+  // Break-even stop curve — 3-tier fallback per trade:
+  //   Tier 1 (exact):         bars stored → breakEvenAtR (bar walk)
+  //   Tier 2a (certain):      no bars, estimateBreakEvenAtR = 'certain' → point pnlUsd
+  //   Tier 2b (indeterminate):no bars, estimateBreakEvenAtR = 'indeterminate' → band
+  //   Tier 3 (skip):          neither computable → not counted
+  const beData = useMemo(() => {
+    const totalM = sortedClosed.length;
+
+    let exactN = 0;
+    let certainN = 0;
+    let indetN = 0;
+    let knownTotal = 0;
+    let indetLowSum = 0;
+    let indetHighSum = 0;
+    let cumActualSubset = 0;
+    const curve: number[] = [];
+    let cumCurve = 0;
+
+    for (let i = 0; i < sortedClosed.length; i++) {
+      const t = sortedClosed[i];
+      const wt = allWhatIfTrades[i];
+      if (!wt) continue;
+
+      const bars = barsByTrade.get(t.id);
+      const hasBars = (bars?.length ?? 0) > 0;
+      const actualPnl = t.pnl ?? 0;
+
+      if (hasBars) {
+        const result = breakEvenAtR(wt, bars!, beR);
+        if (result !== null) {
+          exactN++;
+          knownTotal += result.pnlUsd;
+          cumActualSubset += actualPnl;
+          cumCurve += result.pnlUsd;
+          curve.push(cumCurve);
+        }
+      } else {
+        const est = estimateBreakEvenAtR(wt, beR);
+        if (est !== null) {
+          if (est.confidence === 'certain' && est.pnlUsd !== null) {
+            certainN++;
+            knownTotal += est.pnlUsd;
+            cumActualSubset += actualPnl;
+            cumCurve += est.pnlUsd;
+            curve.push(cumCurve);
+          } else if (est.confidence === 'indeterminate') {
+            indetN++;
+            indetLowSum += est.lowUsd;
+            indetHighSum += est.highUsd;
+            cumActualSubset += actualPnl;
+            const mid = (est.lowUsd + est.highUsd) / 2;
+            cumCurve += mid;
+            curve.push(cumCurve);
+          }
+        }
+      }
+    }
+
+    const coveredN = exactN + certainN + indetN;
+
+    if (coveredN === 0) {
+      return {
+        curve: [] as number[],
+        total: null as number | null,
+        delta: null as number | null,
+        coveredN,
+        totalM,
+        exactN: 0,
+        certainN: 0,
+        indetN: 0,
+        bandLow: null as number | null,
+        bandHigh: null as number | null,
+      };
+    }
+
+    const bandLow = knownTotal + indetLowSum;
+    const bandHigh = knownTotal + indetHighSum;
+    const delta = knownTotal - cumActualSubset;
+
+    return {
+      curve,
+      total: knownTotal,
+      delta,
+      coveredN,
+      totalM,
+      exactN,
+      certainN,
+      indetN,
+      bandLow: indetN > 0 ? bandLow : null,
+      bandHigh: indetN > 0 ? bandHigh : null,
+    };
+  }, [sortedClosed, allWhatIfTrades, barsByTrade, beR]);
+
+  // RR recommendation from the engine.
+  const recommendation = useMemo(() => recommendRR(allWhatIfTrades), [allWhatIfTrades]);
+
+  const targetColor = targetData.total >= actualTotal ? COLOR_GREEN : COLOR_RED;
+
+  const n = sortedClosed.length;
+  if (n === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-ds-4">
+      {/* Section heading */}
+      <div className="flex flex-col gap-ds-1">
+        <h2 className="text-[18px] font-semibold text-white leading-snug">
+          Risk-reward lab
+        </h2>
+        <p className="text-[13px] text-white/50">
+          Test a fixed rule across your {n} closed trade{n !== 1 ? 's' : ''} — find what actually works for you.
+        </p>
+      </div>
+
+      {/* FINO EXPLAINS — no existing on-page explainer card in the Shadow page */}
+      <FinoExplainsInline />
+
+      {/* 2-card grid: Target card + Break-even stop card */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-ds-4">
+
+        {/* Card 1 — Baseline */}
+        <LabCard
+          title="What you actually did"
+          subtitle="Your real exits — the baseline."
+          totalPnl={actualTotal}
+          deltaVsActual={null}
+          curve={actualCurve}
+          curveColor={COLOR_GOLD}
+          isBaseline
+        />
+
+        {/* Card 2 — Target: let it run to fixed R */}
+        <LabCard
+          title="Target — let it run"
+          subtitle={`Exits at ${targetR}R or stops out at −1R.`}
+          totalPnl={targetData.total}
+          deltaVsActual={targetData.delta}
+          curve={targetData.curve}
+          curveColor={targetColor}
+          badge={`Hits the ${targetR}R target ${targetData.hitRate}% of the time.`}
+        >
+          {targetIndeterminateN > 0 && (
+            <p className="text-[11px] text-white/42 leading-relaxed">
+              {targetIndeterminateN} trade{targetIndeterminateN !== 1 ? 's' : ''} indeterminate — target &amp; stop both touched
+            </p>
+          )}
+          <div className="mt-auto pt-ds-1">
+            <SegmentToggle<1 | 2 | 3 | 4>
+              options={[1, 2, 3, 4]}
+              value={targetR}
+              onChange={setTargetR}
+            />
+          </div>
+        </LabCard>
+
+        {/* Card 3 — Break-even stop (3-tier confidence model) */}
+        <LabCard
+          title="Break-even stop"
+          subtitle={`Move stop to entry once price reaches ${beR}R in your favour.`}
+          totalPnl={beData.total}
+          deltaVsActual={beData.coveredN > 0 ? beData.delta : null}
+          curve={beData.curve}
+          curveColor={COLOR_GREEN}
+          isInert={beData.coveredN === 0}
+          inertMessage="Add stops/targets to your trades to unlock this scenario."
+        >
+          {beData.coveredN > 0 && beData.indetN > 0 && beData.bandLow !== null && beData.bandHigh !== null && (
+            <p className="text-[11px] text-white/42 leading-relaxed">
+              Range incl. {beData.indetN} indeterminate:{' '}
+              <span className="tabular-nums">{fmtPnl(Math.round(beData.bandLow))}</span>
+              {' … '}
+              <span className="tabular-nums">{fmtPnl(Math.round(beData.bandHigh))}</span>
+            </p>
+          )}
+          {beData.coveredN > 0 && (
+            <p className="text-[11px] text-white/42 leading-relaxed">
+              <span>Exact {beData.exactN}</span>
+              {' · '}
+              <span>Estimated {beData.certainN}</span>
+              {' · '}
+              <span className={beData.indetN > 0 ? 'text-[#C9A646]' : ''}>
+                Indeterminate {beData.indetN}
+              </span>
+            </p>
+          )}
+          <div className="mt-auto pt-ds-1">
+            <SegmentToggle<1 | 2 | 3>
+              options={[1, 2, 3]}
+              value={beR}
+              onChange={beData.coveredN > 0 ? setBeR : () => { /* inert */ }}
+              disabled={beData.coveredN === 0}
+            />
+          </div>
+        </LabCard>
+      </div>
+
+      {/* Tier legend */}
+      <p className="text-[11px] text-white/28 leading-relaxed">
+        Exact = from price bars · Estimated = from your trade&apos;s favorable/adverse extremes · Indeterminate = order unknown without bars
+      </p>
+
+      {/* RR recommendation panel */}
+      <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4`}>
+        <div className="flex items-start gap-ds-3">
+          <Lightbulb className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#C9A646]" />
+          <div className="flex flex-col gap-ds-1">
+            {recommendation ? (
+              <>
+                <p className="text-sm font-medium text-white leading-relaxed">
+                  {recommendation.verdict}
+                </p>
+                <p className="text-[13px] text-white/70 leading-relaxed">
+                  At {targetR}R you&apos;d net{' '}
+                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
+                    {fmtPnl(Math.round(targetData.total))}
+                  </span>{' '}
+                  ({fmtDelta(Math.round(targetData.delta))}); expectancy peaks at {recommendation.recommendedR}R.
+                </p>
+                <p className="text-[11px] text-white/38 mt-ds-1">
+                  Based on {recommendation.sampleSize} trade{recommendation.sampleSize !== 1 ? 's' : ''} with excursion data.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-white leading-relaxed">
+                  At {targetR}R you&apos;d net{' '}
+                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
+                    {fmtPnl(Math.round(targetData.total))}
+                  </span>{' '}
+                  ({fmtDelta(Math.round(targetData.delta))}) with a {targetData.hitRate}% hit rate.
+                </p>
+                <p className="text-[11px] text-white/38 mt-ds-1">
+                  Add stop prices to your trades to unlock the full R-based expectancy recommendation.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Trade picker ─────────────────────────────────────────────────────────────
 
 interface TradePickerProps {
@@ -1477,6 +1999,10 @@ export default function TradeCompare() {
     );
   }, [selectedTrade, bars, hasBars]);
 
+  // Fetch bars for ALL closed trades — used by the Risk-reward Lab (ScenarioLab).
+  const closedTradeIds = useMemo(() => closedTrades.map((t) => t.id), [closedTrades]);
+  const { barsByTrade } = useAllTradeBars(closedTradeIds);
+
   // Aggregate for beta Day tab + Distribution tab.
   const aggregate = useShadowAggregate(closedTrades);
 
@@ -1524,6 +2050,7 @@ export default function TradeCompare() {
           <TabsTrigger value="day" className={triggerClass}>Day</TabsTrigger>
           <TabsTrigger value="distribution" className={triggerClass}>Distribution</TabsTrigger>
           <TabsTrigger value="trade" className={triggerClass}>Trade</TabsTrigger>
+          <TabsTrigger value="lab" className={triggerClass}>Lab</TabsTrigger>
         </TabsList>
 
         {/* ── Trade tab ── */}
@@ -1568,6 +2095,13 @@ export default function TradeCompare() {
               total={aggregate.total}
               trades={closedTrades}
             />
+          )}
+        </TabsContent>
+
+        {/* ── Lab tab — Risk-reward lab (ScenarioLab) ── */}
+        <TabsContent value="lab" className="mt-ds-5">
+          {isLoading ? loadingEl : closedTrades.length === 0 ? noTradesEl : (
+            <ScenarioLab closedTrades={closedTrades} barsByTrade={barsByTrade} />
           )}
         </TabsContent>
       </Tabs>

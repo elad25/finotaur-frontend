@@ -39,7 +39,7 @@ export function useTradeReconcile(): void {
   }, []);
 }
 
-// ─── Row type returned by Supabase ───────────────────────────────────────────
+// ─── Row types returned by Supabase ──────────────────────────────────────────
 
 interface TradePriceBarRow {
   bar_time: string;
@@ -49,6 +49,15 @@ interface TradePriceBarRow {
   c: number;
   timeframe: string | null;
   source: string | null;
+}
+
+interface MultiTradePriceBarRow {
+  trade_id: string;
+  bar_time: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
 }
 
 // ─── useTradeBars ─────────────────────────────────────────────────────────────
@@ -83,6 +92,60 @@ export function useTradeBars(tradeId?: string): {
 
   return {
     bars: data ?? [],
+    isLoading,
+  };
+}
+
+// ─── useAllTradeBars ──────────────────────────────────────────────────────────
+// Fetches bars for MANY trades in a single query, grouped by trade_id.
+// NOTE: The .in() list is unbounded — safe for typical user trade counts
+// (hundreds at most). If this ever scales to thousands of ids, paginate or
+// batch into chunks of ~200.
+
+export function useAllTradeBars(tradeIds: string[]): {
+  barsByTrade: Map<string, PriceBar[]>;
+  isLoading: boolean;
+} {
+  // Stable query key: sort ids so insertion order doesn't cause cache misses.
+  const sortedIds = [...tradeIds].sort();
+  const queryKey = ['trade-price-bars-multi', sortedIds.join(',')];
+
+  const { data, isLoading } = useQuery<Map<string, PriceBar[]>>({
+    queryKey,
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('trade_price_bars')
+        .select('trade_id, bar_time, o, h, l, c')
+        .in('trade_id', sortedIds)
+        .order('bar_time', { ascending: true });
+
+      if (error) throw error;
+
+      const map = new Map<string, PriceBar[]>();
+      for (const row of (rows as MultiTradePriceBarRow[])) {
+        const bar: PriceBar = {
+          t: new Date(row.bar_time).getTime(),
+          o: Number(row.o),
+          h: Number(row.h),
+          l: Number(row.l),
+          c: Number(row.c),
+        };
+        const existing = map.get(row.trade_id);
+        if (existing) {
+          existing.push(bar);
+        } else {
+          map.set(row.trade_id, [bar]);
+        }
+      }
+      return map;
+    },
+    enabled: tradeIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  return {
+    barsByTrade: data ?? new Map(),
     isLoading,
   };
 }
