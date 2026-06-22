@@ -30,6 +30,7 @@ import {
 } from 'recharts';
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
+import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { analyzeWhatIf } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar } from '@/lib/journal/whatIfEngine';
 import { useTradeReconcile, useTradeBars } from '@/hooks/useTradeBars';
@@ -1419,6 +1420,7 @@ function TradePicker({
 
 export default function TradeCompare() {
   useTradeReconcile();
+  useRegisterJournalFinoContext();
 
   const { data: allTrades, isLoading } = useTrades();
 
