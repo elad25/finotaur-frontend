@@ -31,6 +31,8 @@ import {
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
 import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
+import { usePortfolios } from '@/hooks/usePortfolios';
+import { resolveHiddenPortfolioIds } from '@/lib/journal/hiddenAccounts';
 import { analyzeWhatIf } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar } from '@/lib/journal/whatIfEngine';
 import { useTradeReconcile, useTradeBars } from '@/hooks/useTradeBars';
@@ -1423,13 +1425,23 @@ export default function TradeCompare() {
   useRegisterJournalFinoContext();
 
   const { data: allTrades, isLoading } = useTrades();
+  const { portfolios } = usePortfolios();
+
+  // Exclude hidden paper accounts (e.g. WHISPER) from Shadow — only the
+  // trader's real decisions should be analyzed here.
+  const hiddenPortfolioIds = useMemo(
+    () => new Set(resolveHiddenPortfolioIds(portfolios)),
+    [portfolios],
+  );
 
   const closedTrades = useMemo<Trade[]>(() => {
     if (!allTrades) return [];
     return allTrades.filter(
-      (t) => t.exit_price != null && t.exit_price > 0 && t.close_at != null,
+      (t) =>
+        t.exit_price != null && t.exit_price > 0 && t.close_at != null &&
+        !(t.portfolio_id != null && hiddenPortfolioIds.has(t.portfolio_id)),
     );
-  }, [allTrades]);
+  }, [allTrades, hiddenPortfolioIds]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
