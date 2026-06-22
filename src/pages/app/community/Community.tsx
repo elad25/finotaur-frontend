@@ -36,7 +36,7 @@ export default function Community() {
         )}
       >
         <h1 className="font-sans text-[20px] font-semibold text-ink-primary leading-snug">
-          The Floor — Community
+          The Floor — Global
         </h1>
         <p className="mt-[4px] font-sans text-[13px] text-ink-tertiary">
           Share trades, learn from the desk.
