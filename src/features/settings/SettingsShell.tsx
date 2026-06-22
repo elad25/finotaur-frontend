@@ -5,7 +5,7 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useSearchParams, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Settings, CreditCard, Bell, Shield } from "lucide-react";
+import { Settings, CreditCard, Bell, Shield, Activity } from "lucide-react";
 import { SettingsProvider } from "./SettingsProvider";
 
 // Sidebar nav items mapped to new nested route paths
@@ -14,6 +14,7 @@ const navItems = [
   { path: "billing",       label: "Subscription",  icon: CreditCard },
   { path: "notifications", label: "Notifications", icon: Bell       },
   { path: "security",      label: "Security",      icon: Shield     },
+  { path: "the-floor",     label: "The Floor",     icon: Activity   },
 ] as const;
 
 // Legacy ?tab= query param values → new path segments
