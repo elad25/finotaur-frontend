@@ -62,6 +62,7 @@ import {
   FileBarChart,
   Link2,
   GitCompare,
+  MessageSquare,
 } from 'lucide-react';
 import {
   prefetchAdminStats,
@@ -337,6 +338,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   'mentorship': [
     { label: 'Global', path: '/app/floor/community', icon: Globe, beta: true },
     { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
+    { label: 'DM', path: '/app/floor/dm', icon: MessageSquare, beta: true },
     { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users, beta: true },
   ],
 
