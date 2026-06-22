@@ -672,11 +672,80 @@ function TotalTooltip({ active, payload, label }: TotalTooltipProps) {
 }
 
 
+// ─── Static small-multiple card (non-interactive) ────────────────────────────
+
+interface SmallScenarioCardProps {
+  label: string;
+  subtitle: string;
+  total: number;
+  curve: number[];
+  curveColor: string;
+  isBaseline?: boolean;
+  delta?: number;
+}
+
+function SmallScenarioCard({
+  label,
+  subtitle,
+  total,
+  curve,
+  curveColor,
+  isBaseline = false,
+  delta,
+}: SmallScenarioCardProps) {
+  const totalPositive = total >= 0;
+  const deltaPositive = (delta ?? 0) >= 0;
+  return (
+    <div
+      className={`rounded-[14px] border p-ds-4 flex flex-col gap-ds-2 ${
+        isBaseline
+          ? 'border-2 border-[#C9A646]/40 bg-[rgba(22,22,22,0.90)]'
+          : 'border-[0.5px] border-white/[0.08] bg-[rgba(22,22,22,0.90)]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-ds-2">
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[13px] font-semibold text-white leading-snug">{label}</p>
+          <p className="text-[11px] text-white/42 leading-relaxed">{subtitle}</p>
+        </div>
+        {isBaseline && (
+          <span className="flex-shrink-0 rounded-[4px] bg-[#C9A646]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#E8C766]">
+            Your exit
+          </span>
+        )}
+      </div>
+
+      <MiniCurve data={curve} color={curveColor} />
+
+      <p
+        className={`font-data text-xl font-bold tabular-nums ${
+          totalPositive ? 'text-[#4AD295]' : 'text-[#F87171]'
+        }`}
+      >
+        {fmtPnl(Math.round(total))}
+      </p>
+
+      {!isBaseline && delta != null && (
+        <span
+          className={`self-start rounded-[6px] px-2 py-0.5 text-[11px] font-medium ${
+            deltaPositive
+              ? 'bg-[#4AD295]/10 text-[#4AD295]'
+              : 'bg-[#F87171]/10 text-[#F87171]'
+          }`}
+        >
+          {fmtDelta(Math.round(delta))}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── Day tab (Performance) ────────────────────────────────────────────────────
 // Layout (top → bottom):
-//   1. Interactive scenario cards: Break-even stop + Target — let it run
-//   2. RR recommendation panel + FINO EXPLAINS
-//   3. Combined "Cumulative P&L by scenario" chart (4 lines, incl. BE-stop)
+//   1. Combined "Cumulative P&L by scenario" chart (4 lines, incl. BE-stop)
+//   2. Per-scenario small-multiples grid (5 cards: Actual, Held to stop,
+//      Held to target, Break-even stop [interactive], Target — let it run [interactive])
+//   3. RR recommendation panel
 
 function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<string, PriceBar[]> }) {
   // Shared toggle state — lifted so BE-stop card and chart's 4th line stay in sync.
@@ -939,127 +1008,12 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
   return (
     <div className="flex flex-col gap-ds-5">
 
-      {/* ── TOP: Interactive scenario cards ──────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-ds-4">
-
-        {/* Card 1 — Break-even stop */}
-        <LabCard
-          title="Break-even stop"
-          subtitle={`Move stop to entry once price reaches ${beR}R in your favour.`}
-          totalPnl={beData.total}
-          deltaVsActual={beData.coveredN > 0 ? beData.delta : null}
-          curve={beData.curve}
-          curveColor={COLOR_GREEN}
-          isInert={beData.coveredN === 0}
-          inertMessage="Add stops/targets to your trades to unlock this scenario."
-          badge={
-            beData.coveredN > 0
-              ? `Exact ${beData.exactN} · Estimated ${beData.certainN} · Indeterminate ${beData.indetN}`
-              : undefined
-          }
-        >
-          {/* Confidence chip */}
-          {beConfidenceChip && <div className="flex">{beConfidenceChip}</div>}
-
-          {/* Indeterminate range band */}
-          {beData.coveredN > 0 &&
-            beData.indetN > 0 &&
-            beData.bandLow !== null &&
-            beData.bandHigh !== null && (
-              <p className="text-[11px] text-white/42 leading-relaxed">
-                Range:{' '}
-                <span className="tabular-nums">{fmtPnl(Math.round(beData.bandLow))}</span>
-                {' … '}
-                <span className="tabular-nums">{fmtPnl(Math.round(beData.bandHigh))}</span>
-              </p>
-            )}
-
-          <div className="mt-auto pt-ds-1">
-            <SegmentToggle<1 | 2 | 3>
-              options={[1, 2, 3]}
-              value={beR}
-              onChange={beData.coveredN > 0 ? setBeR : () => { /* inert */ }}
-              disabled={beData.coveredN === 0}
-            />
-          </div>
-        </LabCard>
-
-        {/* Card 2 — Target: let it run */}
-        <LabCard
-          title="Target — let it run"
-          subtitle={`Exits at ${targetR}R or stops out at −1R.`}
-          totalPnl={targetData.total}
-          deltaVsActual={targetData.delta}
-          curve={targetData.curve}
-          curveColor={targetColor}
-          badge={`Hits the ${targetR}R target ${targetData.hitRate}% of the time.`}
-        >
-          {targetIndeterminateN > 0 && (
-            <p className="text-[11px] text-white/42 leading-relaxed">
-              {targetIndeterminateN} trade{targetIndeterminateN !== 1 ? 's' : ''} indeterminate — target &amp; stop both touched
-            </p>
-          )}
-          <div className="mt-auto pt-ds-1">
-            <SegmentToggle<1 | 2 | 3 | 4>
-              options={[1, 2, 3, 4]}
-              value={targetR}
-              onChange={setTargetR}
-            />
-          </div>
-        </LabCard>
-      </div>
-
-      {/* Tier legend */}
-      <p className="text-[11px] text-white/28 leading-relaxed">
-        Exact = from price bars · Estimated = from your trade&apos;s favorable/adverse extremes · Indeterminate = order unknown without bars
-      </p>
-
-      {/* ── RR recommendation panel ───────────────────────────────────────── */}
-      <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4`}>
-        <div className="flex items-start gap-ds-3">
-          <Lightbulb className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#C9A646]" />
-          <div className="flex flex-col gap-ds-1">
-            {recommendation ? (
-              <>
-                <p className="text-sm font-medium text-white leading-relaxed">
-                  {recommendation.verdict}
-                </p>
-                <p className="text-[13px] text-white/70 leading-relaxed">
-                  At {targetR}R you&apos;d net{' '}
-                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
-                    {fmtPnl(Math.round(targetData.total))}
-                  </span>{' '}
-                  ({fmtDelta(Math.round(targetData.delta))}); expectancy peaks at{' '}
-                  {recommendation.recommendedR}R.
-                </p>
-                <p className="text-[11px] text-white/38 mt-ds-1">
-                  Based on {recommendation.sampleSize} trade{recommendation.sampleSize !== 1 ? 's' : ''} with excursion data.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-white leading-relaxed">
-                  At {targetR}R you&apos;d net{' '}
-                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
-                    {fmtPnl(Math.round(targetData.total))}
-                  </span>{' '}
-                  ({fmtDelta(Math.round(targetData.delta))}) with a {targetData.hitRate}% hit rate.
-                </p>
-                <p className="text-[11px] text-white/38 mt-ds-1">
-                  Add stop prices to your trades to unlock the full R-based expectancy recommendation.
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── BOTTOM: Combined cumulative P&L chart (4 lines) ──────────────── */}
+      {/* ── 1. Main combined cumulative P&L chart (full-width, TOP) ──────── */}
       <div className={JOURNAL_PANEL}>
         <div className="flex items-start justify-between gap-ds-3 border-b border-white/[0.06] px-ds-5 py-ds-4">
           <div className="flex items-center gap-2">
             <span className="text-[14px] font-semibold text-white">Cumulative P&amp;L by scenario</span>
-            <ShadowInfoIcon label="Each line shows cumulative P&L across all closed trades. When a stop or target is missing for a trade, that trade's actual P&L is used instead so all lines span the same set of trades. The Break-even stop line reflects the R trigger selected above." />
+            <ShadowInfoIcon label="Each line shows cumulative P&L across all closed trades. When a stop or target is missing for a trade, that trade's actual P&L is used instead so all lines span the same set of trades. The Break-even stop line reflects the R trigger selected in the card below." />
           </div>
         </div>
         <div className="px-ds-5 pb-ds-5 pt-ds-4" style={{ width: '100%', height: 420 }}>
@@ -1126,14 +1080,155 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
             </LineChart>
           </ResponsiveContainer>
         </div>
+        {n > 0 && (
+          <p className="px-ds-5 pb-ds-4 -mt-ds-2 text-[11px] text-white/28 leading-relaxed">
+            Break-even stop line uses midpoint for indeterminate trades; falls back to actual when no excursion data.
+          </p>
+        )}
       </div>
 
-      {/* Tier legend for BE-stop chart line */}
-      {n > 0 && (
-        <p className="text-[11px] text-white/28 leading-relaxed -mt-ds-3">
-          Break-even stop line uses midpoint for indeterminate trades; falls back to actual when no excursion data.
-        </p>
-      )}
+      {/* ── 2. Per-scenario small-multiples grid (5 cards) ───────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
+
+        {/* 2a. Actual (baseline — no delta) */}
+        <SmallScenarioCard
+          label="Actual"
+          subtitle="Your real exits"
+          total={agg.totals.actual}
+          curve={agg.points.map((p) => p.actual)}
+          curveColor={COLOR_GOLD}
+          isBaseline
+        />
+
+        {/* 2b. Held to stop */}
+        <SmallScenarioCard
+          label="Held to stop"
+          subtitle="Exit at your planned stop"
+          total={agg.totals.stop}
+          curve={agg.points.map((p) => p.stop)}
+          curveColor={COLOR_SILVER}
+          delta={agg.totals.stop - agg.totals.actual}
+        />
+
+        {/* 2c. Held to target */}
+        <SmallScenarioCard
+          label="Held to target"
+          subtitle="Exit at your planned target"
+          total={agg.totals.target}
+          curve={agg.points.map((p) => p.target)}
+          curveColor={COLOR_GREEN}
+          delta={agg.totals.target - agg.totals.actual}
+        />
+
+        {/* 2d. Break-even stop — interactive (drives main chart's BE line) */}
+        <LabCard
+          title="Break-even stop"
+          subtitle={`Move stop to entry once price reaches ${beR}R in your favour.`}
+          totalPnl={beData.total}
+          deltaVsActual={beData.coveredN > 0 ? beData.delta : null}
+          curve={beData.curve}
+          curveColor={COLOR_BLUE}
+          isInert={beData.coveredN === 0}
+          inertMessage="Add stops/targets to your trades to unlock this scenario."
+          badge={
+            beData.coveredN > 0
+              ? `Exact ${beData.exactN} · Estimated ${beData.certainN} · Indeterminate ${beData.indetN}`
+              : undefined
+          }
+        >
+          {beConfidenceChip && <div className="flex">{beConfidenceChip}</div>}
+
+          {beData.coveredN > 0 &&
+            beData.indetN > 0 &&
+            beData.bandLow !== null &&
+            beData.bandHigh !== null && (
+              <p className="text-[11px] text-white/42 leading-relaxed">
+                Range:{' '}
+                <span className="tabular-nums">{fmtPnl(Math.round(beData.bandLow))}</span>
+                {' … '}
+                <span className="tabular-nums">{fmtPnl(Math.round(beData.bandHigh))}</span>
+              </p>
+            )}
+
+          <div className="mt-auto pt-ds-1">
+            <SegmentToggle<1 | 2 | 3>
+              options={[1, 2, 3]}
+              value={beR}
+              onChange={beData.coveredN > 0 ? setBeR : () => { /* inert */ }}
+              disabled={beData.coveredN === 0}
+            />
+          </div>
+        </LabCard>
+
+        {/* 2e. Target — let it run — interactive */}
+        <LabCard
+          title="Target — let it run"
+          subtitle={`Exits at ${targetR}R or stops out at −1R.`}
+          totalPnl={targetData.total}
+          deltaVsActual={targetData.delta}
+          curve={targetData.curve}
+          curveColor={targetColor}
+          badge={`Hits the ${targetR}R target ${targetData.hitRate}% of the time.`}
+        >
+          {targetIndeterminateN > 0 && (
+            <p className="text-[11px] text-white/42 leading-relaxed">
+              {targetIndeterminateN} trade{targetIndeterminateN !== 1 ? 's' : ''} indeterminate — target &amp; stop both touched
+            </p>
+          )}
+          <div className="mt-auto pt-ds-1">
+            <SegmentToggle<1 | 2 | 3 | 4>
+              options={[1, 2, 3, 4]}
+              value={targetR}
+              onChange={setTargetR}
+            />
+          </div>
+        </LabCard>
+      </div>
+
+      {/* Tier legend */}
+      <p className="text-[11px] text-white/28 leading-relaxed -mt-ds-2">
+        Exact = from price bars · Estimated = from your trade&apos;s favorable/adverse extremes · Indeterminate = order unknown without bars
+      </p>
+
+      {/* ── 3. RR recommendation panel ───────────────────────────────────── */}
+      <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4`}>
+        <div className="flex items-start gap-ds-3">
+          <Lightbulb className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#C9A646]" />
+          <div className="flex flex-col gap-ds-1">
+            {recommendation ? (
+              <>
+                <p className="text-sm font-medium text-white leading-relaxed">
+                  {recommendation.verdict}
+                </p>
+                <p className="text-[13px] text-white/70 leading-relaxed">
+                  At {targetR}R you&apos;d net{' '}
+                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
+                    {fmtPnl(Math.round(targetData.total))}
+                  </span>{' '}
+                  ({fmtDelta(Math.round(targetData.delta))}); expectancy peaks at{' '}
+                  {recommendation.recommendedR}R.
+                </p>
+                <p className="text-[11px] text-white/38 mt-ds-1">
+                  Based on {recommendation.sampleSize} trade{recommendation.sampleSize !== 1 ? 's' : ''} with excursion data.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-white leading-relaxed">
+                  At {targetR}R you&apos;d net{' '}
+                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
+                    {fmtPnl(Math.round(targetData.total))}
+                  </span>{' '}
+                  ({fmtDelta(Math.round(targetData.delta))}) with a {targetData.hitRate}% hit rate.
+                </p>
+                <p className="text-[11px] text-white/38 mt-ds-1">
+                  Add stop prices to your trades to unlock the full R-based expectancy recommendation.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
