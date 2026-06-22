@@ -748,7 +748,7 @@ function ScenarioCaseCard({
 
 // ─── Day tab (was "Total" — includes Discipline Tax card for beta) ─────────────
 
-function DayView({ trades }: { trades: Trade[] }) {
+function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<string, PriceBar[]> }) {
   const agg = useMemo(() => buildAggregate(trades), [trades]);
 
   if (agg.points.length === 0) {
@@ -787,7 +787,6 @@ function DayView({ trades }: { trades: Trade[] }) {
       value: totals.target,
       caption: `${coverage.withTarget} of ${coverage.total} have a target`,
     },
-    { label: 'Break-even baseline', value: totals.breakeven },
   ];
 
   return (
@@ -889,16 +888,6 @@ function DayView({ trades }: { trades: Trade[] }) {
                 dot={false}
                 activeDot={{ r: 4 }}
               />
-              <Line
-                type="monotone"
-                dataKey="breakeven"
-                name="Break-even"
-                stroke="rgba(255,255,255,0.22)"
-                strokeWidth={1}
-                strokeDasharray="2 4"
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -918,9 +907,8 @@ function DayView({ trades }: { trades: Trade[] }) {
               { key: 'actual',    title: 'What you actually did',       color: COLOR_GOLD,              isActual: true  },
               { key: 'target',    title: 'If you held to target',        color: COLOR_GREEN,             isActual: false },
               { key: 'stop',      title: 'If you held to stop',          color: COLOR_SILVER,            isActual: false },
-              { key: 'breakeven', title: 'If you broke even each time',  color: 'rgba(255,255,255,0.45)', isActual: false },
             ] as Array<{
-              key: 'actual' | 'stop' | 'target' | 'breakeven';
+              key: 'actual' | 'stop' | 'target';
               title: string;
               color: string;
               isActual: boolean;
@@ -938,6 +926,15 @@ function DayView({ trades }: { trades: Trade[] }) {
             />
           ))}
         </div>
+      </div>
+
+      {/* ── Risk-reward lab ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-ds-3">
+        <div className="flex items-center gap-2 border-t border-white/[0.06] pt-ds-5">
+          <span className="text-[14px] font-semibold text-white">Test a fixed rule</span>
+          <ShadowInfoIcon label="Apply a fixed risk-reward rule to all your trades and see what the outcome would have been." />
+        </div>
+        <ScenarioLab closedTrades={trades} barsByTrade={barsByTrade} />
       </div>
     </div>
   );
@@ -2047,10 +2044,9 @@ export default function TradeCompare() {
       {/* Shadow — 3-tab experience */}
       <Tabs defaultValue="day">
         <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
-          <TabsTrigger value="day" className={triggerClass}>Day</TabsTrigger>
+          <TabsTrigger value="day" className={triggerClass}>Performance</TabsTrigger>
           <TabsTrigger value="distribution" className={triggerClass}>Distribution</TabsTrigger>
           <TabsTrigger value="trade" className={triggerClass}>Trade</TabsTrigger>
-          <TabsTrigger value="lab" className={triggerClass}>Lab</TabsTrigger>
         </TabsList>
 
         {/* ── Trade tab ── */}
@@ -2084,7 +2080,7 @@ export default function TradeCompare() {
 
         {/* ── Day tab ── */}
         <TabsContent value="day" className="mt-ds-5">
-          {isLoading ? loadingEl : <DayView trades={closedTrades} />}
+          {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} />}
         </TabsContent>
 
         {/* ── Distribution tab ── */}
@@ -2095,13 +2091,6 @@ export default function TradeCompare() {
               total={aggregate.total}
               trades={closedTrades}
             />
-          )}
-        </TabsContent>
-
-        {/* ── Lab tab — Risk-reward lab (ScenarioLab) ── */}
-        <TabsContent value="lab" className="mt-ds-5">
-          {isLoading ? loadingEl : closedTrades.length === 0 ? noTradesEl : (
-            <ScenarioLab closedTrades={closedTrades} barsByTrade={barsByTrade} />
           )}
         </TabsContent>
       </Tabs>
