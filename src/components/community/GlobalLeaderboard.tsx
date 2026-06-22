@@ -10,8 +10,10 @@
 // Discipline tab: discipline_score rendered as a 0–100 gold progress bar.
 
 import { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { DataState } from '@/components/ds/DataState';
 import { useGlobalLeaderboard, useGlobalDisciplineLeaderboard } from '@/hooks/useGlobalLeaderboard';
+import { useLeaderboardOptIn } from '@/hooks/useLeaderboardOptIn';
 import type {
   GlobalPeriod,
   GlobalLeaderboardRow,
@@ -291,6 +293,61 @@ function DisciplineTable({ rows }: { rows: DisciplineLeaderboardRow[] }) {
   );
 }
 
+// ── Visibility banner ─────────────────────────────────────────────────────────
+
+function VisibilityBanner() {
+  const { optIn, isLoading, toggle, isSaving } = useLeaderboardOptIn();
+  if (isLoading) return null;
+
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-between gap-ds-3',
+        'rounded-[10px] border-[0.5px] px-ds-4 py-[10px]',
+        optIn
+          ? 'bg-[rgba(201,166,70,0.06)] border-[rgba(201,166,70,0.20)]'
+          : 'bg-surface-2 border-border-ds-subtle',
+      )}
+    >
+      <div className="flex items-center gap-[8px] min-w-0">
+        {optIn
+          ? <Eye size={14} className="text-gold-primary shrink-0" aria-hidden="true" />
+          : <EyeOff size={14} className="text-ink-tertiary shrink-0" aria-hidden="true" />
+        }
+        <div className="flex flex-col min-w-0">
+          <span className={cn(
+            'font-sans text-[13px] font-medium leading-snug',
+            optIn ? 'text-gold-primary' : 'text-ink-secondary',
+          )}>
+            {optIn ? 'You\'re visible on the leaderboard' : 'You\'re hidden from the leaderboard'}
+          </span>
+          {!optIn && (
+            <span className="font-sans text-[11px] text-ink-tertiary leading-snug mt-[2px]">
+              Only broker-synced trades count — no manual entries.
+            </span>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        disabled={isSaving}
+        onClick={toggle}
+        className={cn(
+          'shrink-0 px-ds-3 py-[5px] rounded-[6px]',
+          'font-sans text-[12px] font-medium',
+          'transition-colors duration-base ease-out',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          optIn
+            ? 'bg-transparent border-[0.5px] border-[rgba(201,166,70,0.30)] text-gold-primary hover:bg-[rgba(201,166,70,0.08)]'
+            : 'bg-gold-primary text-black hover:opacity-90',
+        )}
+      >
+        {isSaving ? '…' : optIn ? 'Leave' : 'Join'}
+      </button>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function GlobalLeaderboard() {
@@ -334,6 +391,9 @@ export function GlobalLeaderboard() {
         </div>
       </div>
 
+      {/* Opt-in visibility banner */}
+      <VisibilityBanner />
+
       {/* Metric tab bar */}
       <div
         className="flex items-center gap-[2px] rounded-[8px] bg-surface-2 p-[3px] self-start"
@@ -371,7 +431,7 @@ export function GlobalLeaderboard() {
           onRetry={activeQuery.refetch}
           empty={
             <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
-              No one on the leaderboard yet — opt in from Settings.
+              No one on the leaderboard yet. Be the first — join above.
             </p>
           }
         >
