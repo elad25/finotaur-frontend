@@ -141,7 +141,6 @@ const AccountTab = lazy(() => import("@/features/settings/tabs/AccountTab"));
 const BillingTab = lazy(() => import("@/features/settings/tabs/BillingTab"));
 const NotificationsTab = lazy(() => import("@/features/settings/tabs/NotificationsTab"));
 const SecurityTab = lazy(() => import("@/features/settings/tabs/SecurityTab"));
-const CommunityTab = lazy(() => import("@/features/settings/tabs/CommunityTab"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
@@ -744,7 +743,7 @@ function AppContent() {
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
         {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
-        <Route path="floor" element={<Navigate to="/app/floor/rooms" replace />} />
+        <Route path="floor" element={<Navigate to="/app/floor/community" replace />} />
         <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/mentor" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/community" element={<SuspenseRoute><AdminBetaGate><Community /></AdminBetaGate></SuspenseRoute>} />
@@ -814,7 +813,6 @@ function AppContent() {
             <Route path="billing" element={<SuspenseRoute><BillingTab /></SuspenseRoute>} />
             <Route path="notifications" element={<SuspenseRoute><NotificationsTab /></SuspenseRoute>} />
             <Route path="security" element={<SuspenseRoute><SecurityTab /></SuspenseRoute>} />
-            <Route path="community" element={<SuspenseRoute><CommunityTab /></SuspenseRoute>} />
           </Route>
         </Route>
 

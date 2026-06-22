@@ -93,10 +93,6 @@ export interface ProfileData {
   role: string | null;
   is_lifetime: boolean;
 
-  // Community / social visibility (Global Community opt-in flags)
-  global_feed_opt_in: boolean;
-  global_leaderboard_opt_in: boolean;
-
   // Trade limits
   trade_count: number;
   max_trades: number;
@@ -197,8 +193,6 @@ export const PROFILE_SELECT = `
           risk_mode,
           role,
           is_lifetime,
-          global_feed_opt_in,
-          global_leaderboard_opt_in,
           trade_count,
           max_trades,
           current_month_trades_count

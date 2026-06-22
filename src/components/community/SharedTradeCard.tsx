@@ -10,7 +10,8 @@
 // Comments expand inline via useGlobalPostComments + useAddGlobalComment.
 
 import { useState } from 'react';
-import { ArrowBigUp, ArrowBigDown, Repeat2, MessageSquare, MoreVertical } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowBigUp, ArrowBigDown, Repeat2, MessageSquare, MoreVertical, Send } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { DataState } from '@/components/ds/DataState';
@@ -429,8 +430,10 @@ export interface SharedTradeCardProps {
 
 export function SharedTradeCard({ item }: SharedTradeCardProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const currentUserId = user?.id ?? '';
   const canDelete = item.author_id === currentUserId;
+  const canMessage = !!item.author_id && item.author_id !== currentUserId;
 
   // Behavioral score for the post author — loaded async, renders nothing until ready.
   const { score } = useUserDisciplineScore(item.author_id);
@@ -454,7 +457,23 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
             </span>
           </div>
         </div>
-        {canDelete && <DeleteKebab postId={item.id} />}
+        <div className="flex items-center gap-[4px] shrink-0">
+          {canMessage && (
+            <button
+              type="button"
+              onClick={() => navigate(`/app/floor/community?dm=${item.author_id}`)}
+              aria-label={`Message ${item.author_name}`}
+              className={cn(
+                'p-[5px] rounded-[6px]',
+                'text-ink-tertiary hover:text-ink-secondary',
+                'transition-colors duration-base ease-out',
+              )}
+            >
+              <Send size={13} aria-hidden="true" />
+            </button>
+          )}
+          {canDelete && <DeleteKebab postId={item.id} />}
+        </div>
       </div>
 
       {/* Trader Model tags — emotion chip + author behavioral badge */}

@@ -192,7 +192,7 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
-      { label: 'The Floor',   path: '/app/floor/rooms', beta: true },
+      { label: 'The Floor',   path: '/app/floor/community', beta: true },
     ],
     sidebar: [
       { label: 'Dashboard',     path: '/app/journal/overview',    icon: LayoutDashboard },
@@ -216,15 +216,15 @@ export const domains: Record<string, Domain> = {
     label: 'The Floor',
     locked: false,
     beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
-    defaultPath: '/app/floor/rooms',
+    defaultPath: '/app/floor/community',
     subNav: [
+      { label: 'Global', path: '/app/floor/community' },
       { label: 'Rooms', path: '/app/floor/rooms' },
-      { label: 'Community', path: '/app/floor/community' },
       { label: 'Mentor Mode', path: '/app/floor/mentor' },
     ],
     sidebar: [
+      { label: 'Global', path: '/app/floor/community', icon: Globe },
       { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
-      { label: 'Community', path: '/app/floor/community', icon: Users },
       { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users },
     ],
   },
