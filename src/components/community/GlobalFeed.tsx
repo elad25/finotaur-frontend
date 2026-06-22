@@ -4,11 +4,13 @@
 // Hooks: useGlobalFeed (first page only — cursor pagination is additive).
 // Pattern: mirrors RoomFeed layout — DataState wrapper, divided list.
 
+import { useState } from 'react';
 import { DataState } from '@/components/ds/DataState';
 import { Skeleton } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
 import { useGlobalFeed } from '@/hooks/useGlobalFeed';
 import { SharedTradeCard } from '@/components/community/SharedTradeCard';
+import { PostTradeDialog } from '@/components/community/PostTradeDialog';
 import type { GlobalFeedItem } from '@/types/community';
 
 // ── Feed skeleton ──────────────────────────────────────────────────────────────
@@ -47,13 +49,31 @@ function FeedSkeleton() {
 
 export function GlobalFeed() {
   const { posts, isLoading, isError, error, refetch } = useGlobalFeed();
+  const [composerOpen, setComposerOpen] = useState(false);
 
   return (
     <div className={cn('flex flex-col gap-ds-4 px-ds-5 py-ds-5')}>
-      {/* Section heading */}
-      <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
-        Community Feed
-      </h2>
+      {/* Section heading + compose button */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
+          Community Feed
+        </h2>
+        <button
+          type="button"
+          onClick={() => setComposerOpen(true)}
+          aria-label="Share a trade"
+          className={cn(
+            'w-7 h-7 rounded-full flex items-center justify-center',
+            'bg-[#C9A646] hover:bg-[#C9A646]/85 text-black',
+            'font-bold text-[18px] leading-none transition-colors duration-100',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A646]/50',
+          )}
+        >
+          +
+        </button>
+      </div>
+
+      <PostTradeDialog open={composerOpen} onOpenChange={setComposerOpen} />
 
       {/* Feed list */}
       <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle overflow-hidden">
