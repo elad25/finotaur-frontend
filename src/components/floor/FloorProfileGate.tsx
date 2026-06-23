@@ -69,8 +69,9 @@ export function FloorProfileGate({ children }: FloorProfileGateProps) {
 
           {/* Body */}
           <p className="text-sm leading-relaxed" style={{ color: '#888' }}>
-            You need a Floor profile before you can post, compete, or appear on
-            the leaderboard. It takes 10 seconds.
+            Choose a unique nickname and an avatar before you can post,
+            compete, or appear on the leaderboard. Your nickname stays
+            for 3 months.
           </p>
 
           {/* CTA */}

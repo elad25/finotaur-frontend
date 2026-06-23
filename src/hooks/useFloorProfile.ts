@@ -17,6 +17,7 @@ export interface FloorProfile {
   floor_username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  floor_username_locked_until: string | null;
 }
 
 // =====================================================
@@ -39,7 +40,7 @@ export function useFloorProfile() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('floor_username, display_name, avatar_url')
+        .select('floor_username, display_name, avatar_url, floor_username_locked_until')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -50,8 +51,7 @@ export function useFloorProfile() {
     staleTime: 60_000, // 1 min — profile changes are infrequent
   });
 
-  const isComplete =
-    !!query.data?.floor_username && !!query.data?.display_name;
+  const isComplete = !!query.data?.floor_username;
 
   return {
     profile: query.data ?? null,
