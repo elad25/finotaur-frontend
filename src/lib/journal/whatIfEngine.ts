@@ -73,7 +73,7 @@ const ASSET_MULTIPLIERS: Record<string, number> = {
   ZB: 1000, ZN: 1000,
 };
 
-function resolveMultiplier(trade: WhatIfTrade): number {
+export function resolveMultiplier(trade: WhatIfTrade): number {
   if (trade.multiplier != null && trade.multiplier > 0) return trade.multiplier;
   const sym = trade.symbol?.toUpperCase().trim().replace(/\d+$/, '') ?? '';
   return ASSET_MULTIPLIERS[sym] ?? 1;
@@ -311,7 +311,7 @@ export function analyzeWhatIf(trade: WhatIfTrade, bars?: PriceBar[] | null): Wha
  * Returns null when stop is missing or non-positive.
  * Used internally by the R-based scenario functions below.
  */
-function riskUsd(trade: WhatIfTrade, mult: number): number | null {
+export function riskUsd(trade: WhatIfTrade, mult: number): number | null {
   if (!isPositiveNumber(trade.stop_price)) return null;
   const riskPts = Math.abs(trade.entry_price - trade.stop_price);
   if (riskPts === 0) return null;
