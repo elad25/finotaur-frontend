@@ -37,14 +37,20 @@ interface BrokerTrade {
 }
 
 // Collapse copier duplicates into the single original "Trader" trade.
-// The copier replicates one execution across many portfolios — identical
-// symbol/side/entry/exit/quantity/open-time, differing only by portfolio.
-// We keep one representative per position: the earliest-created row (the
-// original the copies were cloned from), matching the journal "Trader" lens.
+// The copier replicates one execution across many portfolios. The copies share
+// an identical economic fingerprint (symbol/side/entry/exit/quantity) but the
+// copier stamps a slightly different open-time per account, so open_at can NOT
+// be part of the identity key (it would leave one row per copy). We key on the
+// economic fingerprint + the close day — two genuinely distinct trades sharing
+// identical entry+exit+qty+symbol+side on the same day is effectively
+// impossible — and keep one representative per position: the earliest-created
+// row (the original the copies were cloned from), matching the journal
+// "Trader" lens.
 function dedupeTraderTrades(rows: BrokerTrade[]): BrokerTrade[] {
   const byPosition = new Map<string, BrokerTrade>();
   for (const t of rows) {
-    const key = [t.symbol, t.side, t.open_at ?? t.close_at, t.entry_price, t.exit_price, t.quantity].join('|');
+    const closeDay = (t.close_at ?? '').slice(0, 10); // YYYY-MM-DD
+    const key = [t.symbol, t.side, t.entry_price, t.exit_price, t.quantity, closeDay].join('|');
     const existing = byPosition.get(key);
     if (!existing || (t.created_at ?? '') < (existing.created_at ?? '')) {
       byPosition.set(key, t);
