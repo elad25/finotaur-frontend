@@ -1,12 +1,13 @@
 // src/components/floor/FloorProfileDialog.tsx
 // =====================================================
 // THE FLOOR — profile setup / edit dialog
-// Lets users set (or update) their Floor username,
-// display name, and optional avatar URL.
+// Lets users set (or update) their Floor nickname and
+// choose a preset avatar. Display name is the nickname.
+// Nickname is locked for 3 months after first set.
 // =====================================================
 
 import { useEffect, useState, useCallback } from 'react';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Lock } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,15 @@ interface FloorProfileDialogProps {
 }
 
 // =====================================================
+// Preset avatar gallery
+// =====================================================
+
+const FLOOR_AVATARS = Array.from(
+  { length: 20 },
+  (_, i) => `/avatars/floor/${String(i + 1).padStart(2, '0')}.webp`,
+);
+
+// =====================================================
 // Username validation (client-side, mirrors the RPC)
 // =====================================================
 
@@ -47,18 +57,16 @@ function validateUsername(raw: string): string | null {
 // =====================================================
 
 function AvatarPreview({
-  displayName,
+  nickname,
   avatarUrl,
 }: {
-  displayName: string;
+  nickname: string;
   avatarUrl: string;
 }) {
-  const initials = displayName
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = nickname
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 2)
+    .toUpperCase() || '?';
 
   const [imgError, setImgError] = useState(false);
 
@@ -89,7 +97,7 @@ function AvatarPreview({
           className="text-lg font-bold select-none"
           style={{ color: '#0A0A0A' }}
         >
-          {initials || '?'}
+          {initials}
         </span>
       )}
     </div>
@@ -111,7 +119,6 @@ export function FloorProfileDialog({
 
   // ── Form state ──────────────────────────────────
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -120,11 +127,24 @@ export function FloorProfileDialog({
   type AvailState = 'idle' | 'checking' | 'available' | 'taken';
   const [availState, setAvailState] = useState<AvailState>('idle');
 
+  // ── Lock state ───────────────────────────────────
+  const isLocked =
+    !!profile?.floor_username &&
+    profile.floor_username_locked_until != null &&
+    new Date(profile.floor_username_locked_until) > new Date();
+
+  const lockedUntilLabel = isLocked && profile?.floor_username_locked_until
+    ? new Date(profile.floor_username_locked_until).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
+
   // ── Prefill from existing profile ────────────────
   useEffect(() => {
     if (open && profile) {
       setUsername(profile.floor_username ?? '');
-      setDisplayName(profile.display_name ?? '');
       setAvatarUrl(profile.avatar_url ?? '');
     }
     if (!open) {
@@ -137,6 +157,8 @@ export function FloorProfileDialog({
   const debouncedUsername = useDebounce(username, 400);
 
   const checkAvailability = useCallback(async (value: string) => {
+    // Skip availability check entirely when locked (name can't change)
+    if (isLocked) return;
     const formatError = validateUsername(value);
     if (formatError || !value) {
       setAvailState('idle');
@@ -157,7 +179,7 @@ export function FloorProfileDialog({
     } catch {
       setAvailState('idle');
     }
-  }, [profile?.floor_username]);
+  }, [profile?.floor_username, isLocked]);
 
   useEffect(() => {
     checkAvailability(debouncedUsername);
@@ -167,11 +189,11 @@ export function FloorProfileDialog({
   const usernameFormatError = validateUsername(username);
   const usernameValid =
     !usernameFormatError && (availState === 'available');
-  const displayNameValid = displayName.trim().length >= 1;
-  const canSave =
-    usernameValid &&
-    displayNameValid &&
-    !saving;
+
+  // When locked: avatar-only save is always allowed (no spinner required)
+  const canSave = isLocked
+    ? !saving
+    : usernameValid && !saving;
 
   // ── Save handler ─────────────────────────────────
   const handleSave = async () => {
@@ -179,9 +201,12 @@ export function FloorProfileDialog({
     setSaving(true);
     setSaveError(null);
     try {
+      const effectiveUsername = isLocked
+        ? (profile?.floor_username ?? username.trim())
+        : username.trim();
       const { error } = await supabase.rpc('set_floor_profile', {
-        p_username: username.trim(),
-        p_display_name: displayName.trim(),
+        p_username: effectiveUsername,
+        p_display_name: null,
         p_avatar_url: avatarUrl.trim() || null,
       });
       if (error) {
@@ -234,7 +259,7 @@ export function FloorProfileDialog({
 
   // ── Shared input style ───────────────────────────
   const inputClass =
-    'w-full rounded-[10px] px-3 py-2 text-sm text-white outline-none transition-colors focus:ring-1 focus:ring-[#C9A646] placeholder:text-zinc-600';
+    'w-full rounded-[10px] px-3 py-2 text-sm text-white outline-none transition-colors focus:ring-1 focus:ring-[#C9A646] placeholder:text-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed';
   const inputStyle = {
     background: '#141414',
     border: '1px solid rgba(255,255,255,0.1)',
@@ -255,45 +280,34 @@ export function FloorProfileDialog({
             Set up your Floor profile
           </DialogTitle>
           <DialogDescription style={{ color: '#888' }}>
-            Pick a public username and display name. This is how you&apos;ll
-            appear on The Floor.
+            Pick a unique nickname and an avatar. This is how you&apos;ll
+            appear on The Floor. Your nickname is locked for 3 months.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 mt-1">
-          {/* ── Avatar preview + display name row ── */}
+          {/* ── Avatar preview row ── */}
           <div className="flex items-center gap-4">
-            <AvatarPreview displayName={displayName} avatarUrl={avatarUrl} />
+            <AvatarPreview nickname={username} avatarUrl={avatarUrl} />
             <div className="flex-1 min-w-0">
-              <label
-                htmlFor="floor-display-name"
-                className="block text-xs font-medium mb-1"
-                style={{ color: '#A0A0A0' }}
-              >
-                Display name <span style={{ color: '#E8C766' }}>*</span>
-              </label>
-              <input
-                id="floor-display-name"
-                type="text"
-                className={inputClass}
-                style={inputStyle}
-                placeholder="Your name on The Floor"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                maxLength={60}
-                disabled={saving}
-              />
+              <p className="text-xs font-medium mb-1" style={{ color: '#A0A0A0' }}>
+                Preview
+              </p>
+              <p className="text-sm font-semibold text-white truncate">
+                {username ? `@${username}` : <span style={{ color: '#555' }}>@your_handle</span>}
+              </p>
             </div>
           </div>
 
-          {/* ── Username ── */}
+          {/* ── Nickname ── */}
           <div>
             <label
               htmlFor="floor-username"
               className="block text-xs font-medium mb-1"
               style={{ color: '#A0A0A0' }}
             >
-              Floor username <span style={{ color: '#E8C766' }}>*</span>
+              Nickname{' '}
+              {!isLocked && <span style={{ color: '#E8C766' }}>*</span>}
             </label>
             <div className="relative">
               <span
@@ -314,41 +328,72 @@ export function FloorProfileDialog({
                 }
                 maxLength={20}
                 autoComplete="off"
-                disabled={saving}
+                disabled={saving || isLocked}
               />
             </div>
             <div className="mt-1 min-h-[18px]">
-              <UsernameStatus />
-              {!username && (
-                <span className="text-[11px]" style={{ color: '#555' }}>
-                  3–20 chars · letters, numbers, underscore
+              {isLocked ? (
+                <span
+                  className="flex items-center gap-1 text-[11px]"
+                  style={{ color: '#C9A646' }}
+                >
+                  <Lock className="h-3 w-3" />
+                  Locked — you can change your nickname after {lockedUntilLabel}
                 </span>
+              ) : (
+                <>
+                  <UsernameStatus />
+                  {!username && (
+                    <span className="text-[11px]" style={{ color: '#555' }}>
+                      3–20 chars · letters, numbers, underscore
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
 
-          {/* ── Avatar URL (optional) ── */}
+          {/* ── Avatar preset gallery ── */}
           <div>
             <label
-              htmlFor="floor-avatar-url"
-              className="block text-xs font-medium mb-1"
+              className="block text-xs font-medium mb-2"
               style={{ color: '#A0A0A0' }}
             >
-              Avatar image URL{' '}
+              Avatar{' '}
               <span className="font-normal" style={{ color: '#555' }}>
-                (optional)
+                (choose one)
               </span>
             </label>
-            <input
-              id="floor-avatar-url"
-              type="url"
-              className={inputClass}
-              style={inputStyle}
-              placeholder="https://…"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
-              disabled={saving}
-            />
+            <div className="grid grid-cols-6 gap-2">
+              {FLOOR_AVATARS.map((src) => {
+                const selected = avatarUrl === src;
+                return (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => setAvatarUrl(src)}
+                    disabled={saving}
+                    className="rounded-[8px] p-0.5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      border: selected
+                        ? '2px solid #C9A646'
+                        : '2px solid rgba(255,255,255,0.08)',
+                      background: selected
+                        ? 'rgba(201,166,70,0.08)'
+                        : 'transparent',
+                    }}
+                    aria-label={src}
+                    aria-pressed={selected}
+                  >
+                    <img
+                      src={src}
+                      alt=""
+                      className="h-[44px] w-[44px] rounded-[6px] object-cover"
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* ── Save error ── */}
