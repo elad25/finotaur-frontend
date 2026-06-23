@@ -72,6 +72,7 @@ const COLOR_GOLD   = '#C9A646';
 const COLOR_BLUE   = '#60A5FA';
 const COLOR_RED    = '#F87171';
 const COLOR_GREEN  = '#4AD295';
+const COLOR_SILVER = '#C3C8D1';
 
 /** Matches JOURNAL_PANEL from Overview.tsx */
 const JOURNAL_PANEL =
@@ -1031,7 +1032,6 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
   }
 
   const xInterval = agg.points.length > 10 ? Math.floor(agg.points.length / 8) : 0;
-  const targetColor = targetData.total >= actualTotal ? COLOR_GREEN : COLOR_RED;
   const n = sortedClosed.length;
 
   // ── Confidence chip for the BE card ──────────────────────────────────────
@@ -1102,16 +1102,16 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
                   <stop offset="100%" stopColor={COLOR_GREEN} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="main-grad-breakeven" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLOR_BLUE} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COLOR_BLUE} stopOpacity={0} />
+                  <stop offset="0%" stopColor={COLOR_SILVER} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={COLOR_SILVER} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="main-grad-letitrun" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#A78BFA" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="#A78BFA" stopOpacity={0} />
+                  <stop offset="0%" stopColor={COLOR_SILVER} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={COLOR_SILVER} stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="main-grad-originalstop" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#F0997B" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="#F0997B" stopOpacity={0} />
+                  <stop offset="0%" stopColor={COLOR_RED} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={COLOR_RED} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
@@ -1147,27 +1147,13 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
               <Legend
                 wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}
               />
-              {/* Actual — shown in both views */}
-              {!hidden.has('actual') && (
-                <Area
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual"
-                  stroke={COLOR_GOLD}
-                  strokeWidth={2}
-                  fill="url(#main-grad-actual)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              )}
               {/* Stop view areas */}
               {view === 'stop' && !hidden.has('originalStop') && (
                 <Area
                   type="monotone"
                   dataKey="originalStop"
                   name="Original stop (kept)"
-                  stroke="#F0997B"
+                  stroke={COLOR_RED}
                   strokeWidth={2}
                   fill="url(#main-grad-originalstop)"
                   fillOpacity={1}
@@ -1180,7 +1166,7 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
                   type="monotone"
                   dataKey="breakevenStop"
                   name={`Break-even stop (${beR}R)`}
-                  stroke={COLOR_BLUE}
+                  stroke={COLOR_SILVER}
                   strokeWidth={2}
                   strokeDasharray="5 3"
                   fill="url(#main-grad-breakeven)"
@@ -1208,12 +1194,29 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
                   type="monotone"
                   dataKey="targetScenario"
                   name={`Let it run (${targetR}R)`}
-                  stroke="#A78BFA"
+                  stroke={COLOR_SILVER}
                   strokeWidth={2}
                   fill="url(#main-grad-letitrun)"
                   fillOpacity={1}
                   dot={false}
                   activeDot={{ r: 4 }}
+                />
+              )}
+              {/* Actual — shown in both views. Rendered LAST so the gold line
+                  paints ON TOP of every scenario line (dominant baseline),
+                  and thicker so it stays readable even when a scenario line
+                  overlaps it exactly (e.g. Held-to-target == Actual). */}
+              {!hidden.has('actual') && (
+                <Area
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual"
+                  stroke={COLOR_GOLD}
+                  strokeWidth={3.5}
+                  fill="url(#main-grad-actual)"
+                  fillOpacity={1}
+                  dot={false}
+                  activeDot={{ r: 5 }}
                 />
               )}
             </AreaChart>
@@ -1340,7 +1343,7 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
             subtitle="Leave it — never move your stop"
             total={originalStopData.total}
             curve={originalStopData.curve}
-            curveColor="#F0997B"
+            curveColor={COLOR_RED}
             delta={originalStopData.delta}
             onClick={() => toggle('originalStop')}
             hidden={hidden.has('originalStop')}
@@ -1365,7 +1368,7 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
             totalPnl={beData.total}
             deltaVsActual={beData.coveredN > 0 ? beData.delta : null}
             curve={beData.curve}
-            curveColor={COLOR_BLUE}
+            curveColor={COLOR_SILVER}
             isInert={beData.coveredN === 0}
             inertMessage="Add stops/targets to your trades to unlock this scenario."
             badge={
@@ -1434,7 +1437,7 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
             totalPnl={targetData.total}
             deltaVsActual={targetData.delta}
             curve={targetData.curve}
-            curveColor={targetColor}
+            curveColor={COLOR_SILVER}
             badge={`Hits the ${targetR}R target ${targetData.hitRate}% of the time.`}
             onClick={() => toggle('targetScenario')}
             hidden={hidden.has('targetScenario')}
