@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../");
-const TODAY = "2026-05-29";
+const TODAY = new Date().toISOString().split("T")[0];
 const BASE_URL = "https://www.finotaur.com";
 
 // --out= flag support
