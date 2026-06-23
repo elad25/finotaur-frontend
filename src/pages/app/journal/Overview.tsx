@@ -46,6 +46,7 @@ import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettings
 // NEW: AFFILIATE STATUS HOOK
 // ================================================
 import { useIsAffiliate } from '@/features/affiliate/hooks/useAffiliateProfile';
+import { UserStatusBadges } from '@/components/floor/UserStatusBadges';
 
 // ================================================
 // NEW: TIMEZONE & TRADING SESSION IMPORTS
@@ -1778,7 +1779,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             <h1 className="text-[17px] font-semibold leading-tight tracking-normal text-white">
               {isMentorView
                 ? <>You're watching {studentName || studentEmail || 'student'} with Mentor Mode 👁️</>
-                : <>Welcome back, {displayName.charAt(0).toUpperCase() + displayName.slice(1)} 👋</>}
+                : <span className="inline-flex items-center gap-1.5 flex-wrap">
+                    Welcome back, {displayName.charAt(0).toUpperCase() + displayName.slice(1)} 👋
+                    <UserStatusBadges />
+                  </span>}
             </h1>
             <p className="mt-2 text-[11px] text-white/62">
               {isMentorView ? "Read-only view of this student's journal" : "Here's your performance overview"}
