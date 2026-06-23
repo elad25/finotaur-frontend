@@ -304,6 +304,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Reports & Stats', path: '/app/journal/reports', icon: FileBarChart },
     { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
+    { label: 'The Floor', path: '/app/journal/floor', icon: Trophy, beta: true },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],

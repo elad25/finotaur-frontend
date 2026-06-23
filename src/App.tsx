@@ -218,6 +218,7 @@ const JournalSettings = lazy(async () => {
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
+const Floor = lazy(() => import("@/pages/app/floor/Floor"));
 
 // Mentorship
 const MentorshipSpaces = lazy(() => import("@/pages/app/mentorship/Spaces"));
@@ -708,6 +709,7 @@ function AppContent() {
 <Route path="journal/strategies/:id" element={<JournalRoute><StrategyDetailView /></JournalRoute>} />
 <Route path="journal/scenarios" element={<JournalRoute><JournalScenarios /></JournalRoute>} />
 <Route path="journal/community" element={<JournalRoute><JournalCommunity /></JournalRoute>} />
+<Route path="journal/floor" element={<JournalRoute><Floor /></JournalRoute>} />
 <Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
 <Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
 <Route path="journal/pricing" element={<JournalRoute><SuspenseRoute><JournalPricingPage /></SuspenseRoute></JournalRoute>} />
