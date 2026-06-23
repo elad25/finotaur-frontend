@@ -31,7 +31,7 @@ export default function Community() {
       {/* ── Page header ── */}
       <header
         className={cn(
-          'shrink-0 px-ds-5 pt-ds-5 pb-ds-4',
+          'shrink-0 px-ds-5 pt-ds-5 pb-ds-4 text-center',
           'border-b border-border-ds-subtle',
         )}
       >
