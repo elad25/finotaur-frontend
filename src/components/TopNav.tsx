@@ -13,7 +13,7 @@
 //   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu } from 'lucide-react';
+import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu, UserCircle } from 'lucide-react';
 import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { FloorProfileDialog } from '@/components/floor/FloorProfileDialog';
 
 export const TopNav = () => {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export const TopNav = () => {
   const { toggle: toggleDrawer } = useProductDrawer();
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
+  const [floorProfileOpen, setFloorProfileOpen] = useState(false);
 
   // Get platform plan + journal tier for the subscription badge
   const fetchUserData = useCallback(async () => {
@@ -262,6 +264,14 @@ export const TopNav = () => {
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
               <DropdownMenuItem
+                onClick={() => setFloorProfileOpen(true)}
+                className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
+              >
+                <UserCircle className="mr-2 h-4 w-4 text-zinc-400" />
+                <span className="text-white">Floor Profile</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
                 onClick={() => navigate('/app/settings')}
                 className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
@@ -282,6 +292,11 @@ export const TopNav = () => {
           </DropdownMenu>
         </div>
       </div>
+
+      <FloorProfileDialog
+        open={floorProfileOpen}
+        onOpenChange={setFloorProfileOpen}
+      />
     </div>
   );
 };

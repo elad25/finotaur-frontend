@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Newspaper, Trophy } from 'lucide-react';
 import { GlobalFeed } from '@/components/community/GlobalFeed';
 import { GlobalLeaderboard } from '@/components/community/GlobalLeaderboard';
+import { FloorProfileGate } from '@/components/floor/FloorProfileGate';
 import { cn } from '@/lib/utils';
 
 // ── Tab config ─────────────────────────────────────────────────────────────────
@@ -69,18 +70,20 @@ export default function Community() {
         ))}
       </nav>
 
-      {/* ── Tab content ── */}
+      {/* ── Tab content (gated behind Floor profile setup) ── */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'feed' && (
-          <div className="h-full overflow-y-auto">
-            <GlobalFeed />
-          </div>
-        )}
-        {activeTab === 'leaderboard' && (
-          <div className="h-full overflow-y-auto">
-            <GlobalLeaderboard />
-          </div>
-        )}
+        <FloorProfileGate>
+          {activeTab === 'feed' && (
+            <div className="h-full overflow-y-auto">
+              <GlobalFeed />
+            </div>
+          )}
+          {activeTab === 'leaderboard' && (
+            <div className="h-full overflow-y-auto">
+              <GlobalLeaderboard />
+            </div>
+          )}
+        </FloorProfileGate>
       </div>
     </div>
   );
