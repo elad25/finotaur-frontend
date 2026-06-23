@@ -1700,7 +1700,7 @@ function ShadowInsightCard({ trades }: { trades: Trade[] }) {
   );
 }
 
-function DistributionView({ tracked, total, trades, closedTrades }: { tracked: number; total: number; trades: Trade[]; closedTrades: Trade[] }) {
+function DistributionView({ closedTrades }: { tracked: number; total: number; trades: Trade[]; closedTrades: Trade[] }) {
   // ── Combined summary: best fixed-R scenario across all closed trades ────────
   const summary = useMemo(() => {
     const actualTotal = closedTrades.reduce((s, t) => s + (t.pnl ?? 0), 0);
@@ -1739,109 +1739,92 @@ function DistributionView({ tracked, total, trades, closedTrades }: { tracked: n
     return { actualTotal, bestR: best.R, bestTotal: best.total, upside, pct };
   }, [closedTrades]);
 
-  const rules: Array<{ key: ScenarioKey; label: string; description: string }> = [
-    {
-      key: 'held_original_stop',
-      label: 'Held original stop',
-      description: 'Did keeping your planned stop improve or cost you vs moving it?',
-    },
-    {
-      key: 'original_target_hit',
-      label: 'Held to original target',
-      description: 'How often do targets actually get hit vs your early exits?',
-    },
-    {
-      key: 'held_loser_past_stop',
-      label: 'Held loser past stop',
-      description: 'The cost of ignoring your stop and holding until close.',
-    },
-  ];
-
-  // ── Determine coaching copy ─────────────────────────────────────────────────
-  // For the stop coaching line we need to know if BE-stop at 1R would have hurt.
-  // We approximate this by checking if actualTotal > 0 and upside > 0
-  // (a rough proxy for "exits are the weak side, stops look disciplined").
-  const stopLineText = summary.upside > 0
-    ? 'Your stops look disciplined — keep them where you planned.'
-    : 'Your stops look disciplined — keep them where you planned.';
-  const targetLineText = summary.upside > 0
-    ? 'Your exits are leaving money on the table — let your winners run.'
-    : 'Your exits are well-timed — discipline is paying off.';
-  const weakerArea = summary.upside > 0 ? 'your exits' : 'your stops';
+  const VERDICT_MIN_N = 10;
+  const n = closedTrades.length;
+  const runItPays = summary.upside > 0;
 
   return (
     <div className="flex flex-col gap-ds-5">
+      {n < VERDICT_MIN_N ? (
+        // Not enough trades to commit to a verdict — stay quiet, no noise.
+        <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-6`}>
+          <div className="relative flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/[0.08] text-[#E8C766]">
+              <Lightbulb className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-[15px] font-semibold text-white">
+                Not enough trades for a verdict yet.
+              </p>
+              <p className="text-[13px] text-white/60 leading-relaxed">
+                Shadow gives you a clear do / don&apos;t once you have at least {VERDICT_MIN_N}{' '}
+                closed trades. You have {n} so far — keep journaling and your verdict will appear here.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        // One decisive verdict: what to do, what not to do.
+        <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-5 flex flex-col gap-ds-4">
+          <div className="flex items-center gap-3">
+            <Lightbulb className="h-5 w-5 shrink-0 text-[#C9A646]" />
+            <p className="text-[18px] font-semibold text-white leading-snug">
+              {runItPays ? 'Let your winners run.' : 'Trust your exits.'}
+            </p>
+          </div>
 
-      {/* ── New: Gold summary headline card ───────────────────────────────── */}
-      {closedTrades.length > 0 && (
-        <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex flex-col gap-ds-3">
-          <div className="flex items-start gap-3">
-            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-            <p className="text-[15px] text-white leading-relaxed">
-              {summary.upside > 0 ? (
-                <>
-                  Keeping your original stop and letting your winners run to{' '}
-                  <span className="text-[#C9A646] font-semibold">{summary.bestR}R</span>{' '}
-                  would have made you{' '}
-                  <span className="text-[#C9A646] font-semibold">
-                    {fmtPnl(Math.round(summary.upside))} more (+{summary.pct}%)
-                  </span>{' '}
-                  than your actual exits.
-                </>
-              ) : (
-                <>
-                  Your actual exits already beat the simple fixed-R targets —{' '}
-                  <span className="text-[#C9A646] font-semibold">your discipline is paying off.</span>
-                </>
-              )}
-            </p>
+          <div className="flex flex-col gap-ds-3">
+            {/* DO */}
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 shrink-0 rounded-[5px] bg-[#3BC76E]/12 px-2 py-0.5 text-[11px] font-bold tracking-wide text-[#3BC76E]">
+                DO
+              </span>
+              <p className="text-[14px] text-white/85 leading-relaxed">
+                {runItPays ? (
+                  <>
+                    Aim for a <span className="font-semibold text-white">{summary.bestR}R target</span>{' '}
+                    and hold your winners to it — across your last {n} closed trades that would have
+                    added{' '}
+                    <span className="font-semibold text-[#C9A646]">
+                      {fmtPnl(Math.round(summary.upside))} (+{summary.pct}%)
+                    </span>.
+                  </>
+                ) : (
+                  <>
+                    Keep timing your exits the way you do — across your last {n} closed trades they
+                    beat every fixed 1R–4R target.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* DON'T */}
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 shrink-0 rounded-[5px] bg-[#EF4444]/12 px-2 py-0.5 text-[11px] font-bold tracking-wide text-[#EF4444]">
+                DON&apos;T
+              </span>
+              <p className="text-[14px] text-white/85 leading-relaxed">
+                {runItPays ? (
+                  <>
+                    Don&apos;t cut your winners early at your current exits — that&apos;s where your
+                    edge is leaking.
+                  </>
+                ) : (
+                  <>
+                    Don&apos;t force trades to a mechanical {summary.bestR}R target — it would have
+                    cost you{' '}
+                    <span className="font-semibold text-[#EF4444]">
+                      ${Math.round(Math.abs(summary.upside)).toLocaleString('en-US')} ({Math.abs(summary.pct)}%)
+                    </span>.
+                  </>
+                )}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-1 pl-8 text-[13px] text-white/62 leading-relaxed">
-            <p>{stopLineText}</p>
-            <p>{targetLineText}</p>
-            <p className="text-white/42 text-[12px] mt-1">
-              Keep sticking to your plan; the upside is in {weakerArea}.
-            </p>
-          </div>
+
+          <p className="text-[11px] text-white/38">Based on your last {n} closed trades.</p>
         </div>
       )}
-
-      {/* Shadow Insight coaching card */}
-      <ShadowInsightCard trades={trades} />
-
-      {/* Header note */}
-      <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_50%,rgba(201,166,70,0.05),transparent_40%)]" />
-        <div className="relative flex items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/08 text-[#E8C766]">
-            <BarChart2 className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-[13px] font-semibold text-white">Across-trade distribution</p>
-            <p className="text-[12px] text-white/50 mt-0.5 max-w-[520px]">
-              These panels show how each decision rule performed across all your intra-trade tracked trades — not just one.
-              Single-trade counterfactuals are anecdotal; patterns emerge at {DISTRIBUTION_MIN_N}+ tracked trades.
-            </p>
-            <p className="text-[11px] text-white/38 mt-2">
-              Currently tracking {tracked} of {total} closed trades with intra-trade price paths.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Per-rule stat blocks */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-ds-4">
-        {rules.map((rule) => (
-          <DistributionRuleStat
-            key={rule.key}
-            ruleKey={rule.key}
-            label={rule.label}
-            description={rule.description}
-            tracked={tracked}
-            total={total}
-          />
-        ))}
-      </div>
     </div>
   );
 }
