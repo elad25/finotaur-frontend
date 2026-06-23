@@ -32,6 +32,26 @@ interface BrokerTrade {
   entry_price: number | null;
   exit_price: number | null;
   quantity: number | null;
+  open_at: string | null;
+  created_at: string | null;
+}
+
+// Collapse copier duplicates into the single original "Trader" trade.
+// The copier replicates one execution across many portfolios — identical
+// symbol/side/entry/exit/quantity/open-time, differing only by portfolio.
+// We keep one representative per position: the earliest-created row (the
+// original the copies were cloned from), matching the journal "Trader" lens.
+function dedupeTraderTrades(rows: BrokerTrade[]): BrokerTrade[] {
+  const byPosition = new Map<string, BrokerTrade>();
+  for (const t of rows) {
+    const key = [t.symbol, t.side, t.open_at ?? t.close_at, t.entry_price, t.exit_price, t.quantity].join('|');
+    const existing = byPosition.get(key);
+    if (!existing || (t.created_at ?? '') < (existing.created_at ?? '')) {
+      byPosition.set(key, t);
+    }
+  }
+  return Array.from(byPosition.values()).sort((a, b) =>
+    (b.close_at ?? '').localeCompare(a.close_at ?? ''));
 }
 
 interface PostTradeDialogProps {
@@ -68,15 +88,16 @@ function TradePicker({
     if (!user) return;
     supabase
       .from('trades')
-      .select('id, symbol, side, pnl, close_at, setup, entry_price, exit_price, quantity, import_source')
+      .select('id, symbol, side, pnl, close_at, setup, entry_price, exit_price, quantity, import_source, open_at, created_at')
       .eq('user_id', user.id)
       .not('close_at', 'is', null)
       .is('deleted_at', null)
       .neq('import_source', 'manual')
       .order('close_at', { ascending: false })
-      .limit(100)
+      .limit(200)
       .then(({ data }) => {
-        setTrades((data ?? []) as BrokerTrade[]);
+        // Show only original Trader trades — collapse copier duplicates.
+        setTrades(dedupeTraderTrades((data ?? []) as BrokerTrade[]));
         setLoading(false);
       });
   }, [user]);
