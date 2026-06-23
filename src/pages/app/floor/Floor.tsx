@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useFloor';
 import { FloorLeaderboardTable } from '@/components/floor/FloorLeaderboardTable';
 import { JoinFloorCard } from '@/components/floor/JoinFloorCard';
+import { FloorProfileGate } from '@/components/floor/FloorProfileGate';
 
 // ────────────────────────────────────────────────────
 // Tab types
@@ -180,12 +181,14 @@ function FloorPage() {
 }
 
 // ────────────────────────────────────────────────────
-// Export — wrapped in AdminBetaGate
+// Export — wrapped in AdminBetaGate, then FloorProfileGate
 // ────────────────────────────────────────────────────
 export default function Floor() {
   return (
     <AdminBetaGate>
-      <FloorPage />
+      <FloorProfileGate>
+        <FloorPage />
+      </FloorProfileGate>
     </AdminBetaGate>
   );
 }
