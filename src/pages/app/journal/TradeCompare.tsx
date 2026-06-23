@@ -151,6 +151,8 @@ interface PriceChartProps {
   bars: PriceBar[];
   mfe: WhatIfResult['mfe'];
   mae: WhatIfResult['mae'];
+  /** Which scenario set to overlay — mirrors the Performance tab's Stop/Target toggle. */
+  view: 'stop' | 'target';
 }
 
 interface ChartTooltipProps {
@@ -178,12 +180,27 @@ function SchematicTooltip({ active, payload, label }: ChartTooltipProps) {
   );
 }
 
-function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
+/** Fixed-R multiple used for the single-trade "Let it run" overlay line. */
+const TRADE_LET_IT_RUN_R = 2;
+
+function PriceChart({ trade, bars, mfe, mae, view }: PriceChartProps) {
   const hasBars = bars.length > 0;
 
   const stopPrice = trade.stop_price && trade.stop_price > 0 ? trade.stop_price : null;
   const tpPrice   = trade.take_profit_price && trade.take_profit_price > 0
     ? trade.take_profit_price
+    : null;
+
+  // ── Scenario exit LEVELS for this one trade (mirrors the Performance tab) ──
+  // Break-even = your entry (scratch the trade). Let-it-run = a fixed-R target
+  // measured from the original stop, in the trade's direction. Both derive from
+  // recorded levels — no price bars required.
+  const breakEvenPrice = view === 'stop' ? trade.entry_price : null;
+  const riskPerUnit = stopPrice != null ? Math.abs(trade.entry_price - stopPrice) : null;
+  const letRunPrice = view === 'target' && riskPerUnit != null && riskPerUnit > 0
+    ? (trade.side === 'LONG'
+        ? trade.entry_price + TRADE_LET_IT_RUN_R * riskPerUnit
+        : trade.entry_price - TRADE_LET_IT_RUN_R * riskPerUnit)
     : null;
 
   const chartData: Array<{ time: string; price: number }> = hasBars
@@ -203,10 +220,11 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
   const allPrices: number[] = [
     trade.entry_price,
     trade.exit_price ?? trade.entry_price,
-    ...(stopPrice ? [stopPrice] : []),
-    ...(tpPrice   ? [tpPrice]   : []),
-    ...(mfe       ? [mfe.price] : []),
-    ...(mae       ? [mae.price] : []),
+    ...(stopPrice    ? [stopPrice]    : []),
+    ...(tpPrice      ? [tpPrice]      : []),
+    ...(letRunPrice  ? [letRunPrice]  : []),
+    ...(mfe          ? [mfe.price]    : []),
+    ...(mae          ? [mae.price]    : []),
     ...(hasBars   ? bars.map((b) => b.h) : []),
     ...(hasBars   ? bars.map((b) => b.l) : []),
   ].filter((v): v is number => typeof v === 'number' && v > 0);
@@ -278,16 +296,35 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
               MAE {fmtPrice(mae.price)}
             </span>
           )}
-          {stopPrice && (
+          {/* Actual — always the dominant baseline */}
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-px w-4 border-t-[3px] border-solid" style={{ borderColor: COLOR_GOLD }} />
+            Actual
+          </span>
+          {/* Stop view: Original stop (red) + Break-even (silver) */}
+          {view === 'stop' && stopPrice && (
             <span className="flex items-center gap-1">
-              <span className="inline-block h-px w-4 border-t-2 border-dashed border-white/40" />
-              Stop {fmtPrice(stopPrice)}
+              <span className="inline-block h-px w-4 border-t-2 border-dashed" style={{ borderColor: COLOR_RED }} />
+              Original stop {fmtPrice(stopPrice)}
             </span>
           )}
-          {tpPrice && (
+          {view === 'stop' && breakEvenPrice && (
             <span className="flex items-center gap-1">
-              <span className="inline-block h-px w-4 border-t-2 border-dashed border-white/40" />
+              <span className="inline-block h-px w-4 border-t-2 border-dashed" style={{ borderColor: COLOR_SILVER }} />
+              Break-even {fmtPrice(breakEvenPrice)}
+            </span>
+          )}
+          {/* Target view: Target (green) + Let it run (silver) */}
+          {view === 'target' && tpPrice && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-px w-4 border-t-2 border-dashed" style={{ borderColor: COLOR_GREEN }} />
               Target {fmtPrice(tpPrice)}
+            </span>
+          )}
+          {view === 'target' && letRunPrice && (
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-px w-4 border-t-2 border-dashed" style={{ borderColor: COLOR_SILVER }} />
+              Let it run ({TRADE_LET_IT_RUN_R}R) {fmtPrice(letRunPrice)}
             </span>
           )}
         </div>
@@ -320,33 +357,54 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
               width={72}
             />
 
-            {/* Stop — dashed neutral line (not red — brand rule: no stoplight on chart lines) */}
-            {stopPrice && (
+            {/* ── Scenario exit levels — coloured per the Performance tab, gated by view ── */}
+            {/* Stop view: Original stop (red) + Break-even = entry (silver). */}
+            {view === 'stop' && stopPrice && (
               <ReferenceLine
                 y={stopPrice}
-                stroke="rgba(255,255,255,0.35)"
+                stroke={COLOR_RED}
                 strokeDasharray="6 4"
                 strokeWidth={1.5}
-                label={{ value: 'Stop', fill: 'rgba(255,255,255,0.5)', fontSize: 10, position: 'right' }}
+                label={{ value: 'Original stop', fill: COLOR_RED, fontSize: 10, position: 'right' }}
               />
             )}
-            {/* Target — dashed neutral line */}
-            {tpPrice && (
+            {view === 'stop' && breakEvenPrice && (
+              <ReferenceLine
+                y={breakEvenPrice}
+                stroke={COLOR_SILVER}
+                strokeDasharray="6 4"
+                strokeWidth={1.5}
+                label={{ value: 'Break-even', fill: COLOR_SILVER, fontSize: 10, position: 'right' }}
+              />
+            )}
+            {/* Target view: Target (green) + Let it run at fixed R (silver). */}
+            {view === 'target' && tpPrice && (
               <ReferenceLine
                 y={tpPrice}
-                stroke="rgba(255,255,255,0.35)"
+                stroke={COLOR_GREEN}
                 strokeDasharray="6 4"
                 strokeWidth={1.5}
-                label={{ value: 'Target', fill: 'rgba(255,255,255,0.5)', fontSize: 10, position: 'right' }}
+                label={{ value: 'Target', fill: COLOR_GREEN, fontSize: 10, position: 'right' }}
               />
             )}
-            {/* Entry — very subtle */}
-            <ReferenceLine
-              y={trade.entry_price}
-              stroke="rgba(255,255,255,0.12)"
-              strokeDasharray="3 3"
-              strokeWidth={1}
-            />
+            {view === 'target' && letRunPrice && (
+              <ReferenceLine
+                y={letRunPrice}
+                stroke={COLOR_SILVER}
+                strokeDasharray="6 4"
+                strokeWidth={1.5}
+                label={{ value: `Let it run (${TRADE_LET_IT_RUN_R}R)`, fill: COLOR_SILVER, fontSize: 10, position: 'right' }}
+              />
+            )}
+            {/* Entry — very subtle reference (shown in Target view; Stop view uses the silver Break-even line at entry). */}
+            {view === 'target' && (
+              <ReferenceLine
+                y={trade.entry_price}
+                stroke="rgba(255,255,255,0.12)"
+                strokeDasharray="3 3"
+                strokeWidth={1}
+              />
+            )}
 
             {hasBars && mfe && mfeLabel && (
               <ReferenceDot
@@ -376,9 +434,9 @@ function PriceChart({ trade, bars, mfe, mae }: PriceChartProps) {
             <Area
               type={hasBars ? 'monotone' : 'linear'}
               dataKey="price"
-              name="Price"
+              name="Actual"
               stroke={COLOR_GOLD}
-              strokeWidth={hasBars ? 1.5 : 2.5}
+              strokeWidth={hasBars ? 2.5 : 3.5}
               fill="url(#shadowPriceFill)"
               fillOpacity={1}
               dot={hasBars
@@ -1848,6 +1906,8 @@ function TradeEngineView({
   distributionTracked,
   distributionTotal,
 }: TradeEngineViewProps) {
+  // Stop / Target overlay switch — mirrors the Performance tab, scoped to this trade.
+  const [view, setView] = useState<'stop' | 'target'>('stop');
   const shadow = useShadowTrade(trade);
   const { engine, planned, hasPath } = shadow;
 
@@ -1887,8 +1947,28 @@ function TradeEngineView({
 
   return (
     <div className="flex flex-col gap-ds-5">
+      {/* Stop / Target overlay switch (same control as the Performance tab) */}
+      <div className="flex justify-center">
+        <div className="flex gap-0.5 rounded-[10px] bg-white/[0.06] p-1">
+          {(['stop', 'target'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`rounded-[7px] px-5 py-1.5 text-[13px] font-semibold transition-colors ${
+                view === v
+                  ? 'bg-[rgba(20,20,20,0.88)] text-[#C9A646] shadow-sm'
+                  : 'text-white/42 hover:text-white/70'
+              }`}
+            >
+              {v === 'stop' ? 'Stop' : 'Target'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Price Path chart */}
-      <PriceChart trade={trade} bars={bars} mfe={mfe} mae={mae} />
+      <PriceChart trade={trade} bars={bars} mfe={mfe} mae={mae} view={view} />
 
       {/* Engine scenarios — when bars exist */}
       {hasPath && scenariosToShow && (
@@ -2340,10 +2420,10 @@ export default function TradeCompare() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[1200px] mx-auto pt-ds-3 pb-ds-7 px-ds-4 flex flex-col gap-ds-5">
+    <div className="w-full max-w-[1200px] mx-auto pt-ds-1 pb-ds-4 px-ds-4 flex flex-col gap-ds-4">
 
       {/* FINO EXPLAINS — canonical collapsible explainer (top-right) */}
-      <div className="flex justify-end -mb-ds-3">
+      <div className="flex justify-end -mb-ds-4">
         <FinoExplains title="What is Shadow?" className="w-fit">
           Shadow replays your closed trades as if you had managed each one by a single fixed
           rule — held your target, moved your stop to break-even, or used a set R target — so
@@ -2371,7 +2451,7 @@ export default function TradeCompare() {
         </TabsList>
 
         {/* ── Trade tab ── */}
-        <TabsContent value="trade" className="mt-ds-5">
+        <TabsContent value="trade" className="mt-ds-4">
           <div className="flex flex-col gap-ds-5">
             {!isLoading && (
               <TradePicker
@@ -2400,12 +2480,12 @@ export default function TradeCompare() {
         </TabsContent>
 
         {/* ── Day tab ── */}
-        <TabsContent value="day" className="mt-ds-5">
+        <TabsContent value="day" className="mt-ds-4">
           {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} />}
         </TabsContent>
 
         {/* ── Distribution tab (now "Summary") ── */}
-        <TabsContent value="distribution" className="mt-ds-5">
+        <TabsContent value="distribution" className="mt-ds-4">
           {isLoading ? loadingEl : (
             <DistributionView
               tracked={aggregate.tracked}
