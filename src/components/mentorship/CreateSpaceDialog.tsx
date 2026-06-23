@@ -170,12 +170,16 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        // Opaque background via INLINE STYLE, not a Tailwind class:
+        //  - shadcn's base `bg-background` resolves to `hsl(var(--background))`
+        //    but this project sets `--background` to a HEX → `hsl(#hex)` is an
+        //    invalid color → the panel renders see-through.
+        //  - an arbitrary `bg-[#111]` class is not reliably emitted by the JIT
+        //    here either. Inline style always wins and is JIT-independent
+        //    (same pattern as the sibling JoinDialog in GlobalLeaderboard).
+        style={{ backgroundColor: '#111' }}
         className={cn(
-          // Override shadcn defaults to match DS: opaque dark surface, gold border.
-          // NOTE: use a solid color, NOT var(--bg-surface-1) — that token is a 2%
-          // white *overlay* (rgba(255,255,255,0.02)) meant to sit on an opaque
-          // parent, so a floating modal rendered see-through (the page bled through).
-          'bg-[#111] border-[0.5px] border-border-ds-subtle',
+          'border-[0.5px] border-border-ds-subtle',
           'rounded-[12px]',
           'p-ds-6',
           'max-w-[480px] w-full',
