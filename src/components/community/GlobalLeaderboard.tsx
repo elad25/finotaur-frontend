@@ -545,16 +545,12 @@ export function GlobalLeaderboard() {
       {/* Header row: heading + period strip */}
       <div className="flex items-center justify-between gap-ds-3 flex-wrap">
         <div className="flex flex-col gap-[2px]">
-          <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
-            Leaderboard
+          <h2 className="font-sans text-[20px] font-semibold text-ink-primary leading-snug">
+            The Floor — Global
           </h2>
-          <div
-            className="inline-flex items-center gap-[5px] text-[11px]"
-            style={{ color: '#C9A646' }}
-          >
-            <ShieldCheck size={11} aria-hidden="true" />
-            <span>Broker-verified trades only</span>
-          </div>
+          <p className="font-sans text-[13px] text-ink-tertiary">
+            Share trades, learn from the desk.
+          </p>
         </div>
         <PeriodStrip value={period} onChange={setPeriod} />
       </div>

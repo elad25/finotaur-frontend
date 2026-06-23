@@ -171,8 +171,11 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          // Override shadcn defaults to match DS: dark surface, gold border.
-          'bg-[var(--bg-surface-1,#111)] border-[0.5px] border-border-ds-subtle',
+          // Override shadcn defaults to match DS: opaque dark surface, gold border.
+          // NOTE: use a solid color, NOT var(--bg-surface-1) — that token is a 2%
+          // white *overlay* (rgba(255,255,255,0.02)) meant to sit on an opaque
+          // parent, so a floating modal rendered see-through (the page bled through).
+          'bg-[#111] border-[0.5px] border-border-ds-subtle',
           'rounded-[12px]',
           'p-ds-6',
           'max-w-[480px] w-full',

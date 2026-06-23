@@ -61,7 +61,7 @@ export const UserStatusBadges = memo(function UserStatusBadges({
               </span>
             </TooltipTrigger>
             <TooltipContent
-              side="top"
+              side="bottom"
               className="bg-[#1a1a1a] border-[#333] text-white text-xs"
             >
               Verified Trader — broker-connected
@@ -94,7 +94,7 @@ export const UserStatusBadges = memo(function UserStatusBadges({
               </span>
             </TooltipTrigger>
             <TooltipContent
-              side="top"
+              side="bottom"
               className="bg-[#1a1a1a] border-[#333] text-white text-xs"
             >
               {championLabel}
