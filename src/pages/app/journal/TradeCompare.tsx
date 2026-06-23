@@ -71,7 +71,6 @@ const COLOR_GOLD   = '#C9A646';
 const COLOR_BLUE   = '#60A5FA';
 const COLOR_RED    = '#F87171';
 const COLOR_GREEN  = '#4AD295';
-const COLOR_SILVER = '#C2C8D2';
 
 /** Matches JOURNAL_PANEL from Overview.tsx */
 const JOURNAL_PANEL =
@@ -742,8 +741,8 @@ function SmallScenarioCard({
 
 // ─── Day tab (Performance) ────────────────────────────────────────────────────
 // Layout (top → bottom):
-//   1. Combined "Cumulative P&L by scenario" chart (4 lines, incl. BE-stop)
-//   2. Per-scenario small-multiples grid (5 cards: Actual, Held to stop,
+//   1. Combined "Cumulative P&L by scenario" chart (3 lines, incl. BE-stop)
+//   2. Per-scenario small-multiples grid (4 cards: Actual,
 //      Held to target, Break-even stop [interactive], Target — let it run [interactive])
 //   3. RR recommendation panel
 
@@ -1060,15 +1059,6 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
               />
               <Line
                 type="monotone"
-                dataKey="stop"
-                name="Held to stop"
-                stroke={COLOR_SILVER}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-              <Line
-                type="monotone"
                 dataKey="breakevenStop"
                 name={`Break-even stop (${beR}R)`}
                 stroke={COLOR_BLUE}
@@ -1100,17 +1090,7 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
           isBaseline
         />
 
-        {/* 2b. Held to stop */}
-        <SmallScenarioCard
-          label="Held to stop"
-          subtitle="Exit at your planned stop"
-          total={agg.totals.stop}
-          curve={agg.points.map((p) => p.stop)}
-          curveColor={COLOR_SILVER}
-          delta={agg.totals.stop - agg.totals.actual}
-        />
-
-        {/* 2c. Held to target */}
+        {/* 2b. Held to target */}
         <SmallScenarioCard
           label="Held to target"
           subtitle="Exit at your planned target"
