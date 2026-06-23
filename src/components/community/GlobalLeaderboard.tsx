@@ -1,349 +1,513 @@
 // src/components/community/GlobalLeaderboard.tsx
-// Global leaderboard with two metric tabs (Net P&L / Discipline) and a
-// period filter (This Month / This Year / All Time).
+// =====================================================
+// The Floor Competition — home tab (merged into Global
+// community's Leaderboard tab).
 //
-// Mirrors RoomLeaderboard styling exactly:
-//   - Gold rank #1/#2/#3
-//   - text-num-negative / text-num-neutral for P&L
-//   - Period toggle in bg-surface-2 pill
+// Three period tabs:
+//   This Month → active monthly competition with
+//                countdown / register / live state block
+//                above the FloorLeaderboardTable.
+//   This Year  → cumulative 'this_year' leaderboard.
+//   All Time   → cumulative 'all_time' leaderboard.
 //
-// Discipline tab: discipline_score rendered as a 0–100 gold progress bar.
+// Styling: gold-on-black (#C9A646/#E8C766 on #0A0A0A/#141414)
+// matching the existing Floor page aesthetic.
+// =====================================================
 
-import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { memo, useState } from 'react';
+import { Lock, Trophy, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { DataState } from '@/components/ds/DataState';
-import { useGlobalLeaderboard, useGlobalDisciplineLeaderboard } from '@/hooks/useGlobalLeaderboard';
-import { useLeaderboardOptIn } from '@/hooks/useLeaderboardOptIn';
-import type {
-  GlobalPeriod,
-  GlobalLeaderboardRow,
-  DisciplineLeaderboardRow,
-} from '@/types/community';
+import { useAuth } from '@/providers/AuthProvider';
+import {
+  useActiveCompetition,
+  useFloorLeaderboard,
+  useMyFloorParticipation,
+  useJoinFloor,
+  useLeaveFloor,
+} from '@/hooks/useFloor';
+import { FloorLeaderboardTable } from '@/components/floor/FloorLeaderboardTable';
+import { FloorCountdown } from '@/components/floor/FloorCountdown';
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type MetricTab = 'net_pnl' | 'discipline';
+type PeriodTab = 'monthly' | 'this_year' | 'all_time';
 
 // ── Configs ────────────────────────────────────────────────────────────────────
 
-const PERIODS: { label: string; value: GlobalPeriod }[] = [
-  { label: 'This Month', value: 'this_month' },
+const PERIOD_TABS: { label: string; value: PeriodTab }[] = [
+  { label: 'This Month', value: 'monthly' },
   { label: 'This Year', value: 'this_year' },
-  { label: 'All Time', value: 'all' },
+  { label: 'All Time', value: 'all_time' },
 ];
 
-const METRIC_TABS: { label: string; value: MetricTab }[] = [
-  { label: 'Net P&L', value: 'net_pnl' },
-  { label: 'Discipline', value: 'discipline' },
-];
+// Default min_trades when no active competition is available
+const DEFAULT_MIN_TRADES = 20;
 
-// ── Formatters ─────────────────────────────────────────────────────────────────
+// ── Date formatting ────────────────────────────────────────────────────────────
 
-/** Formats a dollar amount using U+2212 for negative — matches RoomLeaderboard. */
-function formatPnl(value: number): string {
-  const abs = Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  if (value < 0) return `−$${abs}`; // U+2212 mathematical minus
-  return `$${abs}`;
+/** Formats an ISO date string in user's locale, appending "ET" timezone hint. */
+function formatDate(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return (
+      d.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'America/New_York',
+      }) + ' ET'
+    );
+  } catch {
+    return iso;
+  }
 }
 
-/** Formats a 0..1 win/emotional rate as a percentage with 1 decimal. */
-function formatRate(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
+// ── Competition state derivation ───────────────────────────────────────────────
+
+type CompetitionPhase = 'countdown' | 'registration' | 'live' | 'ended';
+
+function getPhase(
+  registrationOpensAt: string | null,
+  periodStart: string,
+  periodEnd: string,
+): CompetitionPhase {
+  const now = Date.now();
+  const start = new Date(periodStart).getTime();
+  const end = new Date(periodEnd).getTime();
+
+  if (now >= end) return 'ended';
+  if (now >= start) return 'live';
+
+  if (registrationOpensAt) {
+    const regOpen = new Date(registrationOpensAt).getTime();
+    if (now < regOpen) return 'countdown';
+    return 'registration';
+  }
+
+  // No registration window — treat as always open until period_start
+  return 'registration';
 }
 
-// ── Shared sub-components ──────────────────────────────────────────────────────
+// ── Join confirmation dialog ───────────────────────────────────────────────────
 
-function MonogramAvatar({ name }: { name: string }) {
-  const initial = (name || '?').trim().charAt(0).toUpperCase();
+interface JoinDialogProps {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  competitionTitle: string;
+  periodStart: string;
+  onConfirm: () => void;
+  isPending: boolean;
+  error: Error | null;
+}
+
+const JoinDialog = memo(function JoinDialog({
+  open,
+  onOpenChange,
+  competitionTitle,
+  periodStart,
+  onConfirm,
+  isPending,
+  error,
+}: JoinDialogProps) {
+  const isBrokerError =
+    error?.message?.toLowerCase().includes('broker') ?? false;
+
   return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        'flex items-center justify-center shrink-0',
-        'h-7 w-7 rounded-full',
-        'bg-surface-2 border-[0.5px] border-border-ds-subtle',
-        'text-ink-secondary text-[11px] font-semibold',
-      )}
-    >
-      {initial}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-md"
+        style={{
+          background: '#0A0A0A',
+          border: '1px solid rgba(201,166,70,0.25)',
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle className="text-white text-lg font-semibold">
+            Register for {competitionTitle}?
+          </DialogTitle>
+        </DialogHeader>
+
+        <p className="text-sm leading-relaxed" style={{ color: '#A0A0A0' }}>
+          By registering, your verified results become public on the leaderboard.
+          Your entry is locked once the competition starts on{' '}
+          <span className="text-white font-medium">{formatDate(periodStart)}</span> —
+          you can&apos;t opt out mid-competition. Only your real broker-verified
+          trades count.
+        </p>
+
+        {error && (
+          <div>
+            {isBrokerError ? (
+              <p
+                className="text-[12px] rounded-lg px-3 py-2"
+                style={{
+                  background: 'rgba(201,166,70,0.08)',
+                  color: '#C9A646',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                }}
+              >
+                Connect a broker first to compete.{' '}
+                <Link
+                  to="/app/journal/settings"
+                  onClick={() => onOpenChange(false)}
+                  className="underline underline-offset-2 font-medium hover:opacity-80"
+                >
+                  Go to Settings
+                </Link>
+              </p>
+            ) : (
+              <p
+                className="text-[12px] rounded-lg px-3 py-2"
+                style={{
+                  background: 'rgba(239,68,68,0.1)',
+                  color: '#f87171',
+                  border: '1px solid rgba(239,68,68,0.2)',
+                }}
+              >
+                {error.message}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 mt-2">
+          <button
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+            className="rounded-[10px] px-4 py-2 text-sm font-medium transition-colors hover:bg-white/5 disabled:opacity-50"
+            style={{ color: '#888', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className="rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+            style={{
+              background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
+              color: '#0A0A0A',
+            }}
+          >
+            {isPending ? 'Registering…' : 'Register & lock in'}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+});
+JoinDialog.displayName = 'JoinDialog';
+
+// ── Competition status block (This Month tab only) ─────────────────────────────
+
+interface CompStatusProps {
+  competitionId: string;
+  title: string;
+  registrationOpensAt: string | null;
+  periodStart: string;
+  periodEnd: string;
+}
+
+const CompStatusBlock = memo(function CompStatusBlock({
+  competitionId,
+  title,
+  registrationOpensAt,
+  periodStart,
+  periodEnd,
+}: CompStatusProps) {
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+
+  const { data: participation, isLoading: partLoading } =
+    useMyFloorParticipation(competitionId);
+  const {
+    mutate: joinFloor,
+    isPending: joining,
+    error: joinError,
+    reset: resetJoin,
+  } = useJoinFloor();
+  const {
+    mutate: leaveFloor,
+    isPending: leaving,
+    error: leaveError,
+    reset: resetLeave,
+  } = useLeaveFloor();
+
+  const phase = getPhase(registrationOpensAt, periodStart, periodEnd);
+  const isRegistered = !!participation;
+
+  const handleJoinConfirm = () => {
+    resetJoin();
+    joinFloor(
+      { competitionId },
+      { onSuccess: () => setJoinDialogOpen(false) },
+    );
+  };
+
+  const handleLeave = () => {
+    resetLeave();
+    leaveFloor({ competitionId });
+  };
+
+  // ── COUNTDOWN ──────────────────────────────────────
+  if (phase === 'countdown' && registrationOpensAt) {
+    return (
+      <div
+        className="rounded-[16px] p-5 flex flex-col gap-3"
+        style={{
+          background: 'linear-gradient(135deg, rgba(201,166,70,0.06) 0%, rgba(201,166,70,0.02) 100%)',
+          border: '1px solid rgba(201,166,70,0.2)',
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <Trophy className="h-4 w-4 shrink-0" style={{ color: '#C9A646' }} />
+          <span className="text-sm font-semibold" style={{ color: '#E8C766' }}>
+            {title}
+          </span>
+        </div>
+        <FloorCountdown target={registrationOpensAt} />
+        <p className="text-[12px]" style={{ color: '#888' }}>
+          Registration opens {formatDate(registrationOpensAt)} · competition starts{' '}
+          {formatDate(periodStart)}
+        </p>
+      </div>
+    );
+  }
+
+  // ── REGISTRATION ───────────────────────────────────
+  if (phase === 'registration') {
+    if (partLoading) {
+      return (
+        <div
+          className="h-[88px] rounded-[16px] animate-pulse"
+          style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
+        />
+      );
+    }
+
+    if (isRegistered) {
+      return (
+        <div
+          className="rounded-[16px] p-5 flex items-center gap-4"
+          style={{
+            background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+            border: '1px solid rgba(201,166,70,0.25)',
+          }}
+        >
+          <div
+            className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full"
+            style={{
+              background: 'rgba(201,166,70,0.15)',
+              border: '1px solid rgba(201,166,70,0.3)',
+            }}
+          >
+            <Lock className="h-5 w-5" style={{ color: '#E8C766' }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: '#E8C766' }}>
+              You&apos;re registered for {title}
+            </p>
+            <p className="mt-0.5 text-[12px]" style={{ color: '#666' }}>
+              Competition starts {formatDate(periodStart)}.
+            </p>
+          </div>
+          <button
+            onClick={handleLeave}
+            disabled={leaving}
+            className="flex-shrink-0 rounded-[10px] px-3 py-1.5 text-[12px] font-medium transition-all hover:opacity-80 disabled:opacity-50"
+            style={{
+              color: '#888',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}
+          >
+            {leaving ? 'Leaving…' : 'Leave'}
+          </button>
+        </div>
+      );
+    }
+
+    // Not yet registered — CTA
+    return (
+      <>
+        <div
+          className="rounded-[16px] p-5"
+          style={{
+            background: '#141414',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          <div className="flex items-start gap-4">
+            <div
+              className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full"
+              style={{
+                background: 'rgba(201,166,70,0.1)',
+                border: '1px solid rgba(201,166,70,0.25)',
+              }}
+            >
+              <Trophy className="h-5 w-5" style={{ color: '#C9A646' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-white">
+                Register for the competition
+              </h3>
+              <p className="mt-1 text-[12px]" style={{ color: '#888' }}>
+                Only your real broker-verified trades count.
+              </p>
+            </div>
+            <button
+              onClick={() => { resetJoin(); setJoinDialogOpen(true); }}
+              className="flex-shrink-0 rounded-[10px] px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 active:scale-95"
+              style={{
+                background: 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
+                color: '#0A0A0A',
+              }}
+            >
+              Register
+            </button>
+          </div>
+
+          {/* Non-broker inline error */}
+          {joinError && !joinError.message.toLowerCase().includes('broker') && (
+            <p
+              className="mt-3 text-[12px] rounded-lg px-3 py-2"
+              style={{
+                background: 'rgba(239,68,68,0.1)',
+                color: '#f87171',
+                border: '1px solid rgba(239,68,68,0.2)',
+              }}
+            >
+              {joinError.message}
+            </p>
+          )}
+
+          {/* Leave error */}
+          {leaveError && (
+            <p
+              className="mt-3 text-[12px] rounded-lg px-3 py-2 flex items-center gap-2"
+              style={{
+                background: 'rgba(239,68,68,0.1)',
+                color: '#f87171',
+                border: '1px solid rgba(239,68,68,0.2)',
+              }}
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {leaveError.message}
+            </p>
+          )}
+        </div>
+
+        <JoinDialog
+          open={joinDialogOpen}
+          onOpenChange={setJoinDialogOpen}
+          competitionTitle={title}
+          periodStart={periodStart}
+          onConfirm={handleJoinConfirm}
+          isPending={joining}
+          error={joinError}
+        />
+      </>
+    );
+  }
+
+  // ── LIVE ───────────────────────────────────────────
+  if (phase === 'live') {
+    if (partLoading) {
+      return (
+        <div
+          className="h-[72px] rounded-[16px] animate-pulse"
+          style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
+        />
+      );
+    }
+
+    if (isRegistered) {
+      return (
+        <div
+          className="rounded-[16px] px-5 py-4 flex items-center gap-3"
+          style={{
+            background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+            border: '1px solid rgba(201,166,70,0.25)',
+          }}
+        >
+          <Lock className="h-4 w-4 shrink-0" style={{ color: '#E8C766' }} />
+          <p className="text-sm font-medium" style={{ color: '#E8C766' }}>
+            You&apos;re competing · locked until {formatDate(periodEnd)}
+          </p>
+        </div>
+      );
+    }
+
+    // Not registered — competition already started
+    return (
+      <div
+        className="rounded-[16px] px-5 py-4 flex items-center gap-3"
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.07)',
+        }}
+      >
+        <ShieldCheck className="h-4 w-4 shrink-0" style={{ color: '#555' }} />
+        <p className="text-[12px]" style={{ color: '#666' }}>
+          Registration for this competition has closed. Next one opens soon.
+        </p>
+      </div>
+    );
+  }
+
+  // ── ENDED ──────────────────────────────────────────
+  return null;
+});
+CompStatusBlock.displayName = 'CompStatusBlock';
+
+// ── Skeleton ───────────────────────────────────────────────────────────────────
+
+function FloorSkeleton() {
+  return (
+    <div className="space-y-3 animate-pulse px-ds-5 py-ds-4">
+      <div className="h-[88px] rounded-[16px]" style={{ background: '#141414' }} />
+      <div className="h-[320px] rounded-[20px]" style={{ background: '#0A0A0A' }} />
     </div>
   );
 }
 
-function RankBadge({ rank }: { rank: number }) {
-  const isTop3 = rank <= 3;
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center justify-center',
-        'font-sans tabular-nums text-[13px] font-semibold',
-        'w-7 shrink-0',
-        isTop3 ? 'text-gold-primary' : 'text-ink-tertiary',
-      )}
-    >
-      {rank}
-    </span>
-  );
+// ── Period tab pill strip ──────────────────────────────────────────────────────
+
+interface PeriodStripProps {
+  value: PeriodTab;
+  onChange: (v: PeriodTab) => void;
 }
 
-// ── Net P&L table ──────────────────────────────────────────────────────────────
-
-function PnlRow({ row }: { row: GlobalLeaderboardRow }) {
-  const isTop3 = row.rank <= 3;
-  const isNegative = row.net_pnl < 0;
-  const displayName = row.display_name ?? 'Anonymous';
-
+function PeriodStrip({ value, onChange }: PeriodStripProps) {
   return (
-    <tr
-      className={cn(
-        'border-b border-border-ds-subtle',
-        'transition-colors duration-base ease-out',
-        'hover:bg-surface-2',
-        isTop3 && 'bg-[rgba(201,166,70,0.03)]',
-      )}
+    <div
+      className="flex items-center rounded-[8px] bg-surface-2 p-[3px] gap-[2px]"
+      role="group"
+      aria-label="Leaderboard period"
     >
-      {/* RANK */}
-      <td className="py-ds-3 pl-ds-4 pr-ds-2">
-        <RankBadge rank={row.rank} />
-      </td>
-
-      {/* TRADER */}
-      <td className="py-ds-3 px-ds-2">
-        <div className="flex items-center gap-ds-2 min-w-0">
-          <MonogramAvatar name={displayName} />
-          <span
-            className={cn(
-              'font-sans text-[13px] truncate',
-              isTop3 ? 'text-ink-primary font-medium' : 'text-ink-secondary',
-            )}
-          >
-            {displayName}
-          </span>
-        </div>
-      </td>
-
-      {/* NET P&L */}
-      <td className="py-ds-3 px-ds-2 text-right">
-        <span
+      {PERIOD_TABS.map(({ label, value: v }) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
           className={cn(
-            'font-sans tabular-nums text-[13px] font-medium',
-            isNegative ? 'text-num-negative' : 'text-num-neutral',
+            'px-ds-3 py-[5px] rounded-[6px]',
+            'font-sans text-[12px] font-medium',
+            'transition-colors duration-base ease-out',
+            value === v
+              ? 'bg-surface-1 text-ink-primary shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.12)]'
+              : 'text-ink-tertiary hover:text-ink-secondary',
           )}
         >
-          {formatPnl(row.net_pnl)}
-        </span>
-      </td>
-
-      {/* WIN % */}
-      <td className="py-ds-3 px-ds-2 text-right">
-        <span className="font-sans tabular-nums text-[13px] text-ink-secondary">
-          {formatRate(row.win_rate)}
-        </span>
-      </td>
-
-      {/* TRADES */}
-      <td className="py-ds-3 pl-ds-2 pr-ds-4 text-right">
-        <span className="font-sans tabular-nums text-[13px] text-ink-tertiary">
-          {row.trade_count}
-        </span>
-      </td>
-    </tr>
-  );
-}
-
-function PnlTable({ rows }: { rows: GlobalLeaderboardRow[] }) {
-  return (
-    <table className="w-full border-collapse">
-      <thead>
-        <tr className="border-b border-border-ds-subtle bg-surface-2">
-          <th scope="col" className="py-ds-2 pl-ds-4 pr-ds-2 text-left font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary w-10">
-            #
-          </th>
-          <th scope="col" className="py-ds-2 px-ds-2 text-left font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Trader
-          </th>
-          <th scope="col" className="py-ds-2 px-ds-2 text-right font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Net P&amp;L
-          </th>
-          <th scope="col" className="py-ds-2 px-ds-2 text-right font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Win %
-          </th>
-          <th scope="col" className="py-ds-2 pl-ds-2 pr-ds-4 text-right font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Trades
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <PnlRow key={row.user_id} row={row} />
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// ── Discipline table ───────────────────────────────────────────────────────────
-
-/** Gold progress bar for discipline_score (0–100). */
-function DisciplineBar({ score }: { score: number }) {
-  const clamped = Math.min(100, Math.max(0, score));
-  return (
-    <div className="flex items-center gap-ds-2 justify-end">
-      <div className="w-[64px] h-[5px] rounded-full bg-surface-2 overflow-hidden shrink-0">
-        <div
-          className="h-full rounded-full bg-gold-primary transition-all duration-300"
-          style={{ width: `${clamped}%` }}
-          aria-hidden="true"
-        />
-      </div>
-      <span className="font-sans tabular-nums text-[13px] font-medium text-ink-secondary w-9 text-right shrink-0">
-        {clamped}
-      </span>
-    </div>
-  );
-}
-
-function DisciplineRow({ row }: { row: DisciplineLeaderboardRow }) {
-  const isTop3 = row.rank <= 3;
-  const displayName = row.display_name ?? 'Anonymous';
-
-  return (
-    <tr
-      className={cn(
-        'border-b border-border-ds-subtle',
-        'transition-colors duration-base ease-out',
-        'hover:bg-surface-2',
-        isTop3 && 'bg-[rgba(201,166,70,0.03)]',
-      )}
-    >
-      {/* RANK */}
-      <td className="py-ds-3 pl-ds-4 pr-ds-2">
-        <RankBadge rank={row.rank} />
-      </td>
-
-      {/* TRADER */}
-      <td className="py-ds-3 px-ds-2">
-        <div className="flex items-center gap-ds-2 min-w-0">
-          <MonogramAvatar name={displayName} />
-          <span
-            className={cn(
-              'font-sans text-[13px] truncate',
-              isTop3 ? 'text-ink-primary font-medium' : 'text-ink-secondary',
-            )}
-          >
-            {displayName}
-          </span>
-        </div>
-      </td>
-
-      {/* DISCIPLINE SCORE (bar) */}
-      <td className="py-ds-3 px-ds-2">
-        <DisciplineBar score={row.discipline_score} />
-      </td>
-
-      {/* EMOTIONAL % */}
-      <td className="py-ds-3 px-ds-2 text-right">
-        <span className="font-sans tabular-nums text-[13px] text-ink-secondary">
-          {formatRate(row.emotional_rate)}
-        </span>
-      </td>
-
-      {/* TRADES */}
-      <td className="py-ds-3 pl-ds-2 pr-ds-4 text-right">
-        <span className="font-sans tabular-nums text-[13px] text-ink-tertiary">
-          {row.trade_count}
-        </span>
-      </td>
-    </tr>
-  );
-}
-
-function DisciplineTable({ rows }: { rows: DisciplineLeaderboardRow[] }) {
-  return (
-    <table className="w-full border-collapse">
-      <thead>
-        <tr className="border-b border-border-ds-subtle bg-surface-2">
-          <th scope="col" className="py-ds-2 pl-ds-4 pr-ds-2 text-left font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary w-10">
-            #
-          </th>
-          <th scope="col" className="py-ds-2 px-ds-2 text-left font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Trader
-          </th>
-          <th scope="col" className="py-ds-2 px-ds-2 text-right font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Score
-          </th>
-          <th scope="col" className="py-ds-2 px-ds-2 text-right font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Emotional %
-          </th>
-          <th scope="col" className="py-ds-2 pl-ds-2 pr-ds-4 text-right font-sans text-[11px] font-medium tracking-[1px] uppercase text-ink-tertiary">
-            Trades
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <DisciplineRow key={row.user_id} row={row} />
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// ── Visibility banner ─────────────────────────────────────────────────────────
-
-function VisibilityBanner() {
-  const { optIn, isLoading, toggle, isSaving } = useLeaderboardOptIn();
-  if (isLoading) return null;
-
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-between gap-ds-3',
-        'rounded-[10px] border-[0.5px] px-ds-4 py-[10px]',
-        optIn
-          ? 'bg-[rgba(201,166,70,0.06)] border-[rgba(201,166,70,0.20)]'
-          : 'bg-surface-2 border-border-ds-subtle',
-      )}
-    >
-      <div className="flex items-center gap-[8px] min-w-0">
-        {optIn
-          ? <Eye size={14} className="text-gold-primary shrink-0" aria-hidden="true" />
-          : <EyeOff size={14} className="text-ink-tertiary shrink-0" aria-hidden="true" />
-        }
-        <div className="flex flex-col min-w-0">
-          <span className={cn(
-            'font-sans text-[13px] font-medium leading-snug',
-            optIn ? 'text-gold-primary' : 'text-ink-secondary',
-          )}>
-            {optIn ? 'You\'re visible on the leaderboard' : 'You\'re hidden from the leaderboard'}
-          </span>
-          {!optIn && (
-            <span className="font-sans text-[11px] text-ink-tertiary leading-snug mt-[2px]">
-              Only broker-synced trades count — no manual entries.
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        type="button"
-        disabled={isSaving}
-        onClick={toggle}
-        className={cn(
-          'shrink-0 px-ds-3 py-[5px] rounded-[6px]',
-          'font-sans text-[12px] font-medium',
-          'transition-colors duration-base ease-out',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          optIn
-            ? 'bg-transparent border-[0.5px] border-[rgba(201,166,70,0.30)] text-gold-primary hover:bg-[rgba(201,166,70,0.08)]'
-            : 'bg-gold-primary text-black hover:opacity-90',
-        )}
-      >
-        {isSaving ? '…' : optIn ? 'Leave' : 'Join'}
-      </button>
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -351,97 +515,98 @@ function VisibilityBanner() {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function GlobalLeaderboard() {
-  const [period, setPeriod] = useState<GlobalPeriod>('this_month');
-  const [metricTab, setMetricTab] = useState<MetricTab>('net_pnl');
+  const [period, setPeriod] = useState<PeriodTab>('monthly');
+  const { user } = useAuth();
 
-  const pnlQuery = useGlobalLeaderboard(period, 'net_pnl');
-  const disciplineQuery = useGlobalDisciplineLeaderboard(period);
+  const { data: competition, isLoading: competitionLoading } =
+    useActiveCompetition();
 
-  const activeQuery = metricTab === 'net_pnl' ? pnlQuery : disciplineQuery;
+  const competitionId = competition?.id;
+  const minTrades = competition?.min_trades ?? DEFAULT_MIN_TRADES;
+
+  const leaderboardScope =
+    period === 'monthly' ? 'monthly' : period;
+
+  const {
+    data: rows,
+    isLoading: leaderboardLoading,
+    isError,
+    error,
+    refetch,
+  } = useFloorLeaderboard(leaderboardScope, competitionId);
+
+  const isLoading =
+    (period === 'monthly' && competitionLoading) || leaderboardLoading;
+
+  if (isLoading) return <FloorSkeleton />;
 
   return (
     <div className="flex flex-col gap-ds-4 px-ds-5 py-ds-5">
-      {/* Header row: heading + period toggle */}
+      {/* Header row: heading + period strip */}
       <div className="flex items-center justify-between gap-ds-3 flex-wrap">
-        <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
-          Leaderboard
-        </h2>
-        <div
-          className="flex items-center rounded-[8px] bg-surface-2 p-[3px] gap-[2px]"
-          role="group"
-          aria-label="Period"
-        >
-          {PERIODS.map(({ label, value }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPeriod(value)}
-              className={cn(
-                'px-ds-3 py-[5px] rounded-[6px]',
-                'font-sans text-[12px] font-medium',
-                'transition-colors duration-base ease-out',
-                period === value
-                  ? 'bg-surface-1 text-ink-primary shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.12)]'
-                  : 'text-ink-tertiary hover:text-ink-secondary',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Opt-in visibility banner */}
-      <VisibilityBanner />
-
-      {/* Metric tab bar */}
-      <div
-        className="flex items-center gap-[2px] rounded-[8px] bg-surface-2 p-[3px] self-start"
-        role="tablist"
-        aria-label="Leaderboard metric"
-      >
-        {METRIC_TABS.map(({ label, value }) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={metricTab === value}
-            onClick={() => setMetricTab(value)}
-            className={cn(
-              'px-ds-4 py-[5px] rounded-[6px]',
-              'font-sans text-[12px] font-medium',
-              'transition-colors duration-base ease-out',
-              metricTab === value
-                ? 'bg-surface-1 text-ink-primary shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.12)]'
-                : 'text-ink-tertiary hover:text-ink-secondary',
-            )}
+        <div className="flex flex-col gap-[2px]">
+          <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
+            Leaderboard
+          </h2>
+          <div
+            className="inline-flex items-center gap-[5px] text-[11px]"
+            style={{ color: '#C9A646' }}
           >
-            {label}
-          </button>
-        ))}
+            <ShieldCheck size={11} aria-hidden="true" />
+            <span>Broker-verified trades only</span>
+          </div>
+        </div>
+        <PeriodStrip value={period} onChange={setPeriod} />
       </div>
 
-      {/* Table */}
-      <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle overflow-hidden">
-        <DataState
-          isLoading={activeQuery.isLoading}
-          isError={activeQuery.isError}
-          error={activeQuery.error}
-          data={activeQuery.rows}
-          onRetry={activeQuery.refetch}
-          empty={
-            <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
-              No one on the leaderboard yet. Be the first — join above.
-            </p>
-          }
+      {/* Competition status block — only on This Month tab */}
+      {period === 'monthly' && competition && (
+        <CompStatusBlock
+          competitionId={competition.id}
+          title={competition.title}
+          registrationOpensAt={competition.registration_opens_at}
+          periodStart={competition.period_start}
+          periodEnd={competition.period_end}
+        />
+      )}
+
+      {/* No active competition notice (This Month, nothing returned) */}
+      {period === 'monthly' && !competitionLoading && !competition && (
+        <div
+          className="rounded-[16px] px-5 py-4 flex items-center gap-3"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+          }}
         >
-          {(data) => (
-            metricTab === 'net_pnl'
-              ? <PnlTable rows={data as GlobalLeaderboardRow[]} />
-              : <DisciplineTable rows={data as DisciplineLeaderboardRow[]} />
-          )}
-        </DataState>
-      </div>
+          <Trophy className="h-4 w-4 shrink-0" style={{ color: '#555' }} />
+          <p className="text-[12px]" style={{ color: '#666' }}>
+            No active competition right now. Check back soon.
+          </p>
+        </div>
+      )}
+
+      {/* Leaderboard table */}
+      <DataState
+        isLoading={false}
+        isError={isError}
+        error={error}
+        data={rows}
+        onRetry={refetch}
+        empty={
+          <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
+            No competitors on the leaderboard yet.
+          </p>
+        }
+      >
+        {(data) => (
+          <FloorLeaderboardTable
+            rows={data}
+            currentUserId={user?.id ?? null}
+            minTrades={minTrades}
+          />
+        )}
+      </DataState>
     </div>
   );
 }

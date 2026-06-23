@@ -16,6 +16,7 @@ export interface FloorCompetition {
   id: string;
   type: 'monthly';
   title: string;
+  registration_opens_at: string | null; // ISO date string; null = always open
   period_start: string; // ISO date string
   period_end: string;   // ISO date string
   status: 'active';
@@ -25,7 +26,10 @@ export interface FloorCompetition {
 export interface FloorLeaderboardRow {
   user_id: string;
   display_name: string;
+  floor_username: string | null;
+  avatar_url: string | null;
   discipline_score: number | null;
+  net_pnl: number | null;
   trade_count: number;
   rank: number | null;
   qualified: boolean;
@@ -51,15 +55,32 @@ export interface UserBadges {
 // Human-readable error messages keyed by Postgres error message codes
 // returned by floor_join_competition().
 const JOIN_ERROR_MESSAGES: Record<string, string> = {
-  broker_required: 'Connect a broker to compete on The Floor.',
+  broker_required: 'Connect a broker first to compete.',
   competition_not_open: 'This competition is closed for new entries.',
+  registration_not_open: 'Registration has not opened yet.',
+  profile_required: 'Set up your Floor profile first.',
   not_authenticated: 'You must be signed in to join.',
   competition_not_found: 'This competition no longer exists.',
+  competition_closed: 'This competition is closed for new entries.',
 };
 
 function translateJoinError(raw: string): string {
-  const match = JOIN_ERROR_MESSAGES[raw.trim().toLowerCase()];
-  return match ?? `Could not join: ${raw}`;
+  // Check if the raw message matches any known key
+  const key = raw.trim().toLowerCase().replace(/\s+/g, '_');
+  const byKey = JOIN_ERROR_MESSAGES[key];
+  if (byKey) return byKey;
+  // Also pass through readable messages from the server as-is if they look human-readable
+  // (they may already be formatted e.g. 'Registration has not opened yet.')
+  if (raw.length < 120 && !raw.includes('\n')) return raw;
+  return `Could not join: ${raw}`;
+}
+
+// Human-readable leave errors
+function translateLeaveError(raw: string): string {
+  if (raw.toLowerCase().includes('locked') || raw.toLowerCase().includes('started')) {
+    return 'The competition has started — your entry is locked until it ends.';
+  }
+  return raw;
 }
 
 // =====================================================
@@ -93,11 +114,13 @@ export function useActiveCompetition() {
 
 // =====================================================
 // useFloorLeaderboard
-// scope: 'monthly' uses floor_leaderboard(competitionId)
-//        'seasonal' | 'all_time' uses floor_leaderboard_cumulative
+// scope: 'monthly'   → floor_leaderboard(competitionId)
+//        'this_year' → floor_leaderboard_cumulative({ p_scope: 'this_year' })
+//        'all_time'  → floor_leaderboard_cumulative({ p_scope: 'all_time' })
+// Note: 'seasonal' is mapped to 'this_year' for backward compat.
 // =====================================================
 export function useFloorLeaderboard(
-  scope: 'monthly' | 'seasonal' | 'all_time',
+  scope: 'monthly' | 'this_year' | 'all_time',
   competitionId?: string,
 ) {
   return useQuery<FloorLeaderboardRow[]>({
@@ -111,7 +134,7 @@ export function useFloorLeaderboard(
         if (error) throw error;
         return (data as FloorLeaderboardRow[]) ?? [];
       }
-      // seasonal or all_time
+      // this_year or all_time
       const { data, error } = await supabase.rpc('floor_leaderboard_cumulative', {
         p_scope: scope,
       });
@@ -187,6 +210,36 @@ export function useJoinFloor() {
     },
     onSuccess: (_data, { competitionId }) => {
       // Refresh participation state and leaderboard
+      void queryClient.invalidateQueries({
+        queryKey: KEYS.participation(competitionId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: KEYS.leaderboard('monthly', competitionId),
+      });
+    },
+  });
+}
+
+// =====================================================
+// useLeaveFloor
+// Mutation to leave a competition (only allowed during
+// registration window, before period_start).
+// Translates 'locked' error to a friendly message.
+// =====================================================
+export function useLeaveFloor() {
+  const queryClient = useQueryClient();
+
+  return useMutation<boolean, Error, { competitionId: string }>({
+    mutationFn: async ({ competitionId }) => {
+      const { data, error } = await supabase.rpc('floor_leave_competition', {
+        p_competition_id: competitionId,
+      });
+      if (error) {
+        throw new Error(translateLeaveError(error.message));
+      }
+      return data as boolean;
+    },
+    onSuccess: (_data, { competitionId }) => {
       void queryClient.invalidateQueries({
         queryKey: KEYS.participation(competitionId),
       });

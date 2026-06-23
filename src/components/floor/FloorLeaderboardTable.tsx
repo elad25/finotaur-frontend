@@ -1,7 +1,9 @@
 // src/components/floor/FloorLeaderboardTable.tsx
 // =====================================================
 // Branded leaderboard table for The Floor competition.
-// Shows rank, trader, discipline score, and trade count.
+// Columns: Rank · Trader · Net P&L · Discipline Score · Trades
+// Trader cell includes avatar, display_name, @floor_username,
+// and a champion badge when is_champion is true.
 // =====================================================
 
 import { memo } from 'react';
@@ -40,6 +42,63 @@ const RANK_MEDALS: Record<number, string> = {
   3: '🥉',
 };
 
+/** Formats a dollar amount with +/- and green/red colouring. */
+function formatPnl(value: number): { text: string; color: string } {
+  const abs = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (value < 0) {
+    return { text: `−$${abs}`, color: '#ef4444' }; // U+2212 mathematical minus, red
+  }
+  return { text: `+$${abs}`, color: '#22c55e' }; // green
+}
+
+/** Avatar: photo when available, else gold monogram. */
+function TraderAvatar({
+  name,
+  avatarUrl,
+  isCurrentUser,
+}: {
+  name: string;
+  avatarUrl: string | null;
+  isCurrentUser: boolean;
+}) {
+  const initial = (name || '?').trim().charAt(0).toUpperCase();
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        aria-hidden="true"
+        className="h-8 w-8 rounded-full object-cover shrink-0"
+        style={{
+          border: isCurrentUser
+            ? '1.5px solid rgba(201,166,70,0.7)'
+            : '1px solid rgba(255,255,255,0.1)',
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="flex items-center justify-center h-8 w-8 rounded-full shrink-0 text-[13px] font-bold"
+      aria-hidden="true"
+      style={{
+        background: 'rgba(201,166,70,0.15)',
+        border: isCurrentUser
+          ? '1.5px solid rgba(201,166,70,0.7)'
+          : '1px solid rgba(201,166,70,0.3)',
+        color: '#E8C766',
+      }}
+    >
+      {initial}
+    </div>
+  );
+}
+
 const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
   rows,
   currentUserId,
@@ -65,12 +124,13 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
     >
       {/* Header row */}
       <div
-        className="grid grid-cols-[48px_1fr_140px_100px] gap-2 px-5 py-3 text-[11px] font-semibold uppercase tracking-widest"
+        className="grid grid-cols-[48px_1fr_110px_140px_80px] gap-2 px-5 py-3 text-[11px] font-semibold uppercase tracking-widest"
         style={{ color: '#555', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
       >
         <span>Rank</span>
         <span>Trader</span>
-        <span className="text-right">Discipline Score</span>
+        <span className="text-right">Net P&amp;L</span>
+        <span className="text-right">Discipline</span>
         <span className="text-right">Trades</span>
       </div>
 
@@ -82,12 +142,14 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
             row.rank !== null && row.rank <= 3 ? RANK_ACCENTS[row.rank] : null;
           const medal = row.rank !== null && row.rank <= 3 ? RANK_MEDALS[row.rank] : null;
           const isQualified = row.qualified && row.rank !== null;
+          const pnl =
+            row.net_pnl !== null ? formatPnl(row.net_pnl) : null;
 
           return (
             <div
               key={row.user_id}
               className={cn(
-                'grid grid-cols-[48px_1fr_140px_100px] gap-2 items-center px-5 py-3.5 transition-colors',
+                'grid grid-cols-[48px_1fr_110px_140px_80px] gap-2 items-center px-5 py-3.5 transition-colors',
                 isCurrentUser
                   ? 'ring-1 ring-inset ring-[#C9A646]/40 bg-[#C9A646]/5'
                   : rankAccent
@@ -121,23 +183,56 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
                 )}
               </span>
 
-              {/* Trader name + badges */}
+              {/* Trader: avatar + name + @handle + champion badge */}
               <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className={cn(
-                    'text-sm font-medium truncate',
-                    isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
-                  )}
-                >
-                  {row.display_name}
-                  {isCurrentUser && (
-                    <span className="ml-1.5 text-[10px] font-normal text-[#C9A646]/70">
-                      (you)
+                <TraderAvatar
+                  name={row.display_name}
+                  avatarUrl={row.avatar_url}
+                  isCurrentUser={isCurrentUser}
+                />
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={cn(
+                        'text-sm font-medium truncate',
+                        isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
+                      )}
+                    >
+                      {row.display_name}
+                      {isCurrentUser && (
+                        <span className="ml-1.5 text-[10px] font-normal text-[#C9A646]/70">
+                          (you)
+                        </span>
+                      )}
+                    </span>
+                    {row.is_champion && (
+                      <UserStatusBadges userId={row.user_id} />
+                    )}
+                  </div>
+                  {row.floor_username && (
+                    <span
+                      className="text-[11px] truncate"
+                      style={{ color: 'rgba(201,166,70,0.55)' }}
+                    >
+                      @{row.floor_username}
                     </span>
                   )}
-                </span>
-                {row.is_champion && (
-                  <UserStatusBadges userId={row.user_id} />
+                </div>
+              </div>
+
+              {/* Net P&L */}
+              <div className="text-right">
+                {pnl ? (
+                  <span
+                    className="text-sm font-semibold tabular-nums"
+                    style={{ color: pnl.color }}
+                  >
+                    {pnl.text}
+                  </span>
+                ) : (
+                  <span className="text-sm tabular-nums" style={{ color: '#444' }}>
+                    —
+                  </span>
                 )}
               </div>
 
