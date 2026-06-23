@@ -1018,7 +1018,25 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         </div>
         <div className="px-ds-5 pb-ds-5 pt-ds-4" style={{ width: '100%', height: 420 }}>
           <ResponsiveContainer>
-            <LineChart data={chartPoints} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
+            <AreaChart data={chartPoints} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
+              <defs>
+                <linearGradient id="main-grad-actual" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLOR_GOLD} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={COLOR_GOLD} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="main-grad-target" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLOR_GREEN} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={COLOR_GREEN} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="main-grad-breakeven" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLOR_BLUE} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={COLOR_BLUE} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="main-grad-letitrun" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#A78BFA" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#A78BFA" stopOpacity={0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
               <XAxis
                 dataKey="label"
@@ -1036,48 +1054,68 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
                 }
                 width={72}
               />
-              <Tooltip content={<TotalTooltip />} />
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(20,20,20,0.95)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  padding: '4px 8px',
+                }}
+                itemStyle={{ color: 'rgba(255,255,255,0.82)' }}
+                labelStyle={{ color: 'rgba(255,255,255,0.42)' }}
+                formatter={(val: number, name: string) => [fmtPnl(Math.round(val)), name]}
+                cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
+              />
               <Legend
                 wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="actual"
                 name="Actual"
                 stroke={COLOR_GOLD}
                 strokeWidth={2}
+                fill="url(#main-grad-actual)"
+                fillOpacity={1}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="target"
                 name="Held to target"
                 stroke={COLOR_GREEN}
                 strokeWidth={2}
+                fill="url(#main-grad-target)"
+                fillOpacity={1}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="breakevenStop"
                 name={`Break-even stop (${beR}R)`}
                 stroke={COLOR_BLUE}
                 strokeWidth={2}
                 strokeDasharray="5 3"
+                fill="url(#main-grad-breakeven)"
+                fillOpacity={1}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="targetScenario"
                 name={`Let it run (${targetR}R)`}
                 stroke="#A78BFA"
                 strokeWidth={2}
+                fill="url(#main-grad-letitrun)"
+                fillOpacity={1}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
         {n > 0 && (
@@ -1617,19 +1655,41 @@ interface MiniCurveProps {
 function MiniCurve({ data, color }: MiniCurveProps) {
   if (data.length < 2) return <div className="h-14" />;
   const pts = data.map((v, i) => ({ i, v }));
+  const gradId = `mini-grad-${color.replace('#', '')}`;
   return (
     <div style={{ width: '100%', height: 56 }}>
       <ResponsiveContainer width="100%" height={56}>
-        <LineChart data={pts} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-          <Line
+        <AreaChart data={pts} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <Area
             type="monotone"
             dataKey="v"
             stroke={color}
             strokeWidth={1.5}
+            fill={`url(#${gradId})`}
             dot={false}
             isAnimationActive={false}
           />
-        </LineChart>
+          <Tooltip
+            contentStyle={{
+              background: 'rgba(20,20,20,0.95)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 8,
+              fontSize: 11,
+              padding: '4px 8px',
+            }}
+            itemStyle={{ color: 'rgba(255,255,255,0.82)' }}
+            labelStyle={{ color: 'rgba(255,255,255,0.42)' }}
+            formatter={(val: number) => [fmtPnl(Math.round(val)), '']}
+            labelFormatter={() => ''}
+            cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
+          />
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
