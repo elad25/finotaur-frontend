@@ -957,8 +957,9 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
     return agg.points.map((pt, i) => ({
       ...pt,
       breakevenStop: beValues[i] ?? pt.actual,
+      targetScenario: targetData.curve[i] ?? pt.actual,
     }));
-  }, [agg.points, sortedClosed, allWhatIfTrades, barsByTrade, beR]);
+  }, [agg.points, sortedClosed, allWhatIfTrades, barsByTrade, beR, targetData.curve]);
 
   if (agg.points.length === 0) {
     return (
@@ -1064,6 +1065,15 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
                 stroke={COLOR_BLUE}
                 strokeWidth={2}
                 strokeDasharray="5 3"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="targetScenario"
+                name={`Let it run (${targetR}R)`}
+                stroke="#A78BFA"
+                strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
