@@ -35,8 +35,8 @@ import { usePortfolios } from '@/hooks/usePortfolios';
 import { resolveHiddenPortfolioIds } from '@/lib/journal/hiddenAccounts';
 import { analyzeWhatIf, fixedTargetAtR, breakEvenAtR, estimateBreakEvenAtR, recommendRR, riskUsd, resolveMultiplier } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar, WhatIfTrade } from '@/lib/journal/whatIfEngine';
-import { useTradeReconcile, useTradeBars, useAllTradeBars } from '@/hooks/useTradeBars';
-import { buildAggregate } from '@/lib/journal/plannedScenarios';
+import { useTradeReconcile, useTradeBars } from '@/hooks/useTradeBars';
+import { buildAggregate, computePlannedScenarios } from '@/lib/journal/plannedScenarios';
 import type { PlannedScenario } from '@/lib/journal/plannedScenarios';
 import { useShadowTrade, useShadowAggregate } from '@/hooks/useShadow';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -819,9 +819,7 @@ function SmallScenarioCard({
 //      Held to target, Break-even stop [interactive], Target — let it run [interactive])
 //   3. RR recommendation panel
 
-type SeriesKey = 'actual' | 'target' | 'breakevenStop' | 'targetScenario' | 'originalStop';
-
-function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<string, PriceBar[]> }) {
+function DayView({ trade, bars }: { trade: Trade; bars: PriceBar[] }) {
   // Inner Stop / Target switch for the Performance tab.
   const [view, setView] = useState<'stop' | 'target'>('stop');
 
@@ -829,292 +827,63 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
   const [beR, setBeR] = useState<1 | 2 | 3>(1);
   const [targetR, setTargetR] = useState<1 | 2 | 3 | 4>(2);
 
-  // Series visibility — clicking a card hides/shows its line in the main chart.
-  const [hidden, setHidden] = useState<Set<SeriesKey>>(new Set());
-  const toggle = (key: SeriesKey) =>
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
+  const hasBars = bars.length > 0;
 
-  const agg = useMemo(() => buildAggregate(trades), [trades]);
+  const wt = useMemo<WhatIfTrade>(() => ({
+    side: trade.side,
+    entry_price: trade.entry_price,
+    exit_price: trade.exit_price ?? trade.entry_price,
+    quantity: trade.quantity,
+    multiplier: trade.multiplier ?? null,
+    symbol: trade.symbol,
+    stop_price: trade.stop_price ?? null,
+    take_profit_price: trade.take_profit_price ?? null,
+    open_at: trade.open_at,
+    close_at: trade.close_at ?? trade.open_at,
+    mfe_r: trade.mfe_r ?? null,
+    mae_r: trade.mae_r ?? null,
+  }), [trade]);
 
-  // ── Sorted closed trades (same order as buildAggregate uses) ──────────────
-  // buildAggregate sorts by close_at asc — mirror that here for WhatIfTrade alignment.
-  const sortedClosed = useMemo(() => {
-    return trades
-      .filter((t) => t.exit_price != null && t.exit_price > 0 && t.close_at != null)
-      .sort(
-        (a, b) =>
-          new Date(a.close_at ?? a.open_at).getTime() -
-          new Date(b.close_at ?? b.open_at).getTime(),
-      );
-  }, [trades]);
+  const actualPnl = trade.pnl ?? 0;
 
-  // ── WhatIfTrade wrappers (parallel to sortedClosed) ───────────────────────
-  const allWhatIfTrades = useMemo<WhatIfTrade[]>(() => {
-    return sortedClosed.map((t): WhatIfTrade => ({
-      side: t.side,
-      entry_price: t.entry_price,
-      exit_price: t.exit_price ?? t.entry_price,
-      quantity: t.quantity,
-      multiplier: t.multiplier ?? null,
-      symbol: t.symbol,
-      stop_price: t.stop_price ?? null,
-      take_profit_price: t.take_profit_price ?? null,
-      open_at: t.open_at,
-      close_at: t.close_at ?? t.open_at,
-      mfe_r: t.mfe_r ?? null,
-      mae_r: t.mae_r ?? null,
-    }));
-  }, [sortedClosed]);
-
-  const actualTotal = agg.totals.actual;
-
-  // ── Target-at-R curve (reactive to targetR) ───────────────────────────────
-  const targetData = useMemo(() => {
-    let cum = 0;
-    let hits = 0;
-    const curve = sortedClosed.map((t, i) => {
-      const wt = allWhatIfTrades[i];
-      const result = fixedTargetAtR(wt, targetR);
-      let tradePnl: number;
-      if (result !== null) {
-        tradePnl = result.pnlUsd;
-        if (result.resolved === 'target') hits++;
-      } else {
-        tradePnl = t.pnl ?? 0;
-      }
-      cum += tradePnl;
-      return cum;
-    });
-    const total = curve[curve.length - 1] ?? 0;
-    const hitRate =
-      sortedClosed.length > 0 ? Math.round((hits / sortedClosed.length) * 100) : 0;
-    return { curve, total, delta: total - actualTotal, hitRate };
-  }, [sortedClosed, allWhatIfTrades, targetR, actualTotal]);
-
-  // ── Count indeterminate for targetR card note ─────────────────────────────
-  const targetIndeterminateN = useMemo(() => {
-    let n = 0;
-    for (let i = 0; i < sortedClosed.length; i++) {
-      const wt = allWhatIfTrades[i];
-      if (!wt) continue;
-      const result = fixedTargetAtR(wt, targetR);
-      if (result !== null && result.confidence === 'indeterminate') n++;
+  // Original stop — kept: if mae_r >= 1 the stop was hit → -1R; else actual exit
+  const originalStopPnl = useMemo(() => {
+    if (wt.mae_r != null && wt.mae_r >= 1) {
+      const mult = resolveMultiplier(wt);
+      const risk = riskUsd(wt, mult);
+      return risk !== null ? -risk : actualPnl;
     }
-    return n;
-  }, [sortedClosed, allWhatIfTrades, targetR]);
+    return actualPnl;
+  }, [wt, actualPnl]);
 
-  // ── Break-even stop aggregate (reactive to beR) ───────────────────────────
-  // 3-tier: exact (bars) / certain (estimate) / indeterminate (midpoint for curve).
-  const beData = useMemo(() => {
-    const totalM = sortedClosed.length;
-    let exactN = 0;
-    let certainN = 0;
-    let indetN = 0;
-    let knownTotal = 0;
-    let indetLowSum = 0;
-    let indetHighSum = 0;
-    let cumActualSubset = 0;
-    const curve: number[] = [];
-    let cumCurve = 0;
+  // Break-even stop
+  const beResult = useMemo(() => {
+    if (hasBars) return breakEvenAtR(wt, bars, beR);
+    return estimateBreakEvenAtR(wt, beR);
+  }, [wt, bars, hasBars, beR]);
 
-    for (let i = 0; i < sortedClosed.length; i++) {
-      const t = sortedClosed[i];
-      const wt = allWhatIfTrades[i];
-      if (!wt) continue;
-
-      const bars = barsByTrade.get(t.id);
-      const hasBarsForTrade = (bars?.length ?? 0) > 0;
-      const actualPnl = t.pnl ?? 0;
-
-      if (hasBarsForTrade) {
-        const result = breakEvenAtR(wt, bars!, beR);
-        if (result !== null) {
-          exactN++;
-          knownTotal += result.pnlUsd;
-          cumActualSubset += actualPnl;
-          cumCurve += result.pnlUsd;
-          curve.push(cumCurve);
-        }
-      } else {
-        const est = estimateBreakEvenAtR(wt, beR);
-        if (est !== null) {
-          if (est.confidence === 'certain' && est.pnlUsd !== null) {
-            certainN++;
-            knownTotal += est.pnlUsd;
-            cumActualSubset += actualPnl;
-            cumCurve += est.pnlUsd;
-            curve.push(cumCurve);
-          } else if (est.confidence === 'indeterminate') {
-            indetN++;
-            indetLowSum += est.lowUsd;
-            indetHighSum += est.highUsd;
-            cumActualSubset += actualPnl;
-            const mid = (est.lowUsd + est.highUsd) / 2;
-            cumCurve += mid;
-            curve.push(cumCurve);
-          }
-        }
-      }
+  const bePnl = useMemo(() => {
+    if (!beResult) return null;
+    if ('pnlUsd' in beResult && (beResult as any).pnlUsd != null) return (beResult as any).pnlUsd as number;
+    if ('confidence' in beResult && (beResult as any).confidence === 'indeterminate') {
+      return ((beResult as any).lowUsd + (beResult as any).highUsd) / 2;
     }
+    return null;
+  }, [beResult]);
 
-    const coveredN = exactN + certainN + indetN;
+  // Held to target — use planned scenarios
+  const heldToTargetPnl = useMemo(() => {
+    const planned = computePlannedScenarios(trade);
+    const sc = planned.scenarios.find((s: { key: string; available: boolean; pnl: number | null }) => s.key === 'target');
+    return sc?.available && sc.pnl != null ? sc.pnl : null;
+  }, [trade]);
 
-    if (coveredN === 0) {
-      return {
-        curve: [] as number[],
-        total: null as number | null,
-        delta: null as number | null,
-        coveredN,
-        totalM,
-        exactN: 0,
-        certainN: 0,
-        indetN: 0,
-        bandLow: null as number | null,
-        bandHigh: null as number | null,
-      };
-    }
+  // Let it run at targetR
+  const letItRunResult = useMemo(() => fixedTargetAtR(wt, targetR), [wt, targetR]);
+  const letItRunPnl = letItRunResult?.pnlUsd ?? null;
 
-    const bandLow = knownTotal + indetLowSum;
-    const bandHigh = knownTotal + indetHighSum;
-    const delta = knownTotal - cumActualSubset;
 
-    return {
-      curve,
-      total: knownTotal,
-      delta,
-      coveredN,
-      totalM,
-      exactN,
-      certainN,
-      indetN,
-      bandLow: indetN > 0 ? bandLow : null,
-      bandHigh: indetN > 0 ? bandHigh : null,
-    };
-  }, [sortedClosed, allWhatIfTrades, barsByTrade, beR]);
 
-  // ── RR recommendation ─────────────────────────────────────────────────────
-  const recommendation = useMemo(() => recommendRR(allWhatIfTrades), [allWhatIfTrades]);
-
-  // ── Original stop — kept (leave-it baseline) ──────────────────────────────
-  // Per trade: if mae_r >= 1, the original stop was hit → outcome = -1R in $.
-  // Otherwise the price never reached the stop → actual exit was the result.
-  const originalStopData = useMemo(() => {
-    let cum = 0;
-    const curve: number[] = sortedClosed.map((t, i) => {
-      const wt = allWhatIfTrades[i];
-      let tradePnl: number;
-      if (wt && wt.mae_r != null && wt.mae_r >= 1) {
-        // Original stop was hit — a full -1R loss.
-        const mult = resolveMultiplier(wt);
-        const risk = riskUsd(wt, mult);
-        tradePnl = risk !== null ? -risk : (t.pnl ?? 0);
-      } else {
-        // Stop never hit — kept actual exit.
-        tradePnl = t.pnl ?? 0;
-      }
-      cum += tradePnl;
-      return cum;
-    });
-    const total = curve[curve.length - 1] ?? 0;
-    return { curve, total, delta: total - actualTotal };
-  }, [sortedClosed, allWhatIfTrades, actualTotal]);
-
-  // ── Combined chart data — align BE-stop series with buildAggregate points ─
-  // buildAggregate iterates `sorted` (same as sortedClosed). For each trade,
-  // compute a BE-stop value; when not coverable, fall back to actual P&L so
-  // the line always has the same number of points as agg.points.
-  const chartPoints = useMemo(() => {
-    if (agg.points.length === 0) return [];
-
-    let cumBe = 0;
-    const beValues: number[] = sortedClosed.map((t, i) => {
-      const wt = allWhatIfTrades[i];
-      if (!wt) {
-        cumBe += t.pnl ?? 0;
-        return cumBe;
-      }
-
-      const bars = barsByTrade.get(t.id);
-      const hasBarsForTrade = (bars?.length ?? 0) > 0;
-
-      if (hasBarsForTrade) {
-        const result = breakEvenAtR(wt, bars!, beR);
-        if (result !== null) {
-          cumBe += result.pnlUsd;
-          return cumBe;
-        }
-      } else {
-        const est = estimateBreakEvenAtR(wt, beR);
-        if (est !== null) {
-          if (est.confidence === 'certain' && est.pnlUsd !== null) {
-            cumBe += est.pnlUsd;
-            return cumBe;
-          } else if (est.confidence === 'indeterminate') {
-            const mid = (est.lowUsd + est.highUsd) / 2;
-            cumBe += mid;
-            return cumBe;
-          }
-        }
-      }
-      // Fallback: use actual P&L so the line never gaps.
-      cumBe += t.pnl ?? 0;
-      return cumBe;
-    });
-
-    return agg.points.map((pt, i) => ({
-      ...pt,
-      breakevenStop: beValues[i] ?? pt.actual,
-      targetScenario: targetData.curve[i] ?? pt.actual,
-      originalStop: originalStopData.curve[i] ?? pt.actual,
-    }));
-  }, [agg.points, sortedClosed, allWhatIfTrades, barsByTrade, beR, targetData.curve, originalStopData.curve]);
-
-  if (agg.points.length === 0) {
-    return (
-      <div className={`${JOURNAL_PANEL} p-ds-5`}>
-        <div className="flex flex-col items-center gap-ds-3 py-12 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.04] text-white/28">
-            <Info className="h-7 w-7" />
-          </div>
-          <p className="text-sm font-medium text-white/60">No closed trades yet</p>
-          <p className="text-xs text-white/38 max-w-[320px]">
-            Close trades in your journal to see the cumulative scenario comparison here.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const xInterval = agg.points.length > 10 ? Math.floor(agg.points.length / 8) : 0;
-  const n = sortedClosed.length;
-
-  // ── Confidence chip for the BE card ──────────────────────────────────────
-  const beConfidenceChip = (() => {
-    if (beData.coveredN === 0) return null;
-    if (beData.indetN > 0) {
-      return (
-        <span className="rounded-[4px] bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-white/42">
-          Indeterminate
-        </span>
-      );
-    }
-    if (beData.certainN > 0) {
-      return (
-        <span className="rounded-[4px] bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-white/42">
-          Estimated
-        </span>
-      );
-    }
-    return (
-      <span className="rounded-[4px] bg-[#4AD295]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#4AD295]">
-        Exact
-      </span>
-    );
-  })();
 
   return (
     <div className="flex flex-col gap-ds-5">
@@ -1139,324 +908,47 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         </div>
       </div>
 
-      {/* ── 1. Main combined cumulative P&L chart (full-width, TOP) ──────── */}
-      <div className={JOURNAL_PANEL}>
-        <div className="flex items-start justify-between gap-ds-3 border-b border-white/[0.06] px-ds-5 py-ds-4">
-          <div className="flex items-center gap-2">
-            <span className="text-[14px] font-semibold text-white">Cumulative P&amp;L by scenario</span>
-            <ShadowInfoIcon label="Each line shows cumulative P&L across all closed trades. When a stop or target is missing for a trade, that trade's actual P&L is used instead so all lines span the same set of trades. The Break-even stop line reflects the R trigger selected in the card below." />
-          </div>
-        </div>
-        <div className="px-ds-5 pb-ds-5 pt-ds-4" style={{ width: '100%', height: 420 }}>
-          <ResponsiveContainer>
-            <AreaChart data={chartPoints} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
-              <defs>
-                <linearGradient id="main-grad-actual" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLOR_GOLD} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COLOR_GOLD} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="main-grad-target" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLOR_GREEN} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COLOR_GREEN} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="main-grad-breakeven" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLOR_SILVER} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COLOR_SILVER} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="main-grad-letitrun" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLOR_SILVER} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COLOR_SILVER} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="main-grad-originalstop" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COLOR_RED} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COLOR_RED} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                interval={xInterval}
-              />
-              <YAxis
-                tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v: number) =>
-                  `${v >= 0 ? '+' : '-'}$${Math.round(Math.abs(v)).toLocaleString('en-US')}`
-                }
-                width={72}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: 'rgba(20,20,20,0.95)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 8,
-                  fontSize: 11,
-                  padding: '4px 8px',
-                }}
-                itemStyle={{ color: 'rgba(255,255,255,0.82)' }}
-                labelStyle={{ color: 'rgba(255,255,255,0.42)' }}
-                formatter={(val: number, name: string) => [fmtPnl(Math.round(val)), name]}
-                cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}
-              />
-              {/* Stop view areas */}
-              {view === 'stop' && !hidden.has('originalStop') && (
-                <Area
-                  type="monotone"
-                  dataKey="originalStop"
-                  name="Original stop (kept)"
-                  stroke={COLOR_RED}
-                  strokeWidth={2}
-                  fill="url(#main-grad-originalstop)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              {view === 'stop' && !hidden.has('breakevenStop') && (
-                <Area
-                  type="monotone"
-                  dataKey="breakevenStop"
-                  name={`Break-even stop (${beR}R)`}
-                  stroke={COLOR_SILVER}
-                  strokeWidth={2}
-                  strokeDasharray="5 3"
-                  fill="url(#main-grad-breakeven)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              {/* Target view areas */}
-              {view === 'target' && !hidden.has('target') && (
-                <Area
-                  type="monotone"
-                  dataKey="target"
-                  name="Held to target"
-                  stroke={COLOR_GREEN}
-                  strokeWidth={2}
-                  fill="url(#main-grad-target)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              {view === 'target' && !hidden.has('targetScenario') && (
-                <Area
-                  type="monotone"
-                  dataKey="targetScenario"
-                  name={`Let it run (${targetR}R)`}
-                  stroke={COLOR_SILVER}
-                  strokeWidth={2}
-                  fill="url(#main-grad-letitrun)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              )}
-              {/* Actual — shown in both views. Rendered LAST so the gold line
-                  paints ON TOP of every scenario line (dominant baseline),
-                  and thicker so it stays readable even when a scenario line
-                  overlaps it exactly (e.g. Held-to-target == Actual). */}
-              {!hidden.has('actual') && (
-                <Area
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual"
-                  stroke={COLOR_GOLD}
-                  strokeWidth={3.5}
-                  fill="url(#main-grad-actual)"
-                  fillOpacity={1}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
-              )}
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        {n > 0 && view === 'stop' && (
-          <p className="px-ds-5 pb-ds-4 -mt-ds-2 text-[11px] text-white/28 leading-relaxed">
-            Break-even stop line uses midpoint for indeterminate trades; falls back to actual when no excursion data.
-          </p>
-        )}
-      </div>
-
-      {/* ── C. Gold conclusion band — view-specific ───────────────────────── */}
-      {view === 'stop' ? (() => {
-        // Stop view: candidates are originalStop and beData
-        const candidates: Array<{ delta: number; phrase: string }> = [
-          {
-            delta: originalStopData.delta,
-            phrase: 'Keeping your original stop untouched',
-          },
-          ...(beData.delta !== null
-            ? [{ delta: beData.delta, phrase: `Moving your stop to break-even at ${beR}R` }]
-            : []),
-        ];
-
-        if (actualTotal === 0 || candidates.length === 0) {
-          return (
-            <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
-              <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-              <p className="text-[15px] text-white/60 leading-relaxed">
-                Close more trades with stops to see your highest-impact stop scenario.
-              </p>
-            </div>
-          );
-        }
-
-        const best = candidates.reduce((a, b) =>
-          Math.abs(b.delta) > Math.abs(a.delta) ? b : a,
-        );
-        const pct = Math.round((best.delta / Math.abs(actualTotal)) * 100);
-        const positive = best.delta > 0;
-
-        return (
-          <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
-            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-            <p className="text-[15px] text-white leading-relaxed">
-              {best.phrase}{' '}
-              {positive ? (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
-              ) : (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
-              )}
-            </p>
-          </div>
-        );
-      })() : (() => {
-        // Target view: candidates are held-to-target and let-it-run
-        const candidates: Array<{ delta: number; phrase: string }> = [
-          {
-            delta: agg.totals.target - actualTotal,
-            phrase: 'Holding every trade to your original target',
-          },
-          {
-            delta: targetData.delta,
-            phrase: `Letting your winners run to ${targetR}R`,
-          },
-        ];
-
-        if (actualTotal === 0) {
-          return (
-            <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
-              <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-              <p className="text-[15px] text-white/60 leading-relaxed">
-                Close more trades with targets to see your highest-impact target scenario.
-              </p>
-            </div>
-          );
-        }
-
-        const best = candidates.reduce((a, b) =>
-          Math.abs(b.delta) > Math.abs(a.delta) ? b : a,
-        );
-        const pct = Math.round((best.delta / Math.abs(actualTotal)) * 100);
-        const positive = best.delta > 0;
-
-        return (
-          <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
-            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-            <p className="text-[15px] text-white leading-relaxed">
-              {best.phrase}{' '}
-              {positive ? (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
-              ) : (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
-              )}
-            </p>
-          </div>
-        );
-      })()}
-
-      {/* ── 2. Per-scenario small-multiples grid — view-specific 3 cards ─── */}
+      {/* ── Per-scenario small-multiples grid — view-specific 3 cards ─── */}
       {view === 'stop' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
 
-          {/* Original stop — kept (Leave-it baseline) */}
+          {/* Original stop — kept */}
           <SmallScenarioCard
             label="Original stop — kept"
             subtitle="Leave it — never move your stop"
-            total={originalStopData.total}
-            curve={originalStopData.curve}
+            total={originalStopPnl}
+            curve={[0, originalStopPnl]}
             curveColor={COLOR_RED}
-            delta={originalStopData.delta}
-            onClick={() => toggle('originalStop')}
-            hidden={hidden.has('originalStop')}
+            delta={originalStopPnl !== actualPnl ? originalStopPnl - actualPnl : undefined}
           />
 
           {/* Actual (baseline) */}
           <SmallScenarioCard
             label="Actual"
-            subtitle="Your real exits"
-            total={agg.totals.actual}
-            curve={agg.points.map((p) => p.actual)}
+            subtitle="Your real exit"
+            total={actualPnl}
+            curve={[0, actualPnl]}
             curveColor={COLOR_GOLD}
             isBaseline
-            onClick={() => toggle('actual')}
-            hidden={hidden.has('actual')}
           />
 
           {/* Break-even stop — interactive */}
           <LabCard
             title="Break-even stop"
-            subtitle={`Move it — shift stop to entry once price reaches ${beR}R in your favour.`}
-            totalPnl={beData.total}
-            deltaVsActual={beData.coveredN > 0 ? beData.delta : null}
-            curve={beData.curve}
+            subtitle={`Move stop to entry once price reaches ${beR}R in your favour.`}
+            totalPnl={bePnl}
+            deltaVsActual={bePnl !== null ? bePnl - actualPnl : null}
+            curve={bePnl !== null ? [0, bePnl] : []}
             curveColor={COLOR_SILVER}
-            isInert={beData.coveredN === 0}
-            inertMessage="Add stops/targets to your trades to unlock this scenario."
-            badge={
-              beData.coveredN > 0
-                ? `Exact ${beData.exactN} · Estimated ${beData.certainN} · Indeterminate ${beData.indetN}`
-                : undefined
-            }
-            onClick={beData.coveredN > 0 ? () => toggle('breakevenStop') : undefined}
-            hidden={hidden.has('breakevenStop')}
+            isInert={bePnl === null}
+            inertMessage="Add stops/targets to see this scenario."
           >
-            {beConfidenceChip && <div className="flex">{beConfidenceChip}</div>}
-
-            {beData.coveredN > 0 &&
-              beData.indetN > 0 &&
-              beData.bandLow !== null &&
-              beData.bandHigh !== null && (
-                <p className="text-[11px] text-white/42 leading-relaxed">
-                  Range:{' '}
-                  <span className="tabular-nums">{fmtPnl(Math.round(beData.bandLow))}</span>
-                  {' … '}
-                  <span className="tabular-nums">{fmtPnl(Math.round(beData.bandHigh))}</span>
-                </p>
-              )}
-
             <div className="mt-auto pt-ds-1">
               <SegmentToggle<1 | 2 | 3>
                 options={[1, 2, 3]}
                 value={beR}
-                onChange={beData.coveredN > 0 ? setBeR : () => { /* inert */ }}
-                disabled={beData.coveredN === 0}
+                onChange={bePnl !== null ? setBeR : () => { /* inert */ }}
+                disabled={bePnl === null}
               />
             </div>
           </LabCard>
@@ -1467,44 +959,39 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
           {/* Actual (baseline) */}
           <SmallScenarioCard
             label="Actual"
-            subtitle="Your real exits"
-            total={agg.totals.actual}
-            curve={agg.points.map((p) => p.actual)}
+            subtitle="Your real exit"
+            total={actualPnl}
+            curve={[0, actualPnl]}
             curveColor={COLOR_GOLD}
             isBaseline
-            onClick={() => toggle('actual')}
-            hidden={hidden.has('actual')}
           />
 
           {/* Held to target */}
           <SmallScenarioCard
             label="Held to target"
-            subtitle="Exit at your planned target"
-            total={agg.totals.target}
-            curve={agg.points.map((p) => p.target)}
+            subtitle="Exit at your planned take-profit"
+            total={heldToTargetPnl ?? actualPnl}
+            curve={[0, heldToTargetPnl ?? actualPnl]}
             curveColor={COLOR_GREEN}
-            delta={agg.totals.target - agg.totals.actual}
-            onClick={() => toggle('target')}
-            hidden={hidden.has('target')}
+            delta={heldToTargetPnl !== null ? heldToTargetPnl - actualPnl : undefined}
           />
 
           {/* Target — let it run — interactive */}
           <LabCard
             title="Target — let it run"
             subtitle={`Exits at ${targetR}R or stops out at −1R.`}
-            totalPnl={targetData.total}
-            deltaVsActual={targetData.delta}
-            curve={targetData.curve}
+            totalPnl={letItRunPnl}
+            deltaVsActual={letItRunPnl !== null ? letItRunPnl - actualPnl : null}
+            curve={letItRunPnl !== null ? [0, letItRunPnl] : []}
             curveColor={COLOR_SILVER}
-            badge={`Hits the ${targetR}R target ${targetData.hitRate}% of the time.`}
-            onClick={() => toggle('targetScenario')}
-            hidden={hidden.has('targetScenario')}
+            badge={
+              letItRunResult?.resolved === 'target'
+                ? `Hit the ${targetR}R target`
+                : letItRunResult?.resolved === 'stop'
+                  ? `Stopped out at −1R`
+                  : undefined
+            }
           >
-            {targetIndeterminateN > 0 && (
-              <p className="text-[11px] text-white/42 leading-relaxed">
-                {targetIndeterminateN} trade{targetIndeterminateN !== 1 ? 's' : ''} indeterminate — target &amp; stop both touched
-              </p>
-            )}
             <div className="mt-auto pt-ds-1">
               <SegmentToggle<1 | 2 | 3 | 4>
                 options={[1, 2, 3, 4]}
@@ -1516,50 +1003,58 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         </div>
       )}
 
-      {/* Tier legend */}
-      <p className="text-[11px] text-white/28 leading-relaxed -mt-ds-2">
-        Exact = from price bars · Estimated = from your trade&apos;s favorable/adverse extremes · Indeterminate = order unknown without bars
-      </p>
+      {/* Gold insight band */}
+      {(() => {
+        const delta = view === 'stop'
+          ? (originalStopPnl !== actualPnl ? originalStopPnl - actualPnl : bePnl !== null ? bePnl - actualPnl : null)
+          : (heldToTargetPnl !== null ? heldToTargetPnl - actualPnl : letItRunPnl !== null ? letItRunPnl - actualPnl : null);
 
-      {/* ── 3. RR recommendation panel ───────────────────────────────────── */}
-      <div className={`${JOURNAL_PANEL} px-ds-4 py-ds-4`}>
-        <div className="flex items-start gap-ds-3">
-          <Lightbulb className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#C9A646]" />
-          <div className="flex flex-col gap-ds-1">
-            {recommendation ? (
-              <>
-                <p className="text-sm font-medium text-white leading-relaxed">
-                  {recommendation.verdict}
-                </p>
-                <p className="text-[13px] text-white/70 leading-relaxed">
-                  At {targetR}R you&apos;d net{' '}
-                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
-                    {fmtPnl(Math.round(targetData.total))}
-                  </span>{' '}
-                  ({fmtDelta(Math.round(targetData.delta))}); expectancy peaks at{' '}
-                  {recommendation.recommendedR}R.
-                </p>
-                <p className="text-[11px] text-white/38 mt-ds-1">
-                  Based on {recommendation.sampleSize} trade{recommendation.sampleSize !== 1 ? 's' : ''} with excursion data.
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-white leading-relaxed">
-                  At {targetR}R you&apos;d net{' '}
-                  <span className={targetData.total >= 0 ? 'text-[#4AD295]' : 'text-[#F87171]'}>
-                    {fmtPnl(Math.round(targetData.total))}
-                  </span>{' '}
-                  ({fmtDelta(Math.round(targetData.delta))}) with a {targetData.hitRate}% hit rate.
-                </p>
-                <p className="text-[11px] text-white/38 mt-ds-1">
-                  Add stop prices to your trades to unlock the full R-based expectancy recommendation.
-                </p>
-              </>
-            )}
+        const bestScenarioPnl = view === 'stop'
+          ? [originalStopPnl, bePnl].filter((v): v is number => v !== null).reduce(
+              (best, v) => Math.abs(v - actualPnl) > Math.abs(best - actualPnl) ? v : best,
+              originalStopPnl,
+            )
+          : ([heldToTargetPnl, letItRunPnl].filter((v): v is number => v !== null)[0] ?? null);
+
+        const scenarioName = view === 'stop'
+          ? (bestScenarioPnl === originalStopPnl ? 'Keeping your original stop' : `Moving stop to break-even at ${beR}R`)
+          : (bestScenarioPnl === heldToTargetPnl ? 'Holding to your target' : `Letting it run to ${targetR}R`);
+
+        if (delta === null || Math.abs(delta) < 0.01) {
+          return (
+            <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+              <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+              <p className="text-[15px] text-white/60 leading-relaxed">
+                {view === 'stop' ? 'Add stops to this trade to see stop scenario analysis.' : 'Add a target to this trade to see target scenario analysis.'}
+              </p>
+            </div>
+          );
+        }
+
+        const pct = actualPnl !== 0 ? Math.round((Math.abs(delta) / Math.abs(actualPnl)) * 100) : 0;
+        const positive = delta > 0;
+
+        return (
+          <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+            <p className="text-[15px] text-white/72 leading-relaxed">
+              {scenarioName} would have{' '}
+              {positive ? (
+                <>
+                  added{' '}
+                  <span className="text-[#C9A646] font-semibold">{pct}% to your return</span>{' '}
+                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(delta))}</span>).
+                </>
+              ) : (
+                <>
+                  <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
+                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(delta))}</span>).
+                </>
+              )}
+            </p>
           </div>
-        </div>
-      </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2059,6 +1554,13 @@ function MiniCurve({ data, color }: MiniCurveProps) {
               <stop offset="100%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
+          <YAxis
+            hide
+            domain={[
+              (dataMin: number) => Math.min(0, dataMin * 1.1),
+              (dataMax: number) => dataMax > 0 ? dataMax * 1.1 : 0,
+            ]}
+          />
           <Area
             type="monotone"
             dataKey="v"
@@ -2385,9 +1887,6 @@ export default function TradeCompare() {
     );
   }, [selectedTrade, bars, hasBars]);
 
-  // Fetch bars for ALL closed trades — used by the Risk-reward Lab (ScenarioLab).
-  const closedTradeIds = useMemo(() => closedTrades.map((t) => t.id), [closedTrades]);
-  const { barsByTrade } = useAllTradeBars(closedTradeIds);
 
   // Aggregate for beta Day tab + Distribution tab.
   const aggregate = useShadowAggregate(closedTrades);
@@ -2442,6 +1941,19 @@ export default function TradeCompare() {
         </p>
       </div>
 
+      {/* Trade picker — shared across Performance and Trade tabs */}
+      {!isLoading && closedTrades.length > 0 && (
+        <TradePicker
+          closedTrades={closedTrades}
+          selectedId={selectedId}
+          effectiveId={effectiveId}
+          dialogOpen={dialogOpen}
+          setDialogOpen={setDialogOpen}
+          setSelectedId={setSelectedId}
+          disabled={closedTrades.length === 0}
+        />
+      )}
+
       {/* Shadow — 3-tab experience */}
       <Tabs defaultValue="day">
         <TabsList className="mx-auto flex w-fit bg-[rgba(20,20,20,0.6)] border border-white/[0.08] rounded-[10px] p-1 h-auto">
@@ -2453,17 +1965,6 @@ export default function TradeCompare() {
         {/* ── Trade tab ── */}
         <TabsContent value="trade" className="mt-ds-4">
           <div className="flex flex-col gap-ds-5">
-            {!isLoading && (
-              <TradePicker
-                closedTrades={closedTrades}
-                selectedId={selectedId}
-                effectiveId={effectiveId}
-                dialogOpen={dialogOpen}
-                setDialogOpen={setDialogOpen}
-                setSelectedId={setSelectedId}
-                disabled={closedTrades.length === 0}
-              />
-            )}
             {isLoading && loadingEl}
             {!isLoading && closedTrades.length === 0 && noTradesEl}
             {!isLoading && closedTrades.length > 0 && selectedTrade && (
@@ -2481,7 +1982,9 @@ export default function TradeCompare() {
 
         {/* ── Day tab ── */}
         <TabsContent value="day" className="mt-ds-4">
-          {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} />}
+          {isLoading ? loadingEl : selectedTrade ? (
+            <DayView trade={selectedTrade} bars={bars} />
+          ) : noTradesEl}
         </TabsContent>
 
         {/* ── Distribution tab (now "Summary") ── */}
