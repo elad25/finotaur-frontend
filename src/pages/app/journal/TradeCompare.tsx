@@ -33,7 +33,7 @@ import type { Trade } from '@/hooks/useTradesData';
 import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoContext';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { resolveHiddenPortfolioIds } from '@/lib/journal/hiddenAccounts';
-import { analyzeWhatIf, fixedTargetAtR, breakEvenAtR, estimateBreakEvenAtR, recommendRR } from '@/lib/journal/whatIfEngine';
+import { analyzeWhatIf, fixedTargetAtR, breakEvenAtR, estimateBreakEvenAtR, recommendRR, riskUsd, resolveMultiplier } from '@/lib/journal/whatIfEngine';
 import type { WhatIfScenario, WhatIfResult, PriceBar, WhatIfTrade } from '@/lib/journal/whatIfEngine';
 import { useTradeReconcile, useTradeBars, useAllTradeBars } from '@/hooks/useTradeBars';
 import { buildAggregate } from '@/lib/journal/plannedScenarios';
@@ -52,6 +52,7 @@ import {
   ListFilter,
   BarChart2,
   Sparkles,
+  EyeOff,
 } from 'lucide-react';
 import { buildShadowInsights } from '@/lib/journal/shadowInsight';
 import type { ShadowInsight } from '@/lib/journal/shadowInsight';
@@ -681,6 +682,8 @@ interface SmallScenarioCardProps {
   curveColor: string;
   isBaseline?: boolean;
   delta?: number;
+  onClick?: () => void;
+  hidden?: boolean;
 }
 
 function SmallScenarioCard({
@@ -691,16 +694,21 @@ function SmallScenarioCard({
   curveColor,
   isBaseline = false,
   delta,
+  onClick,
+  hidden = false,
 }: SmallScenarioCardProps) {
   const totalPositive = total >= 0;
   const deltaPositive = (delta ?? 0) >= 0;
   return (
     <div
-      className={`rounded-[14px] border p-ds-4 flex flex-col gap-ds-2 ${
+      role={onClick ? 'button' : undefined}
+      aria-pressed={onClick ? !hidden : undefined}
+      onClick={onClick}
+      className={`rounded-[14px] border p-ds-4 flex flex-col gap-ds-2 transition-opacity ${
         isBaseline
           ? 'border-2 border-[#C9A646]/40 bg-[rgba(22,22,22,0.90)]'
           : 'border-[0.5px] border-white/[0.08] bg-[rgba(22,22,22,0.90)]'
-      }`}
+      } ${onClick ? 'cursor-pointer hover:border-white/[0.18]' : ''} ${hidden ? 'opacity-45' : ''}`}
     >
       <div className="flex items-start justify-between gap-ds-2">
         <div className="flex flex-col gap-0.5">
@@ -735,6 +743,12 @@ function SmallScenarioCard({
           {fmtDelta(Math.round(delta))}
         </span>
       )}
+      {hidden && onClick && (
+        <span className="mt-auto flex items-center gap-1 text-[11px] text-white/38">
+          <EyeOff className="h-3.5 w-3.5" />
+          Hidden — click to show
+        </span>
+      )}
     </div>
   );
 }
@@ -746,10 +760,21 @@ function SmallScenarioCard({
 //      Held to target, Break-even stop [interactive], Target — let it run [interactive])
 //   3. RR recommendation panel
 
+type SeriesKey = 'actual' | 'target' | 'breakevenStop' | 'targetScenario' | 'originalStop';
+
 function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<string, PriceBar[]> }) {
   // Shared toggle state — lifted so BE-stop card and chart's 4th line stay in sync.
   const [beR, setBeR] = useState<1 | 2 | 3>(1);
   const [targetR, setTargetR] = useState<1 | 2 | 3 | 4>(2);
+
+  // Series visibility — clicking a card hides/shows its line in the main chart.
+  const [hidden, setHidden] = useState<Set<SeriesKey>>(new Set());
+  const toggle = (key: SeriesKey) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
 
   const agg = useMemo(() => buildAggregate(trades), [trades]);
 
@@ -912,6 +937,30 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
   // ── RR recommendation ─────────────────────────────────────────────────────
   const recommendation = useMemo(() => recommendRR(allWhatIfTrades), [allWhatIfTrades]);
 
+  // ── Original stop — kept (leave-it baseline) ──────────────────────────────
+  // Per trade: if mae_r >= 1, the original stop was hit → outcome = -1R in $.
+  // Otherwise the price never reached the stop → actual exit was the result.
+  const originalStopData = useMemo(() => {
+    let cum = 0;
+    const curve: number[] = sortedClosed.map((t, i) => {
+      const wt = allWhatIfTrades[i];
+      let tradePnl: number;
+      if (wt && wt.mae_r != null && wt.mae_r >= 1) {
+        // Original stop was hit — a full -1R loss.
+        const mult = resolveMultiplier(wt);
+        const risk = riskUsd(wt, mult);
+        tradePnl = risk !== null ? -risk : (t.pnl ?? 0);
+      } else {
+        // Stop never hit — kept actual exit.
+        tradePnl = t.pnl ?? 0;
+      }
+      cum += tradePnl;
+      return cum;
+    });
+    const total = curve[curve.length - 1] ?? 0;
+    return { curve, total, delta: total - actualTotal };
+  }, [sortedClosed, allWhatIfTrades, actualTotal]);
+
   // ── Combined chart data — align BE-stop series with buildAggregate points ─
   // buildAggregate iterates `sorted` (same as sortedClosed). For each trade,
   // compute a BE-stop value; when not coverable, fall back to actual P&L so
@@ -958,8 +1007,9 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
       ...pt,
       breakevenStop: beValues[i] ?? pt.actual,
       targetScenario: targetData.curve[i] ?? pt.actual,
+      originalStop: originalStopData.curve[i] ?? pt.actual,
     }));
-  }, [agg.points, sortedClosed, allWhatIfTrades, barsByTrade, beR, targetData.curve]);
+  }, [agg.points, sortedClosed, allWhatIfTrades, barsByTrade, beR, targetData.curve, originalStopData.curve]);
 
   if (agg.points.length === 0) {
     return (
@@ -1036,6 +1086,10 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
                   <stop offset="0%" stopColor="#A78BFA" stopOpacity={0.18} />
                   <stop offset="100%" stopColor="#A78BFA" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="main-grad-originalstop" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#F0997B" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#F0997B" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
               <XAxis
@@ -1070,51 +1124,72 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
               <Legend
                 wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}
               />
-              <Area
-                type="monotone"
-                dataKey="actual"
-                name="Actual"
-                stroke={COLOR_GOLD}
-                strokeWidth={2}
-                fill="url(#main-grad-actual)"
-                fillOpacity={1}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="target"
-                name="Held to target"
-                stroke={COLOR_GREEN}
-                strokeWidth={2}
-                fill="url(#main-grad-target)"
-                fillOpacity={1}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="breakevenStop"
-                name={`Break-even stop (${beR}R)`}
-                stroke={COLOR_BLUE}
-                strokeWidth={2}
-                strokeDasharray="5 3"
-                fill="url(#main-grad-breakeven)"
-                fillOpacity={1}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="targetScenario"
-                name={`Let it run (${targetR}R)`}
-                stroke="#A78BFA"
-                strokeWidth={2}
-                fill="url(#main-grad-letitrun)"
-                fillOpacity={1}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
+              {!hidden.has('actual') && (
+                <Area
+                  type="monotone"
+                  dataKey="actual"
+                  name="Actual"
+                  stroke={COLOR_GOLD}
+                  strokeWidth={2}
+                  fill="url(#main-grad-actual)"
+                  fillOpacity={1}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+              {!hidden.has('target') && (
+                <Area
+                  type="monotone"
+                  dataKey="target"
+                  name="Held to target"
+                  stroke={COLOR_GREEN}
+                  strokeWidth={2}
+                  fill="url(#main-grad-target)"
+                  fillOpacity={1}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+              {!hidden.has('breakevenStop') && (
+                <Area
+                  type="monotone"
+                  dataKey="breakevenStop"
+                  name={`Break-even stop (${beR}R)`}
+                  stroke={COLOR_BLUE}
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  fill="url(#main-grad-breakeven)"
+                  fillOpacity={1}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+              {!hidden.has('targetScenario') && (
+                <Area
+                  type="monotone"
+                  dataKey="targetScenario"
+                  name={`Let it run (${targetR}R)`}
+                  stroke="#A78BFA"
+                  strokeWidth={2}
+                  fill="url(#main-grad-letitrun)"
+                  fillOpacity={1}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+              {!hidden.has('originalStop') && (
+                <Area
+                  type="monotone"
+                  dataKey="originalStop"
+                  name="Original stop (kept)"
+                  stroke="#F0997B"
+                  strokeWidth={2}
+                  fill="url(#main-grad-originalstop)"
+                  fillOpacity={1}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -1125,7 +1200,68 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         )}
       </div>
 
-      {/* ── 2. Per-scenario small-multiples grid (5 cards) ───────────────── */}
+      {/* ── C. Gold conclusion band ───────────────────────────────────────── */}
+      {(() => {
+        // Candidates: [delta, phrase]
+        const candidates: Array<{ delta: number; phrase: string }> = [
+          {
+            delta: targetData.delta,
+            phrase: `Letting your winners run to ${targetR}R instead of your exits`,
+          },
+          ...(beData.delta !== null
+            ? [{ delta: beData.delta, phrase: `Moving your stop to break-even at ${beR}R` }]
+            : []),
+          {
+            delta: agg.totals.target - actualTotal,
+            phrase: 'Holding every trade to your original target',
+          },
+          {
+            delta: originalStopData.delta,
+            phrase: 'Keeping your original stop untouched (never moving it)',
+          },
+        ];
+
+        if (actualTotal === 0) {
+          return (
+            <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+              <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+              <p className="text-[15px] text-white/60 leading-relaxed">
+                Close more trades with stops and targets to see your highest-impact what-if.
+              </p>
+            </div>
+          );
+        }
+
+        const best = candidates.reduce((a, b) =>
+          Math.abs(b.delta) > Math.abs(a.delta) ? b : a,
+        );
+        const pct = Math.round((best.delta / Math.abs(actualTotal)) * 100);
+        const positive = best.delta > 0;
+
+        return (
+          <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+            <p className="text-[15px] text-white leading-relaxed">
+              {best.phrase}{' '}
+              {positive ? (
+                <>
+                  would have{' '}
+                  <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
+                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
+                </>
+              ) : (
+                <>
+                  would have{' '}
+                  <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
+                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
+                </>
+              )}
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* ── 2. Per-scenario small-multiples grid (4 cards) ───────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
 
         {/* 2a. Actual (baseline — no delta) */}
@@ -1136,6 +1272,8 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
           curve={agg.points.map((p) => p.actual)}
           curveColor={COLOR_GOLD}
           isBaseline
+          onClick={() => toggle('actual')}
+          hidden={hidden.has('actual')}
         />
 
         {/* 2b. Held to target */}
@@ -1146,12 +1284,26 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
           curve={agg.points.map((p) => p.target)}
           curveColor={COLOR_GREEN}
           delta={agg.totals.target - agg.totals.actual}
+          onClick={() => toggle('target')}
+          hidden={hidden.has('target')}
+        />
+
+        {/* 2c. Original stop — kept (Leave-it baseline) */}
+        <SmallScenarioCard
+          label="Original stop — kept"
+          subtitle="Leave it — never move your stop"
+          total={originalStopData.total}
+          curve={originalStopData.curve}
+          curveColor="#F0997B"
+          delta={originalStopData.delta}
+          onClick={() => toggle('originalStop')}
+          hidden={hidden.has('originalStop')}
         />
 
         {/* 2d. Break-even stop — interactive (drives main chart's BE line) */}
         <LabCard
           title="Break-even stop"
-          subtitle={`Move stop to entry once price reaches ${beR}R in your favour.`}
+          subtitle={`Move it — shift stop to entry once price reaches ${beR}R in your favour.`}
           totalPnl={beData.total}
           deltaVsActual={beData.coveredN > 0 ? beData.delta : null}
           curve={beData.curve}
@@ -1163,6 +1315,8 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
               ? `Exact ${beData.exactN} · Estimated ${beData.certainN} · Indeterminate ${beData.indetN}`
               : undefined
           }
+          onClick={beData.coveredN > 0 ? () => toggle('breakevenStop') : undefined}
+          hidden={hidden.has('breakevenStop')}
         >
           {beConfidenceChip && <div className="flex">{beConfidenceChip}</div>}
 
@@ -1197,6 +1351,8 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
           curve={targetData.curve}
           curveColor={targetColor}
           badge={`Hits the ${targetR}R target ${targetData.hitRate}% of the time.`}
+          onClick={() => toggle('targetScenario')}
+          hidden={hidden.has('targetScenario')}
         >
           {targetIndeterminateN > 0 && (
             <p className="text-[11px] text-white/42 leading-relaxed">
@@ -1717,7 +1873,7 @@ function SegmentToggle<T extends number>({
           key={opt}
           type="button"
           disabled={disabled}
-          onClick={() => onChange(opt)}
+          onClick={(e) => { e.stopPropagation(); onChange(opt); }}
           className={`rounded-[6px] px-2 py-0.5 text-[11px] font-semibold tabular-nums transition-colors ${
             disabled
               ? 'cursor-not-allowed text-white/28'
@@ -1746,6 +1902,8 @@ interface LabCardProps {
   inertMessage?: string;
   badge?: string;
   children?: React.ReactNode;
+  onClick?: () => void;
+  hidden?: boolean;
 }
 function LabCard({
   title,
@@ -1759,18 +1917,23 @@ function LabCard({
   inertMessage,
   badge,
   children,
+  onClick,
+  hidden = false,
 }: LabCardProps) {
   const pnlPositive = (totalPnl ?? 0) >= 0;
   const deltaPositive = (deltaVsActual ?? 0) >= 0;
   return (
     <div
+      role={onClick ? 'button' : undefined}
+      aria-pressed={onClick ? !hidden : undefined}
+      onClick={onClick}
       className={`rounded-[14px] border p-ds-4 flex flex-col gap-ds-3 transition-colors ${
         isInert
           ? 'border-white/[0.06] bg-white/[0.02] opacity-60'
           : isBaseline
             ? 'border-2 border-[#60A5FA]/60 bg-[rgba(22,22,22,0.90)]'
             : 'border-[0.5px] border-white/[0.08] bg-[rgba(22,22,22,0.90)] hover:border-white/[0.14]'
-      }`}
+      } ${onClick && !isInert ? 'cursor-pointer' : ''} ${hidden && !isInert ? 'opacity-45' : ''}`}
     >
       <div className="flex items-start justify-between gap-ds-2">
         <div className="flex flex-col gap-0.5">
@@ -1820,6 +1983,12 @@ function LabCard({
 
       {badge && !isInert && (
         <p className="text-[11px] text-white/42">{badge}</p>
+      )}
+      {hidden && onClick && !isInert && (
+        <span className="flex items-center gap-1 text-[11px] text-white/38">
+          <EyeOff className="h-3.5 w-3.5" />
+          Hidden — click to show
+        </span>
       )}
       {children}
     </div>
@@ -2014,7 +2183,7 @@ export default function TradeCompare() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[1200px] mx-auto py-ds-7 px-ds-4 flex flex-col gap-ds-5">
+    <div className="w-full max-w-[1200px] mx-auto pt-ds-3 pb-ds-7 px-ds-4 flex flex-col gap-ds-5">
 
       {/* FINO EXPLAINS — canonical collapsible explainer (top-right) */}
       <div className="flex justify-end -mb-ds-3">
@@ -2030,7 +2199,7 @@ export default function TradeCompare() {
 
       {/* Page header */}
       <div className="flex flex-col items-center text-center gap-1">
-        <h1 className="text-2xl font-bold text-white">Shadow</h1>
+        <h1 className="text-3xl font-bold text-white">Shadow</h1>
         <p className="text-[11px] text-white/62">
           See what your trades could have been.
         </p>
