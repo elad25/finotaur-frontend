@@ -2420,10 +2420,10 @@ export default function TradeCompare() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[1200px] mx-auto pt-ds-3 pb-ds-7 px-ds-4 flex flex-col gap-ds-5">
+    <div className="w-full max-w-[1200px] mx-auto pt-ds-1 pb-ds-4 px-ds-4 flex flex-col gap-ds-4">
 
       {/* FINO EXPLAINS — canonical collapsible explainer (top-right) */}
-      <div className="flex justify-end -mb-ds-3">
+      <div className="flex justify-end -mb-ds-4">
         <FinoExplains title="What is Shadow?" className="w-fit">
           Shadow replays your closed trades as if you had managed each one by a single fixed
           rule — held your target, moved your stop to break-even, or used a set R target — so
@@ -2451,7 +2451,7 @@ export default function TradeCompare() {
         </TabsList>
 
         {/* ── Trade tab ── */}
-        <TabsContent value="trade" className="mt-ds-5">
+        <TabsContent value="trade" className="mt-ds-4">
           <div className="flex flex-col gap-ds-5">
             {!isLoading && (
               <TradePicker
@@ -2480,12 +2480,12 @@ export default function TradeCompare() {
         </TabsContent>
 
         {/* ── Day tab ── */}
-        <TabsContent value="day" className="mt-ds-5">
+        <TabsContent value="day" className="mt-ds-4">
           {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} />}
         </TabsContent>
 
         {/* ── Distribution tab (now "Summary") ── */}
-        <TabsContent value="distribution" className="mt-ds-5">
+        <TabsContent value="distribution" className="mt-ds-4">
           {isLoading ? loadingEl : (
             <DistributionView
               tracked={aggregate.tracked}
