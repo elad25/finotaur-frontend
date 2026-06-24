@@ -2660,8 +2660,13 @@ export default function TradeCompare() {
   return (
     <div className="w-full max-w-[1200px] mx-auto pt-0 pb-ds-4 px-ds-4 flex flex-col gap-ds-4">
 
-      {/* FINO EXPLAINS — canonical collapsible explainer (top-right) */}
-      <div className="flex justify-end -mb-ds-4">
+      {/* Page header + FINO EXPLAINS on same row */}
+      <div className="flex items-center justify-between">
+        <div className="w-36" />
+        <div className="flex flex-col items-center text-center gap-1">
+          <h1 className="text-3xl font-bold text-white">Shadow</h1>
+          <p className="text-[11px] text-white/62">See what your trades could have been.</p>
+        </div>
         <FinoExplains title="What is Shadow?" className="w-fit">
           Shadow replays your closed trades as if you had managed each one by a single fixed
           rule — held your target, moved your stop to break-even, or used a set R target — so
@@ -2670,14 +2675,6 @@ export default function TradeCompare() {
           recorded excursion R values), not guesses. Use the toggles in Performance to find the
           risk-reward that fits how your trades actually behave.
         </FinoExplains>
-      </div>
-
-      {/* Page header */}
-      <div className="flex flex-col items-center text-center gap-1">
-        <h1 className="text-3xl font-bold text-white">Shadow</h1>
-        <p className="text-[11px] text-white/62">
-          See what your trades could have been.
-        </p>
       </div>
 
       {/* Shadow — 3-tab experience */}
@@ -2689,7 +2686,7 @@ export default function TradeCompare() {
         </TabsList>
 
         {/* ── Trade tab ── */}
-        <TabsContent value="trade" className="mt-ds-2">
+        <TabsContent value="trade" className="mt-1">
           <div className="flex flex-col gap-ds-5">
             {!isLoading && (
               <TradePicker
@@ -2718,12 +2715,12 @@ export default function TradeCompare() {
         </TabsContent>
 
         {/* ── Day tab ── */}
-        <TabsContent value="day" className="mt-ds-4">
+        <TabsContent value="day" className="mt-1">
           {isLoading ? loadingEl : <DayView trades={closedTrades} barsByTrade={barsByTrade} />}
         </TabsContent>
 
         {/* ── Distribution tab (now "Summary") ── */}
-        <TabsContent value="distribution" className="mt-ds-4">
+        <TabsContent value="distribution" className="mt-1">
           {isLoading ? loadingEl : (
             <DistributionView
               tracked={aggregate.tracked}
