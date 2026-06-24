@@ -341,7 +341,7 @@ function CommentThread({ item }: CommentThreadProps) {
               <div className="flex flex-col gap-ds-3">
                 {list.map((c: GlobalComment) => (
                   <div key={c.id} className="flex gap-ds-2">
-                    <MonogramAvatar name={c.author_name} size={7} />
+                    <AuthorAvatar name={c.author_name} avatarUrl={null} />
                     <div className="flex flex-col gap-[2px] min-w-0">
                       <div className="flex items-baseline gap-ds-2">
                         <span className="font-sans text-[12px] font-medium text-ink-primary">
