@@ -3,8 +3,9 @@
 //
 // Fields:
 //   - Name (required)
-//   - URL slug (required; auto-suggested from name, editable)
 //   - Description (optional textarea)
+//
+// URL slug is auto-derived from the name and never shown to the user.
 //
 // If canCreate=false, show an inline upsell note inside the dialog so the user
 // understands the gate before submitting (the RPC also enforces it server-side).
@@ -102,30 +103,18 @@ export interface CreateSpaceDialogProps {
 export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpaceDialogProps) {
   const uid = useId();
   const nameId = `${uid}-name`;
-  const slugId = `${uid}-slug`;
   const descId = `${uid}-desc`;
 
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [slugEdited, setSlugEdited] = useState(false);
   const [description, setDescription] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { mutateAsync, isPending } = useCreateSpace();
 
-  // Auto-derive slug from name unless the user has manually edited it.
-  useEffect(() => {
-    if (!slugEdited) {
-      setSlug(slugFromName(name));
-    }
-  }, [name, slugEdited]);
-
   // Reset form when dialog opens/closes.
   useEffect(() => {
     if (!open) {
       setName('');
-      setSlug('');
-      setSlugEdited(false);
       setDescription('');
       setSubmitError(null);
     }
@@ -134,12 +123,6 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
   // ── Validation ──────────────────────────────────────────────────────────────
 
   const nameError = name.trim().length === 0 && submitError ? 'Name is required.' : undefined;
-  const slugError =
-    slug.trim().length === 0 && submitError
-      ? 'URL slug is required.'
-      : slug.length > 0 && !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(slug) && slug.length >= 2
-      ? 'Slug must be lowercase letters, numbers, and hyphens (no leading/trailing hyphens).'
-      : undefined;
 
   // ── Submit ──────────────────────────────────────────────────────────────────
 
@@ -147,7 +130,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
     e.preventDefault();
     setSubmitError(null);
 
-    if (!name.trim() || !slug.trim()) {
+    if (!name.trim()) {
       setSubmitError('required');
       return;
     }
@@ -155,7 +138,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
     try {
       await mutateAsync({
         name: name.trim(),
-        slug: slug.trim(),
+        slug: slugFromName(name.trim()),
         description: description.trim() || undefined,
       });
       toast({ title: 'Room created', description: `"${name.trim()}" is ready.` });
@@ -236,46 +219,6 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
               disabled={isPending}
               autoFocus
             />
-          </Field>
-
-          {/* Slug */}
-          <Field
-            label="URL slug"
-            id={slugId}
-            hint="Lowercase letters, numbers, and hyphens only."
-            error={slugError}
-          >
-            <div className="relative flex items-center">
-              <span className="absolute left-ds-4 text-[13px] text-ink-tertiary select-none pointer-events-none">
-                /spaces/
-              </span>
-              <input
-                id={slugId}
-                type="text"
-                value={slug}
-                onChange={(e) => {
-                  setSlugEdited(true);
-                  // Live-clean to DS slug rules while typing.
-                  const cleaned = e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '')
-                    .replace(/-{2,}/g, '-');
-                  setSlug(cleaned);
-                }}
-                placeholder="ict-mentorship"
-                maxLength={60}
-                /* Inline paddingLeft (not a `pl-[..]` class): the arbitrary
-                   class doesn't reliably win over INPUT_BASE's `px-ds-4` via
-                   tailwind-merge, which let the "/spaces/" prefix overlap the
-                   input text. Inline style always wins. */
-                style={{ paddingLeft: '74px' }}
-                className={cn(
-                  INPUT_BASE,
-                  slugError && 'border-num-negative focus:ring-num-negative/15',
-                )}
-                disabled={isPending}
-              />
-            </div>
           </Field>
 
           {/* Description */}
