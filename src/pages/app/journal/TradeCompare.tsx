@@ -1801,24 +1801,35 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
   const n = closedTrades.length;
   const runItPays = summary.upside > 0;
 
+  // ── Early insight (< VERDICT_MIN_N trades): one-line FINO tip ────────────
+  const earlyInsight = useMemo<string>(() => {
+    if (n === 0) return 'Start journaling your trades — FINO will tell you what to fix.';
+    const withStop = closedTrades.filter((t) => t.stop_price != null).length;
+    const stopCoverage = withStop / n;
+    if (stopCoverage < 0.5) return `Only ${withStop} of your ${n} trades have a stop — add stops so Shadow can compare your scenarios.`;
+    const winners = closedTrades.filter((t) => (t.pnl ?? 0) > 0).length;
+    const winRate = winners / n;
+    const withMfe = closedTrades.filter((t) => t.mfe_r != null && t.mfe_r > 0);
+    if (withMfe.length >= 2) {
+      const avgMfe = withMfe.reduce((s, t) => s + (t.mfe_r ?? 0), 0) / withMfe.length;
+      if (avgMfe > 1.5) return `Your trades reach ${avgMfe.toFixed(1)}R on average before you exit — you may be leaving money on the table.`;
+    }
+    if (winRate < 0.4) return `${Math.round(winRate * 100)}% win rate — focus on skipping low-conviction setups.`;
+    if (winRate > 0.65) return `${Math.round(winRate * 100)}% win rate is strong — make sure your winners are bigger than your losers.`;
+    return `${n} trades logged — ${VERDICT_MIN_N - n} more and FINO will give you a full verdict.`;
+  }, [closedTrades, n]);
+
   return (
     <div className="flex flex-col gap-ds-5">
       {n < VERDICT_MIN_N ? (
-        // Not enough trades to commit to a verdict — stay quiet, no noise.
-        <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-6`}>
-          <div className="relative flex items-start gap-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/[0.08] text-[#E8C766]">
-              <Lightbulb className="h-5 w-5" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <p className="text-[15px] font-semibold text-white">
-                Not enough trades for a verdict yet.
-              </p>
-              <p className="text-[13px] text-white/60 leading-relaxed">
-                Shadow gives you a clear do / don&apos;t once you have at least {VERDICT_MIN_N}{' '}
-                closed trades. You have {n} so far — keep journaling and your verdict will appear here.
-              </p>
-            </div>
+        <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
+          <div className="flex items-center gap-3">
+            <img
+              src="/fino-avatar.png"
+              alt="FINO"
+              className="h-10 w-10 shrink-0 rounded-full object-cover"
+            />
+            <p className="text-[14px] text-white/90 leading-snug">{earlyInsight}</p>
           </div>
         </div>
       ) : (
