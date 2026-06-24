@@ -76,14 +76,14 @@ function ComposerAvatar({
         background: showImage
           ? 'transparent'
           : 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
-        border: '1.5px solid rgba(201,166,70,0.35)',
+        border: showImage ? 'none' : '1.5px solid rgba(201,166,70,0.35)',
       }}
     >
       {showImage ? (
         <img
           src={avatarUrl}
           alt="Your avatar"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover scale-[1.6]"
           onError={() => setImgError(true)}
         />
       ) : (

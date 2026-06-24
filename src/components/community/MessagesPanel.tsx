@@ -50,7 +50,7 @@ function FloorAvatar({
         width: px,
         height: px,
         background: showImg ? 'transparent' : 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
-        border: '1.5px solid rgba(201,166,70,0.35)',
+        border: showImg ? 'none' : '1.5px solid rgba(201,166,70,0.35)',
         flexShrink: 0,
       }}
     >
@@ -58,7 +58,7 @@ function FloorAvatar({
         <img
           src={avatarUrl}
           alt=""
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover scale-[1.6]"
           onError={() => setImgError(true)}
         />
       ) : (
