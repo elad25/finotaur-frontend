@@ -23,6 +23,7 @@ interface OAuthStartResponse {
  */
 export async function getTradovateAuthorizationUrl(
   environment: TradovateEnvironment = 'sandbox',
+  connectionId?: string | null,
 ): Promise<string> {
   const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
   if (sessionErr) {
@@ -44,7 +45,7 @@ export async function getTradovateAuthorizationUrl(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ broker: 'tradovate', environment }),
+    body: JSON.stringify({ broker: 'tradovate', environment, ...(connectionId ? { connection_id: connectionId } : {}) }),
   });
 
   if (!response.ok) {

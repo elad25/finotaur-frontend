@@ -30,6 +30,7 @@ export interface GenerateStateParams {
   environment: BrokerEnvironment;
   redirectUri: string;
   supabaseAdmin: SupabaseClient;
+  connectionId?: string | null;
 }
 
 export interface VerifiedState {
@@ -37,6 +38,7 @@ export interface VerifiedState {
   broker: BrokerName;
   environment: BrokerEnvironment;
   redirectUri: string;
+  connectionId?: string | null;
 }
 
 function getHmacSecret(): string {
@@ -85,6 +87,7 @@ export async function generateStateToken({
   environment,
   redirectUri,
   supabaseAdmin,
+  connectionId,
 }: GenerateStateParams): Promise<string> {
   const nonce = randomNonce();
   const payload = `${userId}.${broker}.${environment}.${nonce}`;
@@ -94,14 +97,17 @@ export async function generateStateToken({
 
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
 
-  const { error } = await supabaseAdmin.from('oauth_state_tokens').insert({
+  const row: Record<string, unknown> = {
     user_id: userId,
     state_hmac: token,
     broker,
     environment,
     redirect_uri: redirectUri,
     expires_at: expiresAt,
-  });
+  };
+  if (connectionId) row.connection_id = connectionId;
+
+  const { error } = await supabaseAdmin.from('oauth_state_tokens').insert(row);
 
   if (error) {
     throw new Error(`Failed to persist OAuth state token: ${error.message}`);
@@ -147,7 +153,7 @@ export async function verifyStateToken(
   // 3. Look up in DB — must exist, not used, not expired.
   const { data, error } = await supabaseAdmin
     .from('oauth_state_tokens')
-    .select('user_id, broker, environment, redirect_uri, used_at, expires_at')
+    .select('user_id, broker, environment, redirect_uri, used_at, expires_at, connection_id')
     .eq('state_hmac', token)
     .single();
 
@@ -180,5 +186,6 @@ export async function verifyStateToken(
     broker: data.broker as BrokerName,
     environment: data.environment as BrokerEnvironment,
     redirectUri: data.redirect_uri as string,
+    connectionId: (data.connection_id as string | null) ?? null,
   };
 }

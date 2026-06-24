@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
   const userId = auth.userId;
 
   // Parse and validate body
-  let body: { broker?: string; environment?: string };
+  let body: { broker?: string; environment?: string; connection_id?: string };
   try {
     body = await req.json();
   } catch {
@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const { broker, environment } = body;
+  const { broker, environment, connection_id: connectionId } = body;
   if (!broker || !environment) {
     return new Response(
       JSON.stringify({ error: 'broker and environment required' }),
@@ -103,6 +103,7 @@ Deno.serve(async (req: Request) => {
       environment: environment as BrokerEnvironment,
       redirectUri,
       supabaseAdmin,
+      connectionId: connectionId ?? null,
     });
 
     // Build broker authorize URL
