@@ -80,7 +80,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
     // (2) Active Tradovate/NinjaTrader environments — errors resolve to empty
     supabase
       .from('broker_connections')
-      .select('environment')
+      .select('id,environment')
       .eq('user_id', userId)
       .eq('is_active', true)
       .in('broker', ['tradovate', 'ninja_trader'])
@@ -156,13 +156,19 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
   // connection was disconnected (is_active=false) but whose portfolios row
   // persists (real row, not derived). Read-side filter — no rows deleted.
   const tvConns = tvConnsResult.data;
-  const activeTvEnvs = new Set((tvConns ?? []).map(c => c.environment));
+  // Prefer credential_id-based filtering (post-PR-#868 portfolios that have the FK set).
+  // Fall back to environment-based for legacy portfolios with credential_id = null.
+  const activeTvConnIds = new Set((tvConns ?? []).map(c => c.id));
+  const activeTvEnvs    = new Set((tvConns ?? []).map(c => c.environment));
 
-  // Apply filter: hide tradovate-source portfolios whose environment has no active connection.
+  // Apply filter: hide tradovate-source portfolios whose parent connection is not active.
   // manual/broker portfolios are untouched.
-  portfolios = portfolios.filter(p =>
-    p.source !== 'tradovate' || activeTvEnvs.has(p.environment)
-  );
+  portfolios = portfolios.filter(p => {
+    if (p.source !== 'tradovate') return true;
+    if (p.credential_id != null)  return activeTvConnIds.has(p.credential_id);
+    return activeTvEnvs.has(p.environment); // legacy fallback for pre-PR-#868 portfolios
+  });
+  void activeTvEnvs; // suppress unused-var lint until legacy portfolios are backfilled with credential_id
 
   // ── 3. Append non-Tradovate broker journal accounts ─────────
   // Query broker_connections with purpose='journal', is_active=true, broker != 'tradovate'.

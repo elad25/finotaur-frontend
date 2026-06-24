@@ -154,6 +154,15 @@ export async function scheduleRetry(
   const transitioned = prevStatus !== newStatus && (newStatus === 'degraded' || newStatus === 'canceled');
 
   if (transitioned) {
+    // Deactivate portfolios immediately when a connection degrades — ensures the
+    // account picker never shows accounts from a connection that can no longer sync.
+    void admin.from('portfolios')
+      .update({ is_active: false })
+      .eq('credential_id', connectionId)
+      .catch((e: unknown) => {
+        console.error('[retryQueue] portfolio deactivate failed:', String(e).slice(0, 200));
+      });
+
     void admin.functions.invoke('broker-state-change-notify', {
       body: {
         connection_id: connectionId,
@@ -191,4 +200,14 @@ export async function clearRetry(
     last_error:          null,
     last_error_at:       null,
   }).eq('id', connectionId);
+
+  // Re-activate portfolios when a connection recovers — they were deactivated
+  // when the connection went degraded. The subsequent reconciliation in
+  // tradovate-sync will deactivate accounts no longer in the live list.
+  void admin.from('portfolios')
+    .update({ is_active: true })
+    .eq('credential_id', connectionId)
+    .catch((e: unknown) => {
+      console.error('[retryQueue] portfolio reactivate failed:', String(e).slice(0, 200));
+    });
 }
