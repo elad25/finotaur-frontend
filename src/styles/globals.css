@@ -1,5 +1,6 @@
 /* Fonts are loaded via a single consolidated <link> in index.html (non-blocking).
    The former @import here blocked CSSOM construction / first paint — removed. */
+/* cache-bust: 2026-06-24 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
