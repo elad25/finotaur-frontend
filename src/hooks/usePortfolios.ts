@@ -80,7 +80,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
     // (2) Active Tradovate/NinjaTrader environments — errors resolve to empty
     supabase
       .from('broker_connections')
-      .select('id,environment')
+      .select('id,environment,connection_name')
       .eq('user_id', userId)
       .eq('is_active', true)
       .in('broker', ['tradovate', 'ninja_trader'])
@@ -149,6 +149,24 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         daily_stop_loss_usd: null,
       }));
     }
+  }
+
+  // ── 2a. Enrich portfolios with authoritative connection_name from broker_connections ──
+  // For every portfolio that has a credential_id, overwrite connection_label with the
+  // connection's own connection_name. This guarantees ALL accounts in a group show the
+  // user-defined connection label (e.g. "Lucid", "MFFU") — not just the first one that
+  // happens to have connection_label set on the portfolio row.
+  const tvConnNameMap = new Map(
+    ((tvConnsResult.data ?? []) as Array<{ id: string; environment: string; connection_name?: string | null }>)
+      .filter(c => c.connection_name?.trim())
+      .map(c => [c.id, c.connection_name!.trim()]),
+  );
+  if (tvConnNameMap.size > 0) {
+    portfolios = portfolios.map(p =>
+      p.credential_id && tvConnNameMap.has(p.credential_id)
+        ? { ...p, connection_label: tvConnNameMap.get(p.credential_id)! }
+        : p,
+    );
   }
 
   // ── 2b. Determine which Tradovate/NinjaTrader environments are still active ──

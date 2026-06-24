@@ -49,8 +49,8 @@ export function buildAccountGroups(
     const firmMap = new Map<string, { label: string; portfolios: Portfolio[] }>();
     for (const p of tradovatePortfolios) {
       // Scope by credential_id (connection) when available; fall back to firm-name detection.
-      // Label always comes from firm detection (e.g. "APEX") — NOT connection_label,
-      // which holds per-account specs like "PAAPEX1958500000164".
+      // Label: prefer connection_label (user-defined name like "Lucid", "MFFU") when set,
+      // else fall back to firm-name detection from the account name string.
       const firm = detectFirmGroup(p.name);
       const { key, label } = p.credential_id
         ? { key: `conn-${p.credential_id}`, label: p.connection_label?.trim() || firm.label }
