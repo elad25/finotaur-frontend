@@ -2649,12 +2649,7 @@ export default function TradeCompare() {
         </div>
         <div className="absolute right-0">
         <FinoExplains title="What is Shadow?" className="w-fit">
-          Shadow replays your closed trades as if you had managed each one by a single fixed
-          rule — held your target, moved your stop to break-even, or used a set R target — so
-          you can see which rule actually makes you more money. It reads the real favorable and
-          adverse extremes each trade reached (exact when price bars are stored, otherwise your
-          recorded excursion R values), not guesses. Use the toggles in Performance to find the
-          risk-reward that fits how your trades actually behave.
+          See what would have happened if you held to your target, moved your stop to break-even, or exited at a set R. Shadow runs each scenario on your real trades so you can spot which habit makes you more money.
         </FinoExplains>
         </div>
       </div>
