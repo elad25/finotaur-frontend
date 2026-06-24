@@ -1941,13 +1941,41 @@ function TradeEngineView({
     return 'Your actual exit was the best outcome among the computed scenarios.';
   }, [engine]);
 
-  const scenariosToShow = engine
-    ? [...engine.scenarios].sort((a, b) => (b.pnlUsd ?? 0) - (a.pnlUsd ?? 0))
-    : null;
+  // ── Per-trade scenario P&L values ───────────────────────────────────────────
+  const actualPnl = engine ? engine.actualPnlUsd : planned.actualPnl;
+
+  const stopPnl: number | null = (() => {
+    if (engine) {
+      const sc = engine.scenarios.find((s) => s.key === 'held_original_stop');
+      return sc?.available && sc.pnlUsd != null ? sc.pnlUsd : null;
+    }
+    const sc = planned.scenarios.find((s) => s.key === 'stop');
+    return sc?.available && sc.pnl != null ? sc.pnl : null;
+  })();
+
+  const bePnl: number | null = (() => {
+    if (engine) {
+      const sc = engine.scenarios.find((s) => s.key === 'moved_stop_to_breakeven');
+      return sc?.available && sc.pnlUsd != null ? sc.pnlUsd : null;
+    }
+    const sc = planned.scenarios.find((s) => s.key === 'breakeven');
+    return sc?.available && sc.pnl != null ? sc.pnl : null;
+  })();
+
+  const targetPnl: number | null = (() => {
+    if (engine) {
+      const sc = engine.scenarios.find((s) => s.key === 'original_target_hit');
+      return sc?.available && sc.pnlUsd != null ? sc.pnlUsd : null;
+    }
+    const sc = planned.scenarios.find((s) => s.key === 'target');
+    return sc?.available && sc.pnl != null ? sc.pnl : null;
+  })();
+
+  const mfePnl: number | null = mfe?.pnl ?? null;
 
   return (
-    <div className="flex flex-col gap-ds-5">
-      {/* Stop / Target overlay switch (same control as the Performance tab) */}
+    <div className="flex flex-col gap-ds-3">
+      {/* Stop / Target overlay switch */}
       <div className="flex justify-center">
         <div className="flex gap-0.5 rounded-[10px] bg-white/[0.06] p-1">
           {(['stop', 'target'] as const).map((v) => (
@@ -1970,67 +1998,121 @@ function TradeEngineView({
       {/* Price Path chart */}
       <PriceChart trade={trade} bars={bars} mfe={mfe} mae={mae} view={view} />
 
-      {/* Engine scenarios — when bars exist */}
-      {hasPath && scenariosToShow && (
-        <div className="flex flex-col gap-ds-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[1.2px] text-white/50">
-              Intra-trade counterfactuals
-            </span>
-            <ShadowInfoIcon label="Scenarios computed from the real intra-trade price path. Sorted best → worst by P&L. Gold = your actual result. Simulated = estimated from recorded levels." />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
-            {scenariosToShow.map((sc) => (
-              <EngineScenarioCard
-                key={sc.key}
-                scenario={sc}
-                isActual={sc.key === 'actual'}
-                distributionN={distributionTracked}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* No bars fallback — planned scenarios */}
-      {!hasPath && (
-        <div className="flex flex-col gap-ds-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[1.2px] text-white/50">
-              What-if scenarios
-            </span>
-            <ShadowInfoIcon label="Four alternate outcomes computed from your recorded price levels — no price bars required." />
-          </div>
-          <p className="text-[11px] text-white/42">
-            Full intra-trade replay activates once price tracking captures this trade.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-ds-3">
-            {planned.scenarios.map((sc) => (
-              <PlannedScenarioCard
-                key={sc.key}
-                scenario={sc}
-                isBaseline={sc.key === 'actual'}
-                hasBars={false}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Coaching verdict / Key Takeaway */}
-      <div className={`${JOURNAL_PANEL} grid min-h-[74px] items-center gap-4 px-ds-5 py-ds-4 sm:grid-cols-[minmax(0,1fr)_auto]`}>
-        <div className="flex min-w-0 items-center gap-ds-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/10 text-[#E8C766] shadow-[0_0_26px_rgba(201,166,70,0.18)]">
-            <Lightbulb className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="mb-1 text-[13px] font-semibold text-[#E8C766]">Key Takeaway</div>
-            <p className="text-[13px] leading-relaxed text-white/78">
-              {engineInsight ?? plannedInsight}
+      {/* ── Gold insight banner (per-trade, mirrors Performance tab) ────── */}
+      {view === 'stop' ? (() => {
+        const candidates: Array<{ delta: number; phrase: string }> = [
+          ...(stopPnl != null ? [{ delta: stopPnl - actualPnl, phrase: 'Keeping your original stop untouched' }] : []),
+          ...(bePnl != null ? [{ delta: bePnl - actualPnl, phrase: 'Moving your stop to break-even' }] : []),
+        ];
+        if (!candidates.length) {
+          return (
+            <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+              <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+              <p className="text-[15px] text-white/60 leading-relaxed">Add a stop to this trade to compare stop scenarios.</p>
+            </div>
+          );
+        }
+        const best = candidates.reduce((a, b) => Math.abs(b.delta) > Math.abs(a.delta) ? b : a);
+        const positive = best.delta > 0;
+        return (
+          <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+            <p className="text-[15px] text-white leading-relaxed">
+              {best.phrase}{' '}
+              {positive ? (
+                <>would have <span className="text-[#C9A646] font-semibold">saved you {fmtDelta(Math.round(best.delta))}</span> on this trade.</>
+              ) : (
+                <>would have <span className="text-[#C9A646] font-semibold">cost you {fmtPnl(Math.round(Math.abs(best.delta)))}</span> on this trade.</>
+              )}
             </p>
           </div>
+        );
+      })() : (() => {
+        const candidates: Array<{ delta: number; phrase: string }> = [
+          ...(targetPnl != null ? [{ delta: targetPnl - actualPnl, phrase: 'Holding to your original target' }] : []),
+          ...(mfePnl != null ? [{ delta: mfePnl - actualPnl, phrase: 'Holding to the MFE (best price reached)' }] : []),
+        ];
+        if (!candidates.length) {
+          return (
+            <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+              <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+              <p className="text-[15px] text-white/60 leading-relaxed">Add a target to this trade to compare target scenarios.</p>
+            </div>
+          );
+        }
+        const best = candidates.reduce((a, b) => Math.abs(b.delta) > Math.abs(a.delta) ? b : a);
+        const positive = best.delta > 0;
+        return (
+          <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
+            <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
+            <p className="text-[15px] text-white leading-relaxed">
+              {best.phrase}{' '}
+              {positive ? (
+                <>would have <span className="text-[#C9A646] font-semibold">added {fmtDelta(Math.round(best.delta))}</span> to this trade.</>
+              ) : (
+                <>would have <span className="text-[#C9A646] font-semibold">cost you {fmtPnl(Math.round(Math.abs(best.delta)))}</span> on this trade.</>
+              )}
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* ── 3-card scenario grid (mirrors Performance tab) ───────────────── */}
+      {view === 'stop' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
+          <SmallScenarioCard
+            label="Original stop — kept"
+            subtitle="Exit at your original stop"
+            total={stopPnl ?? actualPnl}
+            curve={stopPnl != null ? [0, stopPnl] : []}
+            curveColor={COLOR_RED}
+            delta={stopPnl != null ? stopPnl - actualPnl : undefined}
+          />
+          <SmallScenarioCard
+            label="Actual"
+            subtitle="Your real exit"
+            total={actualPnl}
+            curve={[0, actualPnl]}
+            curveColor={COLOR_GOLD}
+            isBaseline
+          />
+          <SmallScenarioCard
+            label="Break-even stop"
+            subtitle="Move stop to entry after 1R profit"
+            total={bePnl ?? actualPnl}
+            curve={bePnl != null ? [0, bePnl] : []}
+            curveColor={COLOR_SILVER}
+            delta={bePnl != null ? bePnl - actualPnl : undefined}
+          />
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-ds-3">
+          <SmallScenarioCard
+            label="Actual"
+            subtitle="Your real exit"
+            total={actualPnl}
+            curve={[0, actualPnl]}
+            curveColor={COLOR_GOLD}
+            isBaseline
+          />
+          <SmallScenarioCard
+            label="Held to target"
+            subtitle="Exit at your original target"
+            total={targetPnl ?? actualPnl}
+            curve={targetPnl != null ? [0, targetPnl] : []}
+            curveColor={COLOR_GREEN}
+            delta={targetPnl != null ? targetPnl - actualPnl : undefined}
+          />
+          <SmallScenarioCard
+            label="MFE exit"
+            subtitle="Best price this trade reached"
+            total={mfePnl ?? actualPnl}
+            curve={mfePnl != null ? [0, mfePnl] : []}
+            curveColor={COLOR_SILVER}
+            delta={mfePnl != null ? mfePnl - actualPnl : undefined}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -2420,7 +2502,7 @@ export default function TradeCompare() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-[1200px] mx-auto pt-ds-1 pb-ds-4 px-ds-4 flex flex-col gap-ds-4">
+    <div className="w-full max-w-[1200px] mx-auto pt-0 pb-ds-4 px-ds-4 flex flex-col gap-ds-4">
 
       {/* FINO EXPLAINS — canonical collapsible explainer (top-right) */}
       <div className="flex justify-end -mb-ds-4">
@@ -2451,7 +2533,7 @@ export default function TradeCompare() {
         </TabsList>
 
         {/* ── Trade tab ── */}
-        <TabsContent value="trade" className="mt-ds-4">
+        <TabsContent value="trade" className="mt-ds-2">
           <div className="flex flex-col gap-ds-5">
             {!isLoading && (
               <TradePicker
