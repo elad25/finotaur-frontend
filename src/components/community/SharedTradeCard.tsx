@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowBigUp, ArrowBigDown, Repeat2, MessageSquare, MoreVertical, Send } from 'lucide-react';
+import { ArrowBigUp, ArrowBigDown, Repeat2, MessageSquare, MoreVertical, Send, Maximize2 } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { DataState } from '@/components/ds/DataState';
@@ -91,14 +91,12 @@ interface AttachedTradeCardProps {
 
 function AttachedTradeCard({ item }: AttachedTradeCardProps) {
   const { trade_symbol, trade_side, trade_pnl, trade_entry, trade_exit, trade_size, trade_setup, trade_open_at, trade_close_at, hide_pnl, show_setup_only, reveal_size } = item;
+  const [chartFullscreen, setChartFullscreen] = useState(false);
 
   if (!trade_symbol) return null;
 
   const isNegative = trade_pnl !== null && trade_pnl < 0;
 
-  // Build a TradeChartTrade when we have enough data to render a meaningful chart.
-  // entry_price falls back to 0 when the author hid prices — the chart still renders
-  // the price history; markers simply land on the bar at that timestamp.
   const chartTrade = (trade_symbol && trade_open_at) ? {
     symbol: trade_symbol,
     side: (trade_side === 'SHORT' ? 'SHORT' : 'LONG') as 'LONG' | 'SHORT',
@@ -117,9 +115,34 @@ function AttachedTradeCard({ item }: AttachedTradeCardProps) {
         'flex flex-col gap-ds-2',
       )}
     >
-      {/* TradingView-style price chart */}
+      {/* Compact chart preview — 220px tall, fullscreen on click */}
       {chartTrade && (
-        <TradeChart trade={chartTrade} />
+        <div className="relative" style={{ height: 220, overflow: 'hidden' }}>
+          <div className="absolute inset-0">
+            <TradeChart
+              trade={chartTrade}
+              theme="dark"
+              onToggleTheme={() => {}}
+              fullscreen={chartFullscreen}
+              onFullscreenChange={setChartFullscreen}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setChartFullscreen(true)}
+            aria-label="Expand chart"
+            className="absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors"
+            style={{
+              background: 'rgba(0,0,0,0.55)',
+              color: '#C9A646',
+              border: '1px solid rgba(201,166,70,0.3)',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <Maximize2 className="h-3 w-3" />
+            Expand
+          </button>
+        </div>
       )}
 
       <div className="px-ds-4 pb-ds-3 flex flex-col gap-ds-2">
