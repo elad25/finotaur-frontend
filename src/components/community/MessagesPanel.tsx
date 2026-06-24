@@ -30,7 +30,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 function FloorAvatar({
   username,
   avatarUrl,
-  size = 32,
+  size = 40,
 }: {
   username: string;
   avatarUrl: string | null;
@@ -40,6 +40,7 @@ function FloorAvatar({
   const initial = (username || '?').replace(/[^a-zA-Z0-9]/g, '').charAt(0).toUpperCase() || '?';
   const showImg = !!avatarUrl && !imgError;
   const px = `${size}px`;
+  const fontSize = size >= 40 ? '14px' : '11px';
 
   return (
     <div
@@ -49,7 +50,8 @@ function FloorAvatar({
         width: px,
         height: px,
         background: showImg ? 'transparent' : 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
-        border: '1px solid rgba(201,166,70,0.3)',
+        border: '1.5px solid rgba(201,166,70,0.35)',
+        flexShrink: 0,
       }}
     >
       {showImg ? (
@@ -60,9 +62,7 @@ function FloorAvatar({
           onError={() => setImgError(true)}
         />
       ) : (
-        <span className="text-[11px] font-bold select-none" style={{ color: '#0A0A0A' }}>
-          {initial}
-        </span>
+        <span className="font-bold select-none" style={{ color: '#0A0A0A', fontSize }}>{initial}</span>
       )}
     </div>
   );
@@ -169,7 +169,7 @@ function NewDmModal({
                 const already = sentTo.has(u.user_id);
                 return (
                   <div key={u.user_id} className="flex items-center gap-3 px-4 py-3">
-                    <FloorAvatar username={u.username} avatarUrl={u.avatar_url} size={36} />
+                    <FloorAvatar username={u.username} avatarUrl={u.avatar_url} />
                     <span className="flex-1 text-[13px] font-medium text-ink-primary">
                       @{u.username}
                     </span>
@@ -219,7 +219,7 @@ function RequestRow({
 
   return (
     <div className="flex items-center gap-3 px-3 py-[10px]">
-      <FloorAvatar username={req.username || '?'} avatarUrl={req.avatar_url} size={32} />
+      <FloorAvatar username={req.username || '?'} avatarUrl={req.avatar_url} />
       <div className="flex-1 min-w-0">
         <p className="text-[13px] font-semibold text-ink-primary truncate">@{req.username}</p>
         <p className="text-[11px] text-ink-tertiary">Wants to message you</p>
@@ -273,7 +273,7 @@ function ConversationRow({
           : 'hover:bg-surface-2 border-l-2 border-transparent',
       )}
     >
-      <FloorAvatar username={conv.other_username || '?'} avatarUrl={conv.other_avatar} size={32} />
+      <FloorAvatar username={conv.other_username || '?'} avatarUrl={conv.other_avatar} />
       <div className="flex-1 min-w-0 flex flex-col gap-[1px]">
         <div className="flex items-center justify-between gap-2">
           <span className="font-sans text-[13px] font-semibold text-ink-primary truncate">
@@ -356,7 +356,7 @@ function ThreadPane({
         <div
           className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border-ds-subtle"
         >
-          <FloorAvatar username={conv.other_username || '?'} avatarUrl={conv.other_avatar} size={34} />
+          <FloorAvatar username={conv.other_username || '?'} avatarUrl={conv.other_avatar} size={44} />
           <span className="text-[14px] font-semibold text-ink-primary">@{conv.other_username}</span>
         </div>
       )}
