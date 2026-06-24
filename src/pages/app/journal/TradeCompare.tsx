@@ -1887,6 +1887,153 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
   );
 }
 
+// ─── Single-trade scenario chart (mirrors Performance's AreaChart) ───────────
+
+const ASSET_MULT: Record<string, number> = {
+  ES: 50, MES: 5, NQ: 20, MNQ: 2, YM: 5,
+  RTY: 50, CL: 1000, GC: 100, SI: 5000, ZB: 1000, ZN: 1000,
+};
+
+function tradeMult(trade: Trade): number {
+  if (trade.multiplier != null && trade.multiplier > 0) return trade.multiplier;
+  const sym = (trade.symbol ?? '').toUpperCase().trim().replace(/\d+$/, '');
+  return ASSET_MULT[sym] ?? 1;
+}
+
+interface SingleTradeChartProps {
+  trade: Trade;
+  bars: PriceBar[];
+  view: 'stop' | 'target';
+  actualPnl: number;
+  stopPnl: number | null;
+  bePnl: number | null;
+  targetPnl: number | null;
+  mfePnl: number | null;
+}
+
+function SingleTradeScenarioChart({
+  trade, bars, view,
+  actualPnl, stopPnl, bePnl, targetPnl, mfePnl,
+}: SingleTradeChartProps) {
+  const hasPath = bars.length > 0;
+  const mult = tradeMult(trade);
+
+  const chartData = useMemo(() => {
+    const alt1Exit = view === 'stop' ? (stopPnl ?? actualPnl) : (targetPnl ?? actualPnl);
+    const alt2Exit = view === 'stop' ? (bePnl ?? actualPnl) : (mfePnl ?? actualPnl);
+
+    if (!hasPath) {
+      return [
+        { label: 'Entry', actual: 0, alt1: 0, alt2: 0 },
+        { label: 'Exit',  actual: actualPnl, alt1: alt1Exit, alt2: alt2Exit },
+      ];
+    }
+
+    const entry = trade.entry_price;
+    const pnlAt = (p: number) =>
+      (trade.side === 'LONG' ? p - entry : entry - p) * trade.quantity * mult;
+
+    return bars.map((bar, i) => {
+      const isLast = i === bars.length - 1;
+      const cur = pnlAt(bar.c);
+      const label = new Date(bar.t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      return {
+        label,
+        actual: isLast ? actualPnl : cur,
+        alt1:   isLast ? alt1Exit  : cur,
+        alt2:   isLast ? alt2Exit  : cur,
+      };
+    });
+  }, [hasPath, bars, trade, mult, view, actualPnl, stopPnl, bePnl, targetPnl, mfePnl]);
+
+  const [alt1Color, alt2Color] = view === 'stop'
+    ? [COLOR_RED, COLOR_SILVER]
+    : [COLOR_GREEN, COLOR_SILVER];
+
+  const [alt1Name, alt2Name] = view === 'stop'
+    ? ['Original stop (kept)', 'Break-even stop']
+    : ['Held to target', 'MFE exit'];
+
+  const fmtY = (v: number) =>
+    `${v >= 0 ? '+' : '-'}$${Math.round(Math.abs(v)).toLocaleString('en-US')}`;
+
+  return (
+    <div className={JOURNAL_PANEL}>
+      <div className="flex items-start justify-between gap-ds-3 border-b border-white/[0.06] px-ds-5 py-ds-4">
+        <div className="flex items-center gap-2">
+          <span className="text-[14px] font-semibold text-white">P&amp;L by scenario</span>
+          <ShadowInfoIcon label="How this trade's P&L would look under each management rule. All lines start from $0 at entry and diverge at the exit decision." />
+        </div>
+        <div className="flex items-center gap-ds-3 text-[11px] text-white/42 flex-wrap justify-end">
+          {!hasPath && (
+            <span className="text-[10px] italic text-white/28">Entry → exit schematic only</span>
+          )}
+          {([
+            { name: 'Actual',   color: COLOR_GOLD,   dash: false },
+            { name: alt1Name,   color: alt1Color,    dash: true  },
+            { name: alt2Name,   color: alt2Color,    dash: true  },
+          ] as const).map(({ name, color, dash }) => (
+            <span key={name} className="flex items-center gap-1">
+              <span
+                className="inline-block h-[2px] w-4 rounded-sm"
+                style={{
+                  backgroundColor: color,
+                  borderTop: dash ? `2px dashed ${color}` : undefined,
+                  background: dash ? 'none' : color,
+                }}
+              />
+              {name}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="px-ds-5 pb-ds-5 pt-ds-4" style={{ width: '100%', height: 280 }}>
+        <ResponsiveContainer>
+          <AreaChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
+            <defs>
+              {([
+                ['stc-actual', COLOR_GOLD],
+                ['stc-alt1',   alt1Color],
+                ['stc-alt2',   alt2Color],
+              ] as const).map(([id, color]) => (
+                <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor={color} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0}    />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+            <XAxis
+              dataKey="label"
+              tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={fmtY}
+              width={80}
+            />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
+            <Tooltip
+              contentStyle={{ background: 'rgba(20,20,20,0.95)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, fontSize: 11, padding: '4px 8px' }}
+              itemStyle={{ color: 'rgba(255,255,255,0.82)' }}
+              labelStyle={{ color: 'rgba(255,255,255,0.42)' }}
+              formatter={(val: number, name: string) => [fmtPnl(Math.round(val)), name]}
+              cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
+            />
+            <Area type="monotone" dataKey="alt2"   name={alt2Name} stroke={alt2Color} strokeWidth={2}   strokeDasharray="5 3" fill="url(#stc-alt2)"   fillOpacity={1} dot={false} activeDot={{ r: 4 }} />
+            <Area type="monotone" dataKey="alt1"   name={alt1Name} stroke={alt1Color} strokeWidth={2}   strokeDasharray="5 3" fill="url(#stc-alt1)"   fillOpacity={1} dot={false} activeDot={{ r: 4 }} />
+            <Area type="monotone" dataKey="actual" name="Actual"   stroke={COLOR_GOLD} strokeWidth={3.5}                    fill="url(#stc-actual)" fillOpacity={1} dot={false} activeDot={{ r: 5 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 // ─── Trade tab — engine view (beta) ────────────────────────────────────────────
 
 interface TradeEngineViewProps {
@@ -1995,8 +2142,17 @@ function TradeEngineView({
         </div>
       </div>
 
-      {/* Price Path chart */}
-      <PriceChart trade={trade} bars={bars} mfe={mfe} mae={mae} view={view} />
+      {/* Single-trade scenario chart (same style as Performance) */}
+      <SingleTradeScenarioChart
+        trade={trade}
+        bars={bars}
+        view={view}
+        actualPnl={actualPnl}
+        stopPnl={stopPnl}
+        bePnl={bePnl}
+        targetPnl={targetPnl}
+        mfePnl={mfePnl}
+      />
 
       {/* ── Gold insight banner (per-trade, mirrors Performance tab) ────── */}
       {view === 'stop' ? (() => {
