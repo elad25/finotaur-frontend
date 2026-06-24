@@ -87,6 +87,14 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
   const disconnect = useCallback(
     async (id: string) => {
       if (!userId) return { success: false, error: 'Not authenticated' };
+      // Deactivate portfolios first — ensures account picker reflects the
+      // disconnected state immediately (portfolios are the source of truth
+      // for the Trader dropdown, not broker_connections).
+      await supabase
+        .from('portfolios')
+        .update({ is_active: false })
+        .eq('credential_id', id)
+        .eq('user_id', userId);
       const { error: e } = await supabase
         .from('broker_connections')
         .update({
@@ -119,6 +127,13 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
   const remove = useCallback(
     async (id: string) => {
       if (!userId) return { success: false, error: 'Not authenticated' };
+      // Deactivate portfolios before deleting the connection — keeps the
+      // Trader dropdown consistent even if the FK cascade doesn't cover portfolios.
+      await supabase
+        .from('portfolios')
+        .update({ is_active: false })
+        .eq('credential_id', id)
+        .eq('user_id', userId);
       const { error: e } = await supabase
         .from('broker_connections')
         .delete()
