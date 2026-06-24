@@ -39,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -2155,6 +2155,7 @@ const stats = useMemo<Stats>(() => {
       {/* Trade Details Dialog */}
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DialogContent className="max-w-[96vw] w-[1450px] h-[92vh] p-0 border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
+          <DialogTitle className="sr-only">Trade Details</DialogTitle>
           {selectedTrade && (() => {
   const selStrategyCfg = strategyRConfigs?.get?.(selectedTrade.strategy_id ?? '') ?? null;
   const resolved1R = resolvePlanned1R(selectedTrade as any, selStrategyCfg, oneR);
