@@ -69,11 +69,6 @@ function ConnectionRow({
   const isExpired   = conn.status === 'error' || conn.status === 'canceled' || conn.status === 'disconnected';
 
   const handleRemove = () => {
-    if (
-      !window.confirm(
-        'Remove this connection? This removes all its accounts from your journal. This cannot be undone.',
-      )
-    ) return;
     onRemove(conn.id);
   };
 
