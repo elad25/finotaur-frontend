@@ -261,22 +261,46 @@ const CompStatusBlock = memo(function CompStatusBlock({
   if (phase === 'countdown' && registrationOpensAt) {
     return (
       <div
-        className="rounded-[16px] p-5 flex flex-col gap-3"
+        className="rounded-[20px] px-6 py-5 flex flex-col gap-4 relative overflow-hidden"
         style={{
-          background: 'linear-gradient(135deg, rgba(201,166,70,0.06) 0%, rgba(201,166,70,0.02) 100%)',
-          border: '1px solid rgba(201,166,70,0.2)',
+          background: 'linear-gradient(145deg, rgba(18,14,6,1) 0%, rgba(12,10,4,1) 100%)',
+          border: '1px solid rgba(201,166,70,0.28)',
+          boxShadow: '0 0 32px rgba(201,166,70,0.06), inset 0 1px 0 rgba(201,166,70,0.12)',
         }}
       >
-        <div className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 shrink-0" style={{ color: '#C9A646' }} />
-          <span className="text-sm font-semibold" style={{ color: '#E8C766' }}>
+        {/* Subtle top glow line */}
+        <div
+          className="absolute top-0 left-6 right-6 h-[1px]"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.4), transparent)' }}
+        />
+
+        {/* Header row */}
+        <div className="flex items-center gap-[10px]">
+          <div
+            className="flex items-center justify-center h-7 w-7 rounded-[8px] shrink-0"
+            style={{ background: 'rgba(201,166,70,0.12)', border: '1px solid rgba(201,166,70,0.25)' }}
+          >
+            <Trophy className="h-[14px] w-[14px]" style={{ color: '#C9A646' }} />
+          </div>
+          <span
+            className="text-[15px] font-semibold tracking-[0.01em]"
+            style={{ color: '#E8C766' }}
+          >
             {title}
           </span>
         </div>
+
+        {/* Countdown tiles */}
         <FloorCountdown target={registrationOpensAt} />
-        <p className="text-[12px]" style={{ color: '#888' }}>
-          Registration opens {formatDate(registrationOpensAt)} · competition starts{' '}
-          {formatDate(periodStart)}
+
+        {/* Subtext */}
+        <p
+          className="text-[11px] tracking-[0.02em]"
+          style={{ color: 'rgba(201,166,70,0.45)' }}
+        >
+          Registration opens {formatDate(registrationOpensAt)}{' '}
+          <span style={{ color: 'rgba(201,166,70,0.25)' }}>·</span>{' '}
+          competition starts {formatDate(periodStart)}
         </p>
       </div>
     );

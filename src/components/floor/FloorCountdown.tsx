@@ -1,7 +1,7 @@
 // src/components/floor/FloorCountdown.tsx
 // =====================================================
 // Live DD:HH:MM:SS countdown to an ISO target date.
-// Gold-on-black, big numerals.
+// Premium gold-on-black tile layout.
 // Renders nothing once the target has passed.
 // =====================================================
 
@@ -42,62 +42,66 @@ export function FloorCountdown({ target, className }: FloorCountdownProps) {
   );
 
   useEffect(() => {
-    // Re-calculate immediately in case of SSR mismatch
     setTimeLeft(calcTimeLeft(target));
-
     const id = setInterval(() => {
       const next = calcTimeLeft(target);
       setTimeLeft(next);
       if (!next) clearInterval(id);
     }, 1000);
-
     return () => clearInterval(id);
   }, [target]);
 
   if (!timeLeft) return null;
 
   const units: Array<{ label: string; value: string }> = [
-    { label: 'Days', value: String(timeLeft.days) },
+    { label: 'Days',  value: String(timeLeft.days) },
     { label: 'Hours', value: pad(timeLeft.hours) },
-    { label: 'Min', value: pad(timeLeft.minutes) },
-    { label: 'Sec', value: pad(timeLeft.seconds) },
+    { label: 'Min',   value: pad(timeLeft.minutes) },
+    { label: 'Sec',   value: pad(timeLeft.seconds) },
   ];
 
   return (
     <div
-      className={cn(
-        'inline-flex items-center gap-[6px]',
-        className,
-      )}
+      className={cn('flex items-center gap-[6px]', className)}
       aria-label={`Countdown: ${timeLeft.days} days ${pad(timeLeft.hours)} hours ${pad(timeLeft.minutes)} minutes ${pad(timeLeft.seconds)} seconds`}
     >
       {units.map(({ label, value }, i) => (
-        <span key={label} className="flex items-baseline gap-[2px]">
-          {/* Separator colon (not before first item) */}
+        <div key={label} className="flex items-center gap-[6px]">
+          {/* Separator */}
           {i > 0 && (
             <span
-              className="font-sans text-[18px] font-bold tabular-nums leading-none"
-              style={{ color: 'rgba(201,166,70,0.5)' }}
+              className="text-[20px] font-bold leading-none pb-[14px] select-none"
+              style={{ color: 'rgba(201,166,70,0.35)' }}
               aria-hidden="true"
             >
               :
             </span>
           )}
-          <span className="flex flex-col items-center">
+          {/* Tile */}
+          <div
+            className="flex flex-col items-center justify-center w-[56px] h-[56px] rounded-[10px]"
+            style={{
+              background: 'rgba(201,166,70,0.07)',
+              border: '1px solid rgba(201,166,70,0.18)',
+            }}
+          >
             <span
-              className="font-sans text-[22px] font-bold tabular-nums leading-none"
-              style={{ color: '#E8C766' }}
+              className="font-sans text-[26px] font-bold tabular-nums leading-none"
+              style={{
+                color: '#E8C766',
+                textShadow: '0 0 18px rgba(232,199,102,0.35)',
+              }}
             >
               {value}
             </span>
             <span
-              className="font-sans text-[9px] font-medium uppercase tracking-[0.08em] mt-[2px]"
-              style={{ color: 'rgba(201,166,70,0.55)' }}
+              className="font-sans text-[8px] font-semibold uppercase tracking-[0.1em] mt-[4px]"
+              style={{ color: 'rgba(201,166,70,0.5)' }}
             >
               {label}
             </span>
-          </span>
-        </span>
+          </div>
+        </div>
       ))}
     </div>
   );
