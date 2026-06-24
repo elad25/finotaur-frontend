@@ -264,9 +264,13 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
                 }}
                 placeholder="ict-mentorship"
                 maxLength={60}
+                /* Inline paddingLeft (not a `pl-[..]` class): the arbitrary
+                   class doesn't reliably win over INPUT_BASE's `px-ds-4` via
+                   tailwind-merge, which let the "/spaces/" prefix overlap the
+                   input text. Inline style always wins. */
+                style={{ paddingLeft: '74px' }}
                 className={cn(
                   INPUT_BASE,
-                  'pl-[72px]',
                   slugError && 'border-num-negative focus:ring-num-negative/15',
                 )}
                 disabled={isPending}
