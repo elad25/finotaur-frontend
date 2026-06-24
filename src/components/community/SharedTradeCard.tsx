@@ -63,22 +63,40 @@ function titleCase(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
-// ── Monogram avatar — matches RoomFeed / RoomLeaderboard exactly ───────────────
+// ── Author avatar — floor image with scale-zoom, fallback to monogram ──────────
 
-function MonogramAvatar({ name, size = 8 }: { name: string; size?: 7 | 8 }) {
+function AuthorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  const [imgError, setImgError] = useState(false);
   const initial = (name || '?').trim().charAt(0).toUpperCase();
+  const showImg = !!avatarUrl && !imgError;
   return (
     <div
       aria-hidden="true"
-      className={cn(
-        'flex items-center justify-center shrink-0',
-        size === 7 ? 'h-7 w-7 text-[11px]' : 'h-8 w-8 text-[12px]',
-        'rounded-full',
-        'bg-surface-2 border-[0.5px] border-border-ds-subtle',
-        'text-ink-secondary font-semibold',
-      )}
+      className="h-8 w-8 rounded-full shrink-0 flex items-center justify-center overflow-hidden"
+      style={{
+        background: showImg ? 'transparent' : undefined,
+        flexShrink: 0,
+      }}
     >
-      {initial}
+      {showImg ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          className="w-full h-full object-cover scale-[1.6]"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div
+          className="w-full h-full flex items-center justify-center rounded-full text-[12px] font-semibold"
+          style={{
+            background: 'var(--surface-2, #1a1a1a)',
+            border: '0.5px solid var(--border-ds-subtle, rgba(255,255,255,0.08))',
+            color: 'var(--ink-secondary, #aaa)',
+          }}
+        >
+          {initial}
+        </div>
+      )}
     </div>
   );
 }
@@ -488,7 +506,7 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
       {/* Header: monogram + author + time + delete */}
       <div className="flex items-start justify-between gap-ds-3">
         <div className="flex items-center gap-ds-2 min-w-0">
-          <MonogramAvatar name={item.author_name} />
+          <AuthorAvatar name={item.author_name} avatarUrl={item.author_avatar_url} />
           <div className="flex flex-col gap-[1px] min-w-0">
             <span className="font-sans text-[13px] font-semibold text-ink-primary truncate">
               {item.author_name}

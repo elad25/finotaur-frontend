@@ -14,6 +14,7 @@ export interface GlobalFeedItem {
   id: string;
   author_id: string;
   author_name: string;
+  author_avatar_url: string | null;
   body: string;
   attached_trade_id: string | null;
   trade_symbol: string | null;
