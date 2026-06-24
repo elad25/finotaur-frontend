@@ -34,6 +34,14 @@ export interface FloorLeaderboardRow {
   rank: number | null;
   qualified: boolean;
   is_champion: boolean;
+  // Extended stats — all nullable until the backend RPC populates them
+  win_rate: number | null;
+  avg_win: number | null;
+  avg_loss: number | null;
+  profit_factor: number | null;
+  best_trade: number | null;
+  worst_trade: number | null;
+  win_streak: number | null;
 }
 
 export interface FloorParticipation {

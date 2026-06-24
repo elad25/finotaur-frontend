@@ -33,6 +33,7 @@ import {
   useLeaveFloor,
 } from '@/hooks/useFloor';
 import { FloorLeaderboardTable } from '@/components/floor/FloorLeaderboardTable';
+import { FloorPodium } from '@/components/floor/FloorPodium';
 import { FloorCountdown } from '@/components/floor/FloorCountdown';
 import { cn } from '@/lib/utils';
 
@@ -542,19 +543,6 @@ export function GlobalLeaderboard() {
 
   return (
     <div className="flex flex-col gap-ds-4 px-ds-5 py-ds-5">
-      {/* Header row: heading + period strip */}
-      <div className="flex items-center justify-between gap-ds-3 flex-wrap">
-        <div className="flex flex-col gap-[2px]">
-          <h2 className="font-sans text-[20px] font-semibold text-ink-primary leading-snug">
-            The Floor — Global
-          </h2>
-          <p className="font-sans text-[13px] text-ink-tertiary">
-            Share trades, learn from the desk.
-          </p>
-        </div>
-        <PeriodStrip value={period} onChange={setPeriod} />
-      </div>
-
       {/* Competition status block — only on This Month tab */}
       {period === 'monthly' && competition && (
         <CompStatusBlock
@@ -582,7 +570,15 @@ export function GlobalLeaderboard() {
         </div>
       )}
 
-      {/* Leaderboard table */}
+      {/* Period strip — centered */}
+      <div className="flex justify-center">
+        <PeriodStrip value={period} onChange={setPeriod} />
+      </div>
+
+      {/* Podium — top 3 qualified rows */}
+      {rows && rows.length > 0 && <FloorPodium rows={rows} />}
+
+      {/* Full ranking table */}
       <DataState
         isLoading={false}
         isError={isError}
