@@ -188,7 +188,7 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
             '@/lib/brokers/tradovate/tradovate-oauth'
           );
           const env = conn.environment === 'live' ? 'live' : 'demo';
-          window.location.href = await getTradovateAuthorizationUrl(env);
+          window.location.href = await getTradovateAuthorizationUrl(env, conn.id);
           return { success: true };
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Could not start reconnect';

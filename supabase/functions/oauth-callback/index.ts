@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // Verify state token — this is the auth gate (HMAC + DB + TTL + consumed flag)
-  let verifiedState: { userId: string; broker: BrokerName; environment: BrokerEnvironment; redirectUri: string };
+  let verifiedState: { userId: string; broker: BrokerName; environment: BrokerEnvironment; redirectUri: string; connectionId?: string | null };
   try {
     verifiedState = await verifyStateToken(state, supabaseAdmin);
   } catch (err: unknown) {
@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
     return redirectTo('?oauth_error=invalid_state');
   }
 
-  const { userId, broker, environment, redirectUri } = verifiedState;
+  const { userId, broker, environment, redirectUri, connectionId: stateConnectionId } = verifiedState;
 
   let adapter;
   try {
@@ -122,18 +122,26 @@ Deno.serve(async (req: Request) => {
 
   const secretName = `oauth_${broker}_${userId}_${environment}`;
 
-  // Look up existing broker_connection for this user+broker+environment
-  const { data: existingConn } = await supabaseAdmin
-    .from('broker_connections')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('broker', broker)
-    .eq('environment', environment)
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle();
-
-  const connectionId: string | null = existingConn?.id ?? null;
+  // Resolve which broker_connection to update.
+  // Priority 1: connectionId encoded in the state token (set when user reconnects
+  //             a specific existing connection — avoids the multi-connection ambiguity
+  //             where order-by-created_at would pick the wrong row).
+  // Priority 2: fall back to newest OAuth connection for this broker+environment,
+  //             for first-connect flows where no connectionId was known up-front.
+  let connectionId: string | null = stateConnectionId ?? null;
+  if (!connectionId) {
+    const { data: existingConn } = await supabaseAdmin
+      .from('broker_connections')
+      .select('id, connection_name')
+      .eq('user_id', userId)
+      .eq('broker', broker)
+      .eq('environment', environment)
+      .eq('auth_method', 'oauth')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    connectionId = existingConn?.id ?? null;
+  }
 
   // Primary account
   const primaryAccount = userInfo.accounts[0] ?? null;
@@ -152,7 +160,9 @@ Deno.serve(async (req: Request) => {
       p_oauth_provider_user_id: tokens.providerUserId ?? userInfo.providerUserId,
       p_account_id: primaryAccount?.id ?? null,
       p_account_name: primaryAccount?.name ?? null,
-      p_connection_name: `${environment} – ${primaryAccount?.name ?? broker}`,
+      // When updating an existing connection, pass null so COALESCE in the RPC
+      // preserves the existing name. Only set the name on first connect.
+      p_connection_name: connectionId ? null : `${environment} – ${primaryAccount?.name ?? broker}`,
       p_is_prop_firm: isPropFirm,
     });
 
@@ -164,6 +174,23 @@ Deno.serve(async (req: Request) => {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[oauth-callback] RPC call threw:', msg);
     return redirectTo('?oauth_error=storage_failed');
+  }
+
+  // Fire-and-forget: trigger immediate trade sync after OAuth connect/reconnect.
+  // tradovate-sync is idempotent; it discovers accounts, upserts portfolios,
+  // and imports trades. We do NOT await it — the user should not wait for sync.
+  {
+    const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-sync`;
+    fetch(syncUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId }),
+    }).catch((e: unknown) => {
+      console.warn('[oauth-callback] sync trigger failed:', String(e).slice(0, 200));
+    });
   }
 
   console.log('[oauth-callback] OAuth flow completed', {
