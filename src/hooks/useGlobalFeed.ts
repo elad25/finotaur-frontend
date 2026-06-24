@@ -10,9 +10,10 @@
 //   - toggle_global_reaction(p_post, p_kind)
 //
 // Pagination: cursor-based via p_before (ISO timestamp of the oldest item in
-// the current page). Pass the created_at of the last visible item to load more.
+// the current page). Each page fetches with p_before = created_at of the last
+// item of the previous page. First page uses p_before = null.
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { mapSpaceError } from '@/hooks/useMentorshipSpaces';
 import type { GlobalFeedItem, GlobalComment, SharePrivacy } from '@/types/community';
@@ -23,7 +24,6 @@ import type { GlobalFeedItem, GlobalComment, SharePrivacy } from '@/types/commun
 
 const feedKeys = {
   feed: () => ['global-feed', 'list'] as const,
-  feedPage: (before: string | null) => ['global-feed', 'list', before] as const,
   comments: (postId: string) => ['global-feed', 'comments', postId] as const,
 };
 
@@ -34,30 +34,47 @@ const feedKeys = {
 const FEED_PAGE_SIZE = 20;
 
 /**
- * Fetches one page of the global feed.
+ * Infinite-scroll hook for the global community feed.
  *
- * @param before ISO timestamp cursor — pass null/undefined for the first page,
- *               or the `created_at` of the last item currently shown to load more.
+ * Each page is fetched with p_before = created_at of the last item of the
+ * previous page (null for the first page). getNextPageParam returns undefined
+ * when fewer than FEED_PAGE_SIZE items are returned, signalling end of feed.
+ *
+ * Return shape (backwards-compatible):
+ *   posts            — flattened array of all loaded GlobalFeedItems
+ *   isLoading        — true only on the very first fetch
+ *   isError          — true if any page fetch errored
+ *   error            — Error | null
+ *   refetch          — refetches all loaded pages
+ *   fetchNextPage    — load the next page
+ *   hasNextPage      — true when more items may exist
+ *   isFetchingNextPage — true while a next-page request is in-flight
  */
-export function useGlobalFeed(before?: string | null): {
+export function useGlobalFeed(): {
   posts: GlobalFeedItem[];
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
   refetch: () => void;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
 } {
-  const cursor = before ?? null;
-
   const {
-    data = [],
+    data,
     isLoading,
     isError,
     error,
     refetch,
-  } = useQuery<GlobalFeedItem[], Error>({
-    queryKey: feedKeys.feedPage(cursor),
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<GlobalFeedItem[], Error>({
+    queryKey: feedKeys.feed(),
     staleTime: 15_000,
-    queryFn: async () => {
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const cursor = (pageParam as string | null) ?? null;
       const { data, error } = await supabase.rpc('list_global_feed', {
         p_before: cursor,
         p_limit: FEED_PAGE_SIZE,
@@ -65,9 +82,25 @@ export function useGlobalFeed(before?: string | null): {
       if (error) throw error;
       return (data ?? []) as GlobalFeedItem[];
     },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.length < FEED_PAGE_SIZE) return undefined;
+      return lastPage[lastPage.length - 1].created_at;
+    },
   });
 
-  return { posts: data, isLoading, isError, error, refetch };
+  // Flatten all pages into a single ordered array
+  const posts = data?.pages.flat() ?? [];
+
+  return {
+    posts,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage: hasNextPage ?? false,
+    isFetchingNextPage,
+  };
 }
 
 /** Lists comments for a single global post. */

@@ -1,16 +1,22 @@
 // src/components/community/GlobalFeed.tsx
-// Global community feed — paginated SharedTradeCard list (trade_shares only).
+// Global community feed — Facebook-style inline composer + infinite scroll list.
 //
-// Hooks: useGlobalFeed (first page only — cursor pagination is additive).
-// Pattern: mirrors RoomFeed layout — DataState wrapper, divided list.
+// Composer card: avatar (from FloorProfile) + "Share a trade…" pill → opens
+// PostTradeDialog. Pencil icon opens FloorProfileDialog for avatar/nickname edits.
+//
+// Infinite scroll: IntersectionObserver sentinel at list bottom calls
+// fetchNextPage() when visible and hasNextPage is true.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { UserCog } from 'lucide-react';
 import { DataState } from '@/components/ds/DataState';
 import { Skeleton } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
 import { useGlobalFeed } from '@/hooks/useGlobalFeed';
+import { useFloorProfile } from '@/hooks/useFloorProfile';
 import { SharedTradeCard } from '@/components/community/SharedTradeCard';
 import { PostTradeDialog } from '@/components/community/PostTradeDialog';
+import { FloorProfileDialog } from '@/components/floor/FloorProfileDialog';
 import type { GlobalFeedItem } from '@/types/community';
 
 // ── Feed skeleton ──────────────────────────────────────────────────────────────
@@ -45,35 +51,189 @@ function FeedSkeleton() {
   );
 }
 
+// ── Composer avatar ────────────────────────────────────────────────────────────
+
+function ComposerAvatar({
+  avatarUrl,
+  username,
+}: {
+  avatarUrl: string | null;
+  username: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  const initials = (username ?? '?')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+
+  const showImage = !!avatarUrl && !imgError;
+
+  return (
+    <div
+      className="h-10 w-10 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
+      style={{
+        background: showImage
+          ? 'transparent'
+          : 'linear-gradient(135deg, #C9A646 0%, #E8C766 100%)',
+        border: '1.5px solid rgba(201,166,70,0.35)',
+      }}
+    >
+      {showImage ? (
+        <img
+          src={avatarUrl}
+          alt="Your avatar"
+          className="h-full w-full object-cover"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span
+          className="text-sm font-bold select-none"
+          style={{ color: '#0A0A0A' }}
+        >
+          {initials}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Inline composer card ───────────────────────────────────────────────────────
+
+interface ComposerCardProps {
+  onOpenComposer: () => void;
+  onOpenProfile: () => void;
+}
+
+function ComposerCard({ onOpenComposer, onOpenProfile }: ComposerCardProps) {
+  const { profile } = useFloorProfile();
+
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-3 rounded-[14px]"
+      style={{
+        background: '#141414',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
+      {/* Avatar */}
+      <ComposerAvatar
+        avatarUrl={profile?.avatar_url ?? null}
+        username={profile?.floor_username ?? null}
+      />
+
+      {/* Prompt pill */}
+      <button
+        type="button"
+        onClick={onOpenComposer}
+        aria-label="Share a trade"
+        className={cn(
+          'flex-1 text-left rounded-full px-4 py-2 text-sm transition-colors duration-100',
+          'hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A646]/50',
+        )}
+        style={{
+          background: '#1a1a1a',
+          color: '#555',
+          border: '1px solid rgba(255,255,255,0.06)',
+          cursor: 'pointer',
+        }}
+      >
+        Share a trade…
+      </button>
+
+      {/* Edit profile icon button */}
+      <button
+        type="button"
+        onClick={onOpenProfile}
+        aria-label="Edit Floor profile"
+        title="Edit profile"
+        className={cn(
+          'h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0',
+          'transition-colors duration-100',
+          'hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A646]/50',
+        )}
+        style={{ color: '#666' }}
+      >
+        <UserCog className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+// ── Next-page loading row ──────────────────────────────────────────────────────
+
+function LoadingMore() {
+  return (
+    <div className="flex items-center justify-center py-4 gap-2">
+      <span
+        className="h-1.5 w-1.5 rounded-full animate-bounce [animation-delay:-0.3s]"
+        style={{ background: '#C9A646' }}
+      />
+      <span
+        className="h-1.5 w-1.5 rounded-full animate-bounce [animation-delay:-0.15s]"
+        style={{ background: '#C9A646' }}
+      />
+      <span
+        className="h-1.5 w-1.5 rounded-full animate-bounce"
+        style={{ background: '#C9A646' }}
+      />
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function GlobalFeed() {
-  const { posts, isLoading, isError, error, refetch } = useGlobalFeed();
+  const {
+    posts,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useGlobalFeed();
+
   const [composerOpen, setComposerOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  // ── Infinite scroll sentinel ────────────────────────
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <div className={cn('flex flex-col gap-ds-4 px-ds-5 py-ds-5')}>
-      {/* Section heading + compose button */}
-      <div className="flex items-center justify-between">
-        <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
-          Community Feed
-        </h2>
-        <button
-          type="button"
-          onClick={() => setComposerOpen(true)}
-          aria-label="Share a trade"
-          className={cn(
-            'w-7 h-7 rounded-full flex items-center justify-center',
-            'bg-[#C9A646] hover:bg-[#C9A646]/85 text-black',
-            'font-bold text-[18px] leading-none transition-colors duration-100',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A646]/50',
-          )}
-        >
-          +
-        </button>
-      </div>
+      {/* Section heading */}
+      <h2 className="font-sans text-[15px] font-semibold text-ink-primary">
+        Community Feed
+      </h2>
+
+      {/* Inline composer card */}
+      <ComposerCard
+        onOpenComposer={() => setComposerOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
+      />
 
       <PostTradeDialog open={composerOpen} onOpenChange={setComposerOpen} />
+      <FloorProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
 
       {/* Feed list */}
       <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle overflow-hidden">
@@ -97,6 +257,12 @@ export function GlobalFeed() {
                   <SharedTradeCard item={item} />
                 </div>
               ))}
+
+              {/* Next-page loading indicator */}
+              {isFetchingNextPage && <LoadingMore />}
+
+              {/* IntersectionObserver sentinel — sits below the last card */}
+              <div ref={sentinelRef} aria-hidden="true" />
             </div>
           )}
         </DataState>

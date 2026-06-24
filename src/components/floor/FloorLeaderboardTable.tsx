@@ -1,15 +1,14 @@
 // src/components/floor/FloorLeaderboardTable.tsx
 // =====================================================
-// Branded leaderboard table for The Floor competition.
-// Columns: Rank · Trader · Net P&L · Discipline Score · Trades
-// Trader cell includes avatar, display_name, @floor_username,
-// and a champion badge when is_champion is true.
+// Rich leaderboard table for The Floor competition.
+// Columns: Rank · Trader · Win % · Trades · Avg Win ·
+//          Avg Loss · PF · Best · Worst · Streak · Discipline
+// Horizontal scroll on small screens.
 // =====================================================
 
 import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import type { FloorLeaderboardRow } from '@/hooks/useFloor';
-import { UserStatusBadges } from '@/components/floor/UserStatusBadges';
 
 interface FloorLeaderboardTableProps {
   rows: FloorLeaderboardRow[];
@@ -17,54 +16,75 @@ interface FloorLeaderboardTableProps {
   minTrades: number;
 }
 
-// Medal colours for positions 1–3
-const RANK_ACCENTS: Record<number, { text: string; bg: string; border: string }> = {
-  1: {
-    text: '#E8C766',
-    bg: 'rgba(232,199,102,0.08)',
-    border: 'rgba(232,199,102,0.25)',
-  },
-  2: {
-    text: '#C0C8D8',
-    bg: 'rgba(192,200,216,0.06)',
-    border: 'rgba(192,200,216,0.2)',
-  },
-  3: {
-    text: '#CD7F32',
-    bg: 'rgba(205,127,50,0.06)',
-    border: 'rgba(205,127,50,0.2)',
-  },
-};
+// ── Rank badge helpers ─────────────────────────────────────────────────────────
 
-const RANK_MEDALS: Record<number, string> = {
-  1: '🥇',
-  2: '🥈',
-  3: '🥉',
-};
-
-/** Formats a dollar amount with +/- and green/red colouring. */
-function formatPnl(value: number): { text: string; color: string } {
-  const abs = Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  if (value < 0) {
-    return { text: `−$${abs}`, color: '#ef4444' }; // U+2212 mathematical minus, red
-  }
-  return { text: `+$${abs}`, color: '#22c55e' }; // green
+interface RankBadgeProps {
+  rank: number | null;
+  qualified: boolean;
 }
 
-/** Avatar: photo when available, else gold monogram. */
-function TraderAvatar({
+function RankBadge({ rank, qualified }: RankBadgeProps) {
+  if (rank === null) {
+    return <span style={{ color: '#444' }}>—</span>;
+  }
+
+  if (rank === 1) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-[6px] text-[11px] font-bold tabular-nums"
+        style={{
+          background: 'linear-gradient(135deg, #C9A646, #E8C766)',
+          color: '#0A0A0A',
+        }}
+      >
+        1
+      </span>
+    );
+  }
+  if (rank === 2) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-[6px] text-[11px] font-bold tabular-nums"
+        style={{ background: '#3a3a3a', color: '#ddd' }}
+      >
+        2
+      </span>
+    );
+  }
+  if (rank === 3) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-[20px] h-[20px] rounded-[6px] text-[11px] font-bold tabular-nums"
+        style={{ background: '#5a3f24', color: '#e8c08a' }}
+      >
+        3
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="text-sm tabular-nums"
+      style={{ color: qualified ? '#888' : '#444' }}
+    >
+      #{rank}
+    </span>
+  );
+}
+
+// ── Small avatar ───────────────────────────────────────────────────────────────
+
+function SmallAvatar({
   name,
   avatarUrl,
-  isCurrentUser,
+  size = 24,
 }: {
   name: string;
   avatarUrl: string | null;
-  isCurrentUser: boolean;
+  size?: number;
 }) {
   const initial = (name || '?').trim().charAt(0).toUpperCase();
+  const dim = `${size}px`;
 
   if (avatarUrl) {
     return (
@@ -72,11 +92,11 @@ function TraderAvatar({
         src={avatarUrl}
         alt=""
         aria-hidden="true"
-        className="h-8 w-8 rounded-full object-cover shrink-0"
+        className="rounded-full object-cover shrink-0"
         style={{
-          border: isCurrentUser
-            ? '1.5px solid rgba(201,166,70,0.7)'
-            : '1px solid rgba(255,255,255,0.1)',
+          width: dim,
+          height: dim,
+          border: '1px solid rgba(255,255,255,0.1)',
         }}
       />
     );
@@ -84,13 +104,13 @@ function TraderAvatar({
 
   return (
     <div
-      className="flex items-center justify-center h-8 w-8 rounded-full shrink-0 text-[13px] font-bold"
+      className="flex items-center justify-center rounded-full shrink-0 text-[10px] font-bold"
       aria-hidden="true"
       style={{
+        width: dim,
+        height: dim,
         background: 'rgba(201,166,70,0.15)',
-        border: isCurrentUser
-          ? '1.5px solid rgba(201,166,70,0.7)'
-          : '1px solid rgba(201,166,70,0.3)',
+        border: '1px solid rgba(201,166,70,0.3)',
         color: '#E8C766',
       }}
     >
@@ -98,6 +118,28 @@ function TraderAvatar({
     </div>
   );
 }
+
+// ── Formatting helpers ─────────────────────────────────────────────────────────
+
+function fmtGreen(value: number | null) {
+  if (value === null) return <span style={{ color: '#444' }}>—</span>;
+  return (
+    <span style={{ color: '#3fd27a' }}>
+      +{Math.round(value).toLocaleString()}
+    </span>
+  );
+}
+
+function fmtRed(value: number | null) {
+  if (value === null) return <span style={{ color: '#444' }}>—</span>;
+  return (
+    <span style={{ color: '#e26b6b' }}>
+      −{Math.round(Math.abs(value)).toLocaleString()}
+    </span>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
   rows,
@@ -116,162 +158,163 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
 
   return (
     <div
-      className="rounded-[20px] overflow-hidden"
-      style={{
-        background: '#0A0A0A',
-        border: '1px solid rgba(201,166,70,0.15)',
-      }}
+      className="overflow-x-auto rounded-[16px]"
+      style={{ border: '1px solid rgba(201,166,70,0.15)' }}
     >
-      {/* Header row */}
-      <div
-        className="grid grid-cols-[48px_1fr_110px_140px_80px] gap-2 px-5 py-3 text-[11px] font-semibold uppercase tracking-widest"
-        style={{ color: '#555', borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+      <table
+        className="w-full min-w-[760px] text-sm"
+        style={{ background: '#0A0A0A', borderCollapse: 'collapse' }}
       >
-        <span>Rank</span>
-        <span>Trader</span>
-        <span className="text-right">Net P&amp;L</span>
-        <span className="text-right">Discipline</span>
-        <span className="text-right">Trades</span>
-      </div>
-
-      {/* Data rows */}
-      <div className="divide-y divide-white/[0.04]">
-        {rows.map((row) => {
-          const isCurrentUser = row.user_id === currentUserId;
-          const rankAccent =
-            row.rank !== null && row.rank <= 3 ? RANK_ACCENTS[row.rank] : null;
-          const medal = row.rank !== null && row.rank <= 3 ? RANK_MEDALS[row.rank] : null;
-          const isQualified = row.qualified && row.rank !== null;
-          const pnl =
-            row.net_pnl !== null ? formatPnl(row.net_pnl) : null;
-
-          return (
-            <div
-              key={row.user_id}
-              className={cn(
-                'grid grid-cols-[48px_1fr_110px_140px_80px] gap-2 items-center px-5 py-3.5 transition-colors',
-                isCurrentUser
-                  ? 'ring-1 ring-inset ring-[#C9A646]/40 bg-[#C9A646]/5'
-                  : rankAccent
-                  ? ''
-                  : 'hover:bg-white/[0.02]',
-              )}
-              style={
-                rankAccent
-                  ? {
-                      background: rankAccent.bg,
-                      boxShadow: isCurrentUser
-                        ? `inset 0 0 0 1px ${rankAccent.border}, inset 0 0 0 1px rgba(201,166,70,0.4)`
-                        : `inset 0 0 0 1px ${rankAccent.border}`,
-                    }
-                  : undefined
-              }
-            >
-              {/* Rank */}
-              <span
-                className="text-sm font-bold tabular-nums"
-                style={{
-                  color: rankAccent ? rankAccent.text : isQualified ? '#888' : '#444',
-                }}
-              >
-                {medal ? (
-                  <span title={`Rank ${row.rank ?? ''}`}>{medal}</span>
-                ) : row.rank !== null ? (
-                  `#${row.rank}`
-                ) : (
-                  '—'
+        {/* Header */}
+        <thead>
+          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            {[
+              { label: 'Rank', align: 'left' },
+              { label: 'Trader', align: 'left' },
+              { label: 'Win %', align: 'right' },
+              { label: 'Trades', align: 'right' },
+              { label: 'Avg Win', align: 'right' },
+              { label: 'Avg Loss', align: 'right' },
+              { label: 'PF', align: 'right' },
+              { label: 'Best', align: 'right' },
+              { label: 'Worst', align: 'right' },
+              { label: 'Streak', align: 'right' },
+              { label: 'Discipline', align: 'right', gold: true },
+            ].map(({ label, align, gold }) => (
+              <th
+                key={label}
+                className={cn(
+                  'px-3 py-3 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
+                  align === 'right' ? 'text-right' : 'text-left',
                 )}
-              </span>
+                style={{ color: gold ? '#E8C766' : '#777' }}
+              >
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
 
-              {/* Trader: avatar + name + @handle + champion badge */}
-              <div className="flex items-center gap-2 min-w-0">
-                <TraderAvatar
-                  name={row.display_name}
-                  avatarUrl={row.avatar_url}
-                  isCurrentUser={isCurrentUser}
-                />
-                <div className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-1.5">
+        {/* Body */}
+        <tbody className="divide-y divide-white/[0.04]">
+          {rows.map((row) => {
+            const isCurrentUser = row.user_id === currentUserId;
+            const isQualified = row.qualified && row.rank !== null;
+            const nickname = row.floor_username ?? row.display_name;
+
+            return (
+              <tr
+                key={row.user_id}
+                style={
+                  isCurrentUser
+                    ? { background: 'rgba(201,166,70,0.06)' }
+                    : undefined
+                }
+                className={cn(!isCurrentUser && 'hover:bg-white/[0.02] transition-colors')}
+              >
+                {/* RANK */}
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <RankBadge rank={row.rank} qualified={isQualified} />
+                </td>
+
+                {/* TRADER */}
+                <td className="px-3 py-3 max-w-[160px]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <SmallAvatar
+                      name={nickname}
+                      avatarUrl={row.avatar_url}
+                      size={24}
+                    />
                     <span
                       className={cn(
                         'text-sm font-medium truncate',
                         isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
                       )}
                     >
-                      {row.display_name}
+                      {nickname}
                       {isCurrentUser && (
-                        <span className="ml-1.5 text-[10px] font-normal text-[#C9A646]/70">
+                        <span className="ml-1 text-[10px] font-normal text-[#C9A646]/70">
                           (you)
                         </span>
                       )}
                     </span>
-                    {row.is_champion && (
-                      <UserStatusBadges userId={row.user_id} />
-                    )}
                   </div>
-                  {row.floor_username && (
-                    <span
-                      className="text-[11px] truncate"
-                      style={{ color: 'rgba(201,166,70,0.55)' }}
-                    >
-                      @{row.floor_username}
-                    </span>
-                  )}
-                </div>
-              </div>
+                </td>
 
-              {/* Net P&L */}
-              <div className="text-right">
-                {pnl ? (
-                  <span
-                    className="text-sm font-semibold tabular-nums"
-                    style={{ color: pnl.color }}
-                  >
-                    {pnl.text}
-                  </span>
-                ) : (
-                  <span className="text-sm tabular-nums" style={{ color: '#444' }}>
-                    —
-                  </span>
-                )}
-              </div>
+                {/* WIN % */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                  {row.win_rate !== null ? `${row.win_rate}%` : <span style={{ color: '#444' }}>—</span>}
+                </td>
 
-              {/* Discipline Score */}
-              <div className="text-right">
-                {isQualified && row.discipline_score !== null ? (
-                  <span
-                    className="text-sm font-semibold tabular-nums"
-                    style={{ color: rankAccent ? rankAccent.text : '#C9A646' }}
-                  >
-                    {row.discipline_score.toFixed(1)}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center justify-end">
+                {/* TRADES */}
+                <td
+                  className="px-3 py-3 text-right whitespace-nowrap tabular-nums"
+                  style={{ color: isQualified ? '#888' : '#444' }}
+                >
+                  {row.trade_count}
+                  {!isQualified && (
                     <span
-                      className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium"
+                      className="ml-1.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-medium"
                       style={{
                         background: 'rgba(255,255,255,0.05)',
                         color: '#555',
                         border: '1px solid rgba(255,255,255,0.08)',
                       }}
                     >
-                      {row.trade_count}/{minTrades} to qualify
+                      {row.trade_count}/{minTrades}
                     </span>
-                  </span>
-                )}
-              </div>
+                  )}
+                </td>
 
-              {/* Trade count */}
-              <span
-                className="text-right text-sm tabular-nums"
-                style={{ color: isQualified ? '#888' : '#444' }}
-              >
-                {row.trade_count}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+                {/* AVG WIN */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                  {fmtGreen(row.avg_win)}
+                </td>
+
+                {/* AVG LOSS */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                  {fmtRed(row.avg_loss)}
+                </td>
+
+                {/* PF */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                  {row.profit_factor !== null
+                    ? row.profit_factor.toFixed(2)
+                    : <span style={{ color: '#444' }}>—</span>}
+                </td>
+
+                {/* BEST */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                  {fmtGreen(row.best_trade)}
+                </td>
+
+                {/* WORST */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                  {fmtRed(row.worst_trade)}
+                </td>
+
+                {/* STREAK */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                  {row.win_streak !== null
+                    ? row.win_streak
+                    : <span style={{ color: '#444' }}>—</span>}
+                </td>
+
+                {/* DISCIPLINE */}
+                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                  {isQualified && row.discipline_score !== null ? (
+                    <span className="font-bold" style={{ color: '#E8C766' }}>
+                      {row.discipline_score.toFixed(1)}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#444' }}>—</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 });
