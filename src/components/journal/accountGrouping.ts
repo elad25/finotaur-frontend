@@ -53,7 +53,7 @@ export function buildAccountGroups(
       // which holds per-account specs like "PAAPEX1958500000164".
       const firm = detectFirmGroup(p.name);
       const { key, label } = p.credential_id
-        ? { key: `conn-${p.credential_id}`, label: firm.label }
+        ? { key: `conn-${p.credential_id}`, label: p.connection_label?.trim() || firm.label }
         : firm;
       if (!firmMap.has(key)) {
         firmMap.set(key, { label, portfolios: [] });

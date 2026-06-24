@@ -626,6 +626,45 @@ async function processFill(
     return 'updated';
   }
 
+  // ── PHANTOM OVERSHOOT GUARD ────────────────────────────────────────────────
+  // Problem: copier retry or APEX bracket order causes two SELL fills for the
+  // same account at nearly the same time. First fill closes the LONG; second
+  // fill arrives milliseconds later, finds no open position, and would create
+  // a phantom SHORT. Root cause: two separate orders (copier retry + bracket)
+  // both executed for the same account. Incident: PAAPEX1958500000159 / fill
+  // 520271351209 created a phantom SHORT after fill 520271351178 closed LONG.
+  //
+  // Guard: if an opposite-side trade was closed for this account within the
+  // last 30 seconds, this fill is an overshoot — skip it.
+  {
+    const thirtySecondsAgo = new Date(new Date(fillAt).getTime() - 30_000).toISOString();
+    let recentCloseQuery = supabaseAdmin
+      .from('trades')
+      .select('id, close_at')
+      .eq('user_id', cred.user_id)
+      .eq('symbol', symbol)
+      .eq('side', closeSide)          // closeSide = opposite of fillSide (defined above)
+      .not('close_at', 'is', null)
+      .gte('close_at', thirtySecondsAgo)
+      .limit(1);
+    if (cred.portfolio_id) {
+      recentCloseQuery = recentCloseQuery.eq('portfolio_id', cred.portfolio_id);
+    }
+    const { data: recentClose } = await recentCloseQuery.maybeSingle();
+    if (recentClose) {
+      console.log(JSON.stringify({
+        event:           'phantom_overshoot_skipped',
+        fill_id:         fill.id,
+        symbol,
+        fill_side:       fillSide,
+        recent_close_id: recentClose.id,
+        recent_close_at: recentClose.close_at,
+        fill_at:         fillAt,
+      }));
+      return 'skipped';
+    }
+  }
+
   // First leg: create a fresh trade row + position state row.
   const matchedStop = matchStop(
     {
@@ -1132,6 +1171,9 @@ async function syncCredential(cred: {
 
   // Step L3: build portfolio map: tradovate_account_id → portfolios.id.
   // tradovate-auth already creates one portfolios row per account on connect.
+  // Self-healing: if a discovered account has no portfolio row (e.g. eval→live
+  // transition where a new funded account appeared after initial connect), create
+  // it now so fills can be attributed correctly without requiring a full re-auth.
   const portfolioMap = new Map<number, string>(); // tradovate_account_id → portfolios.id
   if (discoveredAccountIds.length > 0) {
     const { data: portfolioRows, error: portfolioErr } = await supabaseAdmin
@@ -1149,6 +1191,57 @@ async function syncCredential(cred: {
       for (const row of (portfolioRows ?? []) as Array<{ id: string; tradovate_account_id: number }>) {
         if (row.tradovate_account_id !== null) {
           portfolioMap.set(Number(row.tradovate_account_id), row.id);
+        }
+      }
+    }
+
+    // Auto-create portfolio rows for any discovered account that has no row yet.
+    // Uses discoveredAccounts (has name + id) vs discoveredAccountIds (ids only).
+    const missingAccounts = discoveredAccounts.filter(
+      a => !portfolioMap.has(a.id)
+    );
+    if (missingAccounts.length > 0) {
+      console.log(JSON.stringify({
+        event: 'new_accounts_discovered_self_heal',
+        connection_id: cred.id,
+        missing_count: missingAccounts.length,
+        account_ids: missingAccounts.map(a => a.id),
+      }));
+      for (const acc of missingAccounts) {
+        try {
+          const accWithName = acc as { id: number; name?: string; active?: boolean; archived?: boolean };
+          const accName = accWithName.name ?? String(acc.id);
+          const { data: newPortfolio } = await supabaseAdmin.rpc('upsert_portfolio_from_tradovate', {
+            p_user_id:              cred.user_id,
+            p_tradovate_account_id: acc.id,
+            p_account_spec:         `${accName}${acc.id}`,
+            p_account_name:         accName,
+            p_environment:          resolvedEnvironment,
+            p_credential_id:        cred.id,
+            p_connection_label:     null,
+          });
+          // Re-query for the newly created row's id
+          const { data: createdRow } = await supabaseAdmin
+            .from('portfolios')
+            .select('id')
+            .eq('user_id', cred.user_id)
+            .eq('tradovate_account_id', acc.id)
+            .eq('environment', resolvedEnvironment)
+            .maybeSingle();
+          if (createdRow?.id) {
+            portfolioMap.set(acc.id, createdRow.id);
+            console.log(JSON.stringify({
+              event: 'portfolio_self_healed',
+              connection_id: cred.id,
+              account_id: acc.id,
+              portfolio_id: createdRow.id,
+            }));
+          }
+        } catch (healErr) {
+          console.warn(
+            `[tradovate-sync] self-heal: failed to create portfolio for account ${acc.id}:`,
+            healErr
+          );
         }
       }
     }
@@ -1657,7 +1750,7 @@ Deno.serve(async (req: Request) => {
     // rows will rejoin the sync on the next tick automatically.
     let credentialsQuery = supabaseAdmin
       .from('broker_connections')
-      .select('id, user_id, environment, connection_data, account_id, created_at, auth_method')
+      .select('id, user_id, environment, connection_data, account_id, created_at, auth_method, status')
       .in('broker', ['tradovate', 'ninja_trader'])
       .eq('is_active', true)
       .not('account_id', 'is', null);
@@ -1688,11 +1781,17 @@ Deno.serve(async (req: Request) => {
 
     // Reconciliation ownership map: every active account-owning connection grouped
     // by (user_id, environment). A (user,env) is only reconciled when EVERY one of
-    // its connections here was processed AND returned a successful non-empty account
+    // its healthy connections was processed AND returned a successful non-empty account
     // discovery this run — so a connection skipped by the active-user filter or a
     // failed discovery never lets another connection wipe its accounts.
+    //
+    // Degraded/expired connections are intentionally excluded: a connection whose
+    // token has expired cannot contribute account data, but should not prevent
+    // reconciliation from running and cleaning up orphaned portfolios (e.g. prop-firm
+    // evaluation accounts that graduated to live and no longer appear in demo).
     const expectedByUserEnv = new Map<string, { userId: string; environment: string; connIds: Set<string> }>();
-    for (const bc of allConnections as Array<{ id: string; user_id: string; environment: string }>) {
+    for (const bc of allConnections as Array<{ id: string; user_id: string; environment: string; status?: string }>) {
+      if (bc.status === 'degraded' || bc.status === 'expired') continue;
       const key = `${bc.user_id}::${bc.environment}`;
       let entry = expectedByUserEnv.get(key);
       if (!entry) { entry = { userId: bc.user_id, environment: bc.environment, connIds: new Set<string>() }; expectedByUserEnv.set(key, entry); }
@@ -1902,6 +2001,48 @@ Deno.serve(async (req: Request) => {
     }
     if (reconciledUserEnvs > 0) {
       console.log(JSON.stringify({ event: 'reconcile_summary', user_envs: reconciledUserEnvs, rows_deactivated: reconciledRows }));
+    }
+
+    // ── Legacy-account reconciliation (credential_id=null) ────────────────────
+    // For (user, env) combos where at least ONE connection succeeded but not
+    // all (fullyCovered was false), we still clean up "ownerless" portfolios
+    // (credential_id IS NULL). These are legacy accounts from before the
+    // multi-connection era, or accounts whose original connection was deleted.
+    // They are not exclusively claimed by any specific connection, so we can
+    // safely deactivate any that were not returned by ANY connection that did
+    // succeed this run.
+    let legacyReconciledRows = 0;
+    for (const [key, exp] of expectedByUserEnv) {
+      const proc = processedByUserEnv.get(key);
+      if (!proc || proc.coveredConnIds.size === 0) continue;
+      // Skip if already handled by fullyCovered reconcile above.
+      let alreadyFullyCovered = true;
+      for (const cid of exp.connIds) {
+        if (!proc.coveredConnIds.has(cid)) { alreadyFullyCovered = false; break; }
+      }
+      if (alreadyFullyCovered) continue;
+      const liveIds = [...proc.liveIds];
+      if (liveIds.length === 0) continue;
+      try {
+        const { data: legacyDeactivated, error: lErr } = await supabaseAdmin.rpc(
+          'reconcile_tradovate_legacy_portfolios',
+          { p_user_id: exp.userId, p_environment: exp.environment, p_live_account_ids: liveIds },
+        );
+        if (lErr) {
+          console.error('[tradovate-sync] reconcile_legacy_failed:', key, String(lErr.message ?? lErr).slice(0, 300));
+        } else {
+          const n = typeof legacyDeactivated === 'number' ? legacyDeactivated : 0;
+          legacyReconciledRows += n;
+          if (n > 0) {
+            console.log(JSON.stringify({ event: 'legacy_portfolios_reconciled', user_id: exp.userId, environment: exp.environment, deactivated: n, covered_conns: proc.coveredConnIds.size, expected_conns: exp.connIds.size }));
+          }
+        }
+      } catch (lRecErr) {
+        console.error('[tradovate-sync] reconcile_legacy_exception:', key, String(lRecErr).slice(0, 300));
+      }
+    }
+    if (legacyReconciledRows > 0) {
+      console.log(JSON.stringify({ event: 'legacy_reconcile_summary', rows_deactivated: legacyReconciledRows }));
     }
 
     const durationMs = Date.now() - runStart;
