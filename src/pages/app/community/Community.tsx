@@ -29,26 +29,7 @@ export default function Community() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
-      {/* ── Page header (Feed tab only — the Leaderboard tab carries its
-            own "The Floor — Global" heading inside GlobalLeaderboard, so we
-            hide this one there to avoid showing it twice). ── */}
-      {activeTab === 'feed' && (
-        <header
-          className={cn(
-            'shrink-0 px-ds-5 pt-ds-5 pb-ds-4 text-center',
-            'border-b border-border-ds-subtle',
-          )}
-        >
-          <h1 className="font-sans text-[20px] font-semibold text-ink-primary leading-snug">
-            The Floor — Global
-          </h1>
-          <p className="mt-[4px] font-sans text-[13px] text-ink-tertiary">
-            Share trades, learn from the desk.
-          </p>
-        </header>
-      )}
-
-      {/* ── Tab bar ── */}
+      {/* ── Tab bar (top — the "The Floor — Global" page header was removed) ── */}
       <nav
         className="shrink-0 flex items-center border-b border-border-ds-subtle px-ds-4"
         aria-label="Community sections"
