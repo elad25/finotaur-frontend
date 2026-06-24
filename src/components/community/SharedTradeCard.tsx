@@ -26,6 +26,7 @@ import {
   type GlobalReactionKind,
 } from '@/hooks/useGlobalFeed';
 import { useUserDisciplineScore } from '@/hooks/useUserDisciplineScore';
+import { TradeChart } from '@/components/journal/TradeChart';
 import type { GlobalFeedItem, GlobalComment } from '@/types/community';
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
@@ -89,20 +90,39 @@ interface AttachedTradeCardProps {
 }
 
 function AttachedTradeCard({ item }: AttachedTradeCardProps) {
-  const { trade_symbol, trade_side, trade_pnl, trade_entry, trade_exit, trade_size, trade_setup, trade_close_at, hide_pnl, show_setup_only, reveal_size } = item;
+  const { trade_symbol, trade_side, trade_pnl, trade_entry, trade_exit, trade_size, trade_setup, trade_open_at, trade_close_at, hide_pnl, show_setup_only, reveal_size } = item;
 
   if (!trade_symbol) return null;
 
   const isNegative = trade_pnl !== null && trade_pnl < 0;
 
+  // Build a TradeChartTrade when we have enough data to render a meaningful chart.
+  // entry_price falls back to 0 when the author hid prices — the chart still renders
+  // the price history; markers simply land on the bar at that timestamp.
+  const chartTrade = (trade_symbol && trade_open_at) ? {
+    symbol: trade_symbol,
+    side: (trade_side === 'SHORT' ? 'SHORT' : 'LONG') as 'LONG' | 'SHORT',
+    entry_price: trade_entry ?? 0,
+    exit_price: trade_exit,
+    open_at: trade_open_at,
+    close_at: trade_close_at,
+    pnl: trade_pnl,
+  } : null;
+
   return (
     <div
       className={cn(
         'rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-2',
-        'px-ds-4 py-ds-3',
+        'overflow-hidden',
         'flex flex-col gap-ds-2',
       )}
     >
+      {/* TradingView-style price chart */}
+      {chartTrade && (
+        <TradeChart trade={chartTrade} />
+      )}
+
+      <div className="px-ds-4 pb-ds-3 flex flex-col gap-ds-2">
       {/* Top row: symbol + side + P&L */}
       <div className="flex items-center justify-between gap-ds-3 flex-wrap">
         <div className="flex items-center gap-ds-2 min-w-0">
@@ -175,6 +195,7 @@ function AttachedTradeCard({ item }: AttachedTradeCardProps) {
             {trade_size} contracts
           </span>
         )}
+      </div>
       </div>
     </div>
   );

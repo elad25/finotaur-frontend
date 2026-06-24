@@ -27,6 +27,7 @@ export interface GlobalFeedItem {
   trade_entry: number | null;
   /** NULL when show_setup_only is true — treat as "hidden", not zero. */
   trade_exit: number | null;
+  trade_open_at: string | null;
   trade_close_at: string | null;
   hide_pnl: boolean;
   show_setup_only: boolean;
