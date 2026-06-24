@@ -2043,6 +2043,7 @@ interface TradeEngineViewProps {
   mae: WhatIfResult['mae'];
   distributionTracked: number;
   distributionTotal: number;
+  view: 'stop' | 'target';
 }
 
 function TradeEngineView({
@@ -2052,9 +2053,8 @@ function TradeEngineView({
   mae,
   distributionTracked,
   distributionTotal,
+  view,
 }: TradeEngineViewProps) {
-  // Stop / Target overlay switch — mirrors the Performance tab, scoped to this trade.
-  const [view, setView] = useState<'stop' | 'target'>('stop');
   const shadow = useShadowTrade(trade);
   const { engine, planned, hasPath } = shadow;
 
@@ -2122,26 +2122,6 @@ function TradeEngineView({
 
   return (
     <div className="flex flex-col gap-ds-3">
-      {/* Stop / Target overlay switch */}
-      <div className="flex justify-center">
-        <div className="flex gap-0.5 rounded-[10px] bg-white/[0.06] p-1">
-          {(['stop', 'target'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`rounded-[7px] px-5 py-1.5 text-[13px] font-semibold transition-colors ${
-                view === v
-                  ? 'bg-[rgba(20,20,20,0.88)] text-[#C9A646] shadow-sm'
-                  : 'text-white/42 hover:text-white/70'
-              }`}
-            >
-              {v === 'stop' ? 'Stop' : 'Target'}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Single-trade scenario chart (same style as Performance) */}
       <SingleTradeScenarioChart
         trade={trade}
@@ -2591,6 +2571,7 @@ export default function TradeCompare() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [tradeView, setTradeView] = useState<'stop' | 'target'>('stop');
 
   const effectiveId: string | null = selectedId ?? (closedTrades[0]?.id ?? null);
 
@@ -2660,13 +2641,13 @@ export default function TradeCompare() {
   return (
     <div className="w-full max-w-[1200px] mx-auto pt-0 pb-ds-4 px-ds-4 flex flex-col gap-ds-4">
 
-      {/* Page header + FINO EXPLAINS on same row */}
-      <div className="flex items-center justify-between">
-        <div className="w-36" />
+      {/* Page header + FINO EXPLAINS: title truly centered, button absolute-right */}
+      <div className="relative flex items-center justify-center">
         <div className="flex flex-col items-center text-center gap-1">
           <h1 className="text-3xl font-bold text-white">Shadow</h1>
           <p className="text-[11px] text-white/62">See what your trades could have been.</p>
         </div>
+        <div className="absolute right-0">
         <FinoExplains title="What is Shadow?" className="w-fit">
           Shadow replays your closed trades as if you had managed each one by a single fixed
           rule — held your target, moved your stop to break-even, or used a set R target — so
@@ -2675,6 +2656,7 @@ export default function TradeCompare() {
           recorded excursion R values), not guesses. Use the toggles in Performance to find the
           risk-reward that fits how your trades actually behave.
         </FinoExplains>
+        </div>
       </div>
 
       {/* Shadow — 3-tab experience */}
@@ -2687,17 +2669,36 @@ export default function TradeCompare() {
 
         {/* ── Trade tab ── */}
         <TabsContent value="trade" className="mt-1">
-          <div className="flex flex-col gap-ds-5">
+          <div className="flex flex-col gap-ds-3">
+            {/* Stop/Target toggle + Select trade — same row, no gap */}
             {!isLoading && (
-              <TradePicker
-                closedTrades={closedTrades}
-                selectedId={selectedId}
-                effectiveId={effectiveId}
-                dialogOpen={dialogOpen}
-                setDialogOpen={setDialogOpen}
-                setSelectedId={setSelectedId}
-                disabled={closedTrades.length === 0}
-              />
+              <div className="flex items-center justify-between">
+                <div className="flex gap-0.5 rounded-[10px] bg-white/[0.06] p-1">
+                  {(['stop', 'target'] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setTradeView(v)}
+                      className={`rounded-[7px] px-5 py-1.5 text-[13px] font-semibold transition-colors ${
+                        tradeView === v
+                          ? 'bg-[rgba(20,20,20,0.88)] text-[#C9A646] shadow-sm'
+                          : 'text-white/42 hover:text-white/70'
+                      }`}
+                    >
+                      {v === 'stop' ? 'Stop' : 'Target'}
+                    </button>
+                  ))}
+                </div>
+                <TradePicker
+                  closedTrades={closedTrades}
+                  selectedId={selectedId}
+                  effectiveId={effectiveId}
+                  dialogOpen={dialogOpen}
+                  setDialogOpen={setDialogOpen}
+                  setSelectedId={setSelectedId}
+                  disabled={closedTrades.length === 0}
+                />
+              </div>
             )}
             {isLoading && loadingEl}
             {!isLoading && closedTrades.length === 0 && noTradesEl}
@@ -2709,6 +2710,7 @@ export default function TradeCompare() {
                 mae={whatIfResult?.mae ?? null}
                 distributionTracked={aggregate.tracked}
                 distributionTotal={aggregate.total}
+                view={tradeView}
               />
             )}
           </div>
