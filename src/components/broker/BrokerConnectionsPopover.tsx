@@ -387,8 +387,12 @@ function PopoverBody({
   const {
     connections: inactiveConnections,
     isLoading: loadingInactive,
-    reconnect,
   } = useBrokerConnections({ active: false, purpose: 'journal' });
+  // reconnect must see ALL connections (active + inactive) — degraded connections
+  // are still is_active=true so they only appear in the active: true hook, but
+  // the reconnect button is shown for them too. Using a filter-free hook ensures
+  // the reconnect() closure finds any connection regardless of is_active state.
+  const { reconnect } = useBrokerConnections({ purpose: 'journal' });
 
   // Merge active + inactive so we can surface needs-attention indicators for
   // both connected and recently-disconnected connections.

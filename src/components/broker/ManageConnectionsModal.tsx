@@ -40,14 +40,17 @@ function getConnectionDisplayName(conn: BrokerConnection): string {
 
 // ── Account count helper ──────────────────────────────────────────────────────
 // Counts portfolios that belong to a connection.
-// For tradovate/ninja_trader: matches on source='tradovate' + same environment.
+// For tradovate/ninja_trader: prefer credential_id match (post-PR-#868 rows);
+// fall back to environment match for legacy rows where credential_id is null.
 // For other brokers: matches on broker_connection_id.
 function useAccountCount(conn: BrokerConnection): number {
   const { portfolios } = usePortfolioContext();
   if (conn.broker === 'tradovate' || conn.broker === 'ninja_trader') {
-    return portfolios.filter(
-      p => p.source === 'tradovate' && p.environment === conn.environment,
-    ).length;
+    return portfolios.filter(p => {
+      if (p.source !== 'tradovate') return false;
+      if (p.credential_id != null) return p.credential_id === conn.id;
+      return p.environment === conn.environment; // legacy fallback
+    }).length;
   }
   // broker_connection_id is set for source='broker' portfolios
   return portfolios.filter(p => p.broker_connection_id === conn.id).length;
