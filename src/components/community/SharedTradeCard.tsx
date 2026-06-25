@@ -546,35 +546,21 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
         </div>
       </div>
 
-      {/* Trader Model tags — emotion chip + author behavioral badge */}
-      {(item.trade_emotion || showBehavioralBadge) && (
+      {/* Trader Model tags — author behavioral badge */}
+      {showBehavioralBadge && (
         <div className="flex items-center gap-[6px] flex-wrap">
-          {item.trade_emotion && (
-            <span
-              className={cn(
-                'inline-flex items-center',
-                'rounded-[4px] border-[0.5px] border-border-ds-subtle bg-surface-2',
-                'px-[6px] py-[2px]',
-                'font-sans text-[11px] font-medium text-ink-secondary',
-              )}
-            >
-              {titleCase(item.trade_emotion)}
-            </span>
-          )}
-          {showBehavioralBadge && (
-            <span
-              className={cn(
-                'inline-flex items-center gap-[5px]',
-                'rounded-[4px] border-[0.5px] border-border-ds-subtle bg-surface-2',
-                'px-[6px] py-[2px]',
-                'font-sans text-[11px] text-ink-tertiary',
-              )}
-            >
-              <span>Discipline {Math.round(score!.discipline_score)}</span>
-              <span className="text-border-ds-subtle">·</span>
-              <span>Emotion {Math.round(score!.emotional_rate * 100)}%</span>
-            </span>
-          )}
+          <span
+            className={cn(
+              'inline-flex items-center gap-[5px]',
+              'rounded-[4px] border-[0.5px] border-border-ds-subtle bg-surface-2',
+              'px-[6px] py-[2px]',
+              'font-sans text-[11px] text-ink-tertiary',
+            )}
+          >
+            <span>Discipline {Math.round(score!.discipline_score)}</span>
+            <span className="text-border-ds-subtle">·</span>
+            <span>Emotion {Math.round(score!.emotional_rate * 100)}%</span>
+          </span>
         </div>
       )}
 
