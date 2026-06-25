@@ -17,7 +17,6 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from './useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 
@@ -102,7 +101,7 @@ export function useUserJournalStats(opts: UseUserJournalStatsOptions = {}) {
     ],
     queryFn: async (): Promise<UserJournalStats | null> => {
       if (!targetUserId) return null;
-      const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
+      const client = supabase;
       const { data, error } = await client.rpc('get_user_journal_stats', {
         p_user_id: targetUserId,
         p_portfolio_ids: portfolioIds,

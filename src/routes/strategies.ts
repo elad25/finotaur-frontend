@@ -3,27 +3,18 @@
 // ================================================
 // ✅ FIXED: Uses deleted_at instead of is_deleted
 // ✅ Soft delete support
-// ✅ Admin impersonation support with supabaseAdmin
+// ✅ Impersonation uses real session swap — the regular supabase
+//    client already carries the target user's JWT (RLS satisfied)
 // ✅ Materialized view integration
 // ================================================
 
 import { supabase } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getEffectiveUserId } from '@/lib/journal';
 
-// 🔥 Helper to get the right client based on impersonation
-function getClient(isImpersonating: boolean = false) {
-  // Check if we're in impersonation mode by looking at sessionStorage
-  const impersonatedUserId = typeof window !== 'undefined' 
-    ? sessionStorage.getItem('impersonatedUserId') 
-    : null;
-  
-  if ((isImpersonating || impersonatedUserId) && supabaseAdmin) {
-    console.log('🔓 Using ADMIN client for strategies (bypassing RLS)');
-    return supabaseAdmin;
-  }
-  
-  console.log('🔒 Using REGULAR client for strategies (with RLS)');
+// Helper kept for call-site compatibility; always returns the regular client.
+// Impersonation now relies on a real Supabase session swap rather than a
+// service-role bypass, so no branching is needed here.
+function getClient(_isImpersonating: boolean = false) {
   return supabase;
 }
 

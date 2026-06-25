@@ -5,14 +5,15 @@
 // ✅ Stable references (no unnecessary recalculations)
 // ✅ Smart refetch strategy
 // ✅ Minimal DB load
-// ✅ IMPERSONATION SUPPORT WITH ADMIN CLIENT
-// ✅ FIXED: Use supabaseAdmin when impersonating
+// ✅ IMPERSONATION SUPPORT: uses real Supabase session swap
+//    (admin-impersonate edge fn + ImpersonationContext).
+//    The regular supabase client already carries the target
+//    user's JWT — no service-role bypass needed.
 // ================================================
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { tradeR } from '@/utils/rAggregates';
 import { supabase } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { queryKeys } from '@/lib/queryClient';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -161,7 +162,9 @@ export interface TradeStats {
 }
 
 // ================================================
-// 🔥 FETCH ALL TRADES - FIXED: Use supabaseAdmin when impersonating
+// 🔥 FETCH ALL TRADES
+// Impersonation uses a real session swap — the regular supabase client
+// already holds the target user's JWT, so RLS is satisfied automatically.
 // ================================================
 
 // ================================================
@@ -172,7 +175,7 @@ const RAW_PAGE_SIZE = 1000;
 const RAW_MAX_PAGES = 50; // hard safety cap: 50k rows
 
 async function fetchAllTradesRaw(
-  client: typeof supabase | typeof supabaseAdmin,
+  client: typeof supabase,
   userId: string,
   excludePortfolioIds?: string[],
 ): Promise<Trade[]> {
@@ -227,10 +230,7 @@ async function fetchAllTrades(
   console.log('📊 Fetching trades for user:', userId, '| Impersonating:', isImpersonating, '| Portfolio:', portfolioId ?? 'ALL', '| SkipAgg:', skipCopyAggregation ?? false);
 
   try {
-    // 🔥 CRITICAL FIX: Use admin client when impersonating to bypass RLS
-    const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
-
-    console.log(`✅ Using ${isImpersonating ? 'ADMIN' : 'REGULAR'} client for trades fetch`);
+    const client = supabase;
 
     // TRADER mode: skip copy-aggregation, fetch every raw fill via paginated loop
     // so Supabase's 1000-row default cap doesn't silently truncate the dataset.
@@ -536,12 +536,7 @@ export function useTrade(tradeId: string | null) {
     queryFn: async () => {
       if (!tradeId || !userId) throw new Error('No trade ID or user ID');
 
-      // 🔥 Use admin client when impersonating
-      const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
-      
-      console.log(`✅ Fetching single trade with ${isImpersonating ? 'ADMIN' : 'REGULAR'} client`);
-
-      const { data, error } = await client
+      const { data, error } = await supabase
         .from('trades')
         .select(`
           *,
