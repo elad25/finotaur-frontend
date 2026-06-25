@@ -49,6 +49,7 @@ import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation"
 import { SettingsLayoutSkeletonPage } from "@/components/skeletons/SettingsLayoutSkeleton";
 import { requestAccountDeletion, downloadGdprExport } from "@/services/accountLifecycleService";
 import { Spinner } from '@/components/ds/Spinner';
+import { AvatarPicker } from '@/components/ds/AvatarPicker';
 
 // ============================================
 // TYPES - Matches actual DB schema
@@ -74,6 +75,7 @@ interface ProfileData {
   last_name: string | null;
   email: string | null;
   avatar_url: string | null;
+  avatar_character: string | null;
   preferred_timezone: string | null;
   
   // Platform subscription (main website)
@@ -259,6 +261,7 @@ const GeneralTab = () => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [timezone, setTimezone] = useState("America/New_York");
+  const [avatarCharacter, setAvatarCharacter] = useState<string | null>(null);
 
   // Sync local state with profile data. Fall back to splitting display_name
   // for legacy rows that predate first_name/last_name.
@@ -268,6 +271,7 @@ const GeneralTab = () => {
       setFirstName(profile.first_name ?? fallback.split(' ')[0] ?? '');
       setLastName(profile.last_name ?? fallback.split(' ').slice(1).join(' ') ?? '');
       setTimezone(profile.preferred_timezone || "America/New_York");
+      setAvatarCharacter(profile.avatar_character ?? null);
     }
   }, [profile, user]);
 
@@ -287,6 +291,7 @@ const GeneralTab = () => {
           last_name: trimmedLast || null,
           display_name: composedDisplayName,
           preferred_timezone: timezone,
+          avatar_character: avatarCharacter,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -300,6 +305,7 @@ const GeneralTab = () => {
         last_name: trimmedLast || null,
         display_name: composedDisplayName,
         preferred_timezone: timezone,
+        avatar_character: avatarCharacter,
       } : null);
       
       setIsEditing(false);
@@ -431,6 +437,13 @@ const GeneralTab = () => {
               {profile?.email || user?.email || ''}
             </div>
           </div>
+
+          {/* Avatar */}
+          <AvatarPicker
+            value={avatarCharacter}
+            onChange={setAvatarCharacter}
+            saving={saving}
+          />
         </div>
       </Card>
 
@@ -2982,6 +2995,7 @@ export const SettingsLayout = () => {
           last_name,
           email,
           avatar_url,
+          avatar_character,
           preferred_timezone,
           platform_plan,
           platform_subscription_status,
