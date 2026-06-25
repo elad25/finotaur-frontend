@@ -7,39 +7,39 @@ export const ImpersonationBanner = () => {
   const { isImpersonating, impersonatedUser, stopImpersonation } = useImpersonation();
   const [timeRemaining, setTimeRemaining] = useState<string>('');
 
-  // Show session expiry countdown (sessions expire after 2 hours)
+  // Show session expiry countdown from the real expires_at stored on start.
   useEffect(() => {
     if (!isImpersonating) return;
 
-    const sessionToken = sessionStorage.getItem('imp_session_token');
-    if (!sessionToken) return;
+    const readExpiry = (): number | null => {
+      try {
+        const raw = localStorage.getItem('imp_meta');
+        const meta = raw ? JSON.parse(raw) : null;
+        return meta?.expiresAt ? new Date(meta.expiresAt).getTime() : null;
+      } catch {
+        return null;
+      }
+    };
 
-    // Update countdown every minute
-    const interval = setInterval(() => {
-      // Sessions expire after 2 hours - calculate time remaining
-      const expiryTime = new Date(Date.now() + 2 * 60 * 60 * 1000); // Simplified for demo
-      const now = new Date();
-      const diff = expiryTime.getTime() - now.getTime();
-      
+    const tick = () => {
+      const expiry = readExpiry();
+      if (!expiry) {
+        setTimeRemaining('');
+        return;
+      }
+      const diff = expiry - Date.now();
       if (diff <= 0) {
         setTimeRemaining('Expired');
         return;
       }
-
       const minutes = Math.floor(diff / 60000);
       const hours = Math.floor(minutes / 60);
       const mins = minutes % 60;
-      
-      if (hours > 0) {
-        setTimeRemaining(`${hours}h ${mins}m`);
-      } else {
-        setTimeRemaining(`${mins}m`);
-      }
-    }, 60000); // Update every minute
+      setTimeRemaining(hours > 0 ? `${hours}h ${mins}m` : `${mins}m`);
+    };
 
-    // Initial update
-    setTimeRemaining('< 2h');
-
+    tick(); // initial
+    const interval = setInterval(tick, 60000);
     return () => clearInterval(interval);
   }, [isImpersonating]);
 

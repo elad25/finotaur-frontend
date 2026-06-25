@@ -5,14 +5,13 @@
 // ✅ FIXED: Better caching with refetchOnMount: false
 // ✅ FIXED: Risk-Only mode trades now included in stats!
 // ✅ Calls enable_admin_mode() before queries
-// ✅ Full admin client support
+// ✅ Impersonation uses real session swap (regular client carries target JWT)
 // ✅ Trading session support added
 // ================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
 import { logger } from '@/lib/logger';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -791,7 +790,6 @@ export function useDashboardStats(
   const queryClient = useQueryClient();
   
   const userId = overrideUserId || effectiveUserId;
-  const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
   const dashboardPortfolioId = portfolioId ?? null;
   const dashboardPortfolioIds = portfolioIds ?? null;
 
@@ -826,11 +824,7 @@ export function useDashboardStats(
 
       devLog('🔑 Dashboard query config:', { userId, isImpersonating, cutoffDate, effectiveLookbackDays });
 
-      if (isImpersonating && !supabaseAdmin) {
-        throw new Error('Admin client not configured. Add VITE_SUPABASE_SERVICE_ROLE_KEY to .env file.');
-      }
-
-      const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
+      const client = supabase;
 
       // CHUNK 3 B.4 phase 2.D — for "all-time" view (no daysBack or >= MAX_LOOKBACK_DAYS),
       // use server-side aggregated path: RPC + view + 2 small SELECTs. Eliminates the
@@ -975,7 +969,6 @@ export function useSnapTradeConnections(overrideUserId?: string) {
   const { enableAdminMode } = useImpersonation();
   
   const userId = overrideUserId || effectiveUserId;
-  const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
 
   return useQuery({
     queryKey: dashboardKeys.connections(userId || ''),
@@ -987,9 +980,7 @@ export function useSnapTradeConnections(overrideUserId?: string) {
       }
 
       try {
-        const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
-
-        const { data, error } = await client
+        const { data, error } = await supabase
           .from('broker_connections')
           .select('id, status, broker, created_at')
           .eq('user_id', userId)

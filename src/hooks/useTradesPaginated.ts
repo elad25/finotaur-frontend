@@ -18,7 +18,6 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
@@ -111,7 +110,7 @@ export function useTradesProjection(opts: UseTradesProjectionOptions = {}) {
     ],
     queryFn: async (): Promise<TradeProjectionRow[]> => {
       if (!targetUserId) return [];
-      const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
+      const client = supabase;
       let q = client
         .from('trades')
         .select(PROJECTION_COLUMNS)
@@ -212,7 +211,7 @@ export function useTradesPage(opts: UseTradesPageOptions = {}) {
     initialPageParam: null as TradesPage['nextCursor'],
     queryFn: async ({ pageParam }): Promise<TradesPage> => {
       if (!targetUserId) return { rows: [], nextCursor: null };
-      const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
+      const client = supabase;
       let q = client
         .from('trades')
         .select(PROJECTION_COLUMNS)
