@@ -1,11 +1,13 @@
 // src/layouts/ProtectedAppLayout.tsx
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
 import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 import { MentorViewBanner } from '@/components/MentorViewBanner';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { useMentorView } from '@/contexts/MentorViewContext';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
@@ -55,6 +57,15 @@ const HIDE_CHROME_ROUTES = [
 export const ProtectedAppLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const { isImpersonating } = useImpersonation();
+  const { isMentorView } = useMentorView();
+
+  // Each top banner (admin impersonation / mentor view) is a fixed 52px bar.
+  // In-flow chrome (TopNav/SubNav/main) is already pushed by each banner's
+  // spacer, but the position:fixed Sidebar is not — so expose the combined
+  // banner height as a CSS var the Sidebar reads to offset its top/height.
+  const bannerOffset = (isImpersonating ? 52 : 0) + (isMentorView ? 52 : 0);
+  const shellStyle = { '--app-banner-offset': `${bannerOffset}px` } as CSSProperties;
 
   // 🔥 בדיקה אם הדף הנוכחי צריך להיות בלי Sidebar
   const hideSidebar = NO_SIDEBAR_ROUTES.some(route =>
@@ -110,7 +121,7 @@ export const ProtectedAppLayout = () => {
     <AssetSelectorProvider>
     <ProductDrawerProvider>
     <PortfolioProvider>
-      <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
+      <div className="finotaur-app-shell flex min-h-screen w-full flex-col" style={shellStyle}>
         <ImpersonationBanner />
         <MentorViewBanner />
         {showMarketStatus && <MarketStatusBadge />}
