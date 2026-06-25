@@ -81,6 +81,11 @@ const JOURNAL_PANEL =
 /** Minimum tracked trades before distribution is considered statistically meaningful. */
 const DISTRIBUTION_MIN_N = 20;
 
+/** Minimum closed trades before Shadow presents a firm aggregate conclusion / verdict.
+ *  Below this, aggregate readings (Performance gold band, Summary verdict) are flagged
+ *  as early/low-sample so the UI never claims statistical certainty it doesn't have. */
+const VERDICT_MIN_N = 10;
+
 // ─── Info icon (matches JournalInfoIcon from Overview.tsx) ───────────────────
 
 function ShadowInfoIcon({ label }: { label: string }) {
@@ -1320,22 +1325,29 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         return (
           <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
             <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-            <p className="text-[15px] text-white leading-relaxed">
-              {best.phrase}{' '}
-              {positive ? (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
-              ) : (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
+            <div className="flex flex-col gap-1">
+              <p className="text-[15px] text-white leading-relaxed">
+                {best.phrase}{' '}
+                {positive ? (
+                  <>
+                    would have{' '}
+                    <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
+                    (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
+                  </>
+                ) : (
+                  <>
+                    would have{' '}
+                    <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
+                    (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
+                  </>
+                )}
+              </p>
+              {n < VERDICT_MIN_N && (
+                <p className="text-[11px] text-[#C9A646]/75 leading-snug">
+                  Early read · based on {n} {n === 1 ? 'trade' : 'trades'}. Firms up at {VERDICT_MIN_N} closed trades.
+                </p>
               )}
-            </p>
+            </div>
           </div>
         );
       })() : (() => {
@@ -1371,22 +1383,29 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
         return (
           <div className="bg-[#C9A646]/10 border border-[#C9A646]/35 rounded-[14px] px-ds-5 py-ds-4 flex items-start gap-3">
             <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A646]" />
-            <p className="text-[15px] text-white leading-relaxed">
-              {best.phrase}{' '}
-              {positive ? (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
-              ) : (
-                <>
-                  would have{' '}
-                  <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
-                  (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
-                </>
+            <div className="flex flex-col gap-1">
+              <p className="text-[15px] text-white leading-relaxed">
+                {best.phrase}{' '}
+                {positive ? (
+                  <>
+                    would have{' '}
+                    <span className="text-[#C9A646] font-semibold">ADDED {pct}% to your return</span>{' '}
+                    (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
+                  </>
+                ) : (
+                  <>
+                    would have{' '}
+                    <span className="text-[#C9A646] font-semibold">COST you {Math.abs(pct)}% of your return</span>{' '}
+                    (<span className="text-[#C9A646] font-semibold">{fmtDelta(Math.round(best.delta))}</span>).
+                  </>
+                )}
+              </p>
+              {n < VERDICT_MIN_N && (
+                <p className="text-[11px] text-[#C9A646]/75 leading-snug">
+                  Early read · based on {n} {n === 1 ? 'trade' : 'trades'}. Firms up at {VERDICT_MIN_N} closed trades.
+                </p>
               )}
-            </p>
+            </div>
           </div>
         );
       })()}
@@ -1797,7 +1816,6 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
     return { actualTotal, bestR: best.R, bestTotal: best.total, upside, pct };
   }, [closedTrades]);
 
-  const VERDICT_MIN_N = 10;
   const n = closedTrades.length;
   const runItPays = summary.upside > 0;
 
