@@ -15,7 +15,7 @@ import { Card } from '@/components/ds/Card';
 import { SkeletonGrid } from '@/components/ds/Skeleton';
 import { SpaceCard } from '@/components/mentorship/SpaceCard';
 import { CreateSpaceDialog } from '@/components/mentorship/CreateSpaceDialog';
-import { useMySpaces, useAcceptInvite, mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import { useMySpaces, useAcceptInvite, useDeleteSpace, useLeaveSpace, mapSpaceError } from '@/hooks/useMentorshipSpaces';
 import { useUserProfile, isAdminUser } from '@/hooks/useUserProfile';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -152,6 +152,8 @@ export default function Spaces() {
   const { spaces, isLoading } = useMySpaces();
   const canCreate = useCanCreateSpace();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { mutateAsync: deleteSpace } = useDeleteSpace();
+  const { mutateAsync: leaveSpace } = useLeaveSpace();
 
   return (
     <div className="px-ds-5 md:px-ds-6 py-ds-6 max-w-7xl mx-auto">
@@ -203,6 +205,22 @@ export default function Spaces() {
                 key={space.space_id}
                 space={space}
                 onClick={() => navigate(`/app/floor/rooms/${space.space_id}`)}
+                onDelete={space.role === 'owner' ? async () => {
+                  try {
+                    await deleteSpace(space.space_id);
+                    toast({ title: 'Room deleted', description: 'The room has been permanently deleted.' });
+                  } catch (err) {
+                    toast({ title: 'Could not delete', description: mapSpaceError(err), variant: 'destructive' });
+                  }
+                } : undefined}
+                onLeave={space.role !== 'owner' ? async () => {
+                  try {
+                    await leaveSpace(space.space_id);
+                    toast({ title: 'Left room', description: 'You have left the room.' });
+                  } catch (err) {
+                    toast({ title: 'Could not leave', description: mapSpaceError(err), variant: 'destructive' });
+                  }
+                } : undefined}
               />
             ))}
           </div>

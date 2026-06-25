@@ -1,10 +1,13 @@
 // src/components/mentorship/SpaceCard.tsx
 // Mentor-space card shown in the Spaces list grid.
-// Props: { space: SpaceListItem; onClick: () => void }
+// Props: { space, onClick, onDelete?, onLeave? }
 //
 // Layout: avatar (or gold monogram) | name + role pill | member count | description (2-line clamp).
 // Hover: gold border via DS Card `featured` variant on hover, cursor-pointer.
+// 3-dot menu: owner → Delete Room; non-owner → Leave Room. Inline confirm footer.
 
+import { useState } from 'react';
+import { MoreHorizontal } from 'lucide-react';
 import type { SpaceListItem, SpaceRole } from '@/types/mentorship';
 import { Card } from '@/components/ds/Card';
 import { cn } from '@/lib/utils';
@@ -42,21 +45,51 @@ function MonogramAvatar({ name }: { name: string }) {
 export interface SpaceCardProps {
   space: SpaceListItem;
   onClick: () => void;
+  onDelete?: () => void;   // called after user confirms delete (owner only)
+  onLeave?: () => void;    // called after user confirms leave (non-owner)
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export function SpaceCard({ space, onClick }: SpaceCardProps) {
+export function SpaceCard({ space, onClick, onDelete, onLeave }: SpaceCardProps) {
   const { name, avatar_url, role, member_count, description } = space;
+  const [confirmAction, setConfirmAction] = useState<'delete' | 'leave' | null>(null);
+
+  const hasMenu = !!(onDelete || onLeave);
+
+  function handleMenuClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (role === 'owner' && onDelete) {
+      setConfirmAction('delete');
+    } else if (role !== 'owner' && onLeave) {
+      setConfirmAction('leave');
+    }
+  }
+
+  function handleCancel(e: React.MouseEvent) {
+    e.stopPropagation();
+    setConfirmAction(null);
+  }
+
+  function handleConfirm(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (confirmAction === 'delete') {
+      onDelete?.();
+    } else if (confirmAction === 'leave') {
+      onLeave?.();
+    }
+    setConfirmAction(null);
+  }
 
   return (
     <Card
       variant="default"
       padding="default"
-      onClick={onClick}
+      onClick={confirmAction ? undefined : onClick}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
+        if (confirmAction) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick();
@@ -100,15 +133,33 @@ export function SpaceCard({ space, onClick }: SpaceCardProps) {
             {ROLE_LABELS[role]}
           </span>
         </div>
+
+        {/* 3-dot menu button */}
+        {hasMenu && !confirmAction && (
+          <button
+            type="button"
+            aria-label="Room options"
+            onClick={handleMenuClick}
+            className={cn(
+              'p-1 rounded-[4px] shrink-0',
+              'text-ink-muted hover:text-ink-primary hover:bg-surface-2',
+              'transition-colors duration-base',
+            )}
+          >
+            <MoreHorizontal size={16} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
 
       {/* ── Member count ── */}
-      <p className="mt-ds-3 text-[13px] text-ink-tertiary">
-        {member_count} {member_count === 1 ? 'member' : 'members'}
-      </p>
+      {!confirmAction && (
+        <p className="mt-ds-3 text-[13px] text-ink-tertiary">
+          {member_count} {member_count === 1 ? 'member' : 'members'}
+        </p>
+      )}
 
       {/* ── Description ── */}
-      {description && (
+      {!confirmAction && description && (
         <p
           className={cn(
             'mt-ds-2',
@@ -118,6 +169,36 @@ export function SpaceCard({ space, onClick }: SpaceCardProps) {
         >
           {description}
         </p>
+      )}
+
+      {/* ── Confirm footer ── */}
+      {confirmAction && (
+        <div
+          className="mt-ds-3 border-t border-border-ds-subtle pt-ds-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-[13px] text-ink-secondary leading-[1.5]">
+            {confirmAction === 'delete'
+              ? 'This will permanently delete the room and all its content.'
+              : 'Are you sure you want to leave this room?'}
+          </p>
+          <div className="flex items-center gap-ds-4 mt-ds-3">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="text-[13px] text-num-negative hover:text-red-400 transition-colors duration-base"
+            >
+              {confirmAction === 'delete' ? 'Delete' : 'Leave'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-[13px] text-ink-tertiary hover:text-ink-secondary transition-colors duration-base"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </Card>
   );

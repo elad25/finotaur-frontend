@@ -46,6 +46,8 @@ export function mapSpaceError(error: unknown): string {
   if (message.includes('not_authorized_announcement'))
     return 'Only mentors can post announcements.';
   if (message.includes('cannot_remove_owner')) return "You can't remove the space owner.";
+  if (message.includes('cannot_delete_space')) return 'Only the room owner can delete this room.';
+  if (message.includes('cannot_leave_as_owner')) return 'Owners cannot leave — delete the room instead.';
   if (message.includes('empty_message')) return 'Message cannot be empty.';
   return 'Something went wrong. Please try again.';
 }
@@ -300,6 +302,34 @@ export function useOpenDmChannel() {
     },
     onSuccess: (_data, { spaceId }) => {
       qc.invalidateQueries({ queryKey: keys.channels(spaceId) });
+    },
+  });
+}
+
+/** Owner permanently deletes a mentor space. */
+export function useDeleteSpace() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (spaceId: string) => {
+      const { error } = await supabase.rpc('delete_mentor_space', { p_space: spaceId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.mySpaces });
+    },
+  });
+}
+
+/** Non-owner member removes themselves from a space. */
+export function useLeaveSpace() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (spaceId: string) => {
+      const { error } = await supabase.rpc('leave_mentor_space', { p_space: spaceId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.mySpaces });
     },
   });
 }
