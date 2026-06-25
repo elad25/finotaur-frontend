@@ -753,8 +753,8 @@ function AppContent() {
 <Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
 {/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
-{/* Mentor Mode — moved to /app/floor/mentor; old URL redirects */}
-<Route path="journal/mentor" element={<Navigate to="/app/floor/mentor" replace />} />
+{/* Mentor Mode — moved to /app/mentor/coach; old URL redirects */}
+<Route path="journal/mentor" element={<Navigate to="/app/mentor/coach" replace />} />
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 

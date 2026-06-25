@@ -43,7 +43,8 @@ const PRODUCT_META: Record<string, { icon: LucideIcon; sublabel: string }> = {
   journal:         { icon: BookOpen,   sublabel: 'Track. Review. Improve.' },
   'copy-trade':    { icon: Zap,            sublabel: 'Beta: Trade Copier' },
   'trading-arena': { icon: Swords,         sublabel: 'Beta: Trading Workstation' },
-  mentorship:      { icon: GraduationCap,  sublabel: 'Beta: Mentor Community' },
+  floor:           { icon: GraduationCap,  sublabel: 'Beta: Community & DM' },
+  mentor:          { icon: GraduationCap,  sublabel: 'Beta: Mentor Rooms' },
 };
 
 // ---------------------------------------------------------------------------

@@ -110,7 +110,8 @@ type EnvironmentType =
   | 'war-zone'
   | 'top-secret'
   | 'trading-arena'
-  | 'mentorship';
+  | 'floor'
+  | 'mentor';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -335,11 +336,14 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Transactions', path: '/app/funding/transactions', icon: FileText },
   ],
 
-  'mentorship': [
+  'floor': [
     { label: 'Global', path: '/app/floor/community', icon: Globe, beta: true },
-    { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
     { label: 'DM', path: '/app/floor/dm', icon: MessageSquare, beta: true },
-    { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users, beta: true },
+  ],
+
+  'mentor': [
+    { label: 'Rooms', path: '/app/mentor/rooms', icon: GraduationCap, beta: true },
+    { label: 'Coach Mode', path: '/app/mentor/coach', icon: Users, beta: true },
   ],
 
   admin: [
@@ -437,7 +441,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   useEffect(() => {
-    if (location.pathname.startsWith('/app/floor')) {
+    if (location.pathname.startsWith('/app/floor') || location.pathname.startsWith('/app/mentor')) {
       setIsExpanded(false);
       localStorage.setItem(storageKey, 'false');
     }
@@ -482,7 +486,8 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
     if (path.startsWith('/app/connections')) return 'connections';
-    if (path.startsWith('/app/floor')) return 'mentorship';
+    if (path.startsWith('/app/floor')) return 'floor';
+    if (path.startsWith('/app/mentor')) return 'mentor';
     if (path.startsWith('/app/journal')) return 'journal';
 
     // Default
