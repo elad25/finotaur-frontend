@@ -15,7 +15,7 @@
 // =====================================================
 
 import { memo, useState } from 'react';
-import { Lock, Trophy, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Lock, Trophy, ShieldCheck, AlertCircle, TrendingUp, BarChart2, Zap, Award, Star, BadgeCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   Dialog,
@@ -491,6 +491,195 @@ const CompStatusBlock = memo(function CompStatusBlock({
 });
 CompStatusBlock.displayName = 'CompStatusBlock';
 
+// ── Competition rules block ────────────────────────────────────────────────────
+
+interface CompRulesBlockProps {
+  minTrades: number;
+}
+
+const SCORING_METRICS = [
+  { abbr: 'RR', label: 'Risk / Reward', icon: TrendingUp },
+  { abbr: 'WR', label: 'Win Rate', icon: BarChart2 },
+  { abbr: 'EV', label: 'Expectancy', icon: Zap },
+];
+
+const PRIZES = [
+  {
+    tag: 'GRAND PRIZE',
+    title: 'Full Premium Access',
+    subtitle: 'Free for an entire year — no strings attached',
+    detail: 'Unlimited AI features, full journal, all analytics',
+    icon: Trophy,
+    gold: true,
+  },
+  { tag: 'FAME', title: 'Hall of Fame', subtitle: null, detail: null, icon: Star, gold: false },
+  { tag: 'AWARD', title: 'Official Certificate', subtitle: null, detail: null, icon: BadgeCheck, gold: false },
+  { tag: 'SPOTLIGHT', title: 'Featured on Profile', subtitle: null, detail: null, icon: Award, gold: false },
+];
+
+const CompRulesBlock = memo(function CompRulesBlock({ minTrades }: CompRulesBlockProps) {
+  const ENTRY_RULES = [
+    {
+      n: '01',
+      title: `Minimum ${minTrades} trades`,
+      sub: 'Logged and verified in your FINOTAUR Journal',
+    },
+    {
+      n: '02',
+      title: 'Active on 15+ of 30 days',
+      sub: 'Consistency is the whole point',
+    },
+    {
+      n: '03',
+      title: 'Real broker-verified trades only',
+      sub: 'Connect a broker to qualify',
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* ── Entry requirements ── */}
+      <div>
+        <p
+          className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3"
+          style={{ color: 'rgba(201,166,70,0.5)' }}
+        >
+          Entry Requirements
+        </p>
+        <div className="flex flex-col gap-[6px]">
+          {ENTRY_RULES.map((r) => (
+            <div
+              key={r.n}
+              className="flex items-start gap-3 rounded-[10px] px-4 py-3"
+              style={{
+                background: 'rgba(255,255,255,0.025)',
+                border: '0.5px solid rgba(255,255,255,0.07)',
+              }}
+            >
+              <span
+                className="text-[13px] font-bold tabular-nums mt-px shrink-0"
+                style={{ color: 'rgba(201,166,70,0.45)' }}
+              >
+                {r.n}
+              </span>
+              <div className="flex flex-col gap-[2px] min-w-0">
+                <span className="text-[13px] font-semibold text-white leading-snug">{r.title}</span>
+                <span className="text-[11px] leading-snug" style={{ color: '#666' }}>{r.sub}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Scored by ── */}
+      <div>
+        <p
+          className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3"
+          style={{ color: 'rgba(201,166,70,0.5)' }}
+        >
+          Scored By
+        </p>
+        <div className="grid grid-cols-3 gap-[6px]">
+          {SCORING_METRICS.map(({ abbr, label, icon: Icon }) => (
+            <div
+              key={abbr}
+              className="flex flex-col items-center justify-center gap-1 rounded-[10px] py-4"
+              style={{
+                background: 'rgba(201,166,70,0.04)',
+                border: '0.5px solid rgba(201,166,70,0.18)',
+              }}
+            >
+              <Icon className="h-3.5 w-3.5 mb-0.5" style={{ color: 'rgba(201,166,70,0.5)' }} />
+              <span
+                className="text-[22px] font-black tracking-tight leading-none"
+                style={{ color: '#C9A646' }}
+              >
+                {abbr}
+              </span>
+              <span
+                className="text-[9px] font-semibold tracking-[0.1em] uppercase"
+                style={{ color: 'rgba(201,166,70,0.45)' }}
+              >
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Top 5 winners ── */}
+      <div>
+        <p
+          className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3"
+          style={{ color: 'rgba(201,166,70,0.5)' }}
+        >
+          Top 5 Winners Receive
+        </p>
+        <div className="flex flex-col gap-[6px]">
+          {PRIZES.map((p) => {
+            const Icon = p.icon;
+            return (
+              <div
+                key={p.tag}
+                className="flex items-start gap-3 rounded-[10px] px-4 py-3"
+                style={{
+                  background: p.gold
+                    ? 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.04) 100%)'
+                    : 'rgba(255,255,255,0.025)',
+                  border: p.gold
+                    ? '0.5px solid rgba(201,166,70,0.3)'
+                    : '0.5px solid rgba(255,255,255,0.07)',
+                }}
+              >
+                <div
+                  className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px]"
+                  style={{
+                    background: p.gold ? 'rgba(201,166,70,0.15)' : 'rgba(255,255,255,0.05)',
+                    border: p.gold ? '1px solid rgba(201,166,70,0.25)' : '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <Icon
+                    className="h-3.5 w-3.5"
+                    style={{ color: p.gold ? '#E8C766' : '#555' }}
+                  />
+                </div>
+                <div className="flex flex-col gap-[2px] min-w-0">
+                  <span
+                    className="text-[9px] font-semibold tracking-[0.1em] uppercase"
+                    style={{ color: p.gold ? 'rgba(201,166,70,0.6)' : 'rgba(255,255,255,0.3)' }}
+                  >
+                    {p.tag}
+                  </span>
+                  <span
+                    className="text-[13px] font-bold leading-snug"
+                    style={{ color: p.gold ? '#fff' : '#aaa' }}
+                  >
+                    {p.title}
+                  </span>
+                  {p.subtitle && (
+                    <span
+                      className="text-[11px] font-medium leading-snug"
+                      style={{ color: '#C9A646' }}
+                    >
+                      {p.subtitle}
+                    </span>
+                  )}
+                  {p.detail && (
+                    <span className="text-[11px] leading-snug" style={{ color: '#666' }}>
+                      {p.detail}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
+CompRulesBlock.displayName = 'CompRulesBlock';
+
 // ── Skeleton ───────────────────────────────────────────────────────────────────
 
 function FloorSkeleton() {
@@ -576,6 +765,11 @@ export function GlobalLeaderboard() {
           periodStart={competition.period_start}
           periodEnd={competition.period_end}
         />
+      )}
+
+      {/* Competition rules — show on This Month tab when competition exists */}
+      {period === 'monthly' && competition && (
+        <CompRulesBlock minTrades={minTrades} />
       )}
 
       {/* No active competition notice (This Month, nothing returned) */}

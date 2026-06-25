@@ -14,6 +14,14 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowBigUp, ArrowBigDown, Repeat2, MessageSquare, MoreVertical, Send } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { DataState } from '@/components/ds/DataState';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/AuthProvider';
@@ -402,11 +410,12 @@ interface DeleteKebabProps {
 
 function DeleteKebab({ postId }: DeleteKebabProps) {
   const [open, setOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const deletePost = useDeleteGlobalPost();
 
   function handleDelete() {
-    if (!confirm('Delete this post?')) return;
     setOpen(false);
+    setConfirmOpen(false);
     deletePost.mutate(
       { postId },
       {
@@ -442,7 +451,7 @@ function DeleteKebab({ postId }: DeleteKebabProps) {
         >
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => { setOpen(false); setConfirmOpen(true); }}
             disabled={deletePost.isPending}
             className={cn(
               'w-full text-left px-ds-3 py-[7px]',
@@ -455,6 +464,30 @@ function DeleteKebab({ postId }: DeleteKebabProps) {
           </button>
         </div>
       )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>Delete post?</DialogTitle>
+            <DialogDescription>
+              This can't be undone. The post will be removed from the feed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deletePost.isPending}
+              onClick={handleDelete}
+            >
+              {deletePost.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

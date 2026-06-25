@@ -53,7 +53,7 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
   const emailId = `${uid}-email`;
   const roleId = `${uid}-role`;
 
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [role, setRole] = useState<SpaceRole>('student');
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -64,7 +64,7 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
   // Reset when dialog closes.
   function handleOpenChange(next: boolean) {
     if (!next) {
-      setEmail('');
+      setIdentifier('');
       setRole('student');
       setInviteLink(null);
       setCopied(false);
@@ -79,7 +79,7 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
     try {
       const invite = await mutateAsync({
         spaceId,
-        email: email.trim() || undefined,
+        email: identifier.trim() || undefined,
         role,
       });
       const link = `${window.location.origin}/app/floor/rooms?invite=${invite.token}`;
@@ -105,10 +105,12 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className={cn(
-          'bg-[var(--bg-surface-1,#111)] border-[0.5px] border-border-ds-subtle',
+          'bg-gradient-to-br from-[#0A0A0A] via-[#111118] to-[#0A0A0A]',
+          'border border-gold-border/25',
           'rounded-[12px]',
           'p-ds-6',
           'max-w-[460px] w-full',
+          'shadow-[0_8px_40px_rgba(0,0,0,0.6),0_0_0_1px_rgba(212,175,55,0.08)]',
         )}
       >
         <DialogHeader>
@@ -161,7 +163,7 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
               type="button"
               onClick={() => {
                 setInviteLink(null);
-                setEmail('');
+                setIdentifier('');
                 setRole('student');
               }}
               className="text-[13px] text-ink-tertiary hover:text-ink-secondary transition-colors duration-base text-center"
@@ -172,20 +174,20 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
         ) : (
           /* ── Form ── */
           <form onSubmit={handleCreate} className="mt-ds-5 flex flex-col gap-ds-4" noValidate>
-            {/* Email (optional) */}
+            {/* Email or username (optional) */}
             <div className="flex flex-col gap-ds-1">
               <label
                 htmlFor={emailId}
                 className="text-[13px] font-medium text-ink-secondary"
               >
-                Email address (optional)
+                Email or username
               </label>
               <input
                 id={emailId}
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="student@example.com"
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="email@example.com or @username"
                 className={INPUT_BASE}
                 disabled={isPending}
               />
@@ -202,19 +204,25 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
               >
                 Role
               </label>
-              <select
-                id={roleId}
-                value={role}
-                onChange={(e) => setRole(e.target.value as SpaceRole)}
-                className={cn(INPUT_BASE, 'cursor-pointer')}
-                disabled={isPending}
-              >
-                {INVITABLE_ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  id={roleId}
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as SpaceRole)}
+                  className={cn(INPUT_BASE, 'cursor-pointer appearance-none pr-8')}
+                  disabled={isPending}
+                >
+                  {INVITABLE_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+                <svg
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted"
+                  width="12" height="12" viewBox="0 0 12 12" fill="none"
+                >
+                  <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
             </div>
 
             {/* Error */}
