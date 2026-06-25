@@ -436,6 +436,13 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     });
   };
 
+  useEffect(() => {
+    if (location.pathname.startsWith('/app/floor')) {
+      setIsExpanded(false);
+      localStorage.setItem(storageKey, 'false');
+    }
+  }, [location.pathname, storageKey]);
+
   // ===============================================
   // נ” DETECT CURRENT ENVIRONMENT
   // ===============================================
