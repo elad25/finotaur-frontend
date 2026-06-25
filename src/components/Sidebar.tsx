@@ -498,7 +498,11 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     : ENVIRONMENT_MENUS[currentEnvironment];
   // True when the user is already inside the /copilot/* standalone shell
   const inStandaloneCopilot = location.pathname.startsWith('/copilot');
-  const sidebarTopClass = 'top-28 h-[calc(100vh-7rem)]';
+  // top-28 = 7rem (TopNav+SubNav). When an admin/mentor banner is shown,
+  // ProtectedAppLayout sets --app-banner-offset (52px each) so the fixed
+  // sidebar shifts down and shrinks to stay full-height and aligned.
+  const sidebarTopClass =
+    'top-[calc(7rem+var(--app-banner-offset,0px))] h-[calc(100vh-7rem-var(--app-banner-offset,0px))]';
 
   // ===============================================
   // נ¯ SHOW SIDEBAR FOR ALL APP ROUTES
