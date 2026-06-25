@@ -1816,8 +1816,11 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
     }
     if (winRate < 0.4) return `${Math.round(winRate * 100)}% win rate — focus on skipping low-conviction setups.`;
     if (winRate > 0.65) return `${Math.round(winRate * 100)}% win rate is strong — make sure your winners are bigger than your losers.`;
-    return `${n} trades logged — ${VERDICT_MIN_N - n} more and FINO will give you a full verdict.`;
+    return `Keep logging — FINO is learning your edge and will call it as soon as there's enough to go on.`;
   }, [closedTrades, n]);
+
+  const verdictProgressPct = Math.min(100, Math.round((n / VERDICT_MIN_N) * 100));
+  const tradesToVerdict = Math.max(0, VERDICT_MIN_N - n);
 
   return (
     <div className="flex flex-col gap-ds-5">
@@ -1830,6 +1833,27 @@ function DistributionView({ closedTrades }: { tracked: number; total: number; tr
               className="h-10 w-10 shrink-0 rounded-full object-cover"
             />
             <p className="text-[14px] text-white/90 leading-snug">{earlyInsight}</p>
+          </div>
+
+          {/* Progress toward the full Shadow verdict — every early user sees how close they are */}
+          <div className="mt-ds-4 flex flex-col gap-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-white/45">Building your Shadow verdict</span>
+              <span className="font-semibold text-[#C9A646]">
+                {n} / {VERDICT_MIN_N} trades
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/8">
+              <div
+                className="h-full rounded-full bg-[#C9A646] transition-all duration-500"
+                style={{ width: `${verdictProgressPct}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-white/38">
+              {n === 0
+                ? `Log ${VERDICT_MIN_N} closed trades to unlock FINO's full verdict.`
+                : `${tradesToVerdict} more closed ${tradesToVerdict === 1 ? 'trade' : 'trades'} to unlock FINO's full verdict.`}
+            </p>
           </div>
         </div>
       ) : (
