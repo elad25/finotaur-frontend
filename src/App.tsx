@@ -19,12 +19,6 @@ import { Suspense, memo, useEffect } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { JournalRoute } from "@/components/routes/JournalRoute";
-import JournalPublicPage from "@/pages/JournalPublicPage";
-import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
-import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
-import JournalCopierPage from "@/pages/JournalCopierPage";
-import ResearchIndex from "@/pages/research/ResearchIndexPage";
-import TickerResearch from "@/pages/research/TickerResearchPage";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -33,7 +27,6 @@ import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 import { BetaRoute } from "@/components/routes/BetaRoute";
 import { AdminBetaGate } from "@/components/routes/AdminBetaGate";
 
-import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
 import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
@@ -111,30 +104,41 @@ if (typeof window !== 'undefined') {
   });
 }
 
-import SupportWidget from "@/components/SupportWidget";
 import { FinoChatProvider } from "@/contexts/FinoChatContext";
-import FinoChatDrawer from "@/components/fino/FinoChatDrawer";
-import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
 import { FEATURES } from "@/config/features";
 
-// PUBLIC PAGES
-import LandingPage from "@/pages/landing/LandingPage";
-import Login from "@/pages/auth/Login";
-import Register from "@/pages/auth/Register";
-import ForgotPassword from '@/pages/auth/ForgotPassword';
-import ResetPassword from '@/pages/auth/ResetPassword';
+// PUBLIC PAGES (kept eager — tiny, critical for first paint)
 import NotFound from "./pages/NotFound";
-import PricingSelection from "@/pages/app/journal/PricingSelection";
-import AboutPage from "@/pages/AboutPage";
-import ContactPage from "@/pages/ContactPage";
-import AffiliatePage from "@/pages/AffiliatePage";
-import LinksPage from "@/pages/LinksPage";
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
 import { captureFirstTouch } from "@/lib/analytics/attribution";
 
 // LAZY LOADED PAGES
+
+// --- Formerly-eager public pages (Task 1) ---
+const LandingPage = lazy(() => import("@/pages/landing/LandingPage"));
+const Login = lazy(() => import("@/pages/auth/Login"));
+const Register = lazy(() => import("@/pages/auth/Register"));
+const ForgotPassword = lazy(() => import("@/pages/auth/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/auth/ResetPassword"));
+const AboutPage = lazy(() => import("@/pages/AboutPage"));
+const ContactPage = lazy(() => import("@/pages/ContactPage"));
+const AffiliatePage = lazy(() => import("@/pages/AffiliatePage"));
+const LinksPage = lazy(() => import("@/pages/LinksPage"));
+const JournalPublicPage = lazy(() => import("@/pages/JournalPublicPage"));
+const GlossaryIndex = lazy(() => import("@/pages/glossary/GlossaryIndex"));
+const GlossaryTerm = lazy(() => import("@/pages/glossary/GlossaryTerm"));
+const JournalCopierPage = lazy(() => import("@/pages/JournalCopierPage"));
+const ResearchIndex = lazy(() => import("@/pages/research/ResearchIndexPage"));
+const TickerResearch = lazy(() => import("@/pages/research/TickerResearchPage"));
+const WelcomeScreen = lazy(() => import("@/pages/onboarding/WelcomeScreen"));
+
+// --- Formerly-eager global widgets (Task 3 & 4) ---
+const SupportWidget = lazy(() => import("@/components/SupportWidget"));
+const FinoChatDrawer = lazy(() => import("@/components/fino/FinoChatDrawer"));
+const AffiliateTracker = lazy(() => import("@/features/affiliate/components/AffiliateTracker").then(m => ({ default: m.AffiliateTracker })));
+
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
 const SettingsShell = lazy(() => import("@/features/settings/SettingsShell"));
 const AccountTab = lazy(() => import("@/features/settings/tabs/AccountTab"));
@@ -435,44 +439,44 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
-      {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
+      {FEATURES.AFFILIATE_TRACKING && <Suspense fallback={null}><AffiliateTracker /></Suspense>}
       <Suspense fallback={null}>
         <WelcomeOffer />
       </Suspense>
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
         {import.meta.env.DEV && (
-          <Route path="/design-lab" element={<DesignLab />} />
+          <Route path="/design-lab" element={<SuspenseRoute><DesignLab /></SuspenseRoute>} />
         )}
         {/* PUBLIC ROUTES */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<SuspenseRoute><LandingPage /></SuspenseRoute>} />
         {/* /pricing has no standalone page — the public pricing lives in the
             landing's #pricing section. Redirect direct hits there. */}
         <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/auth/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/auth/reset-password" element={<ResetPassword />} />
+        <Route path="/login" element={<SuspenseRoute><Login /></SuspenseRoute>} />
+        <Route path="/auth/login" element={<SuspenseRoute><Login /></SuspenseRoute>} />
+        <Route path="/register" element={<SuspenseRoute><Register /></SuspenseRoute>} />
+        <Route path="/auth/register" element={<SuspenseRoute><Register /></SuspenseRoute>} />
+        <Route path="/forgot-password" element={<SuspenseRoute><ForgotPassword /></SuspenseRoute>} />
+        <Route path="/auth/forgot-password" element={<SuspenseRoute><ForgotPassword /></SuspenseRoute>} />
+        <Route path="/reset-password" element={<SuspenseRoute><ResetPassword /></SuspenseRoute>} />
+        <Route path="/auth/reset-password" element={<SuspenseRoute><ResetPassword /></SuspenseRoute>} />
         {/* Post-signup welcome screen (top-level, no app nav) */}
-        <Route path="/welcome" element={<ProtectedRoute><WelcomeScreen /></ProtectedRoute>} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/links" element={<LinksPage />} />
-        <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />
-        <Route path="/journal" element={<JournalPublicPage />} />
+        <Route path="/welcome" element={<ProtectedRoute><SuspenseRoute><WelcomeScreen /></SuspenseRoute></ProtectedRoute>} />
+        <Route path="/about" element={<SuspenseRoute><AboutPage /></SuspenseRoute>} />
+        <Route path="/contact" element={<SuspenseRoute><ContactPage /></SuspenseRoute>} />
+        <Route path="/links" element={<SuspenseRoute><LinksPage /></SuspenseRoute>} />
+        <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliatePage /></SuspenseRoute> : <Navigate to="/" replace />} />
+        <Route path="/journal" element={<SuspenseRoute><JournalPublicPage /></SuspenseRoute>} />
         <Route path="/academy" element={<SuspenseRoute><AcademyIndex /></SuspenseRoute>} />
         <Route path="/academy/topics/:topicSlug" element={<SuspenseRoute><AcademyTopicHub /></SuspenseRoute>} />
         <Route path="/academy/:moduleSlug" element={<SuspenseRoute><AcademyModule /></SuspenseRoute>} />
         <Route path="/academy/:moduleSlug/:chapterSlug" element={<SuspenseRoute><AcademyChapter /></SuspenseRoute>} />
-        <Route path="/glossary" element={<GlossaryIndex />} />
-        <Route path="/glossary/:slug" element={<GlossaryTerm />} />
-        <Route path="/research" element={<ResearchIndex />} />
-        <Route path="/research/:ticker" element={<TickerResearch />} />
-        <Route path="/journal-copier" element={<JournalCopierPage />} />
+        <Route path="/glossary" element={<SuspenseRoute><GlossaryIndex /></SuspenseRoute>} />
+        <Route path="/glossary/:slug" element={<SuspenseRoute><GlossaryTerm /></SuspenseRoute>} />
+        <Route path="/research" element={<SuspenseRoute><ResearchIndex /></SuspenseRoute>} />
+        <Route path="/research/:ticker" element={<SuspenseRoute><TickerResearch /></SuspenseRoute>} />
+        <Route path="/journal-copier" element={<SuspenseRoute><JournalCopierPage /></SuspenseRoute>} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
         <Route path="/legal" element={<SuspenseRoute><LegalHub /></SuspenseRoute>} />
@@ -841,8 +845,10 @@ function AppContent() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
-      <SupportWidget />
-      <FinoChatDrawer />
+      <Suspense fallback={null}>
+        <SupportWidget />
+        <FinoChatDrawer />
+      </Suspense>
     </>
   );
 }
