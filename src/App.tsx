@@ -426,6 +426,13 @@ function ETFSymbolRedirect() {
   return <Navigate to={`/app/etfs/${symbol}/overview`} replace />;
 }
 
+// Preserves :id when redirecting legacy /app/floor/rooms/:id → /app/mentor/rooms/:id.
+// React Router v6 <Navigate to="…"> does not interpolate params, so a helper is required.
+function RedirectToMentorRoom() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/mentor/rooms/${id}`} replace />;
+}
+
 
 // APP CONTENT
 function AppContent() {
@@ -751,13 +758,21 @@ function AppContent() {
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
-        {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
+        {/* MENTOR — beta/admin-only (AdminBetaGate); static paths before :id param */}
+        <Route path="mentor" element={<Navigate to="/app/mentor/rooms" replace />} />
+        <Route path="mentor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="mentor/coach" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="mentor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+
+        {/* THE FLOOR — beta/admin-only (AdminBetaGate); community + dm only */}
         <Route path="floor" element={<Navigate to="/app/floor/community" replace />} />
-        <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/mentor" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/community" element={<SuspenseRoute><AdminBetaGate><Community /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/dm" element={<SuspenseRoute><AdminBetaGate><DirectMessages /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+
+        {/* FLOOR LEGACY REDIRECTS — old mentor paths redirect to /app/mentor/* */}
+        <Route path="floor/rooms" element={<Navigate to="/app/mentor/rooms" replace />} />
+        <Route path="floor/mentor" element={<Navigate to="/app/mentor/coach" replace />} />
+        <Route path="floor/rooms/:id" element={<SuspenseRoute><RedirectToMentorRoom /></SuspenseRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
