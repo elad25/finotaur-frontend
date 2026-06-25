@@ -537,68 +537,106 @@ const CompRulesBlock = memo(function CompRulesBlock({ minTrades }: CompRulesBloc
   ];
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* ── Entry requirements ── */}
-      <div>
+    <div
+      className="relative overflow-hidden rounded-[20px] flex flex-col"
+      style={{
+        background: 'linear-gradient(160deg, #0e0b04 0%, #080604 60%, #0a0a0a 100%)',
+        border: '1px solid rgba(201,166,70,0.2)',
+        boxShadow: '0 0 60px rgba(201,166,70,0.04), inset 0 1px 0 rgba(201,166,70,0.1)',
+      }}
+    >
+      {/* ambient corner glow */}
+      <div
+        className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(201,166,70,0.07) 0%, transparent 70%)' }}
+      />
+
+      {/* ── Hero title ── */}
+      <div className="px-6 pt-7 pb-5">
         <p
-          className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3"
-          style={{ color: 'rgba(201,166,70,0.5)' }}
+          className="text-[9px] font-bold tracking-[0.2em] uppercase mb-3"
+          style={{ color: 'rgba(201,166,70,0.45)' }}
+        >
+          FINOTAUR CHALLENGE
+        </p>
+        <h2 className="leading-[0.9] font-black text-[34px] tracking-tight">
+          <span className="block text-white">THE</span>
+          <span className="block text-white">OFFICIAL</span>
+          <span className="block" style={{ color: '#C9A646' }}>RULES.</span>
+        </h2>
+        {/* gold rule */}
+        <div
+          className="mt-4 h-px w-10"
+          style={{ background: 'linear-gradient(90deg, rgba(201,166,70,0.6), transparent)' }}
+        />
+      </div>
+
+      {/* ── Section divider utility ── */}
+      <div
+        className="mx-6 mb-0 h-px"
+        style={{ background: 'rgba(255,255,255,0.05)' }}
+      />
+
+      {/* ── Entry requirements ── */}
+      <div className="px-6 py-5 flex flex-col gap-3">
+        <p
+          className="text-[9px] font-bold tracking-[0.2em] uppercase"
+          style={{ color: 'rgba(201,166,70,0.4)' }}
         >
           Entry Requirements
         </p>
-        <div className="flex flex-col gap-[6px]">
-          {ENTRY_RULES.map((r) => (
-            <div
-              key={r.n}
-              className="flex items-start gap-3 rounded-[10px] px-4 py-3"
-              style={{
-                background: 'rgba(255,255,255,0.025)',
-                border: '0.5px solid rgba(255,255,255,0.07)',
-              }}
+        {ENTRY_RULES.map((r) => (
+          <div key={r.n} className="flex items-start gap-4">
+            <span
+              className="text-[11px] font-black tabular-nums shrink-0 mt-[3px]"
+              style={{ color: 'rgba(201,166,70,0.35)', letterSpacing: '0.05em' }}
             >
-              <span
-                className="text-[13px] font-bold tabular-nums mt-px shrink-0"
-                style={{ color: 'rgba(201,166,70,0.45)' }}
-              >
-                {r.n}
-              </span>
-              <div className="flex flex-col gap-[2px] min-w-0">
-                <span className="text-[13px] font-semibold text-white leading-snug">{r.title}</span>
-                <span className="text-[11px] leading-snug" style={{ color: '#666' }}>{r.sub}</span>
-              </div>
+              {r.n}
+            </span>
+            <div
+              className="flex-1 pb-3"
+              style={{ borderBottom: '0.5px solid rgba(255,255,255,0.05)' }}
+            >
+              <p className="text-[14px] font-semibold text-white leading-snug">{r.title}</p>
+              <p className="mt-[3px] text-[11px] leading-snug" style={{ color: '#555' }}>{r.sub}</p>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
+      <div
+        className="mx-6 h-px"
+        style={{ background: 'rgba(255,255,255,0.05)' }}
+      />
+
       {/* ── Scored by ── */}
-      <div>
+      <div className="px-6 py-5">
         <p
-          className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3"
-          style={{ color: 'rgba(201,166,70,0.5)' }}
+          className="text-[9px] font-bold tracking-[0.2em] uppercase mb-4"
+          style={{ color: 'rgba(201,166,70,0.4)' }}
         >
           Scored By
         </p>
-        <div className="grid grid-cols-3 gap-[6px]">
+        <div className="grid grid-cols-3 gap-2">
           {SCORING_METRICS.map(({ abbr, label, icon: Icon }) => (
             <div
               key={abbr}
-              className="flex flex-col items-center justify-center gap-1 rounded-[10px] py-4"
+              className="flex flex-col items-center justify-center gap-[6px] rounded-[14px] py-5"
               style={{
                 background: 'rgba(201,166,70,0.04)',
-                border: '0.5px solid rgba(201,166,70,0.18)',
+                border: '0.5px solid rgba(201,166,70,0.15)',
               }}
             >
-              <Icon className="h-3.5 w-3.5 mb-0.5" style={{ color: 'rgba(201,166,70,0.5)' }} />
+              <Icon className="h-3 w-3" style={{ color: 'rgba(201,166,70,0.4)' }} />
               <span
-                className="text-[22px] font-black tracking-tight leading-none"
+                className="text-[28px] font-black leading-none tracking-[-0.02em]"
                 style={{ color: '#C9A646' }}
               >
                 {abbr}
               </span>
               <span
-                className="text-[9px] font-semibold tracking-[0.1em] uppercase"
-                style={{ color: 'rgba(201,166,70,0.45)' }}
+                className="text-[8px] font-bold tracking-[0.12em] uppercase text-center px-1"
+                style={{ color: 'rgba(201,166,70,0.4)' }}
               >
                 {label}
               </span>
@@ -607,68 +645,74 @@ const CompRulesBlock = memo(function CompRulesBlock({ minTrades }: CompRulesBloc
         </div>
       </div>
 
-      {/* ── Top 5 winners ── */}
-      <div>
+      <div
+        className="mx-6 h-px"
+        style={{ background: 'rgba(255,255,255,0.05)' }}
+      />
+
+      {/* ── Prizes ── */}
+      <div className="px-6 py-5 flex flex-col gap-3">
         <p
-          className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3"
-          style={{ color: 'rgba(201,166,70,0.5)' }}
+          className="text-[9px] font-bold tracking-[0.2em] uppercase"
+          style={{ color: 'rgba(201,166,70,0.4)' }}
         >
           Top 5 Winners Receive
         </p>
-        <div className="flex flex-col gap-[6px]">
-          {PRIZES.map((p) => {
+
+        {/* Grand prize — full width hero card */}
+        <div
+          className="relative overflow-hidden rounded-[14px] p-5"
+          style={{
+            background: 'linear-gradient(135deg, rgba(201,166,70,0.14) 0%, rgba(201,166,70,0.04) 100%)',
+            border: '0.5px solid rgba(201,166,70,0.35)',
+          }}
+        >
+          <div
+            className="pointer-events-none absolute -bottom-8 -right-8 h-28 w-28 rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(201,166,70,0.12) 0%, transparent 70%)' }}
+          />
+          <p
+            className="text-[8px] font-bold tracking-[0.2em] uppercase mb-2"
+            style={{ color: 'rgba(201,166,70,0.55)' }}
+          >
+            Grand Prize
+          </p>
+          <p className="text-[20px] font-black text-white leading-tight">Full Premium Access</p>
+          <p
+            className="mt-1 text-[12px] font-semibold"
+            style={{ color: '#C9A646' }}
+          >
+            Free for an entire year — no strings attached
+          </p>
+          <p className="mt-1 text-[11px]" style={{ color: '#555' }}>
+            Unlimited AI features, full journal, all analytics
+          </p>
+        </div>
+
+        {/* Secondary prizes — 3 columns */}
+        <div className="grid grid-cols-3 gap-2">
+          {PRIZES.filter((p) => !p.gold).map((p) => {
             const Icon = p.icon;
             return (
               <div
                 key={p.tag}
-                className="flex items-start gap-3 rounded-[10px] px-4 py-3"
+                className="flex flex-col gap-2 rounded-[12px] p-3"
                 style={{
-                  background: p.gold
-                    ? 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.04) 100%)'
-                    : 'rgba(255,255,255,0.025)',
-                  border: p.gold
-                    ? '0.5px solid rgba(201,166,70,0.3)'
-                    : '0.5px solid rgba(255,255,255,0.07)',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '0.5px solid rgba(255,255,255,0.07)',
                 }}
               >
-                <div
-                  className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px]"
-                  style={{
-                    background: p.gold ? 'rgba(201,166,70,0.15)' : 'rgba(255,255,255,0.05)',
-                    border: p.gold ? '1px solid rgba(201,166,70,0.25)' : '1px solid rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <Icon
-                    className="h-3.5 w-3.5"
-                    style={{ color: p.gold ? '#E8C766' : '#555' }}
-                  />
-                </div>
-                <div className="flex flex-col gap-[2px] min-w-0">
-                  <span
-                    className="text-[9px] font-semibold tracking-[0.1em] uppercase"
-                    style={{ color: p.gold ? 'rgba(201,166,70,0.6)' : 'rgba(255,255,255,0.3)' }}
+                <Icon className="h-3.5 w-3.5" style={{ color: '#3a3a3a' }} />
+                <div>
+                  <p
+                    className="text-[8px] font-bold tracking-[0.15em] uppercase"
+                    style={{ color: 'rgba(255,255,255,0.2)' }}
                   >
                     {p.tag}
-                  </span>
-                  <span
-                    className="text-[13px] font-bold leading-snug"
-                    style={{ color: p.gold ? '#fff' : '#aaa' }}
-                  >
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-semibold leading-snug" style={{ color: '#888' }}>
                     {p.title}
-                  </span>
-                  {p.subtitle && (
-                    <span
-                      className="text-[11px] font-medium leading-snug"
-                      style={{ color: '#C9A646' }}
-                    >
-                      {p.subtitle}
-                    </span>
-                  )}
-                  {p.detail && (
-                    <span className="text-[11px] leading-snug" style={{ color: '#666' }}>
-                      {p.detail}
-                    </span>
-                  )}
+                  </p>
                 </div>
               </div>
             );
