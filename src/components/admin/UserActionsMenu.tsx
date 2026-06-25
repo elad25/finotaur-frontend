@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MoreVertical, Eye, Edit, Gift, Mail, Ban, Trash2, UserCheck } from 'lucide-react';
-import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +11,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserWithStats } from '@/types/admin';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
-import { startImpersonation as startImpersonationService } from '@/services/adminService';
 import ChangeSubscriptionModal from './ChangeSubscriptionModal';
 import GrantPremiumModal from './GrantPremiumModal';
 import SendEmailModal from './SendEmailModal';
@@ -49,22 +47,14 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
   };
 
   const handleImpersonate = async () => {
-    try {
-      // 🔥 קריאה לשרת דרך adminService
-      const session = await startImpersonationService(user.id, 'elad2550@gmail.com');
-      
-      // 🔥 שמירה ב-context
-      await startImpersonation(
-        user.id,
-        user.email,
-        user.display_name || undefined
-      );
-      
-      toast.success(`Now impersonating ${user.email}`);
-    } catch (error) {
-      console.error('Failed to start impersonation:', error);
-      toast.error('Failed to impersonate user');
-    }
+    // True session swap is handled entirely by ImpersonationContext
+    // (admin-impersonate edge fn + verifyOtp). It owns its own success/
+    // error toasts, so no extra adminService call or toast is needed here.
+    await startImpersonation(
+      user.id,
+      user.email,
+      user.display_name || undefined
+    );
   };
 
   return (
