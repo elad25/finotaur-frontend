@@ -220,13 +220,13 @@ const JournalSettings = lazy(async () => {
   return { default: Component };
 });
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
-const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
+const Mentor = lazy(() => import("@/features/mentor/pages/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 // Floor page removed — competition lives in GlobalLeaderboard (Community › Leaderboard tab)
 
 // Mentorship
-const MentorshipSpaces = lazy(() => import("@/pages/app/mentorship/Spaces"));
-const SpaceDetail = lazy(() => import("@/pages/app/mentorship/SpaceDetail"));
+const MentorshipSpaces = lazy(() => import("@/features/mentor/pages/Spaces"));
+const SpaceDetail = lazy(() => import("@/features/mentor/pages/SpaceDetail"));
 const Community = lazy(() => import("@/pages/app/community/Community"));
 const DirectMessages = lazy(() => import("@/pages/app/community/DirectMessages"));
 

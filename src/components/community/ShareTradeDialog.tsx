@@ -20,7 +20,7 @@ import { Button } from '@/components/ds/Button';
 import { SharedTradeCard } from '@/components/community/SharedTradeCard';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/AuthProvider';
-import { useMySpaces } from '@/hooks/useMentorshipSpaces';
+import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { useShareTrade } from '@/hooks/useShareTrade';
 import { cn } from '@/lib/utils';
 import type { GlobalFeedItem, ShareDestination, SharePrivacy } from '@/types/community';

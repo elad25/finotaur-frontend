@@ -14,7 +14,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import { mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 
 // ================================================
 // INLINE TYPES (do not re-export via src/types/mentorship.ts)

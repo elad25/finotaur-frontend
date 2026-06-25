@@ -25,7 +25,7 @@ import type {
   SpaceMember,
   SpaceInvite,
   SpaceRole,
-} from '@/types/mentorship';
+} from '@/features/mentor/types/mentorship';
 
 // ================================================
 // ERROR MAPPING

@@ -13,9 +13,9 @@ import { DataState } from '@/components/ds/DataState';
 import {
   useSpaceAnalyticsSummary,
   useSpaceMemberPerformance,
-} from '@/hooks/useSpaceAnalytics';
+} from '@/features/mentor/hooks/useSpaceAnalytics';
 import { useUserDisciplineScores } from '@/hooks/useUserDisciplineScore';
-import type { RoomPeriod, MemberPerformanceRow } from '@/types/mentorship';
+import type { RoomPeriod, MemberPerformanceRow } from '@/features/mentor/types/mentorship';
 import type { UserDisciplineScore } from '@/types/community';
 import { cn } from '@/lib/utils';
 

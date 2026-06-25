@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ds/Button';
 import { Button as UiButton } from '@/components/ui/button';
-import { useCreateSpace, mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import { useCreateSpace, mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 

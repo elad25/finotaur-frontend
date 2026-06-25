@@ -43,9 +43,9 @@ import {
   useCreateResource,
   useDeleteCourse,
   useDeleteResource,
-} from '@/hooks/useSpaceCourses';
-import { mapSpaceError } from '@/hooks/useMentorshipSpaces';
-import type { RoomCourse, RoomLesson, RoomResource } from '@/hooks/useSpaceCourses';
+} from '@/features/mentor/hooks/useSpaceCourses';
+import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
+import type { RoomCourse, RoomLesson, RoomResource } from '@/features/mentor/hooks/useSpaceCourses';
 import { cn } from '@/lib/utils';
 
 // ── Props ─────────────────────────────────────────────────────────────────────

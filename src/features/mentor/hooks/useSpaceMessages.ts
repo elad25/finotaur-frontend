@@ -6,7 +6,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { SpaceMessage } from '@/types/mentorship';
+import type { SpaceMessage } from '@/features/mentor/types/mentorship';
 
 // ================================================
 // QUERY KEYS

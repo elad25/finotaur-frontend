@@ -22,19 +22,19 @@ import {
   useSpaceMembers,
   useOpenDmChannel,
   mapSpaceError,
-} from '@/hooks/useMentorshipSpaces';
+} from '@/features/mentor/hooks/useMentorshipSpaces';
 import { SectionSpinner } from '@/components/ds/Spinner';
-import { ChannelList } from '@/components/mentorship/ChannelList';
-import { MessageList } from '@/components/mentorship/MessageList';
-import { MemberList } from '@/components/mentorship/MemberList';
-import { InviteDialog } from '@/components/mentorship/InviteDialog';
-import { RoomLeaderboard } from '@/components/mentorship/RoomLeaderboard';
-import { RoomAnalytics } from '@/components/mentorship/RoomAnalytics';
-import { RoomFeed } from '@/components/mentorship/RoomFeed';
-import { RoomReviews } from '@/components/mentorship/RoomReviews';
-import { RoomCourses } from '@/components/mentorship/RoomCourses';
+import { ChannelList } from '@/features/mentor/components/ChannelList';
+import { MessageList } from '@/features/mentor/components/MessageList';
+import { MemberList } from '@/features/mentor/components/MemberList';
+import { InviteDialog } from '@/features/mentor/components/InviteDialog';
+import { RoomLeaderboard } from '@/features/mentor/components/RoomLeaderboard';
+import { RoomAnalytics } from '@/features/mentor/components/RoomAnalytics';
+import { RoomFeed } from '@/features/mentor/components/RoomFeed';
+import { RoomReviews } from '@/features/mentor/components/RoomReviews';
+import { RoomCourses } from '@/features/mentor/components/RoomCourses';
 import { toast } from '@/hooks/use-toast';
-import type { SpaceChannel, SpaceMember } from '@/types/mentorship';
+import type { SpaceChannel, SpaceMember } from '@/features/mentor/types/mentorship';
 import { cn } from '@/lib/utils';
 
 // ── Top-level room tabs ───────────────────────────────────────────────────────

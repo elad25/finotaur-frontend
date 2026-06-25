@@ -14,9 +14,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ds/Button';
 import { Button as UiButton } from '@/components/ui/button';
-import { useCreateInvite, mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import { useCreateInvite, mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { toast } from '@/hooks/use-toast';
-import type { SpaceRole } from '@/types/mentorship';
+import type { SpaceRole } from '@/features/mentor/types/mentorship';
 import { cn } from '@/lib/utils';
 
 // ── Shared input className (matches rest of mentorship dialogs) ───────────────

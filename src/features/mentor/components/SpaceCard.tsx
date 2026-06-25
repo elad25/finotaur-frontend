@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
-import type { SpaceListItem, SpaceRole } from '@/types/mentorship';
+import type { SpaceListItem, SpaceRole } from '@/features/mentor/types/mentorship';
 import { Card } from '@/components/ds/Card';
 import { cn } from '@/lib/utils';
 

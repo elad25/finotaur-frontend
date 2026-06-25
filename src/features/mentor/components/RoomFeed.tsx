@@ -38,7 +38,7 @@ import {
   type FeedPost,
   type FeedComment,
   type RecentClosedTrade,
-} from '@/hooks/useSpaceFeed';
+} from '@/features/mentor/hooks/useSpaceFeed';
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 

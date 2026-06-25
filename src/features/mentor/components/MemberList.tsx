@@ -7,8 +7,8 @@
 
 import { useState } from 'react';
 import { BookOpen, MessageCircle, Trash2 } from 'lucide-react';
-import type { SpaceMember, SpaceRole } from '@/types/mentorship';
-import { useRemoveMember, useSetJournalSharing, mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import type { SpaceMember, SpaceRole } from '@/features/mentor/types/mentorship';
+import { useRemoveMember, useSetJournalSharing, mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { Button } from '@/components/ds/Button';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';

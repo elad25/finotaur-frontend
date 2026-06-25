@@ -7,9 +7,9 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Send } from 'lucide-react';
-import type { ChannelType, SpaceMember } from '@/types/mentorship';
-import { useSpaceMessages, usePostMessage } from '@/hooks/useSpaceMessages';
-import { mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import type { ChannelType, SpaceMember } from '@/features/mentor/types/mentorship';
+import { useSpaceMessages, usePostMessage } from '@/features/mentor/hooks/useSpaceMessages';
+import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { SectionSpinner } from '@/components/ds/Spinner';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';

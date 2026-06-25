@@ -16,7 +16,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { mapSpaceError } from '@/hooks/useMentorshipSpaces';
+import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 import type { ShareDestination, SharePrivacy } from '@/types/community';
 
 /** Opaque row returned by share_trade(). Extend as the UI needs more fields. */

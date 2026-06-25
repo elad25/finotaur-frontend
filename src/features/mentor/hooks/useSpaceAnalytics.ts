@@ -15,10 +15,10 @@ import type {
   AnalyticsSummary,
   MemberPerformanceRow,
   RoomPeriod,
-} from '@/types/mentorship';
+} from '@/features/mentor/types/mentorship';
 
 // Re-export so callers don't need to import from two places.
-export { mapSpaceError } from '@/hooks/useMentorshipSpaces';
+export { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 
 // ================================================
 // QUERY KEYS

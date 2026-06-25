@@ -24,7 +24,7 @@ import {
   type StudentLink,
   type MentorLink,
   type PendingRequest,
-} from '@/hooks/useMentorRelationships';
+} from '@/features/mentor/hooks/useMentorRelationships';
 
 const GOLD = '#C9A646';
 

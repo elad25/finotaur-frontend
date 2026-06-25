@@ -10,8 +10,8 @@
 
 import { useState } from 'react';
 import { DataState } from '@/components/ds/DataState';
-import { useSpaceLeaderboard } from '@/hooks/useSpaceAnalytics';
-import type { RoomPeriod, LeaderboardRow } from '@/types/mentorship';
+import { useSpaceLeaderboard } from '@/features/mentor/hooks/useSpaceAnalytics';
+import type { RoomPeriod, LeaderboardRow } from '@/features/mentor/types/mentorship';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

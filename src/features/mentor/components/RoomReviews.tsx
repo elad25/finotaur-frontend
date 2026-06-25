@@ -29,14 +29,14 @@ import {
   useAddReviewComment,
   useSetReviewStatus,
   useMyRecentClosedTrades,
-} from '@/hooks/useSpaceReviews';
+} from '@/features/mentor/hooks/useSpaceReviews';
 import { SharedNotePanel } from '@/components/community/SharedNotePanel';
 import type {
   TradeReview,
   ReviewComment,
   ReviewStatus,
   ClosedTrade,
-} from '@/hooks/useSpaceReviews';
+} from '@/features/mentor/hooks/useSpaceReviews';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 

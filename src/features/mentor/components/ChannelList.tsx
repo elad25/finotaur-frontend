@@ -3,7 +3,7 @@
 // Active channel is highlighted with gold text + border per DS.
 
 import { Hash, Megaphone, MessageCircle, UserPlus } from 'lucide-react';
-import type { ChannelType, SpaceChannel, SpaceMember } from '@/types/mentorship';
+import type { ChannelType, SpaceChannel, SpaceMember } from '@/features/mentor/types/mentorship';
 import { Button } from '@/components/ds/Button';
 import { cn } from '@/lib/utils';
 
