@@ -16,7 +16,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { useFloorProfile, useInvalidateFloorProfile } from '@/hooks/useFloorProfile';
+import { useFloorProfile, useInvalidateFloorProfile } from '@/features/floor/hooks/useFloorProfile';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useQueryClient } from '@tanstack/react-query';
 

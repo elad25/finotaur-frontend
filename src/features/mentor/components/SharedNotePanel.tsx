@@ -17,7 +17,7 @@ import {
   useSharedNote,
   useNoteRevisions,
   useUpdateSharedNote,
-} from '@/hooks/useSharedNote';
+} from '@/features/mentor/hooks/useSharedNote';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

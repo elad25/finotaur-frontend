@@ -2,7 +2,7 @@
 // Standalone Direct Messages page — wraps MessagesPanel, reads ?dm=<userId> from URL.
 
 import { useSearchParams } from 'react-router-dom';
-import { MessagesPanel } from '@/components/community/MessagesPanel';
+import { MessagesPanel } from '@/features/floor/components/MessagesPanel';
 import { cn } from '@/lib/utils';
 
 export default function DirectMessages() {

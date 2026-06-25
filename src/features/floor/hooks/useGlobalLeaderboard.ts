@@ -12,7 +12,7 @@ import type {
   GlobalLeaderboardMetric,
   GlobalLeaderboardRow,
   DisciplineLeaderboardRow,
-} from '@/types/community';
+} from '@/features/floor/types/community';
 
 // ================================================
 // QUERY KEYS

@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { FloorProfileDialog } from '@/components/floor/FloorProfileDialog';
+import { FloorProfileDialog } from '@/features/floor/components/FloorProfileDialog';
 
 export const TopNav = () => {
   const navigate = useNavigate();

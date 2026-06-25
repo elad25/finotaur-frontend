@@ -8,9 +8,9 @@
 
 import { useState } from 'react';
 import { Newspaper, Trophy } from 'lucide-react';
-import { GlobalFeed } from '@/components/community/GlobalFeed';
-import { GlobalLeaderboard } from '@/components/community/GlobalLeaderboard';
-import { FloorProfileGate } from '@/components/floor/FloorProfileGate';
+import { GlobalFeed } from '@/features/floor/components/GlobalFeed';
+import { GlobalLeaderboard } from '@/features/floor/components/GlobalLeaderboard';
+import { FloorProfileGate } from '@/features/floor/components/FloorProfileGate';
 import { cn } from '@/lib/utils';
 
 // ── Tab config ─────────────────────────────────────────────────────────────────

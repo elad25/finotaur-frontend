@@ -12,7 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useUserBadges } from '@/hooks/useFloor';
+import { useUserBadges } from '@/features/floor/hooks/useFloor';
 
 interface UserStatusBadgesProps {
   userId?: string;

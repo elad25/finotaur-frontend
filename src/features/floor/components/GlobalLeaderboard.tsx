@@ -31,10 +31,10 @@ import {
   useMyFloorParticipation,
   useJoinFloor,
   useLeaveFloor,
-} from '@/hooks/useFloor';
-import { FloorLeaderboardTable } from '@/components/floor/FloorLeaderboardTable';
-import { FloorPodium } from '@/components/floor/FloorPodium';
-import { FloorCountdown } from '@/components/floor/FloorCountdown';
+} from '@/features/floor/hooks/useFloor';
+import { FloorLeaderboardTable } from '@/features/floor/components/FloorLeaderboardTable';
+import { FloorPodium } from '@/features/floor/components/FloorPodium';
+import { FloorCountdown } from '@/features/floor/components/FloorCountdown';
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────

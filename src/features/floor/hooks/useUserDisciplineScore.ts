@@ -4,7 +4,7 @@
 
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { UserDisciplineScore } from '@/types/community';
+import type { UserDisciplineScore } from '@/features/floor/types/community';
 
 const DISCIPLINE_STALE = 5 * 60_000; // behavioral profile changes slowly
 

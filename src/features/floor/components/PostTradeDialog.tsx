@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import { useShareTrade } from '@/hooks/useShareTrade';
+import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
 import { cn } from '@/lib/utils';
 import {
   ArrowLeft, TrendingUp, TrendingDown, Check, Loader2,

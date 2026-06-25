@@ -227,8 +227,8 @@ const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 // Mentorship
 const MentorshipSpaces = lazy(() => import("@/features/mentor/pages/Spaces"));
 const SpaceDetail = lazy(() => import("@/features/mentor/pages/SpaceDetail"));
-const Community = lazy(() => import("@/pages/app/community/Community"));
-const DirectMessages = lazy(() => import("@/pages/app/community/DirectMessages"));
+const Community = lazy(() => import("@/features/floor/pages/Community"));
+const DirectMessages = lazy(() => import("@/features/floor/pages/DirectMessages"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));

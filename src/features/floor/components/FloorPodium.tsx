@@ -7,7 +7,7 @@
 // =====================================================
 
 import { Crown } from 'lucide-react';
-import type { FloorLeaderboardRow } from '@/hooks/useFloor';
+import type { FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 
 // ── Avatar helper ──────────────────────────────────────────────────────────────
 

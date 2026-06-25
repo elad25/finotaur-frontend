@@ -32,10 +32,10 @@ import {
   useGlobalPostComments,
   useAddGlobalComment,
   type GlobalReactionKind,
-} from '@/hooks/useGlobalFeed';
-import { useUserDisciplineScore } from '@/hooks/useUserDisciplineScore';
+} from '@/features/floor/hooks/useGlobalFeed';
+import { useUserDisciplineScore } from '@/features/floor/hooks/useUserDisciplineScore';
 import { TradeChart } from '@/components/journal/TradeChart';
-import type { GlobalFeedItem, GlobalComment } from '@/types/community';
+import type { GlobalFeedItem, GlobalComment } from '@/features/floor/types/community';
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 

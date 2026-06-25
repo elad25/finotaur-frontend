@@ -12,12 +12,12 @@ import { UserCog } from 'lucide-react';
 import { DataState } from '@/components/ds/DataState';
 import { Skeleton } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
-import { useGlobalFeed } from '@/hooks/useGlobalFeed';
-import { useFloorProfile } from '@/hooks/useFloorProfile';
-import { SharedTradeCard } from '@/components/community/SharedTradeCard';
-import { PostTradeDialog } from '@/components/community/PostTradeDialog';
-import { FloorProfileDialog } from '@/components/floor/FloorProfileDialog';
-import type { GlobalFeedItem } from '@/types/community';
+import { useGlobalFeed } from '@/features/floor/hooks/useGlobalFeed';
+import { useFloorProfile } from '@/features/floor/hooks/useFloorProfile';
+import { SharedTradeCard } from '@/features/floor/components/SharedTradeCard';
+import { PostTradeDialog } from '@/features/floor/components/PostTradeDialog';
+import { FloorProfileDialog } from '@/features/floor/components/FloorProfileDialog';
+import type { GlobalFeedItem } from '@/features/floor/types/community';
 
 // ── Feed skeleton ──────────────────────────────────────────────────────────────
 

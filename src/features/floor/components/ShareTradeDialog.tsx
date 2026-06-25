@@ -17,13 +17,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ds/Button';
-import { SharedTradeCard } from '@/components/community/SharedTradeCard';
+import { SharedTradeCard } from '@/features/floor/components/SharedTradeCard';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/AuthProvider';
 import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
-import { useShareTrade } from '@/hooks/useShareTrade';
+import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
 import { cn } from '@/lib/utils';
-import type { GlobalFeedItem, ShareDestination, SharePrivacy } from '@/types/community';
+import type { GlobalFeedItem, ShareDestination, SharePrivacy } from '@/features/floor/types/community';
 
 // ── Trade shape — minimal subset of what TradeDetail.tsx exposes ──────────────
 // We only need the fields that drive the preview card + the RPC call.

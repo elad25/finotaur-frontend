@@ -22,7 +22,7 @@ import {
   type Conversation,
   type DmRequest,
   type FloorUserResult,
-} from '@/hooks/useDirectMessages';
+} from '@/features/floor/hooks/useDirectMessages';
 import { useDebounce } from '@/hooks/useDebounce';
 
 // ── Avatar component ────────────────────────────────────────────────────────────

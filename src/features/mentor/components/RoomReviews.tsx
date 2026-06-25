@@ -30,7 +30,7 @@ import {
   useSetReviewStatus,
   useMyRecentClosedTrades,
 } from '@/features/mentor/hooks/useSpaceReviews';
-import { SharedNotePanel } from '@/components/community/SharedNotePanel';
+import { SharedNotePanel } from '@/features/mentor/components/SharedNotePanel';
 import type {
   TradeReview,
   ReviewComment,

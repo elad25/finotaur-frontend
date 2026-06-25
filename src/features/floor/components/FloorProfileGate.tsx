@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { UserCircle } from 'lucide-react';
-import { useFloorProfile } from '@/hooks/useFloorProfile';
+import { useFloorProfile } from '@/features/floor/hooks/useFloorProfile';
 import { FloorProfileDialog } from './FloorProfileDialog';
 
 interface FloorProfileGateProps {
