@@ -234,7 +234,8 @@ const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 // Mentorship
 const MentorshipSpaces = lazy(() => import("@/features/mentor/pages/Spaces"));
 const SpaceDetail = lazy(() => import("@/features/mentor/pages/SpaceDetail"));
-const Community = lazy(() => import("@/features/floor/pages/Community"));
+const FloorFeed = lazy(() => import("@/features/floor/pages/Feed"));
+const FloorLeaderboard = lazy(() => import("@/features/floor/pages/Leaderboard"));
 const DirectMessages = lazy(() => import("@/features/floor/pages/DirectMessages"));
 
 // Backtest Pages
@@ -720,7 +721,7 @@ function AppContent() {
 <Route path="journal/scenarios" element={<JournalRoute><JournalScenarios /></JournalRoute>} />
 <Route path="journal/community" element={<JournalRoute><JournalCommunity /></JournalRoute>} />
 {/* journal/floor removed — competition lives in Community › Leaderboard tab */}
-<Route path="journal/floor" element={<Navigate to="/app/floor/community" replace />} />
+<Route path="journal/floor" element={<Navigate to="/app/floor/feed" replace />} />
 <Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
 <Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
 <Route path="journal/pricing" element={<JournalRoute><SuspenseRoute><JournalPricingPage /></SuspenseRoute></JournalRoute>} />
@@ -753,16 +754,26 @@ function AppContent() {
 {/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 {/* journal/mentor → floor/mentor (legacy redirect) */}
-<Route path="journal/mentor" element={<Navigate to="/app/floor/mentor" replace />} />
+<Route path="journal/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
-        {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
-        <Route path="floor" element={<Navigate to="/app/floor/community" replace />} />
-        <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/mentor" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/community" element={<SuspenseRoute><AdminBetaGate><Community /></AdminBetaGate></SuspenseRoute>} />
+        {/* THE FLOOR — Feed / Leaderboard / DM (beta/admin-only) */}
+        <Route path="floor" element={<Navigate to="/app/floor/feed" replace />} />
+        <Route path="floor/feed" element={<SuspenseRoute><AdminBetaGate><FloorFeed /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/leaderboard" element={<SuspenseRoute><AdminBetaGate><FloorLeaderboard /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/dm" element={<SuspenseRoute><AdminBetaGate><DirectMessages /></AdminBetaGate></SuspenseRoute>} />
+        {/* legacy redirect: old community URL → feed */}
+        <Route path="floor/community" element={<Navigate to="/app/floor/feed" replace />} />
+
+        {/* MENTOR — Mentor Mode + Rooms (beta/admin-only) */}
+        <Route path="mentor" element={<Navigate to="/app/mentor/mode" replace />} />
+        <Route path="mentor/mode" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="mentor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="mentor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+        {/* legacy redirects: old /app/floor/* mentor+rooms → /app/mentor/* */}
+        <Route path="floor/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
+        <Route path="floor/rooms" element={<Navigate to="/app/mentor/rooms" replace />} />
         <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
 
           {/* BACKTEST */}

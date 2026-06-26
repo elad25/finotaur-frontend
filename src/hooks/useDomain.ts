@@ -26,6 +26,9 @@ const TOP_SECRET_PATHS = ['/app/top-secret'];
 // Markets/Stocks nav while on The Floor. Map it to 'journal' so the Journal
 // subNav (with "The Floor" active) renders instead.
 const FLOOR_PATHS = ['/app/floor'];
+// Mentor (Mentor Mode + Rooms) — split out of The Floor; also surfaced via the
+// Journal subNav, so it maps to the 'journal' product like FLOOR_PATHS.
+const MENTOR_PATHS = ['/app/mentor'];
 
 export const useDomain = () => {
   const location = useLocation();
@@ -43,6 +46,9 @@ export const useDomain = () => {
     productId = 'top-secret';
   } else if (FLOOR_PATHS.some((p) => pathname.startsWith(p))) {
     // The Floor lives under the Journal product (see FLOOR_PATHS note above).
+    productId = 'journal';
+  } else if (MENTOR_PATHS.some((p) => pathname.startsWith(p))) {
+    // Mentor (Mentor Mode + Rooms) also lives under the Journal product.
     productId = 'journal';
   } else if (isMarketsPath(pathname)) {
     // /app/etfs is now part of the Markets product (MARKETS_PATH_PREFIXES includes /app/etfs).
