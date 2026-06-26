@@ -608,7 +608,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       '/app/forex/overview',
       '/app/commodities/overview',
       '/app/ai/overview',
-      '/app/copy-trade/overview',
+      '/app/automation/copier',
       '/app/funding/overview',
       '/app/settings',
     ];

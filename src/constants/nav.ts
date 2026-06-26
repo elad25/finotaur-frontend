@@ -251,7 +251,7 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
-  // TRADE COPIER — hidden from drawer (beta/admin-only); kept for DomainGuard
+  // TRADE COPIER — Phase 1 unification: subNav + sidebar now point to /app/automation/*
   // ===========================================================================
   'copy-trade': {
     id: 'copy-trade',
@@ -259,12 +259,12 @@ export const domains: Record<string, Domain> = {
     locked: false,
     beta: true, // 🔒 Non-beta users get hidden tab + DomainGuard redirect
     subNav: [
-      { label: 'Trade Copier', path: '/app/copy-trade/overview' },
+      { label: 'Trade Copier', path: '/app/automation/copier' },
     ],
     sidebar: [
-      { label: 'Connections',  path: '/app/copy-trade/overview',      icon: Link },
-      { label: 'Trade Copier', path: '/app/copy-trade/trade-copier',   icon: Copy },
-      { label: 'Manage Risk',  path: '/app/copy-trade/manage-risk',    icon: Shield },
+      { label: 'Copier', path: '/app/automation/copier', icon: Copy },
+      { label: 'Risk',   path: '/app/automation/risk',   icon: Shield },
+      { label: 'Agent',  path: '/app/automation/agent',  icon: Activity },
     ],
   },
 
