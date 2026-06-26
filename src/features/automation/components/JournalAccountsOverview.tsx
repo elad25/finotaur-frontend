@@ -9,11 +9,19 @@
 //
 // Each connection group is shown as a static, non-interactive row:
 // connection name + broker + account count + status pill. No expand/collapse.
+//
+// Reconnect-needed rows (orphaned groups with no live broker_connection, or
+// a connection that is inactive/not connected) render a small "Connect" button
+// that initiates the Tradovate OAuth flow. Prop-firm accounts (Apex / MFFU /
+// Lucid) run on the demo environment — getTradovateAuthorizationUrl('demo').
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { DataState } from '@/components/ds/DataState';
+import { Button } from '@/components/ds/Button';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import {
@@ -22,66 +30,61 @@ import {
 } from '@/components/journal/accountGrouping';
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
+import { getTradovateAuthorizationUrl } from '@/lib/brokers/tradovate/tradovate-oauth';
 
-// ── Status pill ───────────────────────────────────────────────────────────────
-// Shows "Connected" (green) when there is a matching live broker_connection,
-// or "Reconnect needed" (amber/neutral) when the group has accounts but no
-// live connection entry (e.g. orphaned prop-firm groups like Apex).
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface ConnectionStatusPillProps {
-  connection: BrokerConnection | undefined;
+/**
+ * Returns true when the group has a live, active broker_connection that is
+ * either "connected" or in the brief "renewing" transient state.
+ * Returns false for orphaned groups (no connection row) or stale/inactive ones.
+ */
+function isGroupConnected(connection: BrokerConnection | undefined): boolean {
+  if (!connection) return false;
+  return (
+    connection.is_active &&
+    (connection.status === 'connected' || connection.status === 'renewing')
+  );
 }
 
-function ConnectionStatusPill({ connection }: ConnectionStatusPillProps) {
-  if (connection) {
-    const isOnline =
-      connection.is_active &&
-      (connection.status === 'connected' || connection.status === 'renewing');
+// ── Status pill ───────────────────────────────────────────────────────────────
+// Shows "Connected" (green) only when isGroupConnected() is true.
+// "Reconnect needed" state is handled at the row level via the Connect button.
 
-    const label = isOnline ? 'Connected' : 'Reconnect needed';
+interface ConnectedPillProps {
+  label: string;
+}
 
-    return (
-      <span
-        className={[
-          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
-          isOnline
-            ? 'bg-emerald-500/10 text-emerald-400'
-            : 'bg-amber-500/10 text-amber-400',
-        ].join(' ')}
-        aria-label={`Status: ${label}`}
-      >
-        {isOnline ? (
-          <Wifi className="w-3 h-3" aria-hidden="true" />
-        ) : (
-          <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-        )}
-        {label}
-      </span>
-    );
-  }
-
-  // No matching broker_connection entry — group is orphaned (e.g. Apex accounts
-  // imported from Tradovate with no active OAuth connection).
+function ConnectedPill({ label }: ConnectedPillProps) {
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400"
-      aria-label="Status: Reconnect needed"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400"
+      aria-label={`Status: ${label}`}
     >
-      <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-      Reconnect needed
+      <Wifi className="w-3 h-3" aria-hidden="true" />
+      {label}
     </span>
   );
 }
 
-// ── Static connection row ─────────────────────────────────────────────────────
+// ── Connection row ────────────────────────────────────────────────────────────
 
 interface ConnectionRowProps {
   group: PortfolioGroup;
   /** Matching broker_connections row for status enrichment. */
   brokerConnection: BrokerConnection | undefined;
+  /** True while the OAuth URL is being fetched for this specific row. */
+  isConnecting: boolean;
+  /** Called when the user clicks "Connect" on a reconnect-needed row. */
+  onConnect: () => void;
 }
 
-function ConnectionRow({ group, brokerConnection }: ConnectionRowProps) {
+function ConnectionRow({
+  group,
+  brokerConnection,
+  isConnecting,
+  onConnect,
+}: ConnectionRowProps) {
   // Derive broker display name from the first portfolio in the group.
   const firstPortfolio = group.portfolios[0];
   const source = firstPortfolio?.source;
@@ -94,6 +97,7 @@ function ConnectionRow({ group, brokerConnection }: ConnectionRowProps) {
   }
 
   const accountCount = group.portfolios.length;
+  const connected = isGroupConnected(brokerConnection);
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 flex items-center gap-3 px-3 py-2.5">
@@ -110,8 +114,22 @@ function ConnectionRow({ group, brokerConnection }: ConnectionRowProps) {
         {accountCount} account{accountCount !== 1 ? 's' : ''}
       </span>
 
-      {/* Status pill */}
-      <ConnectionStatusPill connection={brokerConnection} />
+      {/* Status area — static pill for connected, actionable button for reconnect-needed */}
+      {connected ? (
+        <ConnectedPill label="Connected" />
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onConnect}
+          disabled={isConnecting}
+          aria-label={`Connect ${group.label}`}
+          className="shrink-0 h-6 px-2 text-[11px] border-amber-500/40 text-amber-400 hover:border-amber-400 hover:text-amber-300 hover:bg-amber-500/10 disabled:opacity-60"
+        >
+          <AlertTriangle className="w-3 h-3 mr-1" aria-hidden="true" />
+          {isConnecting ? 'Connecting…' : 'Connect'}
+        </Button>
+      )}
     </div>
   );
 }
@@ -139,6 +157,10 @@ function NoAccountsState() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function JournalAccountsOverview() {
+  // Tracks which group key is currently fetching an OAuth URL.
+  // null = nothing in progress.
+  const [connectingKey, setConnectingKey] = useState<string | null>(null);
+
   const {
     tradovatePortfolios,
     brokerPortfolios,
@@ -188,6 +210,27 @@ export function JournalAccountsOverview() {
     return undefined;
   }
 
+  /**
+   * Initiates the Tradovate OAuth flow for a reconnect-needed group.
+   * Prop-firm accounts (Apex / MFFU / Lucid) live on the demo environment —
+   * the server self-corrects env for live accounts too, so passing 'demo'
+   * is safe as the universal default here.
+   */
+  async function handleConnect(groupKey: string) {
+    if (connectingKey !== null) return; // already connecting another row
+    setConnectingKey(groupKey);
+    try {
+      const url = await getTradovateAuthorizationUrl('demo');
+      window.location.href = url;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to start broker connection.';
+      toast.error('Connection failed', { description: message });
+      setConnectingKey(null);
+    }
+    // On success we navigate away; no need to reset connectingKey.
+  }
+
   // Combined loading: both hooks must finish for a meaningful render.
   const isLoading = portfoliosLoading || connectionsLoading;
   // Only surface portfolio errors (connections are enrichment-only).
@@ -227,13 +270,15 @@ export function JournalAccountsOverview() {
               </p>
             )}
 
-            {/* Connection rows — one static row per group */}
+            {/* Connection rows — one row per group */}
             <div className="space-y-1.5">
               {data.map((group) => (
                 <ConnectionRow
                   key={group.key}
                   group={group}
                   brokerConnection={groupConnection(group)}
+                  isConnecting={connectingKey === group.key}
+                  onConnect={() => handleConnect(group.key)}
                 />
               ))}
             </div>
