@@ -162,7 +162,7 @@ export default function Spaces() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-ds-4 mb-ds-7">
         <div>
           <h1 className="text-2xl font-bold text-ink-primary leading-tight">
-            The Floor
+            Rooms
           </h1>
           <p className="mt-ds-2 text-[14px] text-ink-secondary">
             Your trading communities — run a Room, broadcast, and coach.
