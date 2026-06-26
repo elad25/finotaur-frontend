@@ -450,7 +450,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   useEffect(() => {
-    if (location.pathname.startsWith('/app/floor') || location.pathname.startsWith('/app/mentor')) {
+    // The Floor pages auto-collapse the rail for a wider community view. Mentor
+    // pages (Mentor Mode / Rooms) keep the sidebar expanded per Elad's request.
+    if (location.pathname.startsWith('/app/floor')) {
       setIsExpanded(false);
       localStorage.setItem(storageKey, 'false');
     }
