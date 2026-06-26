@@ -7,13 +7,12 @@
 // helper used by the journal's AccountFilterDropdown) so the copier page
 // mirrors the journal's grouping exactly.
 //
-// Each connection is shown as a COLLAPSED compact row by default.
-// Clicking the chevron expands the individual account rows beneath it.
+// Each connection group is shown as a static, non-interactive row:
+// connection name + broker + account count + status pill. No expand/collapse.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Wifi, WifiOff, Circle, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { DataState } from '@/components/ds/DataState';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -74,61 +73,15 @@ function ConnectionStatusPill({ connection }: ConnectionStatusPillProps) {
   );
 }
 
-// ── Environment badge ─────────────────────────────────────────────────────────
-
-function EnvironmentBadge({ env }: { env: string | null }) {
-  if (!env) return null;
-  const isLive = env === 'live';
-  return (
-    <span
-      className={[
-        'px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider',
-        isLive
-          ? 'bg-amber-500/15 text-amber-400'
-          : 'bg-zinc-700/60 text-zinc-500',
-      ].join(' ')}
-    >
-      {isLive ? 'Live' : 'Demo'}
-    </span>
-  );
-}
-
-// ── Account row inside a group (shown when expanded) ──────────────────────────
-
-interface AccountRowProps {
-  name: string;
-  environment: string | null;
-  isActive: boolean;
-}
-
-function AccountRow({ name, environment, isActive }: AccountRowProps) {
-  return (
-    <div className="flex items-center gap-2 py-1.5 px-3 rounded-md hover:bg-zinc-800/40 transition-colors">
-      <Circle
-        className={[
-          'w-1.5 h-1.5 shrink-0',
-          isActive ? 'text-emerald-500' : 'text-zinc-600',
-        ].join(' ')}
-        fill="currentColor"
-        aria-hidden="true"
-      />
-      <span className="text-sm text-zinc-300 flex-1 min-w-0 truncate">{name}</span>
-      <EnvironmentBadge env={environment} />
-    </div>
-  );
-}
-
-// ── Collapsed connection row ──────────────────────────────────────────────────
+// ── Static connection row ─────────────────────────────────────────────────────
 
 interface ConnectionRowProps {
   group: PortfolioGroup;
   /** Matching broker_connections row for status enrichment. */
   brokerConnection: BrokerConnection | undefined;
-  isExpanded: boolean;
-  onToggle: () => void;
 }
 
-function ConnectionRow({ group, brokerConnection, isExpanded, onToggle }: ConnectionRowProps) {
+function ConnectionRow({ group, brokerConnection }: ConnectionRowProps) {
   // Derive broker display name from the first portfolio in the group.
   const firstPortfolio = group.portfolios[0];
   const source = firstPortfolio?.source;
@@ -141,50 +94,24 @@ function ConnectionRow({ group, brokerConnection, isExpanded, onToggle }: Connec
   }
 
   const accountCount = group.portfolios.length;
-  const Chevron = isExpanded ? ChevronDown : ChevronRight;
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50">
-      {/* Compact connection header — always visible */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/40 transition-colors rounded-lg text-left"
-        aria-expanded={isExpanded}
-        aria-label={`${group.label} — ${accountCount} account${accountCount !== 1 ? 's' : ''}. ${isExpanded ? 'Collapse' : 'Expand'}`}
-      >
-        <Chevron className="w-3.5 h-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 flex items-center gap-3 px-3 py-2.5">
+      {/* Connection name */}
+      <span className="font-semibold text-sm text-zinc-100 truncate flex-1 min-w-0">
+        {group.label}
+      </span>
 
-        {/* Connection name */}
-        <span className="font-semibold text-sm text-zinc-100 truncate flex-1 min-w-0">
-          {group.label}
-        </span>
+      {/* Broker label + account count */}
+      <span className="text-[11px] text-zinc-500 shrink-0 hidden sm:block">
+        {brokerLabel}
+      </span>
+      <span className="text-[11px] text-zinc-500 shrink-0">
+        {accountCount} account{accountCount !== 1 ? 's' : ''}
+      </span>
 
-        {/* Broker label + account count */}
-        <span className="text-[11px] text-zinc-500 shrink-0 hidden sm:block">
-          {brokerLabel}
-        </span>
-        <span className="text-[11px] text-zinc-500 shrink-0">
-          {accountCount} account{accountCount !== 1 ? 's' : ''}
-        </span>
-
-        {/* Status pill */}
-        <ConnectionStatusPill connection={brokerConnection} />
-      </button>
-
-      {/* Expanded account list */}
-      {isExpanded && (
-        <div className="border-t border-zinc-800/70 px-2 py-1.5 space-y-0.5">
-          {group.portfolios.map((p) => (
-            <AccountRow
-              key={p.id}
-              name={p.name}
-              environment={p.environment}
-              isActive={p.is_active}
-            />
-          ))}
-        </div>
-      )}
+      {/* Status pill */}
+      <ConnectionStatusPill connection={brokerConnection} />
     </div>
   );
 }
@@ -228,21 +155,6 @@ export function JournalAccountsOverview() {
     isLoading: connectionsLoading,
     error: connectionsError,
   } = useBrokerConnections({ active: true });
-
-  // Track which connection group keys are expanded. Default = all collapsed.
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
-
-  function toggleGroup(key: string) {
-    setExpandedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }
 
   // Build a map from broker_connection_id / credential_id → BrokerConnection
   // so each group row can look up its live status in O(1).
@@ -315,15 +227,13 @@ export function JournalAccountsOverview() {
               </p>
             )}
 
-            {/* Connection rows — one per group, collapsed by default */}
+            {/* Connection rows — one static row per group */}
             <div className="space-y-1.5">
               {data.map((group) => (
                 <ConnectionRow
                   key={group.key}
                   group={group}
                   brokerConnection={groupConnection(group)}
-                  isExpanded={expandedKeys.has(group.key)}
-                  onToggle={() => toggleGroup(group.key)}
                 />
               ))}
             </div>
