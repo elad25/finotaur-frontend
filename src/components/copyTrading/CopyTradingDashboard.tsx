@@ -5,15 +5,10 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertOctagon, Crown, Plus, Search, Users, X } from 'lucide-react';
+import { Crown, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
-import { useEngineSessions } from '@/hooks/useEngineSessions';
 import { usePortfolios } from '@/hooks/usePortfolios';
-import { useAccountSnapshots } from '@/hooks/useAccountSnapshots';
-import type { PositionEntry } from '@/hooks/useAccountSnapshots';
-import { FlattenConfirmDialog } from './FlattenConfirmDialog';
-import { useFlattenActions } from '@/hooks/useFlattenActions';
 import { useCopyRules } from '@/hooks/useCopyRules';
 import type { CopyRule } from '@/hooks/useCopyRules';
 
@@ -80,25 +75,19 @@ const CopyAccountRow = memo(function CopyAccountRow({
   row,
   isLeader,
   rule,
-  onFlatten,
   onUpdateRule,
-  onToggleFollow,
   onSelectLeader,
-  canFollow,
 }: {
   row: AccountRowData;
   isLeader: boolean;
   rule: CopyRule | null;
-  onFlatten: () => void;
   onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
-  onToggleFollow: () => Promise<void>;
   onSelectLeader: () => void;
-  canFollow: boolean;
 }) {
   const ratioValue = rule?.ratio ?? 1;
-  // I.4: visual state binds to the rule, not the broker connection. row.following
-  // (= broker_connections.is_active) was incorrect — toggle reflects copy state.
-  const isFollowing = rule?.is_active ?? false;
+  // Follow toggle and ratio editing are disabled — routes are configured in the Agent tab.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _isFollowing = rule?.is_active ?? false;
 
   return (
     <div
@@ -118,25 +107,16 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {isLeader && <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />}
       </div>
 
-      {/* Follow toggle */}
+      {/* Follow toggle — configure routes in the Agent tab (local execution) */}
       <div className="flex items-center">
         {!isLeader && (
           <button
-            onClick={onToggleFollow}
-            disabled={!canFollow}
-            className={`w-9 h-5 rounded-full transition-colors duration-base ${
-              isFollowing
-                ? 'bg-status-success'
-                : 'bg-status-offline border border-border-ds-default'
-            } disabled:opacity-30 disabled:cursor-not-allowed`}
-            aria-label="Toggle follow"
-            title={canFollow ? undefined : 'Select a leader account first'}
+            disabled
+            className="w-9 h-5 rounded-full bg-status-offline border border-border-ds-default opacity-30 cursor-not-allowed"
+            aria-label="Follow toggle — configure in Agent tab"
+            title="Copying runs on your paired desktop agent — configure routes in the Agent tab"
           >
-            <span
-              className={`block w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
-                isFollowing ? 'translate-x-5' : 'translate-x-1'
-              }`}
-            />
+            <span className="block w-3 h-3 bg-ink-primary rounded-full translate-x-1" />
           </button>
         )}
       </div>
@@ -179,7 +159,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
                 await onUpdateRule({ ratio: newRatio });
               }
             }}
-            disabled={!canFollow}
+            disabled={true}
             aria-label={`Copy ratio for ${row.accountName}`}
             title="Copy ratio from leader to this account"
             className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none disabled:cursor-not-allowed disabled:opacity-30"
@@ -196,7 +176,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
             onClick={async () => {
               await onUpdateRule({ cross_to_micro: !(rule?.cross_to_micro ?? false) });
             }}
-            disabled={!canFollow}
+            disabled={true}
             className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
               rule?.cross_to_micro
                 ? 'bg-status-success'
@@ -255,14 +235,9 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {row.qty ?? '—'}
       </div>
 
-      {/* Actions */}
+      {/* Actions — flatten runs via desktop agent */}
       <div className="flex items-center justify-start">
-        <button
-          onClick={onFlatten}
-          className="text-xs text-num-negative hover:text-num-negative/80 transition-colors duration-base"
-        >
-          Flatten
-        </button>
+        <span className="text-xs text-ink-tertiary">via agent</span>
       </div>
     </div>
   );
@@ -271,10 +246,11 @@ const CopyAccountRow = memo(function CopyAccountRow({
 // ─── Main Component ───────────────────────────────────────────
 
 export function CopyTradingDashboard() {
-  const { connections } = useBrokerConnections({ active: true, purpose: 'copier' });
-  const { liveCredentialIds } = useEngineSessions();
+  // Show all journal broker connections — execution is local via the desktop agent.
+  const { connections } = useBrokerConnections({ active: true });
+  // liveCredentialIds: always empty — cloud engine session polling removed.
+  const liveCredentialIds = useMemo(() => new Set<string>(), []);
   const { portfolios } = usePortfolios();
-  const { snapshotFor } = useAccountSnapshots();
   const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
     { id: 'asset-1', symbol: 'NQ' },
   ]);
@@ -286,14 +262,7 @@ export function CopyTradingDashboard() {
   const instrument = activeInstrumentTab?.symbol ?? 'NQ';
   const [instrumentDraft, setInstrumentDraft] = useState(instrument);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const { flattenAll, flattenCredential, isLoading: flattenLoading } = useFlattenActions();
   const { rules, updateRule, createRule } = useCopyRules();
-  const [flattenDialog, setFlattenDialog] = useState<{
-    open: boolean;
-    scope: 'all' | 'single';
-    credentialId?: string;
-    accountName?: string;
-  } | null>(null);
 
   useEffect(() => {
     setInstrumentDraft(instrument);
@@ -327,7 +296,9 @@ export function CopyTradingDashboard() {
     );
   }
 
-  // Build rows from broker_connections filtered to Tradovate family + portfolios
+  // Build rows from broker_connections (all journal accounts) + portfolios.
+  // Live position/balance columns are sourced from the desktop agent, not the
+  // cloud engine — rendered as null here until the agent pairing ships.
   const rows = useMemo<AccountRowData[]>(() => {
     return connections
       .filter((c) => TRADOVATE_FAMILY.includes(c.broker as typeof TRADOVATE_FAMILY[number]))
@@ -347,51 +318,30 @@ export function CopyTradingDashboard() {
         const live = liveCredentialIds.has(c.id);
         const issue = !live && ((c.is_active && c.status === 'connected') || tokenExpired);
 
-        const snap = snapshotFor(c.id);
-
-        let activePosition: PositionEntry | null = null;
-        if (snap?.positions?.length) {
-          if (instrument) {
-            activePosition =
-              snap.positions.find((p) =>
-                p.contractName?.toUpperCase().includes(instrument.toUpperCase()),
-              ) ?? null;
-          }
-          if (!activePosition) {
-            activePosition =
-              [...snap.positions].sort(
-                (a, b) => Math.abs(b.netPos ?? 0) - Math.abs(a.netPos ?? 0),
-              )[0] ?? null;
-          }
-        }
-
         return {
           id: c.id,
           connectionName: c.connection_name ?? c.broker,
           accountName:    c.account_name ?? c.account_id,
-          symbol:         activePosition?.contractName ?? instrument,
+          symbol:         instrument,
           live,
           issue,
-          position:    activePosition?.netPos ?? null,
-          balance:     snap?.cashBalance     ?? null,
-          dayPnL:      snap?.realizedPnL     ?? null,
-          openPnL:     snap?.openPnL         ?? null,
-          qty:
-            activePosition && activePosition.netPos != null
-              ? Math.abs(activePosition.netPos)
-              : null,
+          // Live data (position/balance/PnL) supplied by desktop agent — null until paired.
+          position:    null,
+          balance:     null,
+          dayPnL:      null,
+          openPnL:     null,
+          qty:         null,
           following:   c.is_active,
           portfolioId,
         };
       });
-  }, [connections, liveCredentialIds, portfolios, snapshotFor, instrument]);
+  }, [connections, liveCredentialIds, portfolios, instrument]);
 
   // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
   const totalOpenPnL       = rows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
   const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
   const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
-  const accountsWithPositions = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
   // ── Contract autocomplete suggestions ─────────────────────────
   const normalizedDraftInstrument = instrumentDraft.trim().toUpperCase();
@@ -461,34 +411,7 @@ export function CopyTradingDashboard() {
     setShowSuggestions(false);
   };
 
-  // ── Flatten handlers ──────────────────────────────────────────
-  const handleFlattenAll = () => {
-    setFlattenDialog({ open: true, scope: 'all' });
-  };
-
-  const handleFlattenSingle = (credentialId: string, accountName: string) => {
-    setFlattenDialog({ open: true, scope: 'single', credentialId, accountName });
-  };
-
-  const handleConfirmFlatten = async () => {
-    if (!flattenDialog) return;
-    const result =
-      flattenDialog.scope === 'all'
-        ? await flattenAll()
-        : await flattenCredential(flattenDialog.credentialId!);
-
-    if (result.ok) {
-      toast.success(
-        `Flattened ${result.positionsFlattened ?? 0} position${(result.positionsFlattened ?? 0) === 1 ? '' : 's'} across ${result.accountsAffected ?? 0} account${(result.accountsAffected ?? 0) === 1 ? '' : 's'}.`,
-      );
-      if (result.errors?.length) {
-        toast.warning(`${result.errors.length} error${result.errors.length === 1 ? '' : 's'} during flatten.`);
-      }
-    } else {
-      toast.error(result.error ?? 'Flatten failed.');
-    }
-    setFlattenDialog(null);
-  };
+  // Flatten is handled by the local desktop agent — no cloud-engine endpoints.
 
   return (
     <div className="min-h-[620px]">
@@ -644,16 +567,8 @@ export function CopyTradingDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-ds-2">
-          {/* FLATTEN ALL */}
-          <button
-            onClick={handleFlattenAll}
-            className="flex items-center gap-1.5 px-ds-4 py-ds-2 rounded-md border border-num-negative/35 bg-num-negative/15 text-num-negative transition-colors duration-base hover:bg-num-negative/25 font-semibold text-sm"
-          >
-            <AlertOctagon className="w-4 h-4" />
-            Flatten All
-          </button>
-        </div>
+        {/* Flatten All removed — flatten runs via local desktop agent */}
+        <div />
       </div>
 
       {/* ── 2. Summary bar ── */}
@@ -719,19 +634,16 @@ export function CopyTradingDashboard() {
           <div>Actions</div>
         </div>
 
-        {/* Rows */}
+        {/* Rows — Follow toggle and flatten disabled; routes configured in Agent tab */}
         {rows.map((row) => {
-          const rule    = ruleFor(row.portfolioId);
-          const canFollow = !!leaderPortfolioId && !!row.portfolioId && row.id !== leaderId;
+          const rule = ruleFor(row.portfolioId);
           return (
             <CopyAccountRow
               key={row.id}
               row={row}
               isLeader={row.id === leaderId}
               rule={rule}
-              canFollow={canFollow}
               onSelectLeader={() => setLeaderId(row.id)}
-              onFlatten={() => handleFlattenSingle(row.id, row.accountName)}
               onUpdateRule={async (patch) => {
                 if (rule) {
                   await updateRule({ id: rule.id, patch });
@@ -742,20 +654,6 @@ export function CopyTradingDashboard() {
                     is_active:           false,
                     ratio:               patch.ratio ?? 1,
                     cross_to_micro:      patch.cross_to_micro ?? false,
-                  });
-                }
-              }}
-              onToggleFollow={async () => {
-                // I.4: toggle follow. If a rule exists for this (leader → target)
-                // pair, flip is_active. If not, create one with is_active=true.
-                if (rule) {
-                  await updateRule({ id: rule.id, patch: { is_active: !rule.is_active } });
-                } else if (leaderPortfolioId && row.portfolioId) {
-                  await createRule({
-                    source_portfolio_id: leaderPortfolioId,
-                    target_portfolio_id: row.portfolioId,
-                    is_active:           true,
-                    ratio:               1,
                   });
                 }
               }}
@@ -774,25 +672,6 @@ export function CopyTradingDashboard() {
         )}
       </div>
 
-      {/* ── 4. Flatten confirm dialog ── */}
-      {flattenDialog && (
-        <FlattenConfirmDialog
-          open={flattenDialog.open}
-          scope={flattenDialog.scope}
-          accountName={flattenDialog.accountName}
-          positionsCount={
-            flattenDialog.scope === 'all'
-              ? openPositionsCount
-              : (rows.find((r) => r.id === flattenDialog.credentialId)?.position ?? 0) !== 0
-                ? 1
-                : 0
-          }
-          accountsCount={flattenDialog.scope === 'all' ? accountsWithPositions : 1}
-          onConfirm={handleConfirmFlatten}
-          onCancel={() => setFlattenDialog(null)}
-          isLoading={flattenLoading}
-        />
-      )}
     </div>
   );
 }
