@@ -307,7 +307,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Reports & Stats', path: '/app/journal/reports', icon: FileBarChart },
     { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
-    { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
+    // Academy removed from sidebar (route /app/journal/academy still exists in App.tsx)
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
 
