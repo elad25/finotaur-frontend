@@ -41,6 +41,7 @@ import {
   UserX,
   ArrowLeft,
   Shield,
+  ShieldCheck,
   UserPlus,
   DollarSign,
   Wallet,
@@ -110,7 +111,8 @@ type EnvironmentType =
   | 'war-zone'
   | 'top-secret'
   | 'trading-arena'
-  | 'mentorship';
+  | 'mentorship'
+  | 'automation';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -372,6 +374,12 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
   ] : [],
 
+  automation: [
+    { label: 'Risk Rules', path: '/app/automation/risk',   icon: ShieldCheck, beta: true },
+    { label: 'Copier',     path: '/app/automation/copier', icon: Copy,        beta: true },
+    { label: 'Agent',      path: '/app/automation/agent',  icon: Shield,      beta: true },
+  ],
+
   settings: [
     { label: 'General', path: '/app/settings', icon: Settings },
     { label: 'Billing', path: '/app/settings/billing', icon: CreditCard },
@@ -451,6 +459,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     
     // Settings first (specific path)
     if (path.startsWith('/app/settings')) return 'settings';
+
+    // Automation (specific path)
+    if (path.startsWith('/app/automation')) return 'automation';
     
     // Admin & Affiliate first (more specific paths)
     if (path.startsWith('/app/journal/admin')) return 'admin';
