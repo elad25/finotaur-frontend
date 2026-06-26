@@ -7,7 +7,7 @@ import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/type
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetTrigger, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { statusBadge, connectionNeedsAttention } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
 import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
@@ -728,9 +728,11 @@ export default function BrokerConnectionsPopover({ children, onAddConnection, on
         <SheetTrigger asChild>{children}</SheetTrigger>
         <SheetContent
           side="bottom"
+          aria-describedby={undefined}
           className="max-h-[85vh] overflow-y-auto rounded-t-[20px] border-t bg-[#141414] p-4"
           style={{ borderColor: BORDER_LIGHT }}
         >
+          <SheetTitle className="sr-only">Broker connections</SheetTitle>
           <PopoverBody onAddConnection={handleAddConnection} onManage={handleManage} />
         </SheetContent>
       </Sheet>
