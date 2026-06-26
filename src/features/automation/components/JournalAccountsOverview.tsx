@@ -6,11 +6,14 @@
 // Groups accounts by connection using buildAccountGroups() (the IDENTICAL
 // helper used by the journal's AccountFilterDropdown) so the copier page
 // mirrors the journal's grouping exactly.
+//
+// Each connection is shown as a COLLAPSED compact row by default.
+// Clicking the chevron expands the individual account rows beneath it.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Wifi, WifiOff, Circle } from 'lucide-react';
-import { Card } from '@/components/ds/Card';
+import { Wifi, WifiOff, Circle, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { DataState } from '@/components/ds/DataState';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -22,36 +25,51 @@ import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
 
 // ── Status pill ───────────────────────────────────────────────────────────────
+// Shows "Connected" (green) when there is a matching live broker_connection,
+// or "Reconnect needed" (amber/neutral) when the group has accounts but no
+// live connection entry (e.g. orphaned prop-firm groups like Apex).
 
 interface ConnectionStatusPillProps {
   connection: BrokerConnection | undefined;
 }
 
 function ConnectionStatusPill({ connection }: ConnectionStatusPillProps) {
-  if (!connection) return null;
+  if (connection) {
+    const isOnline =
+      connection.is_active &&
+      (connection.status === 'connected' || connection.status === 'renewing');
 
-  const isOnline =
-    connection.is_active &&
-    (connection.status === 'connected' || connection.status === 'renewing');
+    const label = isOnline ? 'Connected' : 'Reconnect needed';
 
-  const label = isOnline ? 'Connected' : 'Disconnected';
+    return (
+      <span
+        className={[
+          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
+          isOnline
+            ? 'bg-emerald-500/10 text-emerald-400'
+            : 'bg-amber-500/10 text-amber-400',
+        ].join(' ')}
+        aria-label={`Status: ${label}`}
+      >
+        {isOnline ? (
+          <Wifi className="w-3 h-3" aria-hidden="true" />
+        ) : (
+          <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+        )}
+        {label}
+      </span>
+    );
+  }
 
+  // No matching broker_connection entry — group is orphaned (e.g. Apex accounts
+  // imported from Tradovate with no active OAuth connection).
   return (
     <span
-      className={[
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
-        isOnline
-          ? 'bg-emerald-500/10 text-emerald-400'
-          : 'bg-zinc-700/60 text-zinc-400',
-      ].join(' ')}
-      aria-label={`Status: ${label}`}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400"
+      aria-label="Status: Reconnect needed"
     >
-      {isOnline ? (
-        <Wifi className="w-3 h-3" aria-hidden="true" />
-      ) : (
-        <WifiOff className="w-3 h-3" aria-hidden="true" />
-      )}
-      {label}
+      <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+      Reconnect needed
     </span>
   );
 }
@@ -75,7 +93,7 @@ function EnvironmentBadge({ env }: { env: string | null }) {
   );
 }
 
-// ── Account row inside a group ────────────────────────────────────────────────
+// ── Account row inside a group (shown when expanded) ──────────────────────────
 
 interface AccountRowProps {
   name: string;
@@ -85,7 +103,7 @@ interface AccountRowProps {
 
 function AccountRow({ name, environment, isActive }: AccountRowProps) {
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-zinc-800/40 transition-colors">
+    <div className="flex items-center gap-2 py-1.5 px-3 rounded-md hover:bg-zinc-800/40 transition-colors">
       <Circle
         className={[
           'w-1.5 h-1.5 shrink-0',
@@ -100,15 +118,17 @@ function AccountRow({ name, environment, isActive }: AccountRowProps) {
   );
 }
 
-// ── Connection group card ─────────────────────────────────────────────────────
+// ── Collapsed connection row ──────────────────────────────────────────────────
 
-interface ConnectionGroupCardProps {
+interface ConnectionRowProps {
   group: PortfolioGroup;
-  /** Matching broker_connections row for status enrichment. May be absent for Tradovate credential-based groups. */
+  /** Matching broker_connections row for status enrichment. */
   brokerConnection: BrokerConnection | undefined;
+  isExpanded: boolean;
+  onToggle: () => void;
 }
 
-function ConnectionGroupCard({ group, brokerConnection }: ConnectionGroupCardProps) {
+function ConnectionRow({ group, brokerConnection, isExpanded, onToggle }: ConnectionRowProps) {
   // Derive broker display name from the first portfolio in the group.
   const firstPortfolio = group.portfolios[0];
   const source = firstPortfolio?.source;
@@ -121,37 +141,51 @@ function ConnectionGroupCard({ group, brokerConnection }: ConnectionGroupCardPro
   }
 
   const accountCount = group.portfolios.length;
+  const Chevron = isExpanded ? ChevronDown : ChevronRight;
 
   return (
-    <Card variant="default" padding="compact" className="space-y-2">
-      {/* Connection header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold text-sm text-zinc-100 truncate">
-            {group.label}
-          </span>
-          <span className="text-[11px] text-zinc-500 shrink-0">{brokerLabel}</span>
-        </div>
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50">
+      {/* Compact connection header — always visible */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/40 transition-colors rounded-lg text-left"
+        aria-expanded={isExpanded}
+        aria-label={`${group.label} — ${accountCount} account${accountCount !== 1 ? 's' : ''}. ${isExpanded ? 'Collapse' : 'Expand'}`}
+      >
+        <Chevron className="w-3.5 h-3.5 text-zinc-500 shrink-0" aria-hidden="true" />
+
+        {/* Connection name */}
+        <span className="font-semibold text-sm text-zinc-100 truncate flex-1 min-w-0">
+          {group.label}
+        </span>
+
+        {/* Broker label + account count */}
+        <span className="text-[11px] text-zinc-500 shrink-0 hidden sm:block">
+          {brokerLabel}
+        </span>
+        <span className="text-[11px] text-zinc-500 shrink-0">
+          {accountCount} account{accountCount !== 1 ? 's' : ''}
+        </span>
+
+        {/* Status pill */}
         <ConnectionStatusPill connection={brokerConnection} />
-      </div>
+      </button>
 
-      {/* Account list */}
-      <div className="space-y-0.5">
-        {group.portfolios.map((p) => (
-          <AccountRow
-            key={p.id}
-            name={p.name}
-            environment={p.environment}
-            isActive={p.is_active}
-          />
-        ))}
-      </div>
-
-      {/* Account count footer */}
-      <p className="text-[11px] text-zinc-600 pt-1">
-        {accountCount} account{accountCount !== 1 ? 's' : ''}
-      </p>
-    </Card>
+      {/* Expanded account list */}
+      {isExpanded && (
+        <div className="border-t border-zinc-800/70 px-2 py-1.5 space-y-0.5">
+          {group.portfolios.map((p) => (
+            <AccountRow
+              key={p.id}
+              name={p.name}
+              environment={p.environment}
+              isActive={p.is_active}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -188,15 +222,30 @@ export function JournalAccountsOverview() {
   } = usePortfolios();
 
   // Load all active connections (journal + copier) for status enrichment.
-  // Non-blocking: if this fails the cards still render, just without the pill.
+  // Non-blocking: if this fails the rows still render, just without the live pill.
   const {
     connections,
     isLoading: connectionsLoading,
     error: connectionsError,
   } = useBrokerConnections({ active: true });
 
+  // Track which connection group keys are expanded. Default = all collapsed.
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+
+  function toggleGroup(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   // Build a map from broker_connection_id / credential_id → BrokerConnection
-  // so each group card can look up its live status in O(1).
+  // so each group row can look up its live status in O(1).
   const connectionById = new Map<string, BrokerConnection>(
     connections.map((c) => [c.id, c]),
   );
@@ -266,13 +315,15 @@ export function JournalAccountsOverview() {
               </p>
             )}
 
-            {/* Connection group cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Connection rows — one per group, collapsed by default */}
+            <div className="space-y-1.5">
               {data.map((group) => (
-                <ConnectionGroupCard
+                <ConnectionRow
                   key={group.key}
                   group={group}
                   brokerConnection={groupConnection(group)}
+                  isExpanded={expandedKeys.has(group.key)}
+                  onToggle={() => toggleGroup(group.key)}
                 />
               ))}
             </div>
