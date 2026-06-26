@@ -9,13 +9,9 @@ import { Crown, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
+import { buildAccountGroups } from '@/components/journal/accountGrouping';
 import { useCopyRules } from '@/hooks/useCopyRules';
 import type { CopyRule } from '@/hooks/useCopyRules';
-
-// NinjaTrader Web runs on Tradovate cloud (post-2022 acquisition); both
-// brokers share the same auth flow, account IDs, and engine sessions.
-// See useTradovate.ts TRADOVATE_AUTH_BROKERS.
-const TRADOVATE_FAMILY = ['tradovate', 'ninja_trader'] as const;
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -246,11 +242,11 @@ const CopyAccountRow = memo(function CopyAccountRow({
 // ─── Main Component ───────────────────────────────────────────
 
 export function CopyTradingDashboard() {
-  // Show all journal broker connections — execution is local via the desktop agent.
+  // Show all journal broker connections — used for live status enrichment only.
   const { connections } = useBrokerConnections({ active: true });
   // liveCredentialIds: always empty — cloud engine session polling removed.
   const liveCredentialIds = useMemo(() => new Set<string>(), []);
-  const { portfolios } = usePortfolios();
+  const { tradovatePortfolios, brokerPortfolios } = usePortfolios();
   const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
     { id: 'asset-1', symbol: 'NQ' },
   ]);
@@ -268,21 +264,32 @@ export function CopyTradingDashboard() {
     setInstrumentDraft(instrument);
   }, [instrument]);
 
-  // Leader: user-controlled via dropdown, defaults to first Tradovate-family connection
-  const tradovateConnections = connections.filter(
-    (c) => TRADOVATE_FAMILY.includes(c.broker as typeof TRADOVATE_FAMILY[number]) && c.is_active,
-  );
-  const [leaderId, setLeaderId] = useState<string | null>(
-    tradovateConnections[0]?.id ?? null,
+  // Build account groups from portfolios — identical to the journal's AccountFilterDropdown.
+  // Exclude manual portfolios (no broker = not copyable). This is the ONE source of truth.
+  const accountGroups = useMemo(
+    () => buildAccountGroups(tradovatePortfolios, brokerPortfolios, []),
+    [tradovatePortfolios, brokerPortfolios],
   );
 
-  // Resolve leader's portfolio id for copy-rule lookup
-  const leaderConnection = connections.find((c) => c.id === leaderId);
-  const leaderPortfolio = portfolios.find(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (p) => (p as any).tradovate_account_id?.toString() === leaderConnection?.account_id,
+  // Flat list of all broker portfolios (no manual), preserving group order.
+  const brokerAccountPortfolios = useMemo(
+    () => accountGroups.flatMap((g) => g.portfolios),
+    [accountGroups],
   );
-  const leaderPortfolioId = leaderPortfolio?.id ?? null;
+
+  // Build a map from broker_connection_id / credential_id → connection for live-status lookup.
+  const connectionById = useMemo(
+    () => new Map(connections.map((c) => [c.id, c])),
+    [connections],
+  );
+
+  // Leader: portfolio id — defaults to the first non-manual portfolio.
+  const [leaderId, setLeaderId] = useState<string | null>(
+    brokerAccountPortfolios[0]?.id ?? null,
+  );
+
+  // leaderPortfolioId is the same as leaderId (portfolios are the source of truth now).
+  const leaderPortfolioId = leaderId;
 
   // Helper: find rule for a given follower portfolio
   function ruleFor(targetPortfolioId: string | null): CopyRule | null {
@@ -296,46 +303,42 @@ export function CopyTradingDashboard() {
     );
   }
 
-  // Build rows from broker_connections (all journal accounts) + portfolios.
-  // Live position/balance columns are sourced from the desktop agent, not the
-  // cloud engine — rendered as null here until the agent pairing ships.
+  // Build rows from portfolios (journal source of truth), grouped by connection.
+  // Live position/balance columns come from the desktop agent — null until paired.
   const rows = useMemo<AccountRowData[]>(() => {
-    return connections
-      .filter((c) => TRADOVATE_FAMILY.includes(c.broker as typeof TRADOVATE_FAMILY[number]))
-      .map((c) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const port = portfolios.find(
-          (p) =>
-            p.id === c.id ||
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (p as any).tradovate_account_id?.toString() === c.account_id,
-        );
-        const portfolioId = port?.id ?? null;
+    return accountGroups.flatMap((group) =>
+      group.portfolios.map((p) => {
+        // Resolve the live broker_connection for status: credential_id for Tradovate,
+        // broker_connection_id for non-Tradovate broker portfolios.
+        const connId = p.credential_id ?? p.broker_connection_id;
+        const conn = connId ? connectionById.get(connId) : undefined;
 
-        const tokenExpired = c.token_expires_at
-          ? new Date(c.token_expires_at) < new Date()
+        const tokenExpired = conn?.token_expires_at
+          ? new Date(conn.token_expires_at) < new Date()
           : false;
-        const live = liveCredentialIds.has(c.id);
-        const issue = !live && ((c.is_active && c.status === 'connected') || tokenExpired);
+        // "live" = in a cloud engine session (always false — agent-based, no cloud polling).
+        const live = Boolean(connId && liveCredentialIds.has(connId));
+        const issue = !live && conn != null && conn.is_active && conn.status === 'connected' && tokenExpired;
 
         return {
-          id: c.id,
-          connectionName: c.connection_name ?? c.broker,
-          accountName:    c.account_name ?? c.account_id,
+          id:             p.id,
+          connectionName: group.label,
+          accountName:    p.name,
           symbol:         instrument,
           live,
           issue,
-          // Live data (position/balance/PnL) supplied by desktop agent — null until paired.
-          position:    null,
-          balance:     null,
-          dayPnL:      null,
-          openPnL:     null,
-          qty:         null,
-          following:   c.is_active,
-          portfolioId,
+          // Live data supplied by desktop agent — null until agent is paired.
+          position:  null,
+          balance:   null,
+          dayPnL:    null,
+          openPnL:   null,
+          qty:       null,
+          following: p.is_active,
+          portfolioId: p.id,
         };
-      });
-  }, [connections, liveCredentialIds, portfolios, instrument]);
+      }),
+    );
+  }, [accountGroups, connectionById, liveCredentialIds, instrument]);
 
   // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
