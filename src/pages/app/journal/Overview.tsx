@@ -46,7 +46,7 @@ import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettings
 // NEW: AFFILIATE STATUS HOOK
 // ================================================
 import { useIsAffiliate } from '@/features/affiliate/hooks/useAffiliateProfile';
-import { UserStatusBadges } from '@/components/floor/UserStatusBadges';
+import { UserStatusBadges } from '@/features/floor/components/UserStatusBadges';
 
 // ================================================
 // NEW: TIMEZONE & TRADING SESSION IMPORTS
