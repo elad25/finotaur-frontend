@@ -166,8 +166,8 @@ export function WallHeatLayer({
           const priceLevelY = yAtBandBot as number;
 
           // ── Change C: intensity-driven thickness centered on price level ────
-          // thicknessPx ∈ [1, 14] based on seg.intensity (0..1).
-          const thicknessPx = 1 + Math.round((seg.intensity ?? 0.25) * 13);
+          // Min 3px so even low-intensity walls read clearly as colored stripes.
+          const thicknessPx = 3 + Math.round((seg.intensity ?? 0.3) * 11);
           const halfThick   = thicknessPx / 2;
 
           // Band top/bot for culling check (centered on priceLevelY).
