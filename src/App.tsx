@@ -130,6 +130,7 @@ const JournalPublicPage = lazy(() => import("@/pages/JournalPublicPage"));
 const GlossaryIndex = lazy(() => import("@/pages/glossary/GlossaryIndex"));
 const GlossaryTerm = lazy(() => import("@/pages/glossary/GlossaryTerm"));
 const JournalCopierPage = lazy(() => import("@/pages/JournalCopierPage"));
+const BestTradingJournalTradovate = lazy(() => import("@/pages/BestTradingJournalTradovate"));
 const ResearchIndex = lazy(() => import("@/pages/research/ResearchIndexPage"));
 const TickerResearch = lazy(() => import("@/pages/research/TickerResearchPage"));
 const WelcomeScreen = lazy(() => import("@/pages/onboarding/WelcomeScreen"));
@@ -484,6 +485,7 @@ function AppContent() {
         <Route path="/research" element={<SuspenseRoute><ResearchIndex /></SuspenseRoute>} />
         <Route path="/research/:ticker" element={<SuspenseRoute><TickerResearch /></SuspenseRoute>} />
         <Route path="/journal-copier" element={<SuspenseRoute><JournalCopierPage /></SuspenseRoute>} />
+        <Route path="/best-trading-journal-for-tradovate" element={<SuspenseRoute><BestTradingJournalTradovate /></SuspenseRoute>} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
         <Route path="/legal" element={<SuspenseRoute><LegalHub /></SuspenseRoute>} />
