@@ -39,7 +39,7 @@ try {
 //                              blank-screen case vite:preloadError misses.
 //   3. unhandledrejection    — dynamic import() rejections with chunk/MIME text
 // Guarded by a 10s sessionStorage flag so a non-stale failure never loops.
-// See Sentry MZ-4 (Strategies chunk).
+// See Sentry MZ-2 (TradeCopier chunk) and MZ-4 (Strategies chunk).
 const STALE_CHUNK_RELOAD_KEY = '__vite_preload_reload_at__';
 
 function recoverFromStaleChunk(): void {
