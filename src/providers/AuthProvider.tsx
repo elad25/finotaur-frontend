@@ -46,6 +46,12 @@ function logOnce(key: string, ...args: any[]) {
 let _lastTimeoutWarnAt = 0;
 const TIMEOUT_WARN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+// getUser-fallback retry budget (only used on the getSession-timeout path).
+// Kept within ProtectedRoute's ~20s loading window: worst case ≈
+// TIMEOUTS.AUTH (12s) + 3000 + 1200 + 3000 ≈ 19.2s, below the login redirect.
+const FALLBACK_GETUSER_TIMEOUT_MS = 3000;
+const FALLBACK_GETUSER_BACKOFFS_MS = [0, 1200]; // attempt 0 immediate, then one retry
+
 // ================================================
 // HELPERS
 // ================================================
@@ -149,12 +155,46 @@ async function waitForProfile(userId: string, timeoutMs = 2000): Promise<boolean
   return false;
 }
 
+/**
+ * On a getSession() timeout, recover the user via the lighter getUser() path
+ * with a bounded retry. getUser() reads the local storage adapter without a
+ * forced token refresh, so it recovers the session when the hang is in
+ * Supabase's internal refresh / network preflight (a transient blip), while
+ * staying cheap. The retry catches blips that clear within ~1-2s instead of
+ * dropping a paying user onto the login screen. Each attempt is withTimeout-
+ * wrapped (ADL-040 — no unbounded promise on the critical path).
+ *
+ * Returns the recovered User, or null if every attempt failed.
+ */
+async function recoverUserAfterTimeout(): Promise<User | null> {
+  for (let attempt = 0; attempt < FALLBACK_GETUSER_BACKOFFS_MS.length; attempt++) {
+    const backoff = FALLBACK_GETUSER_BACKOFFS_MS[attempt];
+    if (backoff > 0) await new Promise((r) => setTimeout(r, backoff));
+    try {
+      const fallback = await withTimeout(
+        supabase.auth.getUser(),
+        FALLBACK_GETUSER_TIMEOUT_MS,
+        `AuthProvider.getUser.fallback.${attempt}`
+      );
+      if (fallback.data?.user && !fallback.error) {
+        return fallback.data.user;
+      }
+    } catch {
+      // Swallow this attempt's failure; the loop retries or falls through to null.
+    }
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useQueryClient();
   
   const isSubscribedRef = useRef(false);
+  // True once onAuthStateChange has delivered a real (non-null) user. Guards the
+  // init path from overwriting a valid session with null on a getSession timeout race.
+  const authStateUserRef = useRef(false);
 
   useEffect(() => {
     if (isSubscribedRef.current) {
@@ -180,47 +220,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         getSessionError = err;
         if (err instanceof TimeoutError) {
-          // P0.0 fix (OQ-93): on getSession timeout, try the lighter getUser()
-          // path before declaring no-session. getUser() reads from the local
-          // storage adapter without forcing a token refresh round-trip, so it
-          // recovers the user when the hang is in Supabase's internal refresh
-          // (hypothesis A) or in network preflight, while staying cheap when
-          // localStorage itself is the bottleneck (hypothesis B). withTimeout
-          // wraps it to honour ADL-040 (no unbounded promise on critical path).
+          // P0.0 fix (OQ-93) + bounded retry: on getSession timeout, recover via
+          // the lighter getUser() path with a short retry budget before declaring
+          // no-session. A transient Supabase auth blip should not boot a paying
+          // user to the login screen. See recoverUserAfterTimeout().
           const hasStoredSession = !!localStorage.getItem('finotaur-auth-token');
-          try {
-            const fallback = await withTimeout(
-              supabase.auth.getUser(),
-              4000,
-              'AuthProvider.getUser.fallback'
-            );
-            if (fallback.data?.user && !fallback.error) {
-              // Synthesise a minimal Session from the cached user. The real
-              // Session (with access_token / refresh_token) will arrive via
-              // onAuthStateChange once Supabase's internal state settles —
-              // this just unblocks the initial render so the user isn't stuck
-              // on the login screen while the SDK recovers.
-              session = { user: fallback.data.user } as Session;
-              // Rate-limited warn: only log once per 5 minutes to avoid
-              // spamming Sentry/console when auth lock contention is ongoing.
-              const now = Date.now();
-              if (now - _lastTimeoutWarnAt >= TIMEOUT_WARN_INTERVAL_MS) {
-                _lastTimeoutWarnAt = now;
-                logger.warn(
-                  '[Auth] getSession timeout — session served via getUser fallback ' +
-                  '(auth lock contention)',
-                  { hasStoredSession }
-                );
-              }
-            } else if (fallback.error) {
-              logger.error('[Auth] getSession timeout and getUser fallback failed', {
-                fallbackError: fallback.error,
-                hasStoredSession,
-              });
+          const recoveredUser = await recoverUserAfterTimeout();
+          if (recoveredUser) {
+            // Synthesise a minimal Session from the cached user. The real Session
+            // (access_token / refresh_token) arrives via onAuthStateChange once
+            // Supabase's internal state settles — this unblocks the initial render
+            // so the user isn't stuck on login while the SDK recovers.
+            session = { user: recoveredUser } as Session;
+            // Rate-limited warn: at most once per 5 minutes to avoid spamming
+            // Sentry/console when auth lock contention is ongoing.
+            const now = Date.now();
+            if (now - _lastTimeoutWarnAt >= TIMEOUT_WARN_INTERVAL_MS) {
+              _lastTimeoutWarnAt = now;
+              logger.warn(
+                '[Auth] getSession timeout — session served via getUser fallback ' +
+                '(auth lock contention)',
+                { hasStoredSession }
+              );
             }
-          } catch (fallbackErr) {
+          } else {
+            // Every fallback attempt failed — genuine no-session (or sustained
+            // outage). This is the terminal error that should reach Sentry.
             logger.error('[Auth] getSession timeout and getUser fallback failed', {
-              fallbackErr,
               hasStoredSession,
             });
           }
@@ -237,7 +263,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(session.user);
           logger.setContext({ userId: session.user.id, email: session.user.email });
           setSentryUser({ id: session.user.id });
-        } else {
+        } else if (!authStateUserRef.current) {
+          // Only declare "no session" if onAuthStateChange hasn't already
+          // delivered a real user — prevents the init path from clobbering a
+          // valid INITIAL_SESSION/SIGNED_IN to null during a getSession blip.
           logOnce('auth-no-session', '[Auth] No session found');
           setUser(null);
         }
@@ -255,6 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 🔥 Log each event type only once
       logOnce(`auth-event-${event}`, '[Auth] State change:', event);
 
+      authStateUserRef.current = !!session?.user;
       setUser(session?.user ?? null);
 
       if (isLoading) {
