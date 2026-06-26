@@ -40,12 +40,24 @@ import { AIResultAnalysis } from './components/AIResultAnalysis';
 // ---------------------------------------------------------------------------
 
 function msToDateInput(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
+  // Guard against NaN / invalid epochs — new Date(NaN).toISOString() throws
+  // RangeError and would crash the whole page via the Error Boundary.
+  if (!Number.isFinite(ms)) return '';
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
 function dateInputToMs(value: string, endOfDay = false): number {
+  // Empty or unparseable input → NaN (the caller validates before running).
+  if (!value) return NaN;
   const base = new Date(`${value}T00:00:00Z`).getTime();
+  if (Number.isNaN(base)) return NaN;
   return endOfDay ? base + (24 * 60 * 60 * 1000 - 1) : base;
+}
+
+/** A from/to range is runnable only when both ends are finite and ordered. */
+function isValidDateRange(from: number, to: number): boolean {
+  return Number.isFinite(from) && Number.isFinite(to) && from < to;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +87,8 @@ export default function AutoBacktest() {
 
   const isBusy = status === 'loading-data' || status === 'running';
   const hasResult = status === 'done' && !!result;
-  const canRun = setup.patterns.length > 0 && !isBusy;
+  const dateRangeValid = isValidDateRange(from, to);
+  const canRun = setup.patterns.length > 0 && !isBusy && dateRangeValid;
 
   const { symbol, timeframe, source } = setup.instrument;
 
@@ -140,6 +153,11 @@ export default function AutoBacktest() {
                 {setup.patterns.length === 0 && (
                   <p className="text-[12px] text-ink-tertiary">
                     Select a pattern above to enable the run.
+                  </p>
+                )}
+                {setup.patterns.length > 0 && !dateRangeValid && (
+                  <p className="text-[12px] text-red-400">
+                    Invalid date range — pick a valid From and To (From must be before To).
                   </p>
                 )}
                 <div className="sm:ml-auto">
