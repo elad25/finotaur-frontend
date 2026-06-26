@@ -115,13 +115,23 @@ export class BinanceCandleSource implements CandleSource {
       () => null, // non-fatal: IndexedDB may be unavailable in some environments
     );
     if (cached && Date.now() - cached.lastUpdated < CACHE_MAX_AGE_MS) {
-      // Filter to requested range (timestamps in the cache are in seconds).
-      const fromSec = Math.floor(from / 1000);
-      const toSec = Math.floor(to / 1000);
-      const filtered = cached.candles
-        .filter((c) => c.time >= fromSec && c.time <= toSec)
-        .map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }));
-      if (filtered.length > 0) return filtered as Candle[];
+      // Reject corrupt cache: a prior bug stored candles with NaN OHLC. If the
+      // sample is not finite, ignore the cache and refetch fresh data.
+      const sample = cached.candles[0];
+      const cacheIsValid =
+        sample != null &&
+        [sample.time, sample.open, sample.high, sample.low, sample.close].every(
+          (v) => Number.isFinite(v),
+        );
+      if (cacheIsValid) {
+        // Filter to requested range (timestamps in the cache are in seconds).
+        const fromSec = Math.floor(from / 1000);
+        const toSec = Math.floor(to / 1000);
+        const filtered = cached.candles
+          .filter((c) => c.time >= fromSec && c.time <= toSec)
+          .map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }));
+        if (filtered.length > 0) return filtered as Candle[];
+      }
     }
 
     // --- Fetch from Binance ---

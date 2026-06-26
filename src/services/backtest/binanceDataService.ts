@@ -66,15 +66,18 @@ export class BinanceDataService {
         throw new Error(`Binance API error: ${response.statusText}`);
       }
 
-      const data: BinanceCandle[] = await response.json();
-      
-      return data.map(candle => ({
-        time: Math.floor(candle.openTime / 1000), // Convert to seconds
-        open: parseFloat(candle.open),
-        high: parseFloat(candle.high),
-        low: parseFloat(candle.low),
-        close: parseFloat(candle.close),
-        volume: parseFloat(candle.volume),
+      // Binance /klines returns POSITIONAL tuples, not named objects:
+      // [openTime, open, high, low, close, volume, closeTime, quoteVol, trades, ...]
+      // Reading named fields (candle.open) yields undefined → NaN for every OHLC.
+      const data = (await response.json()) as Array<Array<string | number>>;
+
+      return data.map(k => ({
+        time: Math.floor(Number(k[0]) / 1000), // openTime ms → seconds
+        open: parseFloat(String(k[1])),
+        high: parseFloat(String(k[2])),
+        low: parseFloat(String(k[3])),
+        close: parseFloat(String(k[4])),
+        volume: parseFloat(String(k[5])),
       }));
     } catch (error) {
       console.error('Error fetching Binance data:', error);
