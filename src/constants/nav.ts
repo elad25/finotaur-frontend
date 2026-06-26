@@ -241,12 +241,12 @@ export const domains: Record<string, Domain> = {
     beta: true,
     defaultPath: '/app/mentor/mode',
     subNav: [
-      { label: 'Mentor Mode', path: '/app/mentor/mode' },
       { label: 'Rooms', path: '/app/mentor/rooms' },
+      { label: 'Mentor Mode', path: '/app/mentor/mode' },
     ],
     sidebar: [
-      { label: 'Mentor Mode', path: '/app/mentor/mode', icon: Users },
       { label: 'Rooms', path: '/app/mentor/rooms', icon: GraduationCap },
+      { label: 'Mentor Mode', path: '/app/mentor/mode', icon: Users },
     ],
   },
 
