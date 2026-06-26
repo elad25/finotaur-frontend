@@ -19,7 +19,13 @@ export function initSentry(): void {
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
-    integrations: [],
+    // Keep Sentry's default integrations — GlobalHandlers (window.onerror +
+    // unhandledrejection), Breadcrumbs, Dedupe, LinkedErrors, etc. An empty
+    // array here previously DISABLED all of them, so ONLY explicit
+    // captureException calls reached Sentry and uncaught errors were silently
+    // dropped. tracesSampleRate:0 keeps us on the free tier regardless (no
+    // performance spans are sent), so restoring defaults adds no quota cost.
+    integrations: (defaults) => defaults,
     beforeSend(event) {
       if (event.user) {
         event.user.email = undefined;
