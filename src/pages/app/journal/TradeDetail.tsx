@@ -12,7 +12,7 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 import { getDTE, getOptionBreakeven, getOptionMaxLoss, getOptionMaxProfit, getStrategyLabel, legSignedPnl, getPipSize, parseForexPair, singleLegFromTrade, type TradeLeg } from '@/utils/tradeCalculations';
 import { fetchTradeLegs } from '@/lib/journal/multiLegTrade';
 import { Loader2, ArrowLeft, AlertCircle, Pencil, X, ClipboardList, Share2 } from 'lucide-react';
-import { ShareTradeDialog } from '@/components/community/ShareTradeDialog';
+import { ShareTradeDialog } from '@/features/floor/components/ShareTradeDialog';
 import { SkeletonStatRow, SkeletonChart, SkeletonText } from '@/components/ds/Skeleton';
 import MultiUploadZone from '@/components/journal/MultiUploadZone';
 import { ForexMarketStatusChip } from '@/components/journal/ForexMarketStatusChip';

@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import { useLeaderboardOptIn } from '@/hooks/useLeaderboardOptIn';
+import { useLeaderboardOptIn } from '@/features/floor/hooks/useLeaderboardOptIn';
 import {
   Activity, User, Eye, EyeOff, Pencil, Check, X, Loader2,
 } from 'lucide-react';
