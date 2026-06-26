@@ -1066,6 +1066,11 @@ export function BacktestReplayChart({
                     // Store start state in closure-local refs so we can update
                     // position without React state (avoids a re-render loop).
                     let latestPrice = o.triggerPrice;
+                    // Track whether the pointer actually moved. A zero-distance
+                    // interaction (a click — including an imprecise click near
+                    // the ✕) must NOT be treated as a drag: it should neither
+                    // rewrite the trigger price nor leave the pill displaced.
+                    let moved = false;
 
                     const handleMove = (ev: PointerEvent) => {
                       if (!seriesRef.current || !containerRef.current) return;
@@ -1073,6 +1078,7 @@ export function BacktestReplayChart({
                       const localY = ev.clientY - rect.top;
                       const raw = seriesRef.current.coordinateToPrice(localY);
                       if (raw == null || !Number.isFinite(raw)) return;
+                      moved = true;
                       latestPrice = raw;
                       // Visual feedback: move the pill to follow the pointer.
                       pillEl.style.top = `${localY - 10}px`;
@@ -1082,15 +1088,22 @@ export function BacktestReplayChart({
                       pillEl.removeEventListener('pointermove', handleMove);
                       pillEl.removeEventListener('pointerup', handleUp);
                       pillEl.removeEventListener('pointercancel', handleCancel);
-                      // Reset visual position — overlayTick re-render will
-                      // recompute the correct pixel coord from the new price.
-                      pillEl.style.top = '';
+                      // Force the pill overlay to REMOUNT so React re-applies the
+                      // correct computed `top` to every pill. Just clearing
+                      // style.top to '' is not enough: React skips re-writing an
+                      // unchanged virtual `top`, so a zero-distance interaction
+                      // would leave the imperatively-moved pill stuck at top:0
+                      // (the "pill jumps to the chart top" bug). Bumping
+                      // overlayTick changes the container key → fresh nodes with
+                      // correct inline `top`.
+                      setOverlayTick((n) => n + 1);
                     };
 
                     const handleUp = (ev: PointerEvent) => {
                       pillEl.releasePointerCapture(ev.pointerId);
                       cleanup();
-                      onUpdatePendingPrice(o.id, latestPrice);
+                      // Only commit a new trigger price on a real drag.
+                      if (moved) onUpdatePendingPrice(o.id, latestPrice);
                     };
 
                     // Browser-cancelled gesture: clean up without committing a price.
@@ -1126,6 +1139,60 @@ export function BacktestReplayChart({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Live open-position pill — the counterpart to the pending-order
+            pill above. Once a pending order fills it leaves pendingOrders and
+            becomes activePosition, so the "BUY LIMIT 1× @ X" pill disappears
+            and THIS one takes its place at the entry price: direction + units
+            + running Open P&L, colored green in profit / red in loss. The P&L
+            recomputes from the live cursor bar's close on every render (each
+            playback STEP re-renders the parent), and the coordinate math
+            re-runs on overlayTick (pan / zoom / resize). ── */}
+        {activePosition && seriesRef.current && chartRef.current && (
+          <div key={`pos-${overlayTick}`} className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+            {(() => {
+              const pos = activePosition;
+              const y = seriesRef.current!.priceToCoordinate(pos.entryPrice);
+              const containerHeight = containerRef.current?.clientHeight ?? 0;
+              if (y == null || y < 0 || y > containerHeight) return null;
+              const axisW = chartRef.current!.priceScale('right').width() ?? 60;
+              const dir = pos.side === 'LONG' ? 1 : -1;
+              const units = Math.abs(pos.size);
+              // Live mark price = the close of the bar under the playback cursor.
+              const mark = bars[playback.cursor]?.close;
+              const pnl =
+                mark != null && Number.isFinite(mark)
+                  ? (mark - pos.entryPrice) * dir * pos.size
+                  : null;
+              // PnL sign drives the color: green = winning, red = losing,
+              // neutral gray until a mark price is available.
+              const pillColor =
+                pnl == null ? '#52525b' : pnl >= 0 ? THEME.candleUp : THEME.candleDown;
+              const pnlText =
+                pnl == null
+                  ? '—'
+                  : `${pnl >= 0 ? '+' : ''}${pnl.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`;
+              const label = `${pos.side} ${units}× · ${pnlText}`;
+              return (
+                <div
+                  className="absolute flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow"
+                  style={{
+                    top: y - 10,
+                    right: axisW + 4,
+                    backgroundColor: pillColor,
+                    color: '#fff',
+                    userSelect: 'none',
+                  }}
+                >
+                  {label}
+                </div>
+              );
+            })()}
           </div>
         )}
 
