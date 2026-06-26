@@ -29,6 +29,11 @@ const MID_DRIFT_PCT = 0.005; // 0.5%
 /** Vertical padding above and below the outermost level in the union. */
 const PADDING_PCT = 0.08; // 8%
 
+/** Walls farther than this fraction from current mid do NOT expand the auto-fit
+ *  band (they still render as stripes if scrolled into view). Prevents a distant
+ *  whale wall from zooming the whole chart out and squashing the candles. */
+const WALL_CLAMP_PCT = 0.15; // ±15% of mid
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface LiquidityBand {
@@ -81,7 +86,26 @@ export function useLiquidityBand({
 
     const { bids, asks } = getBook();
 
-    // ── Collect all notional-qualified wall levels ─────────────────────────
+    // ── Current mid anchor (best bid/ask; fall back to candle center) ──────
+    let bestBid = -Infinity;
+    let bestAsk = Infinity;
+    for (const p of bids.keys()) if (p > bestBid) bestBid = p;
+    for (const p of asks.keys()) if (p < bestAsk) bestAsk = p;
+    const bookMid =
+      Number.isFinite(bestBid) && Number.isFinite(bestAsk)
+        ? (bestBid + bestAsk) / 2
+        : NaN;
+    const candleRange = getCandleRange?.() ?? null;
+    const hasCandle = candleRange !== null;
+    const mid = Number.isFinite(bookMid)
+      ? bookMid
+      : hasCandle
+        ? (candleRange.high + candleRange.low) / 2
+        : NaN;
+    const clampLo = Number.isFinite(mid) ? mid * (1 - WALL_CLAMP_PCT) : -Infinity;
+    const clampHi = Number.isFinite(mid) ? mid * (1 + WALL_CLAMP_PCT) : Infinity;
+
+    // ── Collect notional-qualified wall levels within the clamp window ──────
     let wallMin = Infinity;
     let wallMax = -Infinity;
     let hasWall = false;
@@ -89,6 +113,7 @@ export function useLiquidityBand({
     for (const [price, qty] of bids) {
       const notional = price * qty;
       if (notional < floorUsd) continue;
+      if (price < clampLo || price > clampHi) continue;
       hasWall = true;
       if (price < wallMin) wallMin = price;
       if (price > wallMax) wallMax = price;
@@ -97,14 +122,11 @@ export function useLiquidityBand({
     for (const [price, qty] of asks) {
       const notional = price * qty;
       if (notional < floorUsd) continue;
+      if (price < clampLo || price > clampHi) continue;
       hasWall = true;
       if (price < wallMin) wallMin = price;
       if (price > wallMax) wallMax = price;
     }
-
-    // ── Merge in candle hi/low so price action is always in frame ──────────
-    const candleRange = getCandleRange?.() ?? null;
-    const hasCandle = candleRange !== null;
 
     if (!hasWall && !hasCandle) {
       // Nothing to work with yet — clear band and wait.

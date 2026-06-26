@@ -312,7 +312,7 @@ const TRACK_FLOOR_USD  = 100_000;   // track ≥ $100K — kills small-order noi
 // 72h wall-history notionals, so each coin shows its significant walls at its
 // own $-scale (BTC walls ~$200K today; the old fixed $500K hid ~97% of real
 // walls). p70 of observed wall sizes, clamped to a sane band.
-const AUTO_FLOOR_PCTL = 0.70;
+const AUTO_FLOOR_PCTL = 0.60;
 const AUTO_FLOOR_MIN  = 50_000;
 const AUTO_FLOOR_MAX  = 5_000_000;
 
