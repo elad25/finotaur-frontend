@@ -32,7 +32,7 @@ export interface DrawingOptions {
   width: number;
 }
 
-export type ToolId = 'cursor' | 'trendline' | 'horizontal' | 'rectangle';
+export type ToolId = 'cursor' | 'trendline' | 'horizontal' | 'horizontal_ray' | 'rectangle';
 
 // ─── Hit test result ─────────────────────────────────────────────────────────
 

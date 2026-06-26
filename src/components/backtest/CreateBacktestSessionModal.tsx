@@ -10,7 +10,7 @@
 // threaded into useBacktestSession via setCommissionConfig on chart load.
 
 import { useState } from 'react';
-import { CalendarDays, Plus, Loader2, ChevronDown } from 'lucide-react';
+import { CalendarDays, Plus, Loader2 } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
 import {
@@ -112,13 +112,8 @@ export function CreateBacktestSessionModal({
   const [symbol, setSymbol] = useState<string>('');
   const [startBalance, setStartBalance] = useState<string>('');
   const [range, setRange] = useState<DateRange | undefined>();
+  const [dateOpen, setDateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Phase 7: execution settings (commission + slippage).
-  const [execOpen, setExecOpen] = useState(false);
-  const [commissionPerOrder, setCommissionPerOrder] = useState('0');
-  const [commissionPercent, setCommissionPercent] = useState('0');
-  const [slippagePercent, setSlippagePercent] = useState('0');
 
   // Inline "create new strategy" (mirrors reference "Create new playbook")
   const [creatingStrategy, setCreatingStrategy] = useState(false);
@@ -133,13 +128,10 @@ export function CreateBacktestSessionModal({
     setSymbol('');
     setStartBalance('');
     setRange(undefined);
+    setDateOpen(false);
     setError(null);
     setCreatingStrategy(false);
     setNewStrategyName('');
-    setExecOpen(false);
-    setCommissionPerOrder('0');
-    setCommissionPercent('0');
-    setSlippagePercent('0');
   };
 
   const handleClose = (next: boolean) => {
@@ -213,16 +205,10 @@ export function CreateBacktestSessionModal({
       dateRange: { from: toIsoDate(range.from), to: toIsoDate(range.to) },
     });
 
-    // Phase 7: resolve commission config from execution settings inputs.
-    const commissionConfig: CommissionConfig = {
-      commissionPerOrder: Math.max(0, parseFloat(commissionPerOrder) || 0),
-      commissionPercent: Math.max(0, parseFloat(commissionPercent) || 0),
-      slippagePercent: Math.max(0, parseFloat(slippagePercent) || 0),
-    };
-
     resetForm();
     onOpenChange(false);
-    onCreated(session, commissionConfig);
+    // Execution settings UI removed — backtests run with clean defaults (no fees).
+    onCreated(session, DEFAULT_COMMISSION_CONFIG);
   };
 
   return (
@@ -380,7 +366,7 @@ export function CreateBacktestSessionModal({
               <Label className="text-xs text-gray-400">
                 Date range <span className="text-[#C9A646]">*</span>
               </Label>
-              <Popover>
+              <Popover open={dateOpen} onOpenChange={setDateOpen}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
@@ -401,10 +387,13 @@ export function CreateBacktestSessionModal({
                       // Clamp both ends to today (America/New_York) so
                       // keyboard/programmatic paths can't produce a future date.
                       const cap = getTodayNY();
-                      setRange({
+                      const clamped = {
                         from: next.from && next.from > cap ? cap : next.from,
                         to:   next.to   && next.to   > cap ? cap : next.to,
-                      });
+                      };
+                      setRange(clamped);
+                      // Close the popover once the target (end) date is picked.
+                      if (clamped.from && clamped.to) setDateOpen(false);
                     }}
                     disabled={{ after: getTodayNY() }}
                     toDate={getTodayNY()}
@@ -418,68 +407,6 @@ export function CreateBacktestSessionModal({
               </Popover>
               <p className="text-[10px] text-gray-600">Start time is 12 am US/Eastern</p>
             </div>
-          </div>
-
-          {/* Phase 7: Execution settings — collapsible */}
-          <div className="rounded-lg border border-white/10 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setExecOpen((v) => !v)}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-400 hover:bg-white/5 transition-colors"
-            >
-              <span>Execution settings (optional)</span>
-              <ChevronDown
-                size={14}
-                className={cn('transition-transform', execOpen ? 'rotate-180' : '')}
-              />
-            </button>
-            {execOpen && (
-              <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-3">
-                <p className="text-[10px] text-gray-600">
-                  Simulates broker fees and price slippage. Leave at 0 for clean paper trading.
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-gray-400">Commission per order ($)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={commissionPerOrder}
-                      onChange={(e) => setCommissionPerOrder(e.target.value)}
-                      placeholder="0"
-                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 text-xs h-8"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-gray-400">Commission (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.01}
-                      value={commissionPercent}
-                      onChange={(e) => setCommissionPercent(e.target.value)}
-                      placeholder="0"
-                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 text-xs h-8"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-gray-400">Slippage (%)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.01}
-                      value={slippagePercent}
-                      onChange={(e) => setSlippagePercent(e.target.value)}
-                      placeholder="0"
-                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-[#C9A646]/40 text-xs h-8"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {error && <p className="text-xs text-rose-400">{error}</p>}

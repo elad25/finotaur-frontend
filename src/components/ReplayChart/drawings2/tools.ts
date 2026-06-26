@@ -245,6 +245,115 @@ export class HorizontalLineDrawing extends BaseDrawing {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  HORIZONTAL RAY  (1-click: from the anchor point, extends to the RIGHT only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class HorizontalRayPaneRenderer implements ISeriesPrimitivePaneRenderer {
+  constructor(
+    private _p0: PixelPoint | null,
+    private _price: number,
+    private _options: DrawingOptions,
+    private _selected: boolean,
+  ) {}
+
+  draw(target: CanvasRenderingTarget2D): void {
+    target.useBitmapCoordinateSpace(scope => {
+      if (!this._p0) return;
+      const ctx = scope.context;
+      const hr = scope.horizontalPixelRatio;
+      const vr = scope.verticalPixelRatio;
+      const x0 = Math.round(this._p0.x * hr);
+      const yScaled = Math.round(this._p0.y * vr);
+      const w = scope.bitmapSize.width;
+
+      // Line from the anchor x to the right edge only.
+      ctx.beginPath();
+      ctx.strokeStyle = this._options.color;
+      ctx.lineWidth = this._options.width * vr;
+      ctx.moveTo(x0, yScaled);
+      ctx.lineTo(w, yScaled);
+      ctx.stroke();
+
+      // Price label at right edge
+      const label = this._price.toFixed(2);
+      const fontSize = 11 * vr;
+      ctx.font = `${fontSize}px system-ui, sans-serif`;
+      const tw = ctx.measureText(label).width;
+      const pad = 4 * hr;
+      ctx.fillStyle = this._options.color;
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(w - tw - pad * 2, yScaled - fontSize * 0.8, tw + pad * 2, fontSize * 1.2);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#000000';
+      ctx.fillText(label, w - tw - pad, yScaled + fontSize * 0.2);
+
+      // Selected: square handle at the anchor point.
+      if (this._selected) {
+        const hc = selectedColor(this._options.color);
+        const hs = HANDLE_HALF * hr;
+        ctx.fillStyle = hc;
+        ctx.strokeStyle = this._options.color;
+        ctx.lineWidth = 1.5 * vr;
+        ctx.beginPath();
+        ctx.rect(x0 - hs, yScaled - hs, hs * 2, hs * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    });
+  }
+}
+
+class HorizontalRayPaneView implements ISeriesPrimitivePaneView {
+  private _source: HorizontalRayDrawing;
+  private _p0: PixelPoint | null = null;
+
+  constructor(source: HorizontalRayDrawing) {
+    this._source = source;
+  }
+
+  update(): void {
+    const pt = this._source.points[0];
+    this._p0 = pt ? this._source.toPixel(pt) : null;
+  }
+
+  renderer(): ISeriesPrimitivePaneRenderer {
+    const pt = this._source.points[0];
+    return new HorizontalRayPaneRenderer(
+      this._p0,
+      pt?.price ?? 0,
+      this._source.options,
+      this._source.selected,
+    );
+  }
+}
+
+export class HorizontalRayDrawing extends BaseDrawing {
+  private _views: HorizontalRayPaneView[];
+
+  constructor(points: DPoint[], options: DrawingOptions) {
+    super(points, options);
+    this._views = [new HorizontalRayPaneView(this)];
+  }
+
+  paneViews(): ISeriesPrimitivePaneView[] { return this._views; }
+  protected _toolId(): ToolId { return 'horizontal_ray'; }
+
+  hitTest(cx: number, cy: number): HitResult | null {
+    const pt = this.points[0] ? this.toPixel(this.points[0]) : null;
+    if (!pt) return null;
+    // Anchor handle (only when selected)
+    if (this.selected && Math.hypot(cx - pt.x, cy - pt.y) <= HIT_TOLERANCE) {
+      return { isBody: false, handleIndex: 0 };
+    }
+    // Body: near the line's y AND to the right of the anchor only.
+    if (Math.abs(cy - pt.y) <= HIT_TOLERANCE && cx >= pt.x - HIT_TOLERANCE) {
+      return { isBody: true };
+    }
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  RECTANGLE
 // ─────────────────────────────────────────────────────────────────────────────
 
