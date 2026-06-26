@@ -227,6 +227,7 @@ const JournalSettings = lazy(async () => {
   const Component = (module as any).default ?? (module as any).JournalSettings ?? Object.values(module)[0];
   return { default: Component };
 });
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for Phase 2 removal (copy-trade unification)
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/features/mentor/pages/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
@@ -751,8 +752,8 @@ function AppContent() {
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
-<Route path="journal/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
-<Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
+<Route path="journal/trade-copier" element={<Navigate to="/app/automation/copier" replace />} />
+<Route path="journal/copy-trading" element={<Navigate to="/app/automation/copier" replace />} />
 {/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 {/* journal/mentor → floor/mentor (legacy redirect) */}
@@ -818,17 +819,16 @@ function AppContent() {
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
-          {/* TRADE COPIER */}
-          {/* TRADE COPIER — beta-only (gated via DomainGuard, domain copy-trade has beta:true in constants/nav.ts) */}
-          <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/manage-risk" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/top-traders" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/strategies" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/portfolios" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/leaderboard" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/my-copying" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/insights" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          {/* TRADE COPIER — Phase 1 unification: all copy-trade/* routes redirect to /app/automation/copier */}
+          <Route path="copy-trade/overview"     element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/trade-copier" element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/manage-risk"  element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/top-traders"  element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/strategies"   element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/portfolios"   element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/leaderboard"  element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/my-copying"   element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/insights"     element={<Navigate to="/app/automation/copier" replace />} />
           
           {/* FUNDING */}
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />
