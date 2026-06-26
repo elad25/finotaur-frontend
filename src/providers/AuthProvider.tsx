@@ -249,6 +249,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             logger.error('[Auth] getSession timeout and getUser fallback failed', {
               hasStoredSession,
             });
+            // Purge the unrecoverable stored token. Its refresh hangs/times out
+            // (e.g. an expired access token whose refresh_token was rotated/reused),
+            // and supabase-js keeps it because the request errored rather than
+            // returning an auth rejection — so EVERY subsequent load re-runs this
+            // ~19s hanging-refresh sequence and re-freezes the app shell. Remove it
+            // directly (synchronous; signOut() would re-enter the same stalled auth
+            // lock) so the next load resolves to /auth/login instantly. The current
+            // load already falls through to setUser(null) below.
+            if (hasStoredSession) {
+              try {
+                localStorage.removeItem('finotaur-auth-token');
+              } catch {
+                /* localStorage unavailable — nothing more we can do here */
+              }
+            }
           }
         } else {
           logger.error('[Auth] Session fetch failed', err);
