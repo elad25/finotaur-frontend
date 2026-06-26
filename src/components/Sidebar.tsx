@@ -317,13 +317,13 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // surface lives inline on the Dashboard, and Market Replay is reachable via
   // the Chart page's Immersive Mode button.
   backtest: [
-    { label: 'AUTOMATED BACK TEST', path: '/app/backtest/auto', icon: FlaskConical, locked: true },
     { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
     { label: 'Chart', path: '/app/journal/backtest/chart', icon: PlusCircle },
     { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
     { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
     { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Layers },
     { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
+    { label: 'Automated Backtest', path: '/app/journal/backtest/auto', icon: FlaskConical, locked: true },
   ],
 
   'copy-trade': [
