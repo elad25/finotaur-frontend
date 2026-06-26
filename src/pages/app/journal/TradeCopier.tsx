@@ -12,7 +12,7 @@ import {
   Link2, RefreshCw, Clock,
   Copy, History, Zap, Shield, WifiOff,
   TrendingUp, AlertOctagon, ArrowLeftRight, Search, X, Plus,
-  Wallet, MoreVertical, ChevronDown, ChevronRight, Crown,
+  MoreVertical, ChevronDown, ChevronRight, Crown,
   Download, Filter,
 } from 'lucide-react';
 import { useTradovate } from '@/hooks/useTradovate';
@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
 import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
+import { JournalAccountsOverview } from '@/features/automation/components/JournalAccountsOverview';
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
@@ -1268,37 +1269,15 @@ export default function TradeCopier() {
 
   const { hasAnyConnection } = useTradovate();
 
-  // Show ALL journal broker connections — OAuth connections are now valid copier
-  // accounts since execution runs locally via the desktop agent (not the cloud engine).
-  const { connections, reconnect } = useBrokerConnections({ active: true });
+  // Load broker connections only for the "Set a leader" banner presence check.
+  // The accounts display is now sourced from portfolios (same as journal).
+  const { connections } = useBrokerConnections({ active: true });
 
-  // liveCredentialIds: always empty — cloud engine session polling removed.
-  // Connection activity is managed by the local desktop agent.
-  const liveCredentialIds = useMemo(() => new Set<string>(), []);
-
+  // Portfolios are the source of truth for account display (same as journal).
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
   const [showCopierModal, setShowCopierModal] = useState(false);
-  const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
-  const [disabledConnectionIds, setDisabledConnectionIds] = useState<Set<string>>(() => new Set());
-  // 2026-05-19: per-connection reconnect state for the icon-only button.
-  // Direct one-click reconnect — no confirmation modal. If the vault row is
-  // gone (OQ-87, returns requires_credentials=true) we open AddBrokerPopup
-  // so the user can supply fresh credentials instead of showing a popup.
-  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
-  const handleReconnect = useCallback(async (conn: BrokerConnection) => {
-    if (reconnectingId) return;
-    setReconnectingId(conn.id);
-    try {
-      const result = await reconnect(conn.id);
-      const resultExt = result as { success: boolean; error?: string; requires_credentials?: boolean };
-      if (!resultExt.success && resultExt.requires_credentials) {
-        setShowAddBroker(true);
-      }
-    } finally {
-      setReconnectingId(null);
-    }
-  }, [reconnect, reconnectingId]);
+
   const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
     ? 'manage-risk'
     : location.pathname.endsWith('/trade-copier')
@@ -1323,33 +1302,12 @@ export default function TradeCopier() {
     </div>
   );
 
-  // Only real broker accounts — no manual portfolios
+  // Non-manual portfolios: the same accounts visible in the journal, used for
+  // presence checks (e.g. the "Set a leader" banner).
   const brokerPortfolios = useMemo(
-    () => (portfoliosLoading ? [] : portfolios.filter((p: any) => p.source !== 'manual')),
+    () => (portfoliosLoading ? [] : portfolios.filter((p) => p.source !== 'manual')),
     [portfolios, portfoliosLoading],
   );
-  const toggleConnectionDetails = useCallback((id: string) => {
-    setExpandedConnectionIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-  const toggleConnectionEnabled = useCallback((id: string) => {
-    setDisabledConnectionIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-surface-base text-ink-primary">
@@ -1361,7 +1319,7 @@ export default function TradeCopier() {
         {/* ── Tab 1: Broker Connections ── */}
         {activeTab === 'connections' && (
           <>
-            {connections.length > 0 && (
+            {brokerPortfolios.length > 0 && (
               <div className="flex min-h-[56px] items-center justify-between gap-ds-4 rounded-lg border border-blue-500/25 bg-blue-500/10 px-ds-4">
                 <div className="flex items-center gap-ds-3">
                   <Crown className="h-5 w-5 text-gold-primary" />
@@ -1400,72 +1358,8 @@ export default function TradeCopier() {
               </div>
             </div>
 
-            {connections.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
-                <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
-                  <Link2 className="w-5 h-5 text-gold-primary" />
-                </div>
-                <p className="text-sm text-ink-secondary">No copier broker connected yet.</p>
-                <button
-                  onClick={() => setShowCopierModal(true)}
-                  className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10"
-                >
-                  <Plus className="w-4 h-4" />
-                  Connect Trade Copier
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-ds-8">
-                <div>
-                  <div className="mb-ds-4 flex items-center gap-ds-3">
-                    <div className="flex h-6 w-6 items-center justify-center text-gold-primary">
-                      <Link2 className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold text-ink-primary">Connection Details</h3>
-                      <div className="mt-ds-2 h-px w-14 bg-gold-primary" />
-                    </div>
-                  </div>
-                  <ConnectionsAccordion
-                    connections={connections}
-                    liveCredentialIds={liveCredentialIds}
-                    expandedConnectionIds={expandedConnectionIds}
-                    disabledConnectionIds={disabledConnectionIds}
-                    onToggleConnection={toggleConnectionDetails}
-                    onToggleEnabled={toggleConnectionEnabled}
-                    onReconnect={handleReconnect}
-                    reconnectingId={reconnectingId}
-                  />
-                </div>
-
-                {/* eslint-disable-next-line no-constant-binary-expression */}
-                {false && <div className="hidden">
-                  <div className="mb-ds-4 flex items-center gap-ds-3">
-                    <div className="flex items-center gap-ds-3">
-                      <div className="flex h-6 w-6 items-center justify-center text-gold-primary">
-                        <Wallet className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-semibold text-ink-primary">Accounts</h3>
-                        <div className="mt-ds-2 h-px w-14 bg-gold-primary" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* eslint-disable-next-line no-constant-binary-expression */}
-                  {false && <AccountsTable connections={connections} liveCredentialIds={liveCredentialIds} />}
-
-                  <div className="mt-ds-2 flex items-center justify-between rounded-lg border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-4 text-sm text-ink-secondary">
-                    <span>Showing 1 to {connections.length} of {connections.length} accounts</span>
-                    <div className="flex items-center gap-ds-3">
-                      <span className="text-ink-tertiary">‹</span>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-md border border-gold-border text-gold-primary">1</span>
-                      <span className="text-ink-tertiary">›</span>
-                    </div>
-                  </div>
-                </div>}
-              </div>
-            )}
+            {/* Journal-sourced accounts view — same portfolios/grouping as the trade journal */}
+            <JournalAccountsOverview />
             </SectionCard>
           </>
         )}
