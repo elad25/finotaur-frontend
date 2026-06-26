@@ -9,14 +9,30 @@ import { Button } from '@/components/ds/Button';
 import { DataState } from '@/components/ds/DataState';
 import { CopierRouteCard } from '../components/CopierRouteCard';
 import { useCopierRoutes } from '../hooks/useCopierRoutes';
-import type { CopierRoute } from '../lib/automationTypes';
+import type { CopierRoute, CopierRouteTargetInput, JournalAccount } from '../lib/automationTypes';
+
+/** Params emitted by CopierRouteCard.onSave — must stay in sync with the card's prop type. */
+interface SaveParams {
+  routeId: string;
+  sourceAccount: JournalAccount;
+  label: string;
+  symbolFilter: string[];
+  copyOpens: boolean;
+  copyCloses: boolean;
+  reverse: boolean;
+  isActive: boolean;
+  targets: CopierRouteTargetInput[];
+}
 
 function newRouteDefaults(): CopierRoute {
-  const now = new Date().toISOString();
   return {
     id: `new-${Date.now()}`,
     user_id: '',
-    source_connection_id: '',
+    // Account-based identity — blank until the user picks a source.
+    source_account_id: '',
+    source_account_name: '',
+    source_broker: 'tradovate',
+    source_environment: null,
     label: 'New route',
     symbol_filter: [],
     copy_opens: true,
@@ -37,11 +53,9 @@ export default function CopierRoutesTab() {
     setPendingNew((prev) => [...prev, newRouteDefaults()]);
   };
 
-  const handleSave = async (
-    params: Parameters<typeof upsertRoute>[0],
-  ) => {
+  const handleSave = async (params: SaveParams) => {
     const isPending = pendingNew.some((r) => r.id === params.routeId);
-    setSavingId(params.routeId ?? 'new');
+    setSavingId(params.routeId);
     const result = await upsertRoute(
       isPending ? { ...params, routeId: undefined } : params,
     );
@@ -98,16 +112,17 @@ export default function CopierRoutesTab() {
                 route={route}
                 onSave={handleSave}
                 onDelete={handleDelete}
-                isSaving={savingId === route.id || savingId === 'new'}
+                isSaving={savingId === route.id}
               />
             ))}
           </div>
         )}
       </DataState>
 
-      <p className="text-xs text-zinc-600 pt-2">
-        Routes define how trades are copied between your broker accounts. The desktop agent
-        (when connected) executes the actual orders. No execution happens from this page.
+      <p className="text-xs text-zinc-500 border-t border-zinc-800 mt-2 pt-2">
+        Source and target accounts are your journal-connected broker accounts (OAuth). Execution
+        runs locally in your trading platform via the Finotaur desktop agent — no orders are
+        placed from this page.
       </p>
     </div>
   );
