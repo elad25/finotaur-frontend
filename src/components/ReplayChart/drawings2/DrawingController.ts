@@ -30,6 +30,7 @@ import {
 import {
   TrendLineDrawing,
   HorizontalLineDrawing,
+  HorizontalRayDrawing,
   RectangleDrawing,
 } from './tools';
 
@@ -55,10 +56,11 @@ function createDrawing(
   options: DrawingOptions,
 ): BaseDrawing | null {
   switch (tool) {
-    case 'trendline':  return new TrendLineDrawing(points, options);
-    case 'horizontal': return new HorizontalLineDrawing(points, options);
-    case 'rectangle':  return new RectangleDrawing(points, options);
-    default:           return null;
+    case 'trendline':      return new TrendLineDrawing(points, options);
+    case 'horizontal':     return new HorizontalLineDrawing(points, options);
+    case 'horizontal_ray': return new HorizontalRayDrawing(points, options);
+    case 'rectangle':      return new RectangleDrawing(points, options);
+    default:               return null;
   }
 }
 
@@ -244,8 +246,8 @@ export class DrawingController {
     const dp = this._toDPoint(x, y);
     if (!dp) return;
 
-    // Horizontal line: single point → finalize immediately
-    if (tool === 'horizontal') {
+    // Single-point tools (horizontal line / horizontal ray) → finalize immediately
+    if (tool === 'horizontal' || tool === 'horizontal_ray') {
       this._finalize(tool, [dp]);
       return;
     }
