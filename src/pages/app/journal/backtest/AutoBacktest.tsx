@@ -26,13 +26,12 @@ import {
 } from '@/store/useAutoBacktestStore';
 import { SetupBuilderForm } from '@/components/backtest/auto/SetupBuilderForm';
 import { RunProgress } from '@/components/backtest/auto/RunProgress';
-import { StatsGrid } from '@/components/backtest/auto/StatsGrid';
-import { EquityCurveCard } from '@/components/backtest/auto/EquityCurveCard';
 import { TradeListTable } from '@/components/backtest/auto/TradeListTable';
 import { TradeDetailPanel } from '@/components/backtest/auto/TradeDetailPanel';
 import { SavedSetupsPanel } from '@/components/backtest/auto/SavedSetupsPanel';
 import { Field, SelectField } from '@/components/backtest/auto/formControls';
 import { NLSetupInput } from './components/NLSetupInput';
+import { PnlHeroChart } from './components/PnlHeroChart';
 import { AIResultAnalysis } from './components/AIResultAnalysis';
 
 // ---------------------------------------------------------------------------
@@ -179,8 +178,7 @@ export default function AutoBacktest() {
             {/* ── Results ──────────────────────────────────────────── */}
             {hasResult ? (
               <div className="flex flex-col gap-6">
-                <StatsGrid />
-                <EquityCurveCard />
+                <PnlHeroChart />
                 <TradeListTable />
                 <TradeDetailPanel />
                 {/* AI analysis of the completed run — on-demand, after stats */}
