@@ -395,46 +395,9 @@ export function DrawingToolbar2({
       ))}
 
       {/* ── Divider ── */}
-      <div className="my-1 h-px w-6 bg-border-ds-subtle" />
-
-      {/* ── Style group (color + width flyout) ── */}
-      <div
-        className="relative"
-        onMouseEnter={() => open('__style__')}
-        onMouseLeave={close}
-      >
-        <button
-          type="button"
-          title="Style"
-          className="relative flex h-8 w-8 items-center justify-center rounded-md transition-colors text-ink-secondary hover:bg-surface-2 hover:text-ink-primary"
-        >
-          {/* Small color dot preview */}
-          <span
-            className="h-4 w-4 rounded-full border border-border-ds-default"
-            style={{ backgroundColor: color }}
-          />
-          <Palette
-            size={8}
-            className="absolute bottom-0.5 right-0.5 text-ink-tertiary"
-          />
-        </button>
-
-        {openId === '__style__' && (
-          <div
-            onMouseEnter={cancelClose}
-            onMouseLeave={close}
-          >
-            <StyleFlyout
-              color={color}
-              width={width as LineWidth}
-              onColorChange={(c) => { onColorChange(c); closeImmediate(); }}
-              onWidthChange={(w) => { onWidthChange(w); closeImmediate(); }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Divider ── */}
+      {/* Style/color picker is no longer a permanent toolbar button — color is
+          chosen per shape: select a drawing and the color picker appears below
+          (see the hasSelection block). */}
       <div className="my-1 h-px w-6 bg-border-ds-subtle" />
 
       {/* ── BOTTOM: Utility tools ── */}
@@ -458,16 +421,54 @@ export function DrawingToolbar2({
         );
       })}
 
-      {/* ── Delete selected (shown only when a drawing is selected) ── */}
+      {/* ── Selected-shape actions (shown ONLY when a drawing is selected) ──
+          Per Elad (2026-06-26): color is decided per shape — click a shape, then
+          pick its color/width here. No permanent color button in the toolbar. */}
       {hasSelection && (
-        <button
-          type="button"
-          title="Delete selected (Del)"
-          onClick={onDelete}
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors text-num-negative hover:bg-surface-2"
-        >
-          <Trash2 size={15} />
-        </button>
+        <>
+          {/* Color + width picker for the selected shape */}
+          <div
+            className="relative"
+            onMouseEnter={() => open('__selstyle__')}
+            onMouseLeave={close}
+          >
+            <button
+              type="button"
+              title="Shape color"
+              className="relative flex h-8 w-8 items-center justify-center rounded-md transition-colors text-ink-secondary hover:bg-surface-2 hover:text-ink-primary"
+            >
+              <span
+                className="h-4 w-4 rounded-full border border-border-ds-default"
+                style={{ backgroundColor: color }}
+              />
+              <Palette
+                size={8}
+                className="absolute bottom-0.5 right-0.5 text-ink-tertiary"
+              />
+            </button>
+
+            {openId === '__selstyle__' && (
+              <div onMouseEnter={cancelClose} onMouseLeave={close}>
+                <StyleFlyout
+                  color={color}
+                  width={width as LineWidth}
+                  onColorChange={(c) => { onColorChange(c); closeImmediate(); }}
+                  onWidthChange={(w) => { onWidthChange(w); closeImmediate(); }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Delete selected */}
+          <button
+            type="button"
+            title="Delete selected (Del)"
+            onClick={onDelete}
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors text-num-negative hover:bg-surface-2"
+          >
+            <Trash2 size={15} />
+          </button>
+        </>
       )}
     </div>
   );

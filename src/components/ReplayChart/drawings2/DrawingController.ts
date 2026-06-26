@@ -155,10 +155,13 @@ export class DrawingController {
 
   setOptions(o: Partial<DrawingOptions>): void {
     this._options = { ...this._options, ...o };
-    // Apply to selected drawing immediately
+    // Apply to the selected drawing immediately and persist so the per-shape
+    // color/width choice survives a reload.
     if (this._selected) {
       this._selected.options = { ...this._selected.options, ...o };
       this._selected.requestUpdate();
+      this._saveToStorage();
+      this._onChange?.();
     }
   }
 
