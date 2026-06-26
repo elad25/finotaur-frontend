@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, X, Image as ImageIcon } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface Screenshot {
   id: string;
@@ -88,7 +88,8 @@ export function ScreenshotGallery({ screenshots }: ScreenshotGalleryProps) {
       {/* Lightbox Dialog */}
       {selectedIndex !== null && (
         <Dialog open={selectedIndex !== null} onOpenChange={closeLightbox}>
-          <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-zinc-800">
+          <DialogContent aria-describedby={undefined} className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-zinc-800">
+            <DialogTitle className="sr-only">Trade screenshot</DialogTitle>
             <div className="relative w-full h-full flex items-center justify-center">
               {/* Close button */}
               <button
