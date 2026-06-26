@@ -33,19 +33,40 @@ export interface AutomationRiskRule {
   updated_at: string;
 }
 
+// ── Journal account identity (used by the copier picker) ─────────────────────
+// Mirrors the tradeable-account universe from usePortfolios(), normalized to
+// the account-based fields the copier RPC now expects.
+export interface JournalAccount {
+  account_id: string;   // String(tradovate_account_id)
+  account_name: string;
+  broker: string;       // e.g. 'tradovate'
+  environment: string | null; // 'live' | 'demo' | null
+  label?: string;       // connection_label (e.g. "Lucid", "MFFU")
+}
+
 // ── automation_copier_route_targets ──────────────────────────────────────────
 export interface CopierRouteTarget {
   id: string;
   route_id: string;
-  destination_connection_id: string;
+  /** @deprecated — nullable in DB; prefer destination_account_id */
+  destination_connection_id?: string | null;
+  destination_account_id: string;
+  destination_account_name: string;
+  destination_broker: string;
+  destination_environment: string | null;
   scale_ratio: number;
   max_contracts: number | null;
   is_active: boolean;
 }
 
-/** Shape accepted by the upsert RPC for each target. */
+/** Shape accepted by the upsert RPC p_targets array for each target. */
 export interface CopierRouteTargetInput {
-  destination_connection_id: string;
+  /** @deprecated — nullable in DB; prefer destination_account_id */
+  destination_connection_id?: string | null;
+  destination_account_id: string;
+  destination_account_name: string;
+  destination_broker: string;
+  destination_environment: string | null;
   scale_ratio: number;
   max_contracts: number | null;
   is_active: boolean;
@@ -55,7 +76,12 @@ export interface CopierRouteTargetInput {
 export interface CopierRoute {
   id: string;
   user_id: string;
-  source_connection_id: string;
+  /** @deprecated — nullable in DB; prefer source_account_id */
+  source_connection_id?: string | null;
+  source_account_id: string;
+  source_account_name: string;
+  source_broker: string;
+  source_environment: string | null;
   label: string;
   symbol_filter: string[];
   copy_opens: boolean;
