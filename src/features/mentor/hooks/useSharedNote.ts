@@ -15,8 +15,8 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
-import type { SharedNote, NoteRevision } from '@/features/floor/types/community';
+import { mapSpaceError } from '@/features/shared/utils/spaceError';
+import type { SharedNote, NoteRevision } from '@/features/mentor/types/mentorship';
 
 // ================================================
 // QUERY KEYS

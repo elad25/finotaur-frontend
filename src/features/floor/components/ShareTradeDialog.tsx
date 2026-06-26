@@ -20,6 +20,7 @@ import { Button } from '@/components/ds/Button';
 import { SharedTradeCard } from '@/features/floor/components/SharedTradeCard';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/AuthProvider';
+// intentional: floor depends on mentor to offer rooms as share destinations (unidirectional, no cycle)
 import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
 import { cn } from '@/lib/utils';

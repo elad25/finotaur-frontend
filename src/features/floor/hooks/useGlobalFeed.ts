@@ -15,7 +15,7 @@
 
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
+import { mapSpaceError } from '@/features/shared/utils/spaceError';
 import type { GlobalFeedItem, GlobalComment, SharePrivacy } from '@/features/floor/types/community';
 
 // ================================================

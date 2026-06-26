@@ -79,6 +79,29 @@ export interface SpaceInvite {
   used_at: string | null;
 }
 
+// ── Shared Note types ─────────────────────────────────────────────────────────
+
+/** Row returned by get_shared_note(p_review) and update_shared_note(p_review, p_goal, p_body). */
+export interface SharedNote {
+  id: string;
+  review_id: string;
+  goal: string;
+  body: string;
+  updated_by: string;
+  updated_at: string;
+  created_at: string;
+}
+
+/** Row returned by list_note_revisions(p_review, p_limit). */
+export interface NoteRevision {
+  id: string;
+  body: string;
+  goal: string;
+  edited_by: string;
+  editor_name: string;
+  created_at: string;
+}
+
 // ── Analytics / Leaderboard types ─────────────────────────────────────────────
 
 /** Period options for space analytics and leaderboard RPCs. */

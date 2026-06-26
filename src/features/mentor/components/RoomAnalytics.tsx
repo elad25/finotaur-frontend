@@ -14,9 +14,9 @@ import {
   useSpaceAnalyticsSummary,
   useSpaceMemberPerformance,
 } from '@/features/mentor/hooks/useSpaceAnalytics';
-import { useUserDisciplineScores } from '@/features/floor/hooks/useUserDisciplineScore';
+import { useUserDisciplineScores } from '@/features/shared/hooks/useUserDisciplineScore';
 import type { RoomPeriod, MemberPerformanceRow } from '@/features/mentor/types/mentorship';
-import type { UserDisciplineScore } from '@/features/floor/types/community';
+import type { UserDisciplineScore } from '@/features/shared/types/discipline';
 import { cn } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

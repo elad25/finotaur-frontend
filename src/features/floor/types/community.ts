@@ -82,39 +82,12 @@ export interface DisciplineLeaderboardRow {
   rank: number;
 }
 
-/** Row returned by user_discipline_score(p_user, p_period). Sub-indices 0..100; emotional_rate 0..1. */
-export interface UserDisciplineScore {
-  discipline_score: number;
-  risk_consistency: number;
-  process_adherence: number;
-  behavioral_stability: number;
-  outcome_consistency: number;
-  emotional_rate: number;
-  trade_count: number;
-}
+// UserDisciplineScore moved to @/features/shared/types/discipline — re-exported
+// here for backward compat with floor-internal callers (SharedTradeCard, etc.).
+export type { UserDisciplineScore } from '@/features/shared/types/discipline';
 
-// ── Shared Note ───────────────────────────────────────────────────────────────
-
-/** Row returned by get_shared_note(p_review) and update_shared_note(p_review, p_goal, p_body). */
-export interface SharedNote {
-  id: string;
-  review_id: string;
-  goal: string;
-  body: string;
-  updated_by: string;
-  updated_at: string;
-  created_at: string;
-}
-
-/** Row returned by list_note_revisions(p_review, p_limit). */
-export interface NoteRevision {
-  id: string;
-  body: string;
-  goal: string;
-  edited_by: string;
-  editor_name: string;
-  created_at: string;
-}
+// SharedNote / NoteRevision relocated to @/features/mentor/types/mentorship
+// (they are mentor-owned types; having them here created a mentor->floor cycle).
 
 // ── Trade Sharing ─────────────────────────────────────────────────────────────
 
