@@ -40,6 +40,9 @@ export interface DrawingControllerOptions {
   symbol: string;
   onChange?: () => void;
   onSelectionChange?: (hasSelection: boolean) => void;
+  /** Fired when the controller auto-switches tools (e.g. back to 'cursor'
+   *  after finishing a drawing) so the React toolbar can stay in sync. */
+  onActiveToolChange?: (tool: ToolId) => void;
 }
 
 // ─── Persistence key ─────────────────────────────────────────────────────────
@@ -72,6 +75,7 @@ export class DrawingController {
   private _symbol: string;
   private _onChange?: () => void;
   private _onSelectionChange?: (hasSelection: boolean) => void;
+  private _onActiveToolChange?: (tool: ToolId) => void;
 
   private _activeTool: ToolId = 'cursor';
   private _drawings: BaseDrawing[] = [];
@@ -110,6 +114,7 @@ export class DrawingController {
     this._symbol = opts.symbol;
     this._onChange = opts.onChange;
     this._onSelectionChange = opts.onSelectionChange;
+    this._onActiveToolChange = opts.onActiveToolChange;
 
     this._clickHandler = (p) => this._onClick(p);
     this._moveHandler  = (p) => this._onCrosshairMove(p);
@@ -246,9 +251,12 @@ export class DrawingController {
     const dp = this._toDPoint(x, y);
     if (!dp) return;
 
-    // Single-point tools (horizontal line / horizontal ray) → finalize immediately
+    // Single-point tools (horizontal line / horizontal ray) → finalize immediately.
+    // Stop after one mark: switch back to cursor so the next click does NOT
+    // draw another shape (the user must reselect the tool to draw again).
     if (tool === 'horizontal' || tool === 'horizontal_ray') {
       this._finalize(tool, [dp]);
+      this._resetToCursor();
       return;
     }
 
@@ -259,12 +267,22 @@ export class DrawingController {
       // First click: attach preview
       this._attachPreview(tool, dp);
     } else if (this._pendingPoints.length >= 2) {
-      // Second click: finalize
+      // Second click: finalize, then stop (back to cursor — no auto-repeat).
       this._cancelPreview();
       this._finalize(tool, this._pendingPoints.slice(0, 2));
       this._pendingPoints = [];
-      this._activeTool = 'cursor';
+      this._resetToCursor();
     }
+  }
+
+  /**
+   * Return to cursor mode after a drawing is committed, and notify React so
+   * the toolbar de-highlights the tool. One mark per tool selection — the
+   * user reselects the tool to draw again.
+   */
+  private _resetToCursor(): void {
+    this._activeTool = 'cursor';
+    this._onActiveToolChange?.('cursor');
   }
 
   // ── Crosshair move ────────────────────────────────────────────────────────

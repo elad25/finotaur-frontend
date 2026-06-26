@@ -520,6 +520,9 @@ export function BacktestReplayChart({
       symbol,
       onChange: () => setOverlayTick((n) => n + 1),
       onSelectionChange: (has) => setHasSelection(has),
+      // After a shape is drawn the controller switches back to cursor — keep the
+      // React toolbar state in sync so the tool de-highlights (one mark per pick).
+      onActiveToolChange: (t) => setCurrentTool(t),
     });
     drawingControllerRef.current = dc;
     // Sync the current tool into the controller (in case it was set before mount).
