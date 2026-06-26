@@ -58,6 +58,9 @@ const PRESERVED_ENTRIES = [
   // /research index (new)
   { loc: "/research",                            lastmod: TODAY, changefreq: "daily",   priority: "0.9" },
   { loc: "/best-trading-journal-for-tradovate",  lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/best-trading-journal-for-futures",    lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/best-trading-journal-for-prop-firm",  lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
+  { loc: "/ai-trading-journal",                  lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
 ];
 
 // ---------------------------------------------------------------------------
