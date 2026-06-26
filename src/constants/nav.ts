@@ -193,7 +193,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
       { label: 'The Floor',   path: '/app/floor/community', beta: true },
-      { label: 'Mentor',      path: '/app/mentor/rooms', beta: true },
     ],
     sidebar: [
       { label: 'Dashboard',     path: '/app/journal/overview',    icon: LayoutDashboard },
@@ -210,40 +209,25 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
-  // FLOOR — beta/admin-only (Early Access). Community + DM.
+  // MENTORSHIP — beta/admin-only (Early Access)
   // ===========================================================================
-  floor: {
-    id: 'floor',
+  mentorship: {
+    id: 'mentorship',
     label: 'The Floor',
     locked: false,
     beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
     defaultPath: '/app/floor/community',
     subNav: [
       { label: 'Global', path: '/app/floor/community' },
+      { label: 'Rooms', path: '/app/floor/rooms' },
       { label: 'DM', path: '/app/floor/dm' },
+      { label: 'Mentor Mode', path: '/app/floor/mentor' },
     ],
     sidebar: [
       { label: 'Global', path: '/app/floor/community', icon: Globe },
+      { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
       { label: 'DM', path: '/app/floor/dm', icon: MessageSquare },
-    ],
-  },
-
-  // ===========================================================================
-  // MENTOR — beta/admin-only (Early Access). Rooms + Coach Mode.
-  // ===========================================================================
-  mentor: {
-    id: 'mentor',
-    label: 'Mentor',
-    locked: false,
-    beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
-    defaultPath: '/app/mentor/rooms',
-    subNav: [
-      { label: 'Rooms', path: '/app/mentor/rooms' },
-      { label: 'Coach Mode', path: '/app/mentor/coach' },
-    ],
-    sidebar: [
-      { label: 'Rooms', path: '/app/mentor/rooms', icon: GraduationCap },
-      { label: 'Coach Mode', path: '/app/mentor/coach', icon: Users },
+      { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users },
     ],
   },
 
@@ -589,10 +573,9 @@ export const domainOrder = [
   'war-zone',
   'top-secret',
   'journal',
-  // 'floor' (The Floor) and 'mentor' (Mentor) intentionally NOT in the Drawer —
-  // they are reached via the beta-gated "The Floor" / "Mentor" tabs in the
-  // Journal subNav. Domain defs, routes, subNav, sidebar, and AdminBetaGate
-  // all remain intact.
+  // 'mentorship' (The Floor) intentionally NOT in the Drawer — it is reached
+  // via the beta-gated "The Floor" tab in the Journal subNav. Domain def,
+  // routes, subNav, sidebar, and AdminBetaGate all remain intact.
   'copy-trade',     // hidden for non-beta; admin-only in practice
   'trading-arena',  // hidden for non-beta; full-screen workstation (Phase 0)
   // Removed from Drawer (routes/pages/domain defs preserved):
