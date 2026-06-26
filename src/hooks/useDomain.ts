@@ -19,13 +19,13 @@ import { isMarketsPath } from '@/constants/markets';
 
 const WAR_ZONE_PATHS   = ['/app/all-markets/warzone', '/app/warzone'];
 const TOP_SECRET_PATHS = ['/app/top-secret'];
-// The Floor (/app/floor/*) maps to the 'floor' domain so its own sidebar
-// renders. Without an explicit check, productId would be extracted as 'floor'
-// from the URL segment and would find the domain correctly — but we keep the
-// explicit list for safety and documentation parity with other special paths.
-const FLOOR_PATHS  = ['/app/floor'];
-// Mentor (/app/mentor/*) maps to the 'mentor' domain so its own sidebar renders.
-const MENTOR_PATHS = ['/app/mentor'];
+// The Floor (/app/floor/*) is a sub-area of the Journal product, surfaced via
+// the beta-gated "The Floor" tab in the Journal subNav. Without this mapping
+// productId would be extracted as 'floor' (the 2nd path segment), miss the
+// 'mentorship'-keyed domain, fall back to 'markets', and wrongly highlight the
+// Markets/Stocks nav while on The Floor. Map it to 'journal' so the Journal
+// subNav (with "The Floor" active) renders instead.
+const FLOOR_PATHS = ['/app/floor'];
 
 export const useDomain = () => {
   const location = useLocation();
@@ -42,11 +42,8 @@ export const useDomain = () => {
   } else if (TOP_SECRET_PATHS.some((p) => pathname.startsWith(p))) {
     productId = 'top-secret';
   } else if (FLOOR_PATHS.some((p) => pathname.startsWith(p))) {
-    // The Floor has its own 'floor' domain with its own sidebar.
-    productId = 'floor';
-  } else if (MENTOR_PATHS.some((p) => pathname.startsWith(p))) {
-    // Mentor Rooms/Coach has its own 'mentor' domain with its own sidebar.
-    productId = 'mentor';
+    // The Floor lives under the Journal product (see FLOOR_PATHS note above).
+    productId = 'journal';
   } else if (isMarketsPath(pathname)) {
     // /app/etfs is now part of the Markets product (MARKETS_PATH_PREFIXES includes /app/etfs).
     productId = 'markets';

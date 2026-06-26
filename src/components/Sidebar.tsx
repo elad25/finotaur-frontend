@@ -41,6 +41,7 @@ import {
   UserX,
   ArrowLeft,
   Shield,
+  ShieldCheck,
   UserPlus,
   DollarSign,
   Wallet,
@@ -110,8 +111,8 @@ type EnvironmentType =
   | 'war-zone'
   | 'top-secret'
   | 'trading-arena'
-  | 'floor'
-  | 'mentor';
+  | 'mentorship'
+  | 'automation';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -336,14 +337,11 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Transactions', path: '/app/funding/transactions', icon: FileText },
   ],
 
-  'floor': [
+  'mentorship': [
     { label: 'Global', path: '/app/floor/community', icon: Globe, beta: true },
+    { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
     { label: 'DM', path: '/app/floor/dm', icon: MessageSquare, beta: true },
-  ],
-
-  'mentor': [
-    { label: 'Rooms', path: '/app/mentor/rooms', icon: GraduationCap, beta: true },
-    { label: 'Coach Mode', path: '/app/mentor/coach', icon: Users, beta: true },
+    { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users, beta: true },
   ],
 
   admin: [
@@ -380,6 +378,13 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'General', path: '/app/settings', icon: Settings },
     { label: 'Billing', path: '/app/settings/billing', icon: CreditCard },
     { label: 'Usage', path: '/app/settings/usage', icon: Activity },
+  ],
+
+  // Automation — web config plane (admin/beta only, Session 1)
+  automation: [
+    { label: 'Risk Rules', path: '/app/automation/risk',   icon: ShieldCheck, beta: true },
+    { label: 'Copier',     path: '/app/automation/copier', icon: Copy,        beta: true },
+    { label: 'Agent',      path: '/app/automation/agent',  icon: Shield,      beta: true },
   ],
 
 };
@@ -441,7 +446,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   useEffect(() => {
-    if (location.pathname.startsWith('/app/floor') || location.pathname.startsWith('/app/mentor')) {
+    if (location.pathname.startsWith('/app/floor')) {
       setIsExpanded(false);
       localStorage.setItem(storageKey, 'false');
     }
@@ -455,6 +460,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     
     // Settings first (specific path)
     if (path.startsWith('/app/settings')) return 'settings';
+    if (path.startsWith('/app/automation')) return 'automation';
     
     // Admin & Affiliate first (more specific paths)
     if (path.startsWith('/app/journal/admin')) return 'admin';
@@ -486,8 +492,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
     if (path.startsWith('/app/connections')) return 'connections';
-    if (path.startsWith('/app/floor')) return 'floor';
-    if (path.startsWith('/app/mentor')) return 'mentor';
+    if (path.startsWith('/app/floor')) return 'mentorship';
     if (path.startsWith('/app/journal')) return 'journal';
 
     // Default

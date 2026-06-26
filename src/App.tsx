@@ -140,6 +140,13 @@ const FinoChatDrawer = lazy(() => import("@/components/fino/FinoChatDrawer"));
 const AffiliateTracker = lazy(() => import("@/features/affiliate/components/AffiliateTracker").then(m => ({ default: m.AffiliateTracker })));
 
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
+
+// Automation — web config layer (Session 1: UI only, no execution)
+const AutomationShell = lazy(() => import("@/features/automation/AutomationShell"));
+const AutomationRiskTab = lazy(() => import("@/features/automation/tabs/RiskRulesTab"));
+const AutomationCopierTab = lazy(() => import("@/features/automation/tabs/CopierRoutesTab"));
+const AutomationAgentTab = lazy(() => import("@/features/automation/tabs/AgentStatusTab"));
+
 const SettingsShell = lazy(() => import("@/features/settings/SettingsShell"));
 const AccountTab = lazy(() => import("@/features/settings/tabs/AccountTab"));
 const BillingTab = lazy(() => import("@/features/settings/tabs/BillingTab"));
@@ -424,13 +431,6 @@ LockedRoute.displayName = 'LockedRoute';
 function ETFSymbolRedirect() {
   const { symbol } = useParams<{ symbol: string }>();
   return <Navigate to={`/app/etfs/${symbol}/overview`} replace />;
-}
-
-// Preserves :id when redirecting legacy /app/floor/rooms/:id → /app/mentor/rooms/:id.
-// React Router v6 <Navigate to="…"> does not interpolate params, so a helper is required.
-function RedirectToMentorRoom() {
-  const { id } = useParams<{ id: string }>();
-  return <Navigate to={`/app/mentor/rooms/${id}`} replace />;
 }
 
 
@@ -753,26 +753,18 @@ function AppContent() {
 <Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
 {/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
-{/* Mentor Mode — moved to /app/mentor/coach; old URL redirects */}
-<Route path="journal/mentor" element={<Navigate to="/app/mentor/coach" replace />} />
+{/* journal/mentor → floor/mentor (legacy redirect) */}
+<Route path="journal/mentor" element={<Navigate to="/app/floor/mentor" replace />} />
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
-        {/* MENTOR — beta/admin-only (AdminBetaGate); static paths before :id param */}
-        <Route path="mentor" element={<Navigate to="/app/mentor/rooms" replace />} />
-        <Route path="mentor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="mentor/coach" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="mentor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
-
-        {/* THE FLOOR — beta/admin-only (AdminBetaGate); community + dm only */}
+        {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
         <Route path="floor" element={<Navigate to="/app/floor/community" replace />} />
+        <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/mentor" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/community" element={<SuspenseRoute><AdminBetaGate><Community /></AdminBetaGate></SuspenseRoute>} />
         <Route path="floor/dm" element={<SuspenseRoute><AdminBetaGate><DirectMessages /></AdminBetaGate></SuspenseRoute>} />
-
-        {/* FLOOR LEGACY REDIRECTS — old mentor paths redirect to /app/mentor/* */}
-        <Route path="floor/rooms" element={<Navigate to="/app/mentor/rooms" replace />} />
-        <Route path="floor/mentor" element={<Navigate to="/app/mentor/coach" replace />} />
-        <Route path="floor/rooms/:id" element={<SuspenseRoute><RedirectToMentorRoom /></SuspenseRoute>} />
+        <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
@@ -832,6 +824,14 @@ function AppContent() {
           <Route path="funding/advance" element={<LockedRoute domainId="funding"><FundingAdvance /></LockedRoute>} />
           <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
           
+          {/* AUTOMATION — web config layer (admin/beta only, Session 1: no execution) */}
+          <Route path="automation" element={<SuspenseRoute><AdminBetaGate><AutomationShell /></AdminBetaGate></SuspenseRoute>}>
+            <Route index element={<Navigate to="risk" replace />} />
+            <Route path="risk"   element={<SuspenseRoute><AutomationRiskTab /></SuspenseRoute>} />
+            <Route path="copier" element={<SuspenseRoute><AutomationCopierTab /></SuspenseRoute>} />
+            <Route path="agent"  element={<SuspenseRoute><AutomationAgentTab /></SuspenseRoute>} />
+          </Route>
+
           <Route path="settings" element={<SuspenseRoute><SettingsShell /></SuspenseRoute>}>
             <Route index element={<Navigate to="account" replace />} />
             <Route path="account" element={<SuspenseRoute><AccountTab /></SuspenseRoute>} />
