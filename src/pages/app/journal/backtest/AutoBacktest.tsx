@@ -32,6 +32,8 @@ import { TradeListTable } from '@/components/backtest/auto/TradeListTable';
 import { TradeDetailPanel } from '@/components/backtest/auto/TradeDetailPanel';
 import { SavedSetupsPanel } from '@/components/backtest/auto/SavedSetupsPanel';
 import { Field, SelectField } from '@/components/backtest/auto/formControls';
+import { NLSetupInput } from './components/NLSetupInput';
+import { AIResultAnalysis } from './components/AIResultAnalysis';
 
 // ---------------------------------------------------------------------------
 // Date helpers (ms epoch ↔ yyyy-mm-dd for <input type="date">)
@@ -50,6 +52,17 @@ function dateInputToMs(value: string, endOfDay = false): number {
 // Page
 // ---------------------------------------------------------------------------
 
+/** Build a short human-readable summary of the current setup for AI analysis. */
+function buildSetupSummary(setup: ReturnType<typeof selectAutoSetup>): string {
+  const { direction, patterns, instrument, stop, target } = setup;
+  const patternNames = patterns.map((p) => p.type).join(', ') || 'no pattern';
+  const targetDesc =
+    target.basis === 'r-multiple' && target.rMultiple != null
+      ? `${target.rMultiple}R`
+      : target.basis;
+  return `${direction} ${patternNames} on ${instrument.symbol} ${instrument.timeframe}, stop ${stop.basis}, target ${targetDesc}`;
+}
+
 export default function AutoBacktest() {
   const setup = useAutoBacktestStore(selectAutoSetup);
   const status = useAutoBacktestStore(selectAutoStatus);
@@ -66,6 +79,8 @@ export default function AutoBacktest() {
 
   const { symbol, timeframe, source } = setup.instrument;
 
+  const setupSummary = buildSetupSummary(setup);
+
   return (
     <div className="min-h-screen bg-surface-base px-4 py-6 text-ink-primary sm:px-8">
       <div className="mx-auto max-w-7xl">
@@ -80,6 +95,9 @@ export default function AutoBacktest() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="flex flex-col gap-6">
+            {/* AI natural-language setup generation — above the manual builder */}
+            <NLSetupInput />
+
             <SetupBuilderForm />
 
             {/* Instrument + range + run */}
@@ -147,6 +165,11 @@ export default function AutoBacktest() {
                 <EquityCurveCard />
                 <TradeListTable />
                 <TradeDetailPanel />
+                {/* AI analysis of the completed run — on-demand, after stats */}
+                <AIResultAnalysis
+                  statistics={result.statistics}
+                  setupSummary={setupSummary}
+                />
               </div>
             ) : (
               status === 'idle' && (

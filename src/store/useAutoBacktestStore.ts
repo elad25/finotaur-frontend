@@ -63,6 +63,16 @@ export interface AutoBacktestState {
 
 export interface AutoBacktestActions {
   updateSetup(partial: Partial<SetupDefinition>): void;
+  /**
+   * Deep-merge an AI-extracted partial SetupDefinition into the current setup.
+   * - Scalar fields (direction, name, description) are replaced when present.
+   * - Nested objects (entry, stop, target, instrument, session, bias, risk) are
+   *   merged field-by-field, so any key the AI omitted keeps its existing value.
+   * - `patterns` replaces the array wholesale when provided (not merged element-
+   *   wise, because the AI always sends a coherent full list or nothing).
+   * - Identity fields (id, schemaVersion, createdAt) are NEVER overwritten.
+   */
+  applyAISetup(partial: Partial<SetupDefinition>): void;
   /** Replace the single MVP pattern. */
   setPattern(patternParams: PatternParams): void;
   /**
@@ -129,6 +139,48 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
         set((state) => {
           Object.assign(state.currentSetup, partial);
           state.currentSetup.updatedAt = Date.now();
+        });
+      },
+
+      applyAISetup(partial) {
+        set((state) => {
+          const s = state.currentSetup;
+
+          // Scalar fields — replace only when the AI provided them.
+          if (partial.name !== undefined) s.name = partial.name;
+          if (partial.description !== undefined) s.description = partial.description;
+          if (partial.direction !== undefined) s.direction = partial.direction;
+
+          // Patterns — replace the whole array if the AI provided one.
+          if (partial.patterns !== undefined && partial.patterns.length > 0) {
+            s.patterns = partial.patterns;
+          }
+
+          // Nested objects — field-level merge so unset AI keys keep defaults.
+          if (partial.entry !== undefined) {
+            s.entry = { ...s.entry, ...partial.entry };
+          }
+          if (partial.stop !== undefined) {
+            s.stop = { ...s.stop, ...partial.stop };
+          }
+          if (partial.target !== undefined) {
+            s.target = { ...s.target, ...partial.target };
+          }
+          if (partial.instrument !== undefined) {
+            s.instrument = { ...s.instrument, ...partial.instrument };
+          }
+          if (partial.session !== undefined) {
+            s.session = { ...s.session, ...partial.session };
+          }
+          if (partial.bias !== undefined) {
+            s.bias = { ...s.bias, ...partial.bias };
+          }
+          if (partial.risk !== undefined) {
+            s.risk = { ...s.risk, ...partial.risk };
+          }
+
+          // id, schemaVersion, createdAt are intentionally never overwritten.
+          s.updatedAt = Date.now();
         });
       },
 
