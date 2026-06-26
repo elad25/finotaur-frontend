@@ -1,17 +1,19 @@
 // src/features/automation/tabs/AgentStatusTab.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Master switch + desktop agent pairing placeholder.
-// Optionally shows recent automation_events (read-only).
-// Makes it VERY clear nothing executes yet.
+// Master switch + desktop agent device management + recent events feed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Monitor, Clock, Info } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Clock } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
+import { Button } from '@/components/ds/Button';
 import { useTimedQuery } from '@/hooks/useTimedQuery';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { DataState } from '@/components/ds/DataState';
 import { AutomationMasterSwitch } from '../components/AutomationMasterSwitch';
+import { PairDeviceDialog } from '../components/PairDeviceDialog';
+import { DeviceList } from '../components/DeviceList';
 
 // ── recent events (optional, read-only) ──────────────────────────────────────
 
@@ -57,10 +59,11 @@ function formatRelative(iso: string): string {
 
 export default function AgentStatusTab() {
   const { data: events = [], isLoading, isError, error, refetch } = useRecentEvents();
+  const [pairOpen, setPairOpen] = useState(false);
 
   return (
     <div className="space-y-6">
-      {/* Master switch */}
+      {/* 1. Master switch */}
       <section>
         <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3">
           Automation Control
@@ -68,31 +71,33 @@ export default function AgentStatusTab() {
         <AutomationMasterSwitch />
       </section>
 
-      {/* Agent pairing — coming next phase */}
+      {/* 2. Desktop Agents — pair + list */}
       <section>
-        <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3">
-          Desktop Agent
-        </h2>
-        <Card padding="default" className="flex flex-col items-center text-center gap-4 py-8">
-          <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700">
-            <Monitor className="h-8 w-8 text-zinc-500" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="text-base font-semibold text-zinc-200">Desktop agent pairing</p>
-            <p className="mt-1 text-sm text-zinc-500 max-w-sm">
-              Coming in the next phase. The desktop agent runs locally on your machine and
-              is the only component that executes trades or enforces risk halts.
-              <strong className="text-zinc-400"> Nothing on this page executes orders.</strong>
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-600">
-            <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            This web UI is the configuration layer only.
-          </div>
-        </Card>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
+            Desktop Agents
+          </h2>
+          <Button
+            variant="goldOutline"
+            size="compact"
+            showArrow={false}
+            onClick={() => setPairOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Pair a new device
+          </Button>
+        </div>
+
+        <DeviceList />
+
+        <p className="mt-3 text-xs text-zinc-600">
+          The desktop agent runs locally on your machine and is the only component that
+          executes trades or enforces risk halts.{' '}
+          <strong className="text-zinc-500">Nothing on this page executes orders.</strong>
+        </p>
       </section>
 
-      {/* Recent events (optional) */}
+      {/* 3. Recent activity */}
       <section>
         <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3">
           Recent Activity
@@ -134,6 +139,9 @@ export default function AgentStatusTab() {
           )}
         </DataState>
       </section>
+
+      {/* Pair device dialog — rendered here so it has the tab's context */}
+      <PairDeviceDialog open={pairOpen} onOpenChange={setPairOpen} />
     </div>
   );
 }

@@ -66,6 +66,27 @@ export interface CopierRoute {
   automation_copier_route_targets?: CopierRouteTarget[];
 }
 
+// ── automation_agent_devices ─────────────────────────────────────────────────
+
+export type DeviceStatus = 'unpaired' | 'online' | 'offline' | 'error';
+
+export interface AutomationAgentDevice {
+  id: string;
+  user_id: string;
+  device_name: string;
+  platform: string | null;
+  pairing_code: string | null;
+  pairing_code_expires_at: string | null;
+  device_token_hash: string | null;
+  status: DeviceStatus;
+  last_heartbeat_at: string | null;
+  agent_version: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Derived client-side: status==='online' AND last_heartbeat_at within 90s. */
+  isOnline?: boolean;
+}
+
 // ── Risk Monitor ─────────────────────────────────────────────────────────────
 
 export type RiskAlertType =
