@@ -105,10 +105,9 @@ export default function CopierRoutesTab() {
         )}
       </DataState>
 
-      <p className="text-xs text-zinc-500 border-t border-zinc-800 mt-2 pt-2">
-        Source and target accounts are your journal-connected broker accounts (OAuth). Execution
-        runs locally in your trading platform via the Finotaur desktop agent — no orders are
-        placed from this page.
+      <p className="text-xs text-zinc-600 pt-2">
+        Routes define how trades are copied between your broker accounts. The desktop agent
+        (when connected) executes the actual orders. No execution happens from this page.
       </p>
     </div>
   );

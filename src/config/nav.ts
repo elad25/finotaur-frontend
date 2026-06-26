@@ -5,7 +5,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
-  Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves, Calculator,
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Waves, Calculator,
   Landmark,
 } from 'lucide-react';
 
@@ -221,17 +221,16 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // Phase 1 unification: subNav + sidebar point to /app/automation/*
   'copy-trade': {
     id: 'copy-trade',
     label: 'Trade Copier',
     subNav: [
-      { label: 'Trade Copier', path: '/app/automation/copier' },
+      { label: 'Trade Copier', path: '/app/copy-trade/overview' },
     ],
     sidebar: [
-      { label: 'Copier', path: '/app/automation/copier', icon: Copy },
-      { label: 'Risk',   path: '/app/automation/risk',   icon: Shield },
-      { label: 'Agent',  path: '/app/automation/agent',  icon: Activity },
+      { label: 'Connections', path: '/app/copy-trade/overview', icon: Link },
+      { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
+      { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
     ],
   },
 
