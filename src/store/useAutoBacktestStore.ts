@@ -9,8 +9,8 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import type { Candle } from '@/components/ReplayChart/types';
-import type { SetupDefinition, PatternParams } from '@/core/auto/types';
-import { makeDefaultSetup } from '@/core/auto/types';
+import type { SetupDefinition, PatternParams, PatternType } from '@/core/auto/types';
+import { makeDefaultSetup, DEFAULT_PATTERN_PARAMS } from '@/core/auto/types';
 import type { AutoBacktestResult } from '@/core/auto/AutoBacktestEngine';
 import { getCandleSource } from '@/services/backtest/candleSource';
 import { runAutoBacktestInWorker } from '@/services/backtest/autoBacktestRunner';
@@ -151,9 +151,18 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           if (partial.description !== undefined) s.description = partial.description;
           if (partial.direction !== undefined) s.direction = partial.direction;
 
-          // Patterns — replace the whole array if the AI provided one.
+          // Patterns — the AI extraction schema captures only a flat subset of
+          // each pattern's fields, so its objects can miss required nested keys
+          // (e.g. OB/Breaker/Liquidity need `swing.lookback`, OB needs
+          // `obKind`). Merge each AI pattern onto the full canonical default for
+          // its type so the builder always receives a structurally-complete
+          // pattern. Without this the builder crashes on `pattern.swing.lookback`.
           if (partial.patterns !== undefined && partial.patterns.length > 0) {
-            s.patterns = partial.patterns;
+            s.patterns = partial.patterns.map((p) => {
+              const base = DEFAULT_PATTERN_PARAMS[p.type as PatternType];
+              if (!base) return p;
+              return { ...structuredClone(base), ...p } as PatternParams;
+            });
           }
 
           // Nested objects — field-level merge so unset AI keys keep defaults.
