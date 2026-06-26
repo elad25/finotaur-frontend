@@ -8,6 +8,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ds/Button';
 import { DataState } from '@/components/ds/DataState';
 import { CopierRouteCard } from '../components/CopierRouteCard';
+import { JournalAccountsOverview } from '../components/JournalAccountsOverview';
 import { useCopierRoutes } from '../hooks/useCopierRoutes';
 import type { CopierRoute, CopierRouteTargetInput, JournalAccount } from '../lib/automationTypes';
 
@@ -76,7 +77,13 @@ export default function CopierRoutesTab() {
   const allRoutes = [...routes, ...pendingNew];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* ── Journal accounts overview ─────────────────────────── */}
+      <JournalAccountsOverview />
+
+      <div className="border-t border-zinc-800" />
+
+      <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
           Copier Routes
@@ -124,6 +131,7 @@ export default function CopierRoutesTab() {
         runs locally in your trading platform via the Finotaur desktop agent — no orders are
         placed from this page.
       </p>
+      </div>
     </div>
   );
 }
