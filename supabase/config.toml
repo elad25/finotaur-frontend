@@ -90,3 +90,18 @@ verify_jwt = false  # ← This makes it public!
 # [functions.generate-report-pdf]
 # enabled = true
 # verify_jwt = true
+
+# ============================================
+# 🤖 AUTOMATION AGENT FUNCTIONS — verify_jwt:false + in-function device-token auth
+# ============================================
+# The desktop agent (NinjaScript) has no Supabase JWT — it authenticates via a
+# long-lived device token issued at pairing time. Both functions verify identity
+# in-function by SHA-256 hashing the bearer token and doing a DB lookup.
+
+[functions.automation-pair]
+enabled = true
+verify_jwt = false  # agent pairing — pairing code is the proof; no JWT
+
+[functions.automation-agent]
+enabled = true
+verify_jwt = false  # agent channel — device token verified in-function (SHA-256 hash lookup)
