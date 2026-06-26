@@ -53,56 +53,6 @@ if (import.meta.env.DEV) {
   console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey.substring(0, 20) + '...');
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Bounded Web-Lock for supabase-js auth (root-cause fix for app-wide auth hang).
-//
-// auth-js 2.81 calls its lock with acquireTimeout = -1 (wait forever) for every
-// getSession()/getUser()/token-refresh, and no custom `lock` was configured, so
-// the default navigatorLock blocked INDEFINITELY whenever another tab — or a
-// stuck refresh in this tab — held `lock:finotaur-auth-token`. That surfaced
-// app-wide as "[Auth] getSession timeout and getUser fallback failed" with a
-// frozen app shell (both getSession AND its getUser fallback take the same lock).
-//
-// This variant caps acquisition at LOCK_ACQUIRE_MS and, if it can't get the lock
-// in time (or Web Locks is unavailable), runs the callback WITHOUT the lock so
-// the auth call always completes. Cross-tab token-refresh races are already
-// tolerated by autoRefreshToken; a hung app shell is not.
-// ────────────────────────────────────────────────────────────────────────────
-const LOCK_ACQUIRE_MS = 5000;
-
-async function boundedAuthLock<R>(
-  name: string,
-  _acquireTimeout: number,
-  fn: () => Promise<R>,
-): Promise<R> {
-  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-  if (!locks) {
-    // Old browser / SSR prerender: no Web Locks API → run unguarded.
-    return fn();
-  }
-
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), LOCK_ACQUIRE_MS);
-  let started = false;
-  try {
-    return await locks.request(
-      name,
-      { mode: 'exclusive', signal: abort.signal },
-      async () => {
-        started = true;
-        return fn();
-      },
-    );
-  } catch (err) {
-    if (started) throw err; // fn() itself failed — propagate, never re-run it.
-    // Could not acquire the lock within LOCK_ACQUIRE_MS (AbortError) — run
-    // unguarded rather than hang the whole auth subsystem.
-    return fn();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 // 🔥 SINGLETON - instance יחיד לכל האפליקציה
 let supabaseInstance: SupabaseClient | null = null;
 
@@ -118,9 +68,6 @@ export const supabase = (() => {
         // in the browser it is identical to window.localStorage.
         storage: typeof window !== 'undefined' ? window.localStorage : undefined,
         storageKey: 'finotaur-auth-token',
-        // Bounded lock: never wait forever on the cross-tab auth Web Lock.
-        // See boundedAuthLock above (fixes app-wide getSession-timeout hang).
-        lock: boundedAuthLock,
       },
       global: {
         headers: { 'x-client-info': 'finotaur-web@1.0.0' }
