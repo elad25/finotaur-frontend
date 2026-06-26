@@ -305,8 +305,29 @@ const FLOOR_OPTIONS = [
   { label: '$1M',   value: 1_000_000 },
   { label: '$5M',   value: 5_000_000 },
 ] as const;
-const FLOOR_DEFAULT    = 500_000;   // $500K default
+const FLOOR_DEFAULT    = 500_000;   // fallback floor before history loads
 const TRACK_FLOOR_USD  = 100_000;   // track ≥ $100K — kills small-order noise at the source
+
+// Adaptive ("Auto") floor: per-symbol threshold derived from the symbol's own
+// 72h wall-history notionals, so each coin shows its significant walls at its
+// own $-scale (BTC walls ~$200K today; the old fixed $500K hid ~97% of real
+// walls). p70 of observed wall sizes, clamped to a sane band.
+const AUTO_FLOOR_PCTL = 0.70;
+const AUTO_FLOOR_MIN  = 50_000;
+const AUTO_FLOOR_MAX  = 5_000_000;
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return NaN;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * p)));
+  return sorted[idx];
+}
+
+function computeAutoFloor(notionals: number[]): number {
+  const p = percentile(notionals, AUTO_FLOOR_PCTL);
+  if (!Number.isFinite(p)) return FLOOR_DEFAULT;
+  return Math.min(AUTO_FLOOR_MAX, Math.max(AUTO_FLOOR_MIN, Math.round(p)));
+}
 
 // Bar-interval size in seconds — used to align wall times to candle boundaries.
 function intervalSeconds(iv: Interval): number {
@@ -473,9 +494,12 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // immediately and renders history stripes without waiting up to 3 seconds.
   const [seedVersion, setSeedVersion] = useState(0);
 
-  // Floor filter: segments with notional < floorUsd are hidden (not emitted).
-  // Tracking always uses TRACK_FLOOR_USD ($100K) so history isn't lost on filter change.
-  const [floorUsd, setFloorUsd] = useState<number>(FLOOR_DEFAULT);
+  // Floor filter. 'auto' = adaptive per-symbol threshold (default); a number =
+  // a manual override picked from the segmented control. Tracking always uses
+  // TRACK_FLOOR_USD ($100K) so history isn't lost when the floor changes.
+  const [floorMode, setFloorMode] = useState<'auto' | number>('auto');
+  const [autoFloorUsd, setAutoFloorUsd] = useState<number>(FLOOR_DEFAULT);
+  const floorUsd = floorMode === 'auto' ? autoFloorUsd : floorMode;
 
   // Depth matrix size filter: percent of the p99 reference cell.
   // 0 = All, 1 | 5 | 10 | 25 = only bins >= N% of the largest wall in view.
@@ -577,6 +601,14 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
     fetchWallsHistory(symbol, 72, controller.signal).then(resp => {
       if (cancelled) return;
+
+      // Recompute the adaptive ("Auto") floor for THIS symbol from its own wall
+      // history, so each coin shows its significant walls at its own $-scale.
+      const notionals = resp.episodes
+        .map(ep => ep.maxNotionalUsd)
+        .filter((n): n is number => Number.isFinite(n));
+      if (notionals.length > 0) setAutoFloorUsd(computeAutoFloor(notionals));
+
       const nowMs = Date.now();
       const tracked = trackedWallsRef.current;
       const dead    = deadWallsRef.current;
@@ -952,12 +984,27 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
 
         {/* Floor filter segmented control */}
         <div className="flex items-center gap-0.5">
+          {/* Auto = adaptive per-symbol floor (default) */}
+          <button
+            key="auto"
+            onClick={() => setFloorMode('auto')}
+            title={`Adaptive floor — significant walls for ${coinLabel} (~$${Math.round(autoFloorUsd / 1000)}K)`}
+            className={[
+              'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
+              floorMode === 'auto'
+                ? 'text-[#C9A646]'
+                : 'text-white/40 hover:text-white/60',
+            ].join(' ')}
+            style={floorMode === 'auto' ? { color: '#C9A646' } : undefined}
+          >
+            {`Auto · $${Math.round(autoFloorUsd / 1000)}K`}
+          </button>
           {FLOOR_OPTIONS.map(opt => {
-            const isActive = opt.value === floorUsd;
+            const isActive = floorMode !== 'auto' && opt.value === floorMode;
             return (
               <button
                 key={opt.value}
-                onClick={() => setFloorUsd(opt.value)}
+                onClick={() => setFloorMode(opt.value)}
                 className={[
                   'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors duration-100 select-none',
                   isActive
