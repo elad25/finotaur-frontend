@@ -140,8 +140,14 @@ export function useLiquidityBand({
     let rawMax = hasWall ? wallMax : -Infinity;
 
     if (hasCandle) {
-      if (candleRange.low  < rawMin) rawMin = candleRange.low;
-      if (candleRange.high > rawMax) rawMax = candleRange.high;
+      // Clamp the candle contribution to the same +/-15% window as walls, so a
+      // wide loaded history on higher timeframes (1h/4h/1d load many bars)
+      // can't blow the price axis out and squash the visible candles. The
+      // visible 6h window stays well inside this band.
+      const cLow  = Math.max(candleRange.low,  clampLo);
+      const cHigh = Math.min(candleRange.high, clampHi);
+      if (cLow  < rawMin) rawMin = cLow;
+      if (cHigh > rawMax) rawMax = cHigh;
     }
 
     // Fall back to candle center if walls produced degenerate range.
