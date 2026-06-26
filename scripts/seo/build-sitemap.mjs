@@ -57,6 +57,7 @@ const PRESERVED_ENTRIES = [
   { loc: "/legal/refund",                        lastmod: TODAY, changefreq: "monthly", priority: "0.3" },
   // /research index (new)
   { loc: "/research",                            lastmod: TODAY, changefreq: "daily",   priority: "0.9" },
+  { loc: "/best-trading-journal-for-tradovate",  lastmod: TODAY, changefreq: "weekly",  priority: "0.8" },
 ];
 
 // ---------------------------------------------------------------------------
