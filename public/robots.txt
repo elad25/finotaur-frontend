@@ -1,6 +1,9 @@
 # Finotaur - Trading Intelligence Platform
 # https://www.finotaur.com
 
+# ─────────────────────────────────────────────────────────────
+# Traditional search engines
+# ─────────────────────────────────────────────────────────────
 User-agent: Googlebot
 Allow: /
 Disallow: /app/
@@ -13,6 +16,83 @@ Allow: /
 Disallow: /app/
 Disallow: /auth/
 
+# ─────────────────────────────────────────────────────────────
+# AI assistants & answer engines — EXPLICITLY ALLOWED so Finotaur
+# can be cited/recommended in AI-generated answers. Blocking any of
+# these means that platform literally cannot cite us.
+# Public marketing/education pages are open; the logged-in app
+# (/app/), auth, and password flows stay disallowed.
+# ─────────────────────────────────────────────────────────────
+
+# OpenAI — ChatGPT (search + browsing) and ChatGPT live fetch
+User-agent: GPTBot
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+# Anthropic — Claude (search + live fetch)
+User-agent: ClaudeBot
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+User-agent: Claude-User
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+# Google Gemini / AI Overviews (grounding + training opt-in)
+User-agent: Google-Extended
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+# Apple Intelligence
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+# Common Crawl — feeds many LLM training sets; allowed for reach
+User-agent: CCBot
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+
+# ─────────────────────────────────────────────────────────────
+# Social / link unfurl bots
+# ─────────────────────────────────────────────────────────────
 User-agent: Twitterbot
 Allow: /
 
@@ -25,6 +105,9 @@ Allow: /
 User-agent: Slackbot
 Allow: /
 
+# ─────────────────────────────────────────────────────────────
+# Everything else
+# ─────────────────────────────────────────────────────────────
 User-agent: *
 Allow: /
 Disallow: /app/
