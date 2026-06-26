@@ -569,11 +569,16 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // 6h gives enough candle context AND covers the full depth-history window.
   // Recomputed when `to` changes (every 30s timeTick) but FinotaurChart only
   // re-applies it when timeFitToken is explicitly bumped — not on every slide.
-  const SIX_HOURS_SEC = 6 * 60 * 60;
+  // Visible window scales with the interval: a fixed number of bars so every
+  // timeframe frames a sensible amount of price action (a fixed 6h window was
+  // nonsensical on 4h/1d — only 1-2 bars). The price band fits the candles
+  // INSIDE this window (see FinotaurChart onBarsLoad), so candles always fill
+  // the height instead of being squashed by a wide loaded history.
+  const VISIBLE_BARS = 120;
   const focusRange = useMemo(
-    () => ({ from: to - SIX_HOURS_SEC, to }),
+    () => ({ from: to - VISIBLE_BARS * intervalSeconds(interval), to }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [to],
+    [to, interval],
   );
 
   // Depth matrix slices — drives DepthMatrixLayer.

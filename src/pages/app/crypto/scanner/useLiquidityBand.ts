@@ -27,12 +27,12 @@ const RECOMPUTE_INTERVAL_MS = 3_000;
 const MID_DRIFT_PCT = 0.005; // 0.5%
 
 /** Vertical padding above and below the outermost level in the union. */
-const PADDING_PCT = 0.08; // 8%
+const PADDING_PCT = 0.04; // 4%
 
 /** Walls farther than this fraction from current mid do NOT expand the auto-fit
  *  band (they still render as stripes if scrolled into view). Prevents a distant
  *  whale wall from zooming the whole chart out and squashing the candles. */
-const WALL_CLAMP_PCT = 0.15; // ±15% of mid
+const WALL_CLAMP_PCT = 0.05; // ±5% of mid — walls beyond this don't stretch the view
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
