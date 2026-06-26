@@ -1,7 +1,10 @@
 // src/features/automation/components/CopierRouteCard.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Edit a single copier route: source connection, targets (with scale + max
+// Edit a single copier route: source account, targets (with scale + max
 // contracts), symbol filter, opens/closes/reverse toggles.
+//
+// Uses JournalAccountPicker so source and destination lists match the journal's
+// account universe (usePortfolios), not the coarser broker_connections list.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
@@ -11,14 +14,21 @@ import { Button } from '@/components/ds/Button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { AccountPicker } from './AccountPicker';
-import type { CopierRoute, CopierRouteTargetInput } from '../lib/automationTypes';
+import { JournalAccountPicker } from './JournalAccountPicker';
+import type {
+  CopierRoute,
+  CopierRouteTargetInput,
+  JournalAccount,
+} from '../lib/automationTypes';
 
+// ── Types ──────────────────────────────────────────────────────────────────
+
+/** Props exposed to CopierRoutesTab. */
 interface CopierRouteCardProps {
   route: CopierRoute;
   onSave: (params: {
     routeId: string;
-    sourceId: string;
+    sourceAccount: JournalAccount;
     label: string;
     symbolFilter: string[];
     copyOpens: boolean;
@@ -31,27 +41,50 @@ interface CopierRouteCardProps {
   isSaving?: boolean;
 }
 
+/** Internal per-target state — strings for controlled <input> values. */
 interface LocalTarget {
-  destinationId: string;
-  scaleRatio: string;   // string for controlled input
-  maxContracts: string; // string for controlled input
+  account: JournalAccount | null;
+  scaleRatio: string;    // string for controlled input
+  maxContracts: string;  // string for controlled input
   isActive: boolean;
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
 function buildLocalTargets(route: CopierRoute): LocalTarget[] {
   return (route.automation_copier_route_targets ?? []).map((t) => ({
-    destinationId: t.destination_connection_id,
+    account: {
+      account_id: t.destination_account_id,
+      account_name: t.destination_account_name,
+      broker: t.destination_broker,
+      environment: t.destination_environment,
+    },
     scaleRatio: t.scale_ratio?.toString() ?? '1',
     maxContracts: t.max_contracts?.toString() ?? '',
     isActive: t.is_active,
   }));
 }
 
+/** Extract the source JournalAccount from an existing route (may be partial on first render). */
+function buildSourceAccount(route: CopierRoute): JournalAccount | null {
+  if (!route.source_account_id) return null;
+  return {
+    account_id: route.source_account_id,
+    account_name: route.source_account_name,
+    broker: route.source_broker,
+    environment: route.source_environment,
+  };
+}
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRouteCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const [label, setLabel] = useState(route.label);
-  const [sourceId, setSourceId] = useState(route.source_connection_id);
+  const [sourceAccount, setSourceAccount] = useState<JournalAccount | null>(
+    () => buildSourceAccount(route),
+  );
   const [symbolFilter, setSymbolFilter] = useState(route.symbol_filter?.join(', ') ?? '');
   const [copyOpens, setCopyOpens] = useState(route.copy_opens);
   const [copyCloses, setCopyCloses] = useState(route.copy_closes);
@@ -62,7 +95,7 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
   const addTarget = () => {
     setTargets((prev) => [
       ...prev,
-      { destinationId: '', scaleRatio: '1', maxContracts: '', isActive: true },
+      { account: null, scaleRatio: '1', maxContracts: '', isActive: true },
     ]);
   };
 
@@ -75,15 +108,22 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
   };
 
   const handleSave = () => {
+    if (!sourceAccount) return; // guard: source required
+
     const symbols = symbolFilter
       .split(',')
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
 
     const parsedTargets: CopierRouteTargetInput[] = targets
-      .filter((t) => t.destinationId)
+      .filter((t) => t.account != null)
+      // Guard: prevent target equal to source
+      .filter((t) => t.account!.account_id !== sourceAccount.account_id)
       .map((t) => ({
-        destination_connection_id: t.destinationId,
+        destination_account_id: t.account!.account_id,
+        destination_account_name: t.account!.account_name,
+        destination_broker: t.account!.broker,
+        destination_environment: t.account!.environment,
         scale_ratio: parseFloat(t.scaleRatio) || 1,
         max_contracts: t.maxContracts ? parseInt(t.maxContracts, 10) : null,
         is_active: t.isActive,
@@ -91,7 +131,7 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
 
     onSave({
       routeId: route.id,
-      sourceId,
+      sourceAccount,
       label: label.trim() || 'Unnamed route',
       symbolFilter: symbols,
       copyOpens,
@@ -103,6 +143,9 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
   };
 
   const targetCount = targets.length;
+  const sourceLabel = sourceAccount
+    ? `${sourceAccount.account_name}${sourceAccount.environment ? ` (${sourceAccount.environment})` : ''}`
+    : 'No source selected';
 
   return (
     <Card padding="compact" className="space-y-3">
@@ -143,7 +186,7 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
 
       {!expanded && (
         <p className="text-xs text-zinc-500 pl-6">
-          {targetCount} destination{targetCount !== 1 ? 's' : ''} ·{' '}
+          {sourceLabel} · {targetCount} destination{targetCount !== 1 ? 's' : ''} ·{' '}
           {[copyOpens && 'opens', copyCloses && 'closes', reverse && 'reversed']
             .filter(Boolean)
             .join(', ') || 'no copy settings'}
@@ -155,10 +198,10 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
           {/* Source */}
           <div className="space-y-1">
             <Label className="text-xs text-zinc-400">Source account (copy FROM)</Label>
-            <AccountPicker
-              value={sourceId}
-              onChange={(v) => setSourceId(v ?? '')}
-              includeGlobal={false}
+            <JournalAccountPicker
+              value={sourceAccount?.account_id ?? null}
+              onChange={setSourceAccount}
+              placeholder="Select source account"
               className="h-8 text-sm"
             />
           </div>
@@ -198,10 +241,9 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
             {targets.map((target, idx) => (
               <div key={idx} className="flex items-start gap-2">
                 <div className="flex-1 grid grid-cols-3 gap-2">
-                  <AccountPicker
-                    value={target.destinationId || null}
-                    onChange={(v) => updateTarget(idx, { destinationId: v ?? '' })}
-                    includeGlobal={false}
+                  <JournalAccountPicker
+                    value={target.account?.account_id ?? null}
+                    onChange={(acct) => updateTarget(idx, { account: acct })}
                     placeholder="Destination"
                     className="h-7 text-sm col-span-1"
                   />
@@ -251,17 +293,20 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
             </button>
           </div>
 
-          {/* Save */}
-          <div className="pt-1">
+          {/* Save — disabled when no source selected */}
+          <div className="pt-1 flex items-center gap-3">
             <Button
               variant="goldOutline"
               size="compact"
               showArrow={false}
               onClick={handleSave}
-              disabled={isSaving}
+              disabled={isSaving || !sourceAccount}
             >
               {isSaving ? 'Saving…' : 'Save route'}
             </Button>
+            {!sourceAccount && (
+              <span className="text-xs text-amber-400">Select a source account to save</span>
+            )}
           </div>
         </div>
       )}
