@@ -227,8 +227,6 @@ const JournalSettings = lazy(async () => {
   const Component = (module as any).default ?? (module as any).JournalSettings ?? Object.values(module)[0];
   return { default: Component };
 });
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for Phase 2 removal (copy-trade unification)
-const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/features/mentor/pages/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 // Floor page removed — competition lives in GlobalLeaderboard (Community › Leaderboard tab)
