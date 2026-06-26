@@ -88,6 +88,27 @@ jobs:
       - name: Route guard (blocking)
         run: node scripts/check-routes.mjs
 
+  # BLOCKING gate. Fails the build if any Radix <DialogContent> / <SheetContent>
+  # / <AlertDialogContent> / <DrawerContent> renders without a matching title
+  # (<DialogTitle>/<SheetTitle>/... — a sr-only title counts). That omission
+  # makes Radix log "`DialogContent` requires a `DialogTitle`..." at runtime,
+  # invisible to the vite build. Added after 2026-06-26, when the broker
+  # bottom-Sheet + mobile sidebar Sheet shipped without a SheetTitle (PR #1036).
+  # Uses only Node built-ins, so no npm install. See scripts/check-dialog-titles.mjs.
+  # Opt out a false positive (title rendered by a child component) with a
+  # `dialog-title-guard-ignore` comment in the file.
+  dialog-guard:
+    name: dialog-guard (missing dialog title)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Dialog title guard (blocking)
+        run: node scripts/check-dialog-titles.mjs
+
   lint:
     name: lint (eslint)
     runs-on: ubuntu-latest
