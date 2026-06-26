@@ -97,10 +97,15 @@ const FAINT_COLOR = (0x40 << 24) | (45 << 16) | (20 << 8) | 10;
 
 // ── Histogram-based percentile (O(n), no sort) ───────────────────────────────
 
+// Reusable 65536-bin histogram — hoisted to avoid allocating 256KB per call.
+// Module-scoped + single-threaded (rAF) so reuse is safe; zero-filled each call.
+const HIST_SCRATCH = new Uint32Array(65536);
+
 /** Compute a percentile over uint16 values using a 65536-bin histogram. */
 function percentile65536(qValues: Uint16Array, pct: number): number {
   if (qValues.length === 0) return 0;
-  const hist = new Uint32Array(65536);
+  const hist = HIST_SCRATCH;
+  hist.fill(0);
   for (let i = 0; i < qValues.length; i++) hist[qValues[i]]++;
 
   const target = Math.ceil(qValues.length * pct);
@@ -492,10 +497,13 @@ export function DepthMatrixLayer({
       if (dirtyRef.current || fingerprintChanged || needsRepaint) {
         dirtyRef.current = false;
 
-        if (needsRepaint || fingerprintChanged) {
-          // Recompute norm when viewport or data changes.
-          // pxPerSec and priceToCoordinate anchors are resolved fresh every frame
-          // (below) — do NOT cache them across frames; they lag during kinetic zoom.
+        // Recompute the percentile norm ONLY when the offscreen will actually be
+        // repainted (data/version/floor/filter change). Its output (vLo/vHi) is
+        // consumed solely by repaintOffscreen, which is needsRepaint-gated — so
+        // recomputing it on pure pan frames (fingerprintChanged) was wasted work
+        // (2x 65536-bin histogram allocations every frame). The per-frame re-blit
+        // (affine mapping + drawImage) below is unchanged.
+        if (needsRepaint) {
           recomputeNorm(
             columnsRef.current,
             chartInstance,
