@@ -13,7 +13,7 @@
 //   Logo · ☰ hamburger · GlobalOmnibox · ✨ Upgrade · Ask Fino · User menu
 // =====================================================
 
-import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu, UserCircle } from 'lucide-react';
+import { Settings, Crown, LogOut, ChevronDown, Sparkles, Menu, UserCircle, ShieldCheck } from 'lucide-react';
 import { SubscriptionBadge } from '@/components/nav/SubscriptionBadge';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './ui/button';
@@ -278,6 +278,16 @@ export const TopNav = () => {
                 <Settings className="mr-2 h-4 w-4 text-zinc-400" />
                 <span className="text-white">Settings</span>
               </DropdownMenuItem>
+
+              {hasBetaAccess && (
+                <DropdownMenuItem
+                  onClick={() => navigate('/app/automation/risk')}
+                  className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
+                >
+                  <ShieldCheck className="mr-2 h-4 w-4 text-zinc-400" />
+                  <span className="text-white">Automation</span>
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 

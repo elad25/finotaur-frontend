@@ -29,6 +29,7 @@ const NO_SIDEBAR_ROUTES = [
   '/app/all-markets/top-secret',
   '/app/all-markets/top-secret-admin',
   '/app/settings',
+  '/app/automation', // Automation has its own internal sidebar
   // Admin CRM ships its own internal sidebar (12 tabs), so the global one
   // would collide.
   '/app/admin',
