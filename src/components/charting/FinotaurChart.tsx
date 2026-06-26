@@ -1150,11 +1150,26 @@ export function FinotaurChart({
         // liquidity band (makes the band authoritative for the visible candles).
         if (onBarsLoad) {
           if (bars.length > 0) {
+            // Only the VISIBLE window's candles define the price band, not the
+            // full loaded history (600 bars = ~100 days on 4h). When focusRange
+            // is provided (scanner), restrict hi/low to bars inside it so the
+            // band frames the on-screen candles. Other callers keep all bars.
+            const winFrom = focusRange
+              ? (focusRange.from as unknown as number)
+              : -Infinity;
             let hi = -Infinity;
             let lo = Infinity;
             for (const b of bars) {
+              if ((b.time as unknown as number) < winFrom) continue;
               if (b.high > hi) hi = b.high;
               if (b.low  < lo) lo = b.low;
+            }
+            // Fallback: if the window filtered everything out, use all bars.
+            if (hi === -Infinity) {
+              for (const b of bars) {
+                if (b.high > hi) hi = b.high;
+                if (b.low  < lo) lo = b.low;
+              }
             }
             onBarsLoad({ high: hi, low: lo });
           } else {

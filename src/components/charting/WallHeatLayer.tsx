@@ -236,10 +236,13 @@ export function WallHeatLayer({
 
           // ── Draw fill rect centered on price level ─────────────────────────
           // Change C: glow for hot alive walls (intensity >= 0.65, endTime === null).
-          const isHotAlive = seg.endTime === null && (seg.intensity ?? 0) >= 0.65;
+          // Glow only the strongest alive walls with a cheaper blur radius —
+          // canvas shadowBlur is a per-pixel CPU convolution and was a real
+          // pan-jank cost when applied to many walls each frame.
+          const isHotAlive = seg.endTime === null && (seg.intensity ?? 0) >= 0.8;
           if (isHotAlive) {
             ctx.shadowColor = seg.color;
-            ctx.shadowBlur  = 4 + 8 * (seg.intensity ?? 0);
+            ctx.shadowBlur  = 3 + 3 * (seg.intensity ?? 0);
           }
           ctx.fillStyle = seg.fillColor;
           ctx.fillRect(drawX, bandTop, drawW, drawH);
