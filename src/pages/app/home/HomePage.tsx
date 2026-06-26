@@ -22,7 +22,6 @@ import {
 
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
-import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useFinoChat } from '@/contexts/FinoChatContext';
@@ -63,17 +62,17 @@ const PROMPT_CHIPS: PromptChip[] = [
 // ---------------------------------------------------------------------------
 export default function HomePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { hasBetaAccess } = useAdminAuth();
   const { open } = useFinoChat();
-  const { profile } = useUserProfile();
+  const { profile, isLoading: profileLoading } = useUserProfile();
 
-  const firstName = (
-    profile?.display_name ||
-    user?.email?.split(' ')[0] ||
-    user?.email?.split('@')[0] ||
-    'trader'
-  ).trim().split(' ')[0];
+  // Never fall back to the user's email for the greeting — showing it (even
+  // momentarily, before the profile resolves) reads as a bug. While the
+  // profile is loading we render no name at all, then swap straight to the
+  // display name. No email ever flashes.
+  const firstName = profileLoading
+    ? ''
+    : (profile?.display_name || 'trader').trim().split(' ')[0];
   const greeting = computeGreeting();
 
   const [inputValue, setInputValue] = useState('');
@@ -134,7 +133,7 @@ export default function HomePage() {
           more deliberate gap between the greeting and the Ask Fino card. */}
       <div className="text-center mb-ds-6">
         <h1 className="text-3xl font-semibold text-ink-primary">
-          {greeting}, {firstName}
+          {greeting}{firstName && `, ${firstName}`}
         </h1>
       </div>
 
