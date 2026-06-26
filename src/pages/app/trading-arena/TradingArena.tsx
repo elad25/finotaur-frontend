@@ -20,8 +20,14 @@ import { useCallback, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, ChevronLeft, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CRYPTO_COINS } from '@/data/cryptoCoins';
 import type { Interval } from '@/components/charting/types';
+import {
+  SymbolAutocomplete,
+} from '@/components/backtest/SymbolAutocomplete';
+import {
+  detectAssetClass,
+  type AssetClass,
+} from '@/components/backtest/symbolUniverse';
 import {
   TRADING_ARENA_TABS,
   ARENA_INTERVALS,
@@ -35,47 +41,10 @@ import { CvdTab }       from './tabs/CvdTab';
 import { LockedTab }    from './tabs/LockedTab';
 
 // ---------------------------------------------------------------------------
-// Asset selector — top ~30 coins that have Binance USDT spot pairs.
+// Default symbol and interval
 // ---------------------------------------------------------------------------
-const ARENA_COINS = CRYPTO_COINS.slice(0, 30).map((c) => ({
-  symbol: `${c.symbol}USDT`,
-  label: c.symbol,
-}));
-
-// Fallback if the slice above is somehow empty (defensive).
 const DEFAULT_SYMBOL = 'BTCUSDT';
 const DEFAULT_INTERVAL: Interval = '15m';
-
-// ---------------------------------------------------------------------------
-// Top bar sub-components
-// ---------------------------------------------------------------------------
-
-interface AssetSelectorProps {
-  value: string;
-  onChange: (v: string) => void;
-}
-
-function AssetSelector({ value, onChange }: AssetSelectorProps) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        'h-8 rounded-md border border-[rgba(201,166,70,0.25)] bg-[#0D0D0D]',
-        'px-2 text-[12px] font-medium text-[#E8E8E8]',
-        'focus:outline-none focus:border-[rgba(201,166,70,0.6)]',
-        'transition-colors duration-150 cursor-pointer',
-      )}
-      aria-label="Select asset"
-    >
-      {ARENA_COINS.map((c) => (
-        <option key={c.symbol} value={c.symbol}>
-          {c.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 interface IntervalSelectorProps {
   value: Interval;
@@ -157,6 +126,19 @@ export default function TradingArena() {
   // simple for Phase 0 (local state is sufficient for a workstation).
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [interval, setIntervalValue] = useState<Interval>(DEFAULT_INTERVAL);
+  const [assetClass, setAssetClass] = useState<AssetClass>('crypto');
+
+  const handleSymbolSelect = useCallback((picked: string) => {
+    const detected = detectAssetClass(picked);
+    // For crypto, ensure the Binance pair format (e.g. 'BTC' → 'BTCUSDT').
+    let arenaSymbol = picked;
+    if (detected === 'crypto') {
+      const upper = picked.toUpperCase();
+      arenaSymbol = upper.endsWith('USDT') ? upper : `${upper.replace(/USDT$/i, '')}USDT`;
+    }
+    setSymbol(arenaSymbol);
+    setAssetClass(detected);
+  }, []);
 
   const handleTabSelect = useCallback(
     (id: TabId) => {
@@ -219,8 +201,14 @@ export default function TradingArena() {
             aria-hidden="true"
           />
 
-          {/* Asset selector */}
-          <AssetSelector value={symbol} onChange={setSymbol} />
+          {/* Asset selector — SymbolAutocomplete (all asset classes) */}
+          <SymbolAutocomplete
+            symbol={symbol}
+            assetClass={assetClass}
+            onSelect={handleSymbolSelect}
+            variant="toolbar"
+            filterToAssetClass={false}
+          />
 
           {/* Divider */}
           <span
@@ -242,7 +230,7 @@ export default function TradingArena() {
       {/* ── Content area ─────────────────────────────────────────── */}
       <main className="flex flex-1 min-h-0 overflow-hidden" role="tabpanel">
         {activeTab === 'chart' && (
-          <ChartTab symbol={symbol} interval={interval} />
+          <ChartTab symbol={symbol} interval={interval} assetClass={assetClass} />
         )}
         {activeTab === 'order-flow' && (
           <OrderFlowTab symbol={symbol} />
