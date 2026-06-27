@@ -7,7 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Copy, Check, RefreshCw, Monitor, CheckCircle2 } from 'lucide-react';
+import { Copy, Check, RefreshCw, Monitor, CheckCircle2, Lock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,7 @@ interface PairDeviceDialogProps {
 
 export function PairDeviceDialog({ open, onOpenChange }: PairDeviceDialogProps) {
   const { generatePairingCode, devices, refetch } = useAgentDevices();
+  const navigate = useNavigate();
 
   const [phase, setPhase] = useState<Phase>('generating');
   const [pairing, setPairing] = useState<PairingState | null>(null);
@@ -270,15 +272,32 @@ export function PairDeviceDialog({ open, onOpenChange }: PairDeviceDialogProps) 
           {/* ── error ─────────────────────────────────────────────────────── */}
           {phase === 'error' && (
             <div className="flex flex-col items-center gap-4 py-6">
-              <p className="text-sm text-red-400">{errorMsg || 'Something went wrong.'}</p>
-              <Button
-                variant="goldOutline"
-                size="compact"
-                showArrow={false}
-                onClick={startPairing}
-              >
-                Try again
-              </Button>
+              {errorMsg?.includes('Premium subscription') ? (
+                <>
+                  <Lock className="h-8 w-8 text-[#C9A646]" aria-hidden="true" />
+                  <p className="text-sm text-zinc-300 text-center">{errorMsg}</p>
+                  <Button
+                    variant="gold"
+                    size="compact"
+                    showArrow={false}
+                    onClick={() => { onOpenChange(false); navigate('/app/journal/pricing'); }}
+                  >
+                    Upgrade to Premium
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-red-400">{errorMsg || 'Something went wrong.'}</p>
+                  <Button
+                    variant="goldOutline"
+                    size="compact"
+                    showArrow={false}
+                    onClick={startPairing}
+                  >
+                    Try again
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>

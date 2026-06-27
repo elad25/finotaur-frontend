@@ -5,13 +5,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NavLink, Outlet } from 'react-router-dom';
-import { ShieldCheck, GitMerge, Monitor } from 'lucide-react';
+import { ShieldCheck, GitMerge, Monitor, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CopierPremiumGate } from './components/CopierPremiumGate';
 
 const navItems = [
-  { path: 'risk',   label: 'Risk Rules', icon: ShieldCheck },
-  { path: 'copier', label: 'Copier',     icon: GitMerge   },
-  { path: 'agent',  label: 'Agent',      icon: Monitor    },
+  { path: 'install', label: 'Install',    icon: Download   },
+  { path: 'risk',    label: 'Risk Rules', icon: ShieldCheck },
+  { path: 'copier',  label: 'Copier',     icon: GitMerge   },
+  { path: 'agent',   label: 'Agent',      icon: Monitor    },
 ] as const;
 
 const AutomationShell = () => (
@@ -54,7 +56,9 @@ const AutomationShell = () => (
 
       {/* Content */}
       <main className="flex-1 min-w-0">
-        <Outlet />
+        <CopierPremiumGate>
+          <Outlet />
+        </CopierPremiumGate>
       </main>
     </div>
   </div>

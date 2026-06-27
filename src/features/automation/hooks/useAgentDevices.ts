@@ -71,7 +71,12 @@ export function useAgentDevices() {
         p_device_name: name,
       });
 
-      if (e) throw new Error(e.message);
+      if (e) {
+        if (e.message?.includes('subscription_required')) {
+          throw new Error('Trade Copier requires a Premium subscription.');
+        }
+        throw new Error(e.message);
+      }
 
       // supabase-js returns an array for RPCs that RETURN TABLE
       const row = Array.isArray(data) ? data[0] : data;

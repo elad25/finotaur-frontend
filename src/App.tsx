@@ -147,6 +147,7 @@ const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI
 
 // Automation — web config layer (Session 1: UI only, no execution)
 const AutomationShell = lazy(() => import("@/features/automation/AutomationShell"));
+const AutomationInstallTab = lazy(() => import("@/features/automation/tabs/InstallAgentTab"));
 const AutomationRiskTab = lazy(() => import("@/features/automation/tabs/RiskRulesTab"));
 const AutomationCopierTab = lazy(() => import("@/features/automation/tabs/CopierRoutesTab"));
 const AutomationAgentTab = lazy(() => import("@/features/automation/tabs/AgentStatusTab"));
@@ -845,6 +846,7 @@ function AppContent() {
           {/* AUTOMATION — web config layer (admin/beta only, Session 1: no execution) */}
           <Route path="automation" element={<SuspenseRoute><AdminBetaGate><AutomationShell /></AdminBetaGate></SuspenseRoute>}>
             <Route index element={<Navigate to="risk" replace />} />
+            <Route path="install" element={<SuspenseRoute><AutomationInstallTab /></SuspenseRoute>} />
             <Route path="risk"   element={<SuspenseRoute><AutomationRiskTab /></SuspenseRoute>} />
             <Route path="copier" element={<SuspenseRoute><AutomationCopierTab /></SuspenseRoute>} />
             <Route path="agent"  element={<SuspenseRoute><AutomationAgentTab /></SuspenseRoute>} />
