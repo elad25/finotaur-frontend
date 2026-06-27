@@ -11,7 +11,7 @@ import { useState, useCallback, memo, useMemo, useRef, useEffect } from 'react';
 import {
   Link2, RefreshCw, Clock,
   Copy, History, Zap, Shield, WifiOff,
-  TrendingUp, AlertOctagon, ArrowLeftRight, Search, X, Plus,
+  TrendingUp, AlertOctagon, ArrowLeftRight, Search, X,
   MoreVertical, ChevronDown, ChevronRight, Crown,
   Download, Filter,
 } from 'lucide-react';
@@ -19,8 +19,10 @@ import { useTradovate } from '@/hooks/useTradovate';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
-import { ConnectCopierModal } from '@/components/copyTrading/ConnectCopierModal';
 import { useSubscription } from '@/hooks/useSubscription';
+import { CopierPremiumGate } from '@/features/automation/components/CopierPremiumGate';
+import AgentStatusTab from '@/features/automation/tabs/AgentStatusTab';
+import InstallAgentTab from '@/features/automation/tabs/InstallAgentTab';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
@@ -1276,13 +1278,17 @@ export default function TradeCopier() {
   // Portfolios are the source of truth for account display (same as journal).
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
-  const [showCopierModal, setShowCopierModal] = useState(false);
 
-  const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
-    ? 'manage-risk'
-    : location.pathname.endsWith('/trade-copier')
-      ? 'copy-trading'
-      : 'connections';
+  const activeTab: 'connections' | 'copy-trading' | 'manage-risk' | 'agent' | 'install' =
+    location.pathname.endsWith('/manage-risk')
+      ? 'manage-risk'
+      : location.pathname.endsWith('/trade-copier')
+        ? 'copy-trading'
+        : location.pathname.endsWith('/agent')
+          ? 'agent'
+          : location.pathname.endsWith('/install')
+            ? 'install'
+            : 'connections';
 
   if (!isAdmin) return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
@@ -1310,6 +1316,7 @@ export default function TradeCopier() {
   );
 
   return (
+    <CopierPremiumGate>
     <div className="relative min-h-screen overflow-hidden bg-surface-base text-ink-primary">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,rgba(201,166,70,0.08),transparent_70%)]" />
 
@@ -1337,24 +1344,13 @@ export default function TradeCopier() {
             )}
 
             <SectionCard>
-            <div className="flex items-center justify-between gap-ds-4 mb-ds-4">
-              <div className="flex items-center gap-ds-3">
-                <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
-                  <Link2 className="w-4 h-4 text-gold-primary" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
-                  <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
-                </div>
+            <div className="flex items-center gap-ds-4 mb-ds-4">
+              <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+                <Link2 className="w-4 h-4 text-gold-primary" />
               </div>
-              <div className="flex items-center gap-ds-3">
-                <button
-                  onClick={() => setShowCopierModal(true)}
-                  className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary shadow-[0_0_22px_rgba(201,166,70,0.12)] transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10 hover:shadow-[0_0_30px_rgba(201,166,70,0.22)]"
-                >
-                  <Plus className="w-4 h-4" />
-                  Connect Trade Copier
-                </button>
+              <div>
+                <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
+                <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
               </div>
             </div>
 
@@ -1398,14 +1394,18 @@ export default function TradeCopier() {
             no p-ds-6 inset) so they spread wider across the page. */}
         {activeTab === 'manage-risk' && <ManageRiskTab />}
 
+        {/* ── Tab 4: Agent ── */}
+        {activeTab === 'agent' && <AgentStatusTab />}
+
+        {/* ── Tab 5: Install ── */}
+        {activeTab === 'install' && <InstallAgentTab />}
+
       </div>
 
       {showAddBroker && (
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
       )}
-      {showCopierModal && (
-        <ConnectCopierModal onClose={() => setShowCopierModal(false)} />
-      )}
     </div>
+    </CopierPremiumGate>
   );
 }

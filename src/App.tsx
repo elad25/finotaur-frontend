@@ -145,12 +145,8 @@ const AffiliateTracker = lazy(() => import("@/features/affiliate/components/Affi
 
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
 
-// Automation — web config layer (Session 1: UI only, no execution)
-const AutomationShell = lazy(() => import("@/features/automation/AutomationShell"));
-const AutomationInstallTab = lazy(() => import("@/features/automation/tabs/InstallAgentTab"));
-const AutomationRiskTab = lazy(() => import("@/features/automation/tabs/RiskRulesTab"));
-const AutomationCopierTab = lazy(() => import("@/features/automation/tabs/CopierRoutesTab"));
-const AutomationAgentTab = lazy(() => import("@/features/automation/tabs/AgentStatusTab"));
+// Trade Copier page
+const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 
 const SettingsShell = lazy(() => import("@/features/settings/SettingsShell"));
 const AccountTab = lazy(() => import("@/features/settings/tabs/AccountTab"));
@@ -824,18 +820,19 @@ function AppContent() {
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
-          {/* TRADE COPIER — converged onto /app/automation (local NinjaScript agent + journal OAuth
-              accounts). The legacy API-credential copier (TradeCopier + ConnectCopierModal, server
-              copy-engine) is retired; every copy-trade path now redirects to the compliant copier. */}
-          <Route path="copy-trade/overview" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/trade-copier" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/manage-risk" element={<Navigate to="/app/automation/risk" replace />} />
-          <Route path="copy-trade/top-traders" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/strategies" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/portfolios" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/leaderboard" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/my-copying" element={<Navigate to="/app/automation/copier" replace />} />
-          <Route path="copy-trade/insights" element={<Navigate to="/app/automation/copier" replace />} />
+          {/* TRADE COPIER — five-tab page (Connections / Trade Copier / Manage Risk / Agent / Install) */}
+          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/agent"        element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          {/* Legacy aliases — redirect to overview */}
+          <Route path="copy-trade/top-traders"  element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/strategies"   element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/portfolios"   element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/leaderboard"  element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/my-copying"   element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/insights"     element={<Navigate to="/app/copy-trade/overview" replace />} />
           
           {/* FUNDING */}
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />
@@ -843,14 +840,8 @@ function AppContent() {
           <Route path="funding/advance" element={<LockedRoute domainId="funding"><FundingAdvance /></LockedRoute>} />
           <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
 
-          {/* AUTOMATION — web config layer (admin/beta only, Session 1: no execution) */}
-          <Route path="automation" element={<SuspenseRoute><AdminBetaGate><AutomationShell /></AdminBetaGate></SuspenseRoute>}>
-            <Route index element={<Navigate to="risk" replace />} />
-            <Route path="install" element={<SuspenseRoute><AutomationInstallTab /></SuspenseRoute>} />
-            <Route path="risk"   element={<SuspenseRoute><AutomationRiskTab /></SuspenseRoute>} />
-            <Route path="copier" element={<SuspenseRoute><AutomationCopierTab /></SuspenseRoute>} />
-            <Route path="agent"  element={<SuspenseRoute><AutomationAgentTab /></SuspenseRoute>} />
-          </Route>
+          {/* AUTOMATION — backward-compat redirect to Trade Copier */}
+          <Route path="automation/*" element={<Navigate to="/app/copy-trade/overview" replace />} />
 
           <Route path="settings" element={<SuspenseRoute><SettingsShell /></SuspenseRoute>}>
             <Route index element={<Navigate to="account" replace />} />
