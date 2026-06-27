@@ -21,22 +21,9 @@ export interface TradovateCredential {
   sync_error_count: number;
 }
 
-export interface PortfolioCopyRule {
-  id: string;
-  source_portfolio_id: string;
-  target_portfolio_id: string;
-  ratio: number;
-  max_contracts: number | null;
-  max_daily_loss_usd: number | null;
-  is_active: boolean;
-  copy_opens: boolean;
-  copy_closes: boolean;
-}
-
 // ── Query keys
 const tradovateKeys = {
   credentials: (userId: string) => ['tradovate_credentials', userId] as const,
-  copyRules:   (userId: string) => ['tradovate_copy_rules',  userId] as const,
 };
 
 // Extracts the real reason + code from an edge-function error.
@@ -156,17 +143,6 @@ async function fetchCredentials(userId: string): Promise<TradovateCredential[]> 
   }));
 }
 
-async function fetchCopyRules(userId: string): Promise<PortfolioCopyRule[]> {
-  const { data, error } = await supabase
-    .from('portfolio_copy_rules')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  if (error?.code === '42P01') return [];
-  if (error) throw error;
-  return data ?? [];
-}
-
 export function useTradovate() {
   const { id: userId } = useEffectiveUser();
   const queryClient = useQueryClient();
@@ -181,24 +157,10 @@ export function useTradovate() {
     gcTime:    30 * 60 * 1000,
   });
 
-  // ── React Query — copy rules
-  const { data: copyRules = [] } = useQuery({
-    queryKey: tradovateKeys.copyRules(userId ?? ''),
-    queryFn:  () => fetchCopyRules(userId!),
-    enabled:  !!userId,
-    staleTime: 5 * 60 * 1000,
-    gcTime:    30 * 60 * 1000,
-  });
-
   // ── Invalidate helpers
   const loadCredentials = useCallback(() => {
     if (!userId) return;
     queryClient.invalidateQueries({ queryKey: tradovateKeys.credentials(userId) });
-  }, [userId, queryClient]);
-
-  const loadCopyRules = useCallback(() => {
-    if (!userId) return;
-    queryClient.invalidateQueries({ queryKey: tradovateKeys.copyRules(userId) });
   }, [userId, queryClient]);
 
   // ── Connect: calls Edge Function (never touches keys client-side)
@@ -504,52 +466,9 @@ export function useTradovate() {
     });
   }, [userId, credentials, updateLabel]);
 
-  // ── Add copy rule
-  const addCopyRule = useCallback(async (
-    sourcePortfolioId: string,
-    targetPortfolioId: string,
-    ratio: number,
-    maxContracts?: number
-  ) => {
-    if (!userId) return;
-    const { error } = await supabase.from('portfolio_copy_rules').insert({
-      user_id:              userId,
-      source_portfolio_id:  sourcePortfolioId,
-      target_portfolio_id:  targetPortfolioId,
-      ratio,
-      max_contracts:        maxContracts ?? null,
-      is_active:            true,
-      copy_opens:           true,
-      copy_closes:          true
-    });
-    if (!error) {
-      loadCopyRules();
-      toast.success('Copy rule created');
-    } else {
-      toast.error('Failed to create rule');
-    }
-  }, [userId, loadCopyRules]);
-
-  // ── Toggle copy rule active/pause
-  const toggleCopyRule = useCallback(async (ruleId: string, isActive: boolean) => {
-    await supabase
-      .from('portfolio_copy_rules')
-      .update({ is_active: isActive })
-      .eq('id', ruleId);
-    loadCopyRules();
-  }, [loadCopyRules]);
-
-  // ── Delete copy rule
-  const deleteCopyRule = useCallback(async (ruleId: string) => {
-    await supabase.from('portfolio_copy_rules').delete().eq('id', ruleId);
-    loadCopyRules();
-    toast.success('Copy rule removed');
-  }, [loadCopyRules]);
-
   // ── Derived state
   const liveCredential = credentials.find(c => c.environment === 'live');
   const demoCredential = credentials.find(c => c.environment === 'demo');
-  const ACTIVE_STATUSES = ['connected', 'expired', 'error'] as const;
   const hasLiveConnection = liveCredential != null;
   const hasDemoConnection = demoCredential != null;
   const hasAnyConnection  = hasLiveConnection || hasDemoConnection;
@@ -573,10 +492,9 @@ export function useTradovate() {
     credentials, liveCredential, demoCredential, reconnect,
     hasLiveConnection, hasDemoConnection, hasAnyConnection,
     hasLiveActive, hasDemoActive,
-    copyRules, syncStatus, isLoading,
+    syncStatus, isLoading,
     connect, connectPropFirm, isPropFirmPending,
     disconnect, triggerSync, updateLabel,
-    addCopyRule, toggleCopyRule, deleteCopyRule,
-    refresh: () => { loadCredentials(); loadCopyRules(); }
+    refresh: loadCredentials,
   };
 }
