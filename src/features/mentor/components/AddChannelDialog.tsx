@@ -51,7 +51,7 @@ export interface AddChannelDialogProps {
 export function AddChannelDialog({ spaceId, open, onClose }: AddChannelDialogProps) {
   const uid = useId();
   const nameId = `${uid}-name`;
-  const typeId = `${uid}-type`;
+  const typeGroupId = `${uid}-type-group`;
 
   const [name, setName] = useState('');
   const [type, setType] = useState<ChannelTypeOption>('chat');
@@ -133,38 +133,74 @@ export function AddChannelDialog({ spaceId, open, onClose }: AddChannelDialogPro
 
           {/* Channel type */}
           <div className="flex flex-col gap-ds-1">
-            <label htmlFor={typeId} className="text-[13px] font-medium text-ink-secondary">
+            <span id={typeGroupId} className="text-[13px] font-medium text-ink-secondary">
               Type
-            </label>
-            <div className="relative">
-              <select
-                id={typeId}
-                value={type}
-                onChange={(e) => setType(e.target.value as ChannelTypeOption)}
-                className={cn(INPUT_BASE, 'cursor-pointer appearance-none pr-8')}
-                disabled={isPending}
-              >
-                {CHANNEL_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label} — {t.description}
-                  </option>
-                ))}
-              </select>
-              <svg
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted"
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-              >
-                <path
-                  d="M2 4L6 8L10 4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby={typeGroupId}
+              className="flex flex-col gap-[6px]"
+            >
+              {CHANNEL_TYPES.map((t) => {
+                const isSelected = type === t.value;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    disabled={isPending}
+                    onClick={() => setType(t.value)}
+                    className={cn(
+                      'w-full rounded-[8px] px-ds-4 py-[11px]',
+                      'border-[0.5px]',
+                      'text-left',
+                      'transition-colors duration-base ease-out',
+                      'outline-none',
+                      'focus-visible:ring-[3px] focus-visible:ring-gold-primary/15',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      isSelected
+                        ? 'bg-gold-primary/8 border-gold-primary'
+                        : 'bg-surface-1 border-border-ds-default hover:border-gold-border hover:bg-surface-2',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-ds-3">
+                      <div className="flex flex-col gap-[2px]">
+                        <span
+                          className={cn(
+                            'text-[14px] font-semibold leading-snug',
+                            isSelected ? 'text-gold-primary' : 'text-ink-primary',
+                          )}
+                        >
+                          {t.label}
+                        </span>
+                        <span className="text-[12px] text-ink-muted leading-snug">
+                          {t.description}
+                        </span>
+                      </div>
+                      {isSelected && (
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          aria-hidden="true"
+                          className="shrink-0 text-gold-primary"
+                        >
+                          <circle cx="8" cy="8" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+                          <path
+                            d="M5 8L7 10L11 6"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
