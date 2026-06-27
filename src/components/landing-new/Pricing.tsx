@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
 // PRICING — COMPACT — 5 Plans
-// Free | Journal ($45) | TOP SECRET ($50) | Finotaur ($109 FEATURED) | Copilot ($200)
+// Free | Journal ($44.99) | TOP SECRET ($50) | Finotaur ($109 FEATURED) | Copilot ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -55,7 +55,7 @@ const plans: Plan[] = [
   {
     id: "journal",
     name: "Journal",
-    monthlyPrice: "$45",
+    monthlyPrice: "$44.99",
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34",
     description: "The trader's desk",
