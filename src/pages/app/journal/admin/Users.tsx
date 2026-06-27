@@ -623,7 +623,7 @@ const UserRow = React.memo<{
           )}
           {user.products?.includes('warzone') && !platformIncludesNewsletters && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              WAR ZONE
+              Top Secret
             </span>
           )}
           {user.products?.includes('top_secret') && !platformIncludesNewsletters && (

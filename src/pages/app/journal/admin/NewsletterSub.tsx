@@ -1258,7 +1258,7 @@ const clearPreview = () => {
       setLastPublishedDate(nyDate);
       setShowPublishModal(false);
       toast.success(`✅ Daily report published for ${nyDate}!`, {
-        description: 'War Zone subscribers can now see this report.',
+        description: 'Top Secret subscribers can now see this report.',
         duration: 5000,
       });
 
@@ -1320,7 +1320,7 @@ const clearPreview = () => {
               <div className="p-2 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/10 border border-green-500/30">
                 <Globe className="w-5 h-5 text-green-400" />
               </div>
-              <h2 className="text-lg font-semibold text-white">Publish to War Zone</h2>
+              <h2 className="text-lg font-semibold text-white">Publish to Top Secret</h2>
             </div>
             <button
               onClick={() => setShowPublishModal(false)}
@@ -1370,7 +1370,7 @@ const clearPreview = () => {
             {/* Info */}
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
               <p className="text-blue-300 text-sm">
-                This will make the report visible to all <strong>War Zone</strong> subscribers immediately.
+                This will make the report visible to all <strong>Top Secret</strong> subscribers immediately.
               </p>
             </div>
           </div>
@@ -1523,7 +1523,7 @@ const clearPreview = () => {
             <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
               <Mail className="w-6 h-6 text-red-500" />
             </div>
-            War Zone Newsletter
+            Top Secret Newsletter
           </h1>
 <p className="text-gray-600 mt-1 ml-14">Powered by 25 AI Agents (v29 - 6 Phase System)</p>
           
