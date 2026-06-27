@@ -311,7 +311,14 @@ const RiskCard = memo(function RiskCard({
   const isLive = headerBadge === 'live';
 
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[rgba(201,166,70,0.22)] bg-[#0b0b0b] shadow-[0_0_24px_rgba(201,166,70,0.06)]">
+    <div
+      className={
+        mode === 'global'
+          ? // Emphasized gray glass panel — set apart from the per-account cards below
+            'overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
+          : 'overflow-hidden rounded-[14px] border border-[rgba(201,166,70,0.22)] bg-[#0b0b0b] shadow-[0_0_24px_rgba(201,166,70,0.06)]'
+      }
+    >
 
       {/* ── HEADER ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-ds-3 px-ds-4 py-ds-3">
