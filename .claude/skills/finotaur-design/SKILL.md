@@ -147,6 +147,9 @@ This is slower than guessing, but it's how the design system stays coherent over
 
 ## Specific cases that come up often
 
+### Dropdowns / `<select>` — never white-on-white (🔴 IRON RULE)
+A native `<select>` on this dark theme renders its option popup white by default, so light option text becomes invisible. The fix is global, already in `src/styles/globals.css` (`select { color-scheme: dark }` + a `select option {...}` fallback) — every `<select>` is legible with no extra work. Do NOT remove that rule and do NOT set a light `color` on an `<option>` without a matching dark `background`. The `dropdown-guard` CI job blocks PRs that strip the protection. Full rule: DESIGN_SYSTEM.md §8 "native dropdowns are always dark + legible".
+
 ### Building a new landing section
 Use `SectionShell` + `SectionEyebrow` + `SectionTitle` from `@/components/landing-new/_shared/`. Don't roll your own atmospheric background, don't write inline `from-[#080808]` gradients, don't create a `<h2>` without going through `SectionTitle`. The components handle the brand consistency for you.
 

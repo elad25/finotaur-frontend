@@ -23,6 +23,25 @@ input[type='number'],
   appearance: textfield;
 }
 
+/* 🔴 DESIGN IRON RULE (2026-06-27) — native dropdowns must NEVER render
+   white-on-white / unreadable. A bare <select> on this dark theme inherits
+   light option text while the browser paints the option popup white, so the
+   list becomes invisible (reported on the Add-channel "Type" dropdown).
+   `color-scheme: dark` tells every browser to paint native <select> popups,
+   options and their scrollbars in dark mode; the explicit option colors are a
+   cross-engine fallback for engines that ignore color-scheme. Applied SITE-WIDE
+   so every <select> is legible WITHOUT per-component styling — do not remove it,
+   and never set a light `color` on <option> that would break it.
+   Enforced by scripts/check-dropdown-theme.mjs (dropdown-guard CI job). */
+select {
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background-color: #14141a;
+  color: #f5f5f7;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
