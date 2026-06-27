@@ -9,25 +9,28 @@
 
 import { useState, useCallback, memo, useMemo, useRef, useEffect } from 'react';
 import {
-  Link2, RefreshCw, Clock,
-  Copy, History, Zap, Shield, WifiOff,
-  TrendingUp, AlertOctagon, ArrowLeftRight, Search, X, Plus,
+  Link2, RefreshCw,
+  Copy, History, Zap, Shield,
+  AlertOctagon, ArrowLeftRight, Search, X, Plus,
   MoreVertical, ChevronDown, ChevronRight, Crown,
-  Download, Filter,
+  Download, Filter, Trash2,
 } from 'lucide-react';
 import { useTradovate } from '@/hooks/useTradovate';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
-import { ConnectCopierModal } from '@/components/copyTrading/ConnectCopierModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
-import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
-import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
-import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
 import { JournalAccountsOverview } from '@/features/automation/components/JournalAccountsOverview';
+import { JournalAccountPicker } from '@/features/automation/components/JournalAccountPicker';
+import { CopierPremiumGate } from '@/features/automation/components/CopierPremiumGate';
+import { useCopierRoutes } from '@/features/automation/hooks/useCopierRoutes';
+import RiskRulesTab from '@/features/automation/tabs/RiskRulesTab';
+import AgentStatusTab from '@/features/automation/tabs/AgentStatusTab';
+import InstallAgentTab from '@/features/automation/tabs/InstallAgentTab';
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
+import type { JournalAccount, CopierRouteTargetInput } from '@/features/automation/lib/automationTypes';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 
 // ─────────────────────────────────────────────────────────────
@@ -185,37 +188,6 @@ function getActiveTicker(root: string): string {
 // Ratio presets
 const RATIO_PRESETS = [25, 50, 75, 100, 200];
 
-// ─── Premium Guard ────────────────────────────────────────────
-function PremiumGate() {
-  return (
-    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
-      <div className="max-w-md w-full text-center space-y-4">
-        <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center mx-auto">
-          <Shield className="w-8 h-8 text-[#C9A646]" />
-        </div>
-        <h2 className="text-xl font-bold text-white">Premium Journal Feature</h2>
-        <p className="text-zinc-400 text-sm">
-          Trade Copier is available to Premium Journal subscribers (Finotaur tier and above).
-          Connect your broker, auto-sync trades, and copy positions across accounts.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <Link
-            to="/app/journal/pricing"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E8C56A] text-black font-bold text-sm hover:opacity-90 transition-all"
-          >
-            <Zap className="w-4 h-4" /> Upgrade Trade Journal
-          </Link>
-          <Link
-            to="/app/all-markets/pricing"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/15 text-white font-bold text-sm hover:bg-white/10 transition-all"
-          >
-            <Zap className="w-4 h-4" /> Upgrade — Site Pricing
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Section Card wrapper ─────────────────────────────────────
 const SectionCard = memo(({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
@@ -249,22 +221,6 @@ const SyncBadge = memo(({ type, label }: { type: string; label: string }) => {
   );
 });
 
-// ─── Copy Engine Health Pill ──────────────────────────────────
-const EnginePill = memo(function EnginePill({ alive, sessions }: { alive: boolean; sessions: number }) {
-  return (
-    <div
-      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium ${
-        alive
-          ? 'bg-status-success/10 border-status-success/30 text-status-success'
-          : 'bg-status-offline border-border-ds-default text-ink-secondary'
-      }`}
-      title={alive ? `Copy engine live · ${sessions} session${sessions === 1 ? '' : 's'}` : 'Copy engine not running'}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${alive ? 'bg-status-success animate-pulse' : 'bg-status-offline border border-border-ds-default'}`} />
-      Engine {alive ? `· ${sessions}` : 'down'}
-    </div>
-  );
-});
 
 
 // ─── Instrument Search Input ──────────────────────────────────
@@ -904,68 +860,63 @@ const FlattenConfirmModal = memo(({ target, onConfirm, onCancel }: {
 ));
 
 // ─── Copy Panel ───────────────────────────────────────────────
-const CopyPanel = memo(({ portfolios }: { portfolios: { id: string; name: string }[] }) => {
-  const { copyRules, addCopyRule, toggleCopyRule, deleteCopyRule, isLoading } = useTradovate();
+// Rewired to use automation_copier_routes (local agent tables) instead of
+// the legacy portfolio_copy_rules / server engine.
+const CopyPanel = memo(() => {
+  const { routes, isLoading, upsertRoute, deleteRoute } = useCopierRoutes();
+  const { tradovatePortfolios } = usePortfolios();
 
-  const [leaderId, setLeaderId]             = useState(portfolios[0]?.id ?? '');
-  const [instrumentRoot, setInstrumentRoot] = useState('NQ');
-  const [flattenTarget, setFlattenTarget]   = useState<string | null>(null);
-
-  // Per-follower override state: id → { enabled, ratio, crossEnabled }
-  const [overrides, setOverrides] = useState<
-    Record<string, { enabled: boolean; ratio: number; crossEnabled: boolean }>
-  >({});
-
-  const followers = useMemo(
-    () => portfolios.filter(p => p.id !== leaderId),
-    [portfolios, leaderId],
+  // Only accounts with a numeric tradovate_account_id can be routed by the agent.
+  const tradeablePortfolios = useMemo(
+    () => tradovatePortfolios.filter(p => p.is_active && p.tradovate_account_id != null),
+    [tradovatePortfolios],
   );
 
-  const getFollowerState = useCallback((id: string) => {
-    if (overrides[id]) return overrides[id];
-    const existing = copyRules.find(
-      r => r.source_portfolio_id === leaderId && r.target_portfolio_id === id,
-    );
-    return {
-      enabled: existing?.is_active ?? false,
-      ratio: existing ? Math.round(existing.ratio * 100) : 100,
-      crossEnabled: false,
+  // Source account selection (for the "create new route" form)
+  const [sourceAccount, setSourceAccount] = useState<JournalAccount | null>(null);
+  // Target account selections (multi: set of account_ids)
+  const [targetAccountId, setTargetAccountId] = useState<JournalAccount | null>(null);
+  const [ratio, setRatio]                     = useState(100);
+  const [maxContracts, setMaxContracts]       = useState<string>('');
+  const [isSaving, setIsSaving]               = useState(false);
+  const [flattenTarget, setFlattenTarget]     = useState<string | null>(null);
+
+  const handleCreateRoute = useCallback(async () => {
+    if (!sourceAccount || !targetAccountId) return;
+    if (sourceAccount.account_id === targetAccountId.account_id) return;
+
+    const target: CopierRouteTargetInput = {
+      destination_account_id:   targetAccountId.account_id,
+      destination_account_name: targetAccountId.account_name,
+      destination_broker:       targetAccountId.broker,
+      destination_environment:  targetAccountId.environment,
+      scale_ratio:              ratio / 100,
+      max_contracts:            maxContracts.trim() !== '' ? parseInt(maxContracts, 10) : null,
+      is_active:                true,
     };
-  }, [overrides, copyRules, leaderId]);
 
-  const patchFollower = useCallback((id: string, patch: Partial<{ enabled: boolean; ratio: number; crossEnabled: boolean }>) => {
-    setOverrides(prev => ({ ...prev, [id]: { ...getFollowerState(id), ...patch } }));
-  }, [getFollowerState]);
+    setIsSaving(true);
+    await upsertRoute({
+      sourceAccount,
+      label: sourceAccount.account_name,
+      symbolFilter: [],
+      copyOpens: true,
+      copyCloses: true,
+      reverse: false,
+      isActive: true,
+      targets: [target],
+    });
+    setIsSaving(false);
+    // Reset form after successful creation
+    setSourceAccount(null);
+    setTargetAccountId(null);
+    setRatio(100);
+    setMaxContracts('');
+  }, [sourceAccount, targetAccountId, ratio, maxContracts, upsertRoute]);
 
-  const handleToggle = useCallback(async (followerId: string) => {
-    const cur = getFollowerState(followerId);
-    const next = !cur.enabled;
-    patchFollower(followerId, { enabled: next });
-    const existing = copyRules.find(
-      r => r.source_portfolio_id === leaderId && r.target_portfolio_id === followerId,
-    );
-    if (existing) {
-      await toggleCopyRule(existing.id, next);
-    } else if (next) {
-      await addCopyRule(leaderId, followerId, cur.ratio / 100, undefined);
-    }
-  }, [getFollowerState, patchFollower, copyRules, leaderId, toggleCopyRule, addCopyRule]);
-
-  const handleRatioChange = useCallback(async (followerId: string, ratio: number) => {
-    patchFollower(followerId, { ratio });
-    const existing = copyRules.find(
-      r => r.source_portfolio_id === leaderId && r.target_portfolio_id === followerId,
-    );
-    if (existing) {
-      await deleteCopyRule(existing.id);
-      await addCopyRule(leaderId, followerId, ratio / 100, undefined);
-    }
-  }, [patchFollower, copyRules, leaderId, deleteCopyRule, addCopyRule]);
-
-  const crossLabel  = CROSS_MAP[instrumentRoot];
   const flattenName = flattenTarget === 'ALL'
     ? 'ALL accounts'
-    : (portfolios.find(p => p.id === flattenTarget)?.name ?? flattenTarget ?? '');
+    : (routes.find(r => r.id === flattenTarget)?.label ?? flattenTarget ?? '');
 
   return (
     <div className="space-y-5">
@@ -978,94 +929,177 @@ const CopyPanel = memo(({ portfolios }: { portfolios: { id: string; name: string
         <div>
           <h3 className="text-sm font-semibold text-white">Trade Copier Panel</h3>
           <p className="text-[11px] text-zinc-500">
-            Configure leader account, instrument &amp; follower settings
+            Create copy routes between your journal-connected broker accounts
           </p>
         </div>
       </div>
 
-      {/* ── Leader + Instrument + FLATTEN ALL ── */}
-      <div className="grid grid-cols-[1fr,1fr,auto] gap-3 items-start">
+      {/* ── Create new route form ── */}
+      <div className="rounded-xl border border-zinc-800/60 bg-zinc-900/30 p-4 space-y-3">
+        <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">New route</p>
 
-        {/* Leader account */}
-        <div>
-          <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
-            Leader Account
-          </label>
-          <select
-            value={leaderId}
-            onChange={e => setLeaderId(e.target.value)}
-            className="w-full bg-zinc-900/80 border border-zinc-700/60 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#C9A646]/50 appearance-none h-[42px]"
-          >
-            {portfolios.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+        <div className="grid grid-cols-[1fr,1fr,auto] gap-3 items-end">
+          {/* Source account */}
+          <div>
+            <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
+              Copy From (Source)
+            </label>
+            <JournalAccountPicker
+              value={sourceAccount?.account_id ?? null}
+              onChange={setSourceAccount}
+              placeholder="Select source account"
+              className="bg-zinc-900/80 border-zinc-700/60 rounded-xl h-[42px] text-sm"
+            />
+          </div>
+
+          {/* Target account */}
+          <div>
+            <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
+              Copy To (Target)
+            </label>
+            <JournalAccountPicker
+              value={targetAccountId?.account_id ?? null}
+              onChange={setTargetAccountId}
+              placeholder="Select target account"
+              className="bg-zinc-900/80 border-zinc-700/60 rounded-xl h-[42px] text-sm"
+            />
+          </div>
+
+          {/* Ratio */}
+          <div>
+            <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1.5">
+              Ratio %
+            </label>
+            <div className="flex items-center gap-1">
+              {RATIO_PRESETS.map(p => (
+                <button
+                  key={p}
+                  onClick={() => setRatio(p)}
+                  className={`
+                    w-9 h-[42px] rounded-lg text-[11px] font-bold transition-all active:scale-95
+                    ${ratio === p
+                      ? 'bg-[#C9A646] text-black shadow-[0_0_8px_rgba(201,166,70,0.4)]'
+                      : 'bg-zinc-800/60 border border-zinc-700/40 text-zinc-500 hover:border-[#C9A646]/30 hover:text-[#C9A646]'
+                    }
+                  `}
+                >
+                  {p === 200 ? '2×' : `${p}%`}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Smart instrument search */}
-        <InstrumentSearch value={instrumentRoot} onChange={setInstrumentRoot} />
-
-        {/* FLATTEN ALL — aligned to input height */}
-        <div className="pt-[22px]">
+        {/* Max contracts + create button */}
+        <div className="flex items-center gap-3">
+          <div>
+            <label className="block text-[10px] text-zinc-500 uppercase tracking-wider mb-1">
+              Max contracts (optional)
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={maxContracts}
+              onChange={e => setMaxContracts(e.target.value)}
+              placeholder="No limit"
+              className="w-32 bg-zinc-900/80 border border-zinc-700/60 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#C9A646]/50 placeholder-zinc-600"
+            />
+          </div>
           <button
-            onClick={() => setFlattenTarget('ALL')}
-            className="flex items-center justify-center gap-2 px-5 rounded-xl h-[42px]
-              bg-red-600/20 border border-red-500/40 text-red-400 font-bold text-xs
-              hover:bg-red-600/30 hover:border-red-500/60 hover:text-red-300
-              active:scale-95 transition-all duration-150 whitespace-nowrap"
+            onClick={handleCreateRoute}
+            disabled={isSaving || !sourceAccount || !targetAccountId || sourceAccount?.account_id === targetAccountId?.account_id}
+            className="mt-5 flex items-center gap-2 px-4 py-2 rounded-xl
+              bg-[#C9A646]/15 border border-[#C9A646]/40 text-[#C9A646] text-sm font-semibold
+              hover:bg-[#C9A646]/25 hover:border-[#C9A646]/60
+              active:scale-95 transition-all duration-150
+              disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
           >
-            <AlertOctagon className="w-3.5 h-3.5" />
-            FLATTEN ALL
+            <Plus className="w-4 h-4" />
+            {isSaving ? 'Creating…' : 'Create Route'}
           </button>
         </div>
+
+        {tradeablePortfolios.length < 2 && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400">
+            <AlertOctagon className="w-3.5 h-3.5 flex-shrink-0" />
+            Connect at least 2 Tradovate accounts in the journal to create copy routes.
+          </div>
+        )}
       </div>
 
-      {/* ── Followers Table ── */}
-      {portfolios.length < 2 ? (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400">
-          <AlertOctagon className="w-3.5 h-3.5 flex-shrink-0" />
-          Connect at least 2 portfolios to use copy rules.
-        </div>
-      ) : (
-        <div className="rounded-xl border border-zinc-800/60 overflow-hidden">
+      {/* ── Existing routes ── */}
+      <div className="space-y-3">
+        <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Active routes</p>
 
-          {/* Table header */}
-          <div
-            className="bg-zinc-900/60 border-b border-zinc-800/60 px-4 py-2.5"
-            style={{ display: 'grid', gridTemplateColumns: '1fr 80px 1fr 96px 80px' }}
-          >
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Account</span>
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider text-center">Active</span>
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider text-center">Ratio</span>
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider text-center">
-              {crossLabel ? `Cross → ${crossLabel}` : 'Cross'}
-            </span>
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider text-center">Flatten</span>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map(i => (
+              <div key={i} className="h-14 bg-zinc-900/60 rounded-xl animate-pulse" />
+            ))}
           </div>
+        ) : routes.length === 0 ? (
+          <div className="flex items-center justify-center py-8 rounded-xl border border-zinc-800/60 bg-zinc-900/20">
+            <p className="text-sm text-zinc-500">No copy routes yet. Create one above.</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-zinc-800/60 overflow-hidden">
+            <div
+              className="bg-zinc-900/60 border-b border-zinc-800/60 px-4 py-2.5"
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 48px' }}
+            >
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Source</span>
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider">Target(s)</span>
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider text-center">Ratio</span>
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider text-center">Status</span>
+              <span />
+            </div>
 
-          {/* Follower rows */}
-          <div className="divide-y divide-zinc-800/40">
-            {followers.map(f => {
-              const s = getFollowerState(f.id);
-              return (
-                <FollowerRow
-                  key={f.id}
-                  name={f.name}
-                  enabled={s.enabled}
-                  ratio={s.ratio}
-                  crossEnabled={s.crossEnabled}
-                  crossLabel={crossLabel}
-                  onToggle={() => handleToggle(f.id)}
-                  onRatioChange={r => handleRatioChange(f.id, r)}
-                  onCrossToggle={() => patchFollower(f.id, { crossEnabled: !s.crossEnabled })}
-                  onFlatten={() => setFlattenTarget(f.id)}
-                  isLoading={isLoading}
-                />
-              );
-            })}
+            <div className="divide-y divide-zinc-800/40">
+              {routes.map(route => {
+                const targets = route.automation_copier_route_targets ?? [];
+                const firstRatio = targets[0]?.scale_ratio ?? 1;
+                return (
+                  <div
+                    key={route.id}
+                    className="grid items-center px-4 py-3 text-sm hover:bg-zinc-900/20 transition-colors"
+                    style={{ gridTemplateColumns: '1fr 1fr 80px 80px 48px' }}
+                  >
+                    <span className="text-zinc-200 font-medium truncate">{route.source_account_name}</span>
+                    <span className="text-zinc-400 truncate">
+                      {targets.length === 0
+                        ? '—'
+                        : targets.map(t => t.destination_account_name).join(', ')}
+                    </span>
+                    <span className="text-center font-mono text-xs text-zinc-300">
+                      {Math.round(firstRatio * 100)}%
+                    </span>
+                    <span className="flex justify-center">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                        route.is_active
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-zinc-800 text-zinc-500'
+                      }`}>
+                        {route.is_active ? 'Active' : 'Paused'}
+                      </span>
+                    </span>
+                    <button
+                      onClick={() => deleteRoute(route.id)}
+                      className="flex items-center justify-center h-7 w-7 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      aria-label={`Delete route from ${route.source_account_name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        <p className="text-xs text-zinc-600 border-t border-zinc-800 mt-2 pt-2">
+          Routes are executed locally by the Finotaur desktop agent. No orders are placed from this page.
+        </p>
+      </div>
 
       {/* ── Flatten confirm modal ── */}
       {flattenTarget && (
@@ -1267,22 +1301,20 @@ export default function TradeCopier() {
   const navigate = useNavigate();
   const { isAdmin } = useSubscription();
 
-  const { hasAnyConnection } = useTradovate();
-
-  // Load broker connections only for the "Set a leader" banner presence check.
-  // The accounts display is now sourced from portfolios (same as journal).
-  const { connections } = useBrokerConnections({ active: true });
-
   // Portfolios are the source of truth for account display (same as journal).
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
-  const [showCopierModal, setShowCopierModal] = useState(false);
 
-  const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
-    ? 'manage-risk'
-    : location.pathname.endsWith('/trade-copier')
-      ? 'copy-trading'
-      : 'connections';
+  // Tab selection is path-based: last path segment determines active tab.
+  type ActiveTab = 'overview' | 'copier' | 'risk' | 'agent' | 'install';
+  const activeTab: ActiveTab = (() => {
+    const seg = location.pathname.split('/').pop() ?? '';
+    if (seg === 'copier')  return 'copier';
+    if (seg === 'risk')    return 'risk';
+    if (seg === 'agent')   return 'agent';
+    if (seg === 'install') return 'install';
+    return 'overview';
+  })();
 
   if (!isAdmin) return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
@@ -1310,14 +1342,14 @@ export default function TradeCopier() {
   );
 
   return (
+    <CopierPremiumGate>
     <div className="relative min-h-screen overflow-hidden bg-surface-base text-ink-primary">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,rgba(201,166,70,0.08),transparent_70%)]" />
 
       <div className="relative w-full max-w-[1280px] mx-auto px-ds-5 py-ds-7 space-y-ds-6">
 
-        {/* ── Header ── */}
-        {/* ── Tab 1: Broker Connections ── */}
-        {activeTab === 'connections' && (
+        {/* ── Tab: Accounts (overview) ── */}
+        {activeTab === 'overview' && (
           <>
             {brokerPortfolios.length > 0 && (
               <div className="flex min-h-[56px] items-center justify-between gap-ds-4 rounded-lg border border-blue-500/25 bg-blue-500/10 px-ds-4">
@@ -1327,7 +1359,7 @@ export default function TradeCopier() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => navigate('/app/copy-trade/trade-copier')}
+                  onClick={() => navigate('/app/copy-trade/copier')}
                   className="inline-flex items-center gap-ds-2 rounded-md bg-blue-500 px-ds-3 py-ds-2 text-sm font-semibold text-white transition-colors hover:bg-blue-400"
                 >
                   Set a leader
@@ -1337,24 +1369,13 @@ export default function TradeCopier() {
             )}
 
             <SectionCard>
-            <div className="flex items-center justify-between gap-ds-4 mb-ds-4">
-              <div className="flex items-center gap-ds-3">
-                <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
-                  <Link2 className="w-4 h-4 text-gold-primary" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
-                  <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
-                </div>
+            <div className="flex items-center gap-ds-3 mb-ds-4">
+              <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+                <Link2 className="w-4 h-4 text-gold-primary" />
               </div>
-              <div className="flex items-center gap-ds-3">
-                <button
-                  onClick={() => setShowCopierModal(true)}
-                  className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary shadow-[0_0_22px_rgba(201,166,70,0.12)] transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10 hover:shadow-[0_0_30px_rgba(201,166,70,0.22)]"
-                >
-                  <Plus className="w-4 h-4" />
-                  Connect Trade Copier
-                </button>
+              <div>
+                <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
+                <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
               </div>
             </div>
 
@@ -1364,48 +1385,29 @@ export default function TradeCopier() {
           </>
         )}
 
-        {/* ── Tab 2: Trade Copier ── */}
-        {activeTab === 'copy-trading' && (
-          <>
-            {hasAnyConnection ? (
-              <>
-                <SectionCard>
-                  <CopyTradingDashboard />
-                </SectionCard>
-                <SectionCard>
-                  <CopierActivitySection />
-                </SectionCard>
-              </>
-            ) : (
-              <SectionCard>
-                <div className="text-center py-16 space-y-4">
-                  <WifiOff className="w-12 h-12 text-zinc-700 mx-auto" />
-                  <div>
-                    <p className="text-ink-secondary font-medium">No accounts connected</p>
-                    <p className="text-ink-secondary text-sm mt-1">
-                      Connect a broker in the Connections tab to enable Trade Copier.
-                    </p>
-                  </div>
-                </div>
-              </SectionCard>
-            )}
-          </>
+        {/* ── Tab: Copier (route builder via local agent) ── */}
+        {activeTab === 'copier' && (
+          <SectionCard>
+            <CopyPanel />
+          </SectionCard>
         )}
 
-        {/* ── Tab 3: Manage Risk ── */}
-        {/* No SectionCard here: the global "All Accounts" panel and the
-            per-account cards render frameless and full-width (no gold frame,
-            no p-ds-6 inset) so they spread wider across the page. */}
-        {activeTab === 'manage-risk' && <ManageRiskTab />}
+        {/* ── Tab: Risk (agent-enforced risk rules) ── */}
+        {/* No SectionCard: RiskRulesTab renders its own cards full-width. */}
+        {activeTab === 'risk' && <RiskRulesTab />}
+
+        {/* ── Tab: Agent (device pairing + status) ── */}
+        {activeTab === 'agent' && <AgentStatusTab />}
+
+        {/* ── Tab: Install (NinjaTrader agent setup guide) ── */}
+        {activeTab === 'install' && <InstallAgentTab />}
 
       </div>
 
       {showAddBroker && (
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
       )}
-      {showCopierModal && (
-        <ConnectCopierModal onClose={() => setShowCopierModal(false)} />
-      )}
     </div>
+    </CopierPremiumGate>
   );
 }

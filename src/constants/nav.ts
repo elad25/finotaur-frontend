@@ -31,6 +31,8 @@ import {
   ScanLine,
   Crosshair,
   Trophy,
+  Monitor,
+  Download,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -262,9 +264,11 @@ export const domains: Record<string, Domain> = {
       { label: 'Trade Copier', path: '/app/copy-trade/overview' },
     ],
     sidebar: [
-      { label: 'Connections',  path: '/app/copy-trade/overview',      icon: Link },
-      { label: 'Trade Copier', path: '/app/copy-trade/trade-copier',   icon: Copy },
-      { label: 'Manage Risk',  path: '/app/copy-trade/manage-risk',    icon: Shield },
+      { label: 'Accounts', path: '/app/copy-trade/overview',  icon: Link     },
+      { label: 'Copier',   path: '/app/copy-trade/copier',    icon: Copy     },
+      { label: 'Risk',     path: '/app/copy-trade/risk',      icon: Shield   },
+      { label: 'Agent',    path: '/app/copy-trade/agent',     icon: Monitor  },
+      { label: 'Install',  path: '/app/copy-trade/install',   icon: Download },
     ],
   },
 
