@@ -268,7 +268,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Trade Copier', path: '/app/copy-trade/trade-copier',   icon: Copy },
       { label: 'Manage Risk',  path: '/app/copy-trade/manage-risk',    icon: Shield },
       { label: 'Agent',        path: '/app/copy-trade/agent',          icon: Monitor },
-      { label: 'Install',      path: '/app/copy-trade/install',        icon: Download },
+      { label: 'FINOTAUR Agent', path: '/app/copy-trade/install',       icon: Download },
     ],
   },
 
