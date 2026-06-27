@@ -287,10 +287,6 @@ function MyStudentsSection() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
-        <p className="text-xs text-zinc-500 px-1">
-          Students who add you as their mentor appear here once you accept. Click a student to view their journal (read-only).
-        </p>
-
         {isLoading ? (
           <SkeletonTable rows={3} cols={4} />
         ) : (
