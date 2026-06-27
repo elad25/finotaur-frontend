@@ -16,6 +16,7 @@ import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
 import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
 import { ProductDrawer } from '@/components/ProductDrawer';
 import SpotlightTour from '@/components/onboarding/SpotlightTour';
+import { useOAuthReturnRedirect } from '@/hooks/useOAuthReturnRedirect';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -60,6 +61,10 @@ export const ProtectedAppLayout = () => {
   const location = useLocation();
   const { isImpersonating } = useImpersonation();
   const { isMentorView } = useMentorView();
+
+  // Redirect after OAuth if the flow was started from a non-journal page
+  // (e.g. the Trade Copier). When no key is set in sessionStorage this is a no-op.
+  useOAuthReturnRedirect();
 
   // Each top banner (admin impersonation / mentor view) is a fixed 52px bar.
   // In-flow chrome (TopNav/SubNav/main) is already pushed by each banner's
