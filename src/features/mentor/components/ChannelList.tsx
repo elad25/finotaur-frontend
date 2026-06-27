@@ -200,7 +200,6 @@ function OwnerChannelRow({
       >
         <Icon size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
         <input
-          // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
           type="text"
           value={renameValue}
