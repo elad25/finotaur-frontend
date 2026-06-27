@@ -21,7 +21,7 @@ const AutomationShell = () => (
     <div className="mb-6">
       <h1 className="text-2xl font-bold text-zinc-100">Automation</h1>
       <p className="mt-1 text-sm text-zinc-500">
-        Configure risk rules and copier routes. Execution requires the desktop agent (coming soon).
+        Configure risk rules and copier routes. Execution runs through the FINOTAUR desktop agent — download and set it up from the Install tab.
       </p>
     </div>
     <div className="flex gap-6">
