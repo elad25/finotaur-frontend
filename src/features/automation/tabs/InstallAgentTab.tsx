@@ -69,6 +69,39 @@ function FolderIllustration() {
   );
 }
 
+// A black + gold illustration of the FINOTAUR Agent desktop window the user opens
+// in NinjaTrader (Tools → Finotaur Agent…) to pair the device.
+function AgentWindowIllustration() {
+  return (
+    <div className="mt-3 rounded-lg overflow-hidden border" style={{ borderColor: '#2e2a1a', background: '#0a0a0b' }}>
+      {/* title bar */}
+      <div className="flex items-center gap-2 px-3 py-1.5" style={{ background: '#161617', borderBottom: '1px solid #2e2a1a' }}>
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: '#C9A646' }} />
+        <span className="text-[11px]" style={{ color: '#9a9a9e' }}>Finotaur Agent</span>
+      </div>
+      <div className="p-4">
+        {/* header */}
+        <div className="flex items-center gap-3 mb-4">
+          <span className="h-9 w-9 rounded-full" style={{ background: '#C9A646' }} />
+          <div>
+            <p className="text-sm font-bold tracking-wide" style={{ color: '#C9A646' }}>FINOTAUR AGENT</p>
+            <p className="text-[11px]" style={{ color: '#9a9a9e' }}>v1.0.0</p>
+          </div>
+        </div>
+        {/* device pairing card */}
+        <div className="rounded-md p-3" style={{ background: '#161617', border: '1px solid #2e2a1a' }}>
+          <p className="text-[10px] font-semibold tracking-wider mb-2" style={{ color: '#C9A646' }}>DEVICE PAIRING</p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-8 rounded" style={{ background: '#0e0e10', border: '1px solid #2e2a1a' }} />
+            <div className="h-8 px-4 flex items-center rounded text-xs font-bold" style={{ background: '#C9A646', color: '#0a0a0b' }}>Pair</div>
+          </div>
+          <p className="text-[11px] mt-2" style={{ color: '#9a9a9e' }}>Not paired. Enter a code from the web app.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function InstallAgentTab() {
   return (
     <div className="space-y-6">
@@ -121,6 +154,7 @@ export default function InstallAgentTab() {
             Trade Copier
           </Link>{' '}
           tab, pick your leader and follower accounts, and save.
+          <AgentWindowIllustration />
         </Step>
       </div>
 
