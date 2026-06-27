@@ -340,7 +340,7 @@ export default function Mentor() {
     // so the rail sits flush against the global sidebar, Discord-style.
     <div className="flex h-[calc(100vh-112px)] md:-ml-4">
       {/* Discord-style My Students rail — fixed width, full height, flush left. */}
-      <aside className="hidden md:flex flex-col w-80 flex-shrink-0 border-r border-white/10 bg-zinc-900/50 overflow-hidden">
+      <aside className="hidden md:flex flex-col w-56 flex-shrink-0 border-r border-white/10 bg-zinc-900/50 overflow-hidden">
         <MyStudentsSection />
       </aside>
 
