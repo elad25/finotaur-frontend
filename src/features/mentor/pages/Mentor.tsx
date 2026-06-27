@@ -276,20 +276,17 @@ function MyStudentsSection() {
   const isLoading = studentsLoading || requestsLoading;
 
   return (
-    <Card className="bg-zinc-900 border-white/10">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base text-zinc-200 flex items-center gap-2">
-          <Users className="h-4 w-4" style={{ color: GOLD }} />
-          My Students
-          {!isLoading && students.length > 0 && (
-            <span className="ml-auto text-sm font-normal text-zinc-500">{students.length} active</span>
-          )}
-        </CardTitle>
-        <p className="text-sm text-zinc-500">
-          Students who add you as their mentor appear here once you accept. Click a student to view their journal (read-only).
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    // Discord-style full-height rail: pinned header + internally scrolling body.
+    <div className="flex h-full flex-col min-h-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 flex-shrink-0">
+        <Users className="h-4 w-4" style={{ color: GOLD }} />
+        <span className="text-sm font-semibold text-zinc-200">My Students</span>
+        {!isLoading && students.length > 0 && (
+          <span className="ml-auto text-xs text-zinc-500">{students.length} active</span>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
         {isLoading ? (
           <SkeletonTable rows={3} cols={4} />
         ) : (
@@ -309,7 +306,7 @@ function MyStudentsSection() {
             )}
 
             {students.length === 0 ? (
-              <p className="text-sm text-zinc-500 py-2">No students have added you as their mentor yet.</p>
+              <p className="text-sm text-zinc-500 px-1 py-2">No students have added you as their mentor yet.</p>
             ) : (
               <div className="space-y-2">
                 {requests.length > 0 && (
@@ -328,8 +325,8 @@ function MyStudentsSection() {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -339,22 +336,30 @@ function MyStudentsSection() {
 
 export default function Mentor() {
   return (
-    <div className="py-8 pr-4 space-y-6">
-      {/* Centered page header */}
-      <div className="text-center px-4">
-        <h1 className="text-2xl font-bold text-white">Mentor Mode</h1>
-        <p className="text-zinc-400 text-sm mt-1">
-          Connect with a mentor to share your journal, or review your students' journals.
-        </p>
-      </div>
+    // Full-height (under SubNav → bottom). md:-ml-4 cancels the layout's md:pl-4
+    // so the rail sits flush against the global sidebar, Discord-style.
+    <div className="flex h-[calc(100vh-112px)] md:-ml-4">
+      {/* Discord-style My Students rail — fixed width, full height, flush left. */}
+      <aside className="hidden md:flex flex-col w-56 flex-shrink-0 border-r border-white/10 bg-zinc-900/50 overflow-hidden">
+        <MyStudentsSection />
+      </aside>
 
-      {/* My Students hugs the sidebar on the left (fixed-width panel); My Mentor fills the rest. */}
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="w-full lg:w-96 lg:flex-shrink-0">
-          <MyStudentsSection />
-        </div>
-        <div className="w-full lg:flex-1 lg:min-w-0">
+      {/* Right content area: centered header + My Mentor. Scrolls independently. */}
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white">Mentor Mode</h1>
+            <p className="text-zinc-400 text-sm mt-1">
+              Connect with a mentor to share your journal, or review your students' journals.
+            </p>
+          </div>
+
           <MyMentorSection />
+
+          {/* Mobile: the full-height rail is hidden; show My Students as a capped panel here. */}
+          <div className="md:hidden h-[60vh] rounded-lg border border-white/10 bg-zinc-900/50 overflow-hidden">
+            <MyStudentsSection />
+          </div>
         </div>
       </div>
     </div>

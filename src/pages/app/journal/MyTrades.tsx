@@ -30,6 +30,8 @@ import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
+import { TradeShareMenu } from "@/features/floor/components/TradeShareMenu";
+import { isManualTrade } from "@/lib/trades/isManualTrade";
 import { tradeR } from '@/utils/rAggregates';
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
 import { useStrategiesOptimized, useStrategyRConfigs } from "@/hooks/useStrategies";
@@ -44,7 +46,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Moon, Sun, Maximize2, Upload, X, Brain } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -144,6 +146,9 @@ interface Trade {
   user_risk_r?: number;
   user_reward_r?: number;
   input_mode?: 'summary' | 'risk-only';
+  // Origin of the trade: 'manual' (Add Trade form), 'api' (AI screenshot),
+  // 'tradovate' / 'ibrit' / 'tradingview' / 'csv' (broker-synced / imported).
+  import_source?: string | null;
   // Options (single-leg) — populated only when asset_class === 'options'
   option_type?: "CALL" | "PUT";
   strike_price?: number;
@@ -2846,18 +2851,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                       Notes
                     </TabsTrigger>
                   </TabsList>
-                    {tradeDetailTab === 'chart' && (
+                    {tradeDetailTab === 'chart' && !isManualTrade(selectedTrade) && (
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-                          aria-label="Toggle chart theme"
-                          title={`Switch to ${detailChartTheme === 'light' ? 'dark' : 'light'} theme`}
-                        >
-                          {detailChartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-                          {detailChartTheme === 'light' ? 'Dark' : 'Light'}
-                        </button>
+                        <TradeShareMenu trade={selectedTrade} />
                         <button
                           type="button"
                           onClick={() => setDetailChartFullscreen(true)}
@@ -2873,15 +2869,25 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
 
                   {/* 📊 CHART TAB */}
                   <TabsContent value="chart" className="mt-0 min-h-0 flex-1 overflow-hidden px-4 pb-4 pt-3 data-[state=active]:flex data-[state=active]:flex-col">
-                    <Suspense fallback={<TradeChartSkeleton />}>
-                      <TradeChart
-                        trade={selectedTrade}
-                        theme={detailChartTheme}
-                        onToggleTheme={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
-                        fullscreen={detailChartFullscreen}
-                        onFullscreenChange={setDetailChartFullscreen}
-                      />
-                    </Suspense>
+                    {isManualTrade(selectedTrade) ? (
+                      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center">
+                        <TrendingUp className="mb-3 h-8 w-8 text-zinc-700" />
+                        <p className="text-sm font-semibold text-zinc-300">Chart unavailable for manually added trades</p>
+                        <p className="mt-1 max-w-sm text-xs text-zinc-500">
+                          This trade was entered manually, so there is no synced market chart to display. Add a screenshot in the Screenshots tab to keep a visual record.
+                        </p>
+                      </div>
+                    ) : (
+                      <Suspense fallback={<TradeChartSkeleton />}>
+                        <TradeChart
+                          trade={selectedTrade}
+                          theme={detailChartTheme}
+                          onToggleTheme={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
+                          fullscreen={detailChartFullscreen}
+                          onFullscreenChange={setDetailChartFullscreen}
+                        />
+                      </Suspense>
+                    )}
                   </TabsContent>
 
                   {/* 📸 SCREENSHOTS TAB */}
