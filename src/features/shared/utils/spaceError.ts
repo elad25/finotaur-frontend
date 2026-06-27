@@ -22,5 +22,7 @@ export function mapSpaceError(error: unknown): string {
   if (message.includes('cannot_delete_space')) return 'Only the room owner can delete this room.';
   if (message.includes('cannot_leave_as_owner')) return 'Owners cannot leave — delete the room instead.';
   if (message.includes('empty_message')) return 'Message cannot be empty.';
+  if (message.includes('not_connected')) return "You're not connected to this member.";
+  if (message.includes('invalid_role')) return 'Invalid role specified.';
   return 'Something went wrong. Please try again.';
 }

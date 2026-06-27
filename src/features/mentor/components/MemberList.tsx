@@ -6,9 +6,10 @@
 // Student view: shows a "Share my journal" toggle at the top.
 
 import { useState } from 'react';
-import { BookOpen, MessageCircle, Trash2 } from 'lucide-react';
+import { BookOpen, MessageCircle, Trash2, UserPlus } from 'lucide-react';
 import type { SpaceMember, SpaceRole } from '@/features/mentor/types/mentorship';
 import { useRemoveMember, useSetJournalSharing, mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
+import { AddConnectionsDialog } from '@/features/mentor/components/AddConnectionsDialog';
 import { Button } from '@/components/ds/Button';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -128,6 +129,7 @@ export function MemberList({
 }: MemberListProps) {
   const isManager = myRole === 'owner' || myRole === 'co_mentor';
   const { mutateAsync: removeMember, isPending: isRemoving } = useRemoveMember();
+  const [addConnectionsOpen, setAddConnectionsOpen] = useState(false);
 
   // Find my own membership for the journal-share toggle value.
   const myMembership = members.find((m) => m.user_id === currentUserId);
@@ -148,15 +150,42 @@ export function MemberList({
 
   return (
     <div className="flex flex-col py-ds-4 px-ds-3">
-      <h2 className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted mb-ds-4">
-        Members ({members.length})
-      </h2>
+      <div className="flex items-center justify-between mb-ds-4">
+        <h2 className="text-[11px] font-medium tracking-[1.5px] uppercase text-gold-muted">
+          Members ({members.length})
+        </h2>
+        {isManager && (
+          <button
+            type="button"
+            title="Add from connections"
+            onClick={() => setAddConnectionsOpen(true)}
+            className={cn(
+              'flex items-center gap-[4px] px-[8px] py-[4px] rounded-[6px]',
+              'text-[11px] font-medium text-ink-tertiary',
+              'hover:text-gold-primary hover:bg-gold-border',
+              'transition-colors duration-base ease-out',
+            )}
+          >
+            <UserPlus size={12} aria-hidden="true" />
+            Add
+          </button>
+        )}
+      </div>
 
       {/* Student journal-share toggle */}
       {myRole === 'student' && myMembership && (
         <JournalShareToggle
           spaceId={spaceId}
           currentlyShared={myMembership.journal_shared}
+        />
+      )}
+
+      {/* Add from connections dialog — managers only */}
+      {isManager && (
+        <AddConnectionsDialog
+          spaceId={spaceId}
+          open={addConnectionsOpen}
+          onClose={() => setAddConnectionsOpen(false)}
         />
       )}
 
