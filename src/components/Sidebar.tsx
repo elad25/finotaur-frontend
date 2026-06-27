@@ -451,13 +451,11 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   useEffect(() => {
-    // The Floor pages auto-collapse the rail for a wider community view. Mentor
-    // pages (Mentor Mode / Rooms) keep the sidebar expanded per Elad's request.
+    // The Floor pages keep the sidebar expanded (open) per Elad's request.
     if (location.pathname.startsWith('/app/floor')) {
-      // Collapse to the icon-rail for the wide Floor layout, but do NOT persist
-      // this — keeping the saved preference intact lets the sidebar grow back
-      // when the user clicks another sub-nav item and leaves The Floor.
-      setIsExpanded(false);
+      // Force-expand the rail on The Floor. View-only — do NOT persist, so the
+      // user's saved preference is restored when they leave The Floor.
+      setIsExpanded(true);
     } else {
       // Left The Floor: restore the user's persisted preference.
       const saved = localStorage.getItem(storageKey);
