@@ -229,7 +229,7 @@ export function AIActionButton({
             <Button 
               onClick={() => {
                 setShowUpgrade(false);
-                navigate('/app/all-markets/pricing');
+                navigate('/app/upgrade');
               }}
               className="bg-[#C9A646] text-black hover:bg-[#B8963F]"
             >
@@ -259,7 +259,7 @@ export function AIActionButton({
             <Button 
               onClick={() => {
                 setShowInsufficient(false);
-                navigate('/app/all-markets/pricing');
+                navigate('/app/upgrade');
               }}
               className="bg-[#C9A646] text-black hover:bg-[#B8963F]"
             >

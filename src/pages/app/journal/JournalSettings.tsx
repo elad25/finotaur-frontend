@@ -86,7 +86,7 @@ const plans: Plan[] = [
     description: "Unlimited trades + your AI trading coach",
     trialDays: 0, // 🔥 No trial - payment from day 0
     features: [
-      "Everything in Basic, plus:",
+      "Everything in Free, plus:",
       "Unlimited trades — never hit a cap",
       "Your FINOTAUR Score — one number that grades your real edge",
       "Daily AI briefing — ranked insights on what to fix first",

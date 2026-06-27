@@ -37,7 +37,7 @@ function CapacityMeter({
       </span>
       {atLimit && Number.isFinite(limit) && (
         <Link
-          to="/app/plans"
+          to="/app/upgrade"
           className="text-xs font-medium text-gold-primary border border-gold-border rounded-md px-2 py-0.5 hover:bg-gold-primary/10 transition-colors"
         >
           Upgrade to track more

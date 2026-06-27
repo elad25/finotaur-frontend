@@ -322,7 +322,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Sentiment',  path: '/app/all-markets/sentiment', icon: Activity,        locked: true },
       { label: 'Calendar',   path: '/app/all-markets/calendar',  icon: Calendar,        locked: true },
       { label: 'News',       path: '/app/all-markets/news',      icon: Newspaper,       locked: true },
-      { label: 'Pricing',    path: '/app/all-markets/pricing',   icon: Crown,           locked: false },
+      { label: 'Pricing',    path: '/app/upgrade',               icon: Crown,           locked: false },
       { label: 'Settings',   path: '/app/settings',              icon: SettingsIcon,    locked: true },
     ],
   },

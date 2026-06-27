@@ -36,7 +36,7 @@ export const UpgradeLimitModal = memo(function UpgradeLimitModal({
 
   const handleCreditsClick = (credits: number) => {
     setIsProcessing(true);
-    window.location.href = `/app/all-markets/pricing?credits=${credits}`;
+    window.location.href = `/app/upgrade?credits=${credits}`;
   };
 
   // ============================================
@@ -157,7 +157,7 @@ export const UpgradeLimitModal = memo(function UpgradeLimitModal({
 
                   {/* Upgrade - Highlighted */}
                   <button
-                    onClick={() => window.location.href = '/app/all-markets/pricing'}
+                    onClick={() => window.location.href = '/app/upgrade'}
                     className="w-full group relative"
                   >
                     {/* Badge */}

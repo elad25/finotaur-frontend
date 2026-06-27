@@ -120,7 +120,7 @@ export function SubscriptionGuard({ children, requiredPlan, feature }: Subscript
 
           <div className="space-y-3">
             <button
-              onClick={() => navigate('/app/journal/pricing')}
+              onClick={() => navigate('/app/upgrade')}
               className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-xl hover:from-yellow-600 hover:to-yellow-700 transition-all"
             >
               Upgrade to {requiredPlan === 'premium' ? 'Premium' : 'Basic'}

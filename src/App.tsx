@@ -541,7 +541,9 @@ function AppContent() {
           <Route path="admin/upcoming-events" element={<ProtectedAdminRoute><SuspenseRoute><AdminUpcomingEvents /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="admin/patterns" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibraryList /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/pricing" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
-          <Route path="plans" element={<SuspenseRoute><PlansPage /></SuspenseRoute>} />
+          {/* Canonical upgrade page — single source of truth for all upgrade/pricing links */}
+          <Route path="upgrade" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
+          <Route path="plans" element={<Navigate to="/app/upgrade" replace />} />
 
           {/* OPTIONS — sealed pending licensed options data feed (Track B).
               Routes kept so direct URLs don't 404. Serve ComingSoon for all sub-paths.
@@ -728,7 +730,7 @@ function AppContent() {
 <Route path="journal/floor" element={<Navigate to="/app/floor/feed" replace />} />
 <Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
 <Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
-<Route path="journal/pricing" element={<JournalRoute><SuspenseRoute><JournalPricingPage /></SuspenseRoute></JournalRoute>} />
+<Route path="journal/pricing" element={<Navigate to="/app/upgrade" replace />} />
 <Route path="journal/import" element={<JournalRoute><JournalImport /></JournalRoute>} />
 <Route path="journal/export" element={<JournalRoute><JournalExport /></JournalRoute>} />
 <Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />

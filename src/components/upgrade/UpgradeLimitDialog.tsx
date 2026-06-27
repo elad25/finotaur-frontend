@@ -121,7 +121,7 @@ function UpgradeLimitDialog({
 
   function handleUpgrade() {
     onOpenChange(false);
-    navigate('/app/journal/pricing');
+    navigate('/app/upgrade');
   }
 
   function handleDismiss() {

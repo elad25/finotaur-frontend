@@ -28,7 +28,7 @@ export function UsageWarningModal({
 
   const handleUpgrade = () => {
     onClose();
-    navigate('/app/journal/pricing');
+    navigate('/app/upgrade');
   };
 
   return (

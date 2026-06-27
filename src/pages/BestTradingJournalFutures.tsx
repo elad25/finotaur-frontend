@@ -379,7 +379,7 @@ export default function BestTradingJournalFutures() {
             <h3 className="font-wordmark font-medium text-xl text-ink-primary">Premium</h3>
             <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$44.99/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
-              <li>Everything in Basic</li>
+              <li>Everything in Free, plus:</li>
               <li>Unlimited trades</li>
               <li>Multiple broker connections</li>
               <li>AI trading coach & Finotaur Score</li>

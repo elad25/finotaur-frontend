@@ -68,7 +68,7 @@ export const ROUTE_CATALOGUE: RouteTarget[] = [
   { label: 'Top Secret Reports', path: '/app/top-secret',             group: 'Top Secret',   keywords: ['top secret', 'reports', 'confidential', 'exclusive'] },
   // Settings / Account
   { label: 'Settings',           path: '/app/settings',               group: 'Account',      keywords: ['settings', 'account', 'profile', 'billing', 'plan'] },
-  { label: 'Pricing & Plans',    path: '/app/all-markets/pricing',    group: 'Account',      keywords: ['pricing', 'upgrade', 'plans', 'subscription', 'pro'] },
+  { label: 'Pricing & Plans',    path: '/app/upgrade',                group: 'Account',      keywords: ['pricing', 'upgrade', 'plans', 'subscription', 'pro'] },
 ];
 
 /** Return routes whose keywords contain the query string (case-insensitive). */

@@ -197,7 +197,7 @@ export function CreditSection() {
             {PACKS.map((p) => (
               <button
                 key={p.id}
-                onClick={() => navigate('/app/all-markets/pricing')}
+                onClick={() => navigate('/app/upgrade')}
                 className={`p-3 rounded-lg border text-center transition-all hover:border-[#C9A646]/60
                   ${p.hot ? 'border-[#C9A646]/50 bg-[#C9A646]/5' : 'border-zinc-800 bg-zinc-900/50'}`}
               >
@@ -212,7 +212,7 @@ export function CreditSection() {
           <p className="text-sm text-zinc-400 mb-2">Upgrade to buy credit packs</p>
           <Button 
             size="sm" 
-            onClick={() => navigate('/app/all-markets/pricing')}
+            onClick={() => navigate('/app/upgrade')}
             className="bg-[#C9A646] hover:bg-[#B8953F] text-black"
           >
             View Plans <ChevronRight className="w-4 h-4 ml-1" />

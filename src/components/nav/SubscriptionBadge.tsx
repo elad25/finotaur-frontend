@@ -295,7 +295,7 @@ export function SubscriptionBadge({
             <button
               key={key}
               type="button"
-              onClick={() => navigate('/app/plans')}
+              onClick={() => navigate('/app/upgrade')}
               className="relative w-full overflow-hidden flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 mb-1.5 last:mb-0 cursor-pointer text-left hover:brightness-110 transition"
               style={{
                 background: '#121214',

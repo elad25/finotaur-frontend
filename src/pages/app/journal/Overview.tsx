@@ -1710,7 +1710,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   const handleDurationUpgrade = useCallback(() => {
     if (isFreeUser) {
       // Free user → send to pricing page
-      navigate('/app/journal/pricing');
+      navigate('/app/upgrade');
     } else {
       // Paid user without connection → open the live Add-Broker popup
       // (the SnapTrade stub was removed in Phase A1 Step 2; this CTA used
@@ -1735,7 +1735,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
 
   const handleUpgradeFromTooltip = useCallback(() => {
     setShowFreeUserTooltip(false);
-    navigate('/app/journal/pricing');
+    navigate('/app/upgrade');
   }, [navigate]);
 
   // ✅ NEW: Handle import completion

@@ -107,7 +107,7 @@ export function UpsellGate() {
           <div className="mt-ds-6 flex flex-wrap items-center gap-ds-5">
             {/* Gold CTA — asChild suppresses Button's built-in arrow; Crown + ArrowRight added manually */}
             <Button variant="gold" size="default" asChild>
-              <Link to="/app/journal/pricing" className="inline-flex items-center gap-2">
+              <Link to="/app/upgrade" className="inline-flex items-center gap-2">
                 <Crown className="h-4 w-4" />
                 Upgrade to Premium
                 <ArrowRight className="h-4 w-4" />

@@ -748,7 +748,7 @@ export const BillingTab = () => {
           <div className="ml-auto flex items-center gap-2">
             {(platformIsFree || platformPlan === 'free') ? (
               <button
-                onClick={() => navigate('/app/all-markets/pricing')}
+                onClick={() => navigate('/app/upgrade')}
                 className="text-xs text-[#C9A646] hover:text-[#E5C76B] font-medium transition-colors"
               >
                 Upgrade
@@ -891,7 +891,7 @@ export const BillingTab = () => {
                   Stay on Current Plan
                 </button>
                 <button
-                  onClick={() => { setShowPlatformDowngradeInfoDialog(false); navigate('/app/all-markets/pricing'); }}
+                  onClick={() => { setShowPlatformDowngradeInfoDialog(false); navigate('/app/upgrade'); }}
                   className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <ExternalLink className="w-4 h-4" />

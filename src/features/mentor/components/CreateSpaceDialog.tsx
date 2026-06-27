@@ -453,7 +453,7 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
                   <span className="text-gold-primary font-medium">FINOTAUR (Premium) plan</span>{' '}
                   is required to create a Room.{' '}
                   <Link
-                    to="/app/all-markets/pricing"
+                    to="/app/upgrade"
                     className="text-gold-primary underline underline-offset-2 hover:text-gold-hover transition-colors duration-base"
                     onClick={() => onOpenChange(false)}
                   >

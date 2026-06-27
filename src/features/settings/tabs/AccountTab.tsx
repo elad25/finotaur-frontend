@@ -443,7 +443,7 @@ export const AccountTab = () => {
             </div>
 <Button
   size="sm"
-  onClick={() => navigate('/app/all-markets/pricing')}
+  onClick={() => navigate('/app/upgrade')}
   className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
 >
   Upgrade <ArrowRight className="w-4 h-4 ml-1" />

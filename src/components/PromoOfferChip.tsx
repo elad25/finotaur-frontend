@@ -61,7 +61,7 @@ const OFFER: Offer = {
   claimed: 247,
   totalSpots: 300,
   ctaText: 'Unlock Premium',
-  ctaHref: '/app/journal/pricing',
+  ctaHref: '/app/upgrade',
   fineprint: 'Cancel anytime • 7-day money-back guarantee',
   chipLabel: 'Premium for $10',
 };

@@ -58,16 +58,15 @@ const PLAN_TIERS: PlanTier[] = [
     accentTo: '#F4D97B',
     glow: 'rgba(201,166,70,0.3)',
     features: [
-      'Everything in Core, plus:',
-      'Stock Analyzer (7/day)',
+      'Stock Analyzer (unlimited)',
       'Sector Analyzer (unlimited)',
       'Options Intelligence AI',
       'Macro Analyzer',
-      'AI Scanner',
+      'AI Scanner + Insider/13F',
       '🎁 Journal Premium INCLUDED',
       'Unlimited trades + Backtesting',
       'Up to 40 portfolios',
-      '🎁 War Zone + Top Secret Reports',
+      '🎁 TOP SECRET Reports',
       'Priority 24h support',
     ],
   },
@@ -125,7 +124,7 @@ export function UpgradeGate({
   // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
   const handleCheckout = (planKey: 'finotaur' | 'enterprise') => {
     if (!user) {
-      navigate('/app/all-markets/pricing');
+      navigate('/app/upgrade');
       return;
     }
     if (planKey === 'finotaur') {
@@ -549,7 +548,7 @@ export function UpgradeGate({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/app/all-markets/pricing')}
+            onClick={() => navigate('/app/upgrade')}
             className="px-8 py-3 rounded-xl font-semibold text-sm text-black flex items-center justify-center gap-2 mx-auto transition-all duration-300"
             style={{
               background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',

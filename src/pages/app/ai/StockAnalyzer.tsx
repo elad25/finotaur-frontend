@@ -287,7 +287,7 @@ export default function StockAnalyzer() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => navigate('/app/all-markets/pricing')}
+                      onClick={() => navigate('/app/upgrade')}
                       className="mt-ds-1 px-ds-5 py-ds-2 rounded-[16px] text-small font-semibold text-ink-on-gold"
                       style={{
                         background: 'var(--gradient-gold)',
