@@ -21,9 +21,11 @@ import {
   BarChart3, 
   Calendar,
   Building,
-  Target, 
+  Target,
   Users,
   Copy,
+  Monitor,
+  Download,
   GraduationCap,
   Settings,
   FlaskConical,
@@ -330,6 +332,8 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2, beta: true },
     { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy, beta: true },
     { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield, beta: true },
+    { label: 'Agent', path: '/app/copy-trade/agent', icon: Monitor, beta: true },
+    { label: 'FINOTAUR Agent', path: '/app/copy-trade/install', icon: Download, beta: true },
   ],
 
   'funding': [
