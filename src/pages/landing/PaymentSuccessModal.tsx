@@ -60,7 +60,7 @@ export const PaymentSuccessModal = ({ isOpen, onClose }: PaymentSuccessModalProp
           </div>
           
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            Welcome to War Zone! ⚔️
+            Welcome to Top Secret! 🔒
           </h2>
           <p className="text-gray-400">
             Your subscription is now active

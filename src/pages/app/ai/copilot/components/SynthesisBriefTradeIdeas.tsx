@@ -38,7 +38,7 @@ function HorizonBadge({ horizon }: { horizon: TradeIdea['time_horizon'] }) {
 
 function SourcePill({ source }: { source: TradeIdea['source'] }) {
   const labels: Record<TradeIdea['source'], string> = {
-    war_zone:  'WAR ZONE',
+    war_zone:  'TOP SECRET',
     weekly:    'WEEKLY',
     ism:       'ISM',
     synthesis: 'SYNTHESIS',

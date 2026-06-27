@@ -95,7 +95,7 @@ export default function DashboardMock() {
           <div className="flex items-center gap-2 mb-6">
             <Compass className="w-4 h-4 text-gold-primary" strokeWidth={1.5} />
             <span className="font-display tracking-[2px] text-xs uppercase text-ink-primary">
-              War Zone
+              Top Secret
             </span>
           </div>
 
@@ -178,7 +178,7 @@ export default function DashboardMock() {
               <div className="mt-4 rounded-[10px] border-[0.5px] border-border-ds-subtle bg-surface-2 p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-sans text-[10px] uppercase tracking-[1.5px] text-ink-tertiary">
-                    War Zone Analysis
+                    Top Secret Analysis
                   </span>
                   <div className="flex gap-1">
                     <span className="px-2 py-0.5 rounded-full border-[0.5px] border-border-ds-subtle text-[9px] uppercase tracking-wider text-ink-tertiary">

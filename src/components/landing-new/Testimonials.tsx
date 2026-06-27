@@ -41,7 +41,7 @@ const testimonials: Testimonial[] = [
     name: "Rachel Green",
     role: "Options Trader",
     avatar: "RG",
-    text: "As someone who traded blindly for years, Finotaur is like someone turned on the lights in a dark room. The AI insights plus War Zone every morning — I can't imagine trading without it now.",
+    text: "As someone who traded blindly for years, Finotaur is like someone turned on the lights in a dark room. The AI insights plus Top Secret every morning — I can't imagine trading without it now.",
     highlight: "turned on the lights in a dark room",
   },
   {

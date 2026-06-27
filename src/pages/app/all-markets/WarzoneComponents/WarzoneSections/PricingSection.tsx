@@ -38,7 +38,7 @@ const WAR_ZONE_FEATURES = [
 ];
 
 const PLATFORM_FEATURES = [
-  "Everything in War Zone",
+  "Everything in Top Secret",
   "Top Secret research and premium reports",
   "Journal Premium and trading workflow tools",
   "AI tools, platform intelligence and broader trader suite",
@@ -126,7 +126,7 @@ export default function PricingSection({
           </div>
 
           <SectionTitle size="large" className="mt-5">
-            <span className="block">War Zone Alone.</span>
+            <span className="block">Top Secret Alone.</span>
             <span className="block">
               Or the{" "}
               <span
@@ -174,7 +174,7 @@ export default function PricingSection({
             </div>
 
             <div className="mt-5 font-sans text-[11px] uppercase tracking-[2px] text-gold-primary">
-              War Zone
+              Top Secret
             </div>
             <div
               className="mt-2 text-2xl md:text-3xl text-ink-primary leading-tight uppercase"
@@ -207,7 +207,7 @@ export default function PricingSection({
                 showArrow={false}
               >
                 <span className="inline-flex items-center justify-center gap-2 w-full">
-                  Start War Zone
+                  Start Top Secret
                   <svg
                     width="14"
                     height="14"

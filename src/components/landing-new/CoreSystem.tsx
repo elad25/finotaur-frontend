@@ -38,7 +38,7 @@ const steps = [
     number: '03',
     label: 'Deliver',
     description:
-      'Five focused modules. Push notifications. War Zone briefings. AI on demand — surfaced where you need it.',
+      'Five focused modules. Push notifications. Top Secret briefings. AI on demand — surfaced where you need it.',
     sourcesLabel: 'Surfaces',
     sources: ['Web', 'Mobile', 'API'],
     Icon: Zap,

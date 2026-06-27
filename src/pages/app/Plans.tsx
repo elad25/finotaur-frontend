@@ -102,7 +102,7 @@ function FiNotaurIllustration() {
         {/* 4 module tiles */}
         <div className="grid grid-cols-4 gap-1.5">
           {[
-            { label: "War Zone", glyph: "⚡" },
+            { label: "Copilot", glyph: "⚡" },
             { label: "AI Engine", glyph: "◆" },
             { label: "Top Secret", glyph: "✦" },
             { label: "Macro", glyph: "◧" },

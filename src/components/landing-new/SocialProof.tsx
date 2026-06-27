@@ -50,7 +50,7 @@ function buildStats(data: PublicStats): StatDef[] {
       target: data.warZoneDays,
       suffix: "",
       format: "none",
-      label: "Days of War Zone",
+      label: "Days of Top Secret",
     });
   }
 

@@ -946,7 +946,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                         )}
                         <div className="flex items-center gap-2 text-xs">
                           <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
-                          <span className="text-[#C9A646] font-medium">🎁 War Zone Newsletter (INCLUDED)</span>
+                          <span className="text-[#C9A646] font-medium">🎁 Top Secret Daily Briefing (INCLUDED)</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs">
                           <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
@@ -1234,7 +1234,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               <h3 className="text-white font-semibold text-base">Heads up before you continue</h3>
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-5">
-              Subscribing to a Platform plan will <span className="text-amber-400 font-medium">automatically cancel</span> any existing War Zone, Top Secret, or Journal subscriptions you have — they're all included in your new plan.
+              Subscribing to a Platform plan will <span className="text-amber-400 font-medium">automatically cancel</span> any existing Top Secret or Journal subscriptions you have — they're all included in your new plan.
             </p>
             <div className="flex gap-3">
               <button

@@ -18,7 +18,7 @@ const faqs: FAQItem[] = [
   {
     question: "What's the difference between Core and Finotaur?",
     answer:
-      "Core ($59/mo) gives you the full AI platform — Stock Analyzer, Sector Analyzer, Flow Scanner, AI Assistant, and real-time market data. Finotaur ($109/mo) includes everything in Core plus War Zone & Top Secret reports, Options Intelligence AI, Macro Analyzer, AI Scanner, and Journal Premium — all included. It's the complete trading ecosystem.",
+      "Core ($59/mo) gives you the full AI platform — Stock Analyzer, Sector Analyzer, Flow Scanner, AI Assistant, and real-time market data. Finotaur ($109/mo) includes everything in Core plus Top Secret reports, Options Intelligence AI, Macro Analyzer, AI Scanner, and Journal Premium — all included. It's the complete trading ecosystem.",
   },
   {
     question: "Do I need prior trading experience?",
@@ -36,9 +36,9 @@ const faqs: FAQItem[] = [
       "Yes. Cancel in one click from your account settings — no emails, no phone calls, no questions asked. Your subscription will remain active until the end of your billing period. We don't believe in trapping people — if you're here, it's because Finotaur delivers value.",
   },
   {
-    question: "What does the War Zone include?",
+    question: "What does Top Secret include?",
     answer:
-      "War Zone is your daily pre-market briefing delivered every morning. It includes a complete market overview, global macro analysis (Asia → Europe → US flow), key support/resistance levels, daily directional bias, and actionable setups. It's what institutional traders read before the bell — now in your inbox.",
+      "Top Secret is your daily pre-market briefing delivered every morning. It includes a complete market overview, global macro analysis (Asia → Europe → US flow), key support/resistance levels, daily directional bias, and actionable setups. It's what institutional traders read before the bell — now in your inbox.",
   },
   {
     question: "What about the Trading Journal?",

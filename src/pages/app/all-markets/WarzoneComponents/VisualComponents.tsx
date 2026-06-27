@@ -256,7 +256,7 @@ export const BullImage = memo(function BullImage({
   return (
     <img 
       src="/assets/Bull-WarZone.png"
-      alt="War Zone Bull" 
+      alt="Top Secret Bull"
       className={className}
       style={style}
       loading="eager"

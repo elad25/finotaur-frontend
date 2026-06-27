@@ -1125,7 +1125,7 @@ const BillingTab = () => {
               <p className="text-xs text-emerald-400 font-medium mb-2">✅ Included in your plan:</p>
               <div className="flex flex-wrap gap-2">
                 <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
-                  <Mail className="w-3 h-3 mr-1" /> War Zone Newsletter
+                  <Mail className="w-3 h-3 mr-1" /> Top Secret
                 </Badge>
                 <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-xs">
                   <Flame className="w-3 h-3 mr-1" /> Top Secret Reports
@@ -1379,7 +1379,7 @@ const BillingTab = () => {
                 )} />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-lg">War Zone Intelligence</h2>
+                <h2 className="font-semibold text-white text-lg">Top Secret Intelligence</h2>
                 <p className="text-xs text-zinc-400">Daily Market Newsletter</p>
               </div>
             </div>
@@ -1994,7 +1994,7 @@ const BillingTab = () => {
                     <>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium mt-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        <span>⚠️ War Zone Newsletter access</span>
+                        <span>⚠️ Top Secret access</span>
                       </div>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -2064,7 +2064,7 @@ const BillingTab = () => {
         </div>
         
         <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel War Zone Newsletter?
+          Cancel Top Secret?
         </DialogTitle>
         <DialogDescription className="text-zinc-400 text-sm">
           You'll stop receiving our daily market intelligence reports and exclusive insights.

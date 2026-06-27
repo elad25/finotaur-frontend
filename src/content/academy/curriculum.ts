@@ -128,9 +128,9 @@ const F_FUNDAMENTALS: FinotaurLink = {
 };
 
 const F_TECHNICAL: FinotaurLink = {
-  feature: "War Zone & Backtesting",
+  feature: "Top Secret & Backtesting",
   blurb:
-    "Practice these setups in Finotaur's War Zone and prove them in the Backtesting engine — then replay your real trades in the Journal to see whether you followed the chart.",
+    "Practice these setups in Finotaur's Top Secret and prove them in the Backtesting engine — then replay your real trades in the Journal to see whether you followed the chart.",
   ctaLabel: "Start free",
   ctaHref: "/register",
 };
@@ -160,9 +160,9 @@ const F_MACRO: FinotaurLink = {
 };
 
 const F_ORDERFLOW: FinotaurLink = {
-  feature: "War Zone & Order Flow Tools",
+  feature: "Top Secret & Order Flow Tools",
   blurb:
-    "Finotaur's War Zone, Options Flow, and Futures Open Interest views expose the order-flow dynamics covered here — where liquidity sits and how institutions move price.",
+    "Finotaur's Top Secret, Options Flow, and Futures Open Interest views expose the order-flow dynamics covered here — where liquidity sits and how institutions move price.",
   ctaLabel: "Start free",
   ctaHref: "/register",
 };
@@ -184,9 +184,9 @@ const F_CRYPTO: FinotaurLink = {
 };
 
 const F_FUTURES: FinotaurLink = {
-  feature: "Futures Suite & War Zone",
+  feature: "Futures Suite & Top Secret",
   blurb:
-    "Finotaur's Futures tools (Open Interest, Calendar) and the War Zone give you live context on the contracts this section covers — ES, NQ, CL, GC, and more.",
+    "Finotaur's Futures tools (Open Interest, Calendar) and Top Secret give you live context on the contracts this section covers — ES, NQ, CL, GC, and more.",
   ctaLabel: "Start free",
   ctaHref: "/register",
 };
@@ -200,9 +200,9 @@ const F_PROP: FinotaurLink = {
 };
 
 const F_SENTIMENT: FinotaurLink = {
-  feature: "War Zone & Market Dashboards",
+  feature: "Top Secret & Market Dashboards",
   blurb:
-    "Finotaur's War Zone and market dashboards surface the fear/greed, breadth, and volatility signals in this section — so you can read the market's mood in real time.",
+    "Finotaur's Top Secret and market dashboards surface the fear/greed, breadth, and volatility signals in this section — so you can read the market's mood in real time.",
   ctaLabel: "Start free",
   ctaHref: "/register",
 };
