@@ -54,7 +54,7 @@ function PlatformPreview() {
       {/* 4 module tiles */}
       <div className="grid grid-cols-4 gap-1.5 mt-auto">
         {[
-          { label: 'War Zone', glyph: '⚡' },
+          { label: 'Copilot', glyph: '⚡' },
           { label: 'AI Engine', glyph: '◆' },
           { label: 'Top Secret', glyph: '✦' },
           { label: 'Journal', glyph: '◧' },
@@ -69,8 +69,8 @@ function PlatformPreview() {
   );
 }
 
-// ============ 2. WarZonePreview — Briefing report ============
-function WarZonePreview() {
+// ============ 2. CopilotPreview — AI-managed trades ============
+function CopilotPreview() {
   const setups = [
     { time: '09:30', sym: 'AAPL', dir: 'CALL', strike: '$238.50', up: true },
     { time: '10:15', sym: 'NVDA', dir: 'PUT',  strike: '$890.00', up: false },
@@ -96,7 +96,7 @@ function WarZonePreview() {
       </div>
 
       {/* Section label */}
-      <p className="font-sans text-[9.5px] uppercase tracking-[0.28em] text-[#C9A646]/85 font-medium pt-1">Today's Setups</p>
+      <p className="font-sans text-[9.5px] uppercase tracking-[0.28em] text-[#C9A646]/85 font-medium pt-1">Copilot · Live Trades</p>
 
       {/* Setups */}
       <div className="space-y-1.5 flex-1">
@@ -113,8 +113,8 @@ function WarZonePreview() {
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-1.5 border-t border-white/5 font-sans text-[8.5px] uppercase tracking-[0.22em] text-white/35 font-medium">
-        <span>3 of 7 setups</span>
-        <span>Macro: <span className="text-emerald-400/75">Risk-On</span></span>
+        <span>AI auto-managed</span>
+        <span>P&L: <span className="text-emerald-400/75">+2.4%</span></span>
       </div>
     </div>
   );
@@ -476,11 +476,11 @@ const Hero = () => {
       stats: ['5 Modules', '24/7 Intelligence', 'Real-time Flow'],
     },
     {
-      key: 'warzone',
-      eyebrow: 'DAILY INTELLIGENCE',
-      title: 'War Zone',
-      tagline: 'Pre-market briefing. Macro to micro, every morning at 9:00 AM ET.',
-      Preview: WarZonePreview,
+      key: 'copilot',
+      eyebrow: 'AI PORTFOLIO MANAGER',
+      title: 'Copilot',
+      tagline: 'Your AI portfolio manager — invests and trades alongside you, 24/7. Coming soon.',
+      Preview: CopilotPreview,
     },
     {
       key: 'ai',
