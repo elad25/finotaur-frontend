@@ -488,8 +488,10 @@ function AppContent() {
         <Route path="/best-trading-journal-for-futures" element={<SuspenseRoute><BestTradingJournalFutures /></SuspenseRoute>} />
         <Route path="/best-trading-journal-for-prop-firm" element={<SuspenseRoute><BestTradingJournalPropFirm /></SuspenseRoute>} />
         <Route path="/ai-trading-journal" element={<SuspenseRoute><AITradingJournal /></SuspenseRoute>} />
-        <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
-        <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
+        {/* War Zone URLs now redirect to Top Secret (Daily Briefing tab merged in).
+            Warzonepage.tsx is kept on disk as the source of DailyBriefingSection rendering. */}
+        <Route path="/warzone" element={<Navigate to="/app/top-secret" replace />} />
+        <Route path="/warzone-preview" element={<Navigate to="/app/top-secret" replace />} />
         <Route path="/legal" element={<SuspenseRoute><LegalHub /></SuspenseRoute>} />
         <Route path="/legal/terms" element={<SuspenseRoute><TermsOfUse /></SuspenseRoute>} />
         <Route path="/legal/privacy" element={<SuspenseRoute><PrivacyPolicy /></SuspenseRoute>} />
@@ -524,7 +526,8 @@ function AppContent() {
           <Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
           {/* Canonical Screener — cross-asset (Stocks/Crypto toggle), lives at the home/all-markets level */}
           <Route path="all-markets/screener" element={<SuspenseRoute><StocksScreener /></SuspenseRoute>} />
-<Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
+          {/* War Zone in-app route now redirects to Top Secret (Daily Briefing tab) */}
+          <Route path="all-markets/warzone" element={<Navigate to="/app/top-secret" replace />} />
           <Route path="all-markets/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliateSmartPage /></SuspenseRoute> : <Navigate to="/app" replace />} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/admin/support-ai" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportAiDrafts /></SuspenseRoute></ProtectedAdminRoute>} />

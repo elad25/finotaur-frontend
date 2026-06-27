@@ -308,7 +308,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Overview',    path: '/app/all-markets/overview',          locked: true,  priceGated: true },
       { label: 'Summary',     path: '/app/all-markets/summary',           locked: true,  priceGated: true },
       { label: 'Chart',       path: '/app/all-markets/chart',             locked: true,  priceGated: true },
-      { label: 'War Zone',    path: '/app/all-markets/warzone',           locked: false },
+      // 'War Zone' entry removed — redirected to /app/top-secret (Daily Briefing tab)
       { label: 'Top Secret',  path: '/app/top-secret',                    locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin',         adminOnly: true },
       ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true }] : []),
@@ -593,7 +593,9 @@ export const domainOrder = [
   'markets',
   'ai',
   'copilot',
-  'war-zone',
+  // 'war-zone' removed — War Zone daily reports are now surfaced inside Top Secret
+  // (Daily Briefing tab). The war-zone domain def is kept below for useDomain.ts
+  // path resolution and any nav references that remain until old URLs redirect.
   'top-secret',
   'journal',
   // 'mentorship' (The Floor) intentionally NOT in the Drawer — it is reached

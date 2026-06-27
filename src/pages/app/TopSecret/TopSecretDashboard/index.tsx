@@ -49,6 +49,7 @@ import {
   HowToUseSection,
   MemberSection,
   BottomFeaturesBar,
+  DailyBriefingSection,
 } from './components';
 
 const RPC_TIMEOUT_MS = 15000;
@@ -323,56 +324,75 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
         {/* Main Grid */}
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
-            {/* Latest Reports */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="flex items-center gap-2 mb-4">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <h2 className="text-lg font-semibold text-white">Latest Reports</h2>
-                <span className="text-xs text-gray-500 ml-2">{currentMonth}</span>
-              </div>
-              {isLoading ? (
-                <SkeletonGrid count={4} cols={2} cardLines={3} />
-              ) : latestByType.length === 0 ? (
-                <div className="text-center py-12 text-gray-500"><FileText className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No reports available yet</p></div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {latestByType.map(report => <CompactReportCard key={report.id} report={report} onDownload={downloadReport} isDownloading={downloadingId === report.id} />)}
+            {selectedFilter === 'daily briefing' ? (
+              /* ── Daily Briefing tab: War Zone daily/weekly reports ── */
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                {/* Filter tabs — keep visible for easy switching back */}
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <div className="flex-1" />
+                  <FilterTabs selected={selectedFilter} onChange={setSelectedFilter} />
                 </div>
-              )}
-            </motion.div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <h2 className="text-lg font-semibold text-white">Daily Briefing</h2>
+                  <span className="text-xs text-gray-500 ml-2">Market intelligence · every trading day</span>
+                </div>
+                <DailyBriefingSection />
+              </motion.div>
+            ) : (
+              <>
+                {/* Latest Reports */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Sparkles className="w-5 h-5 text-amber-400" />
+                    <h2 className="text-lg font-semibold text-white">Latest Reports</h2>
+                    <span className="text-xs text-gray-500 ml-2">{currentMonth}</span>
+                  </div>
+                  {isLoading ? (
+                    <SkeletonGrid count={4} cols={2} cardLines={3} />
+                  ) : latestByType.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500"><FileText className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No reports available yet</p></div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {latestByType.map(report => <CompactReportCard key={report.id} report={report} onDownload={downloadReport} isDownloading={downloadingId === report.id} />)}
+                    </div>
+                  )}
+                </motion.div>
 
-            {/* Search & Filter */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1"><SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by ticker, company, sector..." /></div>
-              <FilterTabs selected={selectedFilter} onChange={setSelectedFilter} />
-            </motion.div>
+                {/* Search & Filter */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1"><SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by ticker, company, sector..." /></div>
+                  <FilterTabs selected={selectedFilter} onChange={setSelectedFilter} />
+                </motion.div>
 
-            {/* Archive */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Archive className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-lg font-semibold text-white">Reports Archive</h2>
-                  <span className="text-xs text-gray-500 ml-2">{filteredReports.length} reports</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={expandAllMonths} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-1"><ChevronDown className="w-3.5 h-3.5" />Expand All</button>
-                  <button onClick={collapseAllMonths} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-1"><ChevronUp className="w-3.5 h-3.5" />Collapse All</button>
-                </div>
-              </div>
-              {sortedMonthKeys.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 border border-white/10 rounded-xl">
-                  <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No reports found</p>
-                  {searchQuery && <button onClick={() => setSearchQuery('')} className="mt-2 text-amber-400 text-sm hover:underline">Clear search</button>}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {sortedMonthKeys.map(monthKey => (
-                    <MonthGroup key={monthKey} monthKey={monthKey} reports={groupedReports[monthKey]} isExpanded={expandedMonths.has(monthKey)} onToggle={() => toggleMonth(monthKey)} onDownload={downloadReport} downloadingReportId={downloadingId} userInteractions={interactions} onToggleLike={toggleLike} onToggleBookmark={toggleBookmark} isTester={isTester} onPromoteToLive={handlePromoteToLive} promotingReportId={promotingReportId} />
-                  ))}
-                </div>
-              )}
-            </motion.div>
+                {/* Archive */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Archive className="w-5 h-5 text-amber-400" />
+                      <h2 className="text-lg font-semibold text-white">Reports Archive</h2>
+                      <span className="text-xs text-gray-500 ml-2">{filteredReports.length} reports</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={expandAllMonths} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-1"><ChevronDown className="w-3.5 h-3.5" />Expand All</button>
+                      <button onClick={collapseAllMonths} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-1"><ChevronUp className="w-3.5 h-3.5" />Collapse All</button>
+                    </div>
+                  </div>
+                  {sortedMonthKeys.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 border border-white/10 rounded-xl">
+                      <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" /><p>No reports found</p>
+                      {searchQuery && <button onClick={() => setSearchQuery('')} className="mt-2 text-amber-400 text-sm hover:underline">Clear search</button>}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sortedMonthKeys.map(monthKey => (
+                        <MonthGroup key={monthKey} monthKey={monthKey} reports={groupedReports[monthKey]} isExpanded={expandedMonths.has(monthKey)} onToggle={() => toggleMonth(monthKey)} onDownload={downloadReport} downloadingReportId={downloadingId} userInteractions={interactions} onToggleLike={toggleLike} onToggleBookmark={toggleBookmark} isTester={isTester} onPromoteToLive={handlePromoteToLive} promotingReportId={promotingReportId} />
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              </>
+            )}
           </div>
 
           {/* Sidebar */}
