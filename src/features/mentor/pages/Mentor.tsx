@@ -5,7 +5,7 @@
 // All access is RLS-enforced server-side; this page only calls SECURITY DEFINER RPCs
 // via the normal supabase client (never supabaseAdmin).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useMentorView } from '@/contexts/MentorViewContext';
@@ -13,7 +13,6 @@ import { Users, ChevronRight, Clock, GraduationCap, UserPlus, X, Check } from 'l
 import { SkeletonTable } from '@/components/ds/Skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MentorStudentsRail } from '@/features/mentor/components/MentorStudentsRail';
 import {
   useMyStudents,
   useMyMentors,
@@ -209,21 +208,14 @@ function StudentRow({
   onView,
   onRemove,
   removing,
-  highlighted,
 }: {
   student: StudentLink;
   onView: () => void;
   onRemove: () => void;
   removing: boolean;
-  highlighted: boolean;
 }) {
   return (
-    <div
-      id={`mentor-student-${student.student_id}`}
-      className={`flex items-center justify-between gap-4 p-4 rounded-lg border bg-white/5 hover:bg-white/10 transition-all group ${
-        highlighted ? 'border-[#C9A646]/60 ring-2 ring-[#C9A646]/50' : 'border-white/10'
-      }`}
-    >
+    <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors group">
       <button type="button" onClick={onView} className="flex flex-col gap-0.5 min-w-0 flex-1 text-left">
         <span className="font-medium text-white truncate">{student.display_name}</span>
         <span className="text-sm text-zinc-400 truncate">{student.email}</span>
@@ -250,26 +242,13 @@ function StudentRow({
   );
 }
 
-function MyStudentsSection({ focusRequest }: { focusRequest: { studentId: string; nonce: number } | null }) {
+function MyStudentsSection() {
   const navigate = useNavigate();
   const { enterMentorView } = useMentorView();
   const { students, isLoading: studentsLoading } = useMyStudents();
   const { requests, isLoading: requestsLoading } = usePendingMentorRequests();
   const respond = useRespondToMentorRequest();
   const revoke = useRevokeRelationship();
-  const [highlightId, setHighlightId] = useState<string | null>(null);
-
-  // When the rail requests focus on a student, scroll its row into view and
-  // pulse a gold highlight that fades after ~1.8s. The nonce lets repeated
-  // clicks on the same student re-trigger the effect.
-  useEffect(() => {
-    if (!focusRequest) return;
-    const el = document.getElementById(`mentor-student-${focusRequest.studentId}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setHighlightId(focusRequest.studentId);
-    const timer = setTimeout(() => setHighlightId(null), 1800);
-    return () => clearTimeout(timer);
-  }, [focusRequest]);
 
   const handleView = (s: StudentLink) => {
     enterMentorView(s.student_id, s.display_name, s.email);
@@ -341,7 +320,6 @@ function MyStudentsSection({ focusRequest }: { focusRequest: { studentId: string
                     key={s.relationship_id}
                     student={s}
                     removing={revoke.isPending}
-                    highlighted={highlightId === s.student_id}
                     onView={() => handleView(s)}
                     onRemove={() => handleRemove(s)}
                   />
@@ -360,31 +338,23 @@ function MyStudentsSection({ focusRequest }: { focusRequest: { studentId: string
 // ================================================
 
 export default function Mentor() {
-  // Focus signal from the students rail → MyStudentsSection. The nonce makes
-  // repeated clicks on the same student re-fire the scroll/highlight effect.
-  const [focusRequest, setFocusRequest] = useState<{ studentId: string; nonce: number } | null>(null);
-
-  const handleSelectStudent = useCallback((studentId: string) => {
-    setFocusRequest((prev) => ({ studentId, nonce: (prev?.nonce ?? 0) + 1 }));
-  }, []);
-
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 flex gap-6 items-start">
-      <MentorStudentsRail
-        onSelectStudent={handleSelectStudent}
-        activeStudentId={focusRequest?.studentId ?? null}
-      />
+    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Mentor Mode</h1>
+        <p className="text-zinc-400 text-sm mt-1">
+          Connect with a mentor to share your journal, or review your students' journals.
+        </p>
+      </div>
 
-      <div className="flex-1 min-w-0 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Mentor Mode</h1>
-          <p className="text-zinc-400 text-sm mt-1">
-            Connect with a mentor to share your journal, or review your students' journals.
-          </p>
+      {/* My Students lives on the left as its own panel; My Mentor on the right. */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="w-full lg:flex-1 lg:min-w-0">
+          <MyStudentsSection />
         </div>
-
-        <MyMentorSection />
-        <MyStudentsSection focusRequest={focusRequest} />
+        <div className="w-full lg:flex-1 lg:min-w-0">
+          <MyMentorSection />
+        </div>
       </div>
     </div>
   );
