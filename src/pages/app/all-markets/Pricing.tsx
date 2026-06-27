@@ -72,7 +72,7 @@ const plans: PlanConfig[] = [
   {
     id: 'journal',
     name: 'Journal',
-    monthlyPrice: '$45',
+    monthlyPrice: '$44.99',
     yearlyPrice: '$409',
     yearlyMonthlyEquivalent: '$34',
     description: "The trader's desk",
@@ -320,14 +320,13 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   // 🔥 Calculate monthly spending on standalone products vs platform plans
   const standaloneMonthlyTotal = (() => {
     let total = 0;
-    if (hasNewsletterMonthly) total += 69.99;
-    if (hasTopSecretMonthly) total += 50;
-    if (hasJournalPremiumMonthly) total += 45; // journal premium monthly price
+    // WAR ZONE merged into TOP SECRET — count the merged product once at $50
+    if (hasTopSecretMonthly || hasNewsletterMonthly) total += 50;
+    if (hasJournalPremiumMonthly) total += 44.99; // journal premium monthly price
     return total;
   })();
 
-  const hasExpensiveStandalones = standaloneMonthlyTotal >= 95 && currentPlatformPlan === 'free';
-  const wouldSaveWithFinotaur = standaloneMonthlyTotal >= 109;
+  const hasExpensiveStandalones = standaloneMonthlyTotal >= 94 && currentPlatformPlan === 'free';
 
   const handlePlanClick = (planId: PlatformPlanId) => {
     // Free = open downgrade confirmation dialog
@@ -413,10 +412,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   const FinotaurValueBanner = () => {
     if (!hasExpensiveStandalones) return null;
 
-    const products: string[] = [];
-    if (hasNewsletterMonthly) products.push('WAR ZONE ($69.99)');
-    if (hasTopSecretMonthly) products.push('TOP SECRET ($50)');
-    if (hasJournalPremiumMonthly) products.push('Journal Premium');
+    const delta = standaloneMonthlyTotal - 109;
+    const headline =
+      delta >= 0
+        ? `Save $${Math.round(delta)}/mo — go FINOTAUR`
+        : `Get everything for just $${Math.round(Math.abs(delta))} more`;
 
     return (
       <div
@@ -429,15 +429,12 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         <div className="flex items-start gap-3">
           <div className="mt-0.5 text-lg">💡</div>
           <div className="flex-1">
-            <p className="text-[#C9A646] font-semibold text-sm mb-1">
-              You'd save money with FINOTAUR
-            </p>
+            <p className="text-[#C9A646] font-bold text-sm mb-1">{headline}</p>
             <p className="text-slate-400 text-xs leading-relaxed">
-              You currently pay{' '}
-              <span className="text-white font-medium">${standaloneMonthlyTotal.toFixed(2)}/mo</span>
-              {' '}for: {products.join(', ')}.{' '}
-              <span className="text-emerald-400 font-medium">FINOTAUR at $109/mo</span>{' '}
-              includes all of that <span className="text-white">plus</span> the full market engine — a better deal.
+              You pay{' '}
+              <span className="text-white font-medium">${Math.round(standaloneMonthlyTotal)}/mo</span>{' '}
+              for separate products. FINOTAUR bundles them all{' '}
+              <span className="text-white">+ the full market engine</span> for $109.
             </p>
           </div>
         </div>

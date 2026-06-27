@@ -282,7 +282,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: [
       '14-day free trial',
       'Full AI market platform',
-      '🎁 Journal Premium INCLUDED ($45/mo value)',
+      '🎁 Journal Premium INCLUDED ($44.99/mo value)',
       '🎁 Top Secret Reports INCLUDED',
       'Advanced screeners',
       'Custom reports & exports',
@@ -315,7 +315,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     includesJournal: 'premium',
     features: [
       'Full AI market platform',
-      '🎁 Journal Premium INCLUDED ($45/mo value)',
+      '🎁 Journal Premium INCLUDED ($44.99/mo value)',
       '🎁 Top Secret Reports INCLUDED',
       'AI-powered market insights',
       'Advanced screeners',
