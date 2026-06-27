@@ -113,7 +113,8 @@ export default function SpaceDetail() {
   // ── Derived ────────────────────────────────────────────────────────────────
 
   const myRole = space?.my_role ?? 'student';
-  const isManager = myRole === 'owner' || myRole === 'co_mentor';
+  // Room admin powers are owner-only (co_mentor/moderator are regular members).
+  const isManager = myRole === 'owner';
 
   const activeChannel: SpaceChannel | undefined = channels.find(
     (c) => c.id === activeChannelId,
@@ -177,6 +178,7 @@ export default function SpaceDetail() {
 
   const channelListPanel = (
     <ChannelList
+      spaceId={id!}
       channels={channels}
       members={members}
       currentUserId={currentUserId}
