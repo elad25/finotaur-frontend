@@ -96,11 +96,9 @@ export const WHOP_PLAN_IDS = {
   newsletter_monthly: 'plan_U6lF2eO5y9469',
   newsletter_yearly: 'plan_bp2QTGuwfpj0A',
 
-  // Top Secret (merged WAR ZONE + TOP SECRET product, $50/mo)
-  // TODO(Whop): set plan_tUvQbCrEQ4197 price to $50/mo in Whop dashboard
-  top_secret_monthly: 'plan_tUvQbCrEQ4197',
-  // TODO(Whop): set plan_PxxbBlSdkyeo7 price to $499/yr in Whop dashboard
-  top_secret_yearly: 'plan_PxxbBlSdkyeo7',
+  // Top Secret (merged WAR ZONE + TOP SECRET product) — LIVE Whop plans @ $50/mo, $499/yr
+  top_secret_monthly: 'plan_icd76C8REp0LQ',
+  top_secret_yearly: 'plan_7Lf31ygMAMmK8',
 } as const;
 
 // Product IDs - Used for WEBHOOK identification
@@ -186,7 +184,10 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
 
-  // Top Secret (merged WAR ZONE + TOP SECRET, $50/mo)
+  // Top Secret (merged WAR ZONE + TOP SECRET) — LIVE Whop plans @ $50/mo, $499/yr
+  'plan_icd76C8REp0LQ': 'top_secret_monthly',
+  'plan_7Lf31ygMAMmK8': 'top_secret_yearly',
+  // LEGACY $89.99 Top Secret plans — kept for resolution of any pre-merge subscriber
   'plan_tUvQbCrEQ4197': 'top_secret_monthly',
   'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
 };

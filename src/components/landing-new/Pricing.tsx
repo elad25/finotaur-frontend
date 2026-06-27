@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
-// PRICING — COMPACT — 4 Plans
-// Free | Core ($59) | Finotaur ($109 FEATURED) | Copilot ($200)
+// PRICING — COMPACT — 5 Plans
+// Free | Journal ($45) | TOP SECRET ($50) | Finotaur ($109 FEATURED) | Copilot ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -56,8 +56,8 @@ const plans: Plan[] = [
     id: "journal",
     name: "Journal",
     monthlyPrice: "$45",
-    yearlyPrice: "$450",
-    yearlyMonthlyEquivalent: "$38",
+    yearlyPrice: "$409",
+    yearlyMonthlyEquivalent: "$34",
     description: "The trader's desk",
     trialDays: 14,
     features: [
@@ -72,7 +72,7 @@ const plans: Plan[] = [
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
-    savings: "Save 16%",
+    savings: "Save 24%",
     badge: "14-Day Free Trial",
   },
   {
@@ -82,6 +82,8 @@ const plans: Plan[] = [
     yearlyPrice: "$499",
     yearlyMonthlyEquivalent: "$42",
     description: "The intel",
+    trialDays: 14,
+    badge: "14-Day Free Trial",
     features: [
       "Daily institutional market report",
       "Monthly deep-dives (ISM, company, crypto)",
@@ -89,7 +91,7 @@ const plans: Plan[] = [
       "Trade-room commentary",
       "Early access to research",
     ],
-    cta: "Get TOP SECRET",
+    cta: "Start 14-Day Free Trial",
     featured: false,
     savings: "Save 17%",
   },
