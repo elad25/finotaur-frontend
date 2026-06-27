@@ -159,7 +159,7 @@ export const TopNav = () => {
             variant="gold"
             size="compact"
             showArrow={false}
-            onClick={() => navigate('/app/plans')}
+            onClick={() => navigate('/app/upgrade')}
             className="hidden lg:inline-flex"
           >
             ✨ Upgrade

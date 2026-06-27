@@ -362,14 +362,8 @@ const checkoutSession = await createCheckoutSession({
   // ═══════════════════════════════════════════
   // JOURNAL CHECKOUT HELPERS (existing)
   // ═══════════════════════════════════════════
-
-  const checkoutBasicMonthly = useCallback(() => {
-    initiateCheckout({ planName: 'basic', billingInterval: 'monthly' });
-  }, [initiateCheckout]);
-
-  const checkoutBasicYearly = useCallback(() => {
-    initiateCheckout({ planName: 'basic', billingInterval: 'yearly' });
-  }, [initiateCheckout]);
+  // Note: checkoutBasicMonthly / checkoutBasicYearly removed 2026-06 (Basic tier
+  // eliminated, zero subscribers). Journal is now Free → Premium only.
 
   const checkoutPremiumMonthly = useCallback(() => {
     initiateCheckout({ planName: 'premium', billingInterval: 'monthly' });
@@ -380,16 +374,9 @@ const checkoutSession = await createCheckoutSession({
   }, [initiateCheckout]);
 
   // ═══════════════════════════════════════════
-  // 🔥 PLATFORM CHECKOUT HELPERS (NEW)
+  // 🔥 PLATFORM CHECKOUT HELPERS
+  // Note: checkoutPlatformCore* removed 2026-06 (Core tier eliminated, zero subscribers)
   // ═══════════════════════════════════════════
-
-  const checkoutPlatformCoreMonthly = useCallback(() => {
-    initiateCheckout({ planName: 'platform_core', billingInterval: 'monthly' });
-  }, [initiateCheckout]);
-
-  const checkoutPlatformCoreYearly = useCallback(() => {
-    initiateCheckout({ planName: 'platform_core', billingInterval: 'yearly' });
-  }, [initiateCheckout]);
 
   const checkoutPlatformFinotaurMonthly = useCallback(() => {
     initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'monthly' });
@@ -434,15 +421,11 @@ const checkoutSession = await createCheckoutSession({
     // Generic checkout
     initiateCheckout,
     
-    // Journal checkout helpers
-    checkoutBasicMonthly,
-    checkoutBasicYearly,
+    // Journal checkout helpers (Basic tier removed 2026-06 — Free → Premium only)
     checkoutPremiumMonthly,
     checkoutPremiumYearly,
     
-    // 🔥 Platform checkout helpers
-    checkoutPlatformCoreMonthly,
-    checkoutPlatformCoreYearly,
+    // 🔥 Platform checkout helpers (Core removed 2026-06)
     checkoutPlatformFinotaurMonthly,
     checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly,
@@ -506,10 +489,11 @@ export function redirectToWhopCheckout(
 // ============================================
 
 /**
- * Redirect directly to Platform checkout
+ * Redirect directly to Platform checkout.
+ * Note: 'core' removed from plan union 2026-06 (Core tier eliminated, zero subscribers)
  */
 export function redirectToPlatformCheckout(
-  plan: 'core' | 'finotaur' | 'enterprise',
+  plan: 'finotaur' | 'enterprise',
   billingInterval: BillingInterval,
   userEmail?: string,
   userId?: string,

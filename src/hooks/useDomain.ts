@@ -17,6 +17,10 @@ import { useLocation } from 'react-router-dom';
 import { domains } from '@/constants/nav';
 import { isMarketsPath } from '@/constants/markets';
 
+// War Zone paths now redirect to /app/top-secret at the router level.
+// This mapping handles any cases where a War Zone URL reaches the domain hook
+// before the redirect fires (e.g. during SSR or pre-render) by treating them
+// as the Top Secret product so the sidebar/drawer highlight correctly.
 const WAR_ZONE_PATHS   = ['/app/all-markets/warzone', '/app/warzone'];
 const TOP_SECRET_PATHS = ['/app/top-secret'];
 // The Floor (/app/floor/*) is a sub-area of the Journal product, surfaced via
@@ -41,7 +45,8 @@ export const useDomain = () => {
   let productId: string;
 
   if (WAR_ZONE_PATHS.some((p) => pathname.startsWith(p))) {
-    productId = 'war-zone';
+    // War Zone is now part of Top Secret — redirect target = top-secret
+    productId = 'top-secret';
   } else if (TOP_SECRET_PATHS.some((p) => pathname.startsWith(p))) {
     productId = 'top-secret';
   } else if (FLOOR_PATHS.some((p) => pathname.startsWith(p))) {

@@ -46,16 +46,10 @@ function PremiumGate() {
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
           <Link
-            to="/app/journal/pricing"
+            to="/app/upgrade"
             className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E8C56A] text-black font-bold text-sm hover:opacity-90 transition-all"
           >
-            <Zap className="w-4 h-4" /> Upgrade Trade Journal
-          </Link>
-          <Link
-            to="/app/all-markets/pricing"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/15 text-white font-bold text-sm hover:bg-white/10 transition-all"
-          >
-            <Zap className="w-4 h-4" /> Upgrade — Site Pricing
+            <Zap className="w-4 h-4" /> View Plans
           </Link>
         </div>
       </div>

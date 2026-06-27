@@ -147,7 +147,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
     { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
     { label: 'divider', path: '', icon: null, divider: true },
-    { label: 'Pricing', path: '/app/all-markets/pricing', icon: Crown, locked: true },
+    { label: 'Pricing', path: '/app/upgrade', icon: Crown, locked: true },
     { label: 'Settings', path: '/app/settings', icon: Settings, locked: true },
   ],
 

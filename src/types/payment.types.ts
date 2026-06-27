@@ -132,7 +132,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     recommended: true,
     features: [
       'Unlimited trades',
-      'Everything in Basic',
+      'Everything in Free, plus:',
       'AI insights',
       'Priority support',
       'Early access to new features',

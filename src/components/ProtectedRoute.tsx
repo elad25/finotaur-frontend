@@ -44,6 +44,8 @@ const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLanding
 // Routes that are always accessible (no subscription check)
 const PUBLIC_APP_PATHS = [
   '/app/journal/pricing',
+  '/app/upgrade',
+  '/app/all-markets/pricing',
   '/app/journal/payment',
   '/pricing-selection',
 ];

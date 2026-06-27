@@ -724,7 +724,7 @@ export default function MyPortfolioPage() {
                 </span>
                 {!canCreate && (
                   <Link
-                    to="/app/plans"
+                    to="/app/upgrade"
                     className="text-xs text-gold-primary hover:text-gold-bright transition-colors"
                   >
                     Upgrade

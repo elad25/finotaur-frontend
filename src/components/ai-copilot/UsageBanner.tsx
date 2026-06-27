@@ -105,7 +105,7 @@ export const UsageBanner = memo(function UsageBanner({ usage }: UsageBannerProps
       
       {/* Upgrade Button */}
       <Link
-        to="/app/all-markets/pricing"
+        to="/app/upgrade"
         className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 flex-shrink-0"
         style={limit_reached ? {
           background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',

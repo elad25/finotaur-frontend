@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
-// PRICING — COMPACT — 4 Plans
-// Free | Core ($59) | Finotaur ($109 FEATURED) | Copilot ($200)
+// PRICING — COMPACT — 5 Plans
+// Free | Journal ($44.99) | TOP SECRET ($50) | Finotaur ($109 FEATURED) | Copilot ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -40,62 +40,79 @@ const plans: Plan[] = [
     monthlyPrice: "$0",
     yearlyPrice: "$0",
     yearlyMonthlyEquivalent: "$0",
-    description: "Explore the platform",
+    description: "The hook — explore the platform",
     isFree: true,
     features: [
-      "Basic dashboards (limited)",
+      "Trading Journal — 15 trades",
+      "Stock Analyzer (3 analyses/day)",
       "1 watchlist",
-      "Delayed data (15min)",
+      "Market screener (basic)",
       "Community access",
     ],
     cta: "Get Started Free",
     featured: false,
   },
   {
-    id: "core",
-    name: "Core",
-    monthlyPrice: "$59",
-    yearlyPrice: "$599",
-    yearlyMonthlyEquivalent: "$49",
-    description: "Full market intelligence tools",
+    id: "journal",
+    name: "Journal",
+    monthlyPrice: "$44.99",
+    yearlyPrice: "$409",
+    yearlyMonthlyEquivalent: "$34",
+    description: "The trader's desk",
     trialDays: 14,
     features: [
-      "📚 Full Finotaur Academy (300+ lessons)",
-      "Stock Analyzer (5 analyses/day)",
-      "Sector Analyzer (3 sectors/month)",
-      "Flow Scanner",
-      "AI Assistant",
-      "Real-time market data",
-      "Advanced charts & indicators",
-      "Unlimited watchlists",
-      "50 price alerts",
-      "Priority email support",
+      "Everything in Free, plus:",
+      "Unlimited trades — no caps",
+      "Trade copier — auto-sync from broker",
+      "Backtest engine",
+      "Mentor & community rooms",
+      "Full performance analytics",
+      "Strategy builder & playbooks",
+      "Priority support",
+    ],
+    cta: "Start 14-Day Free Trial",
+    featured: false,
+    savings: "Save 24%",
+    badge: "14-Day Free Trial",
+  },
+  {
+    id: "top_secret",
+    name: "TOP SECRET",
+    monthlyPrice: "$50",
+    yearlyPrice: "$499",
+    yearlyMonthlyEquivalent: "$42",
+    description: "The intel",
+    trialDays: 14,
+    badge: "14-Day Free Trial",
+    features: [
+      "Daily institutional market report",
+      "Monthly deep-dives (ISM, company, crypto)",
+      "Exclusive Discord community",
+      "Trade-room commentary",
+      "Early access to research",
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
     savings: "Save 17%",
-    badge: "14-Day Free Trial",
   },
   {
     id: "finotaur",
-    name: "Finotaur",
+    name: "FINOTAUR",
     monthlyPrice: "$109",
     yearlyPrice: "$1,090",
     yearlyMonthlyEquivalent: "$91",
-    description: "Complete trading ecosystem",
+    description: "The Bloomberg of retail",
     trialDays: 14,
-    badge: "MOST POPULAR",
-    includesExtras: "Includes War Zone + Top Secret + Journal Premium",
+    badge: "Most Popular",
+    includesExtras: "Journal + TOP SECRET + full market engine",
     features: [
-      "Everything in Core, plus:",
-      "Stock Analyzer (7 analyses/day)",
-      "Sector Analyzer (unlimited)",
+      "Everything in Journal & TOP SECRET, plus:",
+      "Stock Analyzer — unlimited",
+      "Sector Analyzer",
       "Options Intelligence AI",
       "Macro Analyzer",
-      "AI Scanner",
-      "🎁 Journal Premium INCLUDED",
-      "🎁 War Zone + Top Secret Reports",
-      "Priority 24h support",
+      "AI Scanner + Insider/13F + Market Scanner",
+      "FINO AI assistant",
     ],
     cta: "Start 14-Day Free Trial",
     featured: true,
@@ -103,23 +120,23 @@ const plans: Plan[] = [
   },
   {
     id: "enterprise",
-    name: "Copilot",
+    name: "COPILOT",
     monthlyPrice: "$200",
     yearlyPrice: "$2,000",
     yearlyMonthlyEquivalent: "$167",
-    description: "Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.",
+    description: "Your AI portfolio manager — invests and trades alongside you, 24/7.",
     badge: "AI Portfolio Manager",
     savings: "Save 17%",
     features: [
-      "Everything in Finotaur, plus:",
-      "AI Portfolio Manager that invests & trades alongside you",
-      "Stop flying blind — 24/7 AI oversight of every position you hold",
-      "My Portfolio — live tracking & mark-to-market of your real book",
-      "Proactive AI risk detection & alerts on your holdings",
-      "Daily AI portfolio brief with actionable guidance",
+      "Everything in FINOTAUR, plus:",
+      "AI Portfolio Manager — invests & trades alongside you",
+      "24/7 AI oversight of every position",
+      "My Portfolio — live mark-to-market",
+      "Proactive AI risk detection & alerts",
+      "Daily AI portfolio brief",
       "Priority support",
     ],
-    cta: "Get Copilot",
+    cta: "Get COPILOT",
     featured: false,
   },
 ];
@@ -231,8 +248,8 @@ const Pricing = () => {
           </div>
         </motion.div>
 
-        {/* Plans Grid — 4 columns */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Plans Grid — 5 columns */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
           {plans.map((plan, index) => {
             const displayPrice = getDisplayPrice(plan);
             return (
@@ -266,7 +283,7 @@ const Pricing = () => {
                             }
                       }
                     >
-                      {plan.badge === "MOST POPULAR" && (
+                      {plan.badge === "Most Popular" && (
                         <Star className="w-3 h-3 inline mr-1 -mt-0.5" />
                       )}
                       {plan.badge === "14-Day Free Trial" && (

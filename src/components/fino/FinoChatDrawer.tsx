@@ -273,7 +273,7 @@ function FinoChatPanel({
                   <button
                     type="button"
                     onClick={() => {
-                      window.location.href = '/app/all-markets/pricing';
+                      window.location.href = '/app/upgrade';
                     }}
                     className="mt-1.5 inline-flex items-center rounded-md bg-[#C9A646] px-2.5 py-1 text-[11px] font-semibold text-black transition-colors hover:bg-[#d8b65a]"
                   >

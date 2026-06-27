@@ -280,7 +280,7 @@ export function PairDeviceDialog({ open, onOpenChange }: PairDeviceDialogProps) 
                     variant="gold"
                     size="compact"
                     showArrow={false}
-                    onClick={() => { onOpenChange(false); navigate('/app/journal/pricing'); }}
+                    onClick={() => { onOpenChange(false); navigate('/app/upgrade'); }}
                   >
                     Upgrade to Premium
                   </Button>

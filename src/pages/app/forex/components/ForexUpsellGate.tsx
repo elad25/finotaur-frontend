@@ -38,7 +38,7 @@ export default function ForexUpsellGate({ feature }: ForexUpsellGateProps) {
       {/* CTA */}
       <div className="mt-ds-6">
         <Button variant="gold" size="default" asChild>
-          <Link to="/app/all-markets/pricing" className="inline-flex items-center gap-2">
+          <Link to="/app/upgrade" className="inline-flex items-center gap-2">
             <Crown className="h-4 w-4" />
             Go to Pricing
             <ArrowRight className="h-4 w-4" />

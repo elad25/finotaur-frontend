@@ -1,11 +1,12 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v7.0.0
+// FINOTAUR WHOP CONFIGURATION - v8.0.0
 // =====================================================
-// 🔥 v7.0.0 CHANGES:
-// - REMOVED: Bundle, cross-product discounts, discount products
-// - Finotaur Platform tier replaces Bundle (includes Newsletter + Top Secret + Journal Premium)
-// - Standalone products: Newsletter ($69.99/mo, $699/yr), Top Secret ($89.99/mo, $899/yr)
-// - Platform tiers: Core ($59/mo), Finotaur ($109/mo), Copilot ($200/mo)
+// 🔥 v8.0.0 CHANGES (2026-06):
+// - REMOVED: Journal Basic tier (was $24.99/mo — zero active subscribers)
+// - REMOVED: Platform Core tier (was $59/mo — zero active subscribers)
+// - MERGED: WAR ZONE + TOP SECRET → single "Top Secret" product at $50/mo / $499/yr
+//   WAR ZONE plan IDs (newsletter_monthly/yearly) KEPT for existing-subscriber resolution
+// - Platform tiers remaining: Finotaur ($109/mo), Copilot ($200/mo) + Free
 // =====================================================
 
 // ============================================
@@ -15,31 +16,28 @@
 // 🔥 v4.0: Subscription categories
 export type SubscriptionCategory = 'journal' | 'platform';
 
-// Journal plans (existing)
-export type JournalPlanName = 'basic' | 'premium';
+// Journal plans — Basic removed 2026-06 (zero subscribers)
+export type JournalPlanName = 'premium';
 
-// Platform plans (NEW)
-export type PlatformPlanName = 'platform_free' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise';
+// Platform plans — Core removed 2026-06 (zero subscribers)
+export type PlatformPlanName = 'platform_free' | 'platform_finotaur' | 'platform_enterprise';
 
 // All plan names
 export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret';
 
 export type BillingInterval = 'monthly' | 'yearly';
 
-export type PlanId = 
-  // Journal plans
-  | 'basic_monthly' 
-  | 'basic_yearly' 
+export type PlanId =
+  // Journal plans — Basic removed 2026-06 (zero subscribers)
   | 'premium_monthly'
   | 'premium_yearly'
-  // Platform plans
-  | 'platform_core_monthly'
-  | 'platform_core_yearly'
+  // Platform plans — Core removed 2026-06 (zero subscribers)
   | 'platform_finotaur_monthly'
   | 'platform_finotaur_yearly'
   | 'platform_enterprise_monthly'
   | 'platform_enterprise_yearly'
   // Standalone products
+  // LEGACY: newsletter_monthly/yearly kept for existing WAR ZONE subscriber resolution, not purchasable
   | 'newsletter_monthly'
   | 'newsletter_yearly'
   | 'top_secret_monthly'
@@ -69,7 +67,7 @@ export interface PlanConfig {
   isPlatform?: boolean;
   comingSoon?: boolean;
   contactSales?: boolean;
-  includesJournal?: 'basic' | 'premium';
+  includesJournal?: 'premium';  // 'basic' removed 2026-06
   // 🔥 v4.2.0: Discount info
   hasIntroDiscount?: boolean;
   introDiscountMonths?: number;
@@ -82,140 +80,114 @@ export interface PlanConfig {
 // ============================================
 
 export const WHOP_PLAN_IDS = {
-  // Journal - Basic ($24.99/mo). New plan as of 2026-06-17 (prior plan
-  // plan_2hIXaJbGP1tYN was the legacy $19.99 price).
-  basic_monthly: 'plan_H0VDCb6iD1dYQ',
-  basic_yearly: 'plan_80ZhPpre3iRU2', // $229/yr — new plan 2026-06-17 (was plan_x0jTFLe9qNv8i)
-
   // Journal - Premium (no trial). New plans 2026-06-17.
   premium_monthly: 'plan_N33S1p5Y3dHrK', // $44.99/mo (was plan_v7QKxkvKIZooe)
-  premium_yearly: 'plan_WrjUcvrRhwWPL', // $409/yr (was plan_gBG436aeJxaHU)
-  
-// 🔥 Platform - Core ($59/month, 14-day trial)
-  platform_core_monthly: 'plan_M4ig2ZhYd2RUE',
-  platform_core_yearly: 'plan_6w5KTZsSGp7Ss',
-  
-  // 🔥 Platform - Finotaur ($109/month, 14-day trial)
+  premium_yearly: 'plan_WrjUcvrRhwWPL',  // $409/yr (was plan_gBG436aeJxaHU)
+
+  // Platform - Finotaur ($109/month, 14-day trial)
   platform_finotaur_monthly: 'plan_ICooR8aqtdXad',
   platform_finotaur_yearly: 'plan_M2zS1EoNXJF10',
-  
-  // 🔥 Platform - Copilot ($200/month, no trial)
+
+  // Platform - Copilot ($200/month, no trial)
   platform_enterprise_monthly: 'plan_LG6ODA91iOCzQ', // $200/mo (was plan_nHveClWPmjJNT @ $499)
   platform_enterprise_yearly: 'plan_dfy2uADNyEExg',
-  
-// ═══════════════════════════════════════════
-  // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED WITH WHOP!
-  // ═══════════════════════════════════════════
-  newsletter_monthly: 'plan_U6lF2eO5y9469',  // Regular price $69.99/month
-  newsletter_yearly: 'plan_bp2QTGuwfpj0A',   // Yearly $699/year
-  // Top Secret
-  top_secret_monthly: 'plan_tUvQbCrEQ4197',           // Top Secret Monthly - $89.99/month
-  top_secret_yearly: 'plan_PxxbBlSdkyeo7',            // Top Secret Yearly - $899/year
+
+  // LEGACY: WAR ZONE merged into TOP SECRET 2026-06 — kept for existing-subscriber resolution, not purchasable.
+  newsletter_monthly: 'plan_U6lF2eO5y9469',
+  newsletter_yearly: 'plan_bp2QTGuwfpj0A',
+
+  // Top Secret (merged WAR ZONE + TOP SECRET product) — LIVE Whop plans @ $50/mo, $499/yr
+  top_secret_monthly: 'plan_icd76C8REp0LQ',
+  top_secret_yearly: 'plan_7Lf31ygMAMmK8',
 } as const;
 
-// 🔥 Product IDs - Used for WEBHOOK identification
+// Product IDs - Used for WEBHOOK identification
 export const WHOP_PRODUCT_IDS = {
-  // Journal
-  basic_monthly: 'prod_ZaDN418HLst3r',
-  basic_yearly: 'prod_bPwSoYGedsbyh',
+  // Journal - Premium
   premium_monthly: 'prod_Kq2pmLT1JyGsU',
   premium_yearly: 'prod_vON7zlda6iuII',
-  
-  // 🔥 Platform - REAL IDs!
-  platform_core_monthly: 'prod_HDYzeNp6WOJwh',
-  platform_core_yearly: 'prod_YAdXQrHtt72Gd',
+
+  // Platform - Finotaur
   platform_finotaur_monthly: 'prod_LtP5GbpPfp9bn',
   platform_finotaur_yearly: 'prod_CbWpZrn5P7wc9',
+
+  // Platform - Copilot
   platform_enterprise_monthly: 'prod_CIKv0J5Rq6aFk',
   platform_enterprise_yearly: 'prod_9e5E84XpsrhWE',
-  
-// ═══════════════════════════════════════════
-  // 🔥 v4.3.0: Newsletter (War Zone) - Product IDs
-  // ═══════════════════════════════════════════
+
+  // LEGACY: WAR ZONE merged into TOP SECRET 2026-06 — kept for existing-subscriber resolution, not purchasable.
   newsletter_monthly: 'prod_qlaV5Uu6LZlYn',
   newsletter_yearly: 'prod_8b3VWkZdena4B',
-  // Top Secret
+
+  // Top Secret (merged WAR ZONE + TOP SECRET)
   top_secret: 'prod_nl6YXbLp4t5pz',
-  top_secret_yearly: 'prod_aGd9mbl2XUIFO',   // 🔥 Top Secret Yearly - standalone product
-  
+  top_secret_yearly: 'prod_aGd9mbl2XUIFO',
 } as const;
 
-// 🔥 Platform Product IDs Set - for quick lookup
+// Platform Product IDs Set - for quick lookup (Core removed 2026-06)
 export const PLATFORM_PRODUCT_IDS = new Set([
-  'prod_HDYzeNp6WOJwh',  // Core Monthly
-  'prod_YAdXQrHtt72Gd',  // Core Yearly
   'prod_LtP5GbpPfp9bn',  // Finotaur Monthly
   'prod_CbWpZrn5P7wc9',  // Finotaur Yearly
   'prod_CIKv0J5Rq6aFk',  // Copilot Monthly
   'prod_9e5E84XpsrhWE',  // Copilot Yearly
 ]);
 
-// Reverse lookup (for webhooks)
-export const PRODUCT_ID_TO_PLAN: Record<string, { 
-  plan: PlanName; 
-  interval: BillingInterval; 
+// Reverse lookup (for webhooks) — Basic and Core removed 2026-06 (zero subscribers)
+export const PRODUCT_ID_TO_PLAN: Record<string, {
+  plan: PlanName;
+  interval: BillingInterval;
   category: SubscriptionCategory;
-  isNewsletter?: boolean; 
+  isNewsletter?: boolean;
   isTopSecret?: boolean;
   isPlatform?: boolean;
 }> = {
-  // Journal
-  'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly', category: 'journal' },
-  'prod_bPwSoYGedsbyh': { plan: 'basic', interval: 'yearly', category: 'journal' },
+  // Journal - Premium
   'prod_Kq2pmLT1JyGsU': { plan: 'premium', interval: 'monthly', category: 'journal' },
   'prod_vON7zlda6iuII': { plan: 'premium', interval: 'yearly', category: 'journal' },
-  
-  // 🔥 Platform - REAL IDs!
-  'prod_HDYzeNp6WOJwh': { plan: 'platform_core', interval: 'monthly', category: 'platform', isPlatform: true },
-  'prod_YAdXQrHtt72Gd': { plan: 'platform_core', interval: 'yearly', category: 'platform', isPlatform: true },
+
+  // Platform - Finotaur
   'prod_LtP5GbpPfp9bn': { plan: 'platform_finotaur', interval: 'monthly', category: 'platform', isPlatform: true },
   'prod_CbWpZrn5P7wc9': { plan: 'platform_finotaur', interval: 'yearly', category: 'platform', isPlatform: true },
+
+  // Platform - Copilot
   'prod_CIKv0J5Rq6aFk': { plan: 'platform_enterprise', interval: 'monthly', category: 'platform', isPlatform: true },
   'prod_9e5E84XpsrhWE': { plan: 'platform_enterprise', interval: 'yearly', category: 'platform', isPlatform: true },
-  
-// ═══════════════════════════════════════════
-  // 🔥 v4.3.0: Newsletter (War Zone) - All Products
-  // ═══════════════════════════════════════════
-  'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true },
-  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },  
-  // Top Secret - Regular
-  'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
-  
-  // 🔥 Top Secret Yearly - STANDALONE PRODUCT
-  'prod_aGd9mbl2XUIFO': { plan: 'top_secret', interval: 'yearly', category: 'journal', isTopSecret: true },
-  };
 
-// Plan ID to Name lookup
+  // LEGACY: WAR ZONE merged into TOP SECRET 2026-06 — kept for existing-subscriber resolution, not purchasable.
+  'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true },
+  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },
+
+  // Top Secret (merged WAR ZONE + TOP SECRET)
+  'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
+  'prod_aGd9mbl2XUIFO': { plan: 'top_secret', interval: 'yearly', category: 'journal', isTopSecret: true },
+};
+
+// Plan ID to Name lookup — Basic and Core removed 2026-06 (zero subscribers)
 export const PLAN_ID_TO_NAME: Record<string, string> = {
-  // Journal
-  'plan_H0VDCb6iD1dYQ': 'basic_monthly', // current $24.99 plan (2026-06-17)
-  'plan_2hIXaJbGP1tYN': 'basic_monthly', // legacy $19.99 plan — kept for in-flight refs
-  'plan_80ZhPpre3iRU2': 'basic_yearly', // current $229/yr (2026-06-17)
-  'plan_x0jTFLe9qNv8i': 'basic_yearly', // legacy — kept for in-flight refs
+  // Journal - Premium
   'plan_N33S1p5Y3dHrK': 'premium_monthly', // current $44.99/mo (2026-06-17)
   'plan_v7QKxkvKIZooe': 'premium_monthly', // legacy — kept for in-flight refs
-  'plan_WrjUcvrRhwWPL': 'premium_yearly', // current $409/yr (2026-06-17)
-  'plan_gBG436aeJxaHU': 'premium_yearly', // legacy — kept for in-flight refs
-  
-  // Platform
-  'plan_M4ig2ZhYd2RUE': 'platform_core_monthly',
-  'plan_6w5KTZsSGp7Ss': 'platform_core_yearly',
-  'prod_HDYzeNp6WOJwh': 'platform_core_monthly',
-  'prod_YAdXQrHtt72Gd': 'platform_core_yearly',
-  // 🔥 Finotaur Platform
+  'plan_WrjUcvrRhwWPL': 'premium_yearly',  // current $409/yr (2026-06-17)
+  'plan_gBG436aeJxaHU': 'premium_yearly',  // legacy — kept for in-flight refs
+
+  // Platform - Finotaur
   'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',
   'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',
+
+  // Platform - Copilot
   'plan_LG6ODA91iOCzQ': 'platform_enterprise_monthly', // current $200/mo (2026-06-17)
   'plan_nHveClWPmjJNT': 'platform_enterprise_monthly', // legacy $499/mo — kept for in-flight refs
   'plan_dfy2uADNyEExg': 'platform_enterprise_yearly',
   'prod_9e5E84XpsrhWE': 'platform_enterprise_yearly',
-  
-  // ═══════════════════════════════════════════
-  // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED!
-  // ═══════════════════════════════════════════
+
+  // LEGACY: WAR ZONE merged into TOP SECRET 2026-06 — kept for existing-subscriber resolution, not purchasable.
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
-  // Top Secret - SYNCED with WHOP_PLAN_IDS!
+
+  // Top Secret (merged WAR ZONE + TOP SECRET) — LIVE Whop plans @ $50/mo, $499/yr
+  'plan_icd76C8REp0LQ': 'top_secret_monthly',
+  'plan_7Lf31ygMAMmK8': 'top_secret_yearly',
+  // LEGACY $89.99 Top Secret plans — kept for resolution of any pre-merge subscriber
   'plan_tUvQbCrEQ4197': 'top_secret_monthly',
   'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
 };
@@ -224,65 +196,8 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
 // PLAN CONFIGURATIONS
 // ============================================
 
+// Basic removed 2026-06 (zero active subscribers). Free journal tier (15 lifetime trades) and Premium remain.
 export const PLANS: Record<PlanId, PlanConfig> = {
-  // ═══════════════════════════════════════════
-  // JOURNAL - BASIC (WITH 14-DAY FREE TRIAL)
-  // ═══════════════════════════════════════════
-  basic_monthly: {
-    id: 'basic_monthly',
-    whopPlanId: WHOP_PLAN_IDS.basic_monthly,
-    whopProductId: WHOP_PRODUCT_IDS.basic_monthly,
-    name: 'basic',
-    displayName: 'Basic',
-    price: 24.99,
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 25,
-    trialDays: 14,
-    badge: '14-Day Free Trial',
-    category: 'journal',
-    features: [
-      '14-day free trial',
-      'Broker sync — leading brokers supported',
-      '25 trades/month (manual + auto-sync)',
-      'Full performance analytics',
-      'Strategy builder & tracking',
-      'Calendar & trading sessions',
-      'Advanced statistics & metrics',
-      'Equity curve & charts',
-      'Trade screenshots & notes',
-      'Email support',
-    ],
-  },
-  basic_yearly: {
-    id: 'basic_yearly',
-    whopPlanId: WHOP_PLAN_IDS.basic_yearly,
-    whopProductId: WHOP_PRODUCT_IDS.basic_yearly,
-    name: 'basic',
-    displayName: 'Basic',
-    price: 229,
-    period: 'yearly',
-    periodLabel: '/year',
-    monthlyEquivalent: 19.08,
-    maxTrades: 25,
-    trialDays: 14,
-    badge: '14-Day Free Trial + Save 24%',
-    category: 'journal',
-    features: [
-      '14-day free trial',
-      'Broker sync — leading brokers supported',
-      '25 trades/month (manual + auto-sync)',
-      'Full performance analytics',
-      'Strategy builder & tracking',
-      'Calendar & trading sessions',
-      'Advanced statistics & metrics',
-      'Equity curve & charts',
-      'Trade screenshots & notes',
-      'Email support',
-      '2 months FREE!',
-    ],
-  },
-
   // ═══════════════════════════════════════════
   // JOURNAL - PREMIUM (NO TRIAL)
   // ═══════════════════════════════════════════
@@ -300,8 +215,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     badge: 'Most Popular',
     category: 'journal',
     features: [
-      'Everything in Basic, plus:',
+      'Broker sync — leading brokers supported',
       'Unlimited trades',
+      'Full performance analytics',
       'AI-powered insights & coach',
       'Advanced AI analysis',
       'Pattern recognition',
@@ -327,8 +243,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     badge: 'Best Value',
     category: 'journal',
     features: [
-      'Everything in Basic, plus:',
+      'Broker sync — leading brokers supported',
       'Unlimited trades',
+      'Full performance analytics',
       'AI-powered insights & coach',
       'Advanced AI analysis',
       'Pattern recognition',
@@ -340,70 +257,10 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // ═══════════════════════════════════════════
-  // 🔥 PLATFORM - CORE ($39/month, 7-day trial)
-  // ═══════════════════════════════════════════
-  platform_core_monthly: {
-    id: 'platform_core_monthly',
-    whopPlanId: WHOP_PLAN_IDS.platform_core_monthly,
-    whopProductId: WHOP_PRODUCT_IDS.platform_core_monthly,
-    name: 'platform_core',
-    displayName: 'Core',
-    price: 59,
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 0,
-    trialDays: 14,
-    trialOnceOnly: false,
-    badge: '14-Day Free Trial',
-    category: 'platform',
-    isPlatform: true,
-    includesJournal: 'basic',
-    features: [
-      '14-day free trial',
-      'Full market dashboard',
-      'Real-time market data',
-      'Advanced charts & indicators',
-      'Unlimited watchlists',
-      '50 price alerts',
-      'Basic screeners',
-      'Daily market briefing',
-      'Priority email support',
-      '🎁 Journal Basic INCLUDED (25 trades/mo)',
-    ],
-  },
-  platform_core_yearly: {
-    id: 'platform_core_yearly',
-    whopPlanId: WHOP_PLAN_IDS.platform_core_yearly,
-    whopProductId: WHOP_PRODUCT_IDS.platform_core_yearly,
-    name: 'platform_core',
-    displayName: 'Core',
-    price: 599,
-    period: 'yearly',
-    periodLabel: '/year',
-    monthlyEquivalent: 49.92,
-    maxTrades: 0,
-    trialDays: 0,
-    badge: 'Save 17%',
-    category: 'platform',
-    isPlatform: true,
-    includesJournal: 'basic',
-    features: [
-      'Full market dashboard',
-      'Real-time market data',
-      'Advanced charts & indicators',
-      'Unlimited watchlists',
-      '50 price alerts',
-      'Basic screeners',
-      'Daily market briefing',
-      'Priority email support',
-      '🎁 Journal Basic INCLUDED (25 trades/mo)',
-      '1 month FREE!',
-    ],
-  },
+  // Core removed 2026-06 (zero active subscribers). Platform tiers: Finotaur ($109/mo), Copilot ($200/mo).
 
   // ═══════════════════════════════════════════
-  // 🔥 PLATFORM - PRO ($69/month, 14-day ONE-TIME trial)
+  // PLATFORM - FINOTAUR ($109/month, 14-day trial)
   // ═══════════════════════════════════════════
   platform_finotaur_monthly: {
     id: 'platform_finotaur_monthly',
@@ -424,9 +281,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     includesJournal: 'premium',
     features: [
       '14-day free trial',
-      'Everything in Core, plus:',
-      '🎁 Journal Premium INCLUDED ($40/mo value)',
-      '🎁 War Zone + Top Secret Reports INCLUDED',
+      'Full AI market platform',
+      '🎁 Journal Premium INCLUDED ($44.99/mo value)',
+      '🎁 Top Secret Reports INCLUDED',
       'Advanced screeners',
       'Custom reports & exports',
       'Unlimited price alerts',
@@ -457,9 +314,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     isPlatform: true,
     includesJournal: 'premium',
     features: [
-      'Everything in Core, plus:',
-      '🎁 Journal Premium INCLUDED ($40/mo value)',
-      '🎁 War Zone + Top Secret Reports INCLUDED',
+      'Full AI market platform',
+      '🎁 Journal Premium INCLUDED ($44.99/mo value)',
+      '🎁 Top Secret Reports INCLUDED',
       'AI-powered market insights',
       'Advanced screeners',
       'Custom reports & exports',
@@ -534,42 +391,36 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // ═══════════════════════════════════════════
-  // 🔥 v4.3.0: NEWSLETTER (WAR ZONE) - UPDATED!
-  // Monthly: $49/month with 7-day trial
-  // Yearly: $397/year (NO trial) - saves $191
-  // ═══════════════════════════════════════════
+  // LEGACY: WAR ZONE merged into TOP SECRET 2026-06 — kept for existing-subscriber resolution, not purchasable.
+  // These plan IDs (newsletter_monthly / newsletter_yearly) resolve for Whop webhooks and billing management.
+  // Do NOT show these in any purchase flow or pricing UI.
   newsletter_monthly: {
     id: 'newsletter_monthly',
     whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,  // plan_U6lF2eO5y9469
     whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,  // prod_qlaV5Uu6LZlYn
     name: 'newsletter',
-    displayName: 'War Zone Intelligence',
-    price: 69.99,  // 🔥 v4.4.0: $69.99/month (synced with DB)
+    displayName: 'Top Secret',  // Shown as Top Secret to existing WAR ZONE subscribers
+    price: 69.99,  // Legacy price — existing subscribers pay this until they migrate
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
-    trialDays: 7,
+    trialDays: 0,
     isNewsletter: true,
     discordIncluded: true,
-    badge: '🔥 7-Day Free Trial + 50% OFF',
+    badge: 'Legacy',
     category: 'journal',
-    hasIntroDiscount: true,
-    introDiscountMonths: 2,
-    introDiscountPercent: 50,
-    introPrice: 44.99,
     features: [
-      '🎁 14 days FREE trial',
-      '🔥 Then $44.99/month for 2 months (50% OFF)',
-      'Daily institutional-grade PDF report (8-14 pages)',
+      'Daily institutional-grade market report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
       'Technical outlook (24-72h)',
       'Earnings & corporate intel',
+      'Monthly ISM Manufacturing Report',
+      '2x Company Deep Dive Reports',
+      '2x Crypto Market Reports',
+      'PDF Downloads & Archive Access',
       'Private Discord community',
-      'Finotaur Trading Room access',
       'Real-time alerts',
-      'Chart pack blueprint',
     ],
   },
 
@@ -578,91 +429,98 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopPlanId: WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
     whopProductId: WHOP_PRODUCT_IDS.newsletter_yearly,  // prod_8b3VWkZdena4B
     name: 'newsletter',
-    displayName: 'War Zone Intelligence (Annual)',
-    price: 699,  // 🔥 v4.4.0: $699/year (synced with DB)
+    displayName: 'Top Secret',  // Shown as Top Secret to existing WAR ZONE subscribers
+    price: 699,  // Legacy price — existing subscribers pay this until they migrate
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 58.25,  // $699/12 = ~$58.25/month
+    monthlyEquivalent: 58.25,
     maxTrades: 0,
-    trialDays: 0,  // 🔥 NO trial for yearly!
+    trialDays: 0,
     isNewsletter: true,
     discordIncluded: true,
-    badge: '💰 Save $140.88/year',  // ($69.99*12) - $699 = $140.88 savings
+    badge: 'Legacy',
     category: 'journal',
     features: [
-      '💰 Save $140.88/year vs monthly',
-      'Daily institutional-grade PDF report (8-14 pages)',
+      'Daily institutional-grade market report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
       'Technical outlook (24-72h)',
       'Earnings & corporate intel',
+      'Monthly ISM Manufacturing Report',
+      '2x Company Deep Dive Reports',
+      '2x Crypto Market Reports',
+      'PDF Downloads & Archive Access',
       'Private Discord community',
-      'Finotaur Trading Room access',
       'Real-time alerts',
-      'Chart pack blueprint',
     ],
   },
 
   // ═══════════════════════════════════════════
-  // TOP SECRET - 14-day trial + 50% OFF first 2 months
+  // TOP SECRET — merged WAR ZONE + TOP SECRET product
+  // $50/mo (was $89.99) | $499/yr (was $899)
+  // Includes daily report (ex-WAR ZONE) + monthly deep-dives (ex-TOP SECRET)
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,
+    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_tUvQbCrEQ4197 — TODO(Whop): set to $50/mo
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
-    price: 89.99,
+    price: 50,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Trial + 50% OFF First 2 Months',
+    badge: '14-Day Free Trial',
     category: 'journal',
-    hasIntroDiscount: true,
-    introDiscountMonths: 2,
-    introDiscountPercent: 50,
-    introPrice: 45,
     features: [
       '🎁 14 days FREE trial',
-      '🔥 Then $45/month for 2 months (50% OFF)',
-      '💰 Regular price: $89.99/month after',
+      'Daily institutional-grade market report (8-14 pages)',
+      'Macro breakdown & market structure analysis',
+      'Unusual Options Activity (UOA) tracking',
+      'Technical outlook (24-72h)',
+      'Earnings & corporate intel',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
       'PDF Downloads & Archive Access',
-      'Discord Community Access',
-      'Email Delivery',
+      'Private Discord community',
+      'Real-time alerts',
     ],
   },
 
   top_secret_yearly: {
     id: 'top_secret_yearly',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,
+    whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,  // plan_PxxbBlSdkyeo7 — TODO(Whop): set to $499/yr
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
-    displayName: 'Top Secret (Annual)',
-    price: 899,
+    displayName: 'Top Secret',
+    price: 499,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 74.92,
+    monthlyEquivalent: 41.58,  // $499/12 ≈ $41.58/mo — save ~$99/yr vs monthly
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Trial + Save $180.88/year',
+    badge: '14-Day Trial + Save $101/year',
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
-      '💰 Save $180.88/year vs monthly',
+      '💰 Save $101/year vs monthly ($41.58/mo)',
+      'Daily institutional-grade market report (8-14 pages)',
+      'Macro breakdown & market structure analysis',
+      'Unusual Options Activity (UOA) tracking',
+      'Technical outlook (24-72h)',
+      'Earnings & corporate intel',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
       'PDF Downloads & Archive Access',
-      'Discord Community Access',
-      'Email Delivery',
+      'Private Discord community',
+      'Real-time alerts',
     ],
   },
 
@@ -676,8 +534,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 
 export function isJournalProduct(productId: string): boolean {
   return [
-    WHOP_PRODUCT_IDS.basic_monthly,
-    WHOP_PRODUCT_IDS.basic_yearly,
     WHOP_PRODUCT_IDS.premium_monthly,
     WHOP_PRODUCT_IDS.premium_yearly,
   ].includes(productId as any);
@@ -701,8 +557,10 @@ export function isPlatformPlan(planName: PlanName): boolean {
   return planName.startsWith('platform_');
 }
 
+// Core plan removed 2026-06 (zero subscribers). Kept returning false so existing call-sites don't break.
+// TODO: remove callers of isCorePlan() across the codebase (see pricing-overhaul chunk notes).
 export function isCorePlan(planName: PlanName): boolean {
-  return planName === 'platform_core';
+  return false;
 }
 
 export function isFinotaurPlan(planName: PlanName): boolean {
@@ -759,26 +617,25 @@ export function getIntroDiscountMonths(planId: PlanId): number {
   return PLANS[planId]?.introDiscountMonths ?? 0;
 }
 
+// Basic plan removed 2026-06 (zero subscribers). Kept returning false so existing call-sites don't break.
+// TODO: remove callers of isBasicPlan() across the codebase (see pricing-overhaul chunk notes).
 export function isBasicPlan(planName: PlanName): boolean {
-  return planName === 'basic';
+  return false;
 }
 
 export function isPremiumPlan(planName: PlanName): boolean {
   return planName === 'premium';
 }
 
-// 🔥 v4.3.0: Updated with correct newsletter yearly plan ID
 export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
   const yearlyPlanIds = [
-    WHOP_PLAN_IDS.basic_yearly,
     WHOP_PLAN_IDS.premium_yearly,
-    WHOP_PLAN_IDS.platform_core_yearly,
     WHOP_PLAN_IDS.platform_finotaur_yearly,
     WHOP_PLAN_IDS.platform_enterprise_yearly,
-    WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
+    WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A — legacy WAR ZONE
     WHOP_PLAN_IDS.top_secret_yearly,
   ];
-  
+
   return yearlyPlanIds.includes(planId as any) ? 'yearly' : 'monthly';
 }
 
@@ -878,16 +735,8 @@ export const AFFILIATE_CONFIG = {
 // FEATURE ACCESS BY PLAN
 // ============================================
 
+// Basic and platform_core removed 2026-06 (zero subscribers).
 export const PLAN_FEATURES = {
-  basic: {
-    maxTrades: 25,
-    autoSync: true,
-    aiInsights: false,
-    advancedAnalytics: true,
-    prioritySupport: false,
-    newsletter: false,
-    topSecret: false,
-  },
   premium: {
     maxTrades: Infinity,
     autoSync: true,
@@ -926,36 +775,7 @@ export const PLAN_FEATURES = {
     journalMaxPortfolios: 1,
     journalBacktest: false,
   },
-  platform_core: {
-    dashboardAccess: true,
-    marketData: true,
-    advancedCharts: true,
-    customWatchlists: true,
-    priceAlerts: 50,
-    aiInsights: false,
-    advancedScreeners: false,
-    apiAccess: false,
-    prioritySupport: true,
-    customReports: false,
-    // Page access
-    stockAnalyzer: true,
-    sectorAnalyzer: true,
-    flowScanner: true,
-    optionsIntelligence: false,
-    aiAssistant: true,
-    macroAnalyzer: false,
-    myPortfolio: false,
-    aiScanner: false,
-    stockAnalysisPerDay: 5,
-    sectorAnalysisPerMonth: 3,
-    // Journal access for Core tier
-    journalAccess: true,
-    journalMaxTrades: 25,
-    journalTradesLifetime: false,
-    journalMaxPortfolios: 1,
-    journalBacktest: false,
-  },
-platform_finotaur: {
+  platform_finotaur: {
     dashboardAccess: true,
     marketData: true,
     advancedCharts: true,
@@ -1045,6 +865,7 @@ platform_finotaur: {
 // PLATFORM LIMITS
 // ============================================
 
+// platform_core removed 2026-06 (zero subscribers).
 export const PLATFORM_LIMITS = {
   platform_free: {
     apiCallsPerDay: 0,
@@ -1054,15 +875,6 @@ export const PLATFORM_LIMITS = {
     exportsPerMonth: 0,
     stockAnalysisPerDay: 3,
     sectorAnalysisPerMonth: 0,
-  },
-  platform_core: {
-    apiCallsPerDay: 0,
-    watchlistItems: 100,
-    savedScreeners: 10,
-    alertsActive: 50,
-    exportsPerMonth: 10,
-    stockAnalysisPerDay: 5,
-    sectorAnalysisPerMonth: 3,
   },
   platform_finotaur: {
     apiCallsPerDay: 5000,

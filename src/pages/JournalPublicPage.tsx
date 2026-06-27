@@ -364,7 +364,7 @@ const plans = [
   {
     id: "premium", name: "Premium", monthlyPrice: "$44.99", yearlyPrice: "$409", yearlyMonthlyEquivalent: "$34.08",
     description: "Unlimited trades + your AI trading coach",
-    features: ["Everything in Basic, plus:", "Unlimited trades — never hit a cap", "Connect multiple brokers", "Your FINOTAUR Score — one number that grades your real edge", "Daily AI briefing — ranked insights on what to fix first", "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically", "Leak Finder — AI names the exact mistake costing you money", "Behavioral & risk alerts before you tilt", "Custom AI reports & backtesting", "Priority support", "Early access to new features"],
+    features: ["Everything in Free, plus:", "Unlimited trades — never hit a cap", "Connect multiple brokers", "Your FINOTAUR Score — one number that grades your real edge", "Daily AI briefing — ranked insights on what to fix first", "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically", "Leak Finder — AI names the exact mistake costing you money", "Behavioral & risk alerts before you tilt", "Custom AI reports & backtesting", "Priority support", "Early access to new features"],
     cta: "Get Premium", featured: true, savings: "Yearly — save ~3 months",
   },
 ];

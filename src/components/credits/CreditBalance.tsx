@@ -205,7 +205,7 @@ export function CreditBalance() {
               className="w-full justify-between border-[#C9A646]/40 text-[#C9A646] hover:bg-[#C9A646]/10"
               onClick={() => {
                 setOpen(false);
-                navigate('/app/all-markets/pricing');
+                navigate('/app/upgrade');
               }}
             >
               <span className="flex items-center gap-2">
@@ -222,7 +222,7 @@ export function CreditBalance() {
               className="w-full bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black font-semibold hover:opacity-90"
               onClick={() => {
                 setOpen(false);
-                navigate('/app/all-markets/pricing');
+                navigate('/app/upgrade');
               }}
             >
               {plan === 'free' ? 'Upgrade to Core' : 'Upgrade to Pro'}

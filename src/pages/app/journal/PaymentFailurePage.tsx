@@ -67,7 +67,7 @@ const PaymentFailurePage: React.FC = () => {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4">
             <button
-              onClick={() => navigate('/app/journal/pricing')}
+              onClick={() => navigate('/app/upgrade')}
               className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold py-3 px-6 rounded-lg transition-all duration-200"
             >
               Try Again

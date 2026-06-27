@@ -1,17 +1,15 @@
 // =====================================================
-// FINOTAUR PLANS CONFIGURATION - v2.0.0
+// FINOTAUR PLANS CONFIGURATION - v3.0.0
 // =====================================================
 // Place in: src/constants/plans.ts or src/config/plans.ts
-// 
-// 🔥 v2.0.0 CHANGES:
-// - REMOVED 'free' tier completely
-// - Renamed 'pro' → 'basic', 'elite' → 'premium'
-// - Added trialDays support (14 days for Basic, 0 for Premium)
-// - Updated pricing to match new structure
+//
+// 🔥 v3.0.0 CHANGES (2026-06):
+// - REMOVED 'basic' tier (zero active subscribers — confirmed)
+// - Journal tiers are now: Free (15 lifetime trades, no plan object) and Premium ($44.99/mo)
 // =====================================================
 
 export interface Plan {
-  id: 'basic' | 'premium';
+  id: 'premium';
   name: string;
   price: number;
   yearlyPrice?: number;
@@ -31,35 +29,11 @@ export interface Addon {
 }
 
 // ============================================
-// PLANS - Only Basic & Premium (NO FREE)
+// PLANS - Premium only (Basic removed 2026-06)
+// Free tier (15 lifetime trades) exists in DB but has no purchasable plan object.
 // ============================================
 
 export const PLANS: Plan[] = [
-  {
-    id: 'basic',
-    name: 'Basic',
-    price: 24.99,
-    yearlyPrice: 229,
-    yearlyMonthlyEquivalent: 19.08,
-    description: 'Every tool serious traders need',
-    trialDays: 14, // 🔥 14-day free trial
-    maxTrades: 25,
-    features: [
-      '14-day free trial',
-      'Automatic broker sync — leading brokers supported',
-      '25 trades / month',
-      '1 broker connection',
-      'Full FINOTAUR Academy (300+ lessons)',
-      'Full performance analytics & equity curve',
-      'Strategy builder & playbooks',
-      'Trading sessions & tagging',
-      'Advanced statistics & metrics',
-      'Risk/Reward calculator',
-      'Trade screenshots & notes',
-      'Email support',
-    ],
-    badge: '14-Day Free Trial',
-  },
   {
     id: 'premium',
     name: 'Premium',
@@ -67,10 +41,10 @@ export const PLANS: Plan[] = [
     yearlyPrice: 409,
     yearlyMonthlyEquivalent: 34.08,
     description: 'Unlimited trades + your AI trading coach',
-    trialDays: 0, // 🔥 NO trial - payment from day 0
+    trialDays: 0, // No trial - payment from day 0
     maxTrades: 'unlimited',
     features: [
-      'Everything in Basic, plus:',
+      'Broker sync — leading brokers supported',
       'Unlimited trades — never hit a cap',
       'Connect multiple brokers',
       'Your FINOTAUR Score — one number that grades your real edge',
@@ -110,12 +84,7 @@ export function getPlanById(id: string): Plan | undefined {
   return PLANS.find(plan => plan.id === id);
 }
 
-/**
- * Get the Basic plan
- */
-export function getBasicPlan(): Plan {
-  return PLANS.find(plan => plan.id === 'basic')!;
-}
+// getBasicPlan() removed 2026-06 — Basic tier no longer exists.
 
 /**
  * Get the Premium plan
@@ -151,22 +120,17 @@ export function getYearlySavings(planId: string): number {
 
 // ============================================
 // PLAN IDs TYPE (for type safety)
+// Basic removed 2026-06 (zero subscribers).
 // ============================================
 
-export type PlanId = 'basic' | 'premium';
+export type PlanId = 'premium';
 
 // ============================================
 // PRICING CONSTANTS
+// Basic removed 2026-06 (zero subscribers).
 // ============================================
 
 export const PRICING = {
-  basic: {
-    monthly: 24.99,
-    yearly: 229,
-    yearlyMonthly: 19.08,
-    trialDays: 14,
-    maxTrades: 25,
-  },
   premium: {
     monthly: 44.99,
     yearly: 409,

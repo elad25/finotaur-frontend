@@ -296,12 +296,9 @@ function SectorAnalyzerContent() {
   );
 
   const handleSelectSector = useCallback(async (sector: Sector) => {
-    if (plan === 'platform_core') {
-      const allowed = await recordSectorAnalysis();
-      if (!allowed) return;
-    }
+    // Core tier removed 2026-06 — Finotaur+ gets unlimited sector analysis (no monthly cap)
     setSelectedSector(sector);
-  }, [plan, recordSectorAnalysis]);
+  }, []);
 
   const handleBack = useCallback(() => {
     setSelectedSector(null);
@@ -631,7 +628,7 @@ export default function SectorAnalyzer() {
         upgradePrice={access.upgradePrice}
         currentUsage={access.currentUsage}
         limit={access.limit}
-        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
+        currentPlan={plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

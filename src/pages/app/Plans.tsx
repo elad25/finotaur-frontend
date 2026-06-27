@@ -355,7 +355,7 @@ export default function PlansPage() {
               <Button
                 variant="gold"
                 size="full"
-                onClick={() => navigate("/app/journal/pricing")}
+                onClick={() => navigate("/app/upgrade")}
               >
                 View Journal pricing
               </Button>
@@ -445,7 +445,7 @@ export default function PlansPage() {
               <Button
                 variant="gold"
                 size="full"
-                onClick={() => navigate("/app/all-markets/pricing")}
+                onClick={() => navigate("/app/upgrade")}
               >
                 View Platform pricing
               </Button>

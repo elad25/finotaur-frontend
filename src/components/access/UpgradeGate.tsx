@@ -20,12 +20,13 @@ interface UpgradeGateProps {
   feature: string;
   reason?: 'plan_too_low' | 'daily_limit' | 'monthly_limit';
   message?: string;
-  upgradeTarget?: 'core' | 'finotaur' | 'enterprise';
+  // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
+  upgradeTarget?: 'finotaur' | 'enterprise';
   upgradeDisplayName?: string;
   upgradePrice?: string;
   currentUsage?: number;
   limit?: number;
-  currentPlan?: 'free' | 'core' | 'finotaur' | 'enterprise';
+  currentPlan?: 'free' | 'finotaur' | 'enterprise';
 }
 
 // ============================================
@@ -33,7 +34,8 @@ interface UpgradeGateProps {
 // ============================================
 
 interface PlanTier {
-  key: 'core' | 'finotaur' | 'enterprise';
+  // 'core' removed 2026-06 (Core tier eliminated)
+  key: 'finotaur' | 'enterprise';
   name: string;
   price: string;
   description: string;
@@ -44,29 +46,8 @@ interface PlanTier {
   features: string[];
 }
 
+// Core tier removed 2026-06 (zero subscribers) — only Finotaur and Enterprise remain
 const PLAN_TIERS: PlanTier[] = [
-  {
-    key: 'core',
-    name: 'Core',
-    price: '$59',
-    description: 'Full market intelligence',
-    icon: Zap,
-    accentFrom: '#3B82F6',
-    accentTo: '#60A5FA',
-    glow: 'rgba(59,130,246,0.25)',
-    features: [
-      'Stock Analyzer (5/day)',
-      'Sector Analyzer (3/month)',
-      'Flow Scanner',
-      'AI Assistant',
-      'Real-time market data',
-      'Advanced charts & indicators',
-      'Unlimited watchlists',
-      '50 price alerts',
-      '🎁 Journal Basic INCLUDED',
-      '25 trades/month + 1 portfolio',
-    ],
-  },
   {
     key: 'finotaur',
     name: 'Finotaur',
@@ -77,16 +58,15 @@ const PLAN_TIERS: PlanTier[] = [
     accentTo: '#F4D97B',
     glow: 'rgba(201,166,70,0.3)',
     features: [
-      'Everything in Core, plus:',
-      'Stock Analyzer (7/day)',
+      'Stock Analyzer (unlimited)',
       'Sector Analyzer (unlimited)',
       'Options Intelligence AI',
       'Macro Analyzer',
-      'AI Scanner',
+      'AI Scanner + Insider/13F',
       '🎁 Journal Premium INCLUDED',
       'Unlimited trades + Backtesting',
       'Up to 40 portfolios',
-      '🎁 War Zone + Top Secret Reports',
+      '🎁 TOP SECRET Reports',
       'Priority 24h support',
     ],
   },
@@ -134,7 +114,6 @@ export function UpgradeGate({
   const requiredTier = PLAN_TIERS.find(t => t.key === upgradeTarget) || PLAN_TIERS[1];
 
   const {
-    checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
     isLoading: checkoutLoading,
@@ -142,14 +121,13 @@ export function UpgradeGate({
     onError: (error) => toast.error('Checkout failed', { description: error.message }),
   });
 
-  const handleCheckout = (planKey: 'core' | 'finotaur' | 'enterprise') => {
+  // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
+  const handleCheckout = (planKey: 'finotaur' | 'enterprise') => {
     if (!user) {
-      navigate('/app/all-markets/pricing');
+      navigate('/app/upgrade');
       return;
     }
-    if (planKey === 'core') {
-      billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
-    } else if (planKey === 'finotaur') {
+    if (planKey === 'finotaur') {
       billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
     } else if (planKey === 'enterprise') {
       billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
@@ -251,7 +229,7 @@ export function UpgradeGate({
         </div>
 
         {/* ── Plan Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
 
           {/* ─── FREE CARD ─── */}
           <motion.div
@@ -324,90 +302,10 @@ export function UpgradeGate({
             </div>
           </motion.div>
 
-          {/* ─── CORE CARD ─── */}
+          {/* ─── FINOTAUR CARD (RECOMMENDED) ─── */}
+          {/* Core tier removed 2026-06 (zero subscribers) — PLAN_TIERS[0] is now finotaur */}
           {(() => {
             const tier = PLAN_TIERS[0];
-            const TierIcon = tier.icon;
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="relative rounded-2xl flex flex-col mt-4"
-                style={{
-                  background: currentPlan === 'core'
-                    ? 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(255,255,255,0.04) 50%, rgba(0,0,0,0.1) 100%)'
-                    : 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
-                  backdropFilter: 'blur(20px)',
-                  border: currentPlan === 'core'
-                    ? '2px solid rgba(201,166,70,0.5)'
-                    : '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: currentPlan === 'core'
-                    ? '0 4px 20px rgba(201,166,70,0.15), inset 0 1px 0 rgba(255,255,255,0.05)'
-                    : '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
-                }}
-              >
-                {/* Badge */}
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <div
-                    className="px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
-                    style={{
-                      background: currentPlan === 'core'
-                        ? 'linear-gradient(135deg, #C9A646, #F4D97B, #C9A646)'
-                        : 'linear-gradient(135deg, #3B82F6, #60A5FA)',
-                      color: currentPlan === 'core' ? '#000' : '#fff',
-                      boxShadow: currentPlan === 'core'
-                        ? '0 4px 12px rgba(201,166,70,0.4)'
-                        : '0 4px 12px rgba(59,130,246,0.3)',
-                    }}
-                  >
-                    {currentPlan === 'core' ? 'Your Plan' : <><Zap className="w-3 h-3" /> 14-Day Free Trial</>}
-                  </div>
-                </div>
-
-                {/* Gradient Overlay */}
-                <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl"
-                     style={{ background: 'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.08), transparent 60%)' }} />
-                {/* Subtle Shine Effect */}
-                <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
-                     style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)' }} />
-
-                <div className="p-6 pt-7 flex flex-col flex-1 relative">
-                  <div className="text-center mb-4">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <TierIcon className="w-4 h-4" style={{ color: tier.accentFrom }} />
-                      <span className="text-lg font-bold text-white">{tier.name}</span>
-                    </div>
-                    <div className="flex items-baseline justify-center gap-1 mb-1">
-                      <span className="text-4xl font-bold text-white">{billingInterval === 'monthly' ? tier.price : tier.key === 'core' ? '$49' : '$91'}</span>
-                      <span className="text-sm text-[#6B6B6B]">/month</span>
-                    </div>
-                    {billingInterval === 'yearly' && (
-                      <span className="text-xs text-green-400">Billed {tier.key === 'core' ? '$599' : '$1,090'}/yr</span>
-                    )}
-                    <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
-                  </div>
-
-                  <ul className="space-y-2.5 flex-1">
-                    {tier.features.map((feat, fi) => (
-                      <li key={fi} className="flex items-start gap-2.5">
-                        <div className="w-4 h-4 rounded-full bg-[#C9A646]/20 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
-                          <Check className="h-2.5 w-2.5" style={{ color: tier.accentFrom }} />
-                        </div>
-                        <span className="text-sm text-[#A0A0A0] leading-tight">{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  
-                </div>
-              </motion.div>
-            );
-          })()}
-
-          {/* ─── FINOTAUR CARD (RECOMMENDED) ─── */}
-          {(() => {
-            const tier = PLAN_TIERS[1];
             const TierIcon = tier.icon;
             return (
               <motion.div
@@ -578,7 +476,7 @@ export function UpgradeGate({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/app/all-markets/pricing')}
+            onClick={() => navigate('/app/upgrade')}
             className="px-8 py-3 rounded-xl font-semibold text-sm text-black flex items-center justify-center gap-2 mx-auto transition-all duration-300"
             style={{
               background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
