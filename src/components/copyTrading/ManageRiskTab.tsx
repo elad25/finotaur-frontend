@@ -41,6 +41,38 @@ interface PortfolioRiskPatch {
   max_position_size:        number | null;
 }
 
+// ── Initial values shape for RiskCard ──────────────────────────────────────
+
+interface RiskCardInitial {
+  lossPerTrade:    string;
+  lossPerDay:      string;
+  lossPerWeek:     string;
+  profitPerTrade:  string;
+  profitPerDay:    string;
+  profitPerWeek:   string;
+  riskEnabled:     boolean;
+  killSwitch:      boolean;
+  breachAction:    'pause_copies' | 'stop_copies' | 'close_lock';
+  maxContracts:    string;
+  maxPositionSize: string;
+}
+
+// ── Global defaults for the "All Accounts" broadcast card ──────────────────
+
+const GLOBAL_DEFAULTS: RiskCardInitial = {
+  lossPerTrade:    '',
+  lossPerDay:      '',
+  lossPerWeek:     '',
+  profitPerTrade:  '',
+  profitPerDay:    '',
+  profitPerWeek:   '',
+  riskEnabled:     true,
+  killSwitch:      false,
+  breachAction:    'pause_copies',
+  maxContracts:    '',
+  maxPositionSize: '',
+};
+
 // ── Mutation ────────────────────────────────────────────────────────────────
 
 function usePortfolioRisk() {
@@ -66,7 +98,7 @@ function usePortfolioRisk() {
   };
 }
 
-// ── ManageRiskTab (container — unchanged) ──────────────────────────────────
+// ── ManageRiskTab (container) ───────────────────────────────────────────────
 
 export const ManageRiskTab = memo(function ManageRiskTab() {
   const { portfolios, isLoading } = usePortfolios();
@@ -98,11 +130,42 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
     );
   }
 
+  // Broadcast handler: applies the same patch to every Tradovate account.
+  const handleBroadcast = async (patch: PortfolioRiskPatch) => {
+    await Promise.all(
+      tradovatePortfolios.map((p) => updatePortfolioRisk({ id: p.id, patch })),
+    );
+  };
+
+  const accountCount = tradovatePortfolios.length;
+
   return (
     <div className="space-y-ds-3">
+      {/* ── Global "All Accounts" card ──────────────────────────── */}
+      <RiskCard
+        mode="global"
+        initial={GLOBAL_DEFAULTS}
+        headerTitle="All Accounts"
+        headerBadge={null}
+        headerSubtitle="Apply settings to every connected account"
+        onSave={handleBroadcast}
+        isSaving={isUpdating}
+        saveLabel="Apply to all accounts"
+        successMessage={`Applied to ${accountCount} account${accountCount === 1 ? '' : 's'}`}
+      />
+
+      {/* ── Per-account section divider ─────────────────────────── */}
+      <div className="flex items-center gap-ds-3 pt-ds-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary whitespace-nowrap">
+          Per-account overrides
+        </span>
+        <div className="flex-1 border-t border-[rgba(255,255,255,0.06)]" />
+      </div>
+
+      {/* ── Per-account cards ────────────────────────────────────── */}
       {tradovatePortfolios.map((p) => (
         <PortfolioRiskCard
-          key={p.id}
+          key={`${p.id}:${p.max_loss_per_trade_usd}:${p.max_daily_loss_usd}:${p.max_weekly_loss_usd}:${p.trade_profit_target_usd}:${p.daily_profit_target_usd}:${p.weekly_profit_target_usd}:${p.risk_management_enabled}:${p.kill_switch_active}:${p.risk_breach_action}:${p.max_contracts_per_trade}:${p.max_position_size}`}
           portfolio={p}
           onSave={(patch) => updatePortfolioRisk({ id: p.id, patch })}
           isSaving={isUpdating}
@@ -112,7 +175,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   );
 });
 
-// ── PortfolioRiskCard ───────────────────────────────────────────────────────
+// ── PortfolioRiskCard (thin wrapper around RiskCard) ────────────────────────
 
 interface PortfolioRiskCardProps {
   portfolio: Portfolio;
@@ -125,44 +188,78 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
   onSave,
   isSaving,
 }: PortfolioRiskCardProps) {
+  const initial: RiskCardInitial = {
+    lossPerTrade:    portfolio.max_loss_per_trade_usd?.toString() ?? '',
+    lossPerDay:      portfolio.max_daily_loss_usd?.toString() ?? '',
+    lossPerWeek:     portfolio.max_weekly_loss_usd?.toString() ?? '',
+    profitPerTrade:  portfolio.trade_profit_target_usd?.toString() ?? '',
+    profitPerDay:    portfolio.daily_profit_target_usd?.toString() ?? '',
+    profitPerWeek:   portfolio.weekly_profit_target_usd?.toString() ?? '',
+    riskEnabled:     portfolio.risk_management_enabled ?? true,
+    killSwitch:      portfolio.kill_switch_active ?? false,
+    breachAction:    (portfolio.risk_breach_action as 'pause_copies' | 'stop_copies' | 'close_lock') ?? 'pause_copies',
+    maxContracts:    portfolio.max_contracts_per_trade?.toString() ?? '',
+    maxPositionSize: portfolio.max_position_size?.toString() ?? '',
+  };
+
+  return (
+    <RiskCard
+      mode="account"
+      initial={initial}
+      headerTitle={portfolio.tradovate_account_spec ?? portfolio.name ?? portfolio.id.slice(0, 8)}
+      headerBadge={portfolio.environment ?? 'unknown'}
+      headerSubtitle="Risk management"
+      onSave={onSave}
+      isSaving={isSaving}
+      saveLabel="Save changes"
+      successMessage="Risk limits saved"
+    />
+  );
+});
+
+// ── RiskCard (shared card — renders both per-account and global modes) ───────
+
+interface RiskCardProps {
+  mode: 'account' | 'global';
+  initial: RiskCardInitial;
+  headerTitle: string;
+  headerBadge: string | null;
+  headerSubtitle: string;
+  onSave: (patch: PortfolioRiskPatch) => Promise<unknown>;
+  isSaving: boolean;
+  saveLabel: string;
+  successMessage: string;
+}
+
+const RiskCard = memo(function RiskCard({
+  mode,
+  initial,
+  headerTitle,
+  headerBadge,
+  headerSubtitle,
+  onSave,
+  isSaving,
+  saveLabel,
+  successMessage,
+}: RiskCardProps) {
   // ── Loss limits ──────────────────────────────────────────────
-  const [lossPerTrade, setLossPerTrade] = useState<string>(
-    portfolio.max_loss_per_trade_usd?.toString() ?? '',
-  );
-  const [lossPerDay, setLossPerDay] = useState<string>(
-    portfolio.max_daily_loss_usd?.toString() ?? '',
-  );
-  const [lossPerWeek, setLossPerWeek] = useState<string>(
-    portfolio.max_weekly_loss_usd?.toString() ?? '',
-  );
+  const [lossPerTrade, setLossPerTrade] = useState<string>(initial.lossPerTrade);
+  const [lossPerDay,   setLossPerDay]   = useState<string>(initial.lossPerDay);
+  const [lossPerWeek,  setLossPerWeek]  = useState<string>(initial.lossPerWeek);
   // ── Profit targets ───────────────────────────────────────────
-  const [profitPerTrade, setProfitPerTrade] = useState<string>(
-    portfolio.trade_profit_target_usd?.toString() ?? '',
-  );
-  const [profitPerDay, setProfitPerDay] = useState<string>(
-    portfolio.daily_profit_target_usd?.toString() ?? '',
-  );
-  const [profitPerWeek, setProfitPerWeek] = useState<string>(
-    portfolio.weekly_profit_target_usd?.toString() ?? '',
-  );
+  const [profitPerTrade, setProfitPerTrade] = useState<string>(initial.profitPerTrade);
+  const [profitPerDay,   setProfitPerDay]   = useState<string>(initial.profitPerDay);
+  const [profitPerWeek,  setProfitPerWeek]  = useState<string>(initial.profitPerWeek);
   // ── Control ──────────────────────────────────────────────────
-  const [riskEnabled, setRiskEnabled] = useState<boolean>(
-    portfolio.risk_management_enabled ?? true,
-  );
-  const [killSwitch, setKillSwitch] = useState<boolean>(
-    portfolio.kill_switch_active ?? false,
-  );
+  const [riskEnabled, setRiskEnabled] = useState<boolean>(initial.riskEnabled);
+  const [killSwitch,  setKillSwitch]  = useState<boolean>(initial.killSwitch);
   const [breachAction, setBreachAction] = useState<'pause_copies' | 'stop_copies' | 'close_lock'>(
-    (portfolio.risk_breach_action as 'pause_copies' | 'stop_copies' | 'close_lock') ?? 'pause_copies',
+    initial.breachAction,
   );
   // ── Advanced ─────────────────────────────────────────────────
-  const [maxContracts, setMaxContracts] = useState<string>(
-    portfolio.max_contracts_per_trade?.toString() ?? '',
-  );
-  const [maxPositionSize, setMaxPositionSize] = useState<string>(
-    portfolio.max_position_size?.toString() ?? '',
-  );
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [maxContracts,    setMaxContracts]    = useState<string>(initial.maxContracts);
+  const [maxPositionSize, setMaxPositionSize] = useState<string>(initial.maxPositionSize);
+  const [advancedOpen,    setAdvancedOpen]    = useState(false);
 
   // ── Helpers ──────────────────────────────────────────────────
   const parseNum = (s: string): number | null => {
@@ -173,19 +270,19 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
     return n;
   };
 
-  // ── Dirty detection ──────────────────────────────────────────
+  // ── Dirty detection (compare against initial prop values) ────
   const dirty =
-    lossPerTrade !== (portfolio.max_loss_per_trade_usd?.toString() ?? '') ||
-    lossPerDay   !== (portfolio.max_daily_loss_usd?.toString() ?? '')     ||
-    lossPerWeek  !== (portfolio.max_weekly_loss_usd?.toString() ?? '')    ||
-    profitPerTrade !== (portfolio.trade_profit_target_usd?.toString() ?? '')  ||
-    profitPerDay   !== (portfolio.daily_profit_target_usd?.toString() ?? '')  ||
-    profitPerWeek  !== (portfolio.weekly_profit_target_usd?.toString() ?? '') ||
-    riskEnabled  !== (portfolio.risk_management_enabled ?? true)          ||
-    killSwitch   !== (portfolio.kill_switch_active ?? false)              ||
-    breachAction !== ((portfolio.risk_breach_action as typeof breachAction) ?? 'pause_copies') ||
-    maxContracts !== (portfolio.max_contracts_per_trade?.toString() ?? '') ||
-    maxPositionSize !== (portfolio.max_position_size?.toString() ?? '');
+    lossPerTrade    !== initial.lossPerTrade    ||
+    lossPerDay      !== initial.lossPerDay      ||
+    lossPerWeek     !== initial.lossPerWeek     ||
+    profitPerTrade  !== initial.profitPerTrade  ||
+    profitPerDay    !== initial.profitPerDay    ||
+    profitPerWeek   !== initial.profitPerWeek   ||
+    riskEnabled     !== initial.riskEnabled     ||
+    killSwitch      !== initial.killSwitch      ||
+    breachAction    !== initial.breachAction    ||
+    maxContracts    !== initial.maxContracts    ||
+    maxPositionSize !== initial.maxPositionSize;
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -204,16 +301,14 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
     };
     try {
       await onSave(patch);
-      toast.success('Risk limits saved');
+      toast.success(successMessage);
     } catch (err) {
       toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  const accountTitle =
-    portfolio.tradovate_account_spec ?? portfolio.name ?? portfolio.id.slice(0, 8);
-  const envLabel = portfolio.environment ?? 'unknown';
-  const isLive   = envLabel === 'live';
+  // Header badge for global mode: gold "ALL" pill
+  const isLive = headerBadge === 'live';
 
   return (
     <div className="overflow-hidden rounded-[14px] border border-[rgba(201,166,70,0.22)] bg-[#0b0b0b] shadow-[0_0_24px_rgba(201,166,70,0.06)]">
@@ -234,19 +329,26 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-sm font-semibold text-ink-primary">
-                {accountTitle}
+                {headerTitle}
               </span>
-              <span
-                className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
-                  isLive
-                    ? 'border-status-success/30 bg-status-success/10 text-status-success'
-                    : 'border-border-ds-default bg-surface-base text-ink-tertiary'
-                }`}
-              >
-                {envLabel}
-              </span>
+              {/* Badge: env label for account mode, gold "ALL" pill for global mode */}
+              {mode === 'global' ? (
+                <span className="rounded-sm border border-gold-primary/40 bg-gold-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gold-primary">
+                  ALL
+                </span>
+              ) : headerBadge != null ? (
+                <span
+                  className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                    isLive
+                      ? 'border-status-success/30 bg-status-success/10 text-status-success'
+                      : 'border-border-ds-default bg-surface-base text-ink-tertiary'
+                  }`}
+                >
+                  {headerBadge}
+                </span>
+              ) : null}
             </div>
-            <div className="text-[11px] text-ink-tertiary">Risk management</div>
+            <div className="text-[11px] text-ink-tertiary">{headerSubtitle}</div>
           </div>
         </div>
 
@@ -387,7 +489,7 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-gold-primary px-ds-3 text-xs font-semibold text-ink-on-gold shadow-[0_0_14px_rgba(201,166,70,0.20)] transition-colors duration-base hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Save className="h-3.5 w-3.5" />
-          {isSaving ? 'Saving...' : 'Save changes'}
+          {isSaving ? 'Saving...' : saveLabel}
         </button>
       </div>
 
