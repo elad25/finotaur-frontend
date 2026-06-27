@@ -13,7 +13,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Hash, Users, Megaphone, Trophy, BarChart2, Newspaper, ClipboardCheck, BookOpen } from 'lucide-react';
+import { ArrowLeft, Hash, Users, Megaphone, Newspaper } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import {
@@ -28,26 +28,18 @@ import { ChannelList } from '@/features/mentor/components/ChannelList';
 import { MessageList } from '@/features/mentor/components/MessageList';
 import { MemberList } from '@/features/mentor/components/MemberList';
 import { InviteDialog } from '@/features/mentor/components/InviteDialog';
-import { RoomLeaderboard } from '@/features/mentor/components/RoomLeaderboard';
-import { RoomAnalytics } from '@/features/mentor/components/RoomAnalytics';
 import { RoomFeed } from '@/features/mentor/components/RoomFeed';
-import { RoomReviews } from '@/features/mentor/components/RoomReviews';
-import { RoomCourses } from '@/features/mentor/components/RoomCourses';
 import { toast } from '@/hooks/use-toast';
 import type { SpaceChannel, SpaceMember } from '@/features/mentor/types/mentorship';
 import { cn } from '@/lib/utils';
 
 // ── Top-level room tabs ───────────────────────────────────────────────────────
 
-type RoomTab = 'community' | 'feed' | 'leaderboard' | 'analytics' | 'reviews' | 'courses';
+type RoomTab = 'community' | 'feed';
 
 const ROOM_TABS: { id: RoomTab; label: string; icon: React.ElementType }[] = [
   { id: 'community', label: 'Community', icon: Hash },
   { id: 'feed', label: 'Feed', icon: Newspaper },
-  { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
-  { id: 'analytics', label: 'Analytics', icon: BarChart2 },
-  { id: 'reviews', label: 'Reviews', icon: ClipboardCheck },
-  { id: 'courses', label: 'Courses', icon: BookOpen },
 ];
 
 // ── Mobile tabs (inside Community tab) ───────────────────────────────────────
@@ -280,38 +272,10 @@ export default function SpaceDetail() {
         ))}
       </nav>
 
-      {/* ── Leaderboard tab ── */}
-      {activeRoomTab === 'leaderboard' && (
-        <div className="flex-1 overflow-y-auto">
-          <RoomLeaderboard spaceId={id!} />
-        </div>
-      )}
-
-      {/* ── Analytics tab ── */}
-      {activeRoomTab === 'analytics' && (
-        <div className="flex-1 overflow-y-auto">
-          <RoomAnalytics spaceId={id!} />
-        </div>
-      )}
-
       {/* ── Feed tab ── */}
       {activeRoomTab === 'feed' && (
         <div className="flex-1 overflow-y-auto">
           <RoomFeed spaceId={id!} isManager={isManager} />
-        </div>
-      )}
-
-      {/* ── Reviews tab ── */}
-      {activeRoomTab === 'reviews' && (
-        <div className="flex-1 overflow-y-auto">
-          <RoomReviews spaceId={id!} isManager={isManager} />
-        </div>
-      )}
-
-      {/* ── Courses tab ── */}
-      {activeRoomTab === 'courses' && (
-        <div className="flex-1 overflow-y-auto">
-          <RoomCourses spaceId={id!} isManager={isManager} />
         </div>
       )}
 
