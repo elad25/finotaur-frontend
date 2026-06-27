@@ -102,6 +102,24 @@ function AgentWindowIllustration() {
   );
 }
 
+// A Windows-menu illustration showing where "Finotaur Agent…" sits — at the
+// bottom of NinjaTrader's Control Center "Tools" menu.
+function ToolsMenuIllustration() {
+  const items = ['Trading Hours', 'Import', 'Export', 'Global Simulation Mode', 'Client Dashboard', 'Settings'];
+  return (
+    <div className="mt-3 inline-block rounded-md overflow-hidden border align-top" style={{ borderColor: '#d9d9d6', background: '#ffffff', minWidth: 240 }}>
+      <div className="px-3 py-1.5 text-[11px] font-semibold" style={{ color: '#7a7a76', background: '#f3f3f1', borderBottom: '1px solid #e6e6e2' }}>Tools</div>
+      {items.map((it) => (
+        <div key={it} className="px-3 py-1.5 text-[13px]" style={{ color: '#2a2a28' }}>{it}</div>
+      ))}
+      <div className="my-1" style={{ borderTop: '1px solid #e6e6e2' }} />
+      <div className="flex items-center gap-2 px-3 py-2 text-[13px] font-semibold" style={{ background: '#C9A646', color: '#0a0a0b' }}>
+        Finotaur Agent…
+      </div>
+    </div>
+  );
+}
+
 export default function InstallAgentTab() {
   return (
     <div className="space-y-6">
@@ -154,6 +172,11 @@ export default function InstallAgentTab() {
             Trade Copier
           </Link>{' '}
           tab, pick your leader and follower accounts, and save.
+          <div className="mt-1 text-zinc-500 text-xs">
+            In NinjaTrader, “Finotaur Agent…” is at the bottom of the Control Center{' '}
+            <span className="text-zinc-300 font-medium">Tools</span> menu:
+          </div>
+          <ToolsMenuIllustration />
           <AgentWindowIllustration />
         </Step>
       </div>
