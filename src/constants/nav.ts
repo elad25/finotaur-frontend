@@ -194,7 +194,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
       { label: 'The Floor',   path: '/app/floor/feed', beta: true },
-      { label: 'Mentor',      path: '/app/mentor/mode', beta: true },
+      { label: 'Mentor',      path: '/app/mentor/rooms', beta: true },
     ],
     sidebar: [
       { label: 'Dashboard',     path: '/app/journal/overview',    icon: LayoutDashboard },

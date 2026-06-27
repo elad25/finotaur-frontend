@@ -163,7 +163,7 @@ export const SubNav = () => {
       return location.pathname.startsWith('/app/floor');
     }
     // Mentor tab — active across all /app/mentor/* sub-pages
-    if (itemPath === '/app/mentor/mode') {
+    if (itemPath === '/app/mentor/rooms') {
       return location.pathname.startsWith('/app/mentor');
     }
 
