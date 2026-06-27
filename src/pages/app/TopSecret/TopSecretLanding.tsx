@@ -74,25 +74,25 @@ const FINOTAUR_PRICES = {
   savings: 90.98, // vs buying separately monthly ($199.98 - $109)
 };
 
-// Top Secret Only Pricing (for non-War Zone members)
+// Top Secret Pricing (merged WAR ZONE + TOP SECRET product)
 const TOP_SECRET_ONLY_PRICES = {
-  monthly: 89.99,
-  yearly: 899,
-  monthlyEquivalent: 74.92,
-  savings: 180.88,
+  monthly: 50,
+  yearly: 499,
+  monthlyEquivalent: 41.58,
+  savings: 101,
 };
 
 const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'monthly',
     name: 'Monthly',
-    price: 89.99,
+    price: 50,
     period: '/month',
   },
   {
     id: 'yearly',
     name: 'Yearly',
-    price: 899,
+    price: 499,
     period: '/year',
     savings: 'Save $180.88',
     monthlyEquivalent: 74.92,
@@ -672,11 +672,8 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
               <span className="text-5xl font-bold text-white">${TOP_SECRET_ONLY_PRICES.monthly}</span>
               <span className="text-xl text-slate-400">/month</span>
             </div>
-            <p className="text-sm font-bold text-blue-400 mb-1">
+            <p className="text-sm font-bold text-blue-400 mb-4">
               FREE 14 DAY TRIAL
-            </p>
-            <p className="text-emerald-400 text-base font-semibold mb-4">
-              Only <span className="text-2xl">$45/month</span> for the first 2 months!
             </p>
 
             {/* CTA Button */}
@@ -879,7 +876,7 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
                 onClick={() => onSubscribe('yearly')}
                 className="text-sm text-slate-500 hover:text-slate-400 transition-colors underline"
               >
-                Or get Top Secret yearly only for $899/yr →
+                Or get Top Secret yearly only for $499/yr →
               </button>
             </div>
           </>
@@ -1437,7 +1434,7 @@ export default function TopSecretLanding() {
               onClick={handleTopSecretOnlyCheckout}
               className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
             >
-              No thanks, just Top Secret for $89.99/month →
+              No thanks, just Top Secret for $50/month →
             </button>
           </div>
         </motion.div>
