@@ -362,14 +362,8 @@ const checkoutSession = await createCheckoutSession({
   // ═══════════════════════════════════════════
   // JOURNAL CHECKOUT HELPERS (existing)
   // ═══════════════════════════════════════════
-
-  const checkoutBasicMonthly = useCallback(() => {
-    initiateCheckout({ planName: 'basic', billingInterval: 'monthly' });
-  }, [initiateCheckout]);
-
-  const checkoutBasicYearly = useCallback(() => {
-    initiateCheckout({ planName: 'basic', billingInterval: 'yearly' });
-  }, [initiateCheckout]);
+  // Note: checkoutBasicMonthly / checkoutBasicYearly removed 2026-06 (Basic tier
+  // eliminated, zero subscribers). Journal is now Free → Premium only.
 
   const checkoutPremiumMonthly = useCallback(() => {
     initiateCheckout({ planName: 'premium', billingInterval: 'monthly' });
@@ -427,9 +421,7 @@ const checkoutSession = await createCheckoutSession({
     // Generic checkout
     initiateCheckout,
     
-    // Journal checkout helpers
-    checkoutBasicMonthly,
-    checkoutBasicYearly,
+    // Journal checkout helpers (Basic tier removed 2026-06 — Free → Premium only)
     checkoutPremiumMonthly,
     checkoutPremiumYearly,
     

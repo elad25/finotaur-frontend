@@ -312,7 +312,8 @@ const { data, error } = await supabase.rpc('check_usage_warning', {
         return null;
       }
     },
-    enabled: !!effectiveUserId && (limits?.account_type === 'basic' || limits?.account_type === 'trial'),
+    // 'basic' removed from enabled condition 2026-06 (Basic tier eliminated, zero subscribers)
+    enabled: !!effectiveUserId && limits?.account_type === 'trial',
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -973,7 +974,7 @@ export function usePlatformFeatureAccess() {
       case 'custom_reports':
         return 'Pro';
       case 'advanced_charts':
-        return 'Core';
+        return 'Finotaur'; // Core tier removed 2026-06; Finotaur is now the minimum
       default:
         return 'Free';
     }
