@@ -110,7 +110,7 @@ export const domains: Record<string, Domain> = {
   // ===========================================================================
   'war-zone': {
     id: 'war-zone',
-    label: 'War Zone',
+    label: 'Top Secret',
     locked: false,
     beta: false,
     defaultPath: '/app/all-markets/warzone',

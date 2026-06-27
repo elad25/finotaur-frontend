@@ -32,7 +32,7 @@ const unlocks = [
     description:
       'Pre-market briefings, live options flow, sector rotation tracking. See where smart money is moving before the headlines.',
     includesLabel: 'INCLUDES',
-    includes: ['War Zone', 'Options Flow', 'Live Signals'],
+    includes: ['Top Secret', 'Options Flow', 'Live Signals'],
     Icon: Zap,
   },
   {

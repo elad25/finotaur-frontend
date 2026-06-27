@@ -214,7 +214,7 @@ export default function MissionBriefingPanel({ className }: { className?: string
                 className="text-[10px] tracking-[2.5px] text-gold-primary uppercase"
                 style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600 }}
               >
-                War Zone · Today's Briefing
+                Top Secret · Today's Briefing
               </span>
             </div>
             <span className="font-mono text-[9px] uppercase tracking-[1.5px] text-ink-tertiary">

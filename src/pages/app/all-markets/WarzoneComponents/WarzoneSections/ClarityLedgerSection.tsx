@@ -61,7 +61,7 @@ export default function ClarityLedgerSection() {
                     <X className="w-3.5 h-3.5 text-num-negative" strokeWidth={2} />
                   </span>
                   <span className="font-sans text-[11px] uppercase tracking-[2px] text-ink-secondary">
-                    Without WAR ZONE
+                    Without TOP SECRET
                   </span>
                 </div>
                 <ul className="flex flex-col gap-3">
@@ -87,7 +87,7 @@ export default function ClarityLedgerSection() {
                     />
                   </span>
                   <span className="font-sans text-[11px] uppercase tracking-[2px] text-gold-primary">
-                    With WAR ZONE
+                    With TOP SECRET
                   </span>
                 </div>
                 <ul className="flex flex-col gap-3">

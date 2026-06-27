@@ -839,7 +839,7 @@ export const BillingTab = () => {
           <span className="text-xs text-zinc-300">
             {(() => {
               const active: string[] = [];
-              if (newsletterStatus === 'active' || newsletterStatus === 'trial') active.push('War Zone');
+              if (newsletterStatus === 'active' || newsletterStatus === 'trial') active.push('Top Secret');
               if (topSecretStatus === 'active' || topSecretStatus === 'trial') active.push('Top Secret');
               return active.length > 0 ? active.join(', ') : 'None';
             })()}
@@ -943,7 +943,7 @@ export const BillingTab = () => {
                 )} />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-lg">War Zone Intelligence</h2>
+                <h2 className="font-semibold text-white text-lg">Top Secret Intelligence</h2>
                 <p className="text-xs text-zinc-400">Daily Market Newsletter</p>
               </div>
             </div>
@@ -1558,7 +1558,7 @@ export const BillingTab = () => {
                     <>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium mt-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        <span>⚠️ War Zone Newsletter access</span>
+                        <span>⚠️ Top Secret access</span>
                       </div>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -1706,7 +1706,7 @@ export const BillingTab = () => {
         </div>
 
         <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel War Zone Newsletter?
+          Cancel Top Secret?
         </DialogTitle>
         <DialogDescription className="text-zinc-400 text-sm">
           You'll stop receiving our daily market intelligence reports and exclusive insights.

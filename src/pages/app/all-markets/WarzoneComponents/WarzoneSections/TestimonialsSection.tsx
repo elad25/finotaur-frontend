@@ -24,7 +24,7 @@ const TESTIMONIALS: Testimonial[] = [
     name: "Sarah Mitchell",
     role: "Day Trader",
     quote:
-      "WAR ZONE gives me the edge I was missing. This is the best investment I made this year.",
+      "TOP SECRET gives me the edge I was missing. This is the best investment I made this year.",
     ytd: 27.4,
     spark: [0.3, 0.35, 0.4, 0.5, 0.45, 0.55, 0.7, 0.72],
   },
@@ -33,7 +33,7 @@ const TESTIMONIALS: Testimonial[] = [
     name: "Michael Rodriguez",
     role: "Prop Trader",
     quote:
-      "I pay thousands for research subscriptions. WAR ZONE beats them all.",
+      "I pay thousands for research subscriptions. TOP SECRET beats them all.",
     ytd: 41.8,
     spark: [0.2, 0.3, 0.5, 0.55, 0.65, 0.6, 0.78, 0.85],
   },
@@ -78,7 +78,7 @@ const TESTIMONIALS: Testimonial[] = [
     name: "Alex Thompson",
     role: "Crypto Investor",
     quote:
-      "Tried the free trial and canceled all my other subscriptions. WAR ZONE is all I need.",
+      "Tried the free trial and canceled all my other subscriptions. TOP SECRET is all I need.",
     ytd: 38.5,
     spark: [0.25, 0.35, 0.45, 0.5, 0.6, 0.65, 0.72, 0.82],
   },
@@ -203,7 +203,7 @@ export default function TestimonialsSection() {
             </span>
           </SectionTitle>
           <p className="mt-4 text-ink-secondary text-sm md:text-base leading-relaxed">
-            Real feedback from traders who start their day with WAR ZONE.
+            Real feedback from traders who start their day with TOP SECRET.
           </p>
         </div>
       </div>

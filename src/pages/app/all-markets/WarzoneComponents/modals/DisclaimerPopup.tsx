@@ -120,7 +120,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
           <div className="px-6 py-6">
             {/* Finotaur Includes Banner */}
             <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
-              <span className="text-emerald-400 font-medium">Includes: War Zone + Top Secret + Journal Premium + All AI Tools</span>
+              <span className="text-emerald-400 font-medium">Includes: Top Secret + Journal Premium + All AI Tools</span>
             </div>
 
             {/* Two Pricing Cards — Side by Side */}
@@ -164,7 +164,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>🎁 War Zone + Top Secret Reports</span>
+                      <span>🎁 Top Secret Reports INCLUDED</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -436,7 +436,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                     WebkitTextFillColor: 'transparent' 
                   }}
                 >
-                  {showBothOptions ? 'Choose Your Plan' : 'WAR ZONE'}
+                  {showBothOptions ? 'Choose Your Plan' : 'TOP SECRET'}
                 </h2>
                 <p className="text-[#8B8175] text-sm mt-0.5">
                   {showBothOptions ? 'Upgrade to Finotaur — the complete trading ecosystem!' : 'Start your 7-day free trial'}
@@ -470,12 +470,12 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                 <div className="mb-3">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-800/80 text-slate-300 border border-slate-700/50">
                     <FileText className="w-3 h-3" />
-                    WAR ZONE ONLY
+                    TOP SECRET ONLY
                   </span>
                 </div>
 
                 {/* Title */}
-                <h3 className="text-lg font-bold text-white mb-3">War Zone Newsletter</h3>
+                <h3 className="text-lg font-bold text-white mb-3">Top Secret Newsletter</h3>
 
                 {/* Price */}
                 <div className="mb-4">
@@ -601,7 +601,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   <div className="space-y-2 mb-4 flex-grow">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      <span>🎁 War Zone + Top Secret Reports</span>
+                      <span>🎁 Top Secret Reports INCLUDED</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />

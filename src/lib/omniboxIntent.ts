@@ -63,7 +63,7 @@ export const ROUTE_CATALOGUE: RouteTarget[] = [
   { label: 'Reports & Stats',    path: '/app/journal/reports',        group: 'Journal',      keywords: ['reports', 'stats', 'performance', 'analytics', 'pnl'] },
   { label: 'Backtest',           path: '/app/journal/backtest/overview', group: 'Journal',  keywords: ['backtest', 'test', 'simulate'] },
   // War Zone
-  { label: 'War Zone',           path: '/app/all-markets/warzone',    group: 'War Zone',     keywords: ['war zone', 'warzone', 'alerts', 'breaking', 'urgent'] },
+  { label: 'Top Secret',         path: '/app/all-markets/warzone',    group: 'Top Secret',   keywords: ['war zone', 'warzone', 'alerts', 'breaking', 'urgent', 'top secret'] },
   // Top Secret
   { label: 'Top Secret Reports', path: '/app/top-secret',             group: 'Top Secret',   keywords: ['top secret', 'reports', 'confidential', 'exclusive'] },
   // Settings / Account

@@ -211,7 +211,7 @@ export function PushOptInModal() {
 
             {/* Body */}
             <p className="text-sm text-zinc-300 leading-relaxed mb-5">
-              Get push alerts for the daily War Zone report, AI stock analyses you
+              Get push alerts for the daily Top Secret report, AI stock analyses you
               requested, and weekly market recaps. Browser notifications only — turn
               off anytime.
             </p>

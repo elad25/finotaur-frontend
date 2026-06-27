@@ -77,12 +77,12 @@ import '@/styles/warzone.css';
 
 const TESTIMONIALS = [
   { id: 1, name: "David Chen", role: "Hedge Fund Manager", avatar: "DC", text: "The daily briefing is something I genuinely wait for every morning. The level of analysis here is institutional-grade.", highlight: "something I genuinely wait for every morning" },
-  { id: 2, name: "Sarah Mitchell", role: "Day Trader", avatar: "SM", text: "WAR ZONE gave me the edge I was missing. After one week I realized this is the best investment I made this year.", highlight: "the best investment I made this year" },
-  { id: 3, name: "Michael Rodriguez", role: "Prop Trader", avatar: "MR", text: "I pay thousands per month for research subscriptions. WAR ZONE beats them all in value-for-money.", highlight: "beats them all in value-for-money" },
+  { id: 2, name: "Sarah Mitchell", role: "Day Trader", avatar: "SM", text: "TOP SECRET gave me the edge I was missing. After one week I realized this is the best investment I made this year.", highlight: "the best investment I made this year" },
+  { id: 3, name: "Michael Rodriguez", role: "Prop Trader", avatar: "MR", text: "I pay thousands per month for research subscriptions. TOP SECRET beats them all in value-for-money.", highlight: "beats them all in value-for-money" },
   { id: 4, name: "Emily Watson", role: "Portfolio Manager", avatar: "EW", text: "Finally someone who understands I don't need more data, I need conclusions. These briefings save me hours every day.", highlight: "save me hours every day" },
   { id: 5, name: "James Kim", role: "Swing Trader", avatar: "JK", text: "The writing quality and depth of analysis here is something I haven't found anywhere else.", highlight: "something I haven't found anywhere else" },
-  { id: 6, name: "Rachel Green", role: "Options Trader", avatar: "RG", text: "WAR ZONE is like someone turned on the lights in a dark room. Now I see the full picture before market open.", highlight: "turned on the lights in a dark room" },
-  { id: 7, name: "Alex Thompson", role: "Crypto Investor", avatar: "AT", text: "I tried the free trial and canceled all my other subscriptions. WAR ZONE is all I need now.", highlight: "canceled all my other subscriptions" },
+  { id: 6, name: "Rachel Green", role: "Options Trader", avatar: "RG", text: "TOP SECRET is like someone turned on the lights in a dark room. Now I see the full picture before market open.", highlight: "turned on the lights in a dark room" },
+  { id: 7, name: "Alex Thompson", role: "Crypto Investor", avatar: "AT", text: "I tried the free trial and canceled all my other subscriptions. TOP SECRET is all I need now.", highlight: "canceled all my other subscriptions" },
   { id: 8, name: "Lisa Anderson", role: "Forex Trader", avatar: "LA", text: "The macro analysis here is better than anything I got from Bloomberg Terminal. And I'm not joking.", highlight: "better than anything I got from Bloomberg" },
 ];
 
@@ -114,7 +114,7 @@ const FAQS = [
   { q: "How does the 7-day free trial work?", a: "Full access for 7 days. Cancel in one click, pay nothing. Only available on monthly plan." },
   { q: "When do I receive the daily briefing?", a: "Every trading day at 9:00 AM New York time — before the market opens. You'll have everything you need to start your day with clarity." },
   { q: "What do I get with my subscription?", a: "Daily market briefing, weekly tactical review, access to our private Discord community with 847+ traders, and the Finotaur Trading Room with live analysis." },
-  { q: "Is this just another stock newsletter?", a: "No. WAR ZONE is a professional-grade market briefing — the same style institutional trading desks use. Not stock picks. Not hype. Pure market intelligence." },
+  { q: "Is this just another stock newsletter?", a: "No. TOP SECRET is a professional-grade market briefing — the same style institutional trading desks use. Not stock picks. Not hype. Pure market intelligence." },
   { q: "Can I cancel anytime?", a: "Absolutely. No contracts, no commitments, no questions asked. Cancel with one click from your account settings." }
 ];
 
@@ -175,7 +175,7 @@ const SocialProof = memo(function SocialProof() {
       <div className="max-w-7xl mx-auto relative z-10">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 heading-serif italic">What Traders Are Saying</h2>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto">Join hundreds of professional traders who rely on WAR ZONE for daily market intelligence</p>
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto">Join hundreds of professional traders who rely on TOP SECRET for daily market intelligence</p>
         </motion.div>
         
         <div className="relative">
@@ -263,7 +263,7 @@ const BeforeAfterSection = memo(function BeforeAfterSection() {
             </span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            Most traders start their day overwhelmed. WAR ZONE traders start with clarity.
+            Most traders start their day overwhelmed. TOP SECRET traders start with clarity.
           </p>
         </div>
         
@@ -280,7 +280,7 @@ const BeforeAfterSection = memo(function BeforeAfterSection() {
               <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
                 <XCircle className="w-5 h-5 text-red-400" />
               </div>
-              <h3 className="text-white font-bold text-lg">Without WAR ZONE</h3>
+              <h3 className="text-white font-bold text-lg">Without TOP SECRET</h3>
             </div>
             <div className="px-6 py-6 space-y-4">
               {BEFORE_AFTER.before.map((item, i) => (
@@ -304,7 +304,7 @@ const BeforeAfterSection = memo(function BeforeAfterSection() {
               <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
                 <Check className="w-5 h-5 text-green-400" />
               </div>
-              <h3 className="text-white font-bold text-lg">With WAR ZONE</h3>
+              <h3 className="text-white font-bold text-lg">With TOP SECRET</h3>
             </div>
             <div className="px-6 py-6 space-y-4">
               {BEFORE_AFTER.after.map((item, i) => (
@@ -531,7 +531,7 @@ const FAQSection = memo(function FAQSection() {
             <span className="text-white heading-serif block">Frequently Asked</span>
             <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Questions</span>
           </h2>
-          <p className="text-slate-400 text-base">Everything you need to know before joining the War Zone.</p>
+          <p className="text-slate-400 text-base">Everything you need to know before joining Top Secret.</p>
         </div>
         
         <div className="space-y-4">
@@ -644,11 +644,11 @@ const PricingSection = memo(function PricingSection({
             </div>
             
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
-              <span className="text-white heading-serif block">Add War Zone to Your Arsenal</span>
-              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Get the Ultimate Bundle</span>
+              <span className="text-white heading-serif block">Upgrade to the Full Platform</span>
+              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Everything Included</span>
             </h2>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-              As a Top Secret member, get War Zone + Top Secret together and save $50.98/month
+              As a Top Secret member, upgrade to Finotaur Platform and unlock all AI tools, Journal Premium, and more.
             </p>
           </div>
 
@@ -690,15 +690,11 @@ const PricingSection = memo(function PricingSection({
                   Complete Trading Ecosystem
                 </h3>
                 <p className="text-slate-400 text-sm mb-4">
-                  War Zone + Top Secret + Journal Premium + Full Platform
+                  Top Secret + Journal Premium + Full Platform
                 </p>
 
                 {/* Price Comparison */}
                 <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">War Zone Newsletter</span>
-                    <span className="text-slate-300 line-through">$69.99</span>
-                  </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Top Secret Reports</span>
                     <span className="text-slate-300 line-through">$89.99</span>
@@ -710,7 +706,7 @@ const PricingSection = memo(function PricingSection({
                   <div className="border-t border-slate-700 my-2" />
                   <div className="flex justify-between">
                     <span className="text-slate-300">Separately:</span>
-                    <span className="text-slate-200 line-through">$199.98/mo</span>
+                    <span className="text-slate-200 line-through">$129.99/mo</span>
                   </div>
                 </div>
 
@@ -758,7 +754,7 @@ const PricingSection = memo(function PricingSection({
                   <p className="text-xs text-slate-500 font-medium mb-2">WHAT'S INCLUDED:</p>
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                    <span className="text-sm text-slate-300">War Zone Newsletter (Daily)</span>
+                    <span className="text-sm text-slate-300">Top Secret Daily Briefing</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -838,7 +834,7 @@ const PricingSection = memo(function PricingSection({
                 <div className="space-y-3 mb-6">
                   <div className="flex items-center gap-2">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                    <span className="text-sm text-slate-300 font-medium">War Zone Newsletter (Full Year)</span>
+                    <span className="text-sm text-slate-300 font-medium">Top Secret Daily Briefing (Full Year)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
@@ -918,7 +914,7 @@ const PricingSection = memo(function PricingSection({
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
             <span className="text-white heading-serif block">You are Already in the Market.</span>
-            <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Why Do It Without WAR ZONE?</span>
+            <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Why Do It Without TOP SECRET?</span>
           </h2>
         </div>
 
@@ -1143,7 +1139,7 @@ const HeroMobile = memo(function HeroMobile({
         </h1>
         {/* Description */}
         <p className="text-[#C9A646]/70 text-sm leading-relaxed text-center mb-4 max-w-sm">
-          <span className="text-[#C9A646] font-bold">WAR ZONE</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
+          <span className="text-[#C9A646] font-bold">TOP SECRET</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
         </p>
 
         {/* Billing Toggle */}
@@ -1159,7 +1155,7 @@ const HeroMobile = memo(function HeroMobile({
             boxShadow: '0 4px 24px rgba(201,166,70,0.4)' 
           }}
         >
-          {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get WAR ZONE for $${CONFIG.YEARLY_PRICE}/year`}
+          {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get TOP SECRET for $${CONFIG.YEARLY_PRICE}/year`}
           <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
         </button>
 
@@ -1220,22 +1216,22 @@ const HeroDesktop = memo(function HeroDesktop({
           </h1>
 
           <p className="text-[#C9A646]/80 text-lg leading-relaxed mb-8 max-w-xl relative z-20">
-            <span className="font-bold" style={{ color: '#E9A931' }}>WAR ZONE</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
+            <span className="font-bold" style={{ color: '#E9A931' }}>TOP SECRET</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
           </p>
 
           <BillingToggle selected={billingInterval} onChange={setBillingInterval} className="mb-6 justify-start relative z-20" />
 
           <div className="flex flex-wrap items-center gap-4 mb-8 relative z-20">
-            <button 
-              onClick={onSubscribe} 
+            <button
+              onClick={onSubscribe}
               className="group px-8 py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-105 flex items-center gap-2"
-              style={{ 
-                background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
-                color: '#000', 
-                boxShadow: '0 4px 24px rgba(201,166,70,0.4)' 
+              style={{
+                background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
+                color: '#000',
+                boxShadow: '0 4px 24px rgba(201,166,70,0.4)'
               }}
             >
-              {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get WAR ZONE for $${CONFIG.YEARLY_PRICE}/year`}
+              {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get TOP SECRET for $${CONFIG.YEARLY_PRICE}/year`}
               <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
             </button>
           </div>
@@ -1273,7 +1269,7 @@ const HeroDesktop = memo(function HeroDesktop({
           >
             <img 
               src={CONFIG.BULL_IMAGE}
-              alt="War Zone Bull" 
+              alt="Top Secret Bull"
               className="w-[500px] xl:w-[580px] 2xl:w-[650px] h-auto object-contain pointer-events-none select-none"
               style={{ filter: 'drop-shadow(0 0 80px rgba(255,150,50,0.3))' }}
               draggable={false}
@@ -1851,7 +1847,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">Get the Complete Trading Ecosystem</h3>
             <p className="text-slate-400 text-sm">
-              <span className="text-white font-semibold">War Zone + Top Secret + Journal Premium + Full Platform</span> — all included
+              <span className="text-white font-semibold">Top Secret + Journal Premium + Full Platform</span> — all included
             </p>
           </div>
 
@@ -1994,7 +1990,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
             <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>War Zone Daily Intelligence</span>
+                <span>Top Secret Daily Briefing</span>
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />

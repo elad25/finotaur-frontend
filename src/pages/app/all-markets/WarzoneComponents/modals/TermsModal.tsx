@@ -42,7 +42,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
             </div>
             <div>
               <h3 className="text-white font-bold text-lg">Terms of Service</h3>
-              <p className="text-[#C9A646]/60 text-xs">War Zone Intelligence Subscription</p>
+              <p className="text-[#C9A646]/60 text-xs">Top Secret Intelligence Subscription</p>
             </div>
           </div>
           <button 
@@ -59,7 +59,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
             
             <h4 className="text-[#C9A646] font-semibold text-base mb-3">1. Service Description</h4>
             <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-              War Zone Intelligence provides daily and weekly financial market analysis, research reports, 
+              Top Secret Intelligence provides daily and weekly financial market analysis, research reports, 
               and educational content. Our service is designed to help traders make informed decisions 
               based on comprehensive market intelligence.
             </p>
@@ -81,7 +81,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
             <h4 className="text-[#C9A646] font-semibold text-base mb-3">4. Financial Disclaimer</h4>
             <p className="text-slate-300 text-sm mb-4 leading-relaxed">
               <strong className="text-amber-400">IMPORTANT:</strong> The information provided through 
-              War Zone Intelligence is for educational and informational purposes only. It does not 
+              Top Secret Intelligence is for educational and informational purposes only. It does not 
               constitute financial advice, investment advice, trading advice, or any other form of 
               professional advice.
             </p>
@@ -102,7 +102,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
 
             <h4 className="text-[#C9A646] font-semibold text-base mb-3">6. Intellectual Property</h4>
             <p className="text-slate-300 text-sm mb-4 leading-relaxed">
-              All content provided through War Zone Intelligence, including reports, analysis, 
+              All content provided through Top Secret Intelligence, including reports, analysis, 
               and educational materials, is proprietary and protected by copyright. You may not 
               reproduce, distribute, or share this content without written permission.
             </p>
@@ -115,7 +115,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
 
             <div className="mt-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
               <p className="text-amber-200 text-xs leading-relaxed">
-                By subscribing to War Zone Intelligence, you acknowledge that you have read, 
+                By subscribing to Top Secret Intelligence, you acknowledge that you have read, 
                 understood, and agree to be bound by these Terms of Service. You confirm that 
                 you understand the risks associated with trading and that our service provides 
                 educational content, not personalized financial advice.

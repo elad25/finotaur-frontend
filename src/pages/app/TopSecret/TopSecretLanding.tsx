@@ -566,33 +566,16 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             </div>
             
             <h3 className="text-xl font-bold text-white mb-2">
-              War Zone + Top Secret
+              Finotaur Platform Bundle
             </h3>
             <p className="text-slate-400 text-sm mb-4">
-              Get both products for one low price!
+              Top Secret + Journal Premium + Full Platform for one price!
             </p>
-
-            {/* Price Comparison */}
-            <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">War Zone Newsletter</span>
-                <span className="text-slate-300 line-through">$69.99</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Top Secret Reports</span>
-                <span className="text-slate-300 line-through">$89.99</span>
-              </div>
-              <div className="border-t border-slate-700 my-2" />
-              <div className="flex justify-between">
-                <span className="text-slate-300">Separately:</span>
-                <span className="text-slate-200 line-through">$159.98/mo</span>
-              </div>
-            </div>
 
             {/* Bundle Price */}
             <div className="mb-4">
               <div className="flex items-baseline justify-start gap-2 mb-1">
-                <span className="text-5xl font-bold text-white">${FINOTAUR_PRICES.yearly}</span>
+                <span className="text-5xl font-bold text-white">${FINOTAUR_PRICES.monthly}</span>
                 <span className="text-xl text-slate-400">/month</span>
               </div>
               <p className="text-emerald-400 text-base font-semibold">
@@ -643,7 +626,7 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
               <p className="text-xs text-slate-500 font-medium mb-2">WHAT'S INCLUDED:</p>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300">War Zone Newsletter (Daily)</span>
+                <span className="text-sm text-slate-300">Top Secret Daily Briefing</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -822,7 +805,7 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             <div className="space-y-3 mb-6">
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">War Zone Newsletter (Full Year)</span>
+                <span className="text-sm text-slate-300 font-medium">Top Secret Daily Briefing (Full Year)</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
@@ -1239,7 +1222,7 @@ export default function TopSecretLanding() {
               </span>
             </div>
             <h3 className="text-2xl font-bold text-white">Get Finotaur — Includes Everything</h3>
-            <p className="text-slate-400 text-sm mt-1">Top Secret + War Zone + Journal Premium + Full Platform for one price!</p>
+            <p className="text-slate-400 text-sm mt-1">Top Secret + Journal Premium + Full Platform for one price!</p>
           </div>
           
           {/* Body - Two Column Layout */}
@@ -1248,13 +1231,11 @@ export default function TopSecretLanding() {
             <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
               <span className="text-slate-500 line-through">Top Secret $89.99</span>
               <span className="text-slate-600">+</span>
-              <span className="text-slate-500 line-through">War Zone $69.99</span>
-              <span className="text-slate-600">+</span>
               <span className="text-slate-500 line-through">Journal $29.99</span>
               <span className="text-slate-600">+</span>
               <span className="text-slate-500 line-through">Platform $59</span>
               <span className="text-slate-600">=</span>
-              <span className="text-slate-500 line-through">$248.97/mo</span>
+              <span className="text-slate-500 line-through">$178.98/mo</span>
             </div>
 
             {/* Two Pricing Cards */}
@@ -1302,7 +1283,7 @@ export default function TopSecretLanding() {
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>📡 War Zone Newsletter INCLUDED</span>
+                      <span>🔒 Top Secret Daily Briefing INCLUDED</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -1595,12 +1576,12 @@ export default function TopSecretLanding() {
               <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
                 <span className="text-lg">⚠️</span>
               </div>
-              <h3 className="text-white font-semibold text-base">Your War Zone will be cancelled</h3>
+              <h3 className="text-white font-semibold text-base">Your Top Secret will be cancelled</h3>
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-5">
               Subscribing to the Finotaur Platform will{' '}
               <span className="text-amber-400 font-medium">automatically cancel</span> your existing{' '}
-              <span className="text-white font-medium">War Zone</span> subscription — it's already included in the Platform at no extra charge.
+              <span className="text-white font-medium">Top Secret</span> subscription — it's already included in the Platform at no extra charge.
             </p>
             <div className="flex gap-3">
               <button

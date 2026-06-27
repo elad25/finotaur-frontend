@@ -75,7 +75,7 @@ export default function WarZoneReportPreviewCard() {
               <div>
                 <p className="text-white font-bold leading-tight">FINOTAUR</p>
                 <p className="text-[#C9A646] text-xs font-semibold tracking-wider">
-                  WAR ZONE
+                  TOP SECRET
                 </p>
               </div>
             </div>

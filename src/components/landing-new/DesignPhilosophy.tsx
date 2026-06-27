@@ -18,7 +18,7 @@ import { SectionTitle } from "./_shared/SectionTitle";
 const comparisons = [
   {
     before: "Wake up to 50 headlines and zero clarity",
-    after: "Wake up with War Zone — know exactly what matters",
+    after: "Wake up with Top Secret — know exactly what matters",
   },
   {
     before: "Analyze a stock in 4 hours",

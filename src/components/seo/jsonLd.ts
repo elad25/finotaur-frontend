@@ -122,7 +122,7 @@ export function softwareApplication(): Record<string, unknown> {
         name: 'Finotaur',
         price: '109',
         priceCurrency: 'USD',
-        description: 'Everything in Pro plus TOP SECRET & WAR ZONE Newsletters, AI Top 5, AI Options Intelligence, AI Copilot, Block Trades, Trade Copier',
+        description: 'Everything in Pro plus TOP SECRET Newsletter, AI Top 5, AI Options Intelligence, AI Copilot, Block Trades, Trade Copier',
       },
     ],
   };

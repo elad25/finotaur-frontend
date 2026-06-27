@@ -144,7 +144,7 @@ export default function HeroSection({ onSubscribe }: HeroSectionProps) {
                 letterSpacing: "-0.035em",
               }}
             >
-              <span className="block text-ink-primary">War Zone</span>
+              <span className="block text-ink-primary">Top Secret</span>
               <span
                 className="block"
                 style={{

@@ -254,7 +254,7 @@ export default function BriefingCoverCard({ className }: { className?: string })
               className="text-[11px] uppercase tracking-[3.5px] text-gold-primary"
               style={{ fontFamily: "Inter, sans-serif", fontWeight: 600 }}
             >
-              War Zone Report
+              Top Secret Report
             </span>
           </div>
           <div className="flex items-center gap-2.5">

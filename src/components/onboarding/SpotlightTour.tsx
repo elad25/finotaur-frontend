@@ -88,9 +88,9 @@ const STEPS: TourStep[] = [
   },
   {
     key: 'drawer-product-war-zone',
-    title: 'War Zone',
+    title: 'Top Secret',
     body: 'Start every session ready — a pre-market briefing with global macro and the key levels that matter.',
-    breadcrumb: 'Open the menu → War Zone',
+    breadcrumb: 'Open the menu → Top Secret',
   },
   {
     key: 'drawer-product-top-secret',
