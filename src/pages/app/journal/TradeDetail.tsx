@@ -4,6 +4,7 @@ import { useRegisterJournalFinoContext } from '@/components/fino/useJournalFinoC
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { uploadScreenshot } from '@/lib/trades';
+import { isManualTrade } from '@/lib/trades/isManualTrade';
 import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { useTimezone } from '@/contexts/TimezoneContext';
@@ -69,6 +70,9 @@ interface Trade {
   screenshots?: string[];
   partial_entries?: PartialLeg[];
   partial_exits?: PartialLeg[];
+  // Origin of the trade: 'manual' (Add Trade form), 'api' (AI screenshot),
+  // or a broker/import source ('tradovate' / 'ibrit' / 'tradingview' / 'csv').
+  import_source?: string | null;
   // Options (single-leg) — populated only when asset_class === 'options'
   asset_class?: string;
   option_type?: 'CALL' | 'PUT';
@@ -588,13 +592,15 @@ export default function JournalTradeDetail() {
         {/* Edit / Share / Save / Cancel buttons */}
         {!isEditing ? (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShareDialogOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
-            >
-              <Share2 className="w-4 h-4" style={{ color: '#C9A646' }} />
-              Share
-            </button>
+            {!isManualTrade(trade) && (
+              <button
+                onClick={() => setShareDialogOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
+              >
+                <Share2 className="w-4 h-4" style={{ color: '#C9A646' }} />
+                Share
+              </button>
+            )}
             <button
               onClick={handleEditClick}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
@@ -924,8 +930,20 @@ export default function JournalTradeDetail() {
         );
       })()}
 
-      {/* Price chart — the trade plotted with entry/exit markers */}
-      {trade && <TradeChart trade={trade} />}
+      {/* Price chart — the trade plotted with entry/exit markers.
+          Manual trades have no synced market chart, so show a note instead. */}
+      {trade && (
+        isManualTrade(trade) ? (
+          <div className="flex flex-col items-center justify-center rounded-[12px] border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-10 text-center">
+            <p className="text-sm font-semibold text-zinc-300">Chart unavailable for manually added trades</p>
+            <p className="mt-1 max-w-sm text-xs text-zinc-500">
+              This trade was entered manually, so there is no synced market chart to display.
+            </p>
+          </div>
+        ) : (
+          <TradeChart trade={trade} />
+        )
+      )}
 
       {/* Trade Scorecard */}
       {id && <TradeScorecard tradeId={id} />}
