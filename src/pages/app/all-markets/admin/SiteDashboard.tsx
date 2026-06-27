@@ -2158,7 +2158,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
         // Best/Worst products
         const products = [
           { name: 'Journal', mrr: journalMRR, subscribers: journalSubscribers.total },
-          { name: 'War Zone', mrr: newsletterMRR, subscribers: newsletterSubscribers.total },
+          { name: 'Top Secret', mrr: newsletterMRR, subscribers: newsletterSubscribers.total },
           { name: 'Top Secret', mrr: topSecretMRR, subscribers: topSecretSubscribers.total },
           { name: 'Platform', mrr: platformMRR, subscribers: platformSubscribers.total },
         ];
@@ -2371,7 +2371,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
       // Best/Worst products
       const products = [
         { name: 'Journal', mrr: journalMRR, subscribers: journalSubscribers.total },
-        { name: 'War Zone', mrr: newsletterMRR, subscribers: newsletterSubscribers.total },
+        { name: 'Top Secret', mrr: newsletterMRR, subscribers: newsletterSubscribers.total },
         { name: 'Top Secret', mrr: topSecretMRR, subscribers: topSecretSubscribers.total },
         { name: 'Platform', mrr: platformMRR, subscribers: platformSubscribers.total },
       ];
@@ -2845,7 +2845,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             </div>
             <div className="p-4 bg-[#1A1A1A] rounded-xl text-center">
               <p className="text-xl font-bold text-orange-400">${stats.revenue.newsletter_mrr?.toFixed(2) || '0.00'}</p>
-              <p className="text-xs text-[#808080] mt-1">War Zone</p>
+              <p className="text-xs text-[#808080] mt-1">Top Secret</p>
             </div>
             <div className="p-4 bg-[#1A1A1A] rounded-xl text-center">
               <p className="text-xl font-bold text-purple-400">${stats.revenue.top_secret_mrr?.toFixed(2) || '0.00'}</p>
@@ -2955,7 +2955,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             Journal
           </TabsTrigger>
           <TabsTrigger value="newsletter" className="data-[state=active]:bg-[#C9A646] data-[state=active]:text-black">
-            War Zone
+            Top Secret
           </TabsTrigger>
           <TabsTrigger value="topsecret" className="data-[state=active]:bg-[#C9A646] data-[state=active]:text-black">
             Top Secret
@@ -3097,7 +3097,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                   </div>
                   <div className="text-center px-4">
                     <p className="text-xl font-bold text-orange-400">{loading ? '—' : stats?.trials?.newsletter_trial || 0}</p>
-                    <p className="text-[10px] text-[#606060] uppercase tracking-wider">War Zone</p>
+                    <p className="text-[10px] text-[#606060] uppercase tracking-wider">Top Secret</p>
                   </div>
                   <div className="text-center px-4">
                     <p className="text-xl font-bold text-purple-400">{loading ? '—' : stats?.trials?.top_secret_trial || 0}</p>
@@ -3150,7 +3150,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                   <p className="text-2xl font-bold text-orange-400">
                     {loading ? '—' : `$${(stats?.revenue?.newsletter_mrr || 0).toFixed(0)}`}
                   </p>
-                  <p className="text-xs text-[#808080] mt-1">War Zone</p>
+                  <p className="text-xs text-[#808080] mt-1">Top Secret</p>
                 </div>
                 <div className="text-center p-4 bg-[#1A1A1A] rounded-xl">
                   <p className="text-2xl font-bold text-purple-400">
@@ -3182,7 +3182,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               ]}
             />
             <StatCard
-              title="War Zone Subscribers"
+              title="Top Secret Subscribers"
               value={stats?.newsletter.total_subscribers || 0}
               icon={Newspaper}
               color="orange"
@@ -3262,7 +3262,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                   <p className="text-2xl font-bold text-orange-400 group-hover:scale-110 transition-transform">
                     {loading ? '—' : stats?.newsletter.total_subscribers || 0}
                   </p>
-                  <p className="text-xs text-[#808080] mt-1 font-medium">War Zone</p>
+                  <p className="text-xs text-[#808080] mt-1 font-medium">Top Secret</p>
                   <p className="text-[10px] text-orange-400/50 mt-0.5">$69.99/mo</p>
                 </div>
                 {/* Top Secret */}
@@ -3485,10 +3485,10 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                   >
                     <SelectTrigger className="w-[160px] bg-[#1A1A1A] border-[#2A2A2A] text-[#F4F4F4]">
                       <Newspaper className="h-4 w-4 mr-2 text-orange-400" />
-                      <SelectValue placeholder="War Zone" />
+                      <SelectValue placeholder="Top Secret" />
                     </SelectTrigger>
                     <SelectContent className="bg-[#1A1A1A] border-[#2A2A2A]">
-                      <SelectItem value="all">All War Zone</SelectItem>
+                      <SelectItem value="all">All Top Secret</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="trial">Trial</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -3778,7 +3778,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                           <th className="text-left py-3 px-4 text-[#808080] font-medium">
                             <div className="flex items-center gap-1">
                               <Newspaper className="h-3 w-3 text-orange-400" />
-                              War Zone
+                              Top Secret
                             </div>
                           </th>
                           <th className="text-left py-3 px-4 text-[#808080] font-medium">
@@ -3985,7 +3985,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                                   {user.newsletter_status === 'trial' && (
                                     <span className="text-[10px] text-orange-400 flex items-center gap-1">
                                       <Newspaper className="h-3 w-3" />
-                                      War Zone Trial
+                                      Top Secret Trial
                                     </span>
                                   )}
                                   {user.top_secret_is_in_trial && (
@@ -4315,7 +4315,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Newspaper className="h-5 w-5 text-orange-400" />
-                          <span className="text-[#F4F4F4] font-medium">War Zone</span>
+                          <span className="text-[#F4F4F4] font-medium">Top Secret</span>
                         </div>
                         <Badge className="bg-orange-500/20 text-orange-400">
                           {kpiMetrics.newsletter_subscribers.total} subs
@@ -4442,7 +4442,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     </div>
                     <div className="flex justify-between mt-2 text-xs">
                       <span className="text-blue-400">Journal</span>
-                      <span className="text-orange-400">War Zone</span>
+                      <span className="text-orange-400">Top Secret</span>
                       <span className="text-purple-400">Top Secret</span>
                       <span className="text-cyan-400">Platform</span>
                     </div>
@@ -4770,7 +4770,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       </div>
                     </div>
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">
-                      <p className="text-orange-400 font-medium mb-2">War Zone</p>
+                      <p className="text-orange-400 font-medium mb-2">Top Secret</p>
                       <div className="space-y-1 text-[#808080]">
                         <p>Monthly: $69.99</p>
                         <p>Yearly: $699.00 ($58.25/mo)</p>
@@ -4782,7 +4782,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       <div className="space-y-1 text-[#808080]">
                         <p>Monthly: $89.99</p>
                         <p>Yearly: $899.00 ($74.92/mo)</p>
-                        <p className="text-orange-400">w/ War Zone: $50.00</p>
+                        <p className="text-orange-400">w/ Top Secret: $50.00</p>
                       </div>
                     </div>
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">
@@ -4945,12 +4945,12 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             className="bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F4F4F4]"
           >
             {loadingUsers === 'newsletter' ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
-            Load War Zone Subscribers
+            Load Top Secret Subscribers
           </Button>
 
           <UserListTable 
             users={newsletterUsers} 
-            title="War Zone Subscribers"
+            title="Top Secret Subscribers"
             loading={loadingUsers === 'newsletter'}
           />
         </TabsContent>
@@ -5178,7 +5178,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                   {/* Newsletter */}
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-orange-400">War Zone</span>
+                      <span className="text-orange-400">Top Secret</span>
                       <span className="text-[#F4F4F4]">${stats.revenue.newsletter_mrr?.toFixed(2) || '0.00'}/mo</span>
                     </div>
                     <Progress 
@@ -5559,7 +5559,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                 <div className="p-4 bg-[#1A1A1A] rounded-xl space-y-3">
                   <div className="flex items-center gap-2">
                     <Newspaper className="h-4 w-4 text-orange-400" />
-                    <span className="text-[#F4F4F4] font-medium">War Zone Newsletter</span>
+                    <span className="text-[#F4F4F4] font-medium">Top Secret Newsletter</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <label className="flex items-center gap-2 px-3 py-2 bg-[#0F0F0F] rounded-lg cursor-pointer hover:bg-[#2A2A2A] transition-colors">
@@ -6009,7 +6009,7 @@ You can use these variables:
         <div className="p-4 bg-[#1A1A1A] rounded-xl space-y-4">
           <h4 className="text-[#F4F4F4] font-medium flex items-center gap-2">
             <Newspaper className="h-4 w-4 text-orange-400" />
-            Newsletter (War Zone)
+            Newsletter (Top Secret)
           </h4>
           <div className="space-y-2">
             <Label className="text-[#A0A0A0]">Status</Label>
@@ -6205,7 +6205,7 @@ You can use these variables:
                     }`}>
                       {quickViewDialog.user.newsletter_status || 'inactive'}
                     </Badge>
-                    <p className="text-[10px] text-[#606060] mt-1">War Zone</p>
+                    <p className="text-[10px] text-[#606060] mt-1">Top Secret</p>
                   </div>
                   <div className="p-3 bg-[#0F0F0F] rounded-lg text-center">
                     <Lock className="h-5 w-5 mx-auto mb-1 text-purple-400" />
@@ -6309,7 +6309,7 @@ You can use these variables:
                     )}
                     {quickViewDialog.user.newsletter_whop_membership_id && (
                       <div className="flex items-center justify-between p-2 bg-[#0F0F0F] rounded-lg">
-                        <span className="text-orange-400">War Zone:</span>
+                        <span className="text-orange-400">Top Secret:</span>
                         <span className="text-[#A0A0A0]">{quickViewDialog.user.newsletter_whop_membership_id}</span>
                       </div>
                     )}

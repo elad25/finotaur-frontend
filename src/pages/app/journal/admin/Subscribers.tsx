@@ -190,7 +190,7 @@ export default function AdminSubscribers() {
         <StatsCard
           title="Newsletter"
           value={(stats.newsletterSubscribers ?? 0) + (stats.topSecretSubscribers ?? 0)}
-          change={`${stats.newsletterSubscribers ?? 0} WAR ZONE · ${stats.topSecretSubscribers ?? 0} Top Secret`}
+          change={`${stats.newsletterSubscribers ?? 0} Top Secret · ${stats.topSecretSubscribers ?? 0} Top Secret`}
           changeType="neutral"
           icon={TrendingUp}
           subtitle={`$${((stats.newsletterMRR ?? 0) + (stats.topSecretMRR ?? 0)).toLocaleString()} MRR`}
@@ -214,7 +214,7 @@ export default function AdminSubscribers() {
             <PlanBar label="Journal · Basic Yearly"    count={stats.basicYearly}    total={stats.totalSubscribers} color="bg-emerald-500" />
             <PlanBar label="Journal · Premium Monthly" count={stats.premiumMonthly} total={stats.totalSubscribers} color="bg-[#D4AF37]" />
             <PlanBar label="Journal · Premium Yearly"  count={stats.premiumYearly}  total={stats.totalSubscribers} color="bg-[#FFD700]" />
-            <PlanBar label="Newsletter · WAR ZONE"     count={stats.newsletterSubscribers ?? 0} total={stats.totalSubscribers} color="bg-purple-500" />
+            <PlanBar label="Newsletter · Top Secret"     count={stats.newsletterSubscribers ?? 0} total={stats.totalSubscribers} color="bg-purple-500" />
             <PlanBar label="Newsletter · Top Secret"   count={stats.topSecretSubscribers ?? 0}  total={stats.totalSubscribers} color="bg-red-500" />
           </div>
         </div>
@@ -231,7 +231,7 @@ export default function AdminSubscribers() {
               <span className="text-white font-semibold">${stats.premiumMRR.toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Newsletter · WAR ZONE MRR</span>
+              <span className="text-gray-400">Newsletter · Top Secret MRR</span>
               <span className="text-white font-semibold">${(stats.newsletterMRR ?? 0).toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center">
@@ -276,7 +276,7 @@ export default function AdminSubscribers() {
               <option value="platform">Platform</option>
               <option value="basic">Journal · Basic</option>
               <option value="premium">Journal · Premium</option>
-              <option value="newsletter">WAR ZONE</option>
+              <option value="newsletter">Top Secret</option>
               <option value="top_secret">Top Secret</option>
             </select>
           </div>
@@ -370,7 +370,7 @@ const PLAN_LABELS: Record<string, string> = {
   platform:   'Platform',
   premium:    'Premium',
   basic:      'Basic',
-  newsletter: 'WAR ZONE',
+  newsletter: 'Top Secret',
   top_secret: 'Top Secret',
 };
 
@@ -393,7 +393,7 @@ function SubscriberRow({ subscriber: sub }: { subscriber: Subscriber }) {
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Journal</span>
           )}
           {sub.products?.includes('warzone') && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">WAR ZONE</span>
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">Top Secret</span>
           )}
           {sub.products?.includes('top_secret') && (
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">Top Secret</span>

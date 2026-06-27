@@ -1024,7 +1024,7 @@ const WarZonePerformanceEdge: React.FC<{
       <div>
         <h2 className="text-h3 font-semibold text-gold-primary">Performance &amp; Edge</h2>
         <p className="text-small text-ink-tertiary mt-1">
-          What in the WAR ZONE report actually translates to money.
+          What in the TOP SECRET report actually translates to money.
         </p>
       </div>
 
@@ -1877,7 +1877,7 @@ const WarZoneAdmin: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-h2 font-semibold text-gold-primary">
-            WAR ZONE — Ticker Tracking
+            TOP SECRET — Ticker Tracking
           </h1>
           <p className="text-small text-ink-tertiary mt-1">
             Every ticker mentioned, every reason, same-day impact + performance at 30/60/90 days
@@ -2237,7 +2237,7 @@ const WarZoneAdmin: React.FC = () => {
               Catalyst Tracking — Today
             </p>
             <p className="text-small text-ink-tertiary mt-0.5">
-              What WAR ZONE flagged this morning, and how the market responded by close.
+              What TOP SECRET flagged this morning, and how the market responded by close.
             </p>
           </div>
         </div>
