@@ -173,8 +173,8 @@ const [journalYearlyPlan, setJournalYearlyPlan] = useState<string | null>(null);
 const [platformYearlyExpiresAt, setPlatformYearlyExpiresAt] = useState<string | null>(null);
 const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null);
 
+  // checkoutPlatformCore* removed 2026-06 (Core tier eliminated, zero subscribers)
   const {
-    checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
     isLoading: checkoutLoading,
@@ -278,7 +278,8 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
     setLoading(planId);
     try {
       if (planId === 'core') {
-        billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
+        // Core tier removed 2026-06 (zero subscribers) — redirect to Finotaur instead
+        billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
       } else if (planId === 'finotaur') {
         billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
       } else if (planId === 'enterprise') {

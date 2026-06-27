@@ -207,8 +207,9 @@ export default function WarZonePricingSelection() {
     
     setShowDisclaimer(false);
     
+    // 2026-06: New buyers purchase Top Secret (newsletter plans no longer sold)
     await initiateCheckout({
-      planName: 'newsletter',
+      planName: 'top_secret',
       billingInterval: pendingBillingInterval,
     });
   };
@@ -282,8 +283,9 @@ export default function WarZonePricingSelection() {
     const handleSingleCheckout = () => {
       if (!disclaimerAgreed) return;
       setShowDisclaimer(false);
+      // 2026-06: New buyers purchase Top Secret (newsletter plans no longer sold)
       initiateCheckout({
-        planName: 'newsletter',
+        planName: 'top_secret',
         billingInterval: pendingBillingInterval!,
       });
     };

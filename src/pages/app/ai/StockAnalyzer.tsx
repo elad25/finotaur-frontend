@@ -140,7 +140,7 @@ export default function StockAnalyzer() {
         upgradePrice={access.upgradePrice}
         currentUsage={access.currentUsage}
         limit={access.limit}
-        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
+        currentPlan={plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

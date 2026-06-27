@@ -70,7 +70,7 @@ export default function UpcomingEventsView() {
     return (
       <UpgradeGate
         feature="Upcoming Events"
-        upgradeTarget="core"
+        upgradeTarget="finotaur"
         message="Get forward-looking event calendar with AI thesis for Investor Days, product launches, and earnings."
       />
     );

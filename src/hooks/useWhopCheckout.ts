@@ -380,16 +380,9 @@ const checkoutSession = await createCheckoutSession({
   }, [initiateCheckout]);
 
   // ═══════════════════════════════════════════
-  // 🔥 PLATFORM CHECKOUT HELPERS (NEW)
+  // 🔥 PLATFORM CHECKOUT HELPERS
+  // Note: checkoutPlatformCore* removed 2026-06 (Core tier eliminated, zero subscribers)
   // ═══════════════════════════════════════════
-
-  const checkoutPlatformCoreMonthly = useCallback(() => {
-    initiateCheckout({ planName: 'platform_core', billingInterval: 'monthly' });
-  }, [initiateCheckout]);
-
-  const checkoutPlatformCoreYearly = useCallback(() => {
-    initiateCheckout({ planName: 'platform_core', billingInterval: 'yearly' });
-  }, [initiateCheckout]);
 
   const checkoutPlatformFinotaurMonthly = useCallback(() => {
     initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'monthly' });
@@ -440,9 +433,7 @@ const checkoutSession = await createCheckoutSession({
     checkoutPremiumMonthly,
     checkoutPremiumYearly,
     
-    // 🔥 Platform checkout helpers
-    checkoutPlatformCoreMonthly,
-    checkoutPlatformCoreYearly,
+    // 🔥 Platform checkout helpers (Core removed 2026-06)
     checkoutPlatformFinotaurMonthly,
     checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly,
@@ -506,10 +497,11 @@ export function redirectToWhopCheckout(
 // ============================================
 
 /**
- * Redirect directly to Platform checkout
+ * Redirect directly to Platform checkout.
+ * Note: 'core' removed from plan union 2026-06 (Core tier eliminated, zero subscribers)
  */
 export function redirectToPlatformCheckout(
-  plan: 'core' | 'finotaur' | 'enterprise',
+  plan: 'finotaur' | 'enterprise',
   billingInterval: BillingInterval,
   userEmail?: string,
   userId?: string,

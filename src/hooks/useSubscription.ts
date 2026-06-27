@@ -16,7 +16,8 @@ import { useAuth } from '@/providers/AuthProvider';
 // ================================================
 
 export type AccountType = 'free' | 'trial' | 'basic' | 'premium' | 'admin' | 'vip';
-export type PlatformPlan = 'free' | 'core' | 'finotaur' | 'enterprise' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise' | null;
+// 'core' | 'platform_core' removed 2026-06 (Core tier eliminated, zero subscribers)
+export type PlatformPlan = 'free' | 'finotaur' | 'enterprise' | 'platform_finotaur' | 'platform_enterprise' | null;
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled' | 'past_due' | null;
 export type SubscriptionInterval = 'monthly' | 'yearly' | null;
 export type UserRole = 'user' | 'admin' | 'super_admin';
@@ -386,12 +387,8 @@ const { error } = await supabase.rpc('mark_warning_shown', {
      ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits.platform_plan) &&
      ['active', 'trial', 'trialing'].includes(limits?.platform_subscription_status || ''));
 
-  // 🔥 v8.5.0: Core users get Journal Basic access
-  const hasJournalFromCore = 
-    !isAdmin &&
-    limits?.platform_plan && 
-    ['core', 'platform_core'].includes(limits.platform_plan) &&
-    ['active', 'trial', 'trialing'].includes(limits?.platform_subscription_status || '');
+  // Core tier removed 2026-06 (zero subscribers) — hasJournalFromCore is always false
+  const hasJournalFromCore = false;
 
   // 🔥 v8.5.0: FREE platform users get 15 lifetime trades in Journal
   const hasJournalFromFree = 
@@ -565,7 +562,7 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     // Platform fields (computed from limits)
     platformPlan: (limits?.platform_plan || 'free') as PlatformPlan,
     isPlatformFree: !limits?.platform_plan || limits.platform_plan === 'free',
-    isPlatformCore: limits?.platform_plan === 'core' || limits?.platform_plan === 'platform_core',
+    isPlatformCore: false, // Core tier removed 2026-06; always false (no subscribers).
     isPlatformFinotaur: limits?.platform_plan === 'finotaur' || limits?.platform_plan === 'platform_finotaur',
     isPlatformEnterprise: limits?.platform_plan === 'enterprise' || limits?.platform_plan === 'platform_enterprise',
     isPlatformPaid: !!limits?.platform_plan && limits.platform_plan !== 'free',
@@ -823,9 +820,11 @@ export function usePlatformSubscription() {
   const platformDisplayName = (() => {
     if (isAdmin) return 'Admin';
     switch (platformPlan) {
-      case 'core': return 'Core';
+      // 'core' case removed 2026-06 (Core tier eliminated)
       case 'finotaur': return 'Finotaur';
       case 'enterprise': return 'Enterprise';
+      case 'platform_finotaur': return 'Finotaur';
+      case 'platform_enterprise': return 'Enterprise';
       default: return 'Free';
     }
   })();
@@ -839,8 +838,9 @@ export function usePlatformSubscription() {
     return `${platformTrialDaysRemaining} days left in your trial`;
   })();
   
-  const canUpgradeToCore = !isAdmin && isPlatformFree;
-  const canUpgradeToFinotaur = !isAdmin && (isPlatformFree || isPlatformCore);
+  // Core tier removed 2026-06; upgrade ladder is free → finotaur → enterprise
+  const canUpgradeToCore = false; // Core tier eliminated
+  const canUpgradeToFinotaur = !isAdmin && isPlatformFree;
   
   return {
     plan: platformPlan,

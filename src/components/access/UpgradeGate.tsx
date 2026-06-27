@@ -20,12 +20,13 @@ interface UpgradeGateProps {
   feature: string;
   reason?: 'plan_too_low' | 'daily_limit' | 'monthly_limit';
   message?: string;
-  upgradeTarget?: 'core' | 'finotaur' | 'enterprise';
+  // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
+  upgradeTarget?: 'finotaur' | 'enterprise';
   upgradeDisplayName?: string;
   upgradePrice?: string;
   currentUsage?: number;
   limit?: number;
-  currentPlan?: 'free' | 'core' | 'finotaur' | 'enterprise';
+  currentPlan?: 'free' | 'finotaur' | 'enterprise';
 }
 
 // ============================================
@@ -33,7 +34,8 @@ interface UpgradeGateProps {
 // ============================================
 
 interface PlanTier {
-  key: 'core' | 'finotaur' | 'enterprise';
+  // 'core' removed 2026-06 (Core tier eliminated)
+  key: 'finotaur' | 'enterprise';
   name: string;
   price: string;
   description: string;
@@ -44,29 +46,8 @@ interface PlanTier {
   features: string[];
 }
 
+// Core tier removed 2026-06 (zero subscribers) — only Finotaur and Enterprise remain
 const PLAN_TIERS: PlanTier[] = [
-  {
-    key: 'core',
-    name: 'Core',
-    price: '$59',
-    description: 'Full market intelligence',
-    icon: Zap,
-    accentFrom: '#3B82F6',
-    accentTo: '#60A5FA',
-    glow: 'rgba(59,130,246,0.25)',
-    features: [
-      'Stock Analyzer (5/day)',
-      'Sector Analyzer (3/month)',
-      'Flow Scanner',
-      'AI Assistant',
-      'Real-time market data',
-      'Advanced charts & indicators',
-      'Unlimited watchlists',
-      '50 price alerts',
-      '🎁 Journal Basic INCLUDED',
-      '25 trades/month + 1 portfolio',
-    ],
-  },
   {
     key: 'finotaur',
     name: 'Finotaur',
@@ -134,7 +115,6 @@ export function UpgradeGate({
   const requiredTier = PLAN_TIERS.find(t => t.key === upgradeTarget) || PLAN_TIERS[1];
 
   const {
-    checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
     isLoading: checkoutLoading,
@@ -142,14 +122,13 @@ export function UpgradeGate({
     onError: (error) => toast.error('Checkout failed', { description: error.message }),
   });
 
-  const handleCheckout = (planKey: 'core' | 'finotaur' | 'enterprise') => {
+  // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
+  const handleCheckout = (planKey: 'finotaur' | 'enterprise') => {
     if (!user) {
       navigate('/app/all-markets/pricing');
       return;
     }
-    if (planKey === 'core') {
-      billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
-    } else if (planKey === 'finotaur') {
+    if (planKey === 'finotaur') {
       billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
     } else if (planKey === 'enterprise') {
       billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
@@ -335,16 +314,11 @@ export function UpgradeGate({
                 transition={{ delay: 0.1 }}
                 className="relative rounded-2xl flex flex-col mt-4"
                 style={{
-                  background: currentPlan === 'core'
-                    ? 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(255,255,255,0.04) 50%, rgba(0,0,0,0.1) 100%)'
-                    : 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
+                  // Core tier removed 2026-06 — always show non-active card style
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
                   backdropFilter: 'blur(20px)',
-                  border: currentPlan === 'core'
-                    ? '2px solid rgba(201,166,70,0.5)'
-                    : '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: currentPlan === 'core'
-                    ? '0 4px 20px rgba(201,166,70,0.15), inset 0 1px 0 rgba(255,255,255,0.05)'
-                    : '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
                 }}
               >
                 {/* Badge */}
@@ -352,16 +326,13 @@ export function UpgradeGate({
                   <div
                     className="px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
                     style={{
-                      background: currentPlan === 'core'
-                        ? 'linear-gradient(135deg, #C9A646, #F4D97B, #C9A646)'
-                        : 'linear-gradient(135deg, #3B82F6, #60A5FA)',
-                      color: currentPlan === 'core' ? '#000' : '#fff',
-                      boxShadow: currentPlan === 'core'
-                        ? '0 4px 12px rgba(201,166,70,0.4)'
-                        : '0 4px 12px rgba(59,130,246,0.3)',
+                      // Core tier removed 2026-06 — always show trial badge style
+                      background: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
+                      color: '#fff',
+                      boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
                     }}
                   >
-                    {currentPlan === 'core' ? 'Your Plan' : <><Zap className="w-3 h-3" /> 14-Day Free Trial</>}
+                    <><Zap className="w-3 h-3" /> 14-Day Free Trial</>
                   </div>
                 </div>
 
@@ -379,11 +350,11 @@ export function UpgradeGate({
                       <span className="text-lg font-bold text-white">{tier.name}</span>
                     </div>
                     <div className="flex items-baseline justify-center gap-1 mb-1">
-                      <span className="text-4xl font-bold text-white">{billingInterval === 'monthly' ? tier.price : tier.key === 'core' ? '$49' : '$91'}</span>
+                      <span className="text-4xl font-bold text-white">{billingInterval === 'monthly' ? tier.price : tier.key === 'finotaur' ? '$91' : tier.price}</span>
                       <span className="text-sm text-[#6B6B6B]">/month</span>
                     </div>
                     {billingInterval === 'yearly' && (
-                      <span className="text-xs text-green-400">Billed {tier.key === 'core' ? '$599' : '$1,090'}/yr</span>
+                      <span className="text-xs text-green-400">Billed {tier.key === 'finotaur' ? '$1,090' : '$2,400'}/yr</span>
                     )}
                     <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
                   </div>
