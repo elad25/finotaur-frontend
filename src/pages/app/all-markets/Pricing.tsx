@@ -41,6 +41,7 @@ interface PlanConfig {
   trialOnceOnly?: boolean;
   includesJournal?: boolean;
   includesNewsletter?: boolean;
+  comingSoon?: boolean;
   // checkout category: 'journal' | 'top_secret' | 'platform'
   checkoutCategory: 'none' | 'journal' | 'top_secret' | 'platform';
 }
@@ -128,7 +129,7 @@ const plans: PlanConfig[] = [
     checkoutCategory: 'platform',
     features: [
       'Everything in Journal & TOP SECRET, plus:',
-      'Stock Analyzer — unlimited',
+      'Unlimited analyses, alerts & screeners',
       'Sector Analyzer',
       'Options Intelligence AI',
       'Macro Analyzer',
@@ -149,6 +150,7 @@ const plans: PlanConfig[] = [
     yearlyMonthlyEquivalent: '$167',
     description: 'Your AI portfolio manager — invests and trades alongside you, 24/7 oversight.',
     trialDays: 0,
+    comingSoon: true,
     checkoutCategory: 'platform',
     features: [
       'Everything in FINOTAUR, plus:',
@@ -329,6 +331,8 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   const hasExpensiveStandalones = standaloneMonthlyTotal >= 94 && currentPlatformPlan === 'free';
 
   const handlePlanClick = (planId: PlatformPlanId) => {
+    // COPILOT (or any coming-soon plan) — checkout locked, no-op
+    if (plans.find((p) => p.id === planId)?.comingSoon) return;
     // Free = open downgrade confirmation dialog
     if (planId === 'free') {
       if (currentPlatformPlan !== 'free') {
@@ -768,9 +772,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   return (
                 <button 
                   onClick={() => handlePlanClick(plan.id)}
-                  disabled={(isCurrentPlan && plan.id !== 'free') || isLoadingThis || checkoutLoading || isBlockedYearlyToMonthly}
+                  disabled={plan.comingSoon || (isCurrentPlan && plan.id !== 'free') || isLoadingThis || checkoutLoading || isBlockedYearlyToMonthly}
                   className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
-                    isBlockedYearlyToMonthly
+                    plan.comingSoon
+                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                      : isBlockedYearlyToMonthly
                       ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
                       : isCurrentPlan && plan.id === 'free'
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
@@ -790,7 +796,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                     boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
                   }) : undefined}
                 >
-                  {isLoadingThis ? (
+                  {plan.comingSoon ? (
+                    <span className="flex items-center justify-center gap-2">
+                      Coming Soon
+                    </span>
+                  ) : isLoadingThis ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       Processing...

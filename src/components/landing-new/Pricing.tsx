@@ -31,6 +31,7 @@ interface Plan {
   badge?: string;
   includesExtras?: string;
   isFree?: boolean;
+  comingSoon?: boolean;
 }
 
 const plans: Plan[] = [
@@ -107,7 +108,7 @@ const plans: Plan[] = [
     includesExtras: "Journal + TOP SECRET + full market engine",
     features: [
       "Everything in Journal & TOP SECRET, plus:",
-      "Stock Analyzer — unlimited",
+      "Unlimited analyses, alerts & screeners",
       "Sector Analyzer",
       "Options Intelligence AI",
       "Macro Analyzer",
@@ -125,7 +126,8 @@ const plans: Plan[] = [
     yearlyPrice: "$2,000",
     yearlyMonthlyEquivalent: "$167",
     description: "Your AI portfolio manager — invests and trades alongside you, 24/7.",
-    badge: "AI Portfolio Manager",
+    badge: "Coming Soon",
+    comingSoon: true,
     savings: "Save 17%",
     features: [
       "Everything in FINOTAUR, plus:",
@@ -148,7 +150,7 @@ const Pricing = () => {
 
   const handlePlanClick = (planId: string) => {
     if (planId === "enterprise") {
-      navigate(`/auth/register?plan=enterprise&interval=${billingInterval}`);
+      // COPILOT not yet available — checkout locked
       return;
     }
     if (planId === "free") {
@@ -380,7 +382,11 @@ const Pricing = () => {
                     </div>
 
                     {/* CTA */}
-                    {plan.featured ? (
+                    {plan.comingSoon ? (
+                      <Button variant="goldOutline" size="full" disabled>
+                        Coming Soon
+                      </Button>
+                    ) : plan.featured ? (
                       <Button
                         variant="gold"
                         size="full"
