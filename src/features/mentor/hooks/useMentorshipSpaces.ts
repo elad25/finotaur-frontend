@@ -15,6 +15,7 @@
 //   - remove_space_member(...)      -> owner/co_mentor removes a member
 //   - set_journal_sharing(...)      -> student toggles journal visibility
 //   - open_dm_channel(...)          -> ensures a DM channel exists, returns it
+//   - add_space_member_direct(...)  -> owner/co_mentor adds an accepted connection directly
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -136,17 +137,24 @@ interface CreateSpaceInput {
   description?: string;
 }
 
+/** Minimal shape of mentor_spaces returned by create_mentor_space(). */
+interface CreatedSpace {
+  id: string;
+}
+
 /** Owner creates a new mentor space. Requires a Premium (FINOTAUR) plan. */
 export function useCreateSpace() {
   const qc = useQueryClient();
-  return useMutation<void, Error, CreateSpaceInput>({
+  return useMutation<CreatedSpace, Error, CreateSpaceInput>({
     mutationFn: async ({ name, slug, description }) => {
-      const { error } = await supabase.rpc('create_mentor_space', {
+      const { data, error } = await supabase.rpc('create_mentor_space', {
         p_name: name,
         p_slug: slug,
         p_description: description ?? null,
       });
       if (error) throw error;
+      // create_mentor_space RETURNS mentor_spaces (composite row) -> object, not array.
+      return data as CreatedSpace;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.mySpaces });
@@ -312,6 +320,37 @@ export function useLeaveSpace() {
       if (error) throw error;
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.mySpaces });
+    },
+  });
+}
+
+interface AddConnectionToSpaceInput {
+  spaceId: string;
+  userId: string;
+  role?: SpaceRole;
+}
+
+/**
+ * Owner or co_mentor directly adds an accepted mentor connection to the space.
+ * The caller must have an accepted mentor_relationship with p_user (enforced
+ * server-side by add_space_member_direct).
+ */
+export function useAddConnectionToSpace() {
+  const qc = useQueryClient();
+  return useMutation<SpaceMember, Error, AddConnectionToSpaceInput>({
+    mutationFn: async ({ spaceId, userId, role = 'student' }) => {
+      const { data, error } = await supabase.rpc('add_space_member_direct', {
+        p_space: spaceId,
+        p_user: userId,
+        p_role: role,
+      });
+      if (error) throw error;
+      // add_space_member_direct RETURNS space_members (composite row) -> object, not array.
+      return data as SpaceMember;
+    },
+    onSuccess: (_data, { spaceId }) => {
+      qc.invalidateQueries({ queryKey: keys.members(spaceId) });
       qc.invalidateQueries({ queryKey: keys.mySpaces });
     },
   });

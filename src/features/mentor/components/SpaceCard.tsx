@@ -97,6 +97,8 @@ export function SpaceCard({ space, onClick, onDelete, onLeave }: SpaceCardProps)
       }}
       className={cn(
         'cursor-pointer',
+        // Taller card (~3x) — content stays anchored to the top, extra height grows downward.
+        'min-h-[420px] flex flex-col',
         // Hover: upgrade border to gold-border per DS Card featured behaviour.
         'hover:border-gold-border',
         'transition-colors duration-base ease-out',
