@@ -109,6 +109,21 @@ jobs:
       - name: Dialog title guard (blocking)
         run: node scripts/check-dialog-titles.mjs
 
+  # dropdown-guard — native <select> dropdowns must never render white-on-white.
+  # Enforces the globals.css `select { color-scheme: dark }` iron rule.
+  # See scripts/check-dropdown-theme.mjs.
+  dropdown-guard:
+    name: dropdown-guard (dark dropdowns)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Dropdown dark-theme guard (blocking)
+        run: node scripts/check-dropdown-theme.mjs
+
   lint:
     name: lint (eslint)
     runs-on: ubuntu-latest

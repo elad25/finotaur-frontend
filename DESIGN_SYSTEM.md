@@ -443,6 +443,19 @@ This is enforced globally in `src/styles/globals.css` (a global
 NOT rely on the legacy opt-in `.no-spinner` class — the global rule already
 covers every numeric field.
 
+#### 🔴 IRON RULE — native dropdowns are always dark + legible (site-wide)
+A native `<select>` dropdown MUST NEVER render its option list white-on-white
+or otherwise unreadable. On this dark theme a bare `<select>` inherits light
+option text while the browser paints the option popup white, so the list goes
+invisible (this was reported on the Add-channel "Type" dropdown). Enforced
+globally in `src/styles/globals.css` via `select { color-scheme: dark }` plus a
+`select option { background-color; color }` fallback — every `<select>` is
+legible WITHOUT per-component styling. Do NOT remove that rule, and do NOT set a
+light `color` on an `<option>` without a matching dark `background`. The
+`dropdown-guard` CI job (`scripts/check-dropdown-theme.mjs`) blocks any PR that
+removes the global protection. Prefer the global rule over per-component option
+styling.
+
 ### Number display (price/metric)
 Use the React components in `src/components/ui/NumberDisplay.tsx`:
 - `<Price>` — the value itself, always white
