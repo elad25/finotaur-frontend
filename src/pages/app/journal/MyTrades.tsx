@@ -178,6 +178,7 @@ interface StrategyOption {
 
 interface Stats {
   totalTrades: number;
+  closedCount: number;
   winRate: number;
   totalPnL: number;
   avgR: number;
@@ -1385,10 +1386,11 @@ const stats = useMemo<Stats>(() => {
     // Summary mode: closed if has exit_price
     return t.exit_price != null;
   });
-  const total = closedTrades.length;
-  
+  const closedCount = closedTrades.length;
+  const total = displayTrades.length;
+
   if (total === 0) {
-    return { totalTrades: 0, winRate: 0, totalPnL: 0, avgR: 0, wins: 0, losses: 0, breakeven: 0 };
+    return { totalTrades: 0, closedCount: 0, winRate: 0, totalPnL: 0, avgR: 0, wins: 0, losses: 0, breakeven: 0 };
   }
 
   let wins = 0, losses = 0, breakeven = 0, totalPnL = 0, totalR = 0, rCount = 0;
@@ -1413,7 +1415,8 @@ const stats = useMemo<Stats>(() => {
 
     return {
       totalTrades: total,
-      winRate: (wins / total) * 100,
+      closedCount,
+      winRate: closedCount > 0 ? (wins / closedCount) * 100 : 0,
       totalPnL,
       avgR: rCount > 0 ? totalR / rCount : 0,
       wins,
@@ -1889,7 +1892,7 @@ const stats = useMemo<Stats>(() => {
               icon={TrendingUp}
               title="Win Rate"
               value={`${stats.winRate.toFixed(1)}%`}
-              subtitle={stats.totalTrades > 0 ? `${stats.wins} / ${stats.totalTrades} trades` : undefined}
+              subtitle={stats.closedCount > 0 ? `${stats.wins} / ${stats.closedCount} trades` : undefined}
               color="rgba(16, 185, 129, 0.1)"
             />
             

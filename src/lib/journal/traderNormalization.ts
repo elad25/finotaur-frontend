@@ -35,6 +35,7 @@ interface NormalizableTrade {
   actual_user_r?: number | null;
   actual_r?: number | null;
   rr?: number | null;
+  group_trade_ids?: string[];
 }
 
 const BUCKET_MS = 5_000; // 5-second grouping window
@@ -82,7 +83,7 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
       const qty = representative.quantity != null ? Number(representative.quantity) : 1;
       const pnl = representative.pnl != null ? Number(representative.pnl) : 0;
       const normPnl = mode === 'per-contract' ? pnl / Math.max(qty, 1) : pnl;
-      result.push({ ...representative, pnl: normPnl, quantity: 1 });
+      result.push({ ...representative, pnl: normPnl, quantity: 1, group_trade_ids: [representative.id] } as T);
       continue;
     }
     const totalPnl = sorted.reduce((sum, t) => sum + (t.pnl != null ? Number(t.pnl) : 0), 0);
@@ -121,6 +122,7 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
       actual_r: mergedActualR,
       actual_user_r: null,
       rr: null,
+      group_trade_ids: sorted.map((t) => t.id),
     } as T);
   }
   result.sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
