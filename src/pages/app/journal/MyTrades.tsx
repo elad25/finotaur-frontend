@@ -542,20 +542,22 @@ const buildTradeSummaries = (
 };
 
 // 🚀 OPTIMIZATION: Memoized StatsCard Component
-const StatsCard = memo(({ 
-  icon: Icon, 
-  title, 
-  value, 
-  subtitle, 
-  color, 
-  valueColor 
-}: { 
-  icon: any; 
-  title: string; 
-  value: string; 
-  subtitle?: string; 
-  color: string; 
+const StatsCard = memo(({
+  icon: Icon,
+  title,
+  value,
+  subtitle,
+  color,
+  valueColor,
+  loading,
+}: {
+  icon: any;
+  title: string;
+  value: string;
+  subtitle?: string;
+  color: string;
   valueColor?: string;
+  loading?: boolean;
 }) => (
   <div 
     className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02]"
@@ -590,11 +592,15 @@ const StatsCard = memo(({
       </div>
 
       {/* Value — large and dominant */}
-      <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
-        {value}
-      </div>
+      {loading ? (
+        <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
+      ) : (
+        <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
+          {value}
+        </div>
+      )}
 
-      {subtitle && (
+      {!loading && subtitle && (
         <div className="text-xs text-zinc-600 font-medium">
           {subtitle}
         </div>
@@ -1255,7 +1261,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   // TRADER mode: pass skipCopyAggregation so we receive raw per-account fills
   // instead of copy-aggregated rows. normalizeTraderTrades (below) then groups
   // them into decisions, matching Dashboard behaviour.
-  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
+  const { data: rawTrades = [], isLoading, isPlaceholderData, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
   // TRADER scope: normalize copier-duplicated rows into one decision per trade.
   // All downstream stats and the table operate on `trades` (the normalized array).
   // Non-TRADER: `trades` === `rawTrades` (zero cost, referentially stable).
@@ -1368,12 +1374,22 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   // TRADER scope: normalise to one row per decision before stat/table computation
   const displayTrades = useMemo(() => {
     if (!isTraderMode) return trades;
-    // normalizeTraderTrades expects ascending order; useTrades returns descending
-    const ascending = [...trades].reverse();
-    const normalized = normalizeTraderTrades(ascending, traderMode);
-    // Return descending to match the rest of the page's expectations
-    return [...normalized].reverse();
-  }, [trades, isTraderMode, traderMode]);
+    // `trades` (the memo above) is ALREADY normalized once and carries
+    // group_trade_ids for the full copier group. Re-normalizing here would treat
+    // each decision as a size-1 group and clobber group_trade_ids back to a single
+    // id, which breaks bulk/single delete (only one copy gets deleted, the rest
+    // reappear on refetch). Just present newest-first (normalizeTraderTrades
+    // returns ascending order).
+    return [...trades].sort(
+      (a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime(),
+    );
+  }, [trades, isTraderMode]);
+
+  // While the query is still settling — initial load, OR serving stale
+  // placeholder data after a query-key change (account-scope / hidden-portfolio
+  // resolution happens one tick after mount) — show a stable skeleton instead of
+  // a transient wrong count. Prevents the "27 → 15" number jump on page load.
+  const isStatsLoading = isLoading || isPlaceholderData;
 
   // ✅ 4. 🚀 OPTIMIZED: Stats calculation - single pass, memoized
 const stats = useMemo<Stats>(() => {
@@ -1886,16 +1902,18 @@ const stats = useMemo<Stats>(() => {
               value={stats.totalTrades.toString()}
               subtitle={stats.totalTrades > 0 ? `${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE` : undefined}
               color="rgba(59, 130, 246, 0.1)"
+              loading={isStatsLoading}
             />
-            
+
             <StatsCard
               icon={TrendingUp}
               title="Win Rate"
               value={`${stats.winRate.toFixed(1)}%`}
               subtitle={stats.closedCount > 0 ? `${stats.wins} / ${stats.closedCount} trades` : undefined}
               color="rgba(16, 185, 129, 0.1)"
+              loading={isStatsLoading}
             />
-            
+
             <StatsCard
               icon={DollarSign}
               title="Net P&L"
@@ -1903,8 +1921,9 @@ const stats = useMemo<Stats>(() => {
               subtitle={stats.totalPnL !== 0 ? (stats.totalPnL >= 0 ? 'Profit' : 'Loss') : undefined}
               color="rgba(234, 179, 8, 0.1)"
               valueColor={stats.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              loading={isStatsLoading}
             />
-            
+
             <StatsCard
               icon={Award}
               title="Avg R"
@@ -1912,6 +1931,7 @@ const stats = useMemo<Stats>(() => {
               subtitle="Per trade"
               color="rgba(168, 85, 247, 0.1)"
               valueColor={stats.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              loading={isStatsLoading}
             />
           </div>
         </div>
@@ -1994,7 +2014,7 @@ const stats = useMemo<Stats>(() => {
 
       {/* Trades Table */}
       <div className="flex-1 overflow-auto">
-        {isLoading ? (
+        {isStatsLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-zinc-500">Loading trades...</div>
           </div>
