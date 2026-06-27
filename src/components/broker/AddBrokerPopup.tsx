@@ -55,6 +55,9 @@ const BROKER_MARKS: Partial<Record<BrokerName, string>> = {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** If provided, the user is redirected here after a successful OAuth round-trip
+   *  instead of landing on /app/journal/overview. Must start with /app/. */
+  returnTo?: string;
 }
 
 function BrokerMark({ broker }: { broker: BrokerName }) {
@@ -177,7 +180,7 @@ function EnvironmentToggle({
   );
 }
 
-export default function AddBrokerPopup({ open, onOpenChange }: Props) {
+export default function AddBrokerPopup({ open, onOpenChange, returnTo }: Props) {
   const { user } = useAuth();
   const { isLoading } = useTradovate();
 
@@ -240,6 +243,12 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
           'pending_tradovate_connection_name',
           JSON.stringify({ name: connectionName.trim(), ts: Date.now() }),
         );
+        // If the caller wants to return somewhere other than the journal overview
+        // after OAuth, persist the target path so useOAuthReturnRedirect can pick
+        // it up on the way back (sessionStorage survives the same-tab redirect).
+        if (returnTo) {
+          sessionStorage.setItem('finotaur_oauth_return_to', returnTo);
+        }
         window.location.href = await getTradovateAuthorizationUrl(env);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Tradovate OAuth failed. Try again or contact support.');

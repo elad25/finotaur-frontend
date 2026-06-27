@@ -629,13 +629,33 @@ export default function TradeCopier() {
             )}
 
             <SectionCard>
-            <div className="flex items-center gap-ds-4 mb-ds-4">
-              <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
-                <Link2 className="w-4 h-4 text-gold-primary" />
+            <div className="flex items-start justify-between gap-ds-4 mb-ds-4 flex-wrap">
+              <div className="flex items-center gap-ds-4">
+                <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+                  <Link2 className="w-4 h-4 text-gold-primary" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
+                  <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
-                <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
+              <div className="flex items-center gap-ds-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowAddBroker(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gold-primary/10 px-3 py-2 text-xs font-semibold text-gold-primary transition-all hover:bg-gold-primary/20 hover:border-gold-primary/50"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Connect a broker
+                </button>
+                <a
+                  href="/downloads/finotaur-agent.zip"
+                  download
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gradient-to-r from-[#C9A646] to-[#E8C56A] px-3 py-2 text-xs font-semibold text-black transition-all hover:opacity-90"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download desktop agent
+                </a>
               </div>
             </div>
 
@@ -688,7 +708,11 @@ export default function TradeCopier() {
       </div>
 
       {showAddBroker && (
-        <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
+        <AddBrokerPopup
+          open={showAddBroker}
+          onOpenChange={setShowAddBroker}
+          returnTo="/app/copy-trade/overview"
+        />
       )}
     </div>
     </CopierPremiumGate>
