@@ -1,0 +1,130 @@
+// src/features/floor/components/TradeShareMenu.tsx
+// Minimal "Share" control for the trade-detail chart toolbar (replaces the old
+// Dark theme toggle). Telegram-style send icon opens a small popover with two
+// kinds of destinations:
+//   • Global Feed                       — scope: 'global'
+//   • Each Room the user is a member of — scope: 'community', room_id
+//
+// Privacy defaults to "share everything except position size", matching the
+// ShareTradeDialog defaults. For richer control (hide P&L, setup-only, reveal
+// size, caption, preview) the full ShareTradeDialog still exists.
+//
+// Manual trades cannot be shared (see isManualTrade) — the menu renders nothing
+// for them as a defensive guard; callers also avoid mounting it for manual trades.
+
+import { useState } from 'react';
+import { Send, Globe, Users, Loader2 } from 'lucide-react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { toast } from '@/hooks/use-toast';
+import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
+import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
+import { isManualTrade } from '@/lib/trades/isManualTrade';
+import type { ShareDestination, SharePrivacy } from '@/features/floor/types/community';
+
+const DEFAULT_PRIVACY: SharePrivacy = {
+  hidePnl: false,
+  showSetupOnly: false,
+  revealSize: false,
+};
+
+export interface TradeShareMenuTrade {
+  id: string;
+  import_source?: string | null;
+}
+
+export function TradeShareMenu({ trade }: { trade: TradeShareMenuTrade }) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
+  const { spaces } = useMySpaces();
+  const { shareTrade } = useShareTrade();
+
+  // Defensive: manual trades are not shareable.
+  if (isManualTrade(trade)) return null;
+
+  const handleShare = async (
+    key: string,
+    destination: ShareDestination,
+    label: string,
+  ) => {
+    if (pending) return;
+    setPending(key);
+    try {
+      await shareTrade(trade.id, [destination], DEFAULT_PRIVACY);
+      toast({ title: 'Trade shared', description: `Shared to ${label}.` });
+      setOpen(false);
+    } catch (err) {
+      toast({
+        title: 'Could not share trade',
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+          aria-label="Share trade"
+          title="Share trade"
+        >
+          <Send className="h-3.5 w-3.5" />
+          Share
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-60 border-zinc-800 bg-zinc-900 p-1.5 text-sm text-zinc-200"
+      >
+        <p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+          Share to
+        </p>
+
+        <button
+          type="button"
+          onClick={() => handleShare('global', { scope: 'global' }, 'Global Feed')}
+          disabled={!!pending}
+          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {pending === 'global' ? (
+            <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
+          ) : (
+            <Globe className="h-4 w-4 text-yellow-400" />
+          )}
+          <span>Global Feed</span>
+        </button>
+
+        {spaces.length > 0 && <div className="my-1 border-t border-zinc-800" />}
+
+        {spaces.map((space) => {
+          const key = `room:${space.space_id}`;
+          return (
+            <button
+              key={space.space_id}
+              type="button"
+              onClick={() =>
+                handleShare(
+                  key,
+                  { scope: 'community', room_id: space.space_id },
+                  space.name,
+                )
+              }
+              disabled={!!pending}
+              className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pending === key ? (
+                <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
+              ) : (
+                <Users className="h-4 w-4 text-zinc-400" />
+              )}
+              <span className="truncate">{space.name}</span>
+            </button>
+          );
+        })}
+      </PopoverContent>
+    </Popover>
+  );
+}
