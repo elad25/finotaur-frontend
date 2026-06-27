@@ -144,6 +144,8 @@ const FinoChatDrawer = lazy(() => import("@/components/fino/FinoChatDrawer"));
 const AffiliateTracker = lazy(() => import("@/features/affiliate/components/AffiliateTracker").then(m => ({ default: m.AffiliateTracker })));
 
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
+
+// Trade Copier page
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 
 const SettingsShell = lazy(() => import("@/features/settings/SettingsShell"));
@@ -818,30 +820,27 @@ function AppContent() {
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
-          {/* TRADE COPIER — TradeCopier page (five tabs: Accounts / Copier / Risk / Agent / Install).
-              Execution runs locally via the Finotaur desktop agent; no server copy-engine. */}
-          <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/copier"   element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/risk"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/agent"    element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/install"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          {/* Legacy copy-trade aliases → default Accounts tab */}
-          <Route path="copy-trade/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/manage-risk"  element={<Navigate to="/app/copy-trade/risk"     replace />} />
+          {/* TRADE COPIER — five-tab page (Connections / Trade Copier / Manage Risk / Agent / Install) */}
+          <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/agent"        element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          {/* Legacy aliases — redirect to overview */}
           <Route path="copy-trade/top-traders"  element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies"   element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/portfolios"   element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/leaderboard"  element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/my-copying"   element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/insights"     element={<Navigate to="/app/copy-trade/overview" replace />} />
-
+          
           {/* FUNDING */}
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />
           <Route path="funding/brokers" element={<LockedRoute domainId="funding"><FundingBrokers /></LockedRoute>} />
           <Route path="funding/advance" element={<LockedRoute domainId="funding"><FundingAdvance /></LockedRoute>} />
           <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
 
-          {/* AUTOMATION — shell retired; redirected to the unified Trade Copier page */}
+          {/* AUTOMATION — backward-compat redirect to Trade Copier */}
           <Route path="automation/*" element={<Navigate to="/app/copy-trade/overview" replace />} />
 
           <Route path="settings" element={<SuspenseRoute><SettingsShell /></SuspenseRoute>}>
