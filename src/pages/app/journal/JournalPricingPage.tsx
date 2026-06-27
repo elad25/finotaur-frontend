@@ -77,7 +77,7 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: '$34.08',
     description: 'Unlimited trades + your AI trading coach',
     features: [
-      'Everything in Basic, plus:',
+      'Everything in Free, plus:',
       'Unlimited trades — never hit a cap',
       'Connect multiple brokers',
       'Your FINOTAUR Score — one number that grades your real edge',

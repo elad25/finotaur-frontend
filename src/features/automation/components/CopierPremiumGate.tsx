@@ -49,7 +49,7 @@ export function CopierPremiumGate({ children }: CopierPremiumGateProps) {
         variant="gold"
         size="default"
         showArrow={false}
-        onClick={() => navigate('/app/journal/pricing')}
+        onClick={() => navigate('/app/upgrade')}
       >
         Upgrade to Premium
       </Button>

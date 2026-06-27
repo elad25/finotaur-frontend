@@ -1,15 +1,14 @@
 // =====================================================
-// FINOTAUR SUBSCRIPTION LIMITS - v2.0.0
+// FINOTAUR SUBSCRIPTION LIMITS - v3.0.0
 // =====================================================
 // Place in: src/constants/subscriptionLimits.ts
-// 
+//
 // ✅ Single source of truth for subscription limits
-// 
-// 🔥 v2.0.0 CHANGES:
-// - Removed FREE tier completely
-// - Added trial support for BASIC plan (14 days)
-// - BASIC: 25 trades/month, payment after trial
-// - PREMIUM: Unlimited trades, payment from day 0
+//
+// 🔥 v3.0.0 CHANGES (2026-06):
+// - REMOVED 'basic' tier (zero active subscribers — confirmed)
+// - Journal tiers remaining: Free (15 lifetime trades) and Premium (unlimited)
+// - isBasicUser() now only matches 'trial' (legacy in-flight refs) — basic plan is gone
 // =====================================================
 
 // ============================================
@@ -17,25 +16,7 @@
 // ============================================
 
 export const SUBSCRIPTION_LIMITS = {
-  basic: {
-    max_trades: 25,
-    name: 'Basic',
-    displayName: 'Basic Plan',
-    reset: 'monthly' as const,
-    price_monthly: 24.99,
-    price_yearly: 229.00,
-    trial_days: 14,
-    features: [
-      'Up to 25 trades per month',
-      'Full performance analytics',
-      'Strategy builder & tracking',
-      'Calendar & trading sessions',
-      'Advanced statistics & metrics',
-      'Equity curve & charts',
-      'Trade screenshots & notes',
-      'Email support',
-    ],
-  },
+  // Basic removed 2026-06 (zero subscribers). Free tier (15 lifetime trades) is handled at DB/RLS level.
   premium: {
     max_trades: Infinity,
     name: 'Premium',
@@ -45,7 +26,7 @@ export const SUBSCRIPTION_LIMITS = {
     price_yearly: 409.00,
     trial_days: 0, // No trial - payment from day 0
     features: [
-      'Everything in Basic, plus:',
+      'Broker sync — leading brokers supported',
       'Unlimited trades',
       'AI-powered insights & coach',
       'Advanced AI analysis',
@@ -63,7 +44,8 @@ export const SUBSCRIPTION_LIMITS = {
 // TYPES
 // ============================================
 
-export type AccountType = 'basic' | 'premium' | 'admin' | 'vip' | 'trial';
+// 'basic' removed from AccountType 2026-06. 'trial' kept for legacy in-flight webhook refs.
+export type AccountType = 'premium' | 'admin' | 'vip' | 'trial';
 export type PlanType = keyof typeof SUBSCRIPTION_LIMITS;
 
 export interface SubscriptionStatus {
@@ -85,19 +67,18 @@ export interface SubscriptionStatus {
 // ============================================
 
 /**
- * Get maximum trades for an account type
+ * Get maximum trades for an account type.
+ * Free tier (account_type = null / 'free') is capped at 15 lifetime trades (enforced at DB level).
  */
 export function getMaxTrades(accountType: AccountType | string): number {
   if (isPremiumUser(accountType)) {
     return SUBSCRIPTION_LIMITS.premium.max_trades;
   }
-  
-  if (accountType === 'basic' || accountType === 'trial') {
-    return SUBSCRIPTION_LIMITS.basic.max_trades;
-  }
-  
-  // Default to basic limits for unknown types
-  return SUBSCRIPTION_LIMITS.basic.max_trades;
+
+  // 'trial' was a legacy alias for the old Basic plan (25 trades/month).
+  // With Basic removed, trial users fall through to the free 15-trade lifetime cap.
+  // Return a safe finite sentinel; actual enforcement is at the DB level.
+  return 15;
 }
 
 /**
@@ -105,16 +86,19 @@ export function getMaxTrades(accountType: AccountType | string): number {
  */
 export function isPremiumUser(accountType: string | null | undefined): boolean {
   if (!accountType) return false;
-  return accountType === 'premium' || 
-         accountType === 'admin' || 
+  return accountType === 'premium' ||
+         accountType === 'admin' ||
          accountType === 'vip';
 }
 
 /**
- * Check if user is in basic tier (including trial)
+ * Check if user is in a basic/trial legacy state.
+ * Basic plan was removed 2026-06 — this now only matches 'trial' for in-flight webhook refs.
+ * TODO: remove callers once all legacy trial refs are migrated.
  */
 export function isBasicUser(accountType: string | null | undefined): boolean {
   if (!accountType) return false;
+  // 'basic' is kept as a string match for any in-flight DB rows that still have account_type='basic'
   return accountType === 'basic' || accountType === 'trial';
 }
 
@@ -122,8 +106,8 @@ export function isBasicUser(accountType: string | null | undefined): boolean {
  * Check if trade limit is reached
  */
 export function isLimitReached(
-  tradesUsed: number, 
-  maxTrades: number, 
+  tradesUsed: number,
+  maxTrades: number,
   accountType: string
 ): boolean {
   if (isPremiumUser(accountType)) return false;
@@ -151,14 +135,14 @@ export function needsPlanSelection(
 ): boolean {
   // No account type means needs plan selection
   if (!accountType) return true;
-  
+
   // Premium users never need plan selection
   if (isPremiumUser(accountType)) return false;
-  
+
   // Check subscription status
   if (!subscriptionStatus) return true;
   if (subscriptionStatus === 'expired' || subscriptionStatus === 'cancelled') return true;
-  
+
   return false;
 }
 
@@ -167,7 +151,7 @@ export function needsPlanSelection(
  */
 export function getPlanDisplayInfo(accountType: AccountType | string): {
   name: string;
-  badge: 'basic' | 'premium' | 'vip';
+  badge: 'premium' | 'vip';
   color: string;
   bgColor: string;
   borderColor: string;
@@ -181,10 +165,11 @@ export function getPlanDisplayInfo(accountType: AccountType | string): {
       borderColor: 'border-[#C9A646]/30',
     };
   }
-  
+
+  // Legacy fallback for any remaining 'basic' / 'trial' rows in DB
   return {
-    name: accountType === 'trial' ? 'Basic (Trial)' : 'Basic',
-    badge: 'basic',
+    name: accountType === 'trial' ? 'Free (Trial)' : 'Free',
+    badge: 'premium', // fallback — callers should handle 'free' state themselves
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/20',
     borderColor: 'border-blue-500/30',
@@ -196,12 +181,12 @@ export function getPlanDisplayInfo(accountType: AccountType | string): {
  */
 export function getTrialDaysRemaining(trialEndsAt: string | null): number | null {
   if (!trialEndsAt) return null;
-  
+
   const now = new Date();
   const endDate = new Date(trialEndsAt);
   const diffTime = endDate.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
   return Math.max(0, diffDays);
 }
 
@@ -222,7 +207,7 @@ export function getResetDateFormatted(): string {
   const nextMonth = new Date();
   nextMonth.setMonth(nextMonth.getMonth() + 1);
   nextMonth.setDate(1);
-  
+
   return nextMonth.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',

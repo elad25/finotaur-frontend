@@ -14,7 +14,7 @@ import { supabase } from '@/lib/supabase';
 // TYPES
 // ============================================
 
-export type PlatformPlan = 'free' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise';
+export type PlatformPlan = 'free' | 'platform_finotaur' | 'platform_enterprise';
 
 /**
  * Canonical platform_plan in the DB / RPCs is the BARE form ('core' | 'finotaur' | 'enterprise').
@@ -23,7 +23,8 @@ export type PlatformPlan = 'free' | 'platform_core' | 'platform_finotaur' | 'pla
  */
 function normalizePlatformPlan(raw: string | null | undefined): PlatformPlan {
   const v = (raw || 'free').toString().toLowerCase();
-  if (v === 'platform_core' || v === 'core') return 'platform_core';
+  // 'core' / 'platform_core': Core tier removed 2026-06 (zero subscribers) — treat as free
+  if (v === 'platform_core' || v === 'core') return 'free';
   if (v === 'platform_finotaur' || v === 'finotaur') return 'platform_finotaur';
   if (v === 'platform_enterprise' || v === 'enterprise') return 'platform_enterprise';
   return 'free';
@@ -52,7 +53,7 @@ export interface AccessResult {
   reason?: 'plan_too_low' | 'daily_limit' | 'monthly_limit';
   currentUsage?: number;
   limit?: number;
-  upgradeTarget?: 'core' | 'finotaur' | 'enterprise';
+  upgradeTarget?: 'finotaur' | 'enterprise';
   upgradeDisplayName?: string;   // "Core" | "Finotaur" | "Enterprise"
   upgradePrice?: string;         // "$59" | "$109" | "$500"
   message?: string;              // Full human-readable message
@@ -65,7 +66,7 @@ export interface AccessResult {
 const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
   free: {
     stock_analyzer: true,
-    options_tab: false,         // ❌ Core and above only
+    options_tab: false,         // ❌ Finotaur and above only
     sector_analyzer: false,
     flow_scanner: false,
     options_intelligence: false,
@@ -73,17 +74,6 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
     macro_analyzer: false,
     my_portfolio: false,
     ai_scanner: false,
-  },
-  platform_core: {
-    stock_analyzer: true,         // limited 5/day
-    sector_analyzer: true,        // limited 3/month
-    flow_scanner: true,           // ✅ unlocked at Core
-    options_intelligence: false,
-    ai_assistant: true,           // ✅ unlocked at Core
-    macro_analyzer: false,
-    my_portfolio: false,
-    ai_scanner: false,
-    options_tab: true,            // ✅ unlocked at Core
   },
   platform_finotaur: {
     stock_analyzer: true,         // limited 7/day
@@ -116,10 +106,11 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
 
 const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
   stock_analyzer: 'free',
-  options_tab: 'platform_core',
-  sector_analyzer: 'platform_core',
-  flow_scanner: 'platform_core',
-  ai_assistant: 'platform_core',
+  // The four features below moved from Core → Finotaur (Core tier removed 2026-06)
+  options_tab: 'platform_finotaur',
+  sector_analyzer: 'platform_finotaur',
+  flow_scanner: 'platform_finotaur',
+  ai_assistant: 'platform_finotaur',
   options_intelligence: 'platform_finotaur',
   macro_analyzer: 'platform_finotaur',
   ai_scanner: 'platform_finotaur',
@@ -131,7 +122,7 @@ const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
 // ============================================
 
 const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
-  core: { displayName: 'Core', price: '$59/mo' },
+  // 'core' entry removed 2026-06 (Core tier eliminated, zero subscribers)
   finotaur: { displayName: 'Finotaur', price: '$109/mo' },
   enterprise: { displayName: 'Enterprise', price: '$500/mo' },
 };
@@ -142,7 +133,6 @@ const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
 
 const PLAN_HIERARCHY: PlatformPlan[] = [
   'free',
-  'platform_core',
   'platform_finotaur',
   'platform_enterprise',
 ];
@@ -150,10 +140,10 @@ const PLAN_HIERARCHY: PlatformPlan[] = [
 function getUpgradeTarget(
   currentPlan: PlatformPlan,
   requiredPlan: PlatformPlan
-): { target: 'core' | 'finotaur' | 'enterprise'; displayName: string; price: string } | null {
-  const requiredMap: Record<PlatformPlan, 'core' | 'finotaur' | 'enterprise' | null> = {
+): { target: 'finotaur' | 'enterprise'; displayName: string; price: string } | null {
+  // Core tier removed 2026-06; upgrade ladder is free → finotaur → enterprise
+  const requiredMap: Record<PlatformPlan, 'finotaur' | 'enterprise' | null> = {
     'free': null,
-    'platform_core': 'core',
     'platform_finotaur': 'finotaur',
     'platform_enterprise': 'enterprise',
   };
@@ -165,10 +155,10 @@ function getUpgradeTarget(
   return { target, displayName: info.displayName, price: info.price };
 }
 
-function getNextTierForLimit(currentPlan: PlatformPlan): { target: 'core' | 'finotaur' | 'enterprise'; displayName: string; price: string } | null {
-  const nextMap: Record<PlatformPlan, 'core' | 'finotaur' | 'enterprise' | null> = {
-    'free': 'core',
-    'platform_core': 'finotaur',
+function getNextTierForLimit(currentPlan: PlatformPlan): { target: 'finotaur' | 'enterprise'; displayName: string; price: string } | null {
+  // Core tier removed 2026-06; next tier from free is finotaur
+  const nextMap: Record<PlatformPlan, 'finotaur' | 'enterprise' | null> = {
+    'free': 'finotaur',
     'platform_finotaur': 'enterprise',
     'platform_enterprise': null,
   };
@@ -297,21 +287,8 @@ export function usePlatformAccess() {
       }
     }
 
-    // 3. Sector Analyzer monthly limit check (Core only)
-    if (page === 'sector_analyzer' && plan === 'platform_core') {
-      if (usage.sectorAnalysisMonth >= usage.sectorAnalysisLimit) {
-        return {
-          hasAccess: false,
-          reason: 'monthly_limit',
-          currentUsage: usage.sectorAnalysisMonth,
-          limit: usage.sectorAnalysisLimit,
-          upgradeTarget: 'finotaur',
-          upgradeDisplayName: 'Finotaur',
-          upgradePrice: '$109/mo',
-          message: `You've used all ${usage.sectorAnalysisLimit} sector analyses this month. Upgrade to Finotaur ($109/mo) for unlimited access.`,
-        };
-      }
-    }
+    // 3. Sector Analyzer monthly limit check — Core tier removed 2026-06;
+    // Finotaur and above get unlimited sector analysis (no monthly cap).
 
     return { hasAccess: true };
   }, [plan, usage]);
@@ -370,7 +347,7 @@ export function usePlatformAccess() {
     recordSectorAnalysis,
     refetch: fetchAccessStatus,
     isFreePlan: plan === 'free',
-    isCorePlan: plan === 'platform_core',
+    isCorePlan: false, // Core tier removed 2026-06; always false (no subscribers)
     isFinotaurPlan: plan === 'platform_finotaur',
     isEnterprisePlan: plan === 'platform_enterprise',
   };

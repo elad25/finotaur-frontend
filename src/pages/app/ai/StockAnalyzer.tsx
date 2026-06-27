@@ -140,7 +140,7 @@ export default function StockAnalyzer() {
         upgradePrice={access.upgradePrice}
         currentUsage={access.currentUsage}
         limit={access.limit}
-        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
+        currentPlan={plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }
@@ -287,7 +287,7 @@ export default function StockAnalyzer() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => navigate('/app/all-markets/pricing')}
+                      onClick={() => navigate('/app/upgrade')}
                       className="mt-ds-1 px-ds-5 py-ds-2 rounded-[16px] text-small font-semibold text-ink-on-gold"
                       style={{
                         background: 'var(--gradient-gold)',

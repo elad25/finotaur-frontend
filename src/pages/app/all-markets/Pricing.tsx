@@ -24,7 +24,7 @@ import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 // ============================================
 
 type BillingInterval = 'monthly' | 'yearly';
-type PlatformPlanId = 'free' | 'core' | 'finotaur' | 'enterprise';
+type PlatformPlanId = 'free' | 'journal' | 'top_secret' | 'finotaur' | 'enterprise';
 
 interface PlanConfig {
   id: PlatformPlanId;
@@ -41,10 +41,12 @@ interface PlanConfig {
   trialOnceOnly?: boolean;
   includesJournal?: boolean;
   includesNewsletter?: boolean;
+  // checkout category: 'journal' | 'top_secret' | 'platform'
+  checkoutCategory: 'none' | 'journal' | 'top_secret' | 'platform';
 }
 
 // ============================================
-// PLAN CONFIGURATIONS
+// PLAN CONFIGURATIONS — 5-RUNG LADDER
 // ============================================
 
 const plans: PlanConfig[] = [
@@ -54,41 +56,59 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$0',
     yearlyPrice: '$0',
     yearlyMonthlyEquivalent: '$0',
-    description: 'Basic market access',
+    description: 'The hook — explore the platform',
     trialDays: 0,
+    checkoutCategory: 'none',
     features: [
-      'All Markets dashboard',
+      'Trading Journal — 15 trades',
       'Stock Analyzer (3 analyses/day)',
-      'Trading Journal — 15 trades free',
-      'Basic market data',
-      'Limited watchlists (5 items)',
-      '3 price alerts',
+      '1 watchlist',
+      'Market screener (basic)',
       'Community access',
     ],
     cta: 'Free Plan',
     featured: false,
   },
   {
-    id: 'core',
-    name: 'Core',
-    monthlyPrice: '$59',
-    yearlyPrice: '$599',
-    yearlyMonthlyEquivalent: '$49',
-    description: 'Full market intelligence',
+    id: 'journal',
+    name: 'Journal',
+    monthlyPrice: '$45',
+    yearlyPrice: '$409',
+    yearlyMonthlyEquivalent: '$34',
+    description: "The trader's desk",
     trialDays: 14,
     trialOnceOnly: false,
+    checkoutCategory: 'journal',
     features: [
       'Everything in Free, plus:',
-      'Stock Analyzer (5 analyses/day)',
-      'Sector Analyzer (3 sectors/month)',
-      'Flow Scanner',
-      'AI Assistant',
-      '🎁 Journal Basic (25 trades/month)',
-      'Real-time market data',
-      'Advanced charts & indicators',
-      'Unlimited watchlists',
-      '50 price alerts',
-      'Priority email support',
+      'Unlimited trades — no caps',
+      'Trade copier — auto-sync from broker',
+      'Backtest engine',
+      'Mentor & community rooms',
+      'Full performance analytics',
+      'Strategy builder & playbooks',
+      'Priority support',
+    ],
+    cta: 'Start 14-Day Trial',
+    featured: false,
+    savings: 'Save 24%',
+  },
+  {
+    id: 'top_secret',
+    name: 'TOP SECRET',
+    monthlyPrice: '$50',
+    yearlyPrice: '$499',
+    yearlyMonthlyEquivalent: '$42',
+    description: 'The intel',
+    trialDays: 14,
+    trialOnceOnly: false,
+    checkoutCategory: 'top_secret',
+    features: [
+      'Daily institutional market report',
+      'Monthly deep-dives — ISM, company, crypto',
+      'Exclusive Discord community',
+      'Trade-room commentary',
+      'Early access to research',
     ],
     cta: 'Start 14-Day Trial',
     featured: false,
@@ -96,25 +116,26 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'finotaur',
-    name: 'Finotaur',
+    name: 'FINOTAUR',
     monthlyPrice: '$109',
     yearlyPrice: '$1,090',
     yearlyMonthlyEquivalent: '$91',
-    description: 'Complete trading ecosystem',
+    description: 'The Bloomberg of retail — everything in Journal + TOP SECRET + the full market engine',
     trialDays: 14,
     trialOnceOnly: false,
     includesJournal: true,
     includesNewsletter: true,
+    checkoutCategory: 'platform',
     features: [
-      'Everything in Core, plus:',
-      'Stock Analyzer (7 analyses/day)',
-      'Sector Analyzer (unlimited)',
+      'Everything in Journal & TOP SECRET, plus:',
+      'Stock Analyzer — unlimited',
+      'Sector Analyzer',
       'Options Intelligence AI',
       'Macro Analyzer',
       'AI Scanner',
-      '🎁 Journal Premium INCLUDED',
-      '🎁 War Zone + Top Secret Reports',
-      'Priority 24h support',
+      'Insider / 13F tracker',
+      'Market Scanner (Bookmap)',
+      'FINO AI assistant',
     ],
     cta: 'Start 14-Day Trial',
     featured: true,
@@ -122,22 +143,23 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'enterprise',
-    name: 'Copilot',
+    name: 'COPILOT',
     monthlyPrice: '$200',
     yearlyPrice: '$2,000',
     yearlyMonthlyEquivalent: '$167',
-    description: 'Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.',
+    description: 'Your AI portfolio manager — invests and trades alongside you, 24/7 oversight.',
     trialDays: 0,
+    checkoutCategory: 'platform',
     features: [
-      'Everything in Finotaur, plus:',
-      'AI Portfolio Manager that invests & trades alongside you',
-      'Stop flying blind — 24/7 AI oversight of every position you hold',
-      'My Portfolio — live tracking & mark-to-market of your real book',
-      'Proactive AI risk detection & alerts on your holdings',
+      'Everything in FINOTAUR, plus:',
+      'AI Portfolio Manager — invests & trades alongside you',
+      '24/7 AI oversight of every position you hold',
+      'My Portfolio — live mark-to-market of your real book',
+      'Proactive AI risk detection & alerts',
       'Daily AI portfolio brief with actionable guidance',
       'Priority support',
     ],
-    cta: 'Get Copilot',
+    cta: 'Get COPILOT',
     featured: false,
     savings: 'Save 17%',
   },
@@ -174,9 +196,10 @@ const [platformYearlyExpiresAt, setPlatformYearlyExpiresAt] = useState<string | 
 const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null);
 
   const {
-    checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
+    checkoutPremiumMonthly, checkoutPremiumYearly,
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
+    initiateCheckout,
     isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message })
@@ -200,7 +223,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         const planFromUrl = searchParams.get('plan');
         
         if (paymentSuccess) {
-          window.history.replaceState({}, '', '/app/all-markets/pricing');
+          window.history.replaceState({}, '', '/app/upgrade');
           toast.success('Payment successful! 🎉', {
             description: `Your ${planFromUrl || 'Platform'} subscription is now active.`,
           });
@@ -271,14 +294,15 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   const [pendingPlanId, setPendingPlanId] = useState<PlatformPlanId | null>(null);
   const [showDowngradeTierDialog, setShowDowngradeTierDialog] = useState(false);
   const [pendingDowngradePlanId, setPendingDowngradePlanId] = useState<PlatformPlanId | null>(null);
-  const [showCoreValueWarning, setShowCoreValueWarning] = useState(false);
   const [showEnterpriseYearlyWarning, setShowEnterpriseYearlyWarning] = useState(false);
 
   const proceedToCheckout = (planId: PlatformPlanId) => {
     setLoading(planId);
     try {
-      if (planId === 'core') {
-        billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
+      if (planId === 'journal') {
+        billingInterval === 'monthly' ? checkoutPremiumMonthly() : checkoutPremiumYearly();
+      } else if (planId === 'top_secret') {
+        initiateCheckout({ planName: 'top_secret', billingInterval });
       } else if (planId === 'finotaur') {
         billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
       } else if (planId === 'enterprise') {
@@ -291,20 +315,19 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   };
 
   // 🔥 Plan tier for downgrade detection
-  const PLAN_TIER: Record<string, number> = { free: 0, core: 1, finotaur: 2, enterprise: 3 };
+  const PLAN_TIER: Record<string, number> = { free: 0, journal: 1, top_secret: 1, finotaur: 2, enterprise: 3 };
 
   // 🔥 Calculate monthly spending on standalone products vs platform plans
   const standaloneMonthlyTotal = (() => {
     let total = 0;
     if (hasNewsletterMonthly) total += 69.99;
-    if (hasTopSecretMonthly) total += 89.99;
-    if (hasJournalPremiumMonthly) total += 29.99; // journal premium monthly price
+    if (hasTopSecretMonthly) total += 50;
+    if (hasJournalPremiumMonthly) total += 45; // journal premium monthly price
     return total;
   })();
-  
-  const hasExpensiveStandalones = standaloneMonthlyTotal >= 59 && currentPlatformPlan === 'free';
-  const wouldSaveWithFinotaur = standaloneMonthlyTotal >= 109 || 
-    (hasNewsletterMonthly && hasTopSecretMonthly);
+
+  const hasExpensiveStandalones = standaloneMonthlyTotal >= 95 && currentPlatformPlan === 'free';
+  const wouldSaveWithFinotaur = standaloneMonthlyTotal >= 109;
 
   const handlePlanClick = (planId: PlatformPlanId) => {
     // Free = open downgrade confirmation dialog
@@ -333,26 +356,20 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
       return;
     }
 
-    // 🔥 גישה C: חסום Yearly → Monthly upgrade
+    // 🔥 Block Yearly → Monthly upgrade
     if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier) {
       setBillingInterval('yearly');
       toast.info("You're on a yearly plan — switch to Yearly billing above to upgrade.");
       return;
     }
 
-    // 🔥 Enterprise מ-Yearly (Monthly billing selected): מציג אזהרה על ביטול המנוי הנוכחי
+    // 🔥 Enterprise from Yearly (Monthly billing selected): warn about cancelling current plan
     if (currentBillingInterval === 'yearly' && planId === 'enterprise' && billingInterval === 'monthly') {
       setShowEnterpriseYearlyWarning(true);
       return;
     }
 
-    // 🔥 Core value warning: user pays more on standalones than Core+Finotaur is worth
-    if (planId === 'core' && hasExpensiveStandalones && currentPlatformPlan === 'free') {
-      setShowCoreValueWarning(true);
-      return;
-    }
-
-    // Monthly → Yearly של אותו plan: checkout ישיר, בלי popup
+    // Monthly → Yearly of same plan: direct checkout, no popup
     if (isUpgradeToYearly) {
       proceedToCheckout(planId);
       return;
@@ -390,15 +407,15 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   };
 
   // ============================================
-  // SMART BANNER: shown above Core card when user has expensive standalones
+  // SMART BANNER: shown above FINOTAUR card when user has expensive standalones
   // ============================================
 
-  const CoreUpsellBanner = () => {
+  const FinotaurValueBanner = () => {
     if (!hasExpensiveStandalones) return null;
 
     const products: string[] = [];
-    if (hasNewsletterMonthly) products.push('War Zone ($69.99)');
-    if (hasTopSecretMonthly) products.push('Top Secret ($89.99)');
+    if (hasNewsletterMonthly) products.push('WAR ZONE ($69.99)');
+    if (hasTopSecretMonthly) products.push('TOP SECRET ($50)');
     if (hasJournalPremiumMonthly) products.push('Journal Premium');
 
     return (
@@ -413,39 +430,15 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
           <div className="mt-0.5 text-lg">💡</div>
           <div className="flex-1">
             <p className="text-[#C9A646] font-semibold text-sm mb-1">
-              {wouldSaveWithFinotaur
-                ? 'You\'d get more value from Finotaur!'
-                : 'Heads up before you subscribe to Core'}
+              You'd save money with FINOTAUR
             </p>
             <p className="text-slate-400 text-xs leading-relaxed">
               You currently pay{' '}
               <span className="text-white font-medium">${standaloneMonthlyTotal.toFixed(2)}/mo</span>
               {' '}for: {products.join(', ')}.{' '}
-              {wouldSaveWithFinotaur ? (
-                <>
-                  <span className="text-emerald-400 font-medium">Finotaur at $109/mo</span>{' '}
-                  includes all of that <span className="text-white">plus</span> the full platform — a better deal overall.
-                </>
-              ) : (
-                <>
-                  Core doesn't include War Zone or Top Secret. Consider{' '}
-                  <span className="text-emerald-400 font-medium">Finotaur ($109/mo)</span>{' '}
-                  which bundles everything together.
-                </>
-              )}
+              <span className="text-emerald-400 font-medium">FINOTAUR at $109/mo</span>{' '}
+              includes all of that <span className="text-white">plus</span> the full market engine — a better deal.
             </p>
-            {wouldSaveWithFinotaur && (
-              <button
-                onClick={() => handlePlanClick('finotaur')}
-                className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
-                style={{
-                  background: 'linear-gradient(135deg, #C9A646, #F4D97B)',
-                  color: '#000',
-                }}
-              >
-                Switch to Finotaur instead →
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -480,10 +473,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         <div className="text-center mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-3">
             <span className="text-white">Choose Your </span>
-            <span className="text-[#C9A646]">Platform Plan</span>
+            <span className="text-[#C9A646]">Plan</span>
           </h1>
           <p className="text-base text-slate-400 max-w-2xl mx-auto">
-            Unlock powerful market intelligence tools. Finotaur includes Journal Premium + All Reports!
+            From a free journal to institutional-grade intelligence. One platform, five rungs.
           </p>
         </div>
 
@@ -508,10 +501,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               </div>
               <div className="text-left flex-1">
                 <h4 className="text-xl font-semibold text-white mb-2">
-                  Finotaur Bundle — Save $50+/month
+                  FINOTAUR — The Bloomberg of Retail
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  Get full market access + Journal Premium + War Zone + Top Secret Reports. 
+                  Full market access + Journal Premium + TOP SECRET + the complete AI engine.
                   {proTrialUsed ? ' Start your subscription today!' : ' Try free for 14 days!'}
                 </p>
               </div>
@@ -596,9 +589,9 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto pt-5">
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4 max-w-7xl mx-auto pt-5">
           {plans.map((plan) => {
-  const showCoreUpsellBanner = plan.id === 'core' && hasExpensiveStandalones;
+  const showFinotaurValueBanner = plan.id === 'finotaur' && hasExpensiveStandalones;
             const displayPrice = getDisplayPrice(plan);
             // Block same plan+same interval, allow upgrade to yearly
             const isSamePlanSameInterval = plan.id === currentPlatformPlan && 
@@ -689,12 +682,12 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   </div>
                 )}
 
-                {/* Trial Badge for Core - only monthly, only if NOT current plan */}
-                {plan.id === 'core' && billingInterval === 'monthly' && !isCurrentPlan && (
+                {/* Trial Badge for plans with a trial - only monthly, only if NOT current plan, not featured */}
+                {plan.trialDays > 0 && !plan.featured && billingInterval === 'monthly' && !isCurrentPlan && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 bg-blue-500 text-white whitespace-nowrap"
                        style={{ zIndex: 50 }}>
                     <Clock className="w-3 h-3" />
-                    14-Day Free Trial
+                    {plan.trialDays}-Day Free Trial
                   </div>
                 )}
 
@@ -744,6 +737,9 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   ))}
                 </ul>
 
+                {/* FINOTAUR value banner — shown when user has expensive standalones */}
+                {showFinotaurValueBanner && <FinotaurValueBanner />}
+
                 {/* Bundle Badges - Gold style above CTA */}
                 {plan.includesJournal && (
                   <div className="flex flex-wrap justify-center gap-2 mb-4">
@@ -753,22 +749,8 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                     </span>
                     <span className="flex items-center gap-1.5 bg-[#C9A646]/20 border border-[#C9A646]/50 px-3 py-1.5 rounded-full text-xs font-medium text-[#C9A646]">
                       <Gift className="w-3.5 h-3.5" />
-                      +Newsletter Choice
+                      +TOP SECRET
                     </span>
-                  </div>
-                )}
-
-                {/* 🔥 Core Warning: cancels existing Journal */}
-                {plan.id === 'core' && hasActiveJournalSubscription && (
-                  <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-300 leading-relaxed">
-                      <strong>Note:</strong> Subscribing to Core will cancel your existing Journal {existingJournalPlan === 'premium' ? 'Premium' : 'Basic'} subscription. 
-                      You'll keep access until your current billing period ends, and Core includes Journal Basic.
-                      {journalYearlyExpiresAt && (
-                        <span className="text-emerald-400"> Your yearly access is protected until {new Date(journalYearlyExpiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</span>
-                      )}
-                    </p>
                   </div>
                 )}
 
@@ -919,27 +901,19 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                     <AlertTriangle className="w-3 h-3" /> What you'll lose
                   </p>
                   <div className="space-y-1.5">
-                    {currentPlatformPlan === 'core' && (
+                    {currentPlatformPlan === 'journal' && (
                       <>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                          <span>Stock Analyzer (5/day → 3)</span>
+                          <span>Unlimited trades (back to 15)</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                          <span>Sector Analyzer & Flow Scanner</span>
+                          <span>Trade copier & backtest engine</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                          <span>AI Assistant & real-time data</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-zinc-300">
-                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                          <span>Unlimited watchlists & 50 alerts</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
-                          <span className="text-[#C9A646] font-medium">🎁 Journal Basic (INCLUDED)</span>
+                          <span>Mentor & community rooms</span>
                         </div>
                       </>
                     )}
@@ -988,7 +962,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  Keep My {currentPlatformPlan === 'core' ? 'Core' : currentPlatformPlan === 'finotaur' ? 'Finotaur' : 'Copilot'} Plan
+                  Keep My {currentPlatformPlan === 'journal' ? 'Journal' : currentPlatformPlan === 'top_secret' ? 'TOP SECRET' : currentPlatformPlan === 'finotaur' ? 'FINOTAUR' : 'COPILOT'} Plan
                 </button>
                 
                 <button
@@ -1185,123 +1159,6 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
           </div>
         </div>
       </div>
-
-      {/* 🔥 Core Value Warning Popup */}
-      {showCoreValueWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowCoreValueWarning(false)}
-          />
-          <div className="relative w-full max-w-md rounded-2xl z-10 overflow-hidden"
-            style={{
-              background: 'linear-gradient(135deg, #1a1a1a 0%, #111 100%)',
-              border: '1px solid rgba(201,166,70,0.4)',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
-            }}>
-            {/* Header */}
-            <div className="px-6 pt-6 pb-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold text-lg">Wait — Core might not be worth it</h3>
-                  <p className="text-zinc-500 text-xs mt-0.5">Based on your current subscriptions</p>
-                </div>
-              </div>
-
-              {/* Current spending breakdown */}
-              <div className="p-4 rounded-xl bg-zinc-800/60 border border-zinc-700/50 mb-4">
-                <p className="text-xs text-zinc-400 font-medium mb-2 uppercase tracking-wide">You currently pay</p>
-                <div className="space-y-1.5">
-                  {hasNewsletterMonthly && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-300">War Zone Newsletter</span>
-                      <span className="text-white font-medium">$69.99/mo</span>
-                    </div>
-                  )}
-                  {hasTopSecretMonthly && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-300">Top Secret Reports</span>
-                      <span className="text-white font-medium">$89.99/mo</span>
-                    </div>
-                  )}
-                  {hasJournalPremiumMonthly && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-zinc-300">Journal Premium</span>
-                      <span className="text-white font-medium">$29.99/mo</span>
-                    </div>
-                  )}
-                  <div className="pt-2 mt-2 border-t border-zinc-700 flex justify-between text-sm font-semibold">
-                    <span className="text-zinc-200">Total standalones</span>
-                    <span className="text-red-400">${standaloneMonthlyTotal.toFixed(2)}/mo</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Comparison */}
-              <div className="p-4 rounded-xl border border-amber-500/25 mb-2"
-                style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)' }}>
-                <p className="text-xs text-amber-400/70 font-medium mb-2 uppercase tracking-wide">The smarter choice</p>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-zinc-300">Core plan</span>
-                  <span className="text-white font-medium">$59/mo</span>
-                </div>
-                <p className="text-xs text-zinc-500 mb-3">
-                  ⚠️ Core does <span className="text-red-400 font-medium">not</span> include War Zone or Top Secret — you'd lose those.
-                </p>
-                <div className="h-px bg-zinc-700/50 mb-3" />
-                <div className="flex justify-between text-sm">
-                  <span className="text-[#C9A646] font-semibold">Finotaur plan</span>
-                  <span className="text-[#C9A646] font-semibold">$109/mo</span>
-                </div>
-                <p className="text-xs text-zinc-400 mt-1">
-                  ✅ Includes <span className="text-white">everything</span> — War Zone, Top Secret, Journal Premium + full platform.
-                  {standaloneMonthlyTotal > 109 && (
-                    <span className="text-emerald-400 font-medium"> Save ${(standaloneMonthlyTotal - 109).toFixed(2)}/mo vs standalones.</span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="px-6 pb-6 space-y-2.5">
-              {wouldSaveWithFinotaur && (
-                <button
-                  onClick={() => {
-                    setShowCoreValueWarning(false);
-                    proceedToCheckout('finotaur');
-                  }}
-                  className="w-full py-3 rounded-xl text-sm font-bold transition-all hover:scale-[1.02]"
-                  style={{
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    color: '#000',
-                    boxShadow: '0 6px 30px rgba(201,166,70,0.4)',
-                  }}
-                >
-                  Switch to Finotaur — Better Value →
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setShowCoreValueWarning(false);
-                  proceedToCheckout('core');
-                }}
-                className="w-full py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 text-sm font-medium transition-all"
-              >
-                Continue with Core anyway
-              </button>
-              <button
-                onClick={() => setShowCoreValueWarning(false)}
-                className="w-full py-2 text-zinc-500 hover:text-zinc-300 text-xs transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 🔥 Enterprise from Yearly Warning */}
       {showEnterpriseYearlyWarning && (

@@ -190,9 +190,17 @@ export function useUnifiedUserStatus(): UnifiedUserStatus {
       raw?.newsletter_status === 'trialing';
     
     // Top Secret status
-    const topSecretIsActive = 
-      raw?.top_secret_enabled === true && 
-      (raw?.top_secret_status === 'active' || raw?.top_secret_status === 'trial');
+    // 2026-06 merge: WAR ZONE (newsletter) subscribers now get TOP SECRET access.
+    // Existing WAR ZONE subscribers keep access without a new purchase.
+    // New buyers purchase top_secret_monthly/yearly directly (newsletter plans no longer sold).
+    const warZoneGrantsTopSecret =
+      raw?.newsletter_status === 'active' ||
+      raw?.newsletter_status === 'trial' ||
+      raw?.newsletter_status === 'trialing';
+    const topSecretIsActive =
+      warZoneGrantsTopSecret ||
+      (raw?.top_secret_enabled === true &&
+        (raw?.top_secret_status === 'active' || raw?.top_secret_status === 'trial'));
     
     // User meta
     const isAdmin = 

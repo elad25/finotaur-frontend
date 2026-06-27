@@ -9,3 +9,4 @@ export { CompactReportCard } from './CompactReportCard';
 export { ArchiveReportRow } from './ArchiveReportRow';
 export { MonthGroup } from './MonthGroup';
 export { HowToUseSection, MemberSection, BottomFeaturesBar } from './SidebarComponents';
+export { DailyBriefingSection } from './DailyBriefingSection';

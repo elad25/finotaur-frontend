@@ -181,9 +181,10 @@ export function hasActiveSubscription(profile: UserProfile | null | undefined): 
     return true;
   }
   
-  // 🔥 v8.8.0: Platform users (Core/Finotaur/Enterprise) have active journal via platform
-  if (profile.platform_plan && 
-      ['core', 'platform_core', 'finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan) &&
+  // Platform users (Finotaur/Enterprise) have active journal via platform
+  // 'core' / 'platform_core' entries removed 2026-06 (Core tier eliminated, zero subscribers)
+  if (profile.platform_plan &&
+      ['finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan) &&
       ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '')) {
     return true;
   }
@@ -207,13 +208,9 @@ export function getPlanDisplay(profile: UserProfile | null | undefined): {
     return { name: 'Premium (Admin)', badge: 'admin' };
   }
 
-  // 🔥 v8.8.0: Core platform users get Journal Basic even if account_type is still 'free'
+  // Platform users (Finotaur/Enterprise) get journal Premium; Core removed 2026-06
   if ((account_type === 'free' || account_type === 'trial') && profile.platform_plan) {
     const activePlatform = ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '');
-    if (activePlatform && ['core', 'platform_core'].includes(profile.platform_plan)) {
-      const intervalText = profile.subscription_interval === 'yearly' ? 'Yearly' : 'Monthly';
-      return { name: `Basic (${intervalText}) — via Core`, badge: 'basic' };
-    }
     if (activePlatform && ['finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan)) {
       return { name: 'Premium — via Platform', badge: 'premium' };
     }

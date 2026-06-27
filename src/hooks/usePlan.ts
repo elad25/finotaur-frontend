@@ -21,20 +21,21 @@ const PLAN_HIERARCHY: Record<PlanType, number> = {
  * Maps profiles.platform_plan → PlanType (Phase B, 2026-05-09).
  * Mirrors the server-side mapPlatformPlanToTier() in userTier.js.
  *
- * Mapping:
+ * Mapping (updated 2026-06 — Core tier removed, zero subscribers):
  *   null / 'free'                          → 'free'
- *   'core' / 'platform_core'               → 'pro'
+ *   'core' / 'platform_core'               → 'free' (Core eliminated; treat as free)
  *   'finotaur' / 'platform_finotaur'       → 'finotaur'
  *   'enterprise' / 'platform_enterprise'   → 'elite'
  *   unknown                                 → 'free' (fail-safe)
  *
  * Journal tier (profiles.account_type basic/premium) is intentionally
- * NOT consulted here — Journal is a separate pricing track ($24.99/$44.99)
+ * NOT consulted here — Journal is a separate pricing track ($44.99)
  * and does not include AI Arena features.
  */
 function mapPlatformPlanToPlanType(platform_plan: string | null | undefined): PlanType {
   if (!platform_plan || platform_plan === 'free') return 'free';
-  if (platform_plan === 'core' || platform_plan === 'platform_core') return 'pro';
+  // 'core' / 'platform_core' → 'free': Core tier removed 2026-06 (zero subscribers)
+  if (platform_plan === 'core' || platform_plan === 'platform_core') return 'free';
   if (platform_plan === 'finotaur' || platform_plan === 'platform_finotaur') return 'finotaur';
   if (platform_plan === 'enterprise' || platform_plan === 'platform_enterprise') return 'elite';
   return 'free';

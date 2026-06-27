@@ -1870,7 +1870,7 @@ if (hasResult && directRiskUSD > 0) {
         </div>
       </div>
       <button 
-        onClick={() => navigate('/app/journal/pricing')}
+        onClick={() => navigate('/app/upgrade')}
         className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 text-black text-sm font-semibold hover:from-amber-400 hover:to-yellow-400 transition-all shadow-lg shadow-amber-500/20"
       >
         Select Plan →
@@ -1897,7 +1897,7 @@ if (hasResult && directRiskUSD > 0) {
                 </div>
               </div>
               <button 
-                onClick={() => navigate('/app/journal/pricing')}
+                onClick={() => navigate('/app/upgrade')}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm font-semibold hover:from-purple-400 hover:to-blue-400 transition-all shadow-lg shadow-purple-500/20"
               >
                 Go Premium →

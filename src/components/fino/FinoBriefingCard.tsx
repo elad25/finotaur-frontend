@@ -80,7 +80,7 @@ function LockedState() {
         </p>
       </div>
       <Link
-        to="/app/all-markets/pricing"
+        to="/app/upgrade"
         className="flex-shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold text-black transition-all duration-150 hover:scale-105"
         style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)' }}
       >

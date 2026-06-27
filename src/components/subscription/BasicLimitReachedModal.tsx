@@ -99,7 +99,7 @@ export function BasicLimitReachedModal({
               </div>
               <div>
                 <p className="font-bold text-[#C9A646]">Upgrade to Premium</p>
-                <p className="text-xs text-zinc-400">Everything in Basic, plus:</p>
+                <p className="text-xs text-zinc-400">Upgrade your journal, plus:</p>
               </div>
             </div>
 
@@ -145,7 +145,7 @@ export function BasicLimitReachedModal({
             <Button
               className="w-full h-12 bg-gradient-to-r from-[#C9A646] to-[#E5C158] text-black hover:from-[#E5C158] hover:to-[#C9A646] font-bold text-base shadow-lg shadow-[#C9A646]/30 transition-all hover:scale-[1.02]"
               onClick={() => {
-                navigate('/app/journal/pricing');
+                navigate('/app/upgrade');
                 onClose();
               }}
             >
