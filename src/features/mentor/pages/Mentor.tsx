@@ -339,17 +339,18 @@ function MyStudentsSection() {
 
 export default function Mentor() {
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      <div>
+    <div className="py-8 pr-4 space-y-6">
+      {/* Centered page header */}
+      <div className="text-center px-4">
         <h1 className="text-2xl font-bold text-white">Mentor Mode</h1>
         <p className="text-zinc-400 text-sm mt-1">
           Connect with a mentor to share your journal, or review your students' journals.
         </p>
       </div>
 
-      {/* My Students lives on the left as its own panel; My Mentor on the right. */}
+      {/* My Students hugs the sidebar on the left (fixed-width panel); My Mentor fills the rest. */}
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="w-full lg:flex-1 lg:min-w-0">
+        <div className="w-full lg:w-96 lg:flex-shrink-0">
           <MyStudentsSection />
         </div>
         <div className="w-full lg:flex-1 lg:min-w-0">
