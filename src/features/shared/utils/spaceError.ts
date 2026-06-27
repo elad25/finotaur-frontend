@@ -17,7 +17,16 @@ export function mapSpaceError(error: unknown): string {
   if (message.includes('invite_used')) return 'This invite has already been used.';
   if (message.includes('invite_expired')) return 'This invite has expired.';
   if (message.includes('not_authorized_announcement'))
-    return 'Only mentors can post announcements.';
+    return 'Only the room owner can post in announcement channels.';
+  if (message.includes('invalid_channel_type')) return 'Invalid channel type.';
+  if (message.includes('empty_channel_name')) return "Channel name can't be empty.";
+  if (message.includes('cannot_delete_dm'))
+    return "Direct message channels can't be deleted here.";
+  if (message.includes('cannot_delete_last_channel'))
+    return 'A room must keep at least one channel.';
+  if (message.includes('cannot_modify_dm'))
+    return "Direct message channels can't be renamed.";
+  if (message.includes('channel_not_found')) return 'Channel not found.';
   if (message.includes('cannot_remove_owner')) return "You can't remove the space owner.";
   if (message.includes('cannot_delete_space')) return 'Only the room owner can delete this room.';
   if (message.includes('cannot_leave_as_owner')) return 'Owners cannot leave — delete the room instead.';
