@@ -43,6 +43,57 @@ export interface GlobalFeedItem {
   my_reaction: 'up' | 'down' | 'repost' | null;
   /** The trader's self-tagged emotion for the attached trade; NULL when not tagged. */
   trade_emotion: string | null;
+  /** Strategy name linked to the attached trade; NULL when no strategy. */
+  trade_strategy_name: string | null;
+  /** Strategy category (ICT / Price Action / …); NULL when uncategorised. */
+  trade_strategy_category: string | null;
+  /** R multiple of the attached trade; NULL when hidden or unavailable. */
+  trade_r: number | null;
+  /** Author's membership tier (platform_plan): free | core | finotaur | enterprise. */
+  author_tier: string | null;
+  /** Author's consistency tier from WR + Profit Factor; NULL below sample threshold. */
+  author_consistency_tier: ConsistencyTier | null;
+  /** Author's all-time win rate (0..1); NULL when no closed trades. */
+  author_win_rate: number | null;
+  /** Author's all-time profit factor (gross win / gross loss); NULL when no losses or no trades. */
+  author_profit_factor: number | null;
+}
+
+// ── Feed filters & tags ────────────────────────────────────────────────────────
+
+/** Consistency reputation tier, derived server-side from win rate + profit factor. */
+export type ConsistencyTier = 'rising' | 'pro' | 'elite';
+
+/** Active filter selection for the feed (each null = no filter on that dimension). */
+export interface FeedFilters {
+  symbol?: string | null;
+  strategyCategory?: string | null;
+  outcome?: 'win' | 'loss' | null;
+  tier?: string | null;
+}
+
+/** Facet dimension keys returned by feed_tag_facets(). */
+export type FeedFacetKind = 'symbol' | 'strategy_category' | 'outcome' | 'tier';
+
+/** Row returned by feed_tag_facets() — one tag value + its post count. */
+export interface FeedFacet {
+  facet: FeedFacetKind;
+  value: string;
+  label: string;
+  count: number;
+}
+
+/** Row returned by community_consistency_leaderboard(p_period, p_limit). */
+export interface ConsistencyLeaderboardRow {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  win_rate: number | null; // 0..1
+  profit_factor: number | null;
+  consistency_score: number | null;
+  tier: ConsistencyTier | null;
+  trade_count: number;
+  rank: number;
 }
 
 /** Row returned by list_global_comments(p_post, p_limit). */

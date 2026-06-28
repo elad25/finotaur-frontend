@@ -42,11 +42,25 @@ import { formatTradeDate, formatTradeDateShort } from '@/utils/dateFormatter';
 // 🎯 TYPES
 // ==========================================
 
+/** Fixed strategy-category vocabulary for the editor + community-feed filter. */
+const STRATEGY_CATEGORIES = [
+  'ICT',
+  'Price Action',
+  'Trend',
+  'Breakout',
+  'Mean Reversion',
+  'Scalping',
+  'Momentum',
+  'Other',
+] as const;
+
 interface ExtendedStrategy {
   id: string;
   name: string;
   description?: string;
   category?: string;
+  /** Strategy category (ICT / Price Action / …) — distinct from `category` (asset classes). */
+  strategyCategory?: string;
   timeframe?: string;
   markets?: string[];
   setupType?: string;
@@ -1052,6 +1066,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [assetClasses, setAssetClasses] = useState<string[]>([]);
+  const [strategyCategory, setStrategyCategory] = useState("");
   const [setupType, setSetupType] = useState("");
   const [confirmationSignals, setConfirmationSignals] = useState("");
   const [visualExamples, setVisualExamples] = useState<File[]>([]);
@@ -1070,6 +1085,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setName(editingStrategy.name || "");
       setDescription(editingStrategy.description || "");
       setAssetClasses(editingStrategy.category ? editingStrategy.category.split(', ') : []);
+      setStrategyCategory(editingStrategy.strategyCategory || "");
       setSetupType(editingStrategy.setupType || "");
       setConfirmationSignals(editingStrategy.confirmationSignals?.join(', ') || "");
       setPositionSizingRule(editingStrategy.positionSizingRule || "");
@@ -1086,6 +1102,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setName("");
       setDescription("");
       setAssetClasses([]);
+      setStrategyCategory("");
       setSetupType("");
       setConfirmationSignals("");
       setVisualExamples([]);
@@ -1167,6 +1184,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       name: name.trim(),
       description,
       category: assetClasses.join(', '),
+      strategyCategory,
       timeframe: '',
       markets: [],
       setupType,
@@ -1202,7 +1220,7 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
 
     onSave(strategyData);
     onClose();
-  }, [name, description, assetClasses, setupType, confirmationSignals, checklist, components,
+  }, [name, description, assetClasses, strategyCategory, setupType, confirmationSignals, checklist, components,
       visualExamples,
       positionSizingRule, expectedWinRate, avgRRGoal,
       planned1rUsd, planned1rPercent, standardQuantity, matchRules,
@@ -1329,6 +1347,24 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{ color: '#EAEAEA' }}>
+                  Strategy Category
+                  <span className="ml-2 text-xs text-zinc-500">(Used to filter the community feed)</span>
+                </label>
+                <select
+                  value={strategyCategory}
+                  onChange={(e) => setStrategyCategory(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-black/30 border-2 transition-all focus:outline-none focus:border-[#C9A646]"
+                  style={{ borderColor: 'rgba(201,166,70,0.2)', color: '#EAEAEA' }}
+                >
+                  <option value="">Uncategorized</option>
+                  {STRATEGY_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
 
               {/* ── Auto-Match Rules ── */}
@@ -2114,6 +2150,7 @@ const strategiesWithStats = useMemo(() => {
             name: strategyData.name,
             description: strategyData.description,
             category: strategyData.category,
+            strategy_category: strategyData.strategyCategory || null,
             timeframe: strategyData.timeframe,
             setup_type: strategyData.setupType,
             confirmation_signals: strategyData.confirmationSignals,

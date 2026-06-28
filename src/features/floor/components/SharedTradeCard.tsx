@@ -33,9 +33,12 @@ import {
   useAddGlobalComment,
   type GlobalReactionKind,
 } from '@/features/floor/hooks/useGlobalFeed';
-import { useUserDisciplineScore } from '@/features/floor/hooks/useUserDisciplineScore';
 import { TradeChart } from '@/components/journal/TradeChart';
-import type { GlobalFeedItem, GlobalComment } from '@/features/floor/types/community';
+import type {
+  GlobalFeedItem,
+  GlobalComment,
+  ConsistencyTier,
+} from '@/features/floor/types/community';
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
@@ -66,9 +69,62 @@ function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** Title-cases a single word or short phrase: "revenge" → "Revenge". */
-function titleCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+// ── Author reputation badges ─────────────────────────────────────────────────────
+
+/** Paid membership tiers worth surfacing as a chip (free → no chip). */
+const MEMBERSHIP_LABELS: Record<string, string> = {
+  core: 'Core',
+  finotaur: 'Finotaur',
+  enterprise: 'Enterprise',
+};
+
+const CONSISTENCY_LABELS: Record<ConsistencyTier, string> = {
+  rising: 'Rising',
+  pro: 'Pro',
+  elite: 'Elite',
+};
+
+/** Membership tier + consistency reputation, both sourced from the feed item. */
+function AuthorBadges({ item }: { item: GlobalFeedItem }) {
+  const membership = item.author_tier ? MEMBERSHIP_LABELS[item.author_tier] : undefined;
+  const consistency = item.author_consistency_tier
+    ? CONSISTENCY_LABELS[item.author_consistency_tier]
+    : undefined;
+
+  if (!membership && !consistency) return null;
+
+  return (
+    <div className="flex items-center gap-[6px] flex-wrap">
+      {membership && (
+        <span className="inline-flex items-center rounded-full border-[0.5px] border-gold-border px-[8px] py-[2px] font-sans text-[10px] font-medium uppercase tracking-[0.06em] text-gold-primary">
+          {membership}
+        </span>
+      )}
+      {consistency && (
+        <span
+          className={cn(
+            'inline-flex items-center gap-[5px] rounded-full px-[8px] py-[2px]',
+            'font-sans text-[10px] font-medium',
+            item.author_consistency_tier === 'elite'
+              ? 'bg-gradient-gold text-surface-base'
+              : 'bg-surface-2 border-[0.5px] border-border-ds-subtle text-ink-secondary',
+          )}
+        >
+          <span className="uppercase tracking-[0.06em]">{consistency}</span>
+          {item.author_win_rate != null && (
+            <span className="font-mono tabular-nums">
+              {Math.round(item.author_win_rate * 100)}% WR
+            </span>
+          )}
+          {item.author_profit_factor != null && (
+            <span className="font-mono tabular-nums opacity-80">
+              {item.author_profit_factor.toFixed(1)} PF
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  );
 }
 
 // ── Author avatar — floor image with scale-zoom, fallback to monogram ──────────
@@ -116,10 +172,11 @@ interface AttachedTradeCardProps {
 }
 
 function AttachedTradeCard({ item }: AttachedTradeCardProps) {
-  const { trade_symbol, trade_side, trade_pnl, trade_entry, trade_exit, trade_size, trade_setup, trade_open_at, trade_close_at, hide_pnl, show_setup_only, reveal_size } = item;
+  const { trade_symbol, trade_side, trade_pnl, trade_entry, trade_exit, trade_size, trade_setup, trade_open_at, trade_close_at, hide_pnl, show_setup_only, reveal_size, trade_strategy_category, trade_r } = item;
   if (!trade_symbol) return null;
 
   const isNegative = trade_pnl !== null && trade_pnl < 0;
+  const rIsNegative = trade_r !== null && trade_r < 0;
 
   const chartTrade = (trade_symbol && trade_open_at) ? {
     symbol: trade_symbol,
@@ -165,21 +222,34 @@ function AttachedTradeCard({ item }: AttachedTradeCardProps) {
           )}
         </div>
 
-        {/* P&L — Hidden placeholder when null */}
-        {hide_pnl || trade_pnl === null ? (
-          <span className="font-sans tabular-nums text-[13px] font-medium text-ink-muted select-none" aria-label="P&L hidden">
-            •••
-          </span>
-        ) : (
-          <span
-            className={cn(
-              'font-sans tabular-nums text-[13px] font-medium shrink-0',
-              isNegative ? 'text-num-negative' : 'text-num-neutral',
-            )}
-          >
-            {formatPnl(trade_pnl)}
-          </span>
-        )}
+        {/* R multiple + P&L (R hidden alongside P&L) */}
+        <div className="flex items-center gap-ds-2 shrink-0">
+          {trade_r !== null && (
+            <span
+              className={cn(
+                'font-mono tabular-nums text-[12px] font-medium',
+                rIsNegative ? 'text-num-negative' : 'text-num-neutral',
+              )}
+            >
+              {rIsNegative ? '−' : '+'}
+              {Math.abs(trade_r).toFixed(1)}R
+            </span>
+          )}
+          {hide_pnl || trade_pnl === null ? (
+            <span className="font-sans tabular-nums text-[13px] font-medium text-ink-muted select-none" aria-label="P&L hidden">
+              •••
+            </span>
+          ) : (
+            <span
+              className={cn(
+                'font-sans tabular-nums text-[13px] font-medium',
+                isNegative ? 'text-num-negative' : 'text-num-neutral',
+              )}
+            >
+              {formatPnl(trade_pnl)}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Secondary row: setup + entry/exit + size */}
@@ -187,6 +257,12 @@ function AttachedTradeCard({ item }: AttachedTradeCardProps) {
         {trade_setup && (
           <span className="font-sans text-[11px] font-medium text-ink-secondary bg-surface-1 border-[0.5px] border-border-ds-subtle rounded-[4px] px-ds-2 py-[2px]">
             {trade_setup}
+          </span>
+        )}
+
+        {trade_strategy_category && (
+          <span className="font-sans text-[11px] font-medium text-gold-primary bg-[rgba(201,166,70,0.10)] border-[0.5px] border-gold-border rounded-[4px] px-ds-2 py-[2px]">
+            {trade_strategy_category}
           </span>
         )}
 
@@ -505,10 +581,6 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
   const canDelete = item.author_id === currentUserId;
   const canMessage = !!item.author_id && item.author_id !== currentUserId;
 
-  // Behavioral score for the post author — loaded async, renders nothing until ready.
-  const { score } = useUserDisciplineScore(item.author_id);
-  const showBehavioralBadge = score != null && score.trade_count > 0;
-
   return (
     <Card variant="default" padding="default" className="flex flex-col gap-ds-3">
       {/* Header: monogram + author + time + delete */}
@@ -546,23 +618,8 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
         </div>
       </div>
 
-      {/* Trader Model tags — author behavioral badge */}
-      {showBehavioralBadge && (
-        <div className="flex items-center gap-[6px] flex-wrap">
-          <span
-            className={cn(
-              'inline-flex items-center gap-[5px]',
-              'rounded-[4px] border-[0.5px] border-border-ds-subtle bg-surface-2',
-              'px-[6px] py-[2px]',
-              'font-sans text-[11px] text-ink-tertiary',
-            )}
-          >
-            <span>Discipline {Math.round(score!.discipline_score)}</span>
-            <span className="text-border-ds-subtle">·</span>
-            <span>Emotion {Math.round(score!.emotional_rate * 100)}%</span>
-          </span>
-        </div>
-      )}
+      {/* Author reputation — membership tier + consistency (WR + profit factor) */}
+      <AuthorBadges item={item} />
 
       {/* Caption / body */}
       {item.body && (
