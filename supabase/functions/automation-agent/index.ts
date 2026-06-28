@@ -323,6 +323,72 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // ══════════════════════════════════════════════════════════
+  // action: account_snapshot — upsert live per-account telemetry
+  // body: { action:'account_snapshot', accounts: [ {
+  //   account_name, env?, balance?, day_pnl?, open_pnl?,
+  //   positions?: [{ symbol, qty, isLong, avgPrice, openPnl }] } ] }
+  // One row per (device_id, account_name); "latest snapshot" semantics.
+  // ══════════════════════════════════════════════════════════
+  if (action === 'account_snapshot') {
+    const rawAccounts = body.accounts;
+    if (!Array.isArray(rawAccounts)) {
+      return new Response(
+        JSON.stringify({ error: 'invalid_accounts' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const toNum = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+    const rows = rawAccounts
+      .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
+      .map((a) => ({
+        user_id:      device.user_id,
+        device_id:    device.id,
+        account_name: String(a.account_name ?? '').trim(),
+        env:          typeof a.env === 'string' ? a.env : null,
+        balance:      toNum(a.balance),
+        day_pnl:      toNum(a.day_pnl),
+        open_pnl:     toNum(a.open_pnl),
+        positions:    Array.isArray(a.positions) ? a.positions : [],
+        captured_at:  nowIso,
+        updated_at:   nowIso,
+      }))
+      .filter((r) => r.account_name.length > 0);
+
+    if (rows.length === 0) {
+      return new Response(
+        JSON.stringify({ ok: true, upserted: 0 }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const { error: upsertError } = await supabaseAdmin
+      .from('automation_account_snapshots')
+      .upsert(rows, { onConflict: 'device_id,account_name' });
+
+    if (upsertError) {
+      return new Response(
+        JSON.stringify({ error: 'snapshot_upsert_failed' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Sampling a snapshot is also a liveness signal — bump presence.
+    await supabaseAdmin
+      .from('automation_agent_devices')
+      .update({ last_heartbeat_at: nowIso, status: 'online' })
+      .eq('id', device.id);
+
+    return new Response(
+      JSON.stringify({ ok: true, upserted: rows.length }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
   // ── Unknown action ────────────────────────────────────────
   return new Response(
     JSON.stringify({ error: 'unknown_action' }),
