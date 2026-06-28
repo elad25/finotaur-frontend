@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
+import { useAgentAccountSnapshots } from '@/features/automation/hooks/useAgentAccountSnapshots';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -342,6 +343,8 @@ export function CopyTradingDashboard() {
   const { connections } = useBrokerConnections({ active: true });
   // liveCredentialIds: always empty — cloud engine session polling removed.
   const liveCredentialIds = useMemo(() => new Set<string>(), []);
+  // Desktop agent snapshots — hydrates live balance/PnL/position columns.
+  const { snapshotByAccountName } = useAgentAccountSnapshots();
   const { tradovatePortfolios, brokerPortfolios } = usePortfolios();
   const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
     { id: 'asset-1', symbol: 'NQ' },
@@ -400,21 +403,41 @@ export function CopyTradingDashboard() {
   }
 
   // Build rows from portfolios (journal source of truth), grouped by connection.
-  // Live position/balance columns come from the desktop agent — null until paired.
+  // Live balance/PnL/position columns are hydrated from the desktop agent snapshot.
   const rows = useMemo<AccountRowData[]>(() => {
     return accountGroups.flatMap((group) =>
       group.portfolios.map((p) => {
-        // Resolve the live broker_connection for status: credential_id for Tradovate,
-        // broker_connection_id for non-Tradovate broker portfolios.
+        // Resolve the live broker_connection for token-expiry status check.
         const connId = p.credential_id ?? p.broker_connection_id;
         const conn = connId ? connectionById.get(connId) : undefined;
 
         const tokenExpired = conn?.token_expires_at
           ? new Date(conn.token_expires_at) < new Date()
           : false;
-        // "live" = in a cloud engine session (always false — agent-based, no cloud polling).
-        const live = Boolean(connId && liveCredentialIds.has(connId));
+
+        // Look up the agent snapshot for this account (case-insensitive).
+        const snap = snapshotByAccountName(p.name);
+
+        // "live" = agent has written a snapshot within the last 30 s.
+        const live = snap?.online ?? false;
+        // "issue" = token expired but agent is not actively reporting either
+        // (keeps the amber dot for stale-token warnings from the broker connection).
         const issue = !live && conn != null && conn.is_active && conn.status === 'connected' && tokenExpired;
+
+        // Net position for the active instrument tab: find the positions whose
+        // symbol starts with or contains the active instrument (case-insensitive),
+        // so a NQ snapshot entry covers NQ09-25, NQ SEP25, etc.
+        const instrumentUpper = instrument.toUpperCase();
+        const matchingPositions = (snap?.positions ?? []).filter((pos) =>
+          pos.symbol.toUpperCase().includes(instrumentUpper),
+        );
+        const netPosition =
+          matchingPositions.length > 0
+            ? matchingPositions.reduce(
+                (sum, pos) => sum + (pos.isLong ? pos.qty : -pos.qty),
+                0,
+              )
+            : null;
 
         return {
           id:             p.id,
@@ -423,18 +446,18 @@ export function CopyTradingDashboard() {
           symbol:         instrument,
           live,
           issue,
-          // Live data supplied by desktop agent — null until agent is paired.
-          position:  null,
-          balance:   null,
-          dayPnL:    null,
-          openPnL:   null,
-          qty:       null,
+          // Live data from the desktop agent snapshot — null when no snapshot exists.
+          position: netPosition,
+          balance:  snap?.balance  ?? null,
+          dayPnL:   snap?.dayPnl   ?? null,
+          openPnL:  snap?.openPnl  ?? null,
+          qty:      snap != null ? snap.qty : null,
           following: p.is_active,
           portfolioId: p.id,
         };
       }),
     );
-  }, [accountGroups, connectionById, liveCredentialIds, instrument]);
+  }, [accountGroups, connectionById, liveCredentialIds, instrument, snapshotByAccountName]);
 
   // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
