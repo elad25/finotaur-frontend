@@ -17,9 +17,7 @@ import {
   ChevronUp,
   X,
   AlertCircle,
-  Check,
-  FlaskConical,
-} from 'lucide-react';
+  Check,} from 'lucide-react';
 import { SkeletonGrid } from '@/components/ds/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -79,7 +77,6 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
   
   // User state
   const [isTester, setIsTester] = useState(false);
-  const [testModeEnabled, setTestModeEnabled] = useState(true);
   const [isUserLoaded, setIsUserLoaded] = useState(false);
   
   // Promote state
@@ -87,7 +84,7 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
   const [promoteSuccess, setPromoteSuccess] = useState<string | null>(null);
 
   const currentUserId = userId || user?.id;
-  const effectiveIsTester = isTester && testModeEnabled;
+  const effectiveIsTester = isTester;
 
   // Custom hooks
   const cache = useReportsCache(currentUserId, effectiveIsTester);
@@ -294,15 +291,6 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
             <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 bg-clip-text text-transparent">
               Top Secret Member Dashboard
             </h1>
-            {isTester && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-900/50 border border-purple-500/30">
-                <FlaskConical className="w-3.5 h-3.5 text-purple-400" />
-                <span className="text-xs font-medium text-purple-300">Test Mode</span>
-                <button onClick={() => setTestModeEnabled(!testModeEnabled)} className={`relative w-9 h-5 rounded-full transition-colors ${testModeEnabled ? 'bg-purple-500' : 'bg-gray-600'}`}>
-                  <motion.div animate={{ x: testModeEnabled ? 18 : 2 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm" />
-                </button>
-              </div>
-            )}
           </div>
           <p className="text-gray-400 max-w-2xl text-sm">Your institutional-grade market intelligence is ready.</p>
         </motion.div>
