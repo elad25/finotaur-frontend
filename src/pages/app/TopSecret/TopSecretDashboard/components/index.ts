@@ -11,3 +11,6 @@ export { MonthGroup } from './MonthGroup';
 export { HowToUseSection, MemberSection, BottomFeaturesBar } from './SidebarComponents';
 export { DailyBriefingSection } from './DailyBriefingSection';
 export { CadenceIntel } from './CadenceIntel';
+export { EventsThisWeek } from './EventsThisWeek';
+export { NextDrops } from './NextDrops';
+export { AskFino } from './AskFino';
