@@ -213,7 +213,7 @@ export const BillingTab = () => {
     } else if (now < introEndDate) {
       // In intro period ($44.99/mo - 50% off)
       const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
-      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 45 };
+      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 50 };
     } else {
       // Regular pricing ($50/mo)
       return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 50 };
@@ -1290,7 +1290,7 @@ export const BillingTab = () => {
               <div className="text-right">
                 {topSecretIsActive ? (
                   topSecretInterval === 'yearly' ? (
-                    <span className="text-xl font-bold text-white">$899/yr</span>
+                    <span className="text-xl font-bold text-white">$499/yr</span>
                   ) : topSecretPricing.isInTrial ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-bold text-white">Free Trial</span>
@@ -1300,18 +1300,14 @@ export const BillingTab = () => {
                     </div>
                   ) : topSecretPricing.isInIntro ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">$44.99/mo</span>
-                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs px-2 py-0.5">
-                        50% OFF
-                      </Badge>
+                      <span className="text-xl font-bold text-white">$50/mo</span>
                     </div>
                   ) : (
-                    <span className="text-xl font-bold text-white">$89.99/mo</span>
+                    <span className="text-xl font-bold text-white">$50/mo</span>
                   )
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 line-through text-sm">$89.99</span>
-                    <span className="text-xl font-bold text-white">$44.99/mo</span>
+                    <span className="text-xl font-bold text-white">$50/mo</span>
                   </div>
                 )}
               </div>
@@ -1374,17 +1370,12 @@ export const BillingTab = () => {
                     {topSecretPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">14-Day Trial</Badge>
-                        <span className="text-zinc-400">→ Then $44.99/mo for 2 months → $89.99/mo after</span>
+                        <span className="text-zinc-400">→ Then $50/mo after trial</span>
                       </div>
                     ) : topSecretPricing.isInIntro ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Intro Pricing</Badge>
-                        <span className="text-zinc-400">
-                          {topSecretPricing.introMonthsRemaining === 2
-                            ? '$44.99 → $44.99 → Then $89.99/mo'
-                            : '$44.99 → Then $89.99/mo'
-                          }
-                        </span>
+                        <span className="text-zinc-400">Then $50/mo</span>
                       </div>
                     ) : (
                       <p className="text-xs text-zinc-500">Regular pricing active</p>
@@ -1479,7 +1470,7 @@ export const BillingTab = () => {
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <p className="text-xs text-emerald-400 text-center font-medium">
-                    🔥 Limited: 14-day FREE trial → $44.99/mo for 2 months → $89.99/mo
+                    🔥 14-day FREE trial → then $50/mo
                   </p>
                 </div>
                 <Button
