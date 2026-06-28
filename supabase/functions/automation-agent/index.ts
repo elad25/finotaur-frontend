@@ -10,9 +10,11 @@
 // IMPORTANT: device token never logged.
 //
 // Supported actions (POST body: { action, ...rest }):
-//   'config'    — pull current settings/rules/routes + bump presence
-//   'heartbeat' — update last_heartbeat_at + status
-//   'event'     — ingest an agent-emitted event into automation_events
+//   'config'         — pull current settings/rules/routes + bump presence;
+//                      response always includes pending_commands (claimed atomically)
+//   'heartbeat'      — update last_heartbeat_at + status
+//   'event'          — ingest an agent-emitted event into automation_events
+//   'command_result' — report execution outcome for a claimed command
 // ═══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -174,8 +176,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Claim any pending commands for this device atomically.
+    // Commands are independent of config_version — always include them even on
+    // the { unchanged:true } branch so the agent never misses a queued action.
+    const { data: claimed } = await supabaseAdmin.rpc('automation_claim_commands', {
+      p_device_id: device.id,
+    });
+    const payload = { ...(config as Record<string, unknown>), pending_commands: claimed ?? [] };
+
     return new Response(
-      JSON.stringify(config),
+      JSON.stringify(payload),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
@@ -249,6 +259,60 @@ Deno.serve(async (req: Request) => {
     if (insertError) {
       return new Response(
         JSON.stringify({ error: 'event_insert_failed' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ ok: true }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // action: command_result — report execution outcome for a claimed command
+  // ══════════════════════════════════════════════════════════
+  if (action === 'command_result') {
+    const command_id = body.command_id as string | undefined;
+    const status = body.status as string | undefined;
+    const error = body.error;
+
+    if (!command_id || typeof command_id !== 'string' || !command_id.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'invalid_args' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    if (status !== 'executed' && status !== 'failed') {
+      return new Response(
+        JSON.stringify({ error: 'invalid_args' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Security: verify the command belongs to THIS device before completing.
+    const { data: cmd } = await supabaseAdmin
+      .from('automation_commands')
+      .select('device_id')
+      .eq('id', command_id)
+      .maybeSingle();
+
+    if (!cmd || cmd.device_id !== device.id) {
+      return new Response(
+        JSON.stringify({ error: 'command_not_found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const { error: completeError } = await supabaseAdmin.rpc('automation_complete_command', {
+      p_command_id: command_id,
+      p_status:     status,
+      p_error:      typeof error === 'string' ? error : null,
+    });
+
+    if (completeError) {
+      return new Response(
+        JSON.stringify({ error: 'command_update_failed' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
