@@ -8,7 +8,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ds/Button";
 import { LogIn, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/providers/AuthProvider";
 
 // ===========================================
@@ -454,6 +454,7 @@ function CrossMarker() {
 const Hero = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
 
   const handleStartFree = () => {
     if (user) navigate('/app');
@@ -555,8 +556,19 @@ const Hero = () => {
       />
 
       {/* ========== STAR FIELD ========== */}
-      <div
+      <motion.div
         className="absolute inset-0 opacity-70 pointer-events-none"
+        animate={
+          prefersReducedMotion
+            ? undefined
+            : { x: [0, -14, 6, 0], y: [0, 8, -10, 0] }
+        }
+        transition={{
+          duration: 26,
+          repeat: Infinity,
+          ease: 'easeInOut',
+          times: [0, 0.4, 0.7, 1],
+        }}
         style={{
           backgroundImage: `radial-gradient(1.5px 1.5px at 17% 22%, rgba(255,255,255,0.85) 0%, transparent 50%),
                             radial-gradient(1px 1px at 33% 71%, rgba(255,255,255,0.6) 0%, transparent 50%),
