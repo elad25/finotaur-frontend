@@ -333,7 +333,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2, beta: true },
     { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy, beta: true },
     { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield, beta: true },
-    { label: 'Agent', path: '/app/copy-trade/agent', icon: Monitor, beta: true },
     { label: 'FINOTAUR Agent', path: '/app/copy-trade/install', icon: Download, beta: true },
   ],
 
@@ -520,7 +519,6 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
   '/app/copy-trade/overview': 'Your copy-trade connections',
   '/app/copy-trade/trade-copier': 'Mirror trades across accounts',
   '/app/copy-trade/manage-risk': 'Risk controls for copying',
-  '/app/copy-trade/agent': 'Monitor the copier agent',
   '/app/copy-trade/install': 'Install the FINOTAUR agent',
   // Funding
   '/app/funding/overview': 'Funding overview',

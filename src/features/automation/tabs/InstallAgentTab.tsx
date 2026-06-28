@@ -9,9 +9,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
-import { Download, ShieldCheck, BookOpen } from 'lucide-react';
+import { Download, ShieldCheck, BookOpen, Plus } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
+import { Button } from '@/components/ds/Button';
 import { AgentGuideModal } from '@/features/automation/components/AgentGuideModal';
+import { DeviceList } from '@/features/automation/components/DeviceList';
+import { PairDeviceDialog } from '@/features/automation/components/PairDeviceDialog';
 
 // Short, ordered teaser of what the GUIDE walks through.
 const STEP_TEASERS = [
@@ -23,6 +26,7 @@ const STEP_TEASERS = [
 
 export default function InstallAgentTab() {
   const [guideOpen, setGuideOpen] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -71,6 +75,32 @@ export default function InstallAgentTab() {
         </ol>
       </Card>
 
+      {/* Your desktop agent — device list + pairing */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
+            Your desktop agent
+          </h3>
+          <Button
+            variant="goldOutline"
+            size="compact"
+            showArrow={false}
+            onClick={() => setPairOpen(true)}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Pair a new device
+          </Button>
+        </div>
+
+        <DeviceList />
+
+        <p className="text-xs text-zinc-600">
+          The desktop agent runs locally on your machine and is the only component that
+          executes trades or enforces risk halts.{' '}
+          <strong className="text-zinc-500">Nothing on this page executes orders.</strong>
+        </p>
+      </section>
+
       {/* compliance note */}
       <Card padding="compact" className="flex gap-3 items-start border-zinc-700/50">
         <ShieldCheck className="h-4 w-4 text-zinc-500 shrink-0 mt-0.5" aria-hidden="true" />
@@ -81,6 +111,7 @@ export default function InstallAgentTab() {
       </Card>
 
       <AgentGuideModal open={guideOpen} onOpenChange={setGuideOpen} />
+      <PairDeviceDialog open={pairOpen} onOpenChange={setPairOpen} />
     </div>
   );
 }

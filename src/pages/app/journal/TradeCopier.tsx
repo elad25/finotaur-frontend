@@ -20,7 +20,6 @@ import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
 import { useSubscription } from '@/hooks/useSubscription';
 import { CopierPremiumGate } from '@/features/automation/components/CopierPremiumGate';
-import AgentStatusTab from '@/features/automation/tabs/AgentStatusTab';
 import InstallAgentTab from '@/features/automation/tabs/InstallAgentTab';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -558,16 +557,14 @@ export default function TradeCopier() {
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
 
-  const activeTab: 'connections' | 'copy-trading' | 'manage-risk' | 'agent' | 'install' =
+  const activeTab: 'connections' | 'copy-trading' | 'manage-risk' | 'install' =
     location.pathname.endsWith('/manage-risk')
       ? 'manage-risk'
       : location.pathname.endsWith('/trade-copier')
         ? 'copy-trading'
-        : location.pathname.endsWith('/agent')
-          ? 'agent'
-          : location.pathname.endsWith('/install')
-            ? 'install'
-            : 'connections';
+        : location.pathname.endsWith('/install')
+          ? 'install'
+          : 'connections';
 
   if (!isAdmin) return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
@@ -693,10 +690,7 @@ export default function TradeCopier() {
             no p-ds-6 inset) so they spread wider across the page. */}
         {activeTab === 'manage-risk' && <ManageRiskTab />}
 
-        {/* ── Tab 4: Agent ── */}
-        {activeTab === 'agent' && <AgentStatusTab />}
-
-        {/* ── Tab 5: Install ── */}
+        {/* ── Tab 4: FINOTAUR Agent (install + device pairing) ── */}
         {activeTab === 'install' && <InstallAgentTab />}
 
       </div>

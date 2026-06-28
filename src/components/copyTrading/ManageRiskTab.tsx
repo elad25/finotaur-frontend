@@ -73,13 +73,83 @@ const GLOBAL_DEFAULTS: RiskCardInitial = {
   maxPositionSize: '',
 };
 
+// ── Agent risk-rule RPC (best-effort dual-write) ────────────────────────────
+
+/** Inline params type — mirrors the DB RPC signature. */
+interface AgentRiskRuleParams {
+  p_account_id:              string;
+  p_account_name:            string;
+  p_label:                   string;
+  p_daily_loss_limit_usd:    number | null;
+  p_max_loss_per_trade_usd:  number | null;
+  p_max_weekly_loss_usd:     number | null;
+  p_trade_profit_target_usd: number | null;
+  p_daily_profit_target_usd: number | null;
+  p_weekly_profit_target_usd:number | null;
+  p_max_contracts:           number | null;
+  p_max_position_size:       number | null;
+  p_max_position_usd:        number | null;
+  p_max_trades_per_day:      number | null;
+  p_tilt_loss_streak:        number | null;
+  p_tilt_cooldown_minutes:   number | null;
+  p_risk_breach_action:      string;
+  p_enforce:                 boolean;
+  p_is_active:               boolean;
+}
+
+/**
+ * Calls automation_upsert_risk_rule for a single Tradovate account.
+ * Returns an error string on failure, null on success.
+ * Skips silently (returns null) when tradovate_account_id is null.
+ */
+async function callAgentRiskRpc(
+  tradovateAccountId: number | null,
+  accountName: string,
+  patch: PortfolioRiskPatch,
+): Promise<string | null> {
+  if (tradovateAccountId == null) return null; // not a Tradovate account — skip
+
+  const params: AgentRiskRuleParams = {
+    p_account_id:              String(tradovateAccountId),
+    p_account_name:            accountName,
+    p_label:                   accountName,
+    p_daily_loss_limit_usd:    patch.max_daily_loss_usd,
+    p_max_loss_per_trade_usd:  patch.max_loss_per_trade_usd,
+    p_max_weekly_loss_usd:     patch.max_weekly_loss_usd,
+    p_trade_profit_target_usd: patch.trade_profit_target_usd,
+    p_daily_profit_target_usd: patch.daily_profit_target_usd,
+    p_weekly_profit_target_usd:patch.weekly_profit_target_usd,
+    p_max_contracts:           patch.max_contracts_per_trade,
+    p_max_position_size:       patch.max_position_size,
+    p_max_position_usd:        null,
+    p_max_trades_per_day:      null,
+    p_tilt_loss_streak:        null,
+    p_tilt_cooldown_minutes:   null,
+    p_risk_breach_action:      patch.risk_breach_action,
+    p_enforce:                 patch.risk_management_enabled,
+    p_is_active:               patch.risk_management_enabled,
+  };
+
+  const { error } = await supabase.rpc('automation_upsert_risk_rule', params);
+  if (error) return error.message;
+  return null;
+}
+
 // ── Mutation ────────────────────────────────────────────────────────────────
 
 function usePortfolioRisk() {
   const qc = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (input: { id: string; patch: PortfolioRiskPatch }) => {
+    mutationFn: async (input: {
+      id: string;
+      patch: PortfolioRiskPatch;
+      /** Tradovate numeric account id — null for manual/broker portfolios. */
+      tradovateAccountId: number | null;
+      /** Human-readable account name used as the agent rule label. */
+      accountName: string;
+    }) => {
+      // 1. Primary write — portfolios table (existing behaviour, unchanged).
       const { data, error } = await supabase
         .from('portfolios')
         .update(input.patch)
@@ -87,6 +157,18 @@ function usePortfolioRisk() {
         .select()
         .single();
       if (error) throw error;
+
+      // 2. Best-effort dual-write to automation_risk_rules via RPC.
+      const agentErr = await callAgentRiskRpc(
+        input.tradovateAccountId,
+        input.accountName,
+        input.patch,
+      );
+      if (agentErr) {
+        // Surface as a non-blocking warning toast — do NOT throw.
+        toast.warning(`Risk saved, but agent sync failed: ${agentErr}`);
+      }
+
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolios'] }),
@@ -133,7 +215,14 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   // Broadcast handler: applies the same patch to every Tradovate account.
   const handleBroadcast = async (patch: PortfolioRiskPatch) => {
     await Promise.all(
-      tradovatePortfolios.map((p) => updatePortfolioRisk({ id: p.id, patch })),
+      tradovatePortfolios.map((p) =>
+        updatePortfolioRisk({
+          id: p.id,
+          patch,
+          tradovateAccountId: p.tradovate_account_id,
+          accountName: p.name,
+        }),
+      ),
     );
   };
 
@@ -167,7 +256,14 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
         <PortfolioRiskCard
           key={`${p.id}:${p.max_loss_per_trade_usd}:${p.max_daily_loss_usd}:${p.max_weekly_loss_usd}:${p.trade_profit_target_usd}:${p.daily_profit_target_usd}:${p.weekly_profit_target_usd}:${p.risk_management_enabled}:${p.kill_switch_active}:${p.risk_breach_action}:${p.max_contracts_per_trade}:${p.max_position_size}`}
           portfolio={p}
-          onSave={(patch) => updatePortfolioRisk({ id: p.id, patch })}
+          onSave={(patch) =>
+            updatePortfolioRisk({
+              id: p.id,
+              patch,
+              tradovateAccountId: p.tradovate_account_id,
+              accountName: p.name,
+            })
+          }
           isSaving={isUpdating}
         />
       ))}

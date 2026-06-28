@@ -19,6 +19,18 @@ import {
 } from '@/components/ui/dialog';
 import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
 
+// ─── Helpers ──────────────────────────────────────────────────
+
+function parsePositiveNumber(raw: string, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function parsePositiveInt(raw: string): number | null {
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 interface AccountRowData {
@@ -76,20 +88,55 @@ const GRID_COLS =
 const CopyAccountRow = memo(function CopyAccountRow({
   row,
   isLeader,
+  hasLeader,
   rule,
+  isCreating,
+  isUpdating,
+  onFollowToggle,
   onUpdateRule,
   onSelectLeader,
 }: {
   row: AccountRowData;
   isLeader: boolean;
+  hasLeader: boolean;
   rule: CopyRule | null;
+  isCreating: boolean;
+  isUpdating: boolean;
+  onFollowToggle: (currentRatioDraft: number) => Promise<void>;
   onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
   onSelectLeader: () => void;
 }) {
-  const ratioValue = rule?.ratio ?? 1;
-  // Follow toggle and ratio editing are disabled — routes are configured in the Agent tab.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _isFollowing = rule?.is_active ?? false;
+  const isFollowing = rule?.is_active ?? false;
+
+  // Local ratio draft — used as the value when creating a new rule, and kept
+  // in sync with the persisted ratio when one exists.
+  const [ratioDraft, setRatioDraft] = useState(String(rule?.ratio ?? 1));
+  // Sync when the server-side rule changes (e.g. after a createRule resolves).
+  useEffect(() => {
+    setRatioDraft(String(rule?.ratio ?? 1));
+  }, [rule?.ratio]);
+
+  // Local max_contracts draft — empty string means "no cap" (null).
+  const [maxDraft, setMaxDraft] = useState(
+    rule?.max_contracts != null ? String(rule.max_contracts) : '',
+  );
+  useEffect(() => {
+    setMaxDraft(rule?.max_contracts != null ? String(rule.max_contracts) : '');
+  }, [rule?.max_contracts]);
+
+  // Derive disabled / title for the Follow toggle.
+  const followDisabled = !hasLeader || isLeader || isCreating || isUpdating;
+  const followTitle = isLeader
+    ? 'This account is the leader — it cannot follow itself'
+    : !hasLeader
+      ? 'Select a leader first (use the radio button)'
+      : isCreating || isUpdating
+        ? 'Saving…'
+        : isFollowing
+          ? 'Click to unfollow this leader'
+          : 'Click to follow this leader';
+
+  const isPending = isCreating || isUpdating;
 
   return (
     <div
@@ -109,16 +156,27 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {isLeader && <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />}
       </div>
 
-      {/* Follow toggle — configure routes in the Agent tab (local execution) */}
+      {/* Follow toggle */}
       <div className="flex items-center">
         {!isLeader && (
           <button
-            disabled
-            className="w-9 h-5 rounded-full bg-status-offline border border-border-ds-default opacity-30 cursor-not-allowed"
-            aria-label="Follow toggle — configure in Agent tab"
-            title="Copying runs on your paired desktop agent — configure routes in the Agent tab"
+            disabled={followDisabled}
+            onClick={() => onFollowToggle(parsePositiveNumber(ratioDraft, 1))}
+            className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
+              isFollowing
+                ? 'bg-status-success'
+                : 'bg-status-offline border border-border-ds-default'
+            } ${followDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${
+              isPending ? 'animate-pulse' : ''
+            }`}
+            aria-label={`Follow toggle for ${row.accountName}`}
+            title={followTitle}
           >
-            <span className="block w-3 h-3 bg-ink-primary rounded-full translate-x-1" />
+            <span
+              className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
+                isFollowing ? 'translate-x-[18px]' : 'translate-x-0.5'
+              }`}
+            />
           </button>
         )}
       </div>
@@ -145,47 +203,79 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {row.symbol ?? '—'}
       </div>
 
-      {/* Ratio — inline editable for followers, empty for leader */}
-      <div className="flex items-center">
+      {/* Ratio + max contracts — inline editable for non-leaders */}
+      <div className="flex items-center gap-ds-1">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
-          <input
-            type="text"
-            inputMode="decimal"
-            defaultValue={String(ratioValue)}
-            key={`ratio-${rule?.id ?? row.id}`}
-            onBlur={async (e) => {
-              const newRatio = Number(e.target.value);
-              if (!Number.isNaN(newRatio) && newRatio > 0) {
-                await onUpdateRule({ ratio: newRatio });
-              }
-            }}
-            disabled={true}
-            aria-label={`Copy ratio for ${row.accountName}`}
-            title="Copy ratio from leader to this account"
-            className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none disabled:cursor-not-allowed disabled:opacity-30"
-          />
+          <>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={ratioDraft}
+              onChange={(e) => setRatioDraft(e.target.value)}
+              onBlur={async (e) => {
+                const newRatio = parsePositiveNumber(e.target.value, 1);
+                // Normalize display value even if not following yet.
+                setRatioDraft(String(newRatio));
+                if (isFollowing && rule) {
+                  await onUpdateRule({ ratio: newRatio });
+                }
+              }}
+              aria-label={`Copy ratio for ${row.accountName}`}
+              title="Copy ratio from leader to this account (e.g. 0.5 = half size)"
+              className="w-10 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
+            />
+            {/* Max contracts — empty = no cap */}
+            <div className="flex flex-col items-center" title="Max contracts cap (empty = no limit)">
+              <span className="text-[9px] text-ink-tertiary leading-none mb-0.5">max</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={maxDraft}
+                placeholder="∞"
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onBlur={async (e) => {
+                  const parsed = parsePositiveInt(e.target.value.trim());
+                  // Normalize display: empty if null.
+                  setMaxDraft(parsed != null ? String(parsed) : '');
+                  if (isFollowing && rule) {
+                    await onUpdateRule({ max_contracts: parsed });
+                  }
+                }}
+                aria-label={`Max contracts for ${row.accountName}`}
+                className="w-8 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none placeholder:text-ink-tertiary"
+              />
+            </div>
+          </>
         )}
       </div>
 
-      {/* Cross toggle — for followers only */}
+      {/* Cross-to-micro toggle */}
       <div className="flex items-center">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
           <button
+            disabled={!isFollowing || isPending}
             onClick={async () => {
-              await onUpdateRule({ cross_to_micro: !(rule?.cross_to_micro ?? false) });
+              if (rule) {
+                await onUpdateRule({ cross_to_micro: !rule.cross_to_micro });
+              }
             }}
-            disabled={true}
             className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
               rule?.cross_to_micro
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
-            } disabled:cursor-not-allowed disabled:opacity-30`}
+            } ${!isFollowing || isPending ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isPending ? 'animate-pulse' : ''}`}
             aria-label="Cross-to-micro toggle"
-            title="When enabled, ES copies to MES, NQ to MNQ, and other supported contracts copy to their micro pair"
+            title={
+              !isFollowing
+                ? 'Follow this leader first to enable cross-to-micro (e.g. NQ→MNQ)'
+                : rule?.cross_to_micro
+                  ? 'Cross-to-micro ON — copies the leader\'s instrument as its micro contract (e.g. NQ→MNQ). Click to disable.'
+                  : 'Cross-to-micro OFF — copies the same instrument as the leader. Click to enable (e.g. NQ→MNQ).'
+            }
           >
             <span
               className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
@@ -264,7 +354,7 @@ export function CopyTradingDashboard() {
   const instrument = activeInstrumentTab?.symbol ?? 'NQ';
   const [instrumentDraft, setInstrumentDraft] = useState(instrument);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const { rules, updateRule, createRule } = useCopyRules();
+  const { rules, updateRule, isUpdating, createRule, isCreating } = useCopyRules();
 
   useEffect(() => {
     setInstrumentDraft(instrument);
@@ -669,28 +759,41 @@ export function CopyTradingDashboard() {
           <div>Actions</div>
         </div>
 
-        {/* Rows — Follow toggle and flatten disabled; routes configured in Agent tab */}
+        {/* Rows */}
         {rows.map((row) => {
           const rule = ruleFor(row.portfolioId);
+          const isLeader = row.id === leaderId;
           return (
             <CopyAccountRow
               key={row.id}
               row={row}
-              isLeader={row.id === leaderId}
+              isLeader={isLeader}
+              hasLeader={leaderPortfolioId != null}
               rule={rule}
+              isCreating={isCreating}
+              isUpdating={isUpdating}
               onSelectLeader={() => setLeaderId(row.id)}
-              onUpdateRule={async (patch) => {
-                if (rule) {
-                  await updateRule({ id: rule.id, patch });
-                } else if (leaderPortfolioId && row.portfolioId && row.id !== leaderId) {
+              onFollowToggle={async (currentRatioDraft) => {
+                if (!leaderPortfolioId || !row.portfolioId || isLeader) return;
+                if (rule?.is_active) {
+                  // Unfollow: set is_active false (hook will remove the target).
+                  await updateRule({ id: rule.id, patch: { is_active: false } });
+                } else {
+                  // Follow: create the rule (or re-activate if a stale rule exists).
                   await createRule({
                     source_portfolio_id: leaderPortfolioId,
                     target_portfolio_id: row.portfolioId,
-                    is_active:           false,
-                    ratio:               patch.ratio ?? 1,
-                    cross_to_micro:      patch.cross_to_micro ?? false,
+                    ratio:               currentRatioDraft,
+                    is_active:           true,
                   });
                 }
+              }}
+              onUpdateRule={async (patch) => {
+                if (rule) {
+                  await updateRule({ id: rule.id, patch });
+                }
+                // If not yet following, patches are held locally in the row's
+                // draft state (ratio/max) and applied when the user enables Follow.
               }}
             />
           );

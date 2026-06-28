@@ -177,12 +177,8 @@ function buildSteps(onClose: () => void): GuideStep[] {
       body: (
         <>
           <p>
-            Open the{' '}
-            <Link to="../agent" relative="path" onClick={onClose} className="text-[#C9A646] hover:underline font-medium">
-              Agent
-            </Link>{' '}
-            tab and click <span className="text-zinc-200 font-medium">Pair a new device</span>. In
-            NinjaTrader, open <span className="text-zinc-200 font-medium">Tools → Finotaur Agent…</span>{' '}
+            Click <span className="text-zinc-200 font-medium">Pair a new device</span> above, then in
+            NinjaTrader open <span className="text-zinc-200 font-medium">Tools → Finotaur Agent…</span>{' '}
             and enter the code.
           </p>
           <p className="mt-2 text-zinc-500 text-xs">
