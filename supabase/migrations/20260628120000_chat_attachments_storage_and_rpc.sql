@@ -2,10 +2,13 @@
 -- Already applied to production via Supabase MCP on 2026-06-28; this file is the
 -- version-controlled record. Safe to re-run (idempotent).
 
+-- No allowed_mime_types restriction (matches the working trade-screenshots/avatars
+-- buckets): supabase-js does not reliably send an image/* content-type, so a mime
+-- allowlist 400s legit uploads. Safety is covered by the 10MB cap, RLS folder
+-- scoping, and client-side compression to JPEG.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
-  'chat-attachments', 'chat-attachments', true, 10485760,
-  array['image/jpeg','image/png','image/webp','image/gif']
+  'chat-attachments', 'chat-attachments', true, 10485760, null
 )
 on conflict (id) do update
   set public = excluded.public,
