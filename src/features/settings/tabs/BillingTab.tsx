@@ -173,7 +173,7 @@ export const BillingTab = () => {
   const topSecretIsActive = topSecretEnabled && ['active', 'trial', 'trialing', 'canceling'].includes(topSecretStatus);
   const topSecretInterval = profile?.top_secret_interval || 'monthly';
 
-  // 🔥 v5 FIXED: Calculate intro pricing status using actual DB fields
+  // Top Secret — flat pricing, 14-day free trial only (no intro discount)
   const getTopSecretPricingInfo = () => {
     // Use DB trial flag instead of calculating
     if (topSecretIsInTrial && profile?.top_secret_trial_ends_at) {
@@ -183,41 +183,20 @@ export const BillingTab = () => {
       return {
         isInTrial: true,
         isInIntro: false,
-        introMonthsRemaining: 2,
+        introMonthsRemaining: 0,
         currentPrice: 0,
         trialDaysRemaining,
       };
     }
 
-    if (!profile?.top_secret_started_at || topSecretInterval === 'yearly') {
-      return {
-        isInTrial: false,
-        isInIntro: false,
-        introMonthsRemaining: 0,
-        currentPrice: topSecretInterval === 'yearly' ? 499 : 50,
-        trialDaysRemaining: 0,
-      };
-    }
-
-    const startedAt = new Date(profile.top_secret_started_at);
-    const now = new Date();
-
-    // Calculate months since started (after 14-day trial)
-    // Trial is 14 days, then intro pricing kicks in
-    const trialEndDate = new Date(startedAt.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const introEndDate = new Date(trialEndDate.getTime() + 2 * 30 * 24 * 60 * 60 * 1000); // ~2 months after trial
-
-    if (now < trialEndDate) {
-      // Still in trial
-      return { isInTrial: true, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: Math.ceil((trialEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) };
-    } else if (now < introEndDate) {
-      // In intro period ($44.99/mo - 50% off)
-      const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
-      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 50 };
-    } else {
-      // Regular pricing ($50/mo)
-      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 50 };
-    }
+    // Flat pricing — $50/mo, $499/yr, no intro discount
+    return {
+      isInTrial: false,
+      isInIntro: false,
+      introMonthsRemaining: 0,
+      currentPrice: topSecretInterval === 'yearly' ? 499 : 50,
+      trialDaysRemaining: 0,
+    };
   };
 
   const topSecretPricing = getTopSecretPricingInfo();
@@ -490,7 +469,7 @@ export const BillingTab = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            plan_id: 'plan_PxxbBlSdkyeo7', // Top Secret Yearly plan
+            plan_id: 'plan_7Lf31ygMAMmK8', // Top Secret Yearly plan
             subscription_category: 'top_secret',
             email: user.email,
             user_id: user.id,
@@ -1421,7 +1400,7 @@ export const BillingTab = () => {
                         {upgradingTopSecret ? (
                           <><Spinner size="sm" color="inherit" className="mr-1.5" />Upgrading...</>
                         ) : (
-                          <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $180)</>
+                          <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $101)</>
                         )}
                       </Button>
                     )}

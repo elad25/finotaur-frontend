@@ -19,7 +19,7 @@
 // - Premium: NO trial (immediate billing)
 // - Platform Pro: 14-day trial (ONE-TIME ONLY - tracked in DB)
 // - Newsletter: 7-day trial + 50% OFF first 2 months
-// - Top Secret: 14-day trial + 50% OFF first 2 months
+// - Top Secret: 14-day free trial (Intelligence Envelope — $50/mo, $499/yr, no intro discount)
 
 // ===========================================
 // PLAN TYPES
