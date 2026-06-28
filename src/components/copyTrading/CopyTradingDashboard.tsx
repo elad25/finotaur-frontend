@@ -5,13 +5,19 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { Crown, Plus, Search, Users, X } from 'lucide-react';
+import { AlertOctagon, Crown, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { buildAccountGroups } from '@/components/journal/accountGrouping';
 import { useCopyRules } from '@/hooks/useCopyRules';
 import type { CopyRule } from '@/hooks/useCopyRules';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -416,6 +422,22 @@ export function CopyTradingDashboard() {
 
   // Flatten is handled by the local desktop agent — no cloud-engine endpoints.
 
+  // ── Flatten All ───────────────────────────────────────────────
+  const { flattenAll, isFlattening } = useFlattenAll();
+  const [showFlattenConfirm, setShowFlattenConfirm] = useState(false);
+
+  const handleFlattenConfirm = async () => {
+    setShowFlattenConfirm(false);
+    const result = await flattenAll();
+    if (result.status === 'sent') {
+      toast.success('Flatten command sent to your agent.');
+    } else if (result.status === 'no_agent') {
+      toast.warning('No desktop agent is online — open the FINOTAUR Agent and pair a device.');
+    } else {
+      toast.error("Couldn't send flatten command. Try again.");
+    }
+  };
+
   return (
     <div className="min-h-[620px]">
       <div className="-mt-ds-6 mb-ds-4 flex items-end gap-ds-1 overflow-x-auto border-b border-gold-border/40 px-ds-3 pt-ds-1">
@@ -570,8 +592,18 @@ export function CopyTradingDashboard() {
           </div>
         </div>
 
-        {/* Flatten All removed — flatten runs via local desktop agent */}
-        <div />
+        {/* FLATTEN ALL — customer-initiated, executed by the local desktop agent */}
+        <button
+          type="button"
+          onClick={() => setShowFlattenConfirm(true)}
+          disabled={isFlattening}
+          className="flex items-center gap-ds-2 rounded-lg border border-red-600/60 bg-red-600/10 px-ds-4 py-ds-2 text-sm font-semibold text-red-400 shadow-[0_0_18px_rgba(220,38,38,0.10)] transition-colors hover:border-red-500 hover:bg-red-600/20 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Flatten all positions"
+          title="Immediately closes every open position and cancels working orders via your desktop agent"
+        >
+          <AlertOctagon className="h-4 w-4 flex-shrink-0" />
+          {isFlattening ? 'Sending…' : 'FLATTEN ALL'}
+        </button>
       </div>
 
       {/* ── 2. Summary bar ── */}
@@ -674,6 +706,40 @@ export function CopyTradingDashboard() {
           </div>
         )}
       </div>
+
+      {/* ── Flatten All confirm modal ── */}
+      <Dialog open={showFlattenConfirm} onOpenChange={setShowFlattenConfirm}>
+        <DialogContent className="max-w-md border-red-600/40 bg-[#0d0f14]">
+          <DialogTitle className="flex items-center gap-ds-2 text-red-400">
+            <AlertOctagon className="h-5 w-5 flex-shrink-0" />
+            Flatten ALL
+          </DialogTitle>
+
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            This immediately closes <span className="font-semibold text-ink-primary">every open position</span> and
+            cancels <span className="font-semibold text-ink-primary">all working orders</span> on your copied accounts,
+            executed locally by your desktop agent.
+          </p>
+
+          <div className="mt-ds-2 flex justify-end gap-ds-3">
+            <button
+              type="button"
+              onClick={() => setShowFlattenConfirm(false)}
+              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleFlattenConfirm}
+              className="flex items-center gap-ds-2 rounded-md border border-red-600/60 bg-red-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-red-400 transition-colors hover:border-red-500 hover:bg-red-600/25 hover:text-red-300"
+            >
+              <AlertOctagon className="h-4 w-4 flex-shrink-0" />
+              Yes, Flatten All
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
