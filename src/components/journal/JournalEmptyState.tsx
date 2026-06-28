@@ -70,8 +70,8 @@ export function JournalEmptyState({
       </div>
 
       <p className="text-xs text-ink-tertiary max-w-md">
-        Free: 15 lifetime trades · Basic: 25 / month · Premium: unlimited +
-        backtest + trade copier
+        Free: 15 lifetime trades · Premium: unlimited journal + backtest +
+        trade copier + AI
       </p>
     </div>
   );
