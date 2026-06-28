@@ -158,16 +158,19 @@ function usePortfolioRisk() {
         .single();
       if (error) throw error;
 
-      // 2. Best-effort dual-write to automation_risk_rules via RPC.
-      const agentErr = await callAgentRiskRpc(
-        input.tradovateAccountId,
-        input.accountName,
-        input.patch,
-      );
-      if (agentErr) {
-        // Surface as a non-blocking warning toast — do NOT throw.
-        toast.warning(`Risk saved, but agent sync failed: ${agentErr}`);
-      }
+      // 2. Best-effort agent sync — fire in the BACKGROUND so the "Saving…"
+      //    spinner reflects the fast portfolios write, not the extra RPC
+      //    round-trip. A failure still surfaces a non-blocking warning toast,
+      //    but never holds up (or fails) the save.
+      void callAgentRiskRpc(input.tradovateAccountId, input.accountName, input.patch)
+        .then((agentErr) => {
+          if (agentErr) toast.warning(`Risk saved, but agent sync failed: ${agentErr}`);
+        })
+        .catch((e) => {
+          toast.warning(
+            `Risk saved, but agent sync failed: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        });
 
       return data;
     },
@@ -588,7 +591,11 @@ const RiskCard = memo(function RiskCard({
         <button
           type="button"
           onClick={handleSave}
-          disabled={!dirty || isSaving}
+          // Per-account cards: gate on dirty (don't save an unchanged form).
+          // Global "Apply to all accounts" is an explicit broadcast — it must
+          // stay enabled even when nothing looks "dirty" (e.g. broadcasting
+          // "No limit" to clear risk on every account).
+          disabled={isSaving || (mode === 'account' && !dirty)}
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-gold-primary px-ds-3 text-xs font-semibold text-ink-on-gold shadow-[0_0_14px_rgba(201,166,70,0.20)] transition-colors duration-base hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Save className="h-3.5 w-3.5" />
