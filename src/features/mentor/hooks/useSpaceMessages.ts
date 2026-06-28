@@ -6,7 +6,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { SpaceMessage } from '@/features/mentor/types/mentorship';
+import type { SpaceMessage, MessageAttachment } from '@/features/mentor/types/mentorship';
 
 // ================================================
 // QUERY KEYS
@@ -116,6 +116,7 @@ export function useSpaceMessages(channelId?: string): {
 interface PostMessageInput {
   channelId: string;
   body: string;
+  attachments?: MessageAttachment[];
 }
 
 /**
@@ -125,10 +126,11 @@ interface PostMessageInput {
 export function usePostMessage() {
   const qc = useQueryClient();
   return useMutation<void, Error, PostMessageInput>({
-    mutationFn: async ({ channelId, body }) => {
+    mutationFn: async ({ channelId, body, attachments }) => {
       const { error } = await supabase.rpc('post_space_message', {
         p_channel: channelId,
         p_body: body,
+        p_attachments: attachments ?? [],
       });
       if (error) throw error;
     },

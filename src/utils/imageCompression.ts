@@ -9,6 +9,7 @@
 // ===============================================
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { MessageAttachment } from '@/features/mentor/types/mentorship';
 
 // ===============================================
 // SINGLETON SUPABASE CLIENT
@@ -374,6 +375,54 @@ export async function deleteProfilePicture(avatarUrl: string): Promise<boolean> 
   }).catch((error) => {
     console.error('❌ Profile picture deletion failed:', error);
     return false;
+  });
+}
+
+/**
+ * Compress + upload a chat image attachment to the `chat-attachments` bucket.
+ * Path: {userId}/{spaceId}/{channelId}/{timestamp}-{rand}.jpg  (userId first → RLS).
+ * Returns attachment metadata (incl. dimensions for zero-CLS rendering), or null on failure.
+ */
+export async function uploadChatAttachment(
+  file: File,
+  userId: string,
+  spaceId: string,
+  channelId: string
+): Promise<MessageAttachment | null> {
+  return uploadQueue.add(async () => {
+    return retryWithBackoff(async () => {
+      // Compress: max 1MB, 1600px longest edge, quality 0.82 — small + fast on the feed.
+      const compressed = await compressImage(file, 1, 1600, 0.82);
+      const { width, height } = await getImageDimensions(compressed);
+
+      const rand = Math.random().toString(36).slice(2, 8);
+      const fileName = `${userId}/${spaceId}/${channelId}/${Date.now()}-${rand}.jpg`;
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from('chat-attachments')
+        .upload(fileName, compressed, {
+          cacheControl: '31536000', // 1 year, immutable — unique filename per upload
+          upsert: false,
+          contentType: 'image/jpeg',
+        });
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('chat-attachments')
+        .getPublicUrl(data.path);
+
+      return {
+        url: urlData.publicUrl,
+        type: 'image' as const,
+        width,
+        height,
+        size_kb: Math.round(compressed.size / 1024),
+      };
+    });
+  }).catch((err) => {
+    console.error('❌ Chat attachment upload failed:', err);
+    return null;
   });
 }
 

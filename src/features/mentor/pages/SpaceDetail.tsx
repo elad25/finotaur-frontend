@@ -200,6 +200,7 @@ export default function SpaceDetail() {
       currentUserId={currentUserId}
       members={members}
       isManager={isManager}
+      spaceId={id!}
     />
   ) : (
     <div className="flex-1 flex items-center justify-center">
