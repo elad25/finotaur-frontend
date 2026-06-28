@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
+import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
 import { cn } from '@/lib/utils';
 import {
   ArrowLeft, TrendingUp, TrendingDown, Check, Loader2,
@@ -214,6 +215,7 @@ function Composer({
   const queryClient = useQueryClient();
 
   const [caption, setCaption]       = useState('');
+  const [category, setCategory]     = useState<string | null>(null);
   const [hidePnl, setHidePnl]       = useState(false);
   const [setupOnly, setSetupOnly]   = useState(false);
   const [revealSize, setRevealSize] = useState(false);
@@ -221,11 +223,15 @@ function Composer({
   const profit = trade.pnl != null && trade.pnl >= 0;
 
   const handlePost = async () => {
+    if (!category) {
+      toast.error('Pick a strategy category before sharing.');
+      return;
+    }
     try {
       await shareTrade(
         trade.id,
         [{ scope: 'global' as const }],
-        { hidePnl, showSetupOnly: setupOnly, revealSize, caption: caption.trim() || null },
+        { hidePnl, showSetupOnly: setupOnly, revealSize, caption: caption.trim() || null, strategyCategory: category },
       );
       queryClient.invalidateQueries({ queryKey: ['global-feed', 'list'] });
       toast.success('Trade shared to the community feed');
@@ -283,6 +289,34 @@ function Composer({
         <p className="text-right text-[11px] text-zinc-600 mt-1">{caption.length}/500</p>
       </div>
 
+      {/* Strategy category — REQUIRED */}
+      <div className="flex flex-col gap-1.5">
+        <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
+          Strategy <span className="text-[#C9A646]">*</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {STRATEGY_CATEGORIES.map((cat) => {
+            const active = category === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategory(cat)}
+                aria-pressed={active}
+                className={cn(
+                  'px-2.5 py-1.5 rounded-full text-[12px] font-medium border-[0.5px] transition-colors',
+                  active
+                    ? 'bg-[#C9A646] text-black border-[#C9A646]'
+                    : 'bg-zinc-800/40 border-zinc-700/60 text-zinc-300 hover:border-zinc-500 hover:text-white',
+                )}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Privacy toggles */}
       <div className="flex flex-col gap-1.5">
         <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Visibility</p>
@@ -326,9 +360,9 @@ function Composer({
         </button>
         <div className="flex-1" />
         <Button
-          disabled={isSharing}
+          disabled={isSharing || !category}
           onClick={handlePost}
-          className="bg-[#C9A646] text-black hover:bg-[#C9A646]/90 min-w-[80px]"
+          className="bg-[#C9A646] text-black hover:bg-[#C9A646]/90 min-w-[80px] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSharing ? <Loader2 size={13} className="animate-spin" /> : 'Post'}
         </Button>
