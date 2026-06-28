@@ -895,7 +895,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
               }}
               onMouseEnter={() => !isLocked && handlePrefetch(item.path)}
               disabled={isLocked}
-              title={hasChildren ? (childrenOpen ? 'Hide Copilot pages' : 'Show Copilot pages') : !isExpanded ? item.label : undefined}
+              title={hasChildren && isExpanded ? (childrenOpen ? 'Hide Copilot pages' : 'Show Copilot pages') : undefined}
               className={cn(
                 sidebarItemBaseClass,
                 isExpanded ? sidebarItemExpandedClass : sidebarItemCollapsedClass,
