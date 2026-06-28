@@ -439,12 +439,21 @@ function CarouselCard({ position, eyebrow, title, tagline, Preview, flagship, st
 // ===========================================
 // CrossMarker sub-component
 // ===========================================
-function CrossMarker() {
+function CrossMarker({ delay = 0 }: { delay?: number }) {
+  const reduce = useReducedMotion();
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="opacity-60">
+    <motion.svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      animate={reduce ? undefined : { y: [0, -5, 0], rotate: [0, 10, 0], opacity: [0.4, 0.85, 0.4] }}
+      transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay }}
+      style={{ opacity: 0.6 }}
+    >
       <line x1="7" y1="2" x2="7" y2="12" stroke="rgba(201,166,70,0.6)" strokeWidth="0.8" />
       <line x1="2" y1="7" x2="12" y2="7" stroke="rgba(201,166,70,0.6)" strokeWidth="0.8" />
-    </svg>
+    </motion.svg>
   );
 }
 
@@ -561,10 +570,10 @@ const Hero = () => {
         animate={
           prefersReducedMotion
             ? undefined
-            : { x: [0, -14, 6, 0], y: [0, 8, -10, 0] }
+            : { x: [0, -45, 22, 0], y: [0, 28, -34, 0] }
         }
         transition={{
-          duration: 26,
+          duration: 20,
           repeat: Infinity,
           ease: 'easeInOut',
           times: [0, 0.4, 0.7, 1],
@@ -595,8 +604,12 @@ const Hero = () => {
       {/* Twinkling overlay — sparser, animated */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
-        animate={{ opacity: [0.3, 0.8, 0.3] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        animate={{ opacity: [0.3, 0.8, 0.3], x: [0, 26, 0], y: [0, -20, 0] }}
+        transition={{
+          opacity: { duration: 4, repeat: Infinity, ease: 'easeInOut' },
+          x: { duration: 15, repeat: Infinity, ease: 'easeInOut' },
+          y: { duration: 15, repeat: Infinity, ease: 'easeInOut' },
+        }}
         style={{
           backgroundImage: `radial-gradient(2px 2px at 24% 14%, rgba(255,255,255,1) 0%, transparent 60%),
                             radial-gradient(2px 2px at 78% 38%, rgba(255,247,222,1) 0%, transparent 60%),
@@ -612,8 +625,12 @@ const Hero = () => {
       {/* Second twinkle layer with different timing */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
-        animate={{ opacity: [0.6, 0.2, 0.6] }}
-        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+        animate={{ opacity: [0.6, 0.2, 0.6], x: [0, -30, 0], y: [0, 18, 0] }}
+        transition={{
+          opacity: { duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 1.5 },
+          x: { duration: 18, repeat: Infinity, ease: 'easeInOut' },
+          y: { duration: 18, repeat: Infinity, ease: 'easeInOut' },
+        }}
         style={{
           backgroundImage: `radial-gradient(1.5px 1.5px at 60% 22%, rgba(255,247,222,0.95) 0%, transparent 60%),
                             radial-gradient(2px 2px at 18% 82%, rgba(255,255,255,1) 0%, transparent 60%),
@@ -787,16 +804,16 @@ const Hero = () => {
 
       {/* Corner X cross-hair markers (4 corners of the wordmark area) */}
       <div className="absolute top-[180px] left-[18%] pointer-events-none" aria-hidden="true">
-        <CrossMarker />
+        <CrossMarker delay={0} />
       </div>
       <div className="absolute top-[180px] right-[18%] pointer-events-none" aria-hidden="true">
-        <CrossMarker />
+        <CrossMarker delay={1.3} />
       </div>
       <div className="absolute top-[460px] left-[18%] pointer-events-none" aria-hidden="true">
-        <CrossMarker />
+        <CrossMarker delay={0.7} />
       </div>
       <div className="absolute top-[460px] right-[18%] pointer-events-none" aria-hidden="true">
-        <CrossMarker />
+        <CrossMarker delay={2} />
       </div>
 
       {/* Faint vertical guide lines that frame the wordmark */}
