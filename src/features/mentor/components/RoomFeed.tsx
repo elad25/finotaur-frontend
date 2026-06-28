@@ -13,6 +13,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { MoreVertical, MessageSquare, X } from 'lucide-react';
+import { ReactionBar } from '@/components/feed/ReactionBar';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import {
@@ -46,10 +47,6 @@ interface RoomFeedProps {
   spaceId: string;
   isManager: boolean;
 }
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const QUICK_EMOJIS = ['👍', '🔥', '💯', '👏'] as const;
 
 // ── Formatters ─────────────────────────────────────────────────────────────────
 
@@ -156,12 +153,12 @@ function AttachedTradeCard({ symbol, side, pnl, closeAt, tradeId }: TradeChipPro
 
 // ── Reaction bar ───────────────────────────────────────────────────────────────
 
-interface ReactionBarProps {
+interface LocalReactionBarProps {
   post: FeedPost;
   spaceId: string;
 }
 
-function ReactionBar({ post, spaceId }: ReactionBarProps) {
+function LocalReactionBar({ post, spaceId }: LocalReactionBarProps) {
   const toggleReaction = useToggleReaction();
 
   const handleEmoji = (emoji: string) => {
@@ -176,33 +173,12 @@ function ReactionBar({ post, spaceId }: ReactionBarProps) {
   };
 
   return (
-    <div className="flex items-center gap-[6px]">
-      {QUICK_EMOJIS.map((emoji) => (
-        <button
-          key={emoji}
-          type="button"
-          onClick={() => handleEmoji(emoji)}
-          disabled={toggleReaction.isPending}
-          className={cn(
-            'flex items-center gap-[3px] px-[8px] py-[4px] rounded-[6px]',
-            'font-sans text-[12px]',
-            'border-[0.5px] transition-colors duration-base ease-out',
-            'disabled:opacity-50 disabled:pointer-events-none',
-            post.my_reacted
-              ? 'bg-[rgba(201,166,70,0.12)] border-gold-border text-ink-primary'
-              : 'bg-surface-2 border-border-ds-subtle text-ink-secondary hover:border-border-ds-default',
-          )}
-          aria-label={`React with ${emoji}`}
-        >
-          {emoji}
-        </button>
-      ))}
-      {post.reaction_count > 0 && (
-        <span className="font-sans text-[12px] text-ink-tertiary ml-1">
-          {post.reaction_count}
-        </span>
-      )}
-    </div>
+    <ReactionBar
+      reactions={post.reactions}
+      myReaction={post.my_reaction}
+      onReact={handleEmoji}
+      disabled={toggleReaction.isPending}
+    />
   );
 }
 
@@ -485,7 +461,7 @@ function PostCard({ post, spaceId, currentUserId, isManager }: PostCardProps) {
       )}
 
       {/* Reaction bar */}
-      <ReactionBar post={post} spaceId={spaceId} />
+      <LocalReactionBar post={post} spaceId={spaceId} />
 
       {/* Comment thread */}
       <CommentThread post={post} spaceId={spaceId} currentUserId={currentUserId} />
