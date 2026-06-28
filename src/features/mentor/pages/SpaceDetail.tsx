@@ -165,7 +165,7 @@ export default function SpaceDetail() {
           {spaceError ? mapSpaceError(spaceError) : 'Space not found.'}
         </p>
         <Link
-          to="/app/floor/rooms"
+          to="/app/mentor/rooms"
           className="text-[13px] text-gold-primary hover:text-gold-hover underline underline-offset-2 transition-colors duration-base"
         >
           Back to Rooms
@@ -231,7 +231,7 @@ export default function SpaceDetail() {
         )}
       >
         <Link
-          to="/app/floor/rooms"
+          to="/app/mentor/rooms"
           className="flex items-center justify-center h-8 w-8 rounded-[6px] text-ink-tertiary hover:text-ink-primary hover:bg-surface-2 transition-colors duration-base"
           aria-label="Back to Rooms"
         >

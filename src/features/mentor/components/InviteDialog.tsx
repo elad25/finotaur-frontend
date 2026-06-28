@@ -82,7 +82,7 @@ export function InviteDialog({ spaceId, open, onOpenChange }: InviteDialogProps)
         email: identifier.trim() || undefined,
         role,
       });
-      const link = `${window.location.origin}/app/floor/rooms?invite=${invite.token}`;
+      const link = `${window.location.origin}/app/mentor/rooms?invite=${invite.token}`;
       setInviteLink(link);
     } catch (err) {
       setSubmitError(mapSpaceError(err));

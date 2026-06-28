@@ -61,7 +61,7 @@ function InviteBanner({ token }: InviteBannerProps) {
       await mutateAsync(token);
       toast({ title: 'Invite accepted', description: 'You have joined the Room.' });
       // Clear invite param and stay on the page (list will refetch via onSuccess).
-      navigate('/app/floor/rooms', { replace: true });
+      navigate('/app/mentor/rooms', { replace: true });
     } catch (err) {
       toast({ title: 'Could not accept invite', description: mapSpaceError(err) });
       setDismissed(true);
@@ -87,7 +87,7 @@ function InviteBanner({ token }: InviteBannerProps) {
           type="button"
           onClick={() => {
             setDismissed(true);
-            navigate('/app/floor/rooms', { replace: true });
+            navigate('/app/mentor/rooms', { replace: true });
           }}
           className="text-[13px] text-ink-tertiary hover:text-ink-secondary transition-colors duration-base"
         >
@@ -204,7 +204,7 @@ export default function Spaces() {
               <SpaceCard
                 key={space.space_id}
                 space={space}
-                onClick={() => navigate(`/app/floor/rooms/${space.space_id}`)}
+                onClick={() => navigate(`/app/mentor/rooms/${space.space_id}`)}
                 onDelete={space.role === 'owner' ? async () => {
                   try {
                     await deleteSpace(space.space_id);
