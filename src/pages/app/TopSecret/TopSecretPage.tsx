@@ -15,7 +15,10 @@ import TopSecretErrorBoundary from './TopSecretErrorBoundary';
 
 // Lazy load components
 const TopSecretLanding = lazy(() => import('./TopSecretLanding'));
-const TopSecretDashboard = lazy(() => import('./TopSecretDashboard'));
+// Use the modular v3.0 dashboard (./TopSecretDashboard/index.tsx) explicitly.
+// A bare './TopSecretDashboard' import resolves to the legacy TopSecretDashboard.tsx
+// file (file wins over folder), which has no daily briefing / cadence layout.
+const TopSecretDashboard = lazy(() => import('./TopSecretDashboard/index'));
 
 // ========================================
 // TYPES
