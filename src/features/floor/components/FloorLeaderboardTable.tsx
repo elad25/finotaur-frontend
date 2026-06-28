@@ -6,7 +6,8 @@
 // Horizontal scroll on small screens.
 // =====================================================
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 
@@ -146,6 +147,8 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
   currentUserId,
   minTrades,
 }: FloorLeaderboardTableProps) {
+  const [expanded, setExpanded] = useState(false);
+
   if (rows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -156,165 +159,201 @@ const FloorLeaderboardTable = memo(function FloorLeaderboardTable({
     );
   }
 
+  const coreCols = [
+    { label: 'Rank', align: 'left' },
+    { label: 'Trader', align: 'left' },
+    { label: 'Win %', align: 'right' },
+    { label: 'PF', align: 'right' },
+    { label: 'Trades', align: 'right' },
+  ];
+  const extraCols = [
+    { label: 'Avg Win', align: 'right' },
+    { label: 'Avg Loss', align: 'right' },
+    { label: 'Best', align: 'right' },
+    { label: 'Worst', align: 'right' },
+    { label: 'Streak', align: 'right' },
+  ];
+  const headerCols = [
+    ...coreCols,
+    ...(expanded ? extraCols : []),
+    { label: 'Discipline', align: 'right', gold: true },
+  ];
+
   return (
-    <div
-      className="overflow-x-auto rounded-[16px]"
-      style={{ border: '1px solid rgba(201,166,70,0.15)' }}
-    >
-      <table
-        className="w-full min-w-[760px] text-sm"
-        style={{ background: '#0A0A0A', borderCollapse: 'collapse' }}
+    <div>
+      {/* Toolbar — title + expand toggle */}
+      <div className="mb-2 flex items-center justify-between px-1">
+        <span
+          className="text-[11px] font-semibold uppercase tracking-[0.05em]"
+          style={{ color: '#777' }}
+        >
+          Full ranking
+        </span>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-1 text-[11px] font-medium transition-opacity hover:opacity-80"
+          style={{ color: '#C9A646' }}
+        >
+          {expanded ? 'Fewer stats' : 'More stats'}
+          <ChevronDown
+            className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')}
+          />
+        </button>
+      </div>
+
+      <div
+        className="overflow-x-auto rounded-[16px]"
+        style={{ border: '1px solid rgba(201,166,70,0.15)' }}
       >
-        {/* Header */}
-        <thead>
-          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            {[
-              { label: 'Rank', align: 'left' },
-              { label: 'Trader', align: 'left' },
-              { label: 'Win %', align: 'right' },
-              { label: 'Trades', align: 'right' },
-              { label: 'Avg Win', align: 'right' },
-              { label: 'Avg Loss', align: 'right' },
-              { label: 'PF', align: 'right' },
-              { label: 'Best', align: 'right' },
-              { label: 'Worst', align: 'right' },
-              { label: 'Streak', align: 'right' },
-              { label: 'Discipline', align: 'right', gold: true },
-            ].map(({ label, align, gold }) => (
-              <th
-                key={label}
-                className={cn(
-                  'px-3 py-3 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
-                  align === 'right' ? 'text-right' : 'text-left',
-                )}
-                style={{ color: gold ? '#E8C766' : '#777' }}
-              >
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        {/* Body */}
-        <tbody className="divide-y divide-white/[0.04]">
-          {rows.map((row) => {
-            const isCurrentUser = row.user_id === currentUserId;
-            const isQualified = row.qualified && row.rank !== null;
-            const nickname = row.floor_username ?? row.display_name;
-
-            return (
-              <tr
-                key={row.user_id}
-                style={
-                  isCurrentUser
-                    ? { background: 'rgba(201,166,70,0.06)' }
-                    : undefined
-                }
-                className={cn(!isCurrentUser && 'hover:bg-white/[0.02] transition-colors')}
-              >
-                {/* RANK */}
-                <td className="px-3 py-3 whitespace-nowrap">
-                  <RankBadge rank={row.rank} qualified={isQualified} />
-                </td>
-
-                {/* TRADER */}
-                <td className="px-3 py-3 max-w-[160px]">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <SmallAvatar
-                      name={nickname}
-                      avatarUrl={row.avatar_url}
-                      size={24}
-                    />
-                    <span
-                      className={cn(
-                        'text-sm font-medium truncate',
-                        isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
-                      )}
-                    >
-                      {nickname}
-                      {isCurrentUser && (
-                        <span className="ml-1 text-[10px] font-normal text-[#C9A646]/70">
-                          (you)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </td>
-
-                {/* WIN % */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
-                  {row.win_rate !== null ? `${row.win_rate}%` : <span style={{ color: '#444' }}>—</span>}
-                </td>
-
-                {/* TRADES */}
-                <td
-                  className="px-3 py-3 text-right whitespace-nowrap tabular-nums"
-                  style={{ color: isQualified ? '#888' : '#444' }}
+        <table
+          className="w-full text-sm"
+          style={{
+            minWidth: expanded ? 780 : 480,
+            background: '#0A0A0A',
+            borderCollapse: 'collapse',
+          }}
+        >
+          {/* Header */}
+          <thead>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              {headerCols.map(({ label, align, gold }) => (
+                <th
+                  key={label}
+                  className={cn(
+                    'px-3 py-3 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap',
+                    align === 'right' ? 'text-right' : 'text-left',
+                  )}
+                  style={{ color: gold ? '#E8C766' : '#777' }}
                 >
-                  {row.trade_count}
-                  {!isQualified && (
-                    <span
-                      className="ml-1.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-medium"
-                      style={{
-                        background: 'rgba(255,255,255,0.05)',
-                        color: '#555',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                      }}
-                    >
-                      {row.trade_count}/{minTrades}
-                    </span>
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          {/* Body */}
+          <tbody className="divide-y divide-white/[0.04]">
+            {rows.map((row) => {
+              const isCurrentUser = row.user_id === currentUserId;
+              const isQualified = row.qualified && row.rank !== null;
+              const nickname = row.floor_username ?? row.display_name;
+
+              return (
+                <tr
+                  key={row.user_id}
+                  style={
+                    isCurrentUser
+                      ? { background: 'rgba(201,166,70,0.06)' }
+                      : undefined
+                  }
+                  className={cn(!isCurrentUser && 'hover:bg-white/[0.02] transition-colors')}
+                >
+                  {/* RANK */}
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <RankBadge rank={row.rank} qualified={isQualified} />
+                  </td>
+
+                  {/* TRADER */}
+                  <td className="px-3 py-3 max-w-[160px]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <SmallAvatar
+                        name={nickname}
+                        avatarUrl={row.avatar_url}
+                        size={24}
+                      />
+                      <span
+                        className={cn(
+                          'text-sm font-medium truncate',
+                          isCurrentUser ? 'text-[#E8C766]' : 'text-white/85',
+                        )}
+                      >
+                        {nickname}
+                        {isCurrentUser && (
+                          <span className="ml-1 text-[10px] font-normal text-[#C9A646]/70">
+                            (you)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* WIN % */}
+                  <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                    {row.win_rate !== null ? `${row.win_rate}%` : <span style={{ color: '#444' }}>—</span>}
+                  </td>
+
+                  {/* PF */}
+                  <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                    {row.profit_factor !== null
+                      ? row.profit_factor.toFixed(2)
+                      : <span style={{ color: '#444' }}>—</span>}
+                  </td>
+
+                  {/* TRADES */}
+                  <td
+                    className="px-3 py-3 text-right whitespace-nowrap tabular-nums"
+                    style={{ color: isQualified ? '#888' : '#444' }}
+                  >
+                    {row.trade_count}
+                    {!isQualified && (
+                      <span
+                        className="ml-1.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          color: '#555',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        {row.trade_count}/{minTrades}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* EXTRA STATS (expanded only) */}
+                  {expanded && (
+                    <>
+                      {/* AVG WIN */}
+                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                        {fmtGreen(row.avg_win)}
+                      </td>
+                      {/* AVG LOSS */}
+                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                        {fmtRed(row.avg_loss)}
+                      </td>
+                      {/* BEST */}
+                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                        {fmtGreen(row.best_trade)}
+                      </td>
+                      {/* WORST */}
+                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
+                        {fmtRed(row.worst_trade)}
+                      </td>
+                      {/* STREAK */}
+                      <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
+                        {row.win_streak !== null
+                          ? row.win_streak
+                          : <span style={{ color: '#444' }}>—</span>}
+                      </td>
+                    </>
                   )}
-                </td>
 
-                {/* AVG WIN */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                  {fmtGreen(row.avg_win)}
-                </td>
-
-                {/* AVG LOSS */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                  {fmtRed(row.avg_loss)}
-                </td>
-
-                {/* PF */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
-                  {row.profit_factor !== null
-                    ? row.profit_factor.toFixed(2)
-                    : <span style={{ color: '#444' }}>—</span>}
-                </td>
-
-                {/* BEST */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                  {fmtGreen(row.best_trade)}
-                </td>
-
-                {/* WORST */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-sm">
-                  {fmtRed(row.worst_trade)}
-                </td>
-
-                {/* STREAK */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums" style={{ color: '#aaa' }}>
-                  {row.win_streak !== null
-                    ? row.win_streak
-                    : <span style={{ color: '#444' }}>—</span>}
-                </td>
-
-                {/* DISCIPLINE */}
-                <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
-                  {isQualified && row.discipline_score !== null ? (
-                    <span className="font-bold" style={{ color: '#E8C766' }}>
-                      {row.discipline_score.toFixed(1)}
-                    </span>
-                  ) : (
-                    <span style={{ color: '#444' }}>—</span>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  {/* DISCIPLINE */}
+                  <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+                    {isQualified && row.discipline_score !== null ? (
+                      <span className="font-bold" style={{ color: '#E8C766' }}>
+                        {row.discipline_score.toFixed(1)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#444' }}>—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 });

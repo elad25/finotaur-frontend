@@ -32,6 +32,7 @@ import {
   useJoinFloor,
   useLeaveFloor,
 } from '@/features/floor/hooks/useFloor';
+import type { FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 import { FloorLeaderboardTable } from '@/features/floor/components/FloorLeaderboardTable';
 import { FloorPodium } from '@/features/floor/components/FloorPodium';
 import { FloorCountdown } from '@/features/floor/components/FloorCountdown';
@@ -735,6 +736,56 @@ function FloorSkeleton() {
   );
 }
 
+// ── Current-user standing strip ─────────────────────────────────────────────────
+
+const UserStandingStrip = memo(function UserStandingStrip({
+  row,
+  minTrades,
+}: {
+  row: FloorLeaderboardRow;
+  minTrades: number;
+}) {
+  const qualified = row.qualified && row.rank !== null;
+  const pct = Math.min(100, Math.round((row.trade_count / minTrades) * 100));
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[12px] px-4 py-2.5"
+      style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.22)' }}
+    >
+      <span
+        className="flex items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap"
+        style={{ color: '#E8C766' }}
+      >
+        <BadgeCheck className="h-[15px] w-[15px]" />
+        You · {row.rank !== null ? `#${row.rank}` : 'Unranked'}
+      </span>
+
+      {qualified && row.discipline_score !== null && (
+        <span className="text-[12px]" style={{ color: '#999' }}>
+          Discipline <span style={{ color: '#fff' }}>{row.discipline_score.toFixed(1)}</span>
+        </span>
+      )}
+
+      {!qualified && (
+        <div className="flex-1 min-w-[160px]">
+          <div className="mb-1 flex justify-between text-[10px]" style={{ color: '#777' }}>
+            <span>{row.trade_count} / {minTrades} trades to qualify</span>
+            <span>{pct}%</span>
+          </div>
+          <div className="h-[5px] overflow-hidden rounded-[3px]" style={{ background: 'rgba(255,255,255,0.07)' }}>
+            <div
+              className="h-full"
+              style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#C9A646,#E8C766)' }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+UserStandingStrip.displayName = 'UserStandingStrip';
+
 // ── Period tab pill strip ──────────────────────────────────────────────────────
 
 interface PeriodStripProps {
@@ -782,8 +833,7 @@ export function GlobalLeaderboard() {
   const competitionId = competition?.id;
   const minTrades = competition?.min_trades ?? DEFAULT_MIN_TRADES;
 
-  const leaderboardScope =
-    period === 'monthly' ? 'monthly' : period;
+  const leaderboardScope = period === 'monthly' ? 'monthly' : period;
 
   const {
     data: rows,
@@ -798,25 +848,72 @@ export function GlobalLeaderboard() {
 
   if (isLoading) return <FloorSkeleton />;
 
+  const showComp = period === 'monthly' && !!competition;
+  const phase = showComp
+    ? getPhase(
+        competition!.registration_opens_at,
+        competition!.period_start,
+        competition!.period_end,
+      )
+    : null;
+
+  const competitorCount = rows?.length ?? 0;
+  const myRow = user?.id
+    ? rows?.find((r) => r.user_id === user.id) ?? null
+    : null;
+
   return (
     <div className="flex flex-col gap-ds-4 px-ds-5 py-ds-5">
-      {/* Competition status block — only on This Month tab */}
-      {period === 'monthly' && competition && (
-        <CompStatusBlock
-          competitionId={competition.id}
-          title={competition.title}
-          registrationOpensAt={competition.registration_opens_at}
-          periodStart={competition.period_start}
-          periodEnd={competition.period_end}
-        />
-      )}
+      {/* ── Page header: title · live count · period tabs ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p
+            className="text-[11px] font-medium tracking-[0.18em]"
+            style={{ color: 'rgba(201,166,70,0.55)' }}
+          >
+            THE FLOOR
+          </p>
+          <h1 className="text-[20px] font-semibold leading-tight text-white">
+            Leaderboard
+          </h1>
+        </div>
 
-      {/* Competition rules — show on This Month tab when competition exists */}
-      {period === 'monthly' && competition && (
-        <CompRulesBlock minTrades={minTrades} />
-      )}
+        <div className="flex items-center gap-2.5">
+          {competitorCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] whitespace-nowrap"
+              style={
+                phase === 'live'
+                  ? {
+                      color: '#3fd27a',
+                      background: 'rgba(63,210,122,0.08)',
+                      border: '1px solid rgba(63,210,122,0.25)',
+                    }
+                  : {
+                      color: '#999',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }
+              }
+            >
+              {phase === 'live' && (
+                <span
+                  className="h-[7px] w-[7px] rounded-full"
+                  style={{ background: '#3fd27a' }}
+                />
+              )}
+              {phase === 'live' ? 'Live · ' : ''}
+              {competitorCount} {competitorCount === 1 ? 'trader' : 'traders'}
+            </span>
+          )}
+          <PeriodStrip value={period} onChange={setPeriod} />
+        </div>
+      </div>
 
-      {/* No active competition notice (This Month, nothing returned) */}
+      {/* ── Current-user standing ── */}
+      {myRow && <UserStandingStrip row={myRow} minTrades={minTrades} />}
+
+      {/* ── No active competition notice (This Month, nothing returned) ── */}
       {period === 'monthly' && !competitionLoading && !competition && (
         <div
           className="rounded-[16px] px-5 py-4 flex items-center gap-3"
@@ -832,35 +929,48 @@ export function GlobalLeaderboard() {
         </div>
       )}
 
-      {/* Period strip — centered */}
-      <div className="flex justify-center">
-        <PeriodStrip value={period} onChange={setPeriod} />
-      </div>
+      {/* ── Two-column: main ranking | competition rail ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-ds-4 items-start">
+        {/* Main column — podium + full ranking */}
+        <div className="flex flex-col gap-ds-4 min-w-0">
+          {rows && rows.length > 0 && <FloorPodium rows={rows} />}
 
-      {/* Podium — top 3 qualified rows */}
-      {rows && rows.length > 0 && <FloorPodium rows={rows} />}
+          <DataState
+            isLoading={false}
+            isError={isError}
+            error={error}
+            data={rows}
+            onRetry={refetch}
+            empty={
+              <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
+                No competitors on the leaderboard yet.
+              </p>
+            }
+          >
+            {(data) => (
+              <FloorLeaderboardTable
+                rows={data}
+                currentUserId={user?.id ?? null}
+                minTrades={minTrades}
+              />
+            )}
+          </DataState>
+        </div>
 
-      {/* Full ranking table */}
-      <DataState
-        isLoading={false}
-        isError={isError}
-        error={error}
-        data={rows}
-        onRetry={refetch}
-        empty={
-          <p className="py-ds-9 text-center font-sans text-[13px] text-ink-tertiary">
-            No competitors on the leaderboard yet.
-          </p>
-        }
-      >
-        {(data) => (
-          <FloorLeaderboardTable
-            rows={data}
-            currentUserId={user?.id ?? null}
-            minTrades={minTrades}
-          />
+        {/* Right rail — status + rules (This Month with active competition only) */}
+        {showComp && (
+          <div className="flex flex-col gap-ds-4 min-w-0 lg:sticky lg:top-4">
+            <CompStatusBlock
+              competitionId={competition!.id}
+              title={competition!.title}
+              registrationOpensAt={competition!.registration_opens_at}
+              periodStart={competition!.period_start}
+              periodEnd={competition!.period_end}
+            />
+            <CompRulesBlock minTrades={minTrades} />
+          </div>
         )}
-      </DataState>
+      </div>
     </div>
   );
 }
