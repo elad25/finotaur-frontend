@@ -433,6 +433,13 @@ function ETFSymbolRedirect() {
   return <Navigate to={`/app/etfs/${symbol}/overview`} replace />;
 }
 
+// Redirects /app/floor/rooms/:id → /app/mentor/rooms/:id
+// so old links and bookmarks land under the Mentor tab.
+function FloorRoomRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/mentor/rooms/${id}`} replace />;
+}
+
 // APP CONTENT
 function AppContent() {
   // Consent-gated analytics: boots GA4 + PostHog only after user accepts cookies.
@@ -780,7 +787,7 @@ function AppContent() {
         {/* legacy redirects: old /app/floor/* mentor+rooms → /app/mentor/* */}
         <Route path="floor/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
         <Route path="floor/rooms" element={<Navigate to="/app/mentor/rooms" replace />} />
-        <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/rooms/:id" element={<FloorRoomRedirect />} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
