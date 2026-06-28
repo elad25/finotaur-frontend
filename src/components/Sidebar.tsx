@@ -398,6 +398,169 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
 
 };
 
+// Short "what's in this tab" blurbs shown in the collapsed-rail hover tooltip,
+// keyed by route path. Items with no entry gracefully fall back to label-only.
+const NAV_DESCRIPTIONS: Record<string, string> = {
+  // All Markets
+  '/app/all-markets/overview': 'Cross-asset market snapshot in one view',
+  '/app/all-markets/heatmap': 'Visual heatmap of market performance',
+  '/app/all-markets/movers': "Today's biggest gainers and losers",
+  '/app/all-markets/sentiment': 'Overall market sentiment gauge',
+  '/app/all-markets/calendar': 'Upcoming economic and earnings events',
+  '/app/all-markets/news': 'Latest cross-market headlines',
+  '/app/upgrade': 'Plans, pricing and upgrades',
+  '/app/settings': 'Account and app settings',
+  // Stocks
+  '/app/stocks/overview': 'Stock market dashboard',
+  '/app/stocks/earnings': 'Earnings dates and results',
+  '/app/stocks/movers': 'Top gaining and losing stocks',
+  '/app/stocks/news': 'Latest stock news',
+  '/app/stocks/sectors': 'Sector performance and rotation',
+  '/app/stocks/catalysts': 'Upcoming stock catalysts',
+  '/app/stocks/upgrades': 'Analyst upgrades and downgrades',
+  '/app/stocks/valuation': 'Valuation metrics and screens',
+  '/app/stocks/reports': 'Downloadable research reports and PDFs',
+  '/app/stocks/watchlists': 'Your saved stock watchlists',
+  // Crypto
+  '/app/crypto/overview': 'Crypto market dashboard',
+  '/app/crypto/screener': 'Filter and find crypto assets',
+  '/app/crypto/derivatives': 'Funding, open interest and derivatives',
+  '/app/crypto/sentiment': 'Crypto sentiment and news',
+  '/app/crypto/watchlist': 'Your saved crypto watchlist',
+  '/app/crypto/academy': 'Learn crypto trading',
+  // Futures
+  '/app/futures/overview': 'Futures market dashboard',
+  '/app/futures/contracts': 'Browse futures contracts',
+  '/app/futures/curves': 'Forward curves and spreads',
+  '/app/futures/positioning': 'COT and trader positioning',
+  '/app/futures/tools': 'Futures calculators and tools',
+  // Forex
+  '/app/forex/overview': 'Forex market dashboard',
+  '/app/forex/strength': 'Live currency strength meter',
+  '/app/forex/correlation': 'Currency correlation map',
+  '/app/forex/pairs': 'Major and cross pairs',
+  '/app/forex/rates': 'Central bank interest rates',
+  '/app/forex/deep-analysis': 'In-depth macro reports',
+  '/app/forex/alerts': 'Price alerts and watchlists',
+  '/app/forex/news': 'Latest forex news',
+  // Commodities
+  '/app/commodities/overview': 'Commodities dashboard',
+  '/app/commodities/screener': 'Filter commodities',
+  '/app/commodities/catalysts': 'Upcoming commodity catalysts',
+  '/app/commodities/energy': 'Oil, gas and energy markets',
+  '/app/commodities/metals': 'Gold, silver and metals',
+  '/app/commodities/agriculture': 'Grains and agricultural markets',
+  '/app/commodities/seasonality': 'Seasonal price patterns',
+  '/app/commodities/reports': 'Commodity research reports',
+  '/app/commodities/calendar': 'Commodity events calendar',
+  '/app/commodities/news': 'Latest commodity news',
+  // Options
+  '/app/options/chain': 'Live options chain',
+  '/app/options/flow': 'Real-time options order flow',
+  '/app/options/volatility': 'Implied and historical volatility',
+  '/app/options/strategy': 'Build options strategies',
+  '/app/options/simulator': 'Simulate options trades',
+  '/app/options/greeks-monitor': 'Track your position Greeks',
+  '/app/options/iv-rank': 'IV rank and percentile',
+  '/app/options/oi-volume': 'Open interest and volume',
+  '/app/options/unusual-activity': 'Unusual options activity',
+  '/app/options/earnings-iv-crush': 'Earnings IV-crush plays',
+  '/app/options/shortcuts': 'Quick options shortcuts',
+  // Macro
+  '/app/macro/pulse': 'Macro market pulse',
+  '/app/macro/rates': 'Rates and central banks',
+  '/app/macro/indicators': 'Inflation and growth data',
+  '/app/macro/global': 'Global markets overview',
+  '/app/macro/risk': 'Risk regime indicators',
+  '/app/macro/desk': 'Macro research desk',
+  // War Zone / Top Secret
+  '/app/all-markets/warzone': 'Latest WAR ZONE alerts',
+  '/app/top-secret': 'Latest TOP SECRET reports',
+  '/app/top-secret/admin': 'TOP SECRET admin tools',
+  // AI Arena
+  '/app/ai/stock-analyzer': 'AI-powered stock analysis',
+  '/app/ai/sector-analyzer': 'AI sector analysis',
+  '/app/ai/macro-analyzer': 'AI macro analysis',
+  '/app/ai/options-intelligence': 'AI options intelligence',
+  '/app/ai/flow-scanner': 'AI options flow scanner',
+  '/app/ai/top-5': 'Daily intelligence-desk picks',
+  '/app/ai/upcoming-events': 'Upcoming market events',
+  // Copilot
+  '/copilot': 'Your AI portfolio copilot',
+  '/copilot/top-opportunities': 'Top portfolio opportunities',
+  '/copilot/macro': 'Macro view for your portfolio',
+  '/copilot/quant-flow': 'Quant flow signals',
+  '/copilot/holdings': 'Your holdings breakdown',
+  '/copilot/risks': 'Portfolio risk analysis',
+  '/copilot/ai-analyst': 'Chat with your AI analyst',
+  // Connections
+  '/app/connections': 'Your broker connections',
+  '/app/connections/new': 'Add a new broker connection',
+  // Journal
+  '/app/journal/overview': 'Your trading performance at a glance',
+  '/app/journal/new': 'Log a new trade manually',
+  '/app/journal/my-trades': 'All your trades, tagged and filtered',
+  '/app/journal/strategies': 'Define and track your strategies',
+  '/app/journal/calendar': 'Daily P&L calendar view',
+  '/app/journal/trade-compare': 'What-if shadow analysis of your trades',
+  '/app/journal/reports': 'Performance reports and statistics',
+  '/app/journal/notes': 'Your trading notebook',
+  '/app/journal/prop-firms': 'Track your prop-firm accounts',
+  '/app/journal/settings': 'Journal preferences',
+  // Backtest
+  '/app/journal/backtest/overview': 'Backtest performance dashboard',
+  '/app/journal/backtest/chart': 'Backtest on live charts',
+  '/app/journal/backtest/trades': 'Your backtest trades',
+  '/app/journal/backtest/results': 'Your saved backtest runs',
+  '/app/journal/backtest/builder': 'Build backtest strategies',
+  '/app/journal/backtest/analytics': 'Backtest analytics',
+  '/app/journal/backtest/auto': 'Automated pattern backtester',
+  // Copy Trade
+  '/app/copy-trade/overview': 'Your copy-trade connections',
+  '/app/copy-trade/trade-copier': 'Mirror trades across accounts',
+  '/app/copy-trade/manage-risk': 'Risk controls for copying',
+  '/app/copy-trade/agent': 'Monitor the copier agent',
+  '/app/copy-trade/install': 'Install the FINOTAUR agent',
+  // Funding
+  '/app/funding/overview': 'Funding overview',
+  '/app/funding/brokers': 'Your funded broker accounts',
+  '/app/funding/advance': 'Request a cash advance',
+  '/app/funding/transactions': 'Funding transactions',
+  // The Floor
+  '/app/floor/feed': 'Community trade feed',
+  '/app/floor/leaderboard': 'Community leaderboard',
+  '/app/floor/dm': 'Direct messages',
+  // Mentor
+  '/app/mentor/rooms': 'Your mentor rooms',
+  '/app/mentor/mode': 'Switch to mentor mode',
+  // Admin
+  '/app/admin/overview': 'Admin dashboard',
+  '/app/admin/users': 'Manage users',
+  '/app/admin/analytics': 'Platform analytics',
+  '/app/admin/billing': 'Subscribers and billing',
+  '/app/admin/support': 'Support tickets',
+  '/app/admin/billing/cancellations': 'Cancellation flow',
+  '/app/admin/affiliates': 'Affiliate management',
+  '/app/admin/analytics/top-traders': 'Top traders',
+  // Affiliate
+  '/app/journal/affiliate/overview': 'Affiliate dashboard',
+  '/app/journal/affiliate/referrals': 'Your referrals',
+  '/app/journal/affiliate/earnings': 'Affiliate earnings',
+  '/app/journal/affiliate/analytics': 'Affiliate analytics',
+  '/app/journal/affiliate/payouts': 'Payout history',
+  '/app/journal/affiliate/marketing': 'Marketing tools and links',
+  '/app/journal/affiliate/bonuses': 'Bonus rewards',
+  '/app/journal/affiliate/performance': 'Affiliate performance',
+  '/app/journal/affiliate/settings': 'Affiliate settings',
+  // Automation
+  '/app/automation/risk': 'Automated risk rules',
+  '/app/automation/copier': 'Automated trade copier',
+  '/app/automation/agent': 'Automation agent',
+  // Settings
+  '/app/settings/billing': 'Billing and subscription',
+  '/app/settings/usage': 'Usage and limits',
+};
+
 
 const sidebarItemBaseClass =
   'relative group flex w-full min-h-[46px] items-center rounded-lg border-l-2 border-transparent py-2.5 text-[13px] font-medium leading-snug transition-all duration-200';
@@ -455,11 +618,11 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   useEffect(() => {
-    // The Floor pages keep the sidebar expanded (open) per Elad's request.
+    // The Floor pages keep the sidebar collapsed (closed) per Elad's request.
     if (location.pathname.startsWith('/app/floor')) {
-      // Force-expand the rail on The Floor. View-only — do NOT persist, so the
+      // Force-collapse the rail on The Floor. View-only — do NOT persist, so the
       // user's saved preference is restored when they leave The Floor.
-      setIsExpanded(true);
+      setIsExpanded(false);
     } else {
       // Left The Floor: restore the user's persisted preference.
       const saved = localStorage.getItem(storageKey);
@@ -810,24 +973,31 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                   hover (every item, including the active one). No persistent
                   label — the active item is indicated by its icon highlight. */}
               {!isExpanded && (
-                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-black text-white border border-white/15 rounded-lg text-xs font-medium whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
-                  {item.label}
-                  {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
-                  {showBetaBadge && (
-                    <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
-                      BETA
+                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 max-w-[240px] bg-black text-white border border-white/15 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
+                  <span className="block text-xs font-semibold whitespace-nowrap">
+                    {item.label}
+                    {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
+                    {showBetaBadge && (
+                      <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
+                        BETA
+                      </span>
+                    )}
+                    {showAdminLockIndicator && !isLocked && (
+                      <Lock
+                        className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
+                        style={{ color: 'rgba(201,166,70,0.55)' }}
+                        title="Locked for regular users"
+                      />
+                    )}
+                    {/* Price-gate indicator: visible to all users */}
+                    {isPriceGatedItem && (
+                      <Lock className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500" title="Price gated" />
+                    )}
+                  </span>
+                  {NAV_DESCRIPTIONS[item.path] && (
+                    <span className="mt-0.5 block text-[11px] font-normal leading-snug text-white/65">
+                      {NAV_DESCRIPTIONS[item.path]}
                     </span>
-                  )}
-                  {showAdminLockIndicator && !isLocked && (
-                    <Lock
-                      className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
-                      style={{ color: 'rgba(201,166,70,0.55)' }}
-                      title="Locked for regular users"
-                    />
-                  )}
-                  {/* Price-gate indicator: visible to all users */}
-                  {isPriceGatedItem && (
-                    <Lock className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500" title="Price gated" />
                   )}
                 </div>
               )}
