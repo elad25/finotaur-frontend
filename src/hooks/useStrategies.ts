@@ -33,6 +33,8 @@ export function useStrategiesOptimized(userId?: string) {
       // Map snake_case DB columns to camelCase aliases (additive — existing keys preserved).
       return (data || []).map((row) => ({
         ...row,
+        // Dedicated strategy category (ICT / Price Action / …) — distinct from `category` (asset classes).
+        strategyCategory: row.strategy_category ?? null,
         checklist: row.checklist ?? null,
         avgRRGoal: row.avg_rr_goal ?? null,
         confirmationSignals: row.confirmation_signals ?? null,
@@ -128,6 +130,7 @@ export function useCreateStrategyOptimized() {
           name: strategy.name,
           description: strategy.description,
           category: strategy.category,
+          strategy_category: strategy.strategyCategory ?? null,
           status: 'active',
           created_at: new Date().toISOString(),
           confirmation_signals: strategy.confirmationSignals || null,

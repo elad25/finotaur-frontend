@@ -16,15 +16,32 @@
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { mapSpaceError } from '@/features/shared/utils/spaceError';
-import type { GlobalFeedItem, GlobalComment, SharePrivacy } from '@/features/floor/types/community';
+import type {
+  GlobalFeedItem,
+  GlobalComment,
+  SharePrivacy,
+  FeedFilters,
+  FeedFacet,
+  ConsistencyLeaderboardRow,
+} from '@/features/floor/types/community';
 
 // ================================================
 // QUERY KEYS
 // ================================================
 
 const feedKeys = {
-  feed: () => ['global-feed', 'list'] as const,
+  feed: (filters: FeedFilters) =>
+    [
+      'global-feed',
+      'list',
+      filters.symbol ?? null,
+      filters.strategyCategory ?? null,
+      filters.outcome ?? null,
+      filters.tier ?? null,
+    ] as const,
   comments: (postId: string) => ['global-feed', 'comments', postId] as const,
+  facets: () => ['global-feed', 'facets'] as const,
+  consistencyBoard: (period: string) => ['global-feed', 'consistency-board', period] as const,
 };
 
 // ================================================
@@ -50,7 +67,7 @@ const FEED_PAGE_SIZE = 20;
  *   hasNextPage      — true when more items may exist
  *   isFetchingNextPage — true while a next-page request is in-flight
  */
-export function useGlobalFeed(): {
+export function useGlobalFeed(filters: FeedFilters = {}): {
   posts: GlobalFeedItem[];
   isLoading: boolean;
   isError: boolean;
@@ -70,7 +87,7 @@ export function useGlobalFeed(): {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery<GlobalFeedItem[], Error>({
-    queryKey: feedKeys.feed(),
+    queryKey: feedKeys.feed(filters),
     staleTime: 15_000,
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) => {
@@ -78,6 +95,10 @@ export function useGlobalFeed(): {
       const { data, error } = await supabase.rpc('list_global_feed', {
         p_before: cursor,
         p_limit: FEED_PAGE_SIZE,
+        p_symbol: filters.symbol ?? null,
+        p_strategy_category: filters.strategyCategory ?? null,
+        p_outcome: filters.outcome ?? null,
+        p_tier: filters.tier ?? null,
       });
       if (error) throw error;
       return (data ?? []) as GlobalFeedItem[];
@@ -134,6 +155,46 @@ export function useGlobalPostComments(postId?: string): {
   return { comments: data, isLoading, isError, error, refetch };
 }
 
+/** Tag facets (instrument / strategy category / outcome / tier) with post counts. */
+export function useFeedFacets(): {
+  facets: FeedFacet[];
+  isLoading: boolean;
+} {
+  const { data = [], isLoading } = useQuery<FeedFacet[], Error>({
+    queryKey: feedKeys.facets(),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('feed_tag_facets');
+      if (error) throw error;
+      return (data ?? []) as FeedFacet[];
+    },
+  });
+  return { facets: data, isLoading };
+}
+
+/** Top traders by consistency (WR + profit factor) — never ranked by net P&L. */
+export function useConsistencyLeaderboard(
+  period: 'all' | 'week' | 'month' = 'week',
+  limit = 5,
+): {
+  rows: ConsistencyLeaderboardRow[];
+  isLoading: boolean;
+} {
+  const { data = [], isLoading } = useQuery<ConsistencyLeaderboardRow[], Error>({
+    queryKey: feedKeys.consistencyBoard(period),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('community_consistency_leaderboard', {
+        p_period: period,
+        p_limit: limit,
+      });
+      if (error) throw error;
+      return (data ?? []) as ConsistencyLeaderboardRow[];
+    },
+  });
+  return { rows: data, isLoading };
+}
+
 // ================================================
 // MUTATIONS
 // ================================================
@@ -160,7 +221,7 @@ export function useCreateGlobalPost() {
       return data as GlobalFeedItem;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: feedKeys.feed() });
+      qc.invalidateQueries({ queryKey: ['global-feed', 'list'] });
     },
   });
 }
@@ -178,7 +239,7 @@ export function useDeleteGlobalPost() {
       if (error) throw new Error(mapSpaceError(error));
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: feedKeys.feed() });
+      qc.invalidateQueries({ queryKey: ['global-feed', 'list'] });
     },
   });
 }
@@ -205,7 +266,7 @@ export function useAddGlobalComment() {
     },
     onSuccess: (_data, { postId }) => {
       qc.invalidateQueries({ queryKey: feedKeys.comments(postId) });
-      qc.invalidateQueries({ queryKey: feedKeys.feed() });
+      qc.invalidateQueries({ queryKey: ['global-feed', 'list'] });
     },
   });
 }
@@ -229,7 +290,7 @@ export function useToggleGlobalReaction() {
       if (error) throw new Error(mapSpaceError(error));
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: feedKeys.feed() });
+      qc.invalidateQueries({ queryKey: ['global-feed', 'list'] });
     },
   });
 }
