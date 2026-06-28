@@ -16,7 +16,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Clock, Maximize2, Moon, Sun, TrendingUp, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Clock, Maximize2, TrendingUp, X } from 'lucide-react';
 import type { UTCTimestamp } from 'lightweight-charts';
 
 import { FinotaurChart, type MarkerIcon } from '@/components/charting/FinotaurChart';
@@ -409,11 +409,10 @@ function MarkerChips({ trade }: { trade: TradeChartTrade }) {
 export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreenProp, onFullscreenChange }: TradeChartProps) {
   const controlled = theme !== undefined && !!onToggleTheme && !!onFullscreenChange;
   const [localFullscreen, setLocalFullscreen] = useState(false);
-  const [localTheme, setLocalTheme] = useChartTheme('light');
+  const [localTheme] = useChartTheme('light');
   const chartTheme = theme ?? localTheme;
   const fullscreen = fullscreenProp ?? localFullscreen;
   const setFullscreen = onFullscreenChange ?? setLocalFullscreen;
-  const toggleTheme = onToggleTheme ?? (() => setLocalTheme(localTheme === 'light' ? 'dark' : 'light'));
   const [indicatorSettings, setIndicatorSettings] = useIndicatorPreferences();
 
   // Interval is the same calculation ChartBody does internally — recomputed
@@ -456,16 +455,6 @@ export function TradeChart({ trade, theme, onToggleTheme, fullscreen: fullscreen
             Price Chart
           </h3>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-              aria-label="Toggle chart theme"
-              title={`Switch to ${chartTheme === 'light' ? 'dark' : 'light'} theme`}
-            >
-              {chartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-              {chartTheme === 'light' ? 'Dark' : 'Light'}
-            </button>
             <button
               type="button"
               onClick={() => setFullscreen(true)}
