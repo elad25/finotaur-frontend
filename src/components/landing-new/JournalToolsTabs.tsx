@@ -214,23 +214,40 @@ const JournalDashboardMock = () => {
 };
 
 const MeetFinoIntro = () => {
+  // FINO mascot codec pick — mirrors the in-app Home (HomePage.tsx): Safari /
+  // iOS WebKit can't render VP9-alpha WebM transparently, so those browsers get
+  // the animated-WebP-with-alpha fallback. Everything Chromium/Gecko keeps the
+  // smaller, smoother VP9 WebM. Real alpha → genuinely transparent background,
+  // no mix-blend-screen hack (and no more 503-ing meet-60s mp4).
+  const finoUsesWebpFallback =
+    typeof navigator !== "undefined" &&
+    /AppleWebKit/.test(navigator.userAgent) &&
+    !/Chrome|Chromium|Android/.test(navigator.userAgent);
+
   return (
     <div className="relative flex flex-col items-center justify-center px-3 py-4 overflow-hidden">
       <div className="flex flex-col items-center w-full">
-        {/* Real 60s animated FINO (4 stitched clips, neutral-bracketed). Its
-            pure-black background blends out via mix-blend-screen over the dark
-            card — true transparent look, no box. */}
-        <video
-          className="w-full max-w-[352px] sm:max-w-[496px] h-auto mx-auto mix-blend-screen"
-          src="/fino/fino-meet-60s-v2.mp4"
-          poster="/fino/fino-meet-60s-v2-poster.png"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          aria-label="FINO — the FINOTAUR AI assistant"
-        />
+        {finoUsesWebpFallback ? (
+          <img
+            src="/fino/fino-safari-v4.webp"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="w-full max-w-[320px] sm:max-w-[440px] h-auto mx-auto object-contain"
+          />
+        ) : (
+          <video
+            className="w-full max-w-[320px] sm:max-w-[440px] h-auto mx-auto object-contain"
+            src="/fino/fino-home-natural-v4.webm"
+            poster="/fino/fino-home-natural-v4-poster.png"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-label="FINO — the FINOTAUR AI assistant"
+          />
+        )}
       </div>
     </div>
   );
