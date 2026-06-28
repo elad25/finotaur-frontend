@@ -199,6 +199,7 @@ export default function SpaceDetail() {
       canPost={canPost}
       currentUserId={currentUserId}
       members={members}
+      isManager={isManager}
     />
   ) : (
     <div className="flex-1 flex items-center justify-center">
