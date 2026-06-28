@@ -18,7 +18,7 @@ import { ReportTypeCard, StatCard, ReportViewerModal } from './components';
 
 // Lazy load heavy components
 const TopSecretLanding = lazy(() => import('../TopSecretLanding'));
-const TopSecretDashboard = lazy(() => import('../TopSecretDashboard'));
+const TopSecretDashboard = lazy(() => import('../TopSecretDashboard/index'));
 const PublishReportModal = lazy(() => import('@/components/admin/PublishReportModal'));
 const PublishedReportsManager = lazy(() => import('@/components/admin/PublishedReportsManager'));
 

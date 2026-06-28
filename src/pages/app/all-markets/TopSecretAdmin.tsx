@@ -82,7 +82,7 @@ import { lazy } from '@/lib/lazyWithRetry';
 
 // Lazy load Landing and Dashboard for preview modes
 const TopSecretLanding = lazy(() => import('@/pages/app/TopSecret/TopSecretLanding'));
-const TopSecretDashboard = lazy(() => import('@/pages/app/TopSecret/TopSecretDashboard'));
+const TopSecretDashboard = lazy(() => import('@/pages/app/TopSecret/TopSecretDashboard/index'));
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
