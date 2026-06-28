@@ -262,7 +262,7 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
   const latestByType = useMemo(() => {
     return ['macro', 'company', 'crypto']
       .map(type => reports.find(r => r.type === type))
-      .filter((r): r is Report => r !== null);
+      .filter((r): r is Report => r != null); // find() returns undefined, not null — `!= null` excludes both
   }, [reports]);
 
   // Actions
