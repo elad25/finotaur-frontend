@@ -5,7 +5,8 @@
 // Monthly/Yearly toggle with savings
 // ================================================
 
-import { Check, Shield, Clock, Gift, Star, Zap } from "lucide-react";
+import { Check, Shield, Clock, Gift, Star, Zap, BookOpen, Lock, Crown, Bot, Sparkles } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -32,6 +33,7 @@ interface Plan {
   includesExtras?: string;
   isFree?: boolean;
   comingSoon?: boolean;
+  Icon?: LucideIcon;
 }
 
 const plans: Plan[] = [
@@ -41,13 +43,15 @@ const plans: Plan[] = [
     monthlyPrice: "$0",
     yearlyPrice: "$0",
     yearlyMonthlyEquivalent: "$0",
-    description: "The hook — explore the platform",
+    description: "Start free — no card required",
     isFree: true,
+    Icon: Sparkles,
     features: [
-      "Trading Journal — 15 trades",
-      "Stock Analyzer (3 analyses/day)",
+      "Trade journal — up to 15 trades",
+      "Unlimited AI Stock Analyzer — no credit caps",
+      "P&L calendar & core performance stats",
       "1 watchlist",
-      "Market screener (basic)",
+      "Basic market screener",
       "Community access",
     ],
     cta: "Get Started Free",
@@ -59,17 +63,18 @@ const plans: Plan[] = [
     monthlyPrice: "$44.99",
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34",
-    description: "The trader's desk",
+    description: "Your complete trading journal & analytics desk",
     trialDays: 14,
+    Icon: BookOpen,
     features: [
       "Everything in Free, plus:",
-      "Unlimited trades — no caps",
-      "Trade copier — auto-sync from broker",
-      "Backtest engine",
-      "Mentor & community rooms",
-      "Full performance analytics",
-      "Strategy builder & playbooks",
-      "Priority support",
+      "Unlimited trades — every account, auto-synced",
+      "Broker auto-sync + Trade Copier (Tradovate & NinjaTrader)",
+      "Win rate, profit factor, expectancy, R-multiples & MFE/MAE",
+      "Strategy Backtesting engine",
+      "Strategy builder & Playbooks with adherence tracking",
+      "Shadow — what-if analysis on every closed trade",
+      "Mentor & community rooms · Priority support",
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
@@ -82,15 +87,16 @@ const plans: Plan[] = [
     monthlyPrice: "$50",
     yearlyPrice: "$499",
     yearlyMonthlyEquivalent: "$42",
-    description: "The intel",
+    description: "Institutional-grade market intel, every day",
     trialDays: 14,
     badge: "14-Day Free Trial",
+    Icon: Lock,
     features: [
       "Daily institutional market report",
-      "Monthly deep-dives (ISM, company, crypto)",
-      "Exclusive Discord community",
-      "Trade-room commentary",
-      "Early access to research",
+      "Monthly deep-dive research (ISM, single-name & crypto)",
+      "Private Discord trade room",
+      "Live trade-room commentary",
+      "Early access to new research & calls",
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
@@ -102,18 +108,19 @@ const plans: Plan[] = [
     monthlyPrice: "$109",
     yearlyPrice: "$1,090",
     yearlyMonthlyEquivalent: "$91",
-    description: "The Bloomberg of retail",
+    description: "The entire platform — every tool, one price",
     trialDays: 14,
     badge: "Most Popular",
-    includesExtras: "Journal + TOP SECRET + full market engine",
+    Icon: Crown,
+    includesExtras: "Journal + TOP SECRET + full market engine — over $200 of value",
     features: [
       "Everything in Journal & TOP SECRET, plus:",
-      "Unlimited analyses, alerts & screeners",
-      "Sector Analyzer",
-      "Options Intelligence AI",
-      "Macro Analyzer",
-      "AI Scanner + Insider/13F + Market Scanner",
-      "FINO AI assistant",
+      "Unlimited AI analyses, alerts & screeners",
+      "Sector & Macro Analyzers",
+      "Options Intelligence AI — institutional options flow",
+      "Real-time Market Scanner — live wall & sweep detection",
+      "AI Scanner + Insider / 13F tracking",
+      "FINO — your AI assistant, on every page",
     ],
     cta: "Start 14-Day Free Trial",
     featured: true,
@@ -125,20 +132,20 @@ const plans: Plan[] = [
     monthlyPrice: "$200",
     yearlyPrice: "$2,000",
     yearlyMonthlyEquivalent: "$167",
-    description: "Your AI portfolio manager — invests and trades alongside you, 24/7.",
+    description: "Your AI portfolio manager — invests & trades alongside you, 24/7",
     badge: "Coming Soon",
     comingSoon: true,
+    Icon: Bot,
     savings: "Save 17%",
     features: [
       "Everything in FINOTAUR, plus:",
-      "AI Portfolio Manager — invests & trades alongside you",
+      "AI Portfolio Manager — invests & trades with you",
       "24/7 AI oversight of every position",
-      "My Portfolio — live mark-to-market",
+      "Live mark-to-market of your real book",
       "Proactive AI risk detection & alerts",
       "Daily AI portfolio brief",
-      "Priority support",
     ],
-    cta: "Get COPILOT",
+    cta: "Notify Me",
     featured: false,
   },
 ];
@@ -150,7 +157,8 @@ const Pricing = () => {
 
   const handlePlanClick = (planId: string) => {
     if (planId === "enterprise") {
-      // COPILOT not yet available — checkout locked
+      // COPILOT not yet available — capture interest via signup (waitlist)
+      navigate("/auth/register?plan=copilot-waitlist");
       return;
     }
     if (planId === "free") {
@@ -173,7 +181,7 @@ const Pricing = () => {
 
   return (
     <SectionShell id="pricing" atmosphere="full" beam={false} constructionMarkers={false}>
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
@@ -298,22 +306,37 @@ const Pricing = () => {
 
                 {/* Card */}
                 <div
-                  className="relative rounded-xl overflow-hidden h-full flex flex-col transition-all duration-300"
+                  className={`relative rounded-xl overflow-hidden h-full flex flex-col transition-all duration-300 ${plan.featured ? "lg:-translate-y-2" : ""}`}
                   style={{
                     background: plan.featured
                       ? "linear-gradient(180deg, rgba(201,166,70,0.10) 0%, rgba(10,10,10,0.97) 100%)"
                       : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
                     border: plan.featured
-                      ? "1px solid rgba(201,166,70,0.35)"
+                      ? "1px solid rgba(201,166,70,0.5)"
                       : "1px solid rgba(255,255,255,0.06)",
                     boxShadow: plan.featured
-                      ? "0 0 50px rgba(201,166,70,0.1), 0 15px 40px rgba(0,0,0,0.4)"
+                      ? "0 0 60px rgba(201,166,70,0.18), 0 20px 50px rgba(0,0,0,0.5)"
                       : "0 4px 20px rgba(0,0,0,0.2)",
                   }}
                 >
                   <div className="p-5 flex flex-col flex-1">
                     {/* Name + Price */}
                     <div className="text-center mb-4">
+                      {plan.Icon && (
+                        <div className="flex justify-center mb-2.5">
+                          <span
+                            className="w-9 h-9 rounded-lg flex items-center justify-center"
+                            style={{
+                              background: plan.featured
+                                ? "linear-gradient(135deg, rgba(201,166,70,0.30), rgba(201,166,70,0.08))"
+                                : "rgba(201,166,70,0.07)",
+                              border: "1px solid rgba(201,166,70,0.25)",
+                            }}
+                          >
+                            <plan.Icon className="w-4 h-4 text-gold-primary" />
+                          </span>
+                        </div>
+                      )}
                       <h3
                         className={`text-lg font-bold mb-2 ${plan.featured ? "text-gold-primary" : "text-ink-primary"}`}
                       >
@@ -365,26 +388,35 @@ const Pricing = () => {
 
                     {/* Features — compact */}
                     <div className="space-y-2 mb-5 flex-1">
-                      {plan.features.map((feature, i) => (
-                        <div key={i} className="flex items-start gap-2">
+                      {plan.features.map((feature, i) =>
+                        feature.startsWith("Everything in") ? (
                           <div
-                            className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gold-border"
+                            key={i}
+                            className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-tertiary pt-2 mt-1 border-t border-gold-border/40"
                           >
-                            <Check
-                              className="w-2.5 h-2.5 text-gold-primary"
-                            />
-                          </div>
-                          <span className="text-ink-secondary text-xs leading-tight">
                             {feature}
-                          </span>
-                        </div>
-                      ))}
+                          </div>
+                        ) : (
+                          <div key={i} className="flex items-start gap-2">
+                            <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gold-border">
+                              <Check className="w-2.5 h-2.5 text-gold-primary" />
+                            </div>
+                            <span className="text-ink-secondary text-xs leading-tight">
+                              {feature}
+                            </span>
+                          </div>
+                        )
+                      )}
                     </div>
 
                     {/* CTA */}
                     {plan.comingSoon ? (
-                      <Button variant="goldOutline" size="full" disabled>
-                        Coming Soon
+                      <Button
+                        variant="goldOutline"
+                        size="full"
+                        onClick={() => handlePlanClick(plan.id)}
+                      >
+                        {plan.cta}
                       </Button>
                     ) : plan.featured ? (
                       <Button
