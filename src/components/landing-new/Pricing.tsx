@@ -255,10 +255,11 @@ const Pricing = () => {
         <div className="relative">
           <div
             aria-hidden="true"
-            className="absolute -inset-x-4 -inset-y-8 pointer-events-none"
+            className="absolute -inset-x-12 -inset-y-20 pointer-events-none"
             style={{
               background:
-                "radial-gradient(ellipse 75% 55% at 50% 45%, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.04) 40%, transparent 72%)",
+                "radial-gradient(ellipse 85% 65% at 50% 45%, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.025) 45%, transparent 76%)",
+              filter: "blur(36px)",
             }}
           />
           <div className="relative grid md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -312,13 +313,13 @@ const Pricing = () => {
                   style={{
                     background: plan.featured
                       ? "linear-gradient(180deg, rgba(201,166,70,0.10) 0%, rgba(10,10,10,0.97) 100%)"
-                      : "linear-gradient(180deg, rgba(201,166,70,0.07) 0%, rgba(255,255,255,0.012) 55%, rgba(201,166,70,0.035) 100%)",
+                      : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
                     border: plan.featured
                       ? "1px solid rgba(201,166,70,0.5)"
-                      : "1px solid rgba(201,166,70,0.22)",
+                      : "1px solid rgba(255,255,255,0.06)",
                     boxShadow: plan.featured
                       ? "0 0 60px rgba(201,166,70,0.18), 0 20px 50px rgba(0,0,0,0.5)"
-                      : "0 4px 20px rgba(0,0,0,0.25), 0 0 26px rgba(201,166,70,0.06)",
+                      : "0 4px 20px rgba(0,0,0,0.2)",
                   }}
                 >
                   <div className="p-5 flex flex-col flex-1">
