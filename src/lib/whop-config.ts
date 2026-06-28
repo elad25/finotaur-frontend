@@ -184,12 +184,9 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
 
-  // Top Secret (merged WAR ZONE + TOP SECRET) — LIVE Whop plans @ $50/mo, $499/yr
+  // Top Secret (Intelligence Envelope) — LIVE Whop plans @ $50/mo, $499/yr
   'plan_icd76C8REp0LQ': 'top_secret_monthly',
   'plan_7Lf31ygMAMmK8': 'top_secret_yearly',
-  // LEGACY $89.99 Top Secret plans — kept for resolution of any pre-merge subscriber
-  'plan_tUvQbCrEQ4197': 'top_secret_monthly',
-  'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
 };
 
 // ============================================
@@ -456,13 +453,13 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // TOP SECRET — merged WAR ZONE + TOP SECRET product
-  // $50/mo (was $89.99) | $499/yr (was $899)
-  // Includes daily report (ex-WAR ZONE) + monthly deep-dives (ex-TOP SECRET)
+  // TOP SECRET — Intelligence Envelope, 14-day free trial (no intro discount)
+  // $50/mo | $499/yr ($41.58/mo)
+  // Includes daily report + monthly deep-dives (WAR ZONE merged in)
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_tUvQbCrEQ4197 — TODO(Whop): set to $50/mo
+    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_icd76C8REp0LQ — $50/month, 14-day free trial
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
@@ -473,10 +470,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '14-Day Free Trial',
+    badge: '🔥 14-Day Free Trial',
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
+      '💰 Then $50/month — cancel anytime',
       'Daily institutional-grade market report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -493,7 +491,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 
   top_secret_yearly: {
     id: 'top_secret_yearly',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,  // plan_PxxbBlSdkyeo7 — TODO(Whop): set to $499/yr
+    whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,  // plan_7Lf31ygMAMmK8 — $499/year
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
@@ -505,11 +503,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '14-Day Trial + Save $101/year',
+    badge: '🔥 Save $101/year vs monthly',
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
-      '💰 Save $101/year vs monthly ($41.58/mo)',
+      '💰 $41.58/month — save $101/year vs monthly',
       'Daily institutional-grade market report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',

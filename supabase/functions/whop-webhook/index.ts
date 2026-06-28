@@ -960,6 +960,104 @@ const cancelResult = await cancelMembership(warZoneMembershipId, 'at_period_end'
 }
 
 // ============================================
+// 🔥 v3.6.1: GRANT WAR ZONE FOR TOP SECRET MEMBER
+// Called when Top Secret subscription is activated or renewed
+// Grants the user WAR ZONE (newsletter) entitlement automatically
+// Mirror of cancelWarZoneForTopSecretMember — keep these in sync
+// ============================================
+
+async function grantWarZoneForTopSecretMember(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail: string
+): Promise<{ success: boolean; message: string }> {
+  console.log("🔥 Granting War Zone for Top Secret member...", { userId, userEmail });
+
+  try {
+    // Step 1: Read the user's profile
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("top_secret_status, top_secret_interval, newsletter_enabled, newsletter_status, newsletter_whop_membership_id")
+      .eq("id", userId)
+      .single();
+
+    if (!profile) {
+      console.log("⚠️ Profile not found for War Zone grant");
+      return { success: false, message: "Profile not found" };
+    }
+
+    // Step 2: No-clobber guard — do not override a separately-purchased active War Zone
+    const hasSeparateWarZone =
+      profile.newsletter_whop_membership_id != null &&
+      ['active', 'trial', 'trialing'].includes(profile.newsletter_status || '');
+
+    if (hasSeparateWarZone) {
+      console.log("ℹ️ Separate War Zone membership exists, not overriding", {
+        newsletter_whop_membership_id: profile.newsletter_whop_membership_id,
+        newsletter_status: profile.newsletter_status,
+      });
+      return { success: true, message: "Separate War Zone exists, not overriding" };
+    }
+
+    // Step 3: Grant War Zone — mirror the Top Secret status
+    const grantedStatus =
+      ['trial', 'trialing'].includes(profile.top_secret_status || '')
+        ? 'trial'
+        : 'active';
+
+    const grantedInterval = profile.top_secret_interval || 'monthly';
+
+    await supabase
+      .from("profiles")
+      .update({
+        newsletter_enabled: true,
+        newsletter_status: grantedStatus,
+        newsletter_interval: grantedInterval,
+        newsletter_whop_membership_id: null,
+        newsletter_cancel_at_period_end: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    // Step 4: Audit log — mirror exact column shape of cancelWarZoneForTopSecretMember
+    await supabase
+      .from("whop_webhook_log")
+      .insert({
+        event_id: `auto_grant_warzone_${userId}_${Date.now()}`,
+        event_type: "auto_grant_warzone_with_topsecret",
+        whop_user_id: null,
+        whop_membership_id: null,
+        whop_product_id: null,
+        payload: {
+          reason: "Top Secret subscription activated",
+          user_id: userId,
+          user_email: userEmail,
+          granted_status: grantedStatus,
+          granted_interval: grantedInterval,
+        },
+        processed: true,
+        processing_result: "War Zone granted via Top Secret entitlement",
+        metadata: {
+          triggered_by: "top_secret_activation",
+          source: "top_secret",
+          granted_status: grantedStatus,
+        },
+      });
+
+    const message = `War Zone granted (${grantedStatus}) via Top Secret for ${userEmail}`;
+    console.log("✅", message);
+    return { success: true, message };
+
+  } catch (error) {
+    console.error("❌ Error granting War Zone for Top Secret member:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// ============================================
 // BROKER CONNECTION LIFECYCLE HELPERS
 // ============================================
 
@@ -1598,9 +1696,17 @@ if (isTopSecretPayment) {
             }
             
             console.log("✅ Top Secret upgrade RPC result:", upgradeResult);
-            return { 
-              success: upgradeResult?.success ?? true, 
-              message: `Top Secret UPGRADED to yearly: ${userEmail} (saved $180.88!)` 
+            // 🔥 v3.6.1: Grant War Zone on Top Secret upgrade — never let this break activation
+            if (userResult.id) {
+              try {
+                await grantWarZoneForTopSecretMember(supabase, userResult.id, userEmail);
+              } catch (e) {
+                console.error("grant warzone failed (upgrade path)", e);
+              }
+            }
+            return {
+              success: upgradeResult?.success ?? true,
+              message: `Top Secret UPGRADED to yearly: ${userEmail} (saved $180.88!)`
             };
           }
         }
@@ -1624,9 +1730,18 @@ if (isTopSecretPayment) {
         }
 
         console.log("✅ Top Secret activation RPC result:", result);
-        return { 
-          success: result?.success ?? true, 
-          message: `Top Secret activated: ${userEmail} → ${result?.interval || 'monthly'} ($${result?.price_usd || paymentAmount})${emailMismatch ? ' [email mismatch resolved]' : ''}` 
+        // 🔥 v3.6.1: Grant War Zone on Top Secret activation — never let this break activation
+        const tsActivateUserId = result?.user_id ?? finotaurUserId;
+        if (tsActivateUserId) {
+          try {
+            await grantWarZoneForTopSecretMember(supabase, tsActivateUserId, userEmail);
+          } catch (e) {
+            console.error("grant warzone failed (activation path)", e);
+          }
+        }
+        return {
+          success: result?.success ?? true,
+          message: `Top Secret activated: ${userEmail} → ${result?.interval || 'monthly'} ($${result?.price_usd || paymentAmount})${emailMismatch ? ' [email mismatch resolved]' : ''}`
         };
       } else {
         console.log("🔐 Calling handle_top_secret_payment RPC (recurring payment)...");
@@ -1647,9 +1762,18 @@ if (isTopSecretPayment) {
         }
 
         console.log("✅ Top Secret payment RPC result:", result);
-        return { 
-          success: result?.success ?? true, 
-          message: `Top Secret payment: ${userEmail} → ${result?.interval || 'monthly'}` 
+        // 🔥 v3.6.1: Grant War Zone on Top Secret renewal — never let this break activation
+        const tsRecurringUserId = result?.user_id ?? finotaurUserId;
+        if (tsRecurringUserId) {
+          try {
+            await grantWarZoneForTopSecretMember(supabase, tsRecurringUserId, userEmail);
+          } catch (e) {
+            console.error("grant warzone failed (recurring path)", e);
+          }
+        }
+        return {
+          success: result?.success ?? true,
+          message: `Top Secret payment: ${userEmail} → ${result?.interval || 'monthly'}`
         };
       }
     }

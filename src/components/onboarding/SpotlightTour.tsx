@@ -87,15 +87,9 @@ const STEPS: TourStep[] = [
     breadcrumb: 'Open the menu → AI Arena',
   },
   {
-    key: 'drawer-product-war-zone',
-    title: 'Top Secret',
-    body: 'Start every session ready — a pre-market briefing with global macro and the key levels that matter.',
-    breadcrumb: 'Open the menu → Top Secret',
-  },
-  {
     key: 'drawer-product-top-secret',
     title: 'Top Secret',
-    body: 'Your monthly edge. Deep institutional analysis and the hidden setups most traders never see.',
+    body: 'Your daily edge — a WAR ZONE pre-market briefing every morning, plus institutional-grade research: ISM macro, crypto and deep-dive reports.',
     breadcrumb: 'Open the menu → Top Secret',
   },
   {

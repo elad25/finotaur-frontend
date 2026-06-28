@@ -732,11 +732,10 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
           newsletter_mrr: 
             users.filter(u => u.newsletter_whop_membership_id && u.newsletter_status === 'active' && !u.top_secret_enabled).length * 69.99 +
             users.filter(u => u.newsletter_whop_membership_id && u.newsletter_status === 'active' && u.top_secret_enabled).length * 30,
-          // Top Secret MRR - $89.99/mo or $899/yr ($74.92/mo), with WarZone discount: $50/mo  
-          top_secret_mrr: 
-            users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && !u.newsletter_enabled && u.top_secret_interval === 'monthly').length * 89.99 +
-            users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.newsletter_enabled && u.top_secret_interval === 'monthly').length * 50 +
-            users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.top_secret_interval === 'yearly').length * 74.92,
+          // Top Secret MRR - $50/mo (all monthly, WAR ZONE included) or $499/yr ($41.58/mo)
+          top_secret_mrr:
+            users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.top_secret_interval === 'monthly').length * 50 +
+            users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.top_secret_interval === 'yearly').length * 41.58,
           // Platform MRR - Core: $59/mo, Finotaur: $109/mo, Copilot: $200/mo
           platform_mrr:
             users.filter(u => u.platform_plan === 'platform_core' && u.platform_subscription_status === 'active').length * 59 +
@@ -1981,9 +1980,9 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           top_secret_discount: 30.00,  // If user has Top Secret
         },
         top_secret: {
-          monthly: 89.99,
-          yearly_monthly: 74.92,  // $899/12
-          war_zone_discount: 50.00,  // If user has War Zone
+          monthly: 50.00,
+          yearly_monthly: 41.58,  // $499/12
+          war_zone_discount: 50.00,  // WAR ZONE now included — same price
         },
         platform: {
           core: 59.00,
@@ -3271,7 +3270,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     {loading ? '—' : stats?.top_secret.total_subscribers || 0}
                   </p>
                   <p className="text-xs text-[#808080] mt-1 font-medium">Top Secret</p>
-                  <p className="text-[10px] text-purple-400/50 mt-0.5">$89.99/mo</p>
+                  <p className="text-[10px] text-purple-400/50 mt-0.5">$50/mo</p>
                 </div>
                 {/* Platform Paid */}
                 <div className="p-4 bg-gradient-to-br from-[#1A1A1A] to-[#252525] rounded-xl text-center border border-[#2A2A2A] hover:border-cyan-500/30 transition-all duration-300 group">
@@ -4356,16 +4355,12 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       <p className="text-2xl font-bold text-purple-400">${kpiMetrics.top_secret_mrr.toFixed(2)}</p>
                       <div className="mt-3 space-y-1 text-xs">
                         <div className="flex justify-between text-[#808080]">
-                          <span>Monthly (Full)</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.top_secret_subscribers.monthly - kpiMetrics.top_secret_subscribers.war_zone_discount} × $89.99</span>
-                        </div>
-                        <div className="flex justify-between text-[#808080]">
-                          <span>Monthly (WZ Discount)</span>
-                          <span className="text-orange-400">{kpiMetrics.top_secret_subscribers.war_zone_discount} × $50.00</span>
+                          <span>Monthly</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.top_secret_subscribers.monthly} × $50.00</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Yearly</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.top_secret_subscribers.yearly} × $74.92</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.top_secret_subscribers.yearly} × $41.58</span>
                         </div>
                         <div className="flex justify-between text-orange-400 pt-1 border-t border-[#2A2A2A]">
                           <span>In Trial</span>
@@ -4780,9 +4775,8 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">
                       <p className="text-purple-400 font-medium mb-2">Top Secret</p>
                       <div className="space-y-1 text-[#808080]">
-                        <p>Monthly: $89.99</p>
-                        <p>Yearly: $899.00 ($74.92/mo)</p>
-                        <p className="text-orange-400">w/ Top Secret: $50.00</p>
+                        <p>Monthly: $50.00 (WAR ZONE included)</p>
+                        <p>Yearly: $499.00 ($41.58/mo)</p>
                       </div>
                     </div>
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">

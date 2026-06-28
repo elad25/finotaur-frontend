@@ -275,7 +275,6 @@ const AdminSupportAiDrafts = lazy(() => import("@/pages/app/all-markets/admin/Su
 // as an orphan until Phase 0.5 verifies the new shell is stable in prod.
 const AdminCRMShell = lazy(() => import("@/pages/app/admin"));
 const AffiliateSmartPage = lazy(() => import("@/pages/app/all-markets/affiliate/AffiliateSmartPage"));  // 🤝 NEW
-const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
 const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
 // Catalyst Intelligence Deck — admin Pattern Library (Tree #2, 2026-05-26)
 const AdminPatternLibrary = lazy(() => import("@/pages/app/admin/PatternLibrary"));
@@ -537,8 +536,6 @@ function AppContent() {
           <Route path="admin/*" element={<ProtectedAdminRoute><SuspenseRoute><AdminCRMShell /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
-          <Route path="top-secret/admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="all-markets/top-secret-admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
           {/* Catalyst Intelligence Deck — admin Pattern Library (Tree #2) */}
           <Route path="admin/pattern-library" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibrary /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="admin/upcoming-events" element={<ProtectedAdminRoute><SuspenseRoute><AdminUpcomingEvents /></SuspenseRoute></ProtectedAdminRoute>} />
