@@ -456,8 +456,8 @@ export function UpgradeGate({
               </ul>
 
               <button
-                onClick={() => handleCheckout('enterprise')}
-                disabled={checkoutLoading}
+                onClick={handleJoinWaitlist}
+                disabled={waitlistJoined || checkoutLoading}
                 className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90"
                 style={{
                   background: 'linear-gradient(135deg, #D4AF37, #F5E6A3)',
@@ -465,7 +465,7 @@ export function UpgradeGate({
                   boxShadow: '0 4px 20px rgba(212,175,55,0.3)',
                 }}
               >
-                Get Copilot
+                {waitlistJoined ? "You're on the list ✓" : 'Join the waitlist'}
               </button>
             </div>
           </motion.div>

@@ -14,7 +14,7 @@ const valueItems = [
   { name: "AI Sector Analyzer (unlimited)", value: "$79" },
   { name: "Options Intelligence AI", value: "$149" },
   { name: "AI Scanner", value: "$59" },
-  { name: "Top Secret Reports (daily + research)", value: "$89.99" },
+  { name: "Top Secret Reports (daily + research)", value: "$50" },
   { name: "Trading Journal Premium", value: "$49" },
   { name: "Macro Analyzer", value: "$49" },
   { name: "Priority 24h Support", value: "$29" },
