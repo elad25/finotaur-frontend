@@ -1,0 +1,15 @@
+-- 2026-06-28 — Consent: gate public WR/PF reputation by global_leaderboard_opt_in.
+-- APPLIED TO PRODUCTION via Supabase MCP on 2026-06-28 (migration
+-- `gate_consistency_reputation_by_opt_in`). Consolidated record.
+--
+-- A real user's performance stats (win rate / profit factor / consistency tier)
+-- are shown publicly ONLY if they opted in (profiles.global_leaderboard_opt_in,
+-- toggled in Settings → The Floor). This applies to BOTH surfaces:
+--   • community_consistency_leaderboard ("Top this week") — eligible CTE now also
+--     requires p.global_leaderboard_opt_in = true.
+--   • list_global_feed author badge — author_consistency_tier / author_win_rate /
+--     author_profit_factor are NULL unless pr.global_leaderboard_opt_in is true.
+--     author_tier (membership plan) and the trade fields are unchanged.
+--
+-- Full bodies were applied via MCP; see migration history. With zero opt-ins the
+-- leaderboard is empty and posts show no WR/PF badge — the intended consent default.
