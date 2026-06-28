@@ -9,6 +9,7 @@
 // ===============================================
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { supabase as authedSupabase } from '@/lib/supabase';
 import type { MessageAttachment } from '@/features/mentor/types/mentorship';
 
 // ===============================================
@@ -398,7 +399,10 @@ export async function uploadChatAttachment(
       const rand = Math.random().toString(36).slice(2, 8);
       const fileName = `${userId}/${spaceId}/${channelId}/${Date.now()}-${rand}.jpg`;
 
-      const supabase = getSupabaseClient();
+      // Use the app's AUTHENTICATED client (not the local anon singleton) so the
+      // upload carries the user's session — storage RLS scopes inserts to the
+      // uploader's own folder via auth.uid(), which the anon client lacks.
+      const supabase = authedSupabase;
       const { data, error } = await supabase.storage
         .from('chat-attachments')
         .upload(fileName, compressed, {
