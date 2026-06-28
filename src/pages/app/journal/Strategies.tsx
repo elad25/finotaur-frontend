@@ -44,14 +44,14 @@ import { formatTradeDate, formatTradeDateShort } from '@/utils/dateFormatter';
 
 /** Fixed strategy-category vocabulary for the editor + community-feed filter. */
 const STRATEGY_CATEGORIES = [
-  'ICT',
   'Price Action',
-  'Trend',
+  'Supply & Demand',
+  'ICT',
+  'Indicators',
+  'Wyckoff',
+  'Order Flow',
+  'Trend Following',
   'Breakout',
-  'Mean Reversion',
-  'Scalping',
-  'Momentum',
-  'Other',
 ] as const;
 
 interface ExtendedStrategy {
