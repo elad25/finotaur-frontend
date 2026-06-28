@@ -295,7 +295,6 @@ export function CreateSpaceDialog({ open, onOpenChange, canCreate }: CreateSpace
         slug: slugFromName(name.trim()),
         description: description.trim() || undefined,
       });
-      toast({ title: 'Room created', description: `"${name.trim()}" is ready.` });
       // Advance to step 2 using the returned space id.
       setCreatedSpaceId(space.id);
     } catch (err) {

@@ -208,7 +208,6 @@ export default function Spaces() {
                 onDelete={space.role === 'owner' ? async () => {
                   try {
                     await deleteSpace(space.space_id);
-                    toast({ title: 'Room deleted', description: 'The room has been permanently deleted.' });
                   } catch (err) {
                     toast({ title: 'Could not delete', description: mapSpaceError(err), variant: 'destructive' });
                   }
@@ -216,7 +215,6 @@ export default function Spaces() {
                 onLeave={space.role !== 'owner' ? async () => {
                   try {
                     await leaveSpace(space.space_id);
-                    toast({ title: 'Left room', description: 'You have left the room.' });
                   } catch (err) {
                     toast({ title: 'Could not leave', description: mapSpaceError(err), variant: 'destructive' });
                   }
