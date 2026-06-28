@@ -194,7 +194,7 @@ export const BillingTab = () => {
         isInTrial: false,
         isInIntro: false,
         introMonthsRemaining: 0,
-        currentPrice: topSecretInterval === 'yearly' ? 899 : 89.99,
+        currentPrice: topSecretInterval === 'yearly' ? 499 : 50,
         trialDaysRemaining: 0,
       };
     }
@@ -215,8 +215,8 @@ export const BillingTab = () => {
       const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
       return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 45 };
     } else {
-      // Regular pricing ($89.99/mo)
-      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 89.99 };
+      // Regular pricing ($50/mo)
+      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 50 };
     }
   };
 
@@ -311,7 +311,7 @@ export const BillingTab = () => {
       // Refresh profile to get updated state from DB
       await refreshProfile();
 
-      await submitCancelFeedbackSafe('War Zone', 'newsletter');
+      await submitCancelFeedbackSafe('Daily Newsletter', 'newsletter');
       setCancelReasonId('');
       setCancelFeedbackText('');
       setShowNewsletterCancelDialog(false);
@@ -905,8 +905,8 @@ export const BillingTab = () => {
         {/* /relative */}
       </Card>
 
-      {/* 🔥 WAR ZONE NEWSLETTER CARD - Hide if user has Finotaur/Enterprise Platform */}
-      {!['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
+      {/* 🔥 WAR ZONE NEWSLETTER CARD - Show only for existing newsletter subscribers */}
+      {newsletterIsActive && !['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
       <Card className={cn(
         "p-6 relative overflow-hidden shadow-xl",
         newsletterIsActive && newsletterInterval === 'yearly'
@@ -943,7 +943,7 @@ export const BillingTab = () => {
                 )} />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-lg">Top Secret Intelligence</h2>
+                <h2 className="font-semibold text-white text-lg">Daily Newsletter</h2>
                 <p className="text-xs text-zinc-400">Daily Market Newsletter</p>
               </div>
             </div>
@@ -1036,7 +1036,7 @@ export const BillingTab = () => {
               </div>
               <div className="flex items-center gap-2.5 text-sm text-zinc-300">
                 <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>Exclusive war zone alerts</span>
+                <span>Exclusive market alerts</span>
               </div>
             </div>
 
@@ -1181,23 +1181,7 @@ export const BillingTab = () => {
                   </Button>
                 </div>
               </div>
-            ) : (
-              <div className="pt-4 border-t border-zinc-700/50">
-                <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-xs text-emerald-400 text-center font-medium">
-                    🔥 Limited: 7-day FREE trial → $69.99/mo
-                  </p>
-                </div>
-                <Button
-                  onClick={() => navigate('/app/all-markets/warzone')}
-                  size="sm"
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-medium shadow-lg shadow-purple-900/20"
-                >
-                  Start Free Trial
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       </Card>
@@ -1730,7 +1714,7 @@ export const BillingTab = () => {
             </div>
             <div className="flex items-center gap-2.5 text-sm text-zinc-300">
               <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              <span>Exclusive war zone alerts & signals</span>
+              <span>Exclusive market alerts & signals</span>
             </div>
             <div className="flex items-center gap-2.5 text-sm text-zinc-300">
               <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />

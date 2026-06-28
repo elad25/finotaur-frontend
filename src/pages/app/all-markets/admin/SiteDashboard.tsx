@@ -4883,7 +4883,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
         </TabsContent>
 
         {/* =====================================================
-            NEWSLETTER (WAR ZONE) TAB
+            NEWSLETTER TAB
         ===================================================== */}
         <TabsContent value="newsletter" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

@@ -17,7 +17,7 @@ import { Card } from "@/components/ds/Card";
 import { SEO } from "@/components/seo/SEO";
 import { webPage, breadcrumbList } from "@/components/seo/jsonLd";
 
-const WHOP_URL = "https://whop.com/checkout/plan_v7QKxkvKIZooe"; // Journal Premium monthly, $44.99 — from whop-config.ts line 89
+const WHOP_URL = "https://whop.com/checkout/plan_N33S1p5Y3dHrK"; // Journal Premium monthly (current plan), $44.99
 
 export default function JournalCopierPage() {
   return (
