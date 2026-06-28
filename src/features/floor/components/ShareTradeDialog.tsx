@@ -23,6 +23,7 @@ import { useAuth } from '@/providers/AuthProvider';
 // intentional: floor depends on mentor to offer rooms as share destinations (unidirectional, no cycle)
 import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
+import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
 import { cn } from '@/lib/utils';
 import type { GlobalFeedItem, ShareDestination, SharePrivacy } from '@/features/floor/types/community';
 
@@ -72,11 +73,13 @@ function buildPreviewItem(
     attached_trade_id: trade.id,
     trade_symbol: trade.symbol,
     trade_side: trade.side,
+    author_avatar_url: null,
     trade_pnl: privacy.hidePnl ? null : (trade.pnl ?? null),
     trade_size: privacy.revealSize ? (trade.quantity ?? null) : null,
     trade_setup: trade.setup ?? null,
     trade_entry: privacy.showSetupOnly ? null : (trade.entry_price ?? null),
     trade_exit: privacy.showSetupOnly ? null : (trade.exit_price ?? null),
+    trade_open_at: null,
     trade_close_at: trade.close_at ?? null,
     hide_pnl: privacy.hidePnl,
     show_setup_only: privacy.showSetupOnly,
@@ -88,6 +91,14 @@ function buildPreviewItem(
     down_count: 0,
     repost_count: 0,
     my_reaction: null,
+    trade_emotion: null,
+    trade_strategy_name: null,
+    trade_strategy_category: privacy.strategyCategory ?? null,
+    trade_r: null,
+    author_tier: null,
+    author_consistency_tier: null,
+    author_win_rate: null,
+    author_profit_factor: null,
   };
 }
 
@@ -168,11 +179,13 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
   const [showSetupOnly, setShowSetupOnly] = useState(false);
   const [revealSize, setRevealSize] = useState(false);
   const [caption, setCaption] = useState('');
+  // Strategy category — required when the Global destination is selected.
+  const [strategyCategory, setStrategyCategory] = useState<string | null>(null);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const privacy: SharePrivacy = useMemo(
-    () => ({ hidePnl, showSetupOnly, revealSize, caption: caption || undefined }),
-    [hidePnl, showSetupOnly, revealSize, caption],
+    () => ({ hidePnl, showSetupOnly, revealSize, caption: caption || undefined, strategyCategory }),
+    [hidePnl, showSetupOnly, revealSize, caption, strategyCategory],
   );
 
   const previewItem = useMemo(
@@ -220,12 +233,18 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
 
     if (destinations.length === 0) return;
 
+    if (globalSelected && !strategyCategory) {
+      toast({ title: 'Pick a strategy category for the global share.' });
+      return;
+    }
+
     try {
       await shareTrade(trade.id, destinations, privacy);
       toast({ title: 'Trade shared successfully.' });
       onOpenChange(false);
       // Reset state for next open
       setGlobalSelected(false);
+      setStrategyCategory(null);
       setCommunityRooms(new Set());
       setMentorRooms(new Set());
       setCaption('');
@@ -298,6 +317,36 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
                 label="FINOTAUR Global (public community)"
                 description="Visible to all members of the FINOTAUR community."
               />
+
+              {/* Strategy category — required for global shares */}
+              {globalSelected && (
+                <div className="flex flex-col gap-ds-2 pl-ds-1">
+                  <span className="font-sans text-[11px] text-ink-tertiary">
+                    Strategy category <span className="text-gold-primary">(required)</span>
+                  </span>
+                  <div className="flex flex-wrap gap-[6px]">
+                    {STRATEGY_CATEGORIES.map((cat) => {
+                      const active = strategyCategory === cat;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setStrategyCategory(cat)}
+                          aria-pressed={active}
+                          className={cn(
+                            'rounded-full px-[10px] py-[4px] font-sans text-[11px] font-medium border-[0.5px] transition-colors duration-base ease-out',
+                            active
+                              ? 'bg-gradient-gold border-transparent text-surface-base'
+                              : 'bg-surface-2 border-border-ds-subtle text-ink-secondary hover:border-border-ds-default hover:text-ink-primary',
+                          )}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Per-space community + mentor */}
               {spacesLoading ? (
@@ -401,7 +450,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
             variant="gold"
             size="compact"
             showArrow={false}
-            disabled={!hasAnyDestination || isSharing}
+            disabled={!hasAnyDestination || isSharing || (globalSelected && !strategyCategory)}
             onClick={handleSubmit}
           >
             {isSharing ? 'Sharing…' : 'Share trade'}

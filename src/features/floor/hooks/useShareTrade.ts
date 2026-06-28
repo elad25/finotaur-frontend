@@ -66,6 +66,7 @@ export function useShareTrade(): UseShareTradeReturn {
         p_show_setup_only: privacy.showSetupOnly,
         p_reveal_size: privacy.revealSize,
         p_caption: privacy.caption ?? null,
+        p_strategy_category: privacy.strategyCategory ?? null,
       });
 
       if (rpcError) throw new Error(mapSpaceError(rpcError));

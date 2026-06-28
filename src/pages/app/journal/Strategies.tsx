@@ -37,22 +37,11 @@ import {
 import { toast } from "sonner";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateShort } from '@/utils/dateFormatter';
+import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
 
 // ==========================================
 // 🎯 TYPES
 // ==========================================
-
-/** Fixed strategy-category vocabulary for the editor + community-feed filter. */
-const STRATEGY_CATEGORIES = [
-  'Price Action',
-  'Supply & Demand',
-  'ICT',
-  'Indicators',
-  'Wyckoff',
-  'Order Flow',
-  'Trend Following',
-  'Breakout',
-] as const;
 
 interface ExtendedStrategy {
   id: string;

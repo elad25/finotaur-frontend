@@ -160,4 +160,6 @@ export interface SharePrivacy {
   revealSize: boolean;
   /** Optional caption; only used when sharing (not when creating standalone posts). */
   caption?: string;
+  /** Strategy category — REQUIRED when sharing to the global feed (server-enforced). */
+  strategyCategory?: string | null;
 }
