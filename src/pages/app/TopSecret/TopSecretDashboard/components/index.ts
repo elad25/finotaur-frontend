@@ -10,3 +10,4 @@ export { ArchiveReportRow } from './ArchiveReportRow';
 export { MonthGroup } from './MonthGroup';
 export { HowToUseSection, MemberSection, BottomFeaturesBar } from './SidebarComponents';
 export { DailyBriefingSection } from './DailyBriefingSection';
+export { CadenceIntel } from './CadenceIntel';

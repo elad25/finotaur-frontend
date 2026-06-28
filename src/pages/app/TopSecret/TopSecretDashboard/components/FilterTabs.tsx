@@ -9,7 +9,7 @@ interface FilterTabsProps {
   onChange: (value: string) => void;
 }
 
-const TABS = ['All', 'Macro', 'Company', 'Crypto', 'Weekly', 'Daily Briefing'] as const;
+const TABS = ['All', 'Macro', 'Company', 'Crypto', 'Weekly'] as const;
 
 export const FilterTabs = memo(function FilterTabs({
   selected,
