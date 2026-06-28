@@ -5,8 +5,7 @@
 // Monthly/Yearly toggle with savings
 // ================================================
 
-import { Check, Shield, Clock, Gift, Star, Zap, BookOpen, Lock, Crown, Bot, Sparkles } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Check, Shield, Clock, Gift, Star, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -33,7 +32,6 @@ interface Plan {
   includesExtras?: string;
   isFree?: boolean;
   comingSoon?: boolean;
-  Icon?: LucideIcon;
 }
 
 const plans: Plan[] = [
@@ -45,7 +43,6 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: "$0",
     description: "Start free — no card required",
     isFree: true,
-    Icon: Sparkles,
     features: [
       "Trade journal — up to 15 trades",
       "Unlimited AI Stock Analyzer — no credit caps",
@@ -65,7 +62,6 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: "$34",
     description: "Your complete trading journal & analytics desk",
     trialDays: 14,
-    Icon: BookOpen,
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — every account, auto-synced",
@@ -90,7 +86,6 @@ const plans: Plan[] = [
     description: "Institutional-grade market intel, every day",
     trialDays: 14,
     badge: "14-Day Free Trial",
-    Icon: Lock,
     features: [
       "Daily institutional market report",
       "Monthly deep-dive research (ISM, single-name & crypto)",
@@ -111,7 +106,6 @@ const plans: Plan[] = [
     description: "The entire platform — every tool, one price",
     trialDays: 14,
     badge: "Most Popular",
-    Icon: Crown,
     includesExtras: "Journal + TOP SECRET + full market engine — over $200 of value",
     features: [
       "Everything in Journal & TOP SECRET, plus:",
@@ -135,7 +129,6 @@ const plans: Plan[] = [
     description: "Your AI portfolio manager — invests & trades alongside you, 24/7",
     badge: "Coming Soon",
     comingSoon: true,
-    Icon: Bot,
     savings: "Save 17%",
     features: [
       "Everything in FINOTAUR, plus:",
@@ -258,8 +251,17 @@ const Pricing = () => {
           </div>
         </motion.div>
 
-        {/* Plans Grid — 5 columns */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Plans Grid — 5 columns, wrapped in an ambient gold glow */}
+        <div className="relative">
+          <div
+            aria-hidden="true"
+            className="absolute -inset-x-4 -inset-y-8 pointer-events-none"
+            style={{
+              background:
+                "radial-gradient(ellipse 75% 55% at 50% 45%, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.04) 40%, transparent 72%)",
+            }}
+          />
+          <div className="relative grid md:grid-cols-2 lg:grid-cols-5 gap-4">
           {plans.map((plan, index) => {
             const displayPrice = getDisplayPrice(plan);
             return (
@@ -310,33 +312,18 @@ const Pricing = () => {
                   style={{
                     background: plan.featured
                       ? "linear-gradient(180deg, rgba(201,166,70,0.10) 0%, rgba(10,10,10,0.97) 100%)"
-                      : "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)",
+                      : "linear-gradient(180deg, rgba(201,166,70,0.07) 0%, rgba(255,255,255,0.012) 55%, rgba(201,166,70,0.035) 100%)",
                     border: plan.featured
                       ? "1px solid rgba(201,166,70,0.5)"
-                      : "1px solid rgba(255,255,255,0.06)",
+                      : "1px solid rgba(201,166,70,0.22)",
                     boxShadow: plan.featured
                       ? "0 0 60px rgba(201,166,70,0.18), 0 20px 50px rgba(0,0,0,0.5)"
-                      : "0 4px 20px rgba(0,0,0,0.2)",
+                      : "0 4px 20px rgba(0,0,0,0.25), 0 0 26px rgba(201,166,70,0.06)",
                   }}
                 >
                   <div className="p-5 flex flex-col flex-1">
                     {/* Name + Price */}
                     <div className="text-center mb-4">
-                      {plan.Icon && (
-                        <div className="flex justify-center mb-2.5">
-                          <span
-                            className="w-9 h-9 rounded-lg flex items-center justify-center"
-                            style={{
-                              background: plan.featured
-                                ? "linear-gradient(135deg, rgba(201,166,70,0.30), rgba(201,166,70,0.08))"
-                                : "rgba(201,166,70,0.07)",
-                              border: "1px solid rgba(201,166,70,0.25)",
-                            }}
-                          >
-                            <plan.Icon className="w-4 h-4 text-gold-primary" />
-                          </span>
-                        </div>
-                      )}
                       <h3
                         className={`text-lg font-bold mb-2 ${plan.featured ? "text-gold-primary" : "text-ink-primary"}`}
                       >
@@ -440,6 +427,7 @@ const Pricing = () => {
               </motion.div>
             );
           })}
+          </div>
         </div>
 
         {/* Trust bar — compact */}
