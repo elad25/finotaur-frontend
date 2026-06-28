@@ -6,6 +6,7 @@
 // =====================================================
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { useMentorView } from '@/contexts/MentorViewContext';
@@ -597,6 +598,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     return saved !== 'false';
   });
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // Collapsed-rail hover tooltip. Rendered via a body portal with position:fixed
+  // so it escapes the scrolling <nav> (overflow-y-auto), which would otherwise
+  // clip an absolutely-positioned pill that sticks out to the right of the rail.
+  const [hoverTip, setHoverTip] = useState<{ label: string; desc?: string; beta: boolean; top: number; left: number } | null>(null);
 
   useEffect(() => {
     document.documentElement.style.setProperty(
@@ -893,7 +898,20 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 }
                 handleNavigation(item.path, item.locked);
               }}
-              onMouseEnter={() => !isLocked && handlePrefetch(item.path)}
+              onMouseEnter={(e) => {
+                if (!isLocked) handlePrefetch(item.path);
+                if (!isExpanded) {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setHoverTip({
+                    label: item.label,
+                    desc: NAV_DESCRIPTIONS[item.path],
+                    beta: showBetaBadge,
+                    top: r.top + r.height / 2,
+                    left: r.right + 12,
+                  });
+                }
+              }}
+              onMouseLeave={() => setHoverTip(null)}
               disabled={isLocked}
               title={hasChildren && isExpanded ? (childrenOpen ? 'Hide Copilot pages' : 'Show Copilot pages') : undefined}
               className={cn(
@@ -969,38 +987,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 </>
               )}
 
-              {/* Collapsed rail = icons only. The label appears as a pill on
-                  hover (every item, including the active one). No persistent
-                  label — the active item is indicated by its icon highlight. */}
-              {!isExpanded && (
-                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 max-w-[240px] bg-black text-white border border-white/15 rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
-                  <span className="block text-xs font-semibold whitespace-nowrap">
-                    {item.label}
-                    {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
-                    {showBetaBadge && (
-                      <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
-                        BETA
-                      </span>
-                    )}
-                    {showAdminLockIndicator && !isLocked && (
-                      <Lock
-                        className="inline h-2.5 w-2.5 ml-1 flex-shrink-0"
-                        style={{ color: 'rgba(201,166,70,0.55)' }}
-                        title="Locked for regular users"
-                      />
-                    )}
-                    {/* Price-gate indicator: visible to all users */}
-                    {isPriceGatedItem && (
-                      <Lock className="inline h-3.5 w-3.5 ml-1 flex-shrink-0 text-gray-500" title="Price gated" />
-                    )}
-                  </span>
-                  {NAV_DESCRIPTIONS[item.path] && (
-                    <span className="mt-0.5 block text-[11px] font-normal leading-snug text-white/65">
-                      {NAV_DESCRIPTIONS[item.path]}
-                    </span>
-                  )}
-                </div>
-              )}
+              {/* Collapsed rail = icons only. The hover label/description pill is
+                  rendered once via a body portal (see end of component) so the
+                  scrolling <nav> can't clip it. */}
               </button>
 
               {childrenOpen && (
@@ -1037,6 +1026,25 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           );
         })}
       </nav>
+      {!isExpanded && hoverTip && createPortal(
+        <div
+          style={{ position: 'fixed', top: hoverTip.top, left: hoverTip.left, transform: 'translateY(-50%)' }}
+          className="z-[9999] max-w-[240px] rounded-lg border border-white/15 bg-black px-3 py-2 text-white shadow-lg pointer-events-none"
+        >
+          <span className="block whitespace-nowrap text-xs font-semibold">
+            {hoverTip.label}
+            {hoverTip.beta && (
+              <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">BETA</span>
+            )}
+          </span>
+          {hoverTip.desc && (
+            <span className="mt-0.5 block text-[11px] font-normal leading-snug text-white/65">
+              {hoverTip.desc}
+            </span>
+          )}
+        </div>,
+        document.body
+      )}
     </aside>
   );
 };
