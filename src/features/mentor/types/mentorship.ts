@@ -56,6 +56,15 @@ export interface SpaceMember {
   joined_at: string;
 }
 
+/** A single attachment carried by a chat message (currently images only). */
+export interface MessageAttachment {
+  url: string;
+  type: 'image';
+  width: number;
+  height: number;
+  size_kb: number;
+}
+
 /** Row returned by list_space_messages(p_channel) */
 export interface SpaceMessage {
   id: string;
@@ -63,7 +72,7 @@ export interface SpaceMessage {
   author_id: string;
   author_name: string | null;
   body: string;
-  attachments: unknown[];
+  attachments: MessageAttachment[];
   pinned: boolean;
   created_at: string;
 }
