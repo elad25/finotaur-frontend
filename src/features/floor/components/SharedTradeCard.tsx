@@ -11,7 +11,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowBigUp, ArrowBigDown, Repeat2, MessageSquare, MoreVertical, Send } from 'lucide-react';
+import { MessageSquare, MoreVertical, Send } from 'lucide-react';
+import { ReactionBar } from '@/components/feed/ReactionBar';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import {
@@ -31,7 +32,6 @@ import {
   useDeleteGlobalPost,
   useGlobalPostComments,
   useAddGlobalComment,
-  type GlobalReactionKind,
 } from '@/features/floor/hooks/useGlobalFeed';
 import { TradeChart } from '@/components/journal/TradeChart';
 import type {
@@ -303,16 +303,16 @@ function AttachedTradeCard({ item }: AttachedTradeCardProps) {
 
 // ── Reaction bar ───────────────────────────────────────────────────────────────
 
-interface ReactionBarProps {
+interface LocalReactionBarProps {
   item: GlobalFeedItem;
 }
 
-function ReactionBar({ item }: ReactionBarProps) {
+function LocalReactionBar({ item }: LocalReactionBarProps) {
   const toggleReaction = useToggleGlobalReaction();
 
-  function handleReaction(kind: GlobalReactionKind) {
+  function handleReaction(emoji: string) {
     toggleReaction.mutate(
-      { postId: item.id, kind },
+      { postId: item.id, emoji },
       {
         onError: () => {
           toast({ title: 'Failed to react. Please try again.' });
@@ -321,42 +321,13 @@ function ReactionBar({ item }: ReactionBarProps) {
     );
   }
 
-  const reactions: { kind: GlobalReactionKind; Icon: React.ElementType; count: number; label: string }[] = [
-    { kind: 'up', Icon: ArrowBigUp, count: item.up_count, label: 'Upvote' },
-    { kind: 'down', Icon: ArrowBigDown, count: item.down_count, label: 'Downvote' },
-    { kind: 'repost', Icon: Repeat2, count: item.repost_count, label: 'Repost' },
-  ];
-
   return (
-    <div className="flex items-center gap-[6px]">
-      {reactions.map(({ kind, Icon, count, label }) => {
-        const isActive = item.my_reaction === kind;
-        return (
-          <button
-            key={kind}
-            type="button"
-            onClick={() => handleReaction(kind)}
-            disabled={toggleReaction.isPending}
-            aria-label={label}
-            aria-pressed={isActive}
-            className={cn(
-              'flex items-center gap-[4px] px-[8px] py-[5px] rounded-[6px]',
-              'font-sans text-[12px] font-medium',
-              'border-[0.5px] transition-colors duration-base ease-out',
-              'disabled:opacity-50 disabled:pointer-events-none',
-              isActive
-                ? 'bg-[rgba(201,166,70,0.12)] border-gold-border text-gold-primary'
-                : 'bg-surface-2 border-border-ds-subtle text-ink-tertiary hover:border-border-ds-default hover:text-ink-secondary',
-            )}
-          >
-            <Icon size={13} aria-hidden="true" />
-            {count > 0 && (
-              <span className="tabular-nums">{count}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>
+    <ReactionBar
+      reactions={item.reactions}
+      myReaction={item.my_reaction}
+      onReact={handleReaction}
+      disabled={toggleReaction.isPending}
+    />
   );
 }
 
@@ -632,7 +603,7 @@ export function SharedTradeCard({ item }: SharedTradeCardProps) {
       {item.attached_trade_id && <AttachedTradeCard item={item} />}
 
       {/* Reaction bar */}
-      <ReactionBar item={item} />
+      <LocalReactionBar item={item} />
 
       {/* Comment thread */}
       <CommentThread item={item} />
