@@ -57,6 +57,7 @@ export interface CopierRouteTarget {
   scale_ratio: number;
   max_contracts: number | null;
   is_active: boolean;
+  cross_to_micro: boolean;
 }
 
 /** Shape accepted by the upsert RPC p_targets array for each target. */
@@ -70,6 +71,7 @@ export interface CopierRouteTargetInput {
   scale_ratio: number;
   max_contracts: number | null;
   is_active: boolean;
+  cross_to_micro: boolean;
 }
 
 // ── automation_copier_routes ─────────────────────────────────────────────────

@@ -825,11 +825,11 @@ function AppContent() {
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
-          {/* TRADE COPIER — five-tab page (Connections / Trade Copier / Manage Risk / Agent / Install) */}
+          {/* TRADE COPIER — four-tab page (Connections / Trade Copier / Manage Risk / FINOTAUR Agent) */}
           <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
           <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
           <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/agent"        element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/agent"        element={<Navigate to="/app/copy-trade/install" replace />} />
           <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
           {/* Legacy aliases — redirect to overview */}
           <Route path="copy-trade/top-traders"  element={<Navigate to="/app/copy-trade/overview" replace />} />

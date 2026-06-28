@@ -107,7 +107,7 @@ export function useCopyRules() {
           max_daily_loss_usd:  null,         // no equivalent in agent model
           max_position_size:   null,         // no equivalent in agent model
           kill_switch_active:  false,        // no equivalent in agent model
-          cross_to_micro:      false,        // no equivalent in agent model
+          cross_to_micro:      target.cross_to_micro,
           created_at:          '',           // CopierRoute has no created_at column
         });
       }
@@ -150,6 +150,7 @@ export function useCopyRules() {
       scale_ratio:              ratio,
       max_contracts:            null,
       is_active:                isActive,
+      cross_to_micro:           input.cross_to_micro ?? false,
     };
 
     // Find existing route for this source account
@@ -181,6 +182,7 @@ export function useCopyRules() {
             scale_ratio:              t.scale_ratio,
             max_contracts:            t.max_contracts,
             is_active:                t.is_active,
+            cross_to_micro:           t.cross_to_micro,
           })),
           ...(alreadyPresent ? [] : [newTarget]),
         ];
@@ -280,6 +282,7 @@ export function useCopyRules() {
               scale_ratio:              t.scale_ratio,
               max_contracts:            t.max_contracts,
               is_active:                t.is_active,
+              cross_to_micro:           t.cross_to_micro,
             })),
           });
         }
@@ -303,6 +306,7 @@ export function useCopyRules() {
           scale_ratio:              t.scale_ratio,
           max_contracts:            t.max_contracts,
           is_active:                t.is_active,
+          cross_to_micro:           t.cross_to_micro,
         };
       }
       return {
@@ -310,9 +314,10 @@ export function useCopyRules() {
         destination_account_name: targetRow.destination_account_name,
         destination_broker:       targetRow.destination_broker,
         destination_environment:  targetRow.destination_environment,
-        scale_ratio:              patch.ratio        ?? targetRow.scale_ratio,
-        max_contracts:            patch.max_contracts ?? targetRow.max_contracts,
-        is_active:                patch.is_active    ?? targetRow.is_active,
+        scale_ratio:              patch.ratio           ?? targetRow.scale_ratio,
+        max_contracts:            patch.max_contracts   ?? targetRow.max_contracts,
+        is_active:                patch.is_active       ?? targetRow.is_active,
+        cross_to_micro:           patch.cross_to_micro  ?? targetRow.cross_to_micro,
       };
     });
 
