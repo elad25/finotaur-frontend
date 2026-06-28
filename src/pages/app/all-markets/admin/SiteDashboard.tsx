@@ -708,17 +708,17 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
           total_subscribers: users.filter(u => u.platform_plan && u.platform_plan !== 'free').length,
           free: users.filter(u => !u.platform_plan || u.platform_plan === 'free').length,
           core: {
-            total: users.filter(u => u.platform_plan === 'core').length,
-            monthly: { total: users.filter(u => u.platform_plan === 'core').length, in_trial: 0, paid: users.filter(u => u.platform_plan === 'core' && u.platform_subscription_status === 'active').length },
+            total: users.filter(u => u.platform_plan === 'platform_core').length,
+            monthly: { total: users.filter(u => u.platform_plan === 'platform_core').length, in_trial: 0, paid: users.filter(u => u.platform_plan === 'platform_core' && u.platform_subscription_status === 'active').length },
             yearly: { total: 0, paid: 0 },
           },
           finotaur: {
-            total: users.filter(u => u.platform_plan === 'finotaur').length,
-            monthly: { total: users.filter(u => u.platform_plan === 'finotaur').length, in_trial: users.filter(u => u.platform_plan === 'finotaur' && u.platform_is_in_trial).length, paid: users.filter(u => u.platform_plan === 'finotaur' && u.platform_subscription_status === 'active').length },
+            total: users.filter(u => u.platform_plan === 'platform_finotaur').length,
+            monthly: { total: users.filter(u => u.platform_plan === 'platform_finotaur').length, in_trial: users.filter(u => u.platform_plan === 'platform_finotaur' && u.platform_is_in_trial).length, paid: users.filter(u => u.platform_plan === 'platform_finotaur' && u.platform_subscription_status === 'active').length },
             yearly: { total: 0, paid: 0 },
             trial_eligible: 0,
           },
-          enterprise: { total: users.filter(u => u.platform_plan === 'enterprise').length },
+          enterprise: { total: users.filter(u => u.platform_plan === 'platform_enterprise').length },
           pending_cancellation: 0,
         },
         revenue: {
@@ -737,11 +737,11 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
             users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && !u.newsletter_enabled && u.top_secret_interval === 'monthly').length * 89.99 +
             users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.newsletter_enabled && u.top_secret_interval === 'monthly').length * 50 +
             users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.top_secret_interval === 'yearly').length * 74.92,
-          // Platform MRR - Core: $39/mo, Pro: $69/mo, Enterprise: $199/mo
-          platform_mrr: 
-            users.filter(u => u.platform_plan === 'core' && u.platform_subscription_status === 'active').length * 39 +
-            users.filter(u => u.platform_plan === 'pro' && u.platform_subscription_status === 'active').length * 69 +
-            users.filter(u => u.platform_plan === 'enterprise' && u.platform_subscription_status === 'active').length * 199,
+          // Platform MRR - Core: $59/mo, Finotaur: $109/mo, Copilot: $200/mo
+          platform_mrr:
+            users.filter(u => u.platform_plan === 'platform_core' && u.platform_subscription_status === 'active').length * 59 +
+            users.filter(u => u.platform_plan === 'platform_finotaur' && u.platform_subscription_status === 'active').length * 109 +
+            users.filter(u => u.platform_plan === 'platform_enterprise' && u.platform_subscription_status === 'active').length * 200,
         },
         trials: {
           total_in_trial: users.filter(u => u.is_in_trial || u.subscription_status === 'trial' || u.newsletter_status === 'trial' || u.platform_is_in_trial).length,
@@ -1986,9 +1986,9 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           war_zone_discount: 50.00,  // If user has War Zone
         },
         platform: {
-          core: 39.00,
-          pro: 69.00,
-          enterprise: 199.00,
+          core: 59.00,
+          pro: 109.00,
+          enterprise: 200.00,
         },
       };
 
@@ -2046,9 +2046,9 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
         const topSecretWithWZDiscount = users.filter((u: any) => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.newsletter_enabled).length;
         const topSecretTrials = users.filter((u: any) => u.top_secret_status === 'trial').length;
 
-        const platformCoreCount = users.filter((u: any) => u.platform_plan === 'core' && u.platform_subscription_status === 'active').length;
-        const platformProCount = users.filter((u: any) => u.platform_plan === 'pro' && u.platform_subscription_status === 'active').length;
-        const platformEnterpriseCount = users.filter((u: any) => u.platform_plan === 'enterprise' && u.platform_subscription_status === 'active').length;
+        const platformCoreCount = users.filter((u: any) => u.platform_plan === 'platform_core' && u.platform_subscription_status === 'active').length;
+        const platformProCount = users.filter((u: any) => u.platform_plan === 'platform_finotaur' && u.platform_subscription_status === 'active').length;
+        const platformEnterpriseCount = users.filter((u: any) => u.platform_plan === 'platform_enterprise' && u.platform_subscription_status === 'active').length;
         const platformTrials = users.filter((u: any) => u.platform_is_in_trial).length;
 
         // Calculate MRR
@@ -3947,9 +3947,9 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                             <td className="py-3 px-4">
                               <div className="flex flex-col gap-1">
                                 <Badge className={`text-xs ${
-                                  user.platform_plan === 'pro' ? 'bg-purple-500/20 text-purple-400' :
-                                  user.platform_plan === 'core' ? 'bg-cyan-500/20 text-cyan-400' :
-                                  user.platform_plan === 'enterprise' ? 'bg-[#C9A646]/20 text-[#C9A646]' :
+                                  user.platform_plan === 'platform_finotaur' ? 'bg-purple-500/20 text-purple-400' :
+                                  user.platform_plan === 'platform_core' ? 'bg-cyan-500/20 text-cyan-400' :
+                                  user.platform_plan === 'platform_enterprise' ? 'bg-[#C9A646]/20 text-[#C9A646]' :
                                   'bg-gray-500/20 text-gray-400'
                                 }`}>
                                   {user.platform_plan || 'free'}
@@ -4389,15 +4389,15 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       <div className="mt-3 space-y-1 text-xs">
                         <div className="flex justify-between text-[#808080]">
                           <span>Core</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.core} × $39.00</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.core} × $59.00</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Pro</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.pro} × $69.00</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.pro} × $109.00</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Enterprise</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.enterprise} × $199.00</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.enterprise} × $200.00</span>
                         </div>
                         <div className="flex justify-between text-orange-400 pt-1 border-t border-[#2A2A2A]">
                           <span>In Trial</span>
@@ -4788,9 +4788,9 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">
                       <p className="text-cyan-400 font-medium mb-2">Platform</p>
                       <div className="space-y-1 text-[#808080]">
-                        <p>Core: $39.00/mo</p>
-                        <p>Pro: $69.00/mo</p>
-                        <p>Enterprise: $199.00/mo</p>
+                        <p>Core: $59.00/mo</p>
+                        <p>Finotaur: $109.00/mo</p>
+                        <p>Copilot: $200.00/mo</p>
                       </div>
                     </div>
                   </div>
@@ -5116,7 +5116,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           {/* Core Breakdown */}
           {stats && (
             <SubscriptionBreakdownCard
-              title="Core Plan ($39/mo)"
+              title="Core Plan ($59/mo)"
               icon={Shield}
               monthly={stats.platform.core.monthly}
               yearly={stats.platform.core.yearly}
@@ -5126,7 +5126,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           {/* Pro Breakdown */}
           {stats && (
             <SubscriptionBreakdownCard
-              title="Finotaur Plan ($69/mo)"
+              title="Finotaur Plan ($109/mo)"
               icon={Crown}
               monthly={stats.platform.finotaur.monthly}
               yearly={stats.platform.finotaur.yearly}
