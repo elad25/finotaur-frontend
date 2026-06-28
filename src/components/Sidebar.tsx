@@ -474,7 +474,7 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
   '/app/macro/risk': 'Risk regime indicators',
   '/app/macro/desk': 'Macro research desk',
   // War Zone / Top Secret
-  '/app/all-markets/warzone': 'Latest WAR ZONE alerts',
+  '/app/all-markets/warzone': 'Latest Top Secret alerts',
   '/app/top-secret': 'Latest TOP SECRET reports',
   '/app/top-secret/admin': 'TOP SECRET admin tools',
   // AI Arena
