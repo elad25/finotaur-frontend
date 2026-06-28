@@ -26,6 +26,7 @@ const TopSecretDashboard = lazy(() => import('./TopSecretDashboard/index'));
 
 interface TopSecretStatus {
   isActive: boolean;
+  isAdmin: boolean;
   status: 'inactive' | 'active' | 'cancelled' | null;
   expiresAt: Date | null;
 }
@@ -133,6 +134,8 @@ export default function TopSecretPage() {
 
   const [pageState, setPageState] = useState<PageState>('loading');
   const [status, setStatus] = useState<TopSecretStatus | null>(null);
+  // Admin-only preview: force-view the Landing or Subscriber experience (null = auto)
+  const [adminView, setAdminView] = useState<'landing' | 'subscriber' | null>(null);
 
   const isPaymentReturn = searchParams.get('payment') === 'success';
 
@@ -147,7 +150,7 @@ export default function TopSecretPage() {
       const { data: profile, error } = await withTimeout(
         supabase
           .from('profiles')
-          .select('top_secret_enabled, top_secret_status, top_secret_expires_at')
+          .select('role, top_secret_enabled, top_secret_status, top_secret_expires_at')
           .eq('id', user.id)
           .maybeSingle(),
         SUPABASE_TIMEOUT_MS,
@@ -156,12 +159,14 @@ export default function TopSecretPage() {
 
       if (error) throw error;
 
+      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
       const isActive = ['active', 'trial', 'trialing'].includes(profile?.top_secret_status || '') && profile?.top_secret_enabled === true;
       const expiresAt = profile?.top_secret_expires_at ? new Date(profile.top_secret_expires_at) : null;
       const isExpired = expiresAt && expiresAt < new Date();
 
       return {
         isActive: isActive && !isExpired,
+        isAdmin,
         status: profile?.top_secret_status || 'inactive',
         expiresAt,
       };
@@ -206,7 +211,7 @@ export default function TopSecretPage() {
 
       // Not logged in - show landing
       if (!user?.id) {
-        setStatus({ isActive: false, status: null, expiresAt: null });
+        setStatus({ isActive: false, isAdmin: false, status: null, expiresAt: null });
         setPageState('show_landing');
         return;
       }
@@ -261,10 +266,32 @@ export default function TopSecretPage() {
   }
 
   // Main content
+  const isAdmin = status?.isAdmin === true;
+  // Resolved view: admin override wins, otherwise the user's natural page state
+  const resolvedView: 'landing' | 'subscriber' =
+    adminView ?? (pageState === 'show_dashboard' ? 'subscriber' : 'landing');
+
   return (
     <TopSecretErrorBoundary>
+      {isAdmin && (
+        <div className="fixed top-28 right-4 z-50 flex items-center gap-1 p-1 rounded-xl bg-black/90 backdrop-blur-sm border border-amber-500/40 shadow-xl">
+          {(['landing', 'subscriber'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setAdminView(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                resolvedView === v
+                  ? 'bg-amber-500 text-black'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {v === 'landing' ? 'Landing' : 'Subscriber'}
+            </button>
+          ))}
+        </div>
+      )}
       <Suspense fallback={<PageLoader />}>
-        {pageState === 'show_dashboard' ? (
+        {resolvedView === 'subscriber' ? (
           <TopSecretDashboard userId={user?.id} />
         ) : (
           <TopSecretLanding />
