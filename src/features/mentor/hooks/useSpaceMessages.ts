@@ -50,6 +50,7 @@ export function useSpaceMessages(channelId?: string): {
   // ------------------------------------------------------------------
   // Realtime subscription: append INSERT events to the cached array so
   // senders and recipients see new messages instantly without refetching.
+  // Also handles UPDATE events so pin changes propagate in real time.
   // ------------------------------------------------------------------
   useEffect(() => {
     if (!channelId) return;
@@ -65,17 +66,36 @@ export function useSpaceMessages(channelId?: string): {
           filter: `channel_id=eq.${channelId}`,
         },
         (payload) => {
-          // payload.new is the inserted row but lacks joined author_name from
-          // the RPC; set it to null so the UI can fall back to a default.
           const newMessage: SpaceMessage = {
             ...(payload.new as Omit<SpaceMessage, 'author_name'>),
-            // The realtime row has no JOIN result — UI should fall back.
             author_name: null,
           };
-
           qc.setQueryData<SpaceMessage[]>(
             keys.messages(channelId),
-            (prev = []) => [...prev, newMessage],
+            (prev = []) =>
+              prev.some((m) => m.id === newMessage.id)
+                ? prev
+                : [...prev, newMessage],
+          );
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'space_messages',
+          filter: `channel_id=eq.${channelId}`,
+        },
+        (payload) => {
+          const updated = payload.new as SpaceMessage;
+          qc.setQueryData<SpaceMessage[]>(
+            keys.messages(channelId),
+            (prev = []) =>
+              prev.map((m) =>
+                // Keep the already-resolved author_name; merge mutable fields (e.g. pinned).
+                m.id === updated.id ? { ...m, ...updated, author_name: m.author_name } : m,
+              ),
           );
         },
       )
@@ -109,6 +129,33 @@ export function usePostMessage() {
       const { error } = await supabase.rpc('post_space_message', {
         p_channel: channelId,
         p_body: body,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { channelId }) => {
+      qc.invalidateQueries({ queryKey: keys.messages(channelId) });
+    },
+  });
+}
+
+interface PinMessageInput {
+  messageId: string;
+  channelId: string;
+  pinned: boolean;
+}
+
+/**
+ * Pins or unpins a message (owner-only, enforced server-side by
+ * pin_space_message). Invalidates the channel's message list on success so the
+ * pinned flag is reflected; other clients see it via the realtime UPDATE handler.
+ */
+export function usePinMessage() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, PinMessageInput>({
+    mutationFn: async ({ messageId, pinned }) => {
+      const { error } = await supabase.rpc('pin_space_message', {
+        p_message: messageId,
+        p_pinned: pinned,
       });
       if (error) throw error;
     },

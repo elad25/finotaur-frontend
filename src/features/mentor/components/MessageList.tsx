@@ -1,14 +1,17 @@
 // src/components/mentorship/MessageList.tsx
 // Center panel: message bubbles + composer.
-// - Own messages align right; others align left.
+// - Own messages align right; others align left. Both render on a neutral gray
+//   bubble (no gold) — distinguished by side + author label.
+// - Room owners can click a message to pin/unpin it. A single pinned message per
+//   channel surfaces in a bar at the top; clicking the bar scrolls to it.
 // - If canPost is false (student reading an announcement channel), the composer
 //   is hidden and a subtle hint is shown instead.
 // - Auto-scrolls to newest message on data change.
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Send } from 'lucide-react';
-import type { ChannelType, SpaceMember } from '@/features/mentor/types/mentorship';
-import { useSpaceMessages, usePostMessage } from '@/features/mentor/hooks/useSpaceMessages';
+import { Send, Pin, X } from 'lucide-react';
+import type { ChannelType, SpaceMember, SpaceMessage } from '@/features/mentor/types/mentorship';
+import { useSpaceMessages, usePostMessage, usePinMessage } from '@/features/mentor/hooks/useSpaceMessages';
 import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { SectionSpinner } from '@/components/ds/Spinner';
 import { toast } from '@/hooks/use-toast';
@@ -64,6 +67,7 @@ export interface MessageListProps {
   canPost: boolean;
   currentUserId: string;
   members: SpaceMember[];
+  isManager: boolean;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -74,18 +78,50 @@ export function MessageList({
   canPost,
   currentUserId,
   members,
+  isManager,
 }: MessageListProps) {
   const { messages, isLoading } = useSpaceMessages(channelId);
   const { mutateAsync: postMessage, isPending: isSending } = usePostMessage();
+  const { mutateAsync: pinMessage } = usePinMessage();
 
   const [body, setBody] = useState('');
+  const [actionMsgId, setActionMsgId] = useState<string | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const pinnedMessage = messages.find((m) => m.pinned) ?? null;
+
+  // Close any open per-message action menu when switching channels.
+  useEffect(() => {
+    setActionMsgId(null);
+  }, [channelId]);
 
   // Auto-scroll to newest message.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const scrollToMessage = useCallback((id: string) => {
+    const el = messageRefs.current.get(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setFlashId(id);
+    window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1200);
+  }, []);
+
+  const handlePinToggle = useCallback(
+    async (msg: SpaceMessage) => {
+      setActionMsgId(null);
+      try {
+        await pinMessage({ messageId: msg.id, channelId, pinned: !msg.pinned });
+      } catch (err) {
+        toast({ title: 'Could not update pin', description: mapSpaceError(err) });
+      }
+    },
+    [pinMessage, channelId],
+  );
 
   const handleSend = useCallback(async () => {
     const trimmed = body.trim();
@@ -121,6 +157,50 @@ export function MessageList({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Pinned message bar */}
+      {pinnedMessage && (
+        <button
+          type="button"
+          onClick={() => scrollToMessage(pinnedMessage.id)}
+          className={cn(
+            'flex items-center gap-ds-2 w-full text-left shrink-0',
+            'px-ds-4 py-[8px] border-b border-border-ds-subtle',
+            'bg-surface-1 hover:bg-surface-2 transition-colors duration-base ease-out',
+          )}
+        >
+          <Pin size={13} className="shrink-0 text-gold-primary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <span className="block text-[11px] font-medium text-gold-primary">
+              Pinned message
+            </span>
+            <span className="block text-[12px] text-ink-secondary truncate">
+              {pinnedMessage.body}
+            </span>
+          </div>
+          {isManager && (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label="Unpin message"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePinToggle(pinnedMessage);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handlePinToggle(pinnedMessage);
+                }
+              }}
+              className="shrink-0 p-[4px] rounded-[6px] text-ink-tertiary hover:text-ink-primary hover:bg-surface-2 transition-colors cursor-pointer"
+            >
+              <X size={14} aria-hidden="true" />
+            </span>
+          )}
+        </button>
+      )}
+
       {/* Message scroll area */}
       <div className="flex-1 overflow-y-auto px-ds-4 py-ds-4 flex flex-col gap-ds-3">
         {messages.length === 0 ? (
@@ -133,10 +213,15 @@ export function MessageList({
           messages.map((msg) => {
             const isOwn = msg.author_id === currentUserId;
             const name = resolveName(msg.author_id, msg.author_name, members);
+            const showAction = isManager && actionMsgId === msg.id;
 
             return (
               <div
                 key={msg.id}
+                ref={(el) => {
+                  if (el) messageRefs.current.set(msg.id, el);
+                  else messageRefs.current.delete(msg.id);
+                }}
                 className={cn(
                   'flex flex-col gap-[3px] max-w-[75%]',
                   isOwn ? 'self-end items-end' : 'self-start items-start',
@@ -152,20 +237,51 @@ export function MessageList({
                   <span className="text-[11px] text-ink-tertiary">
                     {formatTime(msg.created_at)}
                   </span>
+                  {msg.pinned && (
+                    <span className="flex items-center gap-[2px] text-[10px] text-gold-primary">
+                      <Pin size={9} aria-hidden="true" /> Pinned
+                    </span>
+                  )}
                 </div>
 
                 {/* Bubble */}
                 <div
+                  onClick={
+                    isManager
+                      ? () =>
+                          setActionMsgId((cur) => (cur === msg.id ? null : msg.id))
+                      : undefined
+                  }
                   className={cn(
                     'rounded-[10px] px-ds-4 py-[8px]',
                     'text-[14px] leading-[1.5]',
-                    isOwn
-                      ? 'bg-gradient-gold text-ink-on-gold font-medium'
-                      : 'bg-surface-2 border-[0.5px] border-border-ds-subtle text-ink-primary',
+                    'bg-surface-2 border-[0.5px] text-ink-primary',
+                    'transition-all duration-base ease-out',
+                    isOwn ? 'border-border-ds-default' : 'border-border-ds-subtle',
+                    msg.pinned && 'border-gold-primary/40',
+                    flashId === msg.id && 'ring-2 ring-gold-primary/50',
+                    isManager && 'cursor-pointer',
                   )}
                 >
                   {msg.body}
                 </div>
+
+                {/* Owner pin/unpin action */}
+                {showAction && (
+                  <button
+                    type="button"
+                    onClick={() => handlePinToggle(msg)}
+                    className={cn(
+                      'flex items-center gap-ds-2 mt-[2px] px-ds-3 py-[5px] rounded-[8px]',
+                      'bg-surface-1 border-[0.5px] border-border-ds-default',
+                      'text-[12px] text-ink-secondary hover:text-ink-primary hover:bg-surface-2',
+                      'transition-colors duration-base ease-out',
+                    )}
+                  >
+                    <Pin size={12} aria-hidden="true" />
+                    {msg.pinned ? 'Unpin message' : 'Pin message'}
+                  </button>
+                )}
               </div>
             );
           })
