@@ -43,13 +43,13 @@ import {
 import {
   SearchBar,
   FilterTabs,
-  StatsCard,
   CompactReportCard,
   MonthGroup,
-  HowToUseSection,
-  MemberSection,
   BottomFeaturesBar,
   CadenceIntel,
+  EventsThisWeek,
+  NextDrops,
+  AskFino,
 } from './components';
 
 const RPC_TIMEOUT_MS = 15000;
@@ -381,11 +381,11 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
             </motion.div>
           </div>
 
-          {/* Sidebar */}
+          {/* Sidebar — Live Intel Rail */}
           <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}><StatsCard reports={reports} /></motion.div>
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}><HowToUseSection /></motion.div>
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}><MemberSection /></motion.div>
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}><EventsThisWeek /></motion.div>
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}><NextDrops /></motion.div>
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}><AskFino /></motion.div>
           </div>
         </div>
 
