@@ -89,7 +89,7 @@ function AvatarPreview({
         <img
           src={avatarUrl}
           alt="Avatar preview"
-          className="h-full w-full object-cover scale-[1.15]"
+          className="h-full w-full object-cover scale-[1.45]"
           onError={() => setImgError(true)}
         />
       ) : (
@@ -392,7 +392,7 @@ export function FloorProfileDialog({
                       <img
                         src={src}
                         alt=""
-                        className="h-full w-full object-cover scale-[1.15]"
+                        className="h-full w-full object-cover scale-[1.45]"
                       />
                     </div>
                   </button>
