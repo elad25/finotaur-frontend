@@ -557,14 +557,6 @@ const EnvelopeReportCard = memo(function EnvelopeReportCard({
 // ─── A Typical Week in Your Inbox ────────────────────────────────────────────
 
 const WeekStripSection = memo(function WeekStripSection() {
-  const days = [
-    { label: 'MON', extras: [] },
-    { label: 'TUE', extras: [{ name: 'Company', color: '#A855F7' }] },
-    { label: 'WED', extras: [{ name: 'Crypto', color: '#06B6D4' }] },
-    { label: 'THU', extras: [{ name: 'ISM', color: '#F59E0B' }] },
-    { label: 'FRI', extras: [{ name: 'Weekly', color: '#C9A646' }] },
-  ];
-
   return (
     <div
       className="rounded-2xl p-8"
@@ -580,51 +572,136 @@ const WeekStripSection = memo(function WeekStripSection() {
           className="text-xs font-semibold tracking-widest uppercase"
           style={{ color: 'rgba(201,166,70,0.75)' }}
         >
-          A typical week in your inbox
+          What lands in your inbox
         </span>
       </div>
 
-      {/* 5-column Mon–Fri grid */}
-      <div className="grid grid-cols-5 gap-3">
-        {days.map((day) => (
-          <div key={day.label} className="flex flex-col gap-2">
-            {/* Day label */}
-            <p
-              className="text-center text-xs font-semibold tracking-widest uppercase mb-1"
+      {/* Cadence-grouped rows */}
+      <div className="flex flex-col gap-[14px]">
+
+        {/* ROW 1 — DAILY (gold accent) */}
+        <div
+          className="flex items-center rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(201,166,70,0.10)',
+            border: '1px solid rgba(201,166,70,0.30)',
+          }}
+        >
+          {/* Left label column */}
+          <div
+            className="flex flex-col items-center justify-center gap-1 px-4 py-4 flex-shrink-0"
+            style={{
+              width: 66,
+              borderRight: '1px solid rgba(201,166,70,0.20)',
+            }}
+          >
+            <Zap className="w-4 h-4 text-[#C9A646]" />
+            <span
+              className="text-[10px] font-bold tracking-widest uppercase"
+              style={{ color: 'rgba(201,166,70,0.75)' }}
+            >
+              DAILY
+            </span>
+          </div>
+          {/* Content */}
+          <div className="flex flex-col gap-0.5 px-5 py-4">
+            <span className="text-sm font-bold text-[#C9A646]">WAR ZONE</span>
+            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Every trading day · Mon–Fri, before the U.S. open
+            </span>
+          </div>
+        </div>
+
+        {/* ROW 2 — WEEKLY */}
+        <div
+          className="flex items-stretch rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Left label column */}
+          <div
+            className="flex flex-col items-center justify-center gap-1 px-4 py-4 flex-shrink-0"
+            style={{
+              width: 66,
+              borderRight: '1px solid rgba(255,255,255,0.07)',
+            }}
+          >
+            <Calendar className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.45)' }} />
+            <span
+              className="text-[10px] font-bold tracking-widest uppercase"
               style={{ color: 'rgba(255,255,255,0.35)' }}
             >
-              {day.label}
-            </p>
-
-            {/* WAR ZONE tile — every day */}
-            <div
-              className="rounded-xl px-3 py-2 flex items-center gap-1.5"
-              style={{
-                background: 'rgba(201,166,70,0.12)',
-                border: '1px solid rgba(201,166,70,0.3)',
-              }}
-            >
-              <Zap className="w-3 h-3 text-[#C9A646] flex-shrink-0" />
-              <span className="text-[#C9A646] text-xs font-semibold truncate">WAR ZONE</span>
-            </div>
-
-            {/* Extra report tiles */}
-            {day.extras.map((extra) => (
-              <div
-                key={extra.name}
-                className="rounded-xl px-3 py-2 flex items-center gap-1.5"
-                style={{
-                  background: `${extra.color}12`,
-                  border: `1px solid ${extra.color}30`,
-                }}
-              >
-                <span className="text-xs font-medium truncate" style={{ color: extra.color }}>
-                  + {extra.name}
-                </span>
-              </div>
-            ))}
+              WEEKLY
+            </span>
           </div>
-        ))}
+          {/* Content — two stacked items with divider */}
+          <div className="flex flex-col flex-1">
+            <div className="flex flex-col gap-0.5 px-5 py-3">
+              <span className="text-sm font-semibold" style={{ color: '#A855F7' }}>
+                Weekly Tactical Review
+              </span>
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                Every Sunday · the week ahead, mapped
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5 px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <span className="text-sm font-semibold text-white">Company Deep-Dive</span>
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.40)' }}>
+                Sundays · a name worth watching
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* ROW 3 — MONTHLY */}
+        <div
+          className="flex items-center rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Left label column */}
+          <div
+            className="flex flex-col items-center justify-center gap-1 px-4 py-4 flex-shrink-0"
+            style={{
+              width: 66,
+              borderRight: '1px solid rgba(255,255,255,0.07)',
+            }}
+          >
+            <BarChart3 className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.45)' }} />
+            <span
+              className="text-[10px] font-bold tracking-widest uppercase"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+            >
+              MONTHLY
+            </span>
+          </div>
+          {/* Content — 3-column mini-grid */}
+          <div className="grid grid-cols-3 flex-1">
+            {/* Crypto */}
+            <div className="flex flex-col items-center gap-1 px-4 py-4 text-center">
+              <Bitcoin className="w-4 h-4" style={{ color: '#06B6D4' }} />
+              <span className="text-xs font-semibold" style={{ color: '#06B6D4' }}>Crypto</span>
+              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>10th &amp; 25th</span>
+            </div>
+            {/* ISM */}
+            <div className="flex flex-col items-center gap-1 px-4 py-4 text-center" style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+              <BarChart3 className="w-4 h-4" style={{ color: '#F59E0B' }} />
+              <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>ISM</span>
+              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>On release week</span>
+            </div>
+            {/* Earnings */}
+            <div className="flex flex-col items-center gap-1 px-4 py-4 text-center" style={{ borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+              <TrendingUp className="w-4 h-4" style={{ color: '#F43F5E' }} />
+              <span className="text-xs font-semibold" style={{ color: '#F43F5E' }}>Earnings</span>
+              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Month-end</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
