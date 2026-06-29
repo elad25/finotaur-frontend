@@ -158,6 +158,15 @@ export const SubNav = () => {
   const isTabActive = useCallback((itemPath: string): boolean => {
     if (location.pathname === itemPath) return true;
 
+    // The Floor tab — active across all /app/floor/* sub-pages
+    if (itemPath === '/app/floor/feed') {
+      return location.pathname.startsWith('/app/floor');
+    }
+    // Mentor tab — active across all /app/mentor/* sub-pages
+    if (itemPath === '/app/mentor/rooms') {
+      return location.pathname.startsWith('/app/mentor');
+    }
+
     if (itemPath === '/app/ai/stock-analyzer') {
       return location.pathname.startsWith('/app/ai') &&
              !location.pathname.startsWith('/app/ai/copilot');

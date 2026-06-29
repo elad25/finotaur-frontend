@@ -224,13 +224,14 @@ export const domains: Record<string, Domain> = {
   'copy-trade': {
     id: 'copy-trade',
     label: 'Trade Copier',
+    // Phase 1 unification: all paths now point to /app/automation/* (the new single surface)
     subNav: [
-      { label: 'Trade Copier', path: '/app/copy-trade/overview' },
+      { label: 'Trade Copier', path: '/app/automation/copier' },
     ],
     sidebar: [
-      { label: 'Connections', path: '/app/copy-trade/overview', icon: Link },
-      { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
-      { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
+      { label: 'Copier',    path: '/app/automation/copier', icon: Copy },
+      { label: 'Risk',      path: '/app/automation/risk',   icon: Shield },
+      { label: 'Agent',     path: '/app/automation/agent',  icon: Link },
     ],
   },
 

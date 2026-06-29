@@ -15,6 +15,7 @@
 //   - remove_space_member(...)      -> owner/co_mentor removes a member
 //   - set_journal_sharing(...)      -> student toggles journal visibility
 //   - open_dm_channel(...)          -> ensures a DM channel exists, returns it
+//   - add_space_member_direct(...)  -> owner/co_mentor adds an accepted connection directly
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
@@ -136,17 +137,24 @@ interface CreateSpaceInput {
   description?: string;
 }
 
+/** Minimal shape of mentor_spaces returned by create_mentor_space(). */
+interface CreatedSpace {
+  id: string;
+}
+
 /** Owner creates a new mentor space. Requires a Premium (FINOTAUR) plan. */
 export function useCreateSpace() {
   const qc = useQueryClient();
-  return useMutation<void, Error, CreateSpaceInput>({
+  return useMutation<CreatedSpace, Error, CreateSpaceInput>({
     mutationFn: async ({ name, slug, description }) => {
-      const { error } = await supabase.rpc('create_mentor_space', {
+      const { data, error } = await supabase.rpc('create_mentor_space', {
         p_name: name,
         p_slug: slug,
         p_description: description ?? null,
       });
       if (error) throw error;
+      // create_mentor_space RETURNS mentor_spaces (composite row) -> object, not array.
+      return data as CreatedSpace;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.mySpaces });
@@ -313,6 +321,135 @@ export function useLeaveSpace() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: keys.mySpaces });
+    },
+  });
+}
+
+interface AddConnectionToSpaceInput {
+  spaceId: string;
+  userId: string;
+  role?: SpaceRole;
+}
+
+/**
+ * Owner directly adds an accepted mentor connection to the space.
+ * The caller must have an accepted mentor_relationship with p_user (enforced
+ * server-side by add_space_member_direct).
+ */
+export function useAddConnectionToSpace() {
+  const qc = useQueryClient();
+  return useMutation<SpaceMember, Error, AddConnectionToSpaceInput>({
+    mutationFn: async ({ spaceId, userId, role = 'student' }) => {
+      const { data, error } = await supabase.rpc('add_space_member_direct', {
+        p_space: spaceId,
+        p_user: userId,
+        p_role: role,
+      });
+      if (error) throw error;
+      // add_space_member_direct RETURNS space_members (composite row) -> object, not array.
+      return data as SpaceMember;
+    },
+    onSuccess: (_data, { spaceId }) => {
+      qc.invalidateQueries({ queryKey: keys.members(spaceId) });
+      qc.invalidateQueries({ queryKey: keys.mySpaces });
+    },
+  });
+}
+
+// ================================================
+// CHANNEL MUTATIONS (owner-only)
+// ================================================
+
+interface CreateChannelInput {
+  spaceId: string;
+  name: string;
+  type: 'chat' | 'announcement';
+}
+
+/** Owner creates a new channel in the space. */
+export function useCreateChannel() {
+  const qc = useQueryClient();
+  return useMutation<SpaceChannel, Error, CreateChannelInput>({
+    mutationFn: async ({ spaceId, name, type }) => {
+      const { data, error } = await supabase.rpc('create_space_channel', {
+        p_space: spaceId,
+        p_name: name,
+        p_type: type,
+      });
+      if (error) throw error;
+      // create_space_channel RETURNS space_channels (composite row) -> object, not array.
+      return data as SpaceChannel;
+    },
+    onSuccess: (_data, { spaceId }) => {
+      qc.invalidateQueries({ queryKey: keys.channels(spaceId) });
+    },
+  });
+}
+
+interface RenameChannelInput {
+  spaceId: string;
+  channelId: string;
+  name: string;
+}
+
+/** Owner renames an existing non-DM channel. */
+export function useRenameChannel() {
+  const qc = useQueryClient();
+  return useMutation<SpaceChannel, Error, RenameChannelInput>({
+    mutationFn: async ({ channelId, name }) => {
+      const { data, error } = await supabase.rpc('rename_space_channel', {
+        p_channel: channelId,
+        p_name: name,
+      });
+      if (error) throw error;
+      // rename_space_channel RETURNS space_channels (composite row) -> object, not array.
+      return data as SpaceChannel;
+    },
+    onSuccess: (_data, { spaceId }) => {
+      qc.invalidateQueries({ queryKey: keys.channels(spaceId) });
+    },
+  });
+}
+
+interface DeleteChannelInput {
+  spaceId: string;
+  channelId: string;
+}
+
+/** Owner deletes a non-DM channel (blocked if it is the last one). */
+export function useDeleteChannel() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, DeleteChannelInput>({
+    mutationFn: async ({ channelId }) => {
+      const { error } = await supabase.rpc('delete_space_channel', {
+        p_channel: channelId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { spaceId }) => {
+      qc.invalidateQueries({ queryKey: keys.channels(spaceId) });
+    },
+  });
+}
+
+interface ReorderChannelsInput {
+  spaceId: string;
+  channelIds: string[];
+}
+
+/** Owner reorders non-DM channels by supplying the full ordered array of ids. */
+export function useReorderChannels() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, ReorderChannelsInput>({
+    mutationFn: async ({ spaceId, channelIds }) => {
+      const { error } = await supabase.rpc('reorder_space_channels', {
+        p_space: spaceId,
+        p_channel_ids: channelIds,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { spaceId }) => {
+      qc.invalidateQueries({ queryKey: keys.channels(spaceId) });
     },
   });
 }

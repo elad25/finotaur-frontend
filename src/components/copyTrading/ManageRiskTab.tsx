@@ -1,32 +1,79 @@
 // src/components/copyTrading/ManageRiskTab.tsx
-// Manage Risk tab - per-portfolio risk limits.
+// Compact Finotaur-branded Loss / Profit per Trade / Day / Week risk panel.
 
 import { memo, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
-  AlertOctagon,
+  ChevronDown,
   ChevronUp,
   FileText,
-  Info,
   Layers,
+  Lock,
   Minus,
   Plus,
   Save,
   Shield,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
 import { toast } from 'sonner';
 
+// ── Patch interface ─────────────────────────────────────────────────────────
+
 interface PortfolioRiskPatch {
-  kill_switch_active: boolean;
-  max_daily_loss_usd: number | null;
-  max_position_size: number | null;
-  max_contracts_per_trade: number | null;
-  max_loss_per_trade_usd: number | null;
-  daily_stop_loss_usd: number | null;
+  // LOSS limits
+  max_loss_per_trade_usd:   number | null;
+  max_daily_loss_usd:       number | null;
+  max_weekly_loss_usd:      number | null;
+  // PROFIT targets
+  trade_profit_target_usd:  number | null;
+  daily_profit_target_usd:  number | null;
+  weekly_profit_target_usd: number | null;
+  // CONTROL
+  risk_management_enabled:  boolean;
+  kill_switch_active:        boolean;
+  risk_breach_action:        'pause_copies' | 'stop_copies' | 'close_lock';
+  // ADVANCED
+  max_contracts_per_trade:  number | null;
+  max_position_size:        number | null;
 }
+
+// ── Initial values shape for RiskCard ──────────────────────────────────────
+
+interface RiskCardInitial {
+  lossPerTrade:    string;
+  lossPerDay:      string;
+  lossPerWeek:     string;
+  profitPerTrade:  string;
+  profitPerDay:    string;
+  profitPerWeek:   string;
+  riskEnabled:     boolean;
+  killSwitch:      boolean;
+  breachAction:    'pause_copies' | 'stop_copies' | 'close_lock';
+  maxContracts:    string;
+  maxPositionSize: string;
+}
+
+// ── Global defaults for the "All Accounts" broadcast card ──────────────────
+
+const GLOBAL_DEFAULTS: RiskCardInitial = {
+  lossPerTrade:    '',
+  lossPerDay:      '',
+  lossPerWeek:     '',
+  profitPerTrade:  '',
+  profitPerDay:    '',
+  profitPerWeek:   '',
+  riskEnabled:     true,
+  killSwitch:      false,
+  breachAction:    'pause_copies',
+  maxContracts:    '',
+  maxPositionSize: '',
+};
+
+// ── Mutation ────────────────────────────────────────────────────────────────
 
 function usePortfolioRisk() {
   const qc = useQueryClient();
@@ -50,6 +97,8 @@ function usePortfolioRisk() {
     isUpdating: mutation.isPending,
   };
 }
+
+// ── ManageRiskTab (container) ───────────────────────────────────────────────
 
 export const ManageRiskTab = memo(function ManageRiskTab() {
   const { portfolios, isLoading } = usePortfolios();
@@ -81,11 +130,42 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
     );
   }
 
+  // Broadcast handler: applies the same patch to every Tradovate account.
+  const handleBroadcast = async (patch: PortfolioRiskPatch) => {
+    await Promise.all(
+      tradovatePortfolios.map((p) => updatePortfolioRisk({ id: p.id, patch })),
+    );
+  };
+
+  const accountCount = tradovatePortfolios.length;
+
   return (
     <div className="space-y-ds-3">
+      {/* ── Global "All Accounts" card ──────────────────────────── */}
+      <RiskCard
+        mode="global"
+        initial={GLOBAL_DEFAULTS}
+        headerTitle="All Accounts"
+        headerBadge={null}
+        headerSubtitle="Apply settings to every connected account"
+        onSave={handleBroadcast}
+        isSaving={isUpdating}
+        saveLabel="Apply to all accounts"
+        successMessage={`Applied to ${accountCount} account${accountCount === 1 ? '' : 's'}`}
+      />
+
+      {/* ── Per-account section divider ─────────────────────────── */}
+      <div className="flex items-center gap-ds-3 pt-ds-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary whitespace-nowrap">
+          Per-account overrides
+        </span>
+        <div className="flex-1 border-t border-[rgba(255,255,255,0.06)]" />
+      </div>
+
+      {/* ── Per-account cards ────────────────────────────────────── */}
       {tradovatePortfolios.map((p) => (
         <PortfolioRiskCard
-          key={p.id}
+          key={`${p.id}:${p.max_loss_per_trade_usd}:${p.max_daily_loss_usd}:${p.max_weekly_loss_usd}:${p.trade_profit_target_usd}:${p.daily_profit_target_usd}:${p.weekly_profit_target_usd}:${p.risk_management_enabled}:${p.kill_switch_active}:${p.risk_breach_action}:${p.max_contracts_per_trade}:${p.max_position_size}`}
           portfolio={p}
           onSave={(patch) => updatePortfolioRisk({ id: p.id, patch })}
           isSaving={isUpdating}
@@ -94,6 +174,8 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
     </div>
   );
 });
+
+// ── PortfolioRiskCard (thin wrapper around RiskCard) ────────────────────────
 
 interface PortfolioRiskCardProps {
   portfolio: Portfolio;
@@ -106,35 +188,80 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
   onSave,
   isSaving,
 }: PortfolioRiskCardProps) {
-  const [maxContractsPerTrade, setMaxContractsPerTrade] = useState<string>(
-    portfolio.max_contracts_per_trade?.toString() ?? '10',
-  );
-  const [maxDailyLossUsd, setMaxDailyLossUsd] = useState<string>(
-    portfolio.max_daily_loss_usd?.toString() ?? '1000',
-  );
-  const [maxPositionSize, setMaxPositionSize] = useState<string>(
-    portfolio.max_position_size?.toString() ?? '50',
-  );
-  const [maxLossPerTradeUsd, setMaxLossPerTradeUsd] = useState<string>(
-    portfolio.max_loss_per_trade_usd?.toString() ?? '500',
-  );
-  const [dailyStopLossUsd, setDailyStopLossUsd] = useState<string>(
-    portfolio.daily_stop_loss_usd?.toString() ?? '1000',
-  );
-  const [dailyMode, setDailyMode] = useState<'soft' | 'hard'>(
-    portfolio.daily_stop_loss_usd ? 'hard' : 'soft',
-  );
-  const [tradeMode, setTradeMode] = useState<'soft' | 'hard'>('soft');
+  const initial: RiskCardInitial = {
+    lossPerTrade:    portfolio.max_loss_per_trade_usd?.toString() ?? '',
+    lossPerDay:      portfolio.max_daily_loss_usd?.toString() ?? '',
+    lossPerWeek:     portfolio.max_weekly_loss_usd?.toString() ?? '',
+    profitPerTrade:  portfolio.trade_profit_target_usd?.toString() ?? '',
+    profitPerDay:    portfolio.daily_profit_target_usd?.toString() ?? '',
+    profitPerWeek:   portfolio.weekly_profit_target_usd?.toString() ?? '',
+    riskEnabled:     portfolio.risk_management_enabled ?? true,
+    killSwitch:      portfolio.kill_switch_active ?? false,
+    breachAction:    (portfolio.risk_breach_action as 'pause_copies' | 'stop_copies' | 'close_lock') ?? 'pause_copies',
+    maxContracts:    portfolio.max_contracts_per_trade?.toString() ?? '',
+    maxPositionSize: portfolio.max_position_size?.toString() ?? '',
+  };
 
-  const dirty =
-    (maxContractsPerTrade || null) !==
-      (portfolio.max_contracts_per_trade?.toString() ?? null) ||
-    (maxDailyLossUsd || null) !== (portfolio.max_daily_loss_usd?.toString() ?? null) ||
-    (maxPositionSize || null) !== (portfolio.max_position_size?.toString() ?? null) ||
-    (maxLossPerTradeUsd || null) !==
-      (portfolio.max_loss_per_trade_usd?.toString() ?? null) ||
-    (dailyStopLossUsd || null) !== (portfolio.daily_stop_loss_usd?.toString() ?? null);
+  return (
+    <RiskCard
+      mode="account"
+      initial={initial}
+      headerTitle={portfolio.tradovate_account_spec ?? portfolio.name ?? portfolio.id.slice(0, 8)}
+      headerBadge={portfolio.environment ?? 'unknown'}
+      headerSubtitle="Risk management"
+      onSave={onSave}
+      isSaving={isSaving}
+      saveLabel="Save changes"
+      successMessage="Risk limits saved"
+    />
+  );
+});
 
+// ── RiskCard (shared card — renders both per-account and global modes) ───────
+
+interface RiskCardProps {
+  mode: 'account' | 'global';
+  initial: RiskCardInitial;
+  headerTitle: string;
+  headerBadge: string | null;
+  headerSubtitle: string;
+  onSave: (patch: PortfolioRiskPatch) => Promise<unknown>;
+  isSaving: boolean;
+  saveLabel: string;
+  successMessage: string;
+}
+
+const RiskCard = memo(function RiskCard({
+  mode,
+  initial,
+  headerTitle,
+  headerBadge,
+  headerSubtitle,
+  onSave,
+  isSaving,
+  saveLabel,
+  successMessage,
+}: RiskCardProps) {
+  // ── Loss limits ──────────────────────────────────────────────
+  const [lossPerTrade, setLossPerTrade] = useState<string>(initial.lossPerTrade);
+  const [lossPerDay,   setLossPerDay]   = useState<string>(initial.lossPerDay);
+  const [lossPerWeek,  setLossPerWeek]  = useState<string>(initial.lossPerWeek);
+  // ── Profit targets ───────────────────────────────────────────
+  const [profitPerTrade, setProfitPerTrade] = useState<string>(initial.profitPerTrade);
+  const [profitPerDay,   setProfitPerDay]   = useState<string>(initial.profitPerDay);
+  const [profitPerWeek,  setProfitPerWeek]  = useState<string>(initial.profitPerWeek);
+  // ── Control ──────────────────────────────────────────────────
+  const [riskEnabled, setRiskEnabled] = useState<boolean>(initial.riskEnabled);
+  const [killSwitch,  setKillSwitch]  = useState<boolean>(initial.killSwitch);
+  const [breachAction, setBreachAction] = useState<'pause_copies' | 'stop_copies' | 'close_lock'>(
+    initial.breachAction,
+  );
+  // ── Advanced ─────────────────────────────────────────────────
+  const [maxContracts,    setMaxContracts]    = useState<string>(initial.maxContracts);
+  const [maxPositionSize, setMaxPositionSize] = useState<string>(initial.maxPositionSize);
+  const [advancedOpen,    setAdvancedOpen]    = useState(false);
+
+  // ── Helpers ──────────────────────────────────────────────────
   const parseNum = (s: string): number | null => {
     const v = s.trim();
     if (!v) return null;
@@ -143,287 +270,277 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
     return n;
   };
 
-  const formatMoney = (value: string) => {
-    const parsed = parseNum(value);
-    if (parsed == null) return '$0';
-    return `$${parsed.toLocaleString('en-US')}`;
-  };
+  // ── Dirty detection (compare against initial prop values) ────
+  const dirty =
+    lossPerTrade    !== initial.lossPerTrade    ||
+    lossPerDay      !== initial.lossPerDay      ||
+    lossPerWeek     !== initial.lossPerWeek     ||
+    profitPerTrade  !== initial.profitPerTrade  ||
+    profitPerDay    !== initial.profitPerDay    ||
+    profitPerWeek   !== initial.profitPerWeek   ||
+    riskEnabled     !== initial.riskEnabled     ||
+    killSwitch      !== initial.killSwitch      ||
+    breachAction    !== initial.breachAction    ||
+    maxContracts    !== initial.maxContracts    ||
+    maxPositionSize !== initial.maxPositionSize;
 
+  // ── Save ─────────────────────────────────────────────────────
   const handleSave = async () => {
     const patch: PortfolioRiskPatch = {
-      kill_switch_active: portfolio.kill_switch_active ?? false,
-      max_daily_loss_usd: parseNum(maxDailyLossUsd),
-      max_position_size: parseNum(maxPositionSize),
-      max_contracts_per_trade: parseNum(maxContractsPerTrade),
-      max_loss_per_trade_usd: parseNum(maxLossPerTradeUsd),
-      daily_stop_loss_usd: parseNum(dailyStopLossUsd),
+      max_loss_per_trade_usd:   parseNum(lossPerTrade),
+      max_daily_loss_usd:       parseNum(lossPerDay),
+      max_weekly_loss_usd:      parseNum(lossPerWeek),
+      trade_profit_target_usd:  parseNum(profitPerTrade),
+      daily_profit_target_usd:  parseNum(profitPerDay),
+      weekly_profit_target_usd: parseNum(profitPerWeek),
+      risk_management_enabled:  riskEnabled,
+      kill_switch_active:       killSwitch,
+      risk_breach_action:       breachAction,
+      max_contracts_per_trade:  parseNum(maxContracts),
+      max_position_size:        parseNum(maxPositionSize),
     };
-
     try {
       await onSave(patch);
-      toast.success('Risk limits saved');
+      toast.success(successMessage);
     } catch (err) {
       toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  const accountTitle =
-    portfolio.tradovate_account_spec ?? portfolio.name ?? portfolio.id.slice(0, 8);
-  const envLabel = portfolio.environment ?? 'unknown';
-  const dailyValue = dailyMode === 'hard' ? dailyStopLossUsd : maxDailyLossUsd;
-  const setDailyValue = dailyMode === 'hard' ? setDailyStopLossUsd : setMaxDailyLossUsd;
+  // Header badge for global mode: gold "ALL" pill
+  const isLive = headerBadge === 'live';
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gold-border/60 bg-[#050505] p-ds-4 shadow-[0_0_32px_rgba(201,166,70,0.08)]">
-      <div className="mb-ds-4 flex items-start justify-between gap-ds-3">
-        <div className="flex min-w-0 items-center gap-ds-3">
-          <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-[1.5px] border-gold-primary/80 bg-black shadow-[inset_0_0_18px_rgba(201,166,70,0.10)]">
+    <div
+      className={
+        mode === 'global'
+          ? // Emphasized gray glass panel — set apart from the per-account cards below
+            'overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.35)]'
+          : 'overflow-hidden rounded-[14px] border border-[rgba(201,166,70,0.22)] bg-[#0b0b0b] shadow-[0_0_24px_rgba(201,166,70,0.06)]'
+      }
+    >
+
+      {/* ── HEADER ──────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-ds-3 px-ds-4 py-ds-3">
+        {/* Left: logo + account info */}
+        <div className="flex min-w-0 items-center gap-ds-2">
+          {/* Small round bull logo */}
+          <div className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-[1.5px] border-gold-primary/70 bg-black">
             <img
               src="/BULL ONLY.png"
               alt="Finotaur"
-              className="h-auto w-[96px] max-w-none translate-y-[2px] object-contain"
+              className="h-auto w-[46px] max-w-none translate-y-[1px] object-contain"
               draggable={false}
             />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-ds-2">
-              <span className="truncate text-base font-semibold text-ink-primary">
-                {accountTitle}
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-sm font-semibold text-ink-primary">
+                {headerTitle}
               </span>
-              <span
-                className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
-                  envLabel === 'live'
-                    ? 'border-status-success/30 bg-status-success/10 text-status-success'
-                    : 'border-border-ds-default bg-surface-base text-ink-tertiary'
-                }`}
-              >
-                {envLabel}
-              </span>
+              {/* Badge: env label for account mode, gold "ALL" pill for global mode */}
+              {mode === 'global' ? (
+                <span className="rounded-sm border border-gold-primary/40 bg-gold-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gold-primary">
+                  ALL
+                </span>
+              ) : headerBadge != null ? (
+                <span
+                  className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                    isLive
+                      ? 'border-status-success/30 bg-status-success/10 text-status-success'
+                      : 'border-border-ds-default bg-surface-base text-ink-tertiary'
+                  }`}
+                >
+                  {headerBadge}
+                </span>
+              ) : null}
             </div>
-            {portfolio.connection_label && (
-              <div className="mt-0.5 text-xs text-ink-secondary">
-                {portfolio.connection_label}
-              </div>
-            )}
+            <div className="text-[11px] text-ink-tertiary">{headerSubtitle}</div>
           </div>
         </div>
 
-        <ChevronUp className="h-5 w-5 text-ink-secondary" />
+        {/* Right: Active toggle + Lock button */}
+        <div className="flex flex-shrink-0 items-center gap-ds-2">
+          {/* Active pill toggle */}
+          <label className="flex cursor-pointer items-center gap-1.5 select-none">
+            <span className="text-[11px] font-medium text-ink-secondary">Active</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={riskEnabled}
+              onClick={() => setRiskEnabled((v) => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full border transition-colors duration-base ${
+                riskEnabled
+                  ? 'border-gold-primary/60 bg-gold-primary/20'
+                  : 'border-border-ds-subtle bg-surface-1'
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 h-3.5 w-3.5 rounded-full transition-transform duration-base ${
+                  riskEnabled
+                    ? 'translate-x-4 bg-gold-primary'
+                    : 'translate-x-0 bg-ink-tertiary'
+                }`}
+              />
+            </button>
+          </label>
+
+          {/* Lock button — red outline when active */}
+          <button
+            type="button"
+            onClick={() => setKillSwitch((v) => !v)}
+            title={killSwitch ? 'Account locked — click to unlock' : 'Lock account'}
+            className={`flex h-7 w-7 items-center justify-center rounded-md border transition-colors duration-base ${
+              killSwitch
+                ? 'border-status-danger/60 bg-status-danger/10 text-status-danger'
+                : 'border-border-ds-subtle text-ink-secondary hover:border-border-ds-default hover:text-ink-primary'
+            }`}
+          >
+            <Lock className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
-      <div className="mb-ds-3 grid grid-cols-1 gap-ds-3 lg:grid-cols-2">
-        <RiskSliderPanel
-          index="1"
-          title="Daily Loss Limit"
-          subtitle="Max total loss allowed per day (resets at midnight)"
-          mode={dailyMode}
-          onModeChange={setDailyMode}
-          value={dailyValue}
-          onValueChange={setDailyValue}
-          valueLabel={dailyMode === 'hard' ? 'Daily stop loss (Hard)' : 'Max daily loss (Soft)'}
-          min={100}
-          max={10000}
-          step={50}
-          ticks={['$100', '$250', '$500', '$1,000', '$2,500', '$5,000', '$10,000']}
-          tickValues={[100, 250, 500, 1000, 2500, 5000, 10000]}
-          displayValue={formatMoney(dailyValue)}
-        />
+      {/* ── GRID: Loss / Profit per Trade / Day / Week ──────────── */}
+      <div
+        className={`px-ds-4 pb-ds-3 transition-opacity duration-base ${
+          riskEnabled ? 'opacity-100' : 'pointer-events-none opacity-30'
+        }`}
+      >
+        {/* Column headers */}
+        <div className="mb-ds-2 grid grid-cols-[120px_1fr_1fr] gap-x-ds-2">
+          <div /> {/* label column spacer */}
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-status-danger">
+            <TrendingDown className="h-3.5 w-3.5" />
+            Loss limit
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-status-success">
+            <TrendingUp className="h-3.5 w-3.5" />
+            Profit target
+            <span className="font-normal text-ink-tertiary">· optional</span>
+          </div>
+        </div>
 
-        <RiskSliderPanel
-          index="2"
-          title="Per-Trade Loss Limit"
-          subtitle="Max loss allowed per copied trade"
-          mode={tradeMode}
-          onModeChange={setTradeMode}
-          value={maxLossPerTradeUsd}
-          onValueChange={setMaxLossPerTradeUsd}
-          valueLabel="Max loss per trade (Hard)"
-          min={20}
-          max={2000}
-          step={20}
-          ticks={['$20', '$50', '$100', '$200', '$500', '$1,000', '$2,000']}
-          tickValues={[20, 50, 100, 200, 500, 1000, 2000]}
-          displayValue={formatMoney(maxLossPerTradeUsd)}
-        />
+        {/* Rows */}
+        {(
+          [
+            { label: 'Per trade', lossVal: lossPerTrade, setLoss: setLossPerTrade, profitVal: profitPerTrade, setProfit: setProfitPerTrade },
+            { label: 'Per day',   lossVal: lossPerDay,   setLoss: setLossPerDay,   profitVal: profitPerDay,   setProfit: setProfitPerDay   },
+            { label: 'Per week',  lossVal: lossPerWeek,  setLoss: setLossPerWeek,  profitVal: profitPerWeek,  setProfit: setProfitPerWeek  },
+          ] as const
+        ).map(({ label, lossVal, setLoss, profitVal, setProfit }) => (
+          <div
+            key={label}
+            className="mb-ds-2 grid grid-cols-[120px_1fr_1fr] items-center gap-x-ds-2"
+          >
+            <span className="text-xs font-medium text-ink-secondary">{label}</span>
+
+            {/* Loss input — red-tinted border */}
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs text-ink-tertiary">
+                $
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="No limit"
+                value={lossVal}
+                onChange={(e) => setLoss(e.target.value)}
+                className="h-8 w-full rounded-md border border-status-danger/25 bg-[#0f0b0b] pl-5 pr-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-status-danger/50 focus:ring-0"
+              />
+            </div>
+
+            {/* Profit input — neutral border */}
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs text-ink-tertiary">
+                $
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="No limit"
+                value={profitVal}
+                onChange={(e) => setProfit(e.target.value)}
+                className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] pl-5 pr-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-border-ds-default focus:ring-0"
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-ds-3 lg:grid-cols-3">
-        <StepperPanel
-          icon={<FileText className="h-5 w-5" />}
-          title="Max contracts / trade"
-          subtitle="Quantity cap per copy"
-          value={maxContractsPerTrade}
-          onChange={setMaxContractsPerTrade}
-          step={1}
-        />
-        <StepperPanel
-          icon={<Layers className="h-5 w-5" />}
-          title="Max position size"
-          subtitle="Total open contracts"
-          value={maxPositionSize}
-          onChange={setMaxPositionSize}
-          step={1}
-        />
-        <StepperPanel
-          icon={<Shield className="h-5 w-5" />}
-          title="Max loss per trade"
-          subtitle="Auto-flattens on loss"
-          value={maxLossPerTradeUsd}
-          onChange={setMaxLossPerTradeUsd}
-          step={50}
-          prefix="$"
-        />
-      </div>
+      {/* ── FOOTER ──────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-ds-3 border-t border-[rgba(201,166,70,0.10)] px-ds-4 py-ds-3">
+        {/* On breach select */}
+        <div className="flex items-center gap-ds-2">
+          <span className="text-[11px] text-ink-tertiary">On breach:</span>
+          <select
+            value={breachAction}
+            onChange={(e) =>
+              setBreachAction(e.target.value as typeof breachAction)
+            }
+            className="h-7 rounded-md border border-border-ds-subtle bg-[#0f0f0f] px-ds-2 text-[11px] text-ink-primary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
+          >
+            <option value="pause_copies">Pause new copies</option>
+            <option value="stop_copies">Stop all copies</option>
+            <option value="close_lock">Close trades &amp; lock account</option>
+          </select>
+        </div>
 
-      <div className="mt-ds-3 flex justify-end">
+        {/* Save button */}
         <button
+          type="button"
           onClick={handleSave}
           disabled={!dirty || isSaving}
-          className="inline-flex h-10 items-center gap-ds-2 rounded-md bg-gold-primary px-ds-4 text-xs font-semibold text-ink-on-gold shadow-[0_0_18px_rgba(201,166,70,0.22)] transition-colors duration-base hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-gold-primary px-ds-3 text-xs font-semibold text-ink-on-gold shadow-[0_0_14px_rgba(201,166,70,0.20)] transition-colors duration-base hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Save className="h-4 w-4" />
-          {isSaving ? 'Saving...' : 'Save changes'}
+          <Save className="h-3.5 w-3.5" />
+          {isSaving ? 'Saving...' : saveLabel}
         </button>
+      </div>
+
+      {/* ── ADVANCED (collapsible) ───────────────────────────────── */}
+      <div className="border-t border-[rgba(255,255,255,0.05)]">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="flex w-full items-center gap-1.5 px-ds-4 py-ds-2 text-[11px] font-medium text-ink-tertiary transition-colors hover:text-ink-secondary"
+        >
+          {advancedOpen ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+          Advanced
+        </button>
+
+        {advancedOpen && (
+          <div className="grid grid-cols-1 gap-ds-3 px-ds-4 pb-ds-4 lg:grid-cols-2">
+            <StepperPanel
+              icon={<FileText className="h-5 w-5" />}
+              title="Max contracts / trade"
+              subtitle="Quantity cap per copy"
+              value={maxContracts}
+              onChange={setMaxContracts}
+              step={1}
+            />
+            <StepperPanel
+              icon={<Layers className="h-5 w-5" />}
+              title="Max position size"
+              subtitle="Total open contracts"
+              value={maxPositionSize}
+              onChange={setMaxPositionSize}
+              step={1}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
 });
 
-const RiskSliderPanel = memo(function RiskSliderPanel({
-  index,
-  title,
-  subtitle,
-  mode,
-  onModeChange,
-  value,
-  onValueChange,
-  valueLabel,
-  min,
-  max,
-  step,
-  ticks,
-  tickValues,
-  displayValue,
-}: {
-  index: string;
-  title: string;
-  subtitle: string;
-  mode: 'soft' | 'hard';
-  onModeChange: (mode: 'soft' | 'hard') => void;
-  value: string;
-  onValueChange: (value: string) => void;
-  valueLabel: string;
-  min: number;
-  max: number;
-  step: number;
-  ticks: string[];
-  tickValues: number[];
-  displayValue: string;
-}) {
-  const numericValue = Number(value) || min;
-  const clampedValue = Math.min(max, Math.max(min, numericValue));
-  const valueToPercent = (currentValue: number) => {
-    const lastIndex = tickValues.length - 1;
-    if (currentValue <= tickValues[0]) return 0;
-    if (currentValue >= tickValues[lastIndex]) return 100;
-
-    const segmentIndex = tickValues.findIndex(
-      (tick, index) => index < lastIndex && currentValue >= tick && currentValue <= tickValues[index + 1],
-    );
-    const safeIndex = Math.max(0, segmentIndex);
-    const start = tickValues[safeIndex];
-    const end = tickValues[safeIndex + 1];
-    const segmentProgress = (currentValue - start) / (end - start);
-
-    return ((safeIndex + segmentProgress) / lastIndex) * 100;
-  };
-  const percentToValue = (percent: number) => {
-    const lastIndex = tickValues.length - 1;
-    const scaled = (Math.min(100, Math.max(0, percent)) / 100) * lastIndex;
-    const startIndex = Math.min(lastIndex - 1, Math.floor(scaled));
-    const segmentProgress = scaled - startIndex;
-    const rawValue =
-      tickValues[startIndex] +
-      (tickValues[startIndex + 1] - tickValues[startIndex]) * segmentProgress;
-
-    return Math.round(rawValue / step) * step;
-  };
-  const sliderPercent = valueToPercent(clampedValue);
-
-  return (
-    <section className="rounded-md border border-border-ds-subtle bg-[#080808] p-ds-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <div className="mb-ds-3 flex items-start gap-ds-2">
-        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gold-border bg-gold-primary/10 text-xs font-semibold text-gold-primary">
-          {index}
-        </span>
-        <div>
-          <div className="flex items-center gap-ds-1">
-            <h3 className="text-sm font-semibold text-ink-primary">{title}</h3>
-            <Info className="h-3.5 w-3.5 text-ink-tertiary" />
-          </div>
-          <p className="mt-1 text-[11px] text-ink-tertiary">{subtitle}</p>
-        </div>
-      </div>
-
-      <div className="mb-ds-4 grid grid-cols-2 overflow-hidden rounded-md border border-border-ds-subtle bg-[#0b0b0b]">
-        <ModeButton mode="soft" activeMode={mode} onClick={() => onModeChange('soft')} />
-        <ModeButton mode="hard" activeMode={mode} onClick={() => onModeChange('hard')} />
-      </div>
-
-      <div className="mb-ds-2 text-xs font-medium text-ink-primary">{valueLabel}</div>
-      <div className="mb-ds-2 text-center text-xl font-semibold text-gold-primary">
-        {displayValue}
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={0.1}
-        value={sliderPercent}
-        onChange={(e) => onValueChange(String(percentToValue(Number(e.target.value))))}
-        className="risk-range h-2 w-full"
-        style={{ '--risk-fill': `${sliderPercent}%` } as CSSProperties}
-      />
-      <div className="mt-ds-2 grid grid-cols-7 text-center text-[11px] font-medium text-ink-tertiary">
-        {ticks.map((tick) => (
-          <span key={tick}>{tick}</span>
-        ))}
-      </div>
-    </section>
-  );
-});
-
-const ModeButton = memo(function ModeButton({
-  mode,
-  activeMode,
-  onClick,
-}: {
-  mode: 'soft' | 'hard';
-  activeMode: 'soft' | 'hard';
-  onClick: () => void;
-}) {
-  const active = mode === activeMode;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex h-12 flex-col items-center justify-center gap-0.5 border transition-colors duration-base ${
-        active
-          ? 'border-gold-border bg-gold-primary/10 text-gold-primary'
-          : 'border-transparent text-ink-secondary hover:bg-surface-2 hover:text-ink-primary'
-      }`}
-    >
-      <div className="flex items-center gap-ds-1 text-xs font-semibold">
-        <Shield className="h-3.5 w-3.5" />
-        <span>{mode === 'soft' ? 'Soft' : 'Hard'}</span>
-      </div>
-      <span className="text-[11px] text-current opacity-80">
-        {mode === 'soft' ? 'Pause new copies' : 'Stop all copies'}
-      </span>
-    </button>
-  );
-});
+// ── StepperPanel (reused in Advanced) ──────────────────────────────────────
 
 const StepperPanel = memo(function StepperPanel({
   icon,
@@ -452,10 +569,7 @@ const StepperPanel = memo(function StepperPanel({
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-ds-1">
-            <h3 className="truncate text-sm font-semibold text-ink-primary">{title}</h3>
-            <Info className="h-3.5 w-3.5 flex-shrink-0 text-ink-tertiary" />
-          </div>
+          <h3 className="truncate text-sm font-semibold text-ink-primary">{title}</h3>
           <p className="mt-1 text-xs text-ink-secondary">{subtitle}</p>
           <div className="mt-ds-3 grid h-9 grid-cols-[48px_1fr_48px] overflow-hidden rounded-md border border-border-ds-subtle bg-[#101010]">
             <button

@@ -1,7 +1,9 @@
 // src/features/automation/components/AccountPicker.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Small reusable select of the user's broker_connections.
-// Uses the canonical useBrokerConnections hook.
+// Small reusable select of the user's Tradovate portfolios (copier-eligible).
+// Emits a SelectedAccount so callers receive full account identity, not just
+// an opaque UUID. For the risk-rule caller, includeGlobal=true allows null
+// (global default). For copier source/destination, includeGlobal=false.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
@@ -11,36 +13,60 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
+import { usePortfolios } from '@/hooks/usePortfolios';
 import { SectionSpinner } from '@/components/ds/Spinner';
+import type { SelectedAccount } from '../lib/automationTypes';
 
 interface AccountPickerProps {
-  /** Currently selected broker_connection id, or null for "Global default". */
+  /** Currently selected Tradovate account_id as text, or null for "Global default". */
   value: string | null;
-  onChange: (value: string | null) => void;
-  /** Whether to include a "Global default" option. Default: true. */
+  onChange: (account: SelectedAccount | null) => void;
+  /** Whether to include a "Global (all accounts)" (null) option. Default: true. */
   includeGlobal?: boolean;
+  /** Alias for includeGlobal — prefer this name for new callers. */
+  allowGlobal?: boolean;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
 }
 
+const GLOBAL_SENTINEL = '__global__';
+
 export function AccountPicker({
   value,
   onChange,
   includeGlobal = true,
+  allowGlobal,
   placeholder = 'Select account',
   disabled = false,
   className,
 }: AccountPickerProps) {
-  const { connections, isLoading } = useBrokerConnections({ active: true });
+  // allowGlobal is an alias; if explicitly provided it takes precedence.
+  const showGlobal = allowGlobal !== undefined ? allowGlobal : includeGlobal;
+  const { portfolios, isLoading } = usePortfolios();
 
   if (isLoading) return <SectionSpinner />;
 
-  const selectValue = value ?? (includeGlobal ? '__global__' : '');
+  // Only Tradovate accounts are copier-eligible (NT8 agent matches by account name).
+  const eligible = portfolios.filter(
+    (p) => p.is_active && p.tradovate_account_id != null,
+  );
+
+  const selectValue = value ?? (showGlobal ? GLOBAL_SENTINEL : '');
 
   const handleChange = (v: string) => {
-    onChange(v === '__global__' ? null : v);
+    if (v === GLOBAL_SENTINEL) {
+      onChange(null);
+      return;
+    }
+    const found = eligible.find((p) => String(p.tradovate_account_id) === v);
+    if (!found) return;
+    onChange({
+      account_id: String(found.tradovate_account_id!),
+      account_name: found.name,
+      broker: 'tradovate',
+      environment: found.environment ?? null,
+    });
   };
 
   return (
@@ -49,17 +75,17 @@ export function AccountPicker({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {includeGlobal && (
-          <SelectItem value="__global__">Global default (all accounts)</SelectItem>
+        {showGlobal && (
+          <SelectItem value={GLOBAL_SENTINEL}>Global (all accounts)</SelectItem>
         )}
-        {connections.map((conn) => (
-          <SelectItem key={conn.id} value={conn.id}>
-            {conn.connection_name ?? conn.account_name ?? conn.broker} — {conn.environment}
+        {eligible.map((p) => (
+          <SelectItem key={p.id} value={String(p.tradovate_account_id!)}>
+            {p.name} — {p.environment ?? 'unknown'}
           </SelectItem>
         ))}
-        {connections.length === 0 && !includeGlobal && (
+        {eligible.length === 0 && !showGlobal && (
           <SelectItem value="" disabled>
-            No active connections
+            No Tradovate accounts connected
           </SelectItem>
         )}
       </SelectContent>

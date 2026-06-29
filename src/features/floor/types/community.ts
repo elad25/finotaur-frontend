@@ -7,6 +7,8 @@
 // trade_exit) come back NULL from list_global_feed when hidden. The UI must
 // treat NULL as "hidden", not "zero".
 
+import type { ReactionAggregate } from '@/constants/feedReactions';
+
 // ── Feed ─────────────────────────────────────────────────────────────────────
 
 /** Row returned by list_global_feed(p_before, p_limit). */
@@ -36,11 +38,10 @@ export interface GlobalFeedItem {
   pinned: boolean;
   created_at: string;
   comment_count: number;
-  up_count: number;
-  down_count: number;
-  repost_count: number;
-  /** The caller's current reaction, or null if none. */
-  my_reaction: 'up' | 'down' | 'repost' | null;
+  reaction_count: number;
+  reactions: ReactionAggregate[];
+  /** The caller's current reaction emoji, or null if none. */
+  my_reaction: string | null;
   /** The trader's self-tagged emotion for the attached trade; NULL when not tagged. */
   trade_emotion: string | null;
 }

@@ -10,8 +10,7 @@ import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
 import { usePortfolios } from '@/hooks/usePortfolios';
-import { useAccountSnapshots } from '@/hooks/useAccountSnapshots';
-import type { PositionEntry } from '@/hooks/useAccountSnapshots';
+import { useAgentAccountSnapshots } from '@/features/automation/hooks/useAgentAccountSnapshots';
 import { FlattenConfirmDialog } from './FlattenConfirmDialog';
 import { useFlattenActions } from '@/hooks/useFlattenActions';
 import { useCopyRules } from '@/hooks/useCopyRules';
@@ -104,27 +103,32 @@ const CopyAccountRow = memo(function CopyAccountRow({
     <div
       className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-3 border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2 transition-colors duration-base`}
     >
-      {/* Leader radio col */}
-      <div className="flex items-center justify-center gap-ds-1">
-        <input
-          type="radio"
-          name="leader-select"
-          checked={isLeader}
-          onChange={onSelectLeader}
+      {/* Leader select col — empty gold-bordered square; crown marks the leader */}
+      <div className="flex items-center justify-center">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={isLeader}
+          onClick={onSelectLeader}
           title="Set as leader"
           aria-label={`Set ${row.accountName} as leader`}
-          className="h-3.5 w-3.5 cursor-pointer accent-gold-primary"
-        />
-        {isLeader && <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />}
+          className={`flex h-6 w-6 items-center justify-center rounded-md border transition-colors duration-base ${
+            isLeader
+              ? 'border-gold-primary bg-gold-primary/10'
+              : 'border-gold-border/50 hover:border-gold-primary/70'
+          }`}
+        >
+          {isLeader && <Crown className="h-3.5 w-3.5 text-gold-primary" />}
+        </button>
       </div>
 
       {/* Follow toggle */}
-      <div className="flex items-center">
+      <div className="flex items-center justify-center">
         {!isLeader && (
           <button
             onClick={onToggleFollow}
             disabled={!canFollow}
-            className={`w-9 h-5 rounded-full transition-colors duration-base ${
+            className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
               isFollowing
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
@@ -133,8 +137,8 @@ const CopyAccountRow = memo(function CopyAccountRow({
             title={canFollow ? undefined : 'Select a leader account first'}
           >
             <span
-              className={`block w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
-                isFollowing ? 'translate-x-5' : 'translate-x-1'
+              className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-base ${
+                isFollowing ? 'left-[18px]' : 'left-0.5'
               }`}
             />
           </button>
@@ -164,7 +168,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Ratio — inline editable for followers, empty for leader */}
-      <div className="flex items-center">
+      <div className="flex items-center justify-center">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
@@ -188,7 +192,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Cross toggle — for followers only */}
-      <div className="flex items-center">
+      <div className="flex items-center justify-center">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
@@ -206,8 +210,8 @@ const CopyAccountRow = memo(function CopyAccountRow({
             title="When enabled, ES copies to MES, NQ to MNQ, and other supported contracts copy to their micro pair"
           >
             <span
-              className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
-                rule?.cross_to_micro ? 'translate-x-[18px]' : 'translate-x-0.5'
+              className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-base ${
+                rule?.cross_to_micro ? 'left-[18px]' : 'left-0.5'
               }`}
             />
           </button>
@@ -256,7 +260,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-start">
+      <div className="flex items-center justify-center">
         <button
           onClick={onFlatten}
           className="text-xs text-num-negative hover:text-num-negative/80 transition-colors duration-base"
@@ -274,7 +278,7 @@ export function CopyTradingDashboard() {
   const { connections } = useBrokerConnections({ active: true, purpose: 'copier' });
   const { liveCredentialIds } = useEngineSessions();
   const { portfolios } = usePortfolios();
-  const { snapshotFor } = useAccountSnapshots();
+  const { snapshotByAccountName } = useAgentAccountSnapshots();
   const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
     { id: 'asset-1', symbol: 'NQ' },
   ]);
@@ -344,47 +348,49 @@ export function CopyTradingDashboard() {
         const tokenExpired = c.token_expires_at
           ? new Date(c.token_expires_at) < new Date()
           : false;
-        const live = liveCredentialIds.has(c.id);
-        const issue = !live && ((c.is_active && c.status === 'connected') || tokenExpired);
+        const cloudLive = liveCredentialIds.has(c.id);
+        const issue = !cloudLive && ((c.is_active && c.status === 'connected') || tokenExpired);
 
-        const snap = snapshotFor(c.id);
+        // Agent snapshot — matched by account_name (case-insensitive, trimmed).
+        // Falls back to null when the agent hasn't reported for this account yet.
+        const agentSnap = snapshotByAccountName(c.account_name ?? c.account_id ?? '');
 
-        let activePosition: PositionEntry | null = null;
-        if (snap?.positions?.length) {
-          if (instrument) {
-            activePosition =
-              snap.positions.find((p) =>
-                p.contractName?.toUpperCase().includes(instrument.toUpperCase()),
-              ) ?? null;
-          }
-          if (!activePosition) {
-            activePosition =
-              [...snap.positions].sort(
-                (a, b) => Math.abs(b.netPos ?? 0) - Math.abs(a.netPos ?? 0),
-              )[0] ?? null;
-          }
+        // Online = agent snapshot exists AND captured_at < 30 s ago.
+        // Falls back to the cloud engine's live flag when no agent snap is available.
+        const live = agentSnap?.online ?? cloudLive;
+
+        // Active position: match the selected instrument symbol against agent positions.
+        // Agent positions use `symbol` (e.g. "NQM5"); cloud used contractName.
+        const agentPositions = agentSnap?.positions ?? [];
+        let activeAgentPosition = agentPositions.find((p) =>
+          p.symbol?.toUpperCase().includes(instrument.toUpperCase()),
+        ) ?? null;
+        if (!activeAgentPosition && agentPositions.length > 0) {
+          // Fall back to largest absolute qty position when no symbol match.
+          activeAgentPosition = [...agentPositions].sort(
+            (a, b) => Math.abs(b.qty) - Math.abs(a.qty),
+          )[0] ?? null;
         }
 
         return {
           id: c.id,
           connectionName: c.connection_name ?? c.broker,
           accountName:    c.account_name ?? c.account_id,
-          symbol:         activePosition?.contractName ?? instrument,
+          symbol:         activeAgentPosition?.symbol ?? instrument,
           live,
           issue,
-          position:    activePosition?.netPos ?? null,
-          balance:     snap?.cashBalance     ?? null,
-          dayPnL:      snap?.realizedPnL     ?? null,
-          openPnL:     snap?.openPnL         ?? null,
-          qty:
-            activePosition && activePosition.netPos != null
-              ? Math.abs(activePosition.netPos)
-              : null,
+          // Live numeric fields come from the agent snapshot.
+          // Render null (→ '—') when no agent snapshot exists, not 0.
+          position: agentSnap != null ? (activeAgentPosition?.qty ?? null) : null,
+          balance:  agentSnap?.balance  ?? null,
+          dayPnL:   agentSnap?.dayPnl   ?? null,
+          openPnL:  agentSnap?.openPnl  ?? null,
+          qty:      agentSnap != null ? (agentSnap.qty > 0 ? agentSnap.qty : null) : null,
           following:   c.is_active,
           portfolioId,
         };
       });
-  }, [connections, liveCredentialIds, portfolios, snapshotFor, instrument]);
+  }, [connections, liveCredentialIds, portfolios, snapshotByAccountName, instrument]);
 
   // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
@@ -704,19 +710,19 @@ export function CopyTradingDashboard() {
         <div
           className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-2 border-b border-border-ds-subtle text-[10px] font-medium uppercase tracking-wider text-ink-secondary`}
         >
-          <div>Leader</div>
-          <div>Follow</div>
+          <div className="text-center">Leader</div>
+          <div className="text-center">Follow</div>
           <div>Connection</div>
           <div>Account</div>
           <div>Symbol</div>
-          <div>Ratio</div>
-          <div>Cross</div>
+          <div className="text-center">Ratio</div>
+          <div className="text-center">Cross</div>
           <div className="text-right">Position</div>
           <div className="text-right">Balance</div>
           <div className="text-right">Day PnL</div>
           <div className="text-right">Open PnL</div>
           <div className="text-right">Qty</div>
-          <div>Actions</div>
+          <div className="text-center">Actions</div>
         </div>
 
         {/* Rows */}

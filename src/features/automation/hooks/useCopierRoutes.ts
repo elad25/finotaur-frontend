@@ -48,20 +48,26 @@ export function useCopierRoutes() {
    * Upsert a copier route and its targets via RPC.
    * Pass `routeId` to update an existing route; omit (or pass undefined) to create.
    *
-   * @param routeId        Existing route UUID, or undefined to create.
-   * @param sourceId       source_connection_id
-   * @param label          Human-readable route name.
-   * @param symbolFilter   Array of symbols to copy (empty = all).
-   * @param copyOpens      Copy position opens.
-   * @param copyCloses     Copy position closes.
-   * @param reverse        Reverse the trade direction.
-   * @param isActive       Whether the route is live.
-   * @param targets        Array of destination targets.
+   * @param routeId            Existing route UUID, or undefined to create.
+   * @param sourceAccountId    Tradovate account id as text.
+   * @param sourceAccountName  Portfolio display name (NT8 agent matches by name).
+   * @param sourceBroker       Broker string, e.g. 'tradovate'.
+   * @param sourceEnvironment  'live' | 'demo' | null.
+   * @param label              Human-readable route name.
+   * @param symbolFilter       Array of symbols to copy (empty = all).
+   * @param copyOpens          Copy position opens.
+   * @param copyCloses         Copy position closes.
+   * @param reverse            Reverse the trade direction.
+   * @param isActive           Whether the route is live.
+   * @param targets            Array of destination targets.
    */
   const upsertRoute = useCallback(
     async (params: {
       routeId?: string;
-      sourceId: string;
+      sourceAccountId: string;
+      sourceAccountName: string;
+      sourceBroker: string | null;
+      sourceEnvironment: string | null;
       label: string;
       symbolFilter: string[];
       copyOpens: boolean;
@@ -74,7 +80,10 @@ export function useCopierRoutes() {
 
       const { data, error: e } = await supabase.rpc('automation_upsert_copier_route', {
         p_route_id: params.routeId ?? null,
-        p_source: params.sourceId,
+        p_source_account_id: params.sourceAccountId,
+        p_source_account_name: params.sourceAccountName,
+        p_source_broker: params.sourceBroker ?? null,
+        p_source_environment: params.sourceEnvironment ?? null,
         p_label: params.label,
         p_symbol_filter: params.symbolFilter,
         p_copy_opens: params.copyOpens,

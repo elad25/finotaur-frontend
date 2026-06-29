@@ -112,6 +112,7 @@ type EnvironmentType =
   | 'top-secret'
   | 'trading-arena'
   | 'mentorship'
+  | 'mentor'
   | 'automation';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
@@ -338,10 +339,14 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'mentorship': [
-    { label: 'Global', path: '/app/floor/community', icon: Globe, beta: true },
-    { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap, beta: true },
+    { label: 'Feed', path: '/app/floor/feed', icon: Newspaper, beta: true },
+    { label: 'Leaderboard', path: '/app/floor/leaderboard', icon: Trophy, beta: true },
     { label: 'DM', path: '/app/floor/dm', icon: MessageSquare, beta: true },
-    { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users, beta: true },
+  ],
+
+  'mentor': [
+    { label: 'Mentor Mode', path: '/app/mentor/mode', icon: Users, beta: true },
+    { label: 'Rooms', path: '/app/mentor/rooms', icon: GraduationCap, beta: true },
   ],
 
   admin: [
@@ -445,7 +450,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   useEffect(() => {
-    if (location.pathname.startsWith('/app/floor')) {
+    if (location.pathname.startsWith('/app/floor') || location.pathname.startsWith('/app/mentor')) {
       setIsExpanded(false);
       localStorage.setItem(storageKey, 'false');
     }
@@ -493,6 +498,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
     if (path.startsWith('/app/connections')) return 'connections';
+    if (path.startsWith('/app/mentor')) return 'mentor';
     if (path.startsWith('/app/floor')) return 'mentorship';
     if (path.startsWith('/app/journal')) return 'journal';
 
@@ -599,7 +605,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       '/app/forex/overview',
       '/app/commodities/overview',
       '/app/ai/overview',
-      '/app/copy-trade/overview',
+      '/app/automation/copier',
       '/app/funding/overview',
       '/app/settings',
     ];

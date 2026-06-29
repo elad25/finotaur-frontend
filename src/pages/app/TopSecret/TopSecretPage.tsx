@@ -5,7 +5,7 @@
 // ================================================
 
 import React, { useState, useEffect, useCallback, lazy, Suspense, memo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Loader2, CheckCircle } from 'lucide-react';
@@ -23,7 +23,6 @@ const TopSecretDashboard = lazy(() => import('./TopSecretDashboard'));
 
 interface TopSecretStatus {
   isActive: boolean;
-  isAdmin: boolean;
   status: 'inactive' | 'active' | 'cancelled' | null;
   expiresAt: Date | null;
 }
@@ -126,7 +125,6 @@ const ErrorState = memo(function ErrorState() {
 // ========================================
 
 export default function TopSecretPage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
 
@@ -146,7 +144,7 @@ export default function TopSecretPage() {
       const { data: profile, error } = await withTimeout(
         supabase
           .from('profiles')
-          .select('role, top_secret_enabled, top_secret_status, top_secret_expires_at')
+          .select('top_secret_enabled, top_secret_status, top_secret_expires_at')
           .eq('id', user.id)
           .maybeSingle(),
         SUPABASE_TIMEOUT_MS,
@@ -155,14 +153,12 @@ export default function TopSecretPage() {
 
       if (error) throw error;
 
-      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
       const isActive = ['active', 'trial', 'trialing'].includes(profile?.top_secret_status || '') && profile?.top_secret_enabled === true;
       const expiresAt = profile?.top_secret_expires_at ? new Date(profile.top_secret_expires_at) : null;
       const isExpired = expiresAt && expiresAt < new Date();
 
       return {
         isActive: isActive && !isExpired,
-        isAdmin,
         status: profile?.top_secret_status || 'inactive',
         expiresAt,
       };
@@ -207,7 +203,7 @@ export default function TopSecretPage() {
 
       // Not logged in - show landing
       if (!user?.id) {
-        setStatus({ isActive: false, isAdmin: false, status: null, expiresAt: null });
+        setStatus({ isActive: false, status: null, expiresAt: null });
         setPageState('show_landing');
         return;
       }
@@ -219,12 +215,6 @@ export default function TopSecretPage() {
       if (currentStatus === null && user?.id) {
         console.error('[TopSecret] Failed to load profile status; showing error UI');
         setPageState('error');
-        return;
-      }
-
-      // Admin redirect
-      if (currentStatus?.isAdmin) {
-        navigate('/app/top-secret/admin', { replace: true });
         return;
       }
 
@@ -241,7 +231,7 @@ export default function TopSecretPage() {
     }
 
     initializePage();
-  }, [user, authLoading, navigate, isPaymentReturn, checkTopSecretStatus]);
+  }, [user, authLoading, isPaymentReturn, checkTopSecretStatus]);
 
   // ========================================
   // Render

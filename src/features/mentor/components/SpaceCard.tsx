@@ -2,15 +2,17 @@
 // Mentor-space card shown in the Spaces list grid.
 // Props: { space, onClick, onDelete?, onLeave? }
 //
-// Layout: avatar (or gold monogram) | name + role pill | member count | description (2-line clamp).
+// Layout: avatar (or gold monogram) | name + role pill | member count | description.
 // Hover: gold border via DS Card `featured` variant on hover, cursor-pointer.
 // 3-dot menu: owner → Delete Room; non-owner → Leave Room. Inline confirm footer.
+// Owner affordances: "Add a description" dashed button (empty) or pencil edit link (filled).
 
 import { useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Pencil } from 'lucide-react';
 import type { SpaceListItem, SpaceRole } from '@/features/mentor/types/mentorship';
 import { Card } from '@/components/ds/Card';
 import { cn } from '@/lib/utils';
+import { EditSpaceDescriptionDialog } from '@/features/mentor/components/EditSpaceDescriptionDialog';
 
 // ── Role badge labels ──────────────────────────────────────────────────────────
 
@@ -52,8 +54,11 @@ export interface SpaceCardProps {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function SpaceCard({ space, onClick, onDelete, onLeave }: SpaceCardProps) {
-  const { name, avatar_url, role, member_count, description } = space;
+  const { space_id, name, avatar_url, role, member_count, description } = space;
   const [confirmAction, setConfirmAction] = useState<'delete' | 'leave' | null>(null);
+  const [editDescOpen, setEditDescOpen] = useState(false);
+
+  const isOwner = role === 'owner';
 
   const hasMenu = !!(onDelete || onLeave);
 
@@ -97,6 +102,8 @@ export function SpaceCard({ space, onClick, onDelete, onLeave }: SpaceCardProps)
       }}
       className={cn(
         'cursor-pointer',
+        // Taller card (~3x) — content stays anchored to the top, extra height grows downward.
+        'min-h-[420px] flex flex-col',
         // Hover: upgrade border to gold-border per DS Card featured behaviour.
         'hover:border-gold-border',
         'transition-colors duration-base ease-out',
@@ -158,17 +165,50 @@ export function SpaceCard({ space, onClick, onDelete, onLeave }: SpaceCardProps)
         </p>
       )}
 
-      {/* ── Description ── */}
-      {!confirmAction && description && (
-        <p
-          className={cn(
-            'mt-ds-2',
-            'text-[13px] text-ink-secondary leading-[1.5]',
-            'line-clamp-2',
-          )}
-        >
-          {description}
-        </p>
+      {/* ── Description (or owner add-description affordance) ── */}
+      {!confirmAction && (
+        <>
+          {description ? (
+            /* Description is set: show text + owner pencil edit */
+            <div className="mt-ds-2 flex flex-col gap-ds-2">
+              <p className="text-[13px] text-ink-secondary leading-[1.5] line-clamp-6">
+                {description}
+              </p>
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setEditDescOpen(true); }}
+                  className={cn(
+                    'self-start flex items-center gap-[5px]',
+                    'text-[12px] text-ink-muted hover:text-ink-secondary',
+                    'transition-colors duration-base',
+                  )}
+                  aria-label="Edit description"
+                >
+                  <Pencil size={11} strokeWidth={1.5} aria-hidden="true" />
+                  Edit
+                </button>
+              )}
+            </div>
+          ) : isOwner ? (
+            /* No description + owner: dashed "Add a description" affordance */
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setEditDescOpen(true); }}
+              className={cn(
+                'mt-ds-3 w-full flex-1',
+                'flex items-center justify-center',
+                'rounded-[8px] px-ds-4 py-ds-5',
+                'border border-dashed border-border-ds-subtle',
+                'text-[13px] text-ink-muted hover:text-ink-secondary hover:border-border-ds-default',
+                'transition-colors duration-base',
+              )}
+              aria-label="Add a room description"
+            >
+              Add a description — tell members what to expect
+            </button>
+          ) : null /* Non-owner, no description: nothing shown */}
+        </>
       )}
 
       {/* ── Confirm footer ── */}
@@ -199,6 +239,15 @@ export function SpaceCard({ space, onClick, onDelete, onLeave }: SpaceCardProps)
             </button>
           </div>
         </div>
+      )}
+      {/* ── Edit description dialog (owner only, rendered outside click-bubble) ── */}
+      {isOwner && (
+        <EditSpaceDescriptionDialog
+          spaceId={space_id}
+          initialDescription={description ?? null}
+          open={editDescOpen}
+          onClose={() => setEditDescOpen(false)}
+        />
       )}
     </Card>
   );

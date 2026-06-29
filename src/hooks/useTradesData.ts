@@ -144,6 +144,9 @@ export interface Trade {
   setup_quality_rating?: number | null;
   mental_state?: number | null;
   checklist_results?: Record<string, boolean> | null;
+  // User-set annotations on the trade-detail view
+  trade_rating?: number | null;
+  exit_reason?: string | null;
   // R-from-frozen-stop fields (populated by DB trigger)
   r_stop_price?: number | null;
   r_locked_at?: string | null;

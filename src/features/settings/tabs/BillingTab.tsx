@@ -490,7 +490,7 @@ export const BillingTab = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            plan_id: 'plan_PxxbBlSdkyeo7', // Top Secret Yearly plan
+            plan_id: 'plan_7Lf31ygMAMmK8', // Top Secret Yearly plan ($499/yr)
             subscription_category: 'top_secret',
             email: user.email,
             user_id: user.id,

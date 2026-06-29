@@ -20,13 +20,27 @@ function newRuleDefaults(userId: string): AutomationRiskRule {
     id: `new-${Date.now()}`, // placeholder — replaced by DB on insert
     user_id: userId,
     broker_connection_id: null,
+    account_id: null,
+    account_name: null,
     label: 'New rule',
+    // Loss limits
     daily_loss_limit_usd: null,
+    max_loss_per_trade_usd: null,
+    max_weekly_loss_usd: null,
+    // Profit targets
+    trade_profit_target_usd: null,
+    daily_profit_target_usd: null,
+    weekly_profit_target_usd: null,
+    // Position / volume limits
     max_contracts: null,
+    max_position_size: null,
     max_position_usd: null,
     max_trades_per_day: null,
+    // Tilt protection
     tilt_loss_streak: null,
     tilt_cooldown_minutes: null,
+    // Breach action
+    risk_breach_action: 'pause_copies',
     enforce: false,
     is_active: true,
     created_at: now,
@@ -84,7 +98,7 @@ export default function RiskRulesTab() {
             isLoading={monitorLoading}
             isError={monitorError}
             data={undefined}
-            onRetry={() => {/* useTrades/useRiskRules refetch is implicit */}}
+            onRetry={refetch}
           >
             {() => null}
           </DataState>

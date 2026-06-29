@@ -144,7 +144,9 @@ const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI
 // Automation — web config layer (Session 1: UI only, no execution)
 const AutomationShell = lazy(() => import("@/features/automation/AutomationShell"));
 const AutomationRiskTab = lazy(() => import("@/features/automation/tabs/RiskRulesTab"));
-const AutomationCopierTab = lazy(() => import("@/features/automation/tabs/CopierRoutesTab"));
+// Copier tab = the unified live dashboard (leader/follow + live positions/balance/PnL + flatten).
+// Route config CRUD (CopierRoutesTab) is folded into this table in Phase 2.
+const AutomationCopierTab = lazy(() => import("@/components/copyTrading/CopyTradingDashboard"));
 const AutomationAgentTab = lazy(() => import("@/features/automation/tabs/AgentStatusTab"));
 
 const SettingsShell = lazy(() => import("@/features/settings/SettingsShell"));
@@ -226,6 +228,7 @@ const JournalSettings = lazy(async () => {
   const Component = (module as any).default ?? (module as any).JournalSettings ?? Object.values(module)[0];
   return { default: Component };
 });
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained for Phase 2 removal (copy-trade unification)
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 const Mentor = lazy(() => import("@/features/mentor/pages/Mentor"));
 const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
@@ -234,7 +237,8 @@ const TradeCompare = lazy(() => import("@/pages/app/journal/TradeCompare"));
 // Mentorship
 const MentorshipSpaces = lazy(() => import("@/features/mentor/pages/Spaces"));
 const SpaceDetail = lazy(() => import("@/features/mentor/pages/SpaceDetail"));
-const Community = lazy(() => import("@/features/floor/pages/Community"));
+const FloorFeed = lazy(() => import("@/features/floor/pages/Feed"));
+const FloorLeaderboard = lazy(() => import("@/features/floor/pages/Leaderboard"));
 const DirectMessages = lazy(() => import("@/features/floor/pages/DirectMessages"));
 
 // Backtest Pages
@@ -274,7 +278,6 @@ const AdminSupportAiDrafts = lazy(() => import("@/pages/app/all-markets/admin/Su
 // as an orphan until Phase 0.5 verifies the new shell is stable in prod.
 const AdminCRMShell = lazy(() => import("@/pages/app/admin"));
 const AffiliateSmartPage = lazy(() => import("@/pages/app/all-markets/affiliate/AffiliateSmartPage"));  // 🤝 NEW
-const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
 const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
 // Catalyst Intelligence Deck — admin Pattern Library (Tree #2, 2026-05-26)
 const AdminPatternLibrary = lazy(() => import("@/pages/app/admin/PatternLibrary"));
@@ -529,8 +532,6 @@ function AppContent() {
           <Route path="admin/*" element={<ProtectedAdminRoute><SuspenseRoute><AdminCRMShell /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
-          <Route path="top-secret/admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="all-markets/top-secret-admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
           {/* Catalyst Intelligence Deck — admin Pattern Library (Tree #2) */}
           <Route path="admin/pattern-library" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibrary /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="admin/upcoming-events" element={<ProtectedAdminRoute><SuspenseRoute><AdminUpcomingEvents /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -720,7 +721,7 @@ function AppContent() {
 <Route path="journal/scenarios" element={<JournalRoute><JournalScenarios /></JournalRoute>} />
 <Route path="journal/community" element={<JournalRoute><JournalCommunity /></JournalRoute>} />
 {/* journal/floor removed — competition lives in Community › Leaderboard tab */}
-<Route path="journal/floor" element={<Navigate to="/app/floor/community" replace />} />
+<Route path="journal/floor" element={<Navigate to="/app/floor/feed" replace />} />
 <Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
 <Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
 <Route path="journal/pricing" element={<JournalRoute><SuspenseRoute><JournalPricingPage /></SuspenseRoute></JournalRoute>} />
@@ -748,22 +749,32 @@ function AppContent() {
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
-<Route path="journal/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
-<Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
+<Route path="journal/trade-copier" element={<Navigate to="/app/automation/copier" replace />} />
+<Route path="journal/copy-trading" element={<Navigate to="/app/automation/copier" replace />} />
 {/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
-{/* journal/mentor → floor/mentor (legacy redirect) */}
-<Route path="journal/mentor" element={<Navigate to="/app/floor/mentor" replace />} />
+{/* journal/mentor → mentor/mode (legacy redirect) */}
+<Route path="journal/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
-        {/* THE FLOOR — beta/admin-only (AdminBetaGate); rooms before :id to avoid wildcard clash */}
-        <Route path="floor" element={<Navigate to="/app/floor/community" replace />} />
-        <Route path="floor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/mentor" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/community" element={<SuspenseRoute><AdminBetaGate><Community /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/dm" element={<SuspenseRoute><AdminBetaGate><DirectMessages /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+        {/* THE FLOOR — Feed / Leaderboard / DM (open to all logged-in users) */}
+        <Route path="floor" element={<Navigate to="/app/floor/feed" replace />} />
+        <Route path="floor/feed" element={<SuspenseRoute><FloorFeed /></SuspenseRoute>} />
+        <Route path="floor/leaderboard" element={<SuspenseRoute><FloorLeaderboard /></SuspenseRoute>} />
+        <Route path="floor/dm" element={<SuspenseRoute><DirectMessages /></SuspenseRoute>} />
+        {/* legacy redirect: old community URL → feed */}
+        <Route path="floor/community" element={<Navigate to="/app/floor/feed" replace />} />
+
+        {/* MENTOR — Mentor Mode + Rooms (open to all logged-in users); split out of The Floor */}
+        <Route path="mentor" element={<Navigate to="/app/mentor/mode" replace />} />
+        <Route path="mentor/mode" element={<SuspenseRoute><Mentor /></SuspenseRoute>} />
+        <Route path="mentor/rooms" element={<SuspenseRoute><MentorshipSpaces /></SuspenseRoute>} />
+        <Route path="mentor/rooms/:id" element={<SuspenseRoute><SpaceDetail /></SuspenseRoute>} />
+        {/* legacy redirects: old /app/floor/* mentor+rooms → /app/mentor/* */}
+        <Route path="floor/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
+        <Route path="floor/rooms" element={<Navigate to="/app/mentor/rooms" replace />} />
+        <Route path="floor/rooms/:id" element={<SuspenseRoute><SpaceDetail /></SuspenseRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/auto" element={<BacktestRoute><AutoBacktest /></BacktestRoute>} />
@@ -805,17 +816,17 @@ function AppContent() {
           <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
           <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
           
-          {/* TRADE COPIER */}
-          {/* TRADE COPIER — beta-only (gated via DomainGuard, domain copy-trade has beta:true in constants/nav.ts) */}
-          <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/manage-risk" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
-          <Route path="copy-trade/top-traders" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/strategies" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/portfolios" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/leaderboard" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/my-copying" element={<Navigate to="/app/copy-trade/overview" replace />} />
-          <Route path="copy-trade/insights" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          {/* TRADE COPIER — Phase 1 unification: all copy-trade/* now redirect to /app/automation/copier.
+              TradeCopier import retained for Phase 2 removal. */}
+          <Route path="copy-trade/overview"     element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/trade-copier" element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/manage-risk"  element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/top-traders"  element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/strategies"   element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/portfolios"   element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/leaderboard"  element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/my-copying"   element={<Navigate to="/app/automation/copier" replace />} />
+          <Route path="copy-trade/insights"     element={<Navigate to="/app/automation/copier" replace />} />
           
           {/* FUNDING */}
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />

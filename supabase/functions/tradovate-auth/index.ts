@@ -606,7 +606,7 @@ Deno.serve(async (req: Request) => {
       const reconnectApiKey = (reconnectPurpose === 'copier' && parsedReconnect.cid && parsedReconnect.sec)
         ? { cid: parsedReconnect.cid, sec: parsedReconnect.sec }
         : undefined;
-      const { accessToken } = await tradovateLogin(env, username, password, reconnectPurpose, reconnectApiKey);
+      const { accessToken, accounts: reconnectAccounts } = await tradovateLogin(env, username, password, reconnectPurpose, reconnectApiKey);
 
       // OQ-VAULT-DRIFT fix: atomic vault + pointer alignment via the RPC (single txn).
       // Re-pass reconnectApiKey so the cid+sec stay in the vault payload.
@@ -636,6 +636,30 @@ Deno.serve(async (req: Request) => {
       // Clear any retry backoff state — reconnect succeeded (sets status='connected')
       await clearRetry(supabaseAdmin, cred.id);
 
+      // Upsert portfolio rows for every account returned by this login.
+      // This is the key fix for eval→live transitions: when a prop-firm user passes
+      // evaluation, a new funded account appears in /account/list with a different
+      // account_id. Without this step, the new account never gets a portfolio row and
+      // its fills are imported without a portfolio association (silent data gap).
+      // Uses the same RPC as mode=login — idempotent, safe to call on every reconnect.
+      for (const acc of reconnectAccounts) {
+        try {
+          await supabaseAdmin.rpc('upsert_portfolio_from_tradovate', {
+            p_user_id:              cred.user_id,
+            p_tradovate_account_id: acc.id,
+            p_account_spec:         `${acc.name}${acc.id}`,
+            p_account_name:         acc.name,
+            p_environment:          env,
+            p_credential_id:        cred.id,
+            p_connection_label:     null,
+          });
+        } catch (portfolioErr) {
+          // Non-fatal: log and continue. The sync will still run; the portfolio
+          // will be created on the next successful login.
+          console.warn(`[tradovate-auth] reconnect: portfolio upsert failed for account ${acc.id}:`, portfolioErr);
+        }
+      }
+
       if (source === 'whop_resume') {
         console.info('[tradovate-auth] reconnect via whop_resume succeeded', { credentialId });
       }
@@ -645,7 +669,7 @@ Deno.serve(async (req: Request) => {
         body: { userId: cred.user_id, environment: env, mode: 'initial' },
       }).catch(() => {});
 
-      return json({ ok: true, source, status: 'connected' });
+      return json({ ok: true, source, status: 'connected', accounts: reconnectAccounts.length });
     }
 
     // ══════════════════════════════════════════════════════════

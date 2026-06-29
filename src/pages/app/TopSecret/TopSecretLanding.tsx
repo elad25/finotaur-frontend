@@ -1,15 +1,11 @@
 // ================================================
-// TOP SECRET LANDING PAGE - Luxury Premium v4.0 OPTIMIZED
+// TOP SECRET LANDING PAGE — The FINOTAUR Intelligence Envelope v5.0
 // File: src/pages/app/TopSecret/TopSecretLanding.tsx
-// 🔥 v4.0: OPTIMIZED version - 1:1 identical to original with memoization
+// 🔥 v5.0: REDESIGNED presentation — "Intelligence Envelope" unified layout
 // ================================================
 
-import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/providers/AuthProvider';
+import React, { useState, memo, useCallback } from 'react';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
-import { supabase } from '@/lib/supabase';
-import { useWarZoneStatus } from '@/hooks/useUserStatus';
 import {
   TrendingUp,
   Bitcoin,
@@ -18,34 +14,20 @@ import {
   Lock,
   Check,
   Shield,
-  Clock,
-  ArrowRight,
-  Crown,
-  Eye,
-  X,
   Target,
   BarChart3,
   Gift,
-  Package,
   Zap,
+  Mail,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ds/Button';
 import { Spinner } from '@/components/ds/Spinner';
 
 // ========================================
 // TYPES
 // ========================================
-
-interface PricingPlan {
-  id: 'monthly' | 'yearly';
-  name: string;
-  price: number;
-  period: string;
-  savings?: string;
-  monthlyEquivalent?: number;
-}
 
 interface ReportType {
   id: string;
@@ -54,6 +36,7 @@ interface ReportType {
   description: string;
   icon: React.ElementType;
   frequency: string;
+  frequencyLabel: string;
   accentColor: string;
   glowColor: string;
   borderGradient: string;
@@ -64,49 +47,26 @@ interface ReportType {
 // CONSTANTS
 // ========================================
 
-const WARZONE_MEMBER_PRICE = 50;
-
-// Finotaur Platform Pricing (War Zone + Top Secret + Journal Premium + Full Platform)
-const FINOTAUR_PRICES = {
-  monthly: 109,
-  yearly: 1090,
-  monthlyEquivalent: 90.83,
-  savings: 90.98, // vs buying separately monthly ($199.98 - $109)
+// ⚠️ PRICING DISPLAY = $50/mo + $499/yr. These are NOT yet wired to Whop products.
+// The 'top_secret' planName currently maps to $89.99/$899 in whop-config.ts.
+// BEFORE PRODUCTION DEPLOY: Elad must create $50/$499 Whop products and their plan IDs
+// must replace top_secret's IDs in whop-config.ts, or the checkout will charge the wrong amount.
+const ENVELOPE_PRICES = {
+  monthly: 50,
+  yearly: 499,
+  monthlyEquivalent: 41.58,
+  savings: 101,
 };
-
-// Top Secret Only Pricing (for non-War Zone members)
-const TOP_SECRET_ONLY_PRICES = {
-  monthly: 89.99,
-  yearly: 899,
-  monthlyEquivalent: 74.92,
-  savings: 180.88,
-};
-
-const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: 'monthly',
-    name: 'Monthly',
-    price: 89.99,
-    period: '/month',
-  },
-  {
-    id: 'yearly',
-    name: 'Yearly',
-    price: 899,
-    period: '/year',
-    savings: 'Save $180.88',
-    monthlyEquivalent: 74.92,
-  },
-];
 
 const REPORT_TYPES: ReportType[] = [
   {
     id: 'ism',
-    name: 'ISM Manufacturing Report',
+    name: 'ISM Macro Report',
     shortName: 'Macro Report',
-    description: 'Deep macro-economic analysis of PMI data with sector impacts and actionable trade setups.',
+    description: 'PMI breakdown, sector impact & trade ideas with R:R.',
     icon: TrendingUp,
-    frequency: 'Monthly (~3rd)',
+    frequency: 'Monthly',
+    frequencyLabel: 'Monthly',
     accentColor: '#F59E0B',
     glowColor: 'rgba(245, 158, 11, 0.4)',
     borderGradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #F59E0B 100%)',
@@ -120,9 +80,10 @@ const REPORT_TYPES: ReportType[] = [
     id: 'company',
     name: 'Company Deep Dive',
     shortName: 'Company Analysis',
-    description: 'Institutional-grade fundamental research with investment thesis and valuation models.',
+    description: 'Fundamental research, thesis & price targets.',
     icon: Building2,
-    frequency: '2x Monthly (5th & 20th)',
+    frequency: '2× monthly · 5th & 20th',
+    frequencyLabel: '2× monthly · 5th & 20th',
     accentColor: '#A855F7',
     glowColor: 'rgba(168, 85, 247, 0.4)',
     borderGradient: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 50%, #A855F7 100%)',
@@ -134,11 +95,12 @@ const REPORT_TYPES: ReportType[] = [
   },
   {
     id: 'crypto',
-    name: 'Crypto Market Intelligence',
+    name: 'Crypto Intelligence',
     shortName: 'Crypto Report',
-    description: 'Professional crypto analysis covering derivatives, on-chain metrics, and key levels.',
+    description: 'Derivatives, on-chain metrics & key levels.',
     icon: Bitcoin,
-    frequency: '2x Monthly (10th & 25th)',
+    frequency: 'Bi-weekly · 10th & 25th',
+    frequencyLabel: 'Bi-weekly · 10th & 25th',
     accentColor: '#06B6D4',
     glowColor: 'rgba(6, 182, 212, 0.4)',
     borderGradient: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 50%, #06B6D4 100%)',
@@ -148,13 +110,6 @@ const REPORT_TYPES: ReportType[] = [
       'Key Levels & Targets',
     ],
   },
-];
-
-const FEATURES = [
-  { icon: Eye, text: 'Same research Wall Street pays $2,000+/month for' },
-  { icon: Target, text: 'Actionable trade ideas with entry, stop, target' },
-  { icon: BarChart3, text: 'Data-driven analysis, not opinions' },
-  { icon: Clock, text: '5 premium reports delivered monthly' },
 ];
 
 // ========================================
@@ -170,11 +125,11 @@ const containerVariants: Variants = {
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
   },
 };
 
@@ -187,117 +142,185 @@ const BackgroundEffects = memo(function BackgroundEffects() {
   return (
     <>
       <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#12100D] to-[#0B0B0B]" />
-      
+
       {/* Main Golden Glow - Top Center */}
-      <div 
+      <div
         className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[800px] pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse at center top, rgba(201,166,70,0.15) 0%, rgba(180,140,50,0.08) 30%, transparent 70%)',
-          filter: 'blur(60px)'
+          filter: 'blur(60px)',
         }}
       />
-      
+
       {/* Secondary Golden Glow - Middle */}
-      <div 
+      <div
         className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[600px] pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.1) 0%, rgba(150,120,40,0.05) 40%, transparent 70%)',
-          filter: 'blur(80px)'
+          filter: 'blur(80px)',
         }}
       />
-      
+
       {/* Subtle warm accent - Left */}
-      <div 
+      <div
         className="absolute top-1/4 left-0 w-[500px] h-[500px] pointer-events-none"
         style={{
           background: 'radial-gradient(circle at center, rgba(180,140,50,0.06) 0%, transparent 60%)',
-          filter: 'blur(100px)'
+          filter: 'blur(100px)',
         }}
       />
-      
+
       {/* Subtle warm accent - Right */}
-      <div 
+      <div
         className="absolute bottom-1/4 right-0 w-[400px] h-[400px] pointer-events-none"
         style={{
           background: 'radial-gradient(circle at center, rgba(201,166,70,0.05) 0%, transparent 60%)',
-          filter: 'blur(80px)'
+          filter: 'blur(80px)',
         }}
       />
     </>
   );
 });
 
-// Hero Badge Component
-const HeroBadge = memo(function HeroBadge() {
+// ─── Hero: left column ───────────────────────────────────────────────────────
+
+const HeroLeft = memo(function HeroLeft({
+  isLoading,
+  onSubscribe,
+}: {
+  isLoading: boolean;
+  onSubscribe: (plan: 'monthly' | 'yearly') => void;
+}) {
   return (
-    <div 
-      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full mb-8"
-      style={{
-        background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.05) 100%)',
-        border: '1px solid rgba(201,166,70,0.4)',
-        boxShadow: '0 0 40px rgba(201,166,70,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
-      }}
-    >
-      <Lock className="w-5 h-5 text-[#C9A646]" />
-      <span className="text-[#C9A646] font-semibold tracking-wide">Top Secret Intelligence</span>
+    <div className="text-left">
+      {/* Eyebrow badge */}
+      <div
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl mb-8"
+        style={{
+          background: 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.05) 100%)',
+          border: '1px solid rgba(201,166,70,0.35)',
+          boxShadow: '0 0 32px rgba(201,166,70,0.15), inset 0 1px 0 rgba(255,255,255,0.08)',
+        }}
+      >
+        <Mail className="w-4 h-4 text-[#C9A646]" />
+        <span className="text-[#C9A646] text-xs font-semibold tracking-widest uppercase">
+          The FINOTAUR Intelligence Envelope
+        </span>
+      </div>
+
+      {/* Headline */}
+      <h1
+        className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
+        style={{ letterSpacing: '-0.03em' }}
+      >
+        <span className="text-white italic">Institutional intelligence,</span>
+        <br />
+        <span
+          className="bg-clip-text text-transparent"
+          style={{
+            backgroundImage: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+          }}
+        >
+          delivered every trading day.
+        </span>
+      </h1>
+
+      {/* Subheadline */}
+      <p className="text-lg text-slate-400 max-w-lg mb-8 leading-relaxed">
+        One envelope.{' '}
+        <span className="text-[#C9A646] font-semibold">WAR ZONE</span> hits your
+        inbox every market morning — and{' '}
+        <span className="text-[#C9A646] font-semibold">TOP SECRET</span> deep-dive
+        research lands all month long.
+      </p>
+
+      {/* 14-Day Free Trial pill */}
+      <div
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl mb-6"
+        style={{
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%)',
+          border: '1px solid rgba(16,185,129,0.3)',
+          boxShadow: '0 0 24px rgba(16,185,129,0.08)',
+        }}
+      >
+        <Gift className="w-4 h-4 text-emerald-400" />
+        <span className="text-emerald-300 font-semibold text-sm">14-day free trial</span>
+        <span className="text-emerald-600 text-xs">· Cancel anytime</span>
+      </div>
+
+      {/* Primary CTA — DS gold button */}
+      <div className="mb-10">
+        <Button
+          variant="gold"
+          size="xl"
+          onClick={() => onSubscribe('monthly')}
+          disabled={isLoading}
+          showArrow={!isLoading}
+        >
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <Spinner size="sm" color="inherit" />
+              Redirecting...
+            </span>
+          ) : (
+            'Start your 14-day free trial'
+          )}
+        </Button>
+      </div>
+
+      {/* Stats row */}
+      <div className="flex flex-wrap items-center gap-6">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
+            <Calendar className="w-4 h-4 text-[#C9A646]" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm">Daily + monthly</p>
+            <p className="text-xs text-slate-500">Continuous coverage</p>
+          </div>
+        </div>
+        <div className="w-px h-8 bg-slate-700" />
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
+            <Shield className="w-4 h-4 text-[#C9A646]" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm">Institutional</p>
+            <p className="text-xs text-slate-500">Research grade</p>
+          </div>
+        </div>
+        <div className="w-px h-8 bg-slate-700" />
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
+            <Target className="w-4 h-4 text-[#C9A646]" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm">Actionable</p>
+            <p className="text-xs text-slate-500">Trade ideas</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 });
 
-// Stats Row Component
-const StatsRow = memo(function StatsRow() {
-  return (
-    <div className="flex flex-wrap items-center gap-6 mt-10">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
-          <TrendingUp className="w-4 h-4 text-[#C9A646]" />
-        </div>
-        <div>
-          <p className="text-white font-bold">10 Reports</p>
-          <p className="text-xs text-slate-500">Every Month</p>
-        </div>
-      </div>
-      <div className="w-px h-8 bg-slate-700" />
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
-          <Shield className="w-4 h-4 text-[#C9A646]" />
-        </div>
-        <div>
-          <p className="text-white font-bold">Institutional Grade</p>
-          <p className="text-xs text-slate-500">Research Quality</p>
-        </div>
-      </div>
-      <div className="w-px h-8 bg-slate-700" />
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
-          <Target className="w-4 h-4 text-[#C9A646]" />
-        </div>
-        <div>
-          <p className="text-white font-bold">Actionable</p>
-          <p className="text-xs text-slate-500">Trade Ideas</p>
-        </div>
-      </div>
-    </div>
-  );
-});
+// ─── Hero: right column — WAR ZONE "Morning Briefing" preview card ──────────
 
-// Report Preview Card Component
-const ReportPreviewCard = memo(function ReportPreviewCard() {
+const WarZonePreviewCard = memo(function WarZonePreviewCard() {
   return (
     <div className="relative">
-      {/* Glow Effect Behind */}
+      {/* Glow behind */}
       <div
         className="absolute -inset-4 rounded-3xl opacity-40"
         style={{
           background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.3) 0%, transparent 70%)',
-          filter: 'blur(40px)'
+          filter: 'blur(40px)',
         }}
       />
 
-      {/* Report Card */}
       <motion.div
         className="relative"
-        initial={{ opacity: 0, y: 20, rotateY: -5 }}
+        initial={{ opacity: 0, y: 20, rotateY: -4 }}
         animate={{ opacity: 1, y: 0, rotateY: 0 }}
         transition={{ duration: 0.8, delay: 0.3 }}
       >
@@ -306,10 +329,10 @@ const ReportPreviewCard = memo(function ReportPreviewCard() {
           style={{
             background: 'linear-gradient(180deg, #151515 0%, #0A0A0A 100%)',
             border: '1px solid rgba(201,166,70,0.3)',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.1)'
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.1)',
           }}
         >
-          {/* Report Header */}
+          {/* Card header */}
           <div
             className="p-5 flex items-center justify-between"
             style={{ borderBottom: '1px solid rgba(201,166,70,0.2)' }}
@@ -317,109 +340,94 @@ const ReportPreviewCard = memo(function ReportPreviewCard() {
             <div className="flex items-center gap-3">
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{
-                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)'
-                }}
+                style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)' }}
               >
-                <span className="text-black font-bold text-sm">F</span>
+                <Zap className="w-5 h-5 text-black" />
               </div>
               <div>
-                <p className="text-white font-bold">FINOTAUR</p>
-                <p className="text-[#C9A646] text-xs font-semibold">TOP SECRET</p>
+                <p className="text-white font-bold text-xs tracking-widest uppercase">FINOTAUR / WAR ZONE · DAILY</p>
               </div>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#C9A646]/10 border border-[#C9A646]/30">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-[#C9A646] animate-pulse" />
               <span className="text-[#C9A646] text-xs font-semibold">LIVE</span>
             </div>
           </div>
 
-          {/* Report Content Preview */}
+          {/* Card body */}
           <div className="p-6">
-            {/* Report Title */}
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="w-5 h-5 text-amber-400" />
-                <span className="text-amber-400 text-sm font-semibold">ISM Manufacturing Report</span>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-1">January 2025 Analysis</h3>
-              <p className="text-slate-500 text-sm">Published Jan 3, 2025</p>
+            <div className="mb-5">
+              <p className="text-slate-500 text-xs mb-1 font-mono">9:00 AM ET</p>
+              <h3 className="text-xl font-bold text-white">Today's Market Map</h3>
             </div>
 
-            {/* Key Metrics Preview */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                <p className="text-emerald-400 text-xs font-semibold mb-1">PMI Index</p>
-                <p className="text-white text-xl font-bold">52.8</p>
-                <p className="text-emerald-400 text-xs">+1.2 vs prev</p>
+            {/* Metric tiles */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div
+                className="p-3 rounded-xl"
+                style={{
+                  background: 'rgba(201,166,70,0.08)',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                }}
+              >
+                <p className="text-[#C9A646] text-xs font-semibold mb-1">Bias</p>
+                <p className="text-white text-lg font-bold font-mono tabular-nums">RISK ON</p>
               </div>
-              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                <p className="text-blue-400 text-xs font-semibold mb-1">New Orders</p>
-                <p className="text-white text-xl font-bold">54.3</p>
-                <p className="text-blue-400 text-xs">Expanding</p>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <p className="text-amber-400 text-xs font-semibold mb-1">Market Bias</p>
-                <p className="text-white text-xl font-bold">RISK ON</p>
-                <p className="text-amber-400 text-xs">Bullish setup</p>
+              <div
+                className="p-3 rounded-xl"
+                style={{
+                  background: 'rgba(201,166,70,0.06)',
+                  border: '1px solid rgba(201,166,70,0.15)',
+                }}
+              >
+                <p className="text-[#C9A646] text-xs font-semibold mb-1">Setups</p>
+                <p className="text-white text-lg font-bold font-mono tabular-nums">4 today</p>
               </div>
             </div>
 
-            {/* Chart Placeholder */}
+            {/* Faint chart strip */}
             <div
-              className="h-32 rounded-xl mb-4 relative overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.02) 100%)' }}
+              className="h-20 rounded-xl mb-4 relative overflow-hidden"
+              style={{
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.02) 100%)',
+              }}
             >
               <svg className="w-full h-full" preserveAspectRatio="none">
                 <defs>
-                  <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stopColor="#C9A646" stopOpacity="0.3" />
+                  <linearGradient id="warzoneChartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#C9A646" stopOpacity="0.25" />
                     <stop offset="100%" stopColor="#C9A646" stopOpacity="0" />
                   </linearGradient>
                 </defs>
                 <path
-                  d="M0,80 Q50,60 100,65 T200,50 T300,55 T400,30"
+                  d="M0,60 Q60,40 120,45 T240,30 T360,35 T480,15"
                   fill="none"
                   stroke="#C9A646"
-                  strokeWidth="2"
+                  strokeWidth="1.5"
+                  opacity="0.6"
                 />
                 <path
-                  d="M0,80 Q50,60 100,65 T200,50 T300,55 T400,30 L400,128 L0,128 Z"
-                  fill="url(#chartGradient)"
+                  d="M0,60 Q60,40 120,45 T240,30 T360,35 T480,15 L480,80 L0,80 Z"
+                  fill="url(#warzoneChartGrad)"
                 />
               </svg>
-              <div className="absolute bottom-2 right-2 text-xs text-[#C9A646]/60">
-                Sector Performance
-              </div>
-            </div>
-
-            {/* Trade Ideas Teaser */}
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-white font-semibold text-sm">Trade Ideas</span>
-                <span className="text-[#C9A646] text-xs">3 setups included</span>
-              </div>
-              <div className="space-y-2">
-                <div className="h-2 w-full rounded bg-white/10" />
-                <div className="h-2 w-4/5 rounded bg-white/10" />
-              </div>
             </div>
           </div>
 
-          {/* Blur Overlay */}
+          {/* Blur / lock overlay */}
           <div className="absolute inset-0 backdrop-blur-[2px] bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-end justify-center pb-8">
             <div className="text-center">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3"
                 style={{
                   background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-                  boxShadow: '0 0 40px rgba(201,166,70,0.5)'
+                  boxShadow: '0 0 32px rgba(201,166,70,0.5)',
                 }}
               >
-                <Lock className="w-8 h-8 text-black" />
+                <Lock className="w-7 h-7 text-black" />
               </div>
-              <p className="text-white font-bold text-lg mb-1">Unlock Full Report</p>
-              <p className="text-slate-400 text-sm">Subscribe to access all reports</p>
+              <p className="text-white font-bold text-base mb-1">Unlock the envelope</p>
+              <p className="text-slate-400 text-sm">Daily + all research</p>
             </div>
           </div>
         </div>
@@ -428,651 +436,493 @@ const ReportPreviewCard = memo(function ReportPreviewCard() {
   );
 });
 
-// Report Type Card Component
-const ReportTypeCard = memo(function ReportTypeCard({ report }: { report: ReportType }) {
-  const Icon = report.icon;
-  
+// ─── Inside the Envelope: WAR ZONE flagship card ─────────────────────────────
+
+const WarZoneFlagshipCard = memo(function WarZoneFlagshipCard() {
   return (
-    <motion.div
-      className="relative group"
-      whileHover={{ scale: 1.02, y: -8 }}
-      transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+    <div
+      className="relative rounded-2xl p-7 overflow-hidden"
+      style={{
+        background: 'linear-gradient(135deg, rgba(201,166,70,0.10) 0%, rgba(201,166,70,0.04) 100%)',
+        border: '1px solid rgba(201,166,70,0.3)',
+      }}
     >
-      {/* Glow Effect */}
-      <div 
-        className="absolute -inset-[1px] rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl"
-        style={{ background: report.glowColor }}
+      {/* Gold top accent */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px]"
+        style={{
+          background: 'linear-gradient(90deg, transparent 0%, #C9A646 40%, #F4D97B 50%, #C9A646 60%, transparent 100%)',
+        }}
       />
-      
-      {/* Border Gradient */}
-      <div 
-        className="absolute -inset-[1px] rounded-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-300"
-        style={{ background: report.borderGradient, padding: '1px' }}
-      >
-        <div className="w-full h-full rounded-2xl bg-[#0A0A0A]" />
-      </div>
 
-      {/* Card Content */}
-      <div className="relative rounded-2xl p-7 bg-gradient-to-b from-[#111111] to-[#0A0A0A]">
-        {/* Top Accent Line */}
-        <div 
-          className="absolute top-0 left-6 right-6 h-[2px] rounded-full"
-          style={{ background: report.borderGradient }}
-        />
-
+      <div className="flex flex-wrap items-start gap-6">
         {/* Icon */}
-        <div 
-          className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 relative"
+        <div
+          className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
           style={{
-            background: `linear-gradient(135deg, ${report.accentColor}20 0%, ${report.accentColor}05 100%)`,
-            border: `1px solid ${report.accentColor}40`,
-            boxShadow: `0 0 30px ${report.accentColor}20`
+            background: 'linear-gradient(135deg, rgba(201,166,70,0.25) 0%, rgba(201,166,70,0.08) 100%)',
+            border: '1px solid rgba(201,166,70,0.35)',
           }}
         >
-          <Icon className="w-8 h-8" style={{ color: report.accentColor }} />
+          <Zap className="w-7 h-7 text-[#C9A646]" />
         </div>
 
-        {/* Content */}
-        <h3 className="text-xl font-bold text-white mb-3">{report.name}</h3>
-        <p className="text-sm text-slate-400 mb-5 leading-relaxed">{report.description}</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h3 className="text-2xl font-bold text-white">WAR ZONE</h3>
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold"
+              style={{
+                background: 'rgba(201,166,70,0.18)',
+                border: '1px solid rgba(201,166,70,0.35)',
+                color: '#C9A646',
+              }}
+            >
+              <Calendar className="w-3 h-3" />
+              DAILY · FLAGSHIP
+            </span>
+          </div>
+          <p className="text-slate-400 leading-relaxed max-w-xl">
+            Your morning market briefing — global macro, sector rotation &amp; actionable setups.
+            Every trading day, 9:00 AM ET.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+});
 
-        {/* Frequency Badge */}
-        <div className="flex items-center gap-2 mb-6">
-          <div 
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+// ─── Inside the Envelope: report card (2×2 grid) ─────────────────────────────
+
+const EnvelopeReportCard = memo(function EnvelopeReportCard({
+  report,
+}: {
+  report: ReportType;
+}) {
+  const Icon = report.icon;
+  return (
+    <div
+      className="relative rounded-2xl p-6 group"
+      style={{
+        background: 'linear-gradient(180deg, #111111 0%, #0A0A0A 100%)',
+        border: `1px solid ${report.accentColor}25`,
+        transition: 'border-color 200ms ease-out',
+      }}
+      onMouseEnter={(e) =>
+        ((e.currentTarget as HTMLDivElement).style.borderColor = `${report.accentColor}60`)
+      }
+      onMouseLeave={(e) =>
+        ((e.currentTarget as HTMLDivElement).style.borderColor = `${report.accentColor}25`)
+      }
+    >
+      {/* Accent top line */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
+        style={{ background: report.borderGradient }}
+      />
+
+      <div className="flex items-start gap-4">
+        {/* Icon */}
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+          style={{
+            background: `${report.accentColor}15`,
+            border: `1px solid ${report.accentColor}35`,
+          }}
+        >
+          <Icon className="w-5 h-5" style={{ color: report.accentColor }} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <h4 className="text-base font-bold text-white">{report.name}</h4>
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
+              style={{
+                background: `${report.accentColor}15`,
+                border: `1px solid ${report.accentColor}30`,
+                color: report.accentColor,
+              }}
+            >
+              {report.frequencyLabel}
+            </span>
+          </div>
+          <p className="text-sm text-slate-400 leading-relaxed">{report.description}</p>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ─── What Lands in Your Inbox ────────────────────────────────────────────────
+
+const WeekStripSection = memo(function WeekStripSection() {
+  return (
+    <div
+      className="rounded-2xl p-8"
+      style={{
+        background: 'linear-gradient(135deg, rgba(20,18,14,0.95) 0%, rgba(12,11,8,0.98) 100%)',
+        border: '1px solid rgba(201,166,70,0.15)',
+      }}
+    >
+      {/* Section label */}
+      <div className="flex items-center gap-2 mb-6">
+        <Mail className="w-4 h-4 text-[#C9A646]" />
+        <span
+          className="text-xs font-semibold tracking-widest uppercase"
+          style={{ color: 'rgba(201,166,70,0.75)' }}
+        >
+          What lands in your inbox
+        </span>
+      </div>
+
+      {/* Cadence-grouped rows */}
+      <div className="flex flex-col gap-[14px]">
+
+        {/* ROW 1 — DAILY (gold flagship) */}
+        <div
+          className="flex rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(201,166,70,0.10)',
+            border: '1px solid rgba(201,166,70,0.35)',
+          }}
+        >
+          {/* Left label column */}
+          <div
+            className="flex flex-col items-center justify-center gap-1 px-4 py-4 flex-shrink-0"
             style={{
-              background: `${report.accentColor}15`,
-              border: `1px solid ${report.accentColor}30`,
-              color: report.accentColor
+              width: '66px',
+              borderRight: '1px solid rgba(201,166,70,0.25)',
             }}
           >
-            <Calendar className="w-3.5 h-3.5" />
-            {report.frequency}
+            <Zap className="w-4 h-4 text-[#C9A646]" />
+            <span
+              className="text-[9px] font-bold tracking-widest uppercase"
+              style={{ color: 'rgba(201,166,70,0.75)' }}
+            >
+              DAILY
+            </span>
+          </div>
+          {/* Content area */}
+          <div className="flex flex-col justify-center px-5 py-4 gap-0.5">
+            <p className="text-sm font-bold tracking-wide text-[#C9A646]">WAR ZONE</p>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              Every trading day · Mon–Fri, before the U.S. open
+            </p>
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-6" />
+        {/* ROW 2 — WEEKLY */}
+        <div
+          className="flex rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Left label column */}
+          <div
+            className="flex flex-col items-center justify-center gap-1 px-4 py-4 flex-shrink-0"
+            style={{
+              width: '66px',
+              borderRight: '1px solid rgba(255,255,255,0.07)',
+            }}
+          >
+            <Calendar className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.45)' }} />
+            <span
+              className="text-[9px] font-bold tracking-widest uppercase"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+            >
+              WEEKLY
+            </span>
+          </div>
+          {/* Content area — two stacked items */}
+          <div className="flex flex-col justify-center px-5 py-4 gap-0 flex-1">
+            {/* Item 1 */}
+            <div className="flex flex-col gap-0.5 py-2.5">
+              <p className="text-sm font-semibold" style={{ color: '#A855F7' }}>
+                Weekly Tactical Review
+              </p>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                Every Sunday · the week ahead, mapped
+              </p>
+            </div>
+            {/* Thin divider */}
+            <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+            {/* Item 2 */}
+            <div className="flex flex-col gap-0.5 py-2.5">
+              <p className="text-sm font-semibold text-white">Company Deep-Dive</p>
+              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                Sundays · a name worth watching
+              </p>
+            </div>
+          </div>
+        </div>
 
-        {/* Highlights */}
-        <ul className="space-y-3">
-          {report.highlights.map((highlight, idx) => (
-            <li key={idx} className="flex items-center gap-3 text-sm text-slate-300">
-              <div 
+        {/* ROW 3 — MONTHLY */}
+        <div
+          className="flex rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Left label column */}
+          <div
+            className="flex flex-col items-center justify-center gap-1 px-4 py-4 flex-shrink-0"
+            style={{
+              width: '66px',
+              borderRight: '1px solid rgba(255,255,255,0.07)',
+            }}
+          >
+            <BarChart3 className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.45)' }} />
+            <span
+              className="text-[9px] font-bold tracking-widest uppercase"
+              style={{ color: 'rgba(255,255,255,0.35)' }}
+            >
+              MONTHLY
+            </span>
+          </div>
+          {/* Content area — 3-column mini-grid */}
+          <div className="flex items-center px-5 py-4 flex-1">
+            <div className="grid grid-cols-3 gap-4 w-full">
+              {/* Crypto */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5">
+                  <Bitcoin className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#06B6D4' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#06B6D4' }}>
+                    Crypto
+                  </span>
+                </div>
+                <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  10th &amp; 25th
+                </p>
+              </div>
+              {/* ISM */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5">
+                  <BarChart3 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#F59E0B' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#F59E0B' }}>
+                    ISM
+                  </span>
+                </div>
+                <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  On release week
+                </p>
+              </div>
+              {/* Earnings */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#F43F5E' }} />
+                  <span className="text-xs font-semibold" style={{ color: '#F43F5E' }}>
+                    Earnings
+                  </span>
+                </div>
+                <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Month-end
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+});
+
+// ─── Pricing cards (new unified layout) ──────────────────────────────────────
+
+const UnifiedMonthlyCard = memo(function UnifiedMonthlyCard({
+  isLoading,
+  selectedPlan,
+  onSubscribe,
+}: {
+  isLoading: boolean;
+  selectedPlan: 'monthly' | 'yearly' | null;
+  onSubscribe: (plan: 'monthly' | 'yearly') => void;
+}) {
+  const checklist = [
+    'WAR ZONE daily briefing',
+    'TOP SECRET Weekly review',
+    'ISM, Crypto & Company reports',
+    'Cancel anytime',
+  ];
+
+  return (
+    <div
+      className="relative rounded-2xl p-8"
+      style={{
+        background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
+        border: '1px solid rgba(201,166,70,0.3)',
+      }}
+    >
+      {/* 14-DAY FREE TRIAL badge */}
+      <div className="absolute -top-3 left-8">
+        <div
+          className="px-4 py-1.5 rounded-xl text-xs font-bold shadow-lg"
+          style={{
+            background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+            color: '#fff',
+            boxShadow: '0 4px 12px rgba(16,185,129,0.35)',
+          }}
+        >
+          14-DAY FREE TRIAL
+        </div>
+      </div>
+
+      <div className="pt-4">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-2"
+          style={{ color: 'rgba(201,166,70,0.7)' }}
+        >
+          Monthly
+        </p>
+
+        {/* Price */}
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-5xl font-bold text-white font-mono tabular-nums">
+            ${ENVELOPE_PRICES.monthly}
+          </span>
+          <span className="text-slate-400 text-lg">/month</span>
+        </div>
+        <p className="text-slate-500 text-sm mb-6">Daily + monthly intelligence</p>
+
+        {/* Checklist */}
+        <ul className="space-y-3 mb-8">
+          {checklist.map((item) => (
+            <li key={item} className="flex items-center gap-3">
+              <div
                 className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
                 style={{
-                  background: `${report.accentColor}20`,
-                  border: `1px solid ${report.accentColor}40`
+                  background: 'rgba(201,166,70,0.15)',
+                  border: '1px solid rgba(201,166,70,0.35)',
                 }}
               >
-                <Check className="w-3 h-3" style={{ color: report.accentColor }} />
+                <Check className="w-3 h-3 text-[#C9A646]" />
               </div>
-              <span>{highlight}</span>
+              <span className="text-sm text-slate-300">{item}</span>
             </li>
           ))}
         </ul>
-      </div>
-    </motion.div>
-  );
-});
 
-// Monthly Pricing Card Component - Shows Bundle for War Zone members, Top Secret only for others
-const MonthlyPricingCard = memo(function MonthlyPricingCard({
-  isWarZoneMember,
-  isLoading,
-  selectedPlan,
-  onSubscribe,
-  onBundleSubscribe,
-}: {
-  isWarZoneMember: boolean;
-  isLoading: boolean;
-  selectedPlan: 'monthly' | 'yearly' | null;
-  onSubscribe: (plan: 'monthly' | 'yearly') => void;
-  onBundleSubscribe: () => void;
-}) {
-  return (
-    <div
-      className="relative p-8 rounded-2xl"
-      style={{
-        background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
-        border: isWarZoneMember ? '2px solid rgba(201,166,70,0.5)' : '2px solid rgba(201,166,70,0.4)',
-        boxShadow: isWarZoneMember ? '0 0 50px rgba(201,166,70,0.2)' : '0 0 40px rgba(201,166,70,0.15)'
-      }}
-    >
-      {/* Badge */}
-      <div className="absolute -top-3 left-8">
-        <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
-          style={{
-            background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-            color: '#000'
-          }}
+        {/* CTA */}
+        <Button
+          variant="gold"
+          size="full"
+          onClick={() => onSubscribe('monthly')}
+          disabled={isLoading}
+          showArrow={false}
         >
-          {isWarZoneMember ? '🔥 BEST VALUE' : 'MONTHLY'}
-        </div>
-      </div>
-
-      <div className="pt-6">
-        {isWarZoneMember ? (
-          // ===== WAR ZONE MEMBER: Show Bundle Offer =====
-          <>
-            {/* Bundle Header */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4"
-                 style={{
-                   background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.1) 100%)',
-                   border: '1px solid rgba(201,166,70,0.4)'
-                 }}>
-              <Package className="w-4 h-4 text-[#C9A646]" />
-              <span className="text-[#C9A646] text-sm font-semibold">Ultimate Bundle</span>
-            </div>
-            
-            <h3 className="text-xl font-bold text-white mb-2">
-              War Zone + Top Secret
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">
-              Get both products for one low price!
-            </p>
-
-            {/* Price Comparison */}
-            <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">War Zone Newsletter</span>
-                <span className="text-slate-300 line-through">$69.99</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Top Secret Reports</span>
-                <span className="text-slate-300 line-through">$89.99</span>
-              </div>
-              <div className="border-t border-slate-700 my-2" />
-              <div className="flex justify-between">
-                <span className="text-slate-300">Separately:</span>
-                <span className="text-slate-200 line-through">$159.98/mo</span>
-              </div>
-            </div>
-
-            {/* Bundle Price */}
-            <div className="mb-4">
-              <div className="flex items-baseline justify-start gap-2 mb-1">
-                <span className="text-5xl font-bold text-white">${FINOTAUR_PRICES.yearly}</span>
-                <span className="text-xl text-slate-400">/month</span>
-              </div>
-              <p className="text-emerald-400 text-base font-semibold">
-                Save ${FINOTAUR_PRICES.savings}/month! 🎉
-              </p>
-            </div>
-
-            {/* Trial Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg mb-4"
-                 style={{
-                   background: 'rgba(16,185,129,0.15)',
-                   border: '1px solid rgba(16,185,129,0.3)'
-                 }}>
-              <Gift className="w-4 h-4 text-emerald-400" />
-              <span className="text-emerald-400 text-sm font-semibold">7-Day Free Trial</span>
-            </div>
-
-            {/* Bundle CTA */}
-            <Button
-              onClick={onBundleSubscribe}
-              disabled={isLoading}
-              className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
-              style={{
-                background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
-                color: '#000',
-                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
-              }}
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <Spinner size="sm" color="inherit" />
-                  Redirecting...
-                </div>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  <Crown className="w-5 h-5" />
-                  GET BUNDLE — $109/mo
-                </span>
-              )}
-            </Button>
-
-            <p className="text-xs text-center text-slate-500 mb-4">
-              7-day free trial. Cancel anytime.
-            </p>
-
-            {/* What's Included */}
-            <div className="space-y-2 border-t border-slate-800 pt-4">
-              <p className="text-xs text-slate-500 font-medium mb-2">WHAT'S INCLUDED:</p>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300">War Zone Newsletter (Daily)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300">Top Secret Reports (10/month)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300">Discord Access</span>
-              </div>
-            </div>
-
-            {/* Or get Top Secret only link */}
-            <div className="mt-4 pt-4 border-t border-slate-800">
-              <button
-                onClick={() => onSubscribe('monthly')}
-                className="text-sm text-slate-500 hover:text-slate-400 transition-colors underline"
-              >
-                Or get Top Secret only for $50/mo →
-              </button>
-            </div>
-          </>
-        ) : (
-          // ===== NON-WAR ZONE MEMBER: Show Top Secret Only =====
-          <>
-            <div className="flex items-baseline justify-start gap-2 mb-2">
-              <span className="text-5xl font-bold text-white">${TOP_SECRET_ONLY_PRICES.monthly}</span>
-              <span className="text-xl text-slate-400">/month</span>
-            </div>
-            <p className="text-sm font-bold text-blue-400 mb-1">
-              FREE 14 DAY TRIAL
-            </p>
-            <p className="text-emerald-400 text-base font-semibold mb-4">
-              Only <span className="text-2xl">$45/month</span> for the first 2 months!
-            </p>
-
-            {/* CTA Button */}
-            <Button
-              onClick={() => onSubscribe('monthly')}
-              disabled={isLoading}
-              className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                color: '#000',
-                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
-              }}
-            >
-              {isLoading && selectedPlan === 'monthly' ? (
-                <div className="flex items-center gap-2">
-                  <Spinner size="sm" color="inherit" />
-                  Redirecting...
-                </div>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  START FREE TRIAL
-                  <ArrowRight className="w-5 h-5" />
-                </span>
-              )}
-            </Button>
-
-            <p className="text-xs text-center text-slate-500 mb-6">
-              Risk-free. Cancel anytime.
-            </p>
-
-            {/* Features */}
-            <div className="space-y-4 border-t border-slate-800 pt-6">
-              <div>
-                <div className="flex items-start gap-2 mb-1">
-                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                  <span className="text-base font-bold text-white">Actionable Macro Insights</span>
-                </div>
-                <p className="text-sm text-slate-400 ml-7">
-                  Cut through the noise. Understand ISM, and get a clear view of which sectors to target and which to avoid.
-                </p>
-              </div>
-
-              <div>
-                <div className="flex items-start gap-2 mb-1">
-                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                  <span className="text-base font-bold text-white">Only the Opportunities That Actually Matter</span>
-                </div>
-                <p className="text-sm text-slate-400 ml-7">
-                  A tightly filtered set of ideas backed by macro data, ISM signals, and institutional-style reasoning.
-                </p>
-              </div>
-
-              <div>
-                <div className="flex items-start gap-2 mb-1">
-                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                  <span className="text-base font-bold text-white">Smart Crypto Reports</span>
-                </div>
-                <p className="text-sm text-slate-400 ml-7">
-                  Up-to-date crypto market analysis and bi-weekly reports.
-                </p>
-              </div>
-            </div>
-          </>
-        )}
+          {isLoading && selectedPlan === 'monthly' ? (
+            <span className="flex items-center justify-center gap-2">
+              <Spinner size="sm" color="inherit" />
+              Redirecting...
+            </span>
+          ) : (
+            'Start free trial'
+          )}
+        </Button>
       </div>
     </div>
   );
 });
 
-// Yearly Pricing Card Component - Shows Bundle Yearly for War Zone members, Top Secret Yearly for others
-const YearlyPricingCard = memo(function YearlyPricingCard({
-  isWarZoneMember,
+const UnifiedAnnualCard = memo(function UnifiedAnnualCard({
   isLoading,
   selectedPlan,
   onSubscribe,
-  onBundleYearlySubscribe,
 }: {
-  isWarZoneMember: boolean;
   isLoading: boolean;
   selectedPlan: 'monthly' | 'yearly' | null;
   onSubscribe: (plan: 'monthly' | 'yearly') => void;
-  onBundleYearlySubscribe: () => void;
 }) {
+  const checklist = [
+    'Everything in Monthly',
+    'Locked price for 12 months',
+    'Founding Members badge',
+    'Early access to new tools',
+  ];
+
   return (
     <div
-      className="relative p-8 rounded-2xl"
+      className="relative rounded-2xl p-8"
       style={{
         background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
         border: '2px solid rgba(201,166,70,0.5)',
-        boxShadow: '0 0 50px rgba(201,166,70,0.2)'
+        boxShadow: '0 0 48px rgba(201,166,70,0.12)',
       }}
     >
-      {/* Badge */}
+      {/* BEST VALUE badge */}
       <div className="absolute -top-3 right-8">
-        <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
+        <div
+          className="px-4 py-1.5 rounded-xl text-xs font-bold shadow-lg"
           style={{
             background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-            color: '#000'
+            color: '#000',
+            boxShadow: '0 4px 12px rgba(201,166,70,0.4)',
           }}
         >
-          {isWarZoneMember ? '⚡ ULTIMATE' : 'BEST DEAL'}
+          BEST VALUE
         </div>
       </div>
 
-      <div className="pt-6">
-        {isWarZoneMember ? (
-          // ===== WAR ZONE MEMBER: Show Bundle Yearly =====
-          <>
-            {/* Bundle Yearly Header */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4"
-                 style={{
-                   background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.1) 100%)',
-                   border: '1px solid rgba(201,166,70,0.4)'
-                 }}>
-              <Zap className="w-4 h-4 text-[#C9A646]" />
-              <span className="text-[#C9A646] text-sm font-semibold">Finotaur Annual</span>
-            </div>
+      <div className="pt-4">
+        <p
+          className="text-xs font-semibold tracking-widest uppercase mb-2"
+          style={{ color: 'rgba(201,166,70,0.7)' }}
+        >
+          Annual
+        </p>
 
-            <h3 className="text-xl font-bold text-white mb-2">
-              Finotaur Platform
-            </h3>
-            <p className="text-sm text-slate-400 mb-4">
-              Full year access to the complete trading ecosystem
-            </p>
+        {/* Price */}
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-5xl font-bold text-white font-mono tabular-nums">
+            ${ENVELOPE_PRICES.yearly}
+          </span>
+          <span className="text-slate-400 text-lg">/year</span>
+        </div>
+        <p className="text-slate-500 text-sm mb-6">
+          ${ENVELOPE_PRICES.monthlyEquivalent}/mo — save ${ENVELOPE_PRICES.savings} vs monthly
+        </p>
 
-            {/* Price Comparison */}
-            <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Monthly Bundle × 12</span>
-                <span className="text-slate-200 line-through">$1,308</span>
-              </div>
-            </div>
-
-            {/* Bundle Yearly Price */}
-            <div className="mb-4">
-              <div className="flex items-baseline justify-start gap-2 mb-1">
-                <span className="text-5xl font-bold text-white">${FINOTAUR_PRICES.yearly}</span>
-                <span className="text-xl text-slate-400">/year</span>
-              </div>
-              <p className="text-emerald-400 text-base font-semibold">
-                Just ${FINOTAUR_PRICES.monthlyEquivalent}/month — Save $218!
-              </p>
-            </div>
-
-            {/* Benefits */}
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">War Zone Newsletter (Full Year)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Top Secret Reports (Full Year)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">🎁 Journal Premium INCLUDED</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Full Platform + AI Tools</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Founding Members badge</span>
-              </div>
-            </div>
-
-            {/* Bundle Yearly CTA */}
-            <Button
-              onClick={onBundleYearlySubscribe}
-              disabled={isLoading}
-              className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
-              style={{
-                background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
-                color: '#000',
-                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
-              }}
-            >
-              {isLoading && selectedPlan === 'yearly' ? (
-                <div className="flex items-center gap-2">
-                  <Spinner size="sm" color="inherit" />
-                  Redirecting...
-                </div>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  GET FINOTAUR ANNUAL
-                  <ArrowRight className="w-5 h-5" />
-                </span>
-              )}
-            </Button>
-
-            <p className="text-xs text-center text-slate-500 mb-4">
-              Locked price. Cancel anytime.
-            </p>
-
-            {/* Or get Top Secret only link */}
-            <div className="pt-4 border-t border-slate-800">
-              <button
-                onClick={() => onSubscribe('yearly')}
-                className="text-sm text-slate-500 hover:text-slate-400 transition-colors underline"
+        {/* Checklist */}
+        <ul className="space-y-3 mb-8">
+          {checklist.map((item) => (
+            <li key={item} className="flex items-center gap-3">
+              <div
+                className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: 'rgba(201,166,70,0.18)',
+                  border: '1px solid rgba(201,166,70,0.4)',
+                }}
               >
-                Or get Top Secret yearly only for $899/yr →
-              </button>
-            </div>
-          </>
-        ) : (
-          // ===== NON-WAR ZONE MEMBER: Show Top Secret Yearly Only =====
-          <>
-            {/* Title */}
-            <h3 className="text-2xl font-bold mb-1" style={{
-              background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}>
-              Unlock Top Secret
-            </h3>
-            <h3 className="text-2xl font-bold text-white mb-2">
-              Institutional Research
-            </h3>
-            <p className="text-sm text-slate-400 mb-4 px-4 py-1.5 rounded-lg inline-block" style={{
-              background: 'rgba(201,166,70,0.1)',
-              border: '1px solid rgba(201,166,70,0.2)'
-            }}>
-              FOR SERIOUS INVESTORS ONLY
-            </p>
+                <Check className="w-3 h-3 text-[#C9A646]" />
+              </div>
+              <span className="text-sm text-slate-300">{item}</span>
+            </li>
+          ))}
+        </ul>
 
-            {/* Price */}
-            <div className="mb-6">
-              <div className="flex items-baseline justify-start gap-2 mb-2">
-                <span className="text-5xl font-bold text-white">${TOP_SECRET_ONLY_PRICES.yearly}</span>
-                <span className="text-xl text-slate-400">/year</span>
-              </div>
-              <p className="text-emerald-400 text-base font-semibold">
-                Just ${TOP_SECRET_ONLY_PRICES.monthlyEquivalent}/month — Save ${TOP_SECRET_ONLY_PRICES.savings}!
-              </p>
-            </div>
-
-            {/* Benefits */}
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Priority Access</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Locked price for 12 months</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Early Access to future FINOTAUR tools</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Founding Members badge</span>
-              </div>
-            </div>
-
-            {/* CTA Button */}
-            <Button
-              onClick={() => onSubscribe('yearly')}
-              disabled={isLoading}
-              className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                color: '#000',
-                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
-              }}
-            >
-              {isLoading && selectedPlan === 'yearly' ? (
-                <div className="flex items-center gap-2">
-                  <Spinner size="sm" color="inherit" />
-                  Redirecting...
-                </div>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  GET ANNUAL PLAN
-                  <ArrowRight className="w-5 h-5" />
-                </span>
-              )}
-            </Button>
-
-            <p className="text-xs text-center text-slate-500 mb-6">
-              Locked price. Cancel anytime.
-            </p>
-
-            {/* Additional Perks */}
-            <div className="space-y-2 border-t border-slate-800 pt-6">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-400">Cancel anytime</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-400">Best yearly value</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-400">No lock-in contracts</span>
-              </div>
-            </div>
-          </>
-        )}
+        {/* CTA */}
+        <Button
+          variant="gold"
+          size="full"
+          onClick={() => onSubscribe('yearly')}
+          disabled={isLoading}
+          showArrow={false}
+        >
+          {isLoading && selectedPlan === 'yearly' ? (
+            <span className="flex items-center justify-center gap-2">
+              <Spinner size="sm" color="inherit" />
+              Redirecting...
+            </span>
+          ) : (
+            'Get annual plan'
+          )}
+        </Button>
       </div>
     </div>
-  );
-});
-
-// Sample Report Preview Card Component
-const SampleReportPreviewCard = memo(function SampleReportPreviewCard({ report }: { report: ReportType }) {
-  const Icon = report.icon;
-  
-  return (
-    <motion.div
-      className="relative group cursor-pointer"
-      whileHover={{ scale: 1.03 }}
-      transition={{ duration: 0.3 }}
-    >
-      {/* Card */}
-      <div 
-        className="relative aspect-[3/4] rounded-2xl overflow-hidden"
-        style={{
-          background: 'linear-gradient(180deg, #111111 0%, #0A0A0A 100%)',
-          border: `1px solid ${report.accentColor}30`
-        }}
-      >
-        {/* Report Header Bar */}
-        <div 
-          className="h-2 w-full"
-          style={{ background: report.borderGradient }}
-        />
-
-        {/* Fake Document Content */}
-        <div className="p-5">
-          {/* Title skeleton */}
-          <div className="flex items-center gap-3 mb-4">
-            <div 
-              className="w-8 h-8 rounded-lg"
-              style={{ background: `${report.accentColor}30` }}
-            />
-            <div>
-              <div className="h-3 w-24 rounded bg-white/20 mb-1.5" />
-              <div className="h-2 w-16 rounded bg-white/10" />
-            </div>
-          </div>
-
-          {/* Content skeletons */}
-          <div className="space-y-2 mb-4">
-            <div className="h-2 w-full rounded bg-white/10" />
-            <div className="h-2 w-5/6 rounded bg-white/10" />
-            <div className="h-2 w-4/5 rounded bg-white/10" />
-          </div>
-
-          {/* Chart placeholder */}
-          <div 
-            className="h-20 rounded-lg mb-4"
-            style={{ background: `linear-gradient(135deg, ${report.accentColor}10 0%, ${report.accentColor}05 100%)` }}
-          />
-
-          {/* More content */}
-          <div className="space-y-2">
-            <div className="h-2 w-full rounded bg-white/10" />
-            <div className="h-2 w-3/4 rounded bg-white/10" />
-          </div>
-        </div>
-
-        {/* Blur Overlay */}
-        <div className="absolute inset-0 backdrop-blur-[3px] bg-black/70 flex flex-col items-center justify-center transition-all duration-300 group-hover:bg-black/80">
-          {/* Glowing Lock Icon */}
-          <div 
-            className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
-            style={{
-              background: report.borderGradient,
-              boxShadow: `0 0 40px ${report.glowColor}`
-            }}
-          >
-            <Lock className="w-10 h-10 text-white" />
-          </div>
-          
-          <p className="text-white font-bold text-xl mb-2">{report.shortName}</p>
-          <p className="text-slate-400 text-sm mb-4">Subscribe to unlock</p>
-          
-          {/* Mini CTA */}
-          <div 
-            className="px-4 py-2 rounded-lg text-sm font-semibold opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            style={{
-              background: `${report.accentColor}20`,
-              border: `1px solid ${report.accentColor}50`,
-              color: report.accentColor
-            }}
-          >
-            View Sample →
-          </div>
-        </div>
-      </div>
-    </motion.div>
   );
 });
 
@@ -1081,13 +931,8 @@ const SampleReportPreviewCard = memo(function SampleReportPreviewCard({ report }
 // ========================================
 
 export default function TopSecretLanding() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
-  const [isWarZoneMember, setIsWarZoneMember] = useState(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
-  const [showBundlePopup, setShowBundlePopup] = useState(false);
-  
+
   const { initiateCheckout, isLoading } = useWhopCheckout({
     onSuccess: () => {
       console.log('✅ Top Secret checkout initiated');
@@ -1097,357 +942,20 @@ export default function TopSecretLanding() {
     },
   });
 
-  const { isActive: isWarZoneMemberFromHook, isLoading: isWarZoneLoading } = useWarZoneStatus();
+  // Memoized subscribe handler — both monthly and yearly go direct to top_secret
+  const handleSubscribe = useCallback(
+    async (billingInterval: 'monthly' | 'yearly') => {
+      setSelectedPlan(billingInterval);
+      initiateCheckout({ planName: 'top_secret', billingInterval });
+    },
+    [initiateCheckout],
+  );
 
-  useEffect(() => {
-    if (!isWarZoneLoading) {
-      setIsWarZoneMember(isWarZoneMemberFromHook);
-      setIsCheckingStatus(false);
-    }
-  }, [isWarZoneMemberFromHook, isWarZoneLoading]);
-
-  // Memoized subscribe handler
-  const handleSubscribe = useCallback(async (billingInterval: 'monthly' | 'yearly') => {
-    setSelectedPlan(billingInterval);
-    
-    // 🔥 Show Bundle popup for ALL monthly subscriptions
-    // This offers users the Bundle option before checkout
-    if (billingInterval === 'monthly') {
-      setShowBundlePopup(true);
-      return;
-    }
-    
-    // Yearly checkout flow - direct to Top Secret yearly
-    initiateCheckout({
-      planName: 'top_secret',
-      billingInterval,
-    });
-  }, [initiateCheckout]);
-
-  const [showPlatformWarning, setShowPlatformWarning] = useState(false);
-  const [pendingPlatformInterval, setPendingPlatformInterval] = useState<'monthly' | 'yearly'>('monthly');
-
-  // 🔥 Actual checkout execution (after user confirmed warning)
-  const executeBundleCheckout = useCallback(async (interval: 'monthly' | 'yearly') => {
-    setShowBundlePopup(false);
-    
-    // Save pending checkout BEFORE redirecting
-    if (user?.id && user?.email) {
-      const checkoutToken = crypto.randomUUID();
-      try {
-        await supabase.from('pending_checkouts').insert({
-          user_id: user.id,
-          user_email: user.email,
-          checkout_token: checkoutToken,
-          product_type: 'platform_finotaur',
-          billing_interval: 'monthly',
-          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        });
-        console.log('✅ Pending checkout saved for Bundle Monthly');
-      } catch (err) {
-        console.warn('⚠️ Failed to save pending checkout:', err);
-      }
-    }
-    
-    // Redirect to Finotaur Platform checkout
-    initiateCheckout({
-      planName: 'platform_finotaur',
-      billingInterval: interval,
-    });
-  }, [user, initiateCheckout]);
-
-  // 🔥 Handler for Bundle Monthly checkout - shows warning if user has War Zone
-  const handleBundleCheckout = useCallback(async () => {
-    if (isWarZoneMember) {
-      setPendingPlatformInterval('monthly');
-      setShowPlatformWarning(true);
-      return;
-    }
-    executeBundleCheckout('monthly');
-  }, [isWarZoneMember, executeBundleCheckout]);
-
-  // 🔥 Handler for Bundle Yearly checkout - shows warning if user has War Zone
-  const handleBundleYearlyCheckout = useCallback(async () => {
-    setSelectedPlan('yearly');
-    if (isWarZoneMember) {
-      setPendingPlatformInterval('yearly');
-      setShowPlatformWarning(true);
-      return;
-    }
-    executeBundleCheckout('yearly');
-  }, [isWarZoneMember, executeBundleCheckout]);
-
-  // 🔥 Bundle Upgrade Popup Component - v2.0 with Monthly + Yearly options
-  const BundleUpgradePopup = () => {
-    if (!showBundlePopup) return null;
-
-    const handleBundleYearlyCheckout = async () => {
-      setShowBundlePopup(false);
-      setSelectedPlan('yearly');
-      initiateCheckout({
-        planName: 'platform_finotaur',
-        billingInterval: 'yearly',
-      });
-    };
-
-    const handleTopSecretOnlyCheckout = () => {
-      setShowBundlePopup(false);
-      initiateCheckout({
-        planName: 'top_secret',
-        billingInterval: 'monthly',
-      });
-    };
-    
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-20">
-        {/* Backdrop */}
-        <div 
-          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-          onClick={() => setShowBundlePopup(false)}
-        />
-        
-        {/* Popup Content - Wide for two columns */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative w-full max-w-2xl rounded-2xl overflow-hidden max-h-[calc(100vh-80px)] overflow-y-auto"
-          style={{
-            background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
-            border: '1px solid rgba(201,166,70,0.3)',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.2)'
-          }}
-        >
-          {/* Header */}
-          <div 
-            className="px-6 py-4 text-center relative"
-            style={{
-              background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-              borderBottom: '1px solid rgba(201,166,70,0.2)'
-            }}
-          >
-            {/* Close button */}
-            <button 
-              onClick={() => setShowBundlePopup(false)}
-              className="absolute right-4 top-4 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <X className="w-5 h-5 text-slate-400 hover:text-white" />
-            </button>
-            
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-3"
-                 style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}>
-              <Crown className="w-4 h-4 text-[#C9A646]" />
-              <span className="text-[#C9A646] text-sm font-semibold">
-                Complete Trading Ecosystem
-              </span>
-            </div>
-            <h3 className="text-2xl font-bold text-white">Get Finotaur — Includes Everything</h3>
-            <p className="text-slate-400 text-sm mt-1">Top Secret + War Zone + Journal Premium + Full Platform for one price!</p>
-          </div>
-          
-          {/* Body - Two Column Layout */}
-          <div className="px-6 py-6">
-            {/* Price Comparison Banner */}
-            <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
-              <span className="text-slate-500 line-through">Top Secret $89.99</span>
-              <span className="text-slate-600">+</span>
-              <span className="text-slate-500 line-through">War Zone $69.99</span>
-              <span className="text-slate-600">+</span>
-              <span className="text-slate-500 line-through">Journal $29.99</span>
-              <span className="text-slate-600">+</span>
-              <span className="text-slate-500 line-through">Platform $59</span>
-              <span className="text-slate-600">=</span>
-              <span className="text-slate-500 line-through">$248.97/mo</span>
-            </div>
-
-            {/* Two Pricing Cards */}
-            <div className="grid md:grid-cols-2 gap-4 mb-6">
-              {/* Monthly Bundle Card */}
-              <div 
-                className="relative p-5 rounded-xl"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(30,30,30,0.9) 0%, rgba(20,20,20,0.95) 100%)',
-                  border: '1px solid rgba(201,166,70,0.3)',
-                }}
-              >
-                {/* 7-Day Trial Badge */}
-                <div className="absolute -top-2.5 left-4">
-                  <div className="px-3 py-1 rounded-full text-xs font-bold"
-                    style={{
-                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                      color: '#fff',
-                      boxShadow: '0 4px 12px rgba(16,185,129,0.4)'
-                    }}
-                  >
-                    14-DAY FREE TRIAL
-                  </div>
-                </div>
-
-                <div className="pt-4">
-                  <h4 className="text-lg font-bold text-white mb-1">Finotaur Monthly</h4>
-                  
-                  {/* Price */}
-                  <div className="mb-4">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-[#C9A646]">$109</span>
-                      <span className="text-slate-500">/month</span>
-                    </div>
-                    <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Save $139+/month vs separate!
-                    </p>
-                  </div>
-
-                  {/* Features */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>🔒 Top Secret Reports INCLUDED</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>📡 War Zone Newsletter INCLUDED</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>📓 Journal Premium INCLUDED</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>Full Platform (7 AI tools)</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>14-Day Free Trial</span>
-                    </div>
-                  </div>
-
-                  {/* CTA Button */}
-                  <Button
-                    onClick={() => { setShowBundlePopup(false); initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'monthly' }); }}
-                    disabled={isLoading && selectedPlan === 'monthly'}
-                    className="w-full py-3 font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
-                    style={{
-                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                      color: '#000',
-                      boxShadow: '0 6px 20px rgba(201,166,70,0.3)'
-                    }}
-                  >
-                    {isLoading && selectedPlan === 'monthly' ? (
-                      <Spinner size="sm" color="inherit" className="mx-auto" />
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        <Crown className="w-4 h-4" />
-                        Start Free Trial
-                      </span>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Yearly Bundle Card - BEST VALUE */}
-              <div 
-                className="relative p-5 rounded-xl"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(40,35,25,0.95) 0%, rgba(25,22,15,0.98) 100%)',
-                  border: '2px solid rgba(201,166,70,0.5)',
-                  boxShadow: '0 0 40px rgba(201,166,70,0.15)'
-                }}
-              >
-                {/* BEST VALUE Badge */}
-                <div className="absolute -top-2.5 right-4">
-                  <div className="px-3 py-1 rounded-full text-xs font-bold"
-                    style={{
-                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                      color: '#000',
-                      boxShadow: '0 4px 12px rgba(201,166,70,0.4)'
-                    }}
-                  >
-                    BEST VALUE
-                  </div>
-                </div>
-
-                <div className="pt-4">
-                  <h4 className="text-lg font-bold mb-1"
-                    style={{
-                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent'
-                    }}
-                  >
-                    Finotaur Yearly
-                  </h4>
-                  
-                  {/* Price */}
-                  <div className="mb-4">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-white">$1090</span>
-                      <span className="text-slate-500">/year</span>
-                    </div>
-                    <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Just $91/mo — Save 17%!
-                    </p>
-                  </div>
-
-                  {/* Features */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Everything in Monthly</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Locked price for 12 months</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Priority 24h support</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Founding member badge</span>
-                    </div>
-                  </div>
-
-                  {/* CTA Button */}
-                  <Button
-                    onClick={handleBundleYearlyCheckout}
-                    disabled={isLoading && selectedPlan === 'yearly'}
-                    className="w-full py-3 font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
-                    style={{
-                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                      color: '#000',
-                      boxShadow: '0 6px 20px rgba(201,166,70,0.4)'
-                    }}
-                  >
-                    {isLoading && selectedPlan === 'yearly' ? (
-                      <Spinner size="sm" color="inherit" className="mx-auto" />
-                    ) : (
-                      <span className="flex items-center justify-center gap-2">
-                        <Crown className="w-4 h-4" />
-                        Get Finotaur Yearly
-                      </span>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-            
-            {/* Skip Button - Always show */}
-            <button
-              onClick={handleTopSecretOnlyCheckout}
-              className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
-            >
-              No thanks, just Top Secret for $89.99/month →
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  };
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <section className="min-h-screen py-8 px-4 relative overflow-hidden bg-[#0A0A0A]">
-      {/* Background Effects */}
+      {/* Background */}
       <BackgroundEffects />
 
       <motion.div
@@ -1456,116 +964,94 @@ export default function TopSecretLanding() {
         initial="hidden"
         animate="visible"
       >
-        {/* Hero Section - Two Column Layout */}
-        <motion.div variants={itemVariants} className="grid lg:grid-cols-2 gap-12 items-center mb-20 px-4">
-          {/* Left Column - Text Content */}
-          <div className="text-left">
-            {/* Badge */}
-            <HeroBadge />
 
-            {/* Main Headline */}
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6" style={{ letterSpacing: '-0.03em' }}>
-              <span className="text-white italic">Institutional</span>
-              <br />
-              <span className="text-white italic">Research</span>
-              <br />
-              <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
-                Delivered Monthly
-              </span>
-            </h1>
+        {/* ── 1. HERO ─────────────────────────────────────────────────────── */}
+        <motion.div
+          variants={itemVariants}
+          className="grid lg:grid-cols-2 gap-12 items-center mb-24 px-4"
+        >
+          <HeroLeft isLoading={isLoading} onSubscribe={handleSubscribe} />
+          <WarZonePreviewCard />
+        </motion.div>
 
-            {/* Subheadline */}
-            <p className="text-lg text-slate-400 max-w-lg mb-8 leading-relaxed">
-              The same market intelligence that hedge funds pay <span className="text-white font-semibold">$2,000+/month</span> for —
-              now available for serious traders who want an edge.
-            </p>
-
-            {/* 14-Day Free Trial Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl mb-6"
-                 style={{
-                   background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%)',
-                   border: '1px solid rgba(16,185,129,0.3)',
-                   boxShadow: '0 0 30px rgba(16,185,129,0.1)'
-                 }}>
-              <Gift className="w-5 h-5 text-emerald-400" />
-              <span className="text-emerald-300 font-bold">14-Day Free Trial</span>
-              <span className="text-emerald-500 text-sm">• Cancel Anytime</span>
-            </div>
-
-            {/* CTA Button */}
-            <Button
-              onClick={() => handleSubscribe('monthly')}
-              disabled={isLoading}
-              className="px-8 py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                color: '#000',
-                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
-              }}
+        {/* ── 2. INSIDE THE ENVELOPE ──────────────────────────────────────── */}
+        <motion.div variants={itemVariants} className="mb-24 px-4">
+          {/* Eyebrow + heading */}
+          <div className="text-center mb-12">
+            <p
+              className="text-xs font-semibold tracking-widest uppercase mb-3"
+              style={{ color: 'rgba(201,166,70,0.75)' }}
             >
-              {isLoading ? (
-                <Spinner size="sm" color="inherit" />
-              ) : (
-                <span className="flex items-center gap-2">
-                  Start 14-Day Free Trial
-                  <ArrowRight className="w-5 h-5" />
-                </span>
-              )}
-            </Button>
-
-            {/* Stats Row */}
-            <StatsRow />
+              INSIDE THE ENVELOPE
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
+              Five intelligence streams, one subscription
+            </h2>
           </div>
 
-          {/* Right Column - Report Preview Mockup */}
-          <ReportPreviewCard />
-        </motion.div>
+          {/* Flagship card */}
+          <div className="mb-6">
+            <WarZoneFlagshipCard />
+          </div>
 
-        {/* Report Types - Premium Cards */}
-        <motion.div variants={itemVariants} className="mb-20">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-white">
-            What You'll Receive
-          </h2>
-          <p className="text-slate-500 text-center mb-12">10 premium reports delivered every month</p>
-
-          <div className="grid md:grid-cols-3 gap-8">
+          {/* 2×2 grid of report cards */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Weekly added inline since it's not in REPORT_TYPES */}
+            <EnvelopeReportCard
+              report={{
+                id: 'weekly',
+                name: 'TOP SECRET Weekly',
+                shortName: 'Weekly Review',
+                description: 'Tactical week review, event calendar & positioning framework.',
+                icon: BarChart3,
+                frequency: 'Every Friday',
+                frequencyLabel: 'Every Friday',
+                accentColor: '#C9A646',
+                glowColor: 'rgba(201,166,70,0.4)',
+                borderGradient: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                highlights: [],
+              }}
+            />
             {REPORT_TYPES.map((report) => (
-              <ReportTypeCard key={report.id} report={report} />
+              <EnvelopeReportCard key={report.id} report={report} />
             ))}
           </div>
         </motion.div>
 
-        {/* Pricing Cards - Two Column */}
-        <motion.div variants={itemVariants} className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-20">
-          <MonthlyPricingCard
-            isWarZoneMember={isWarZoneMember}
-            isLoading={isLoading}
-            selectedPlan={selectedPlan}
-            onSubscribe={handleSubscribe}
-            onBundleSubscribe={handleBundleCheckout}
-          />
-          <YearlyPricingCard
-            isWarZoneMember={isWarZoneMember}
-            isLoading={isLoading}
-            selectedPlan={selectedPlan}
-            onSubscribe={handleSubscribe}
-            onBundleYearlySubscribe={handleBundleYearlyCheckout}
-          />
+        {/* ── 3. WEEK-IN-YOUR-INBOX STRIP ─────────────────────────────────── */}
+        <motion.div variants={itemVariants} className="mb-24 px-4">
+          <WeekStripSection />
         </motion.div>
 
-        {/* Sample Preview - Premium Version */}
-        <motion.div variants={itemVariants} className="mb-16">
-          <h2 className="text-2xl font-bold text-center mb-3 text-white">Sample Reports</h2>
-          <p className="text-slate-500 text-center mb-10">Preview what's waiting for you inside</p>
-          
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {REPORT_TYPES.map((report) => (
-              <SampleReportPreviewCard key={report.id} report={report} />
-            ))}
+        {/* ── 4. PRICING ──────────────────────────────────────────────────── */}
+        <motion.div variants={itemVariants} className="mb-20 px-4">
+          <div className="text-center mb-12">
+            <p
+              className="text-xs font-semibold tracking-widest uppercase mb-3"
+              style={{ color: 'rgba(201,166,70,0.75)' }}
+            >
+              ONE PRICE, THE WHOLE ENVELOPE
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
+              Daily briefing + all research, included
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 max-w-[560px] md:max-w-3xl mx-auto">
+            <UnifiedMonthlyCard
+              isLoading={isLoading}
+              selectedPlan={selectedPlan}
+              onSubscribe={handleSubscribe}
+            />
+            <UnifiedAnnualCard
+              isLoading={isLoading}
+              selectedPlan={selectedPlan}
+              onSubscribe={handleSubscribe}
+            />
           </div>
         </motion.div>
 
-        {/* Footer */}
+        {/* ── Footer ──────────────────────────────────────────────────────── */}
         <motion.div variants={itemVariants} className="text-center pb-8">
           <p className="text-slate-600">
             Questions?{' '}
@@ -1575,57 +1061,7 @@ export default function TopSecretLanding() {
           </p>
         </motion.div>
       </motion.div>
-      
-      {/* 🔥 Bundle Upgrade Popup */}
-      <BundleUpgradePopup />
 
-      {/* 🔥 Platform Cancel Warning */}
-      {showPlatformWarning && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setShowPlatformWarning(false)}
-          />
-          <div
-            className="relative w-full max-w-sm rounded-2xl p-6 z-10"
-            style={{
-              background: 'linear-gradient(135deg, #1a1a1a 0%, #111 100%)',
-              border: '1px solid rgba(201,166,70,0.35)',
-              boxShadow: '0 0 40px rgba(201,166,70,0.1)',
-            }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                <span className="text-lg">⚠️</span>
-              </div>
-              <h3 className="text-white font-semibold text-base">Your War Zone will be cancelled</h3>
-            </div>
-            <p className="text-zinc-400 text-sm leading-relaxed mb-5">
-              Subscribing to the Finotaur Platform will{' '}
-              <span className="text-amber-400 font-medium">automatically cancel</span> your existing{' '}
-              <span className="text-white font-medium">War Zone</span> subscription — it's already included in the Platform at no extra charge.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowPlatformWarning(false)}
-                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
-              >
-                Go Back
-              </button>
-              <button
-                onClick={() => {
-                  setShowPlatformWarning(false);
-                  executeBundleCheckout(pendingPlatformInterval);
-                }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
-                style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
-              >
-                Got it, continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

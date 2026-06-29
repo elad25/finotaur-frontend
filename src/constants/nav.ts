@@ -30,6 +30,7 @@ import {
   GitCompare,
   ScanLine,
   Crosshair,
+  Trophy,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -192,7 +193,8 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
-      { label: 'The Floor',   path: '/app/floor/community', beta: true },
+      { label: 'The Floor',   path: '/app/floor/feed' },
+      { label: 'Mentor',      path: '/app/mentor/rooms' },
     ],
     sidebar: [
       { label: 'Dashboard',     path: '/app/journal/overview',    icon: LayoutDashboard },
@@ -209,30 +211,49 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
-  // MENTORSHIP — beta/admin-only (Early Access)
+  // MENTORSHIP — beta/admin-only (Early Access); The Floor sidebar
   // ===========================================================================
   mentorship: {
     id: 'mentorship',
     label: 'The Floor',
     locked: false,
-    beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
-    defaultPath: '/app/floor/community',
+    beta: false,
+    defaultPath: '/app/floor/feed',
     subNav: [
-      { label: 'Global', path: '/app/floor/community' },
-      { label: 'Rooms', path: '/app/floor/rooms' },
+      { label: 'Feed', path: '/app/floor/feed' },
+      { label: 'Leaderboard', path: '/app/floor/leaderboard' },
       { label: 'DM', path: '/app/floor/dm' },
-      { label: 'Mentor Mode', path: '/app/floor/mentor' },
     ],
     sidebar: [
-      { label: 'Global', path: '/app/floor/community', icon: Globe },
-      { label: 'Rooms', path: '/app/floor/rooms', icon: GraduationCap },
+      { label: 'Feed', path: '/app/floor/feed', icon: Newspaper },
+      { label: 'Leaderboard', path: '/app/floor/leaderboard', icon: Trophy },
       { label: 'DM', path: '/app/floor/dm', icon: MessageSquare },
-      { label: 'Mentor Mode', path: '/app/floor/mentor', icon: Users },
     ],
   },
 
   // ===========================================================================
-  // TRADE COPIER — hidden from drawer (beta/admin-only); kept for DomainGuard
+  // MENTOR — Mentor Mode + Rooms (beta/admin-only); split out of The Floor
+  // ===========================================================================
+  mentor: {
+    id: 'mentor',
+    label: 'Mentor',
+    locked: false,
+    beta: false,
+    defaultPath: '/app/mentor/mode',
+    subNav: [
+      { label: 'Mentor Mode', path: '/app/mentor/mode' },
+      { label: 'Rooms', path: '/app/mentor/rooms' },
+    ],
+    sidebar: [
+      { label: 'Mentor Mode', path: '/app/mentor/mode', icon: Users },
+      { label: 'Rooms', path: '/app/mentor/rooms', icon: GraduationCap },
+    ],
+  },
+
+  // ===========================================================================
+  // TRADE COPIER — hidden from drawer (beta/admin-only); kept for DomainGuard.
+  // Phase 1 unification: sidebar + subNav now point to /app/automation/*.
+  // copy-trade/* routes in App.tsx redirect to /app/automation/copier.
   // ===========================================================================
   'copy-trade': {
     id: 'copy-trade',
@@ -240,12 +261,12 @@ export const domains: Record<string, Domain> = {
     locked: false,
     beta: true, // 🔒 Non-beta users get hidden tab + DomainGuard redirect
     subNav: [
-      { label: 'Trade Copier', path: '/app/copy-trade/overview' },
+      { label: 'Trade Copier', path: '/app/automation/copier' },
     ],
     sidebar: [
-      { label: 'Connections',  path: '/app/copy-trade/overview',      icon: Link },
-      { label: 'Trade Copier', path: '/app/copy-trade/trade-copier',   icon: Copy },
-      { label: 'Manage Risk',  path: '/app/copy-trade/manage-risk',    icon: Shield },
+      { label: 'Copier',    path: '/app/automation/copier', icon: Copy },
+      { label: 'Risk',      path: '/app/automation/risk',   icon: Shield },
+      { label: 'Agent',     path: '/app/automation/agent',  icon: Activity },
     ],
   },
 

@@ -261,6 +261,128 @@ function JournalPreview() {
   );
 }
 
+// ============ 6. CopilotPreview — AI Portfolio Manager, live & auto-managed ============
+function CopilotPreview() {
+  const trades = [
+    { time: '09:30', sym: 'AAPL', dir: 'CALL', strike: '$238.50', up: true },
+    { time: '10:15', sym: 'NVDA', dir: 'PUT',  strike: '$890.00', up: false },
+    { time: '11:00', sym: 'TSLA', dir: 'CALL', strike: '$245.30', up: true },
+  ];
+
+  // Today label — e.g. "Sun · Jun 28"
+  const now = new Date();
+  const dayLabel = now.toLocaleDateString('en-US', { weekday: 'short' });
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'short' });
+  const dayNum = String(now.getDate()).padStart(2, '0');
+  const todayLabel = `${dayLabel} · ${monthLabel} ${dayNum}`;
+
+  // Live P&L counter — eases up to +2.4%
+  const [pnl, setPnl] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    let startTs = 0;
+    const target = 2.4;
+    const dur = 1800;
+    const tick = (ts: number) => {
+      if (!startTs) startTs = ts;
+      const p = Math.min((ts - startTs) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setPnl(target * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div className="w-full h-full flex flex-col gap-2 relative">
+      {/* Header — date + LIVE pulse */}
+      <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
+        <span className="font-sans text-[9.5px] uppercase tracking-[0.25em] text-white/60 font-medium">{todayLabel}</span>
+        <span className="flex items-center gap-1 font-sans text-[9px] uppercase tracking-[0.22em] text-emerald-400/90 font-medium">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          </span>
+          Live
+        </span>
+      </div>
+
+      {/* Hero P&L + animated equity curve */}
+      <div className="relative rounded-lg border border-[#C9A646]/15 bg-gradient-to-br from-[#C9A646]/[0.06] to-transparent px-3 py-2.5 overflow-hidden">
+        {/* gold shimmer sweep */}
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          initial={{ x: '-120%' }}
+          animate={{ x: '120%' }}
+          transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1.4 }}
+          style={{ background: 'linear-gradient(105deg, transparent 35%, rgba(255,220,140,0.12) 50%, transparent 65%)' }}
+          aria-hidden="true"
+        />
+        <div className="flex items-end justify-between mb-1 relative">
+          <div>
+            <div className="font-sans text-[7.5px] uppercase tracking-[0.28em] text-white/45 mb-0.5">Portfolio P&amp;L · Today</div>
+            <div className="font-mono text-[22px] leading-none text-emerald-400 font-semibold tabular-nums">
+              +{pnl.toFixed(1)}%
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="font-sans text-[7.5px] uppercase tracking-[0.24em] text-white/45 mb-0.5">Win Rate</div>
+            <div className="font-mono text-[13px] text-[#E5C875] font-semibold tabular-nums">71%</div>
+          </div>
+        </div>
+        {/* equity curve */}
+        <svg viewBox="0 0 300 40" className="w-full h-9 relative" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="cp-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(100,220,130,0.30)" />
+              <stop offset="100%" stopColor="rgba(100,220,130,0)" />
+            </linearGradient>
+          </defs>
+          <motion.path
+            d="M0,34 L40,32 L80,26 L120,28 L160,20 L200,16 L240,10 L300,4"
+            stroke="rgba(120,225,150,0.9)" strokeWidth="1.4" fill="none"
+            initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+            transition={{ duration: 1.8, ease: 'easeOut' }}
+          />
+          <path d="M0,34 L40,32 L80,26 L120,28 L160,20 L200,16 L240,10 L300,4 L300,40 L0,40 Z" fill="url(#cp-grad)" />
+        </svg>
+      </div>
+
+      {/* Live trades label */}
+      <p className="font-sans text-[9px] uppercase tracking-[0.28em] text-[#C9A646]/85 font-medium pt-0.5">Copilot · Live Trades</p>
+
+      {/* Trades — stream in one-by-one */}
+      <div className="space-y-1.5 flex-1">
+        {trades.map((s, i) => (
+          <motion.div
+            key={s.sym}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.5 + i * 0.45, duration: 0.5, ease: 'easeOut' }}
+            className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 py-1.5 px-2.5 rounded border border-white/8 bg-black/30"
+          >
+            <span className="font-mono text-[9px] text-white/45 tabular-nums">{s.time}</span>
+            <span className="font-wordmark text-[12px] text-white/90 tracking-wider">{s.sym}</span>
+            <span className={`font-sans text-[8.5px] uppercase tracking-[0.2em] font-semibold px-1.5 py-0.5 rounded-sm ${s.dir === 'CALL' ? 'text-emerald-400/95 bg-emerald-500/10' : 'text-rose-400/95 bg-rose-500/10'}`}>{s.dir}</span>
+            <span className="font-mono text-[10px] text-white/65 tabular-nums">{s.strike}</span>
+            <span className={`text-[12px] ${s.up ? 'text-emerald-400/90' : 'text-rose-400/90'}`}>{s.up ? '↗' : '↘'}</span>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Footer — AI auto-managed + live P&L */}
+      <div className="flex items-center justify-between pt-1.5 border-t border-[#C9A646]/12 font-sans text-[8.5px] uppercase tracking-[0.22em] text-white/40 font-medium">
+        <span className="flex items-center gap-1.5">
+          <span className="w-1 h-1 rounded-full bg-[#C9A646]" style={{ boxShadow: '0 0 6px rgba(201,166,70,0.9)' }} />
+          AI Auto-Managed
+        </span>
+        <span>P&amp;L: <span className="text-emerald-400/90 font-mono">+{pnl.toFixed(1)}%</span></span>
+      </div>
+    </div>
+  );
+}
+
 // ===========================================
 // CarouselCard component
 // ===========================================
@@ -463,7 +585,6 @@ const Hero = () => {
   // Carousel state
   const [centerIndex, setCenterIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const cardCount = 5;
 
   const cards = [
     {
@@ -474,6 +595,13 @@ const Hero = () => {
       Preview: PlatformPreview,
       flagship: true,
       stats: ['5 Modules', '24/7 Intelligence', 'Real-time Flow'],
+    },
+    {
+      key: 'copilot',
+      eyebrow: 'AI PORTFOLIO MANAGER',
+      title: 'Copilot',
+      tagline: 'Your AI portfolio manager — invests and trades alongside you, 24/7. Coming soon.',
+      Preview: CopilotPreview,
     },
     {
       key: 'warzone',
@@ -504,6 +632,7 @@ const Hero = () => {
       Preview: JournalPreview,
     },
   ];
+  const cardCount = cards.length;
 
   useEffect(() => {
     if (isPaused) return;

@@ -108,9 +108,9 @@ export const WHOP_PLAN_IDS = {
   // ═══════════════════════════════════════════
   newsletter_monthly: 'plan_U6lF2eO5y9469',  // Regular price $69.99/month
   newsletter_yearly: 'plan_bp2QTGuwfpj0A',   // Yearly $699/year
-  // Top Secret
-  top_secret_monthly: 'plan_tUvQbCrEQ4197',           // Top Secret Monthly - $89.99/month
-  top_secret_yearly: 'plan_PxxbBlSdkyeo7',            // Top Secret Yearly - $899/year
+  // Top Secret — Intelligence Envelope pricing (2026-06-28): $50/mo + $499/yr, no intro discount
+  top_secret_monthly: 'plan_icd76C8REp0LQ',           // Top Secret Monthly - $50/month (14-day free trial)
+  top_secret_yearly: 'plan_7Lf31ygMAMmK8',            // Top Secret Yearly - $499/year
 } as const;
 
 // 🔥 Product IDs - Used for WEBHOOK identification
@@ -216,8 +216,8 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
   // Top Secret - SYNCED with WHOP_PLAN_IDS!
-  'plan_tUvQbCrEQ4197': 'top_secret_monthly',
-  'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
+  'plan_icd76C8REp0LQ': 'top_secret_monthly',
+  'plan_7Lf31ygMAMmK8': 'top_secret_yearly',
 };
 
 // ============================================
@@ -604,7 +604,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // TOP SECRET - 14-day trial + 50% OFF first 2 months
+  // TOP SECRET — Intelligence Envelope, 14-day free trial (no intro discount)
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
@@ -612,23 +612,18 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
-    price: 89.99,
+    price: 50,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Trial + 50% OFF First 2 Months',
+    badge: '🔥 14-Day Free Trial',
     category: 'journal',
-    hasIntroDiscount: true,
-    introDiscountMonths: 2,
-    introDiscountPercent: 50,
-    introPrice: 45,
     features: [
       '🎁 14 days FREE trial',
-      '🔥 Then $45/month for 2 months (50% OFF)',
-      '💰 Regular price: $89.99/month after',
+      '💰 Then $50/month — cancel anytime',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
@@ -644,19 +639,18 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret (Annual)',
-    price: 899,
+    price: 499,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 74.92,
+    monthlyEquivalent: 41.58,
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Trial + Save $180.88/year',
+    badge: '🔥 Save $101/year vs monthly',
     category: 'journal',
     features: [
-      '🎁 14 days FREE trial',
-      '💰 Save $180.88/year vs monthly',
+      '💰 $41.58/month — save $101/year vs monthly',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',

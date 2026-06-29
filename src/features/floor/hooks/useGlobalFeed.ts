@@ -7,7 +7,7 @@
 //   - delete_global_post(p_post)
 //   - add_global_comment(p_post, p_body)
 //   - list_global_comments(p_post, p_limit?)
-//   - toggle_global_reaction(p_post, p_kind)
+//   - toggle_global_reaction(p_post, p_emoji)
 //
 // Pagination: cursor-based via p_before (ISO timestamp of the oldest item in
 // the current page). Each page fetches with p_before = created_at of the last
@@ -17,6 +17,8 @@ import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tansta
 import { supabase } from '@/lib/supabase';
 import { mapSpaceError } from '@/features/shared/utils/spaceError';
 import type { GlobalFeedItem, GlobalComment, SharePrivacy } from '@/features/floor/types/community';
+import type { ReactionAggregate } from '@/constants/feedReactions';
+export type { ReactionAggregate };
 
 // ================================================
 // QUERY KEYS
@@ -80,7 +82,12 @@ export function useGlobalFeed(): {
         p_limit: FEED_PAGE_SIZE,
       });
       if (error) throw error;
-      return (data ?? []) as GlobalFeedItem[];
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        ...row,
+        reaction_count: (row.reaction_count as number | null) ?? 0,
+        reactions: (row.reactions as ReactionAggregate[] | null) ?? [],
+        my_reaction: (row.my_reaction as string | null) ?? null,
+      })) as GlobalFeedItem[];
     },
     getNextPageParam: (lastPage) => {
       if (lastPage.length < FEED_PAGE_SIZE) return undefined;
@@ -210,21 +217,19 @@ export function useAddGlobalComment() {
   });
 }
 
-export type GlobalReactionKind = 'up' | 'down' | 'repost';
-
 interface ToggleGlobalReactionInput {
   postId: string;
-  kind: GlobalReactionKind;
+  emoji: string;
 }
 
-/** Toggles an up/down/repost reaction on a global post. Invalidates the feed. */
+/** Toggles an emoji reaction on a global post. Invalidates the feed. */
 export function useToggleGlobalReaction() {
   const qc = useQueryClient();
   return useMutation<void, Error, ToggleGlobalReactionInput>({
-    mutationFn: async ({ postId, kind }) => {
+    mutationFn: async ({ postId, emoji }) => {
       const { error } = await supabase.rpc('toggle_global_reaction', {
         p_post: postId,
-        p_kind: kind,
+        p_emoji: emoji,
       });
       if (error) throw new Error(mapSpaceError(error));
     },

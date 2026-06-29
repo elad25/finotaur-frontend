@@ -1741,11 +1741,10 @@ export default function TradeCopier() {
         )}
 
         {/* ── Tab 3: Manage Risk ── */}
-        {activeTab === 'manage-risk' && (
-          <SectionCard>
-            <ManageRiskTab />
-          </SectionCard>
-        )}
+        {/* No SectionCard here: the global "All Accounts" panel and the
+            per-account cards render frameless and full-width (no gold frame,
+            no p-ds-6 inset) so they spread wider across the page. */}
+        {activeTab === 'manage-risk' && <ManageRiskTab />}
 
       </div>
 

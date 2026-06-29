@@ -89,7 +89,7 @@ function AvatarPreview({
         <img
           src={avatarUrl}
           alt="Avatar preview"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover scale-[1.15]"
           onError={() => setImgError(true)}
         />
       ) : (
@@ -364,7 +364,7 @@ export function FloorProfileDialog({
                 (choose one)
               </span>
             </label>
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-5 gap-2.5">
               {FLOOR_AVATARS.map((src) => {
                 const selected = avatarUrl === src;
                 return (
@@ -373,23 +373,28 @@ export function FloorProfileDialog({
                     type="button"
                     onClick={() => setAvatarUrl(src)}
                     disabled={saving}
-                    className="rounded-[8px] p-0.5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="aspect-square w-full rounded-full p-[2px] flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{
                       border: selected
                         ? '2px solid #C9A646'
-                        : '2px solid rgba(255,255,255,0.08)',
+                        : '2px solid transparent',
                       background: selected
-                        ? 'rgba(201,166,70,0.08)'
+                        ? 'rgba(201,166,70,0.10)'
                         : 'transparent',
+                      boxShadow: selected
+                        ? '0 0 0 2px rgba(201,166,70,0.30)'
+                        : 'none',
                     }}
                     aria-label={src}
                     aria-pressed={selected}
                   >
-                    <img
-                      src={src}
-                      alt=""
-                      className="h-[44px] w-[44px] rounded-[6px] object-cover"
-                    />
+                    <div className="h-full w-full rounded-full overflow-hidden">
+                      <img
+                        src={src}
+                        alt=""
+                        className="h-full w-full object-cover scale-[1.15]"
+                      />
+                    </div>
                   </button>
                 );
               })}

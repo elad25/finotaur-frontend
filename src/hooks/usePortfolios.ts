@@ -25,13 +25,20 @@ export interface Portfolio {
   created_at: string;
   connection_label: string | null;
   // Risk fields (may be null if not yet set)
-  kill_switch_active:      boolean | null;
-  max_daily_loss_usd:      number | null;
-  max_position_size:       number | null;
-  max_contracts_per_trade: number | null;
+  kill_switch_active:        boolean | null;
+  max_daily_loss_usd:        number | null;
+  max_position_size:         number | null;
+  max_contracts_per_trade:   number | null;
   // Sprint 4c: hard-stop fields
-  max_loss_per_trade_usd:  number | null;
-  daily_stop_loss_usd:     number | null;
+  max_loss_per_trade_usd:    number | null;
+  daily_stop_loss_usd:       number | null;
+  // New risk fields (migration applied)
+  max_weekly_loss_usd:       number | null;
+  trade_profit_target_usd:   number | null;
+  daily_profit_target_usd:   number | null;
+  weekly_profit_target_usd:  number | null;
+  risk_management_enabled:   boolean | null;
+  risk_breach_action:        string | null;
 }
 
 // ── Broker portfolio ID helpers ─────────────────────────────────────────────
@@ -73,7 +80,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
     // (1) Main portfolios table
     supabase
       .from('portfolios')
-      .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,credential_id,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd')
+      .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,credential_id,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd,max_weekly_loss_usd,trade_profit_target_usd,daily_profit_target_usd,weekly_profit_target_usd,risk_management_enabled,risk_breach_action')
       .eq('user_id', userId)
       .eq('is_active', true)
       .order('created_at', { ascending: true }),
@@ -147,6 +154,12 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         max_contracts_per_trade: null,
         max_loss_per_trade_usd: null,
         daily_stop_loss_usd: null,
+        max_weekly_loss_usd: null,
+        trade_profit_target_usd: null,
+        daily_profit_target_usd: null,
+        weekly_profit_target_usd: null,
+        risk_management_enabled: null,
+        risk_breach_action: null,
       }));
     }
   }
@@ -213,6 +226,12 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         max_contracts_per_trade: null,
         max_loss_per_trade_usd: null,
         daily_stop_loss_usd: null,
+        max_weekly_loss_usd: null,
+        trade_profit_target_usd: null,
+        daily_profit_target_usd: null,
+        weekly_profit_target_usd: null,
+        risk_management_enabled: null,
+        risk_breach_action: null,
       }));
       portfolios = [...portfolios, ...brokerPortfolios];
     }
@@ -254,6 +273,12 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         max_contracts_per_trade: null,
         max_loss_per_trade_usd: null,
         daily_stop_loss_usd: null,
+        max_weekly_loss_usd: null,
+        trade_profit_target_usd: null,
+        daily_profit_target_usd: null,
+        weekly_profit_target_usd: null,
+        risk_management_enabled: null,
+        risk_breach_action: null,
       },
       ...portfolios,
     ];

@@ -99,14 +99,25 @@ Deno.serve(async (req: Request) => {
     return redirectTo('?oauth_error=token_exchange_failed');
   }
 
-  // Fetch user info and accounts (needed for account_id, prop firm detection)
+  // Fetch user info and accounts (needed for account_id, prop firm detection).
+  // The adapter does the prop-firm /account/list?userId= discovery + env auto-detect.
   let userInfo;
   try {
     userInfo = await adapter.getUserInfo(tokens.accessToken, environment);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[oauth-callback] user info fetch failed:', msg);
-    return redirectTo('?oauth_error=token_exchange_failed');
+    return redirectTo('?oauth_error=account_discovery_failed');
+  }
+
+  // No accounts discovered → do NOT create or clobber any connection. Surface a clear error.
+  // (Happens for an empty prop-firm account list, or an inactive/expired account set.)
+  if (userInfo.accounts.length === 0) {
+    console.error('[oauth-callback] no accounts discovered for this login', {
+      userId, broker, environment,
+      debug: (userInfo as { _debugMe?: unknown })._debugMe ?? null,
+    });
+    return redirectTo('?oauth_error=no_accounts_found');
   }
 
   const isPropFirm = userInfo.accounts.some((a) => a.isPropFirm);
@@ -122,29 +133,27 @@ Deno.serve(async (req: Request) => {
 
   const secretName = `oauth_${broker}_${userId}_${environment}`;
 
-  // Resolve which broker_connection to update.
-  // Priority 1: connectionId encoded in the state token (set when user reconnects
-  //             a specific existing connection — avoids the multi-connection ambiguity
-  //             where order-by-created_at would pick the wrong row).
-  // Priority 2: fall back to newest OAuth connection for this broker+environment,
-  //             for first-connect flows where no connectionId was known up-front.
+  // Primary account (guaranteed non-null by the empty-accounts guard above).
+  const primaryAccount = userInfo.accounts[0];
+
+  // Resolve which broker_connection to upsert:
+  //   1. connectionId from the state token (explicit reconnect of a specific connection).
+  //   2. else match by the ACTUAL account being connected — NOT "newest" (the old bug, which
+  //      clobbered a different prop-firm connection: connecting APEX would overwrite MFFU/Lucid).
+  //   3. else null → the RPC creates a NEW connection (ON CONFLICT by user+broker+account_id+purpose).
   let connectionId: string | null = stateConnectionId ?? null;
   if (!connectionId) {
     const { data: existingConn } = await supabaseAdmin
       .from('broker_connections')
-      .select('id, connection_name')
+      .select('id')
       .eq('user_id', userId)
       .eq('broker', broker)
       .eq('environment', environment)
       .eq('auth_method', 'oauth')
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .eq('account_id', primaryAccount.id)
       .maybeSingle();
     connectionId = existingConn?.id ?? null;
   }
-
-  // Primary account
-  const primaryAccount = userInfo.accounts[0] ?? null;
 
   // Atomically upsert vault + broker_connections via the SECURITY DEFINER RPC
   try {
@@ -158,11 +167,11 @@ Deno.serve(async (req: Request) => {
       p_token_expires_at: tokens.expiresAt,
       p_oauth_scope: tokens.scope ?? null,
       p_oauth_provider_user_id: tokens.providerUserId ?? userInfo.providerUserId,
-      p_account_id: primaryAccount?.id ?? null,
-      p_account_name: primaryAccount?.name ?? null,
+      p_account_id: primaryAccount.id,
+      p_account_name: primaryAccount.name,
       // When updating an existing connection, pass null so COALESCE in the RPC
       // preserves the existing name. Only set the name on first connect.
-      p_connection_name: connectionId ? null : `${environment} – ${primaryAccount?.name ?? broker}`,
+      p_connection_name: connectionId ? null : `${environment} – ${primaryAccount.name}`,
       p_is_prop_firm: isPropFirm,
     });
 

@@ -2,19 +2,19 @@
 // ================================================
 // 🔥 JOURNAL TOOLS TABS — Tradezella-style tabbed product showcase
 // Sits between ProductShowcase (Journal hero) and PartnershipRow (NinjaTrader vendor strip)
-// Tabs: Automated Journal (Live), Backtesting / AI Insights / Trade Replay (Coming Soon)
+// Tabs: Meet FINO (Live), Automated Journal (Live), Shadow (Live), Backtesting (Coming Soon)
 // ================================================
 
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, LineChart, Brain, PlayCircle, Lock, TrendingUp, Coins } from "lucide-react";
+import { BookOpen, LineChart, Brain, Layers, Sparkles, Lock, TrendingUp, Coins } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SectionShell } from "./_shared/SectionShell";
 import { SectionEyebrow } from "./_shared/SectionEyebrow";
 import { SectionTitle } from "./_shared/SectionTitle";
 
-type TabKey = "journal" | "backtest" | "ai" | "replay";
+type TabKey = "journal" | "backtest" | "ai" | "shadow";
 
 interface Tab {
   key: TabKey;
@@ -84,19 +84,19 @@ const tabs: Tab[] = [
     ],
   },
   {
-    key: "replay",
-    icon: PlayCircle,
-    label: "Trade Replay",
-    status: "soon",
-    eyebrow: "Trade Replay",
-    title: "Re-watch the chart, bar by bar.",
+    key: "shadow",
+    icon: Layers,
+    label: "Shadow",
+    status: "live",
+    eyebrow: "Shadow",
+    title: "See what your exit really cost you.",
     description:
-      "Step through any trade exactly as it printed. Spot the hesitation, the early exit, the level you should have respected — then annotate it for next time.",
+      "Replay every closed trade against the exits you didn't take. Shadow models your stops and targets — held-to-plan, never-moved-stop, max favorable move — and tells you which habit is quietly costing you the most.",
     bullets: [
-      "Synced with your fills",
-      "Variable playback speed",
-      "Drawing tools & annotations",
-      "Share with your accountability space",
+      "Stop & target what-if scenarios",
+      "MFE / MAE on every closed trade",
+      "Held-to-plan vs. what you actually did",
+      "Confidence-scored gold verdicts",
     ],
   },
 ];
@@ -343,6 +343,149 @@ const EquityCurveSVG = () => (
   </svg>
 );
 
+// NOTE: status-success (green) / status-error (red) used here per the same
+// marketing-mockup exception as JournalDashboardMock (DS §14 no-green is waived
+// for these landing mocks that mirror the real journal's positive/negative colors).
+const ScenarioCard = ({
+  label,
+  value,
+  sub,
+  tone,
+  badge,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: "gold" | "muted";
+  badge?: string;
+}) => (
+  <div
+    className={`relative bg-section-card-rest border rounded-[12px] px-3 py-2.5 overflow-hidden ${
+      tone === "gold" ? "border-gold-primary/40" : "border-gold-border"
+    }`}
+  >
+    {badge && (
+      <span className="absolute top-1.5 right-1.5 text-[8px] font-medium uppercase tracking-[0.1em] text-gold-primary bg-gold-primary/10 border border-gold-primary/30 rounded-sm px-1 py-0.5">
+        {badge}
+      </span>
+    )}
+    <div className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary mb-1.5">
+      {label}
+    </div>
+    <div
+      className={`font-sans tabular-nums text-lg font-semibold leading-none ${
+        tone === "gold" ? "text-gold-primary" : "text-ink-primary"
+      }`}
+    >
+      {value}
+    </div>
+    <div className="text-[9px] text-status-success mt-1 tabular-nums">{sub}</div>
+  </div>
+);
+
+const ShadowChartSVG = () => (
+  <svg
+    viewBox="0 0 600 150"
+    preserveAspectRatio="none"
+    className="w-full h-[110px] block"
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="shadow-missed" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="var(--gold-primary)" stopOpacity="0.22" />
+        <stop offset="100%" stopColor="var(--gold-primary)" stopOpacity="0" />
+      </linearGradient>
+    </defs>
+
+    {/* horizontal grid lines */}
+    <line x1="0" y1="40" x2="600" y2="40" stroke="var(--gold-border)" strokeDasharray="2 4" />
+    <line x1="0" y1="80" x2="600" y2="80" stroke="var(--gold-border)" strokeDasharray="2 4" />
+    <line x1="0" y1="120" x2="600" y2="120" stroke="var(--gold-border)" strokeDasharray="2 4" />
+
+    {/* missed-profit shaded zone between your early exit and the shadow target */}
+    <rect x="300" y="30" width="300" height="42" fill="url(#shadow-missed)" />
+
+    {/* actual market price path */}
+    <path
+      d="M 0 122 L 60 112 L 120 118 L 180 95 L 240 90 L 300 72 L 360 56 L 420 34 L 480 30 L 540 44 L 600 36"
+      stroke="var(--ink-secondary, rgba(255,255,255,0.55))"
+      strokeWidth="1.5"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity="0.55"
+    />
+
+    {/* entry marker */}
+    <circle cx="180" cy="95" r="4" fill="var(--gold-primary)" />
+    <text x="180" y="112" fontSize="9" textAnchor="middle" fill="var(--gold-primary)" fontFamily="ui-monospace, monospace">Entry</text>
+
+    {/* your early exit — neutral dashed line */}
+    <line x1="300" y1="72" x2="600" y2="72" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" strokeDasharray="4 4" />
+    <circle cx="300" cy="72" r="4" fill="rgba(255,255,255,0.75)" />
+    <text x="310" y="68" fontSize="9" fill="rgba(255,255,255,0.6)" fontFamily="ui-monospace, monospace">You exited</text>
+
+    {/* shadow target — gold dashed line */}
+    <line x1="420" y1="34" x2="600" y2="34" stroke="var(--gold-primary)" strokeWidth="1.5" strokeDasharray="4 4" />
+    <circle cx="420" cy="34" r="4" fill="var(--gold-primary)" />
+    <text x="430" y="30" fontSize="9" fill="var(--gold-primary)" fontFamily="ui-monospace, monospace">Held to target</text>
+  </svg>
+);
+
+const ShadowPerformanceMock = () => {
+  return (
+    <div className="bg-section-card-deep p-3 lg:p-4">
+      {/* header: trade + verdict tag */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-wordmark text-sm text-ink-primary tracking-wide">NQ</span>
+          <span className="text-[9px] uppercase tracking-[0.1em] text-status-success bg-status-success/10 border border-status-success/25 rounded-sm px-1.5 py-0.5">
+            Long
+          </span>
+          <span className="text-[10px] text-ink-tertiary font-mono">Mar 19 · 2 contracts</span>
+        </div>
+        <div className="text-[9px] uppercase tracking-[0.18em] text-gold-primary/80 border border-gold-primary/30 rounded-sm px-2 py-0.5">
+          Shadow Verdict
+        </div>
+      </div>
+
+      {/* price chart: your exit vs held-to-target */}
+      <div className="bg-section-card-rest border border-gold-border rounded-[12px] p-3 mb-3">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <div className="text-ink-primary font-semibold text-xs">What could have been</div>
+            <div className="text-ink-tertiary text-[10px] mt-0.5">Your exit vs. held-to-plan</div>
+          </div>
+          <div className="flex items-center gap-3 text-[9px]">
+            <span className="flex items-center gap-1 text-ink-tertiary">
+              <span className="w-2.5 h-[2px] bg-ink-secondary inline-block" aria-hidden="true" />You
+            </span>
+            <span className="flex items-center gap-1 text-gold-primary">
+              <span className="w-2.5 h-[2px] bg-gold-primary inline-block" aria-hidden="true" />Shadow
+            </span>
+          </div>
+        </div>
+        <ShadowChartSVG />
+      </div>
+
+      {/* scenario comparison cards */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <ScenarioCard label="You exited" value="+1.4R" sub="+$612" tone="muted" />
+        <ScenarioCard label="Held to target" value="+3.2R" sub="+$1,408" tone="gold" badge="Best" />
+        <ScenarioCard label="Never moved stop" value="+2.1R" sub="+$924" tone="muted" />
+      </div>
+
+      {/* verdict line */}
+      <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-[10px] bg-gold-primary/[0.06] border border-gold-primary/20">
+        <Sparkles className="h-3.5 w-3.5 text-gold-primary shrink-0" aria-hidden="true" />
+        <span className="text-[11px] text-ink-secondary leading-snug">
+          You left <span className="text-status-success font-semibold">+1.8R ($796)</span> on the table by exiting early — your #1 recurring leak.
+        </span>
+      </div>
+    </div>
+  );
+};
+
 const JournalToolsTabs = () => {
   const [active, setActive] = useState<TabKey>("ai");
   const activeTab = tabs.find((t) => t.key === active)!;
@@ -505,6 +648,8 @@ const JournalToolsTabs = () => {
                 <JournalDashboardMock />
               ) : activeTab.key === "ai" ? (
                 <MeetFinoIntro />
+              ) : activeTab.key === "shadow" ? (
+                <ShadowPerformanceMock />
               ) : activeTab.screenshot ? (
                 <img
                   src={activeTab.screenshot.src}

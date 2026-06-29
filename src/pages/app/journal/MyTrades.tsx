@@ -30,6 +30,8 @@ import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
+import { TradeShareMenu } from "@/features/floor/components/TradeShareMenu";
+import { isManualTrade } from "@/lib/trades/isManualTrade";
 import { tradeR } from '@/utils/rAggregates';
 import { BulkActionBar } from "@/components/journal/BulkActionBar";
 import { useStrategiesOptimized, useStrategyRConfigs } from "@/hooks/useStrategies";
@@ -44,7 +46,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useChartTheme } from "@/components/charting/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Moon, Sun, Maximize2, Upload, X, Brain } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare, Maximize2, Upload, X, Brain } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { getDTE, getOptionBreakeven, getOptionContractLabel, getStrategyLabel, getPipSize, parseForexPair } from "@/utils/tradeCalculations";
@@ -144,6 +146,9 @@ interface Trade {
   user_risk_r?: number;
   user_reward_r?: number;
   input_mode?: 'summary' | 'risk-only';
+  // Origin of the trade: 'manual' (Add Trade form), 'api' (AI screenshot),
+  // 'tradovate' / 'ibrit' / 'tradingview' / 'csv' (broker-synced / imported).
+  import_source?: string | null;
   // Options (single-leg) — populated only when asset_class === 'options'
   option_type?: "CALL" | "PUT";
   strike_price?: number;
@@ -178,6 +183,7 @@ interface StrategyOption {
 
 interface Stats {
   totalTrades: number;
+  closedCount: number;
   winRate: number;
   totalPnL: number;
   avgR: number;
@@ -541,20 +547,22 @@ const buildTradeSummaries = (
 };
 
 // 🚀 OPTIMIZATION: Memoized StatsCard Component
-const StatsCard = memo(({ 
-  icon: Icon, 
-  title, 
-  value, 
-  subtitle, 
-  color, 
-  valueColor 
-}: { 
-  icon: any; 
-  title: string; 
-  value: string; 
-  subtitle?: string; 
-  color: string; 
+const StatsCard = memo(({
+  icon: Icon,
+  title,
+  value,
+  subtitle,
+  color,
+  valueColor,
+  loading,
+}: {
+  icon: any;
+  title: string;
+  value: string;
+  subtitle?: string;
+  color: string;
   valueColor?: string;
+  loading?: boolean;
 }) => (
   <div 
     className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02]"
@@ -589,11 +597,15 @@ const StatsCard = memo(({
       </div>
 
       {/* Value — large and dominant */}
-      <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
-        {value}
-      </div>
+      {loading ? (
+        <div className="h-8 w-24 mb-2 rounded-md bg-zinc-700/40 animate-pulse" />
+      ) : (
+        <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
+          {value}
+        </div>
+      )}
 
-      {subtitle && (
+      {!loading && subtitle && (
         <div className="text-xs text-zinc-600 font-medium">
           {subtitle}
         </div>
@@ -1254,7 +1266,7 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   // TRADER mode: pass skipCopyAggregation so we receive raw per-account fills
   // instead of copy-aggregated rows. normalizeTraderTrades (below) then groups
   // them into decisions, matching Dashboard behaviour.
-  const { data: rawTrades = [], isLoading, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
+  const { data: rawTrades = [], isLoading, isPlaceholderData, error } = useTrades(userId, mentorPortfolioId, { skipCopyAggregation: isTraderMode }, (isShowingAll || isTraderMode) ? hiddenPortfolioIds : undefined);
   // TRADER scope: normalize copier-duplicated rows into one decision per trade.
   // All downstream stats and the table operate on `trades` (the normalized array).
   // Non-TRADER: `trades` === `rawTrades` (zero cost, referentially stable).
@@ -1367,12 +1379,22 @@ export default function MyTrades({ overrideUserId, readOnly = false }: MyTradesP
   // TRADER scope: normalise to one row per decision before stat/table computation
   const displayTrades = useMemo(() => {
     if (!isTraderMode) return trades;
-    // normalizeTraderTrades expects ascending order; useTrades returns descending
-    const ascending = [...trades].reverse();
-    const normalized = normalizeTraderTrades(ascending, traderMode);
-    // Return descending to match the rest of the page's expectations
-    return [...normalized].reverse();
-  }, [trades, isTraderMode, traderMode]);
+    // `trades` (the memo above) is ALREADY normalized once and carries
+    // group_trade_ids for the full copier group. Re-normalizing here would treat
+    // each decision as a size-1 group and clobber group_trade_ids back to a single
+    // id, which breaks bulk/single delete (only one copy gets deleted, the rest
+    // reappear on refetch). Just present newest-first (normalizeTraderTrades
+    // returns ascending order).
+    return [...trades].sort(
+      (a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime(),
+    );
+  }, [trades, isTraderMode]);
+
+  // While the query is still settling — initial load, OR serving stale
+  // placeholder data after a query-key change (account-scope / hidden-portfolio
+  // resolution happens one tick after mount) — show a stable skeleton instead of
+  // a transient wrong count. Prevents the "27 → 15" number jump on page load.
+  const isStatsLoading = isLoading || isPlaceholderData;
 
   // ✅ 4. 🚀 OPTIMIZED: Stats calculation - single pass, memoized
 const stats = useMemo<Stats>(() => {
@@ -1385,10 +1407,11 @@ const stats = useMemo<Stats>(() => {
     // Summary mode: closed if has exit_price
     return t.exit_price != null;
   });
-  const total = closedTrades.length;
-  
+  const closedCount = closedTrades.length;
+  const total = displayTrades.length;
+
   if (total === 0) {
-    return { totalTrades: 0, winRate: 0, totalPnL: 0, avgR: 0, wins: 0, losses: 0, breakeven: 0 };
+    return { totalTrades: 0, closedCount: 0, winRate: 0, totalPnL: 0, avgR: 0, wins: 0, losses: 0, breakeven: 0 };
   }
 
   let wins = 0, losses = 0, breakeven = 0, totalPnL = 0, totalR = 0, rCount = 0;
@@ -1413,7 +1436,8 @@ const stats = useMemo<Stats>(() => {
 
     return {
       totalTrades: total,
-      winRate: (wins / total) * 100,
+      closedCount,
+      winRate: closedCount > 0 ? (wins / closedCount) * 100 : 0,
       totalPnL,
       avgR: rCount > 0 ? totalR / rCount : 0,
       wins,
@@ -1883,16 +1907,18 @@ const stats = useMemo<Stats>(() => {
               value={stats.totalTrades.toString()}
               subtitle={stats.totalTrades > 0 ? `${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE` : undefined}
               color="rgba(59, 130, 246, 0.1)"
+              loading={isStatsLoading}
             />
-            
+
             <StatsCard
               icon={TrendingUp}
               title="Win Rate"
               value={`${stats.winRate.toFixed(1)}%`}
-              subtitle={stats.totalTrades > 0 ? `${stats.wins} / ${stats.totalTrades} trades` : undefined}
+              subtitle={stats.closedCount > 0 ? `${stats.wins} / ${stats.closedCount} trades` : undefined}
               color="rgba(16, 185, 129, 0.1)"
+              loading={isStatsLoading}
             />
-            
+
             <StatsCard
               icon={DollarSign}
               title="Net P&L"
@@ -1900,8 +1926,9 @@ const stats = useMemo<Stats>(() => {
               subtitle={stats.totalPnL !== 0 ? (stats.totalPnL >= 0 ? 'Profit' : 'Loss') : undefined}
               color="rgba(234, 179, 8, 0.1)"
               valueColor={stats.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              loading={isStatsLoading}
             />
-            
+
             <StatsCard
               icon={Award}
               title="Avg R"
@@ -1909,6 +1936,7 @@ const stats = useMemo<Stats>(() => {
               subtitle="Per trade"
               color="rgba(168, 85, 247, 0.1)"
               valueColor={stats.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              loading={isStatsLoading}
             />
           </div>
         </div>
@@ -1991,7 +2019,7 @@ const stats = useMemo<Stats>(() => {
 
       {/* Trades Table */}
       <div className="flex-1 overflow-auto">
-        {isLoading ? (
+        {isStatsLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-zinc-500">Loading trades...</div>
           </div>
@@ -2823,18 +2851,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                       Notes
                     </TabsTrigger>
                   </TabsList>
-                    {tradeDetailTab === 'chart' && (
+                    {tradeDetailTab === 'chart' && !isManualTrade(selectedTrade) && (
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-                          aria-label="Toggle chart theme"
-                          title={`Switch to ${detailChartTheme === 'light' ? 'dark' : 'light'} theme`}
-                        >
-                          {detailChartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-                          {detailChartTheme === 'light' ? 'Dark' : 'Light'}
-                        </button>
+                        <TradeShareMenu trade={selectedTrade} />
                         <button
                           type="button"
                           onClick={() => setDetailChartFullscreen(true)}
@@ -2850,15 +2869,25 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
 
                   {/* 📊 CHART TAB */}
                   <TabsContent value="chart" className="mt-0 min-h-0 flex-1 overflow-hidden px-4 pb-4 pt-3 data-[state=active]:flex data-[state=active]:flex-col">
-                    <Suspense fallback={<TradeChartSkeleton />}>
-                      <TradeChart
-                        trade={selectedTrade}
-                        theme={detailChartTheme}
-                        onToggleTheme={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
-                        fullscreen={detailChartFullscreen}
-                        onFullscreenChange={setDetailChartFullscreen}
-                      />
-                    </Suspense>
+                    {isManualTrade(selectedTrade) ? (
+                      <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center">
+                        <TrendingUp className="mb-3 h-8 w-8 text-zinc-700" />
+                        <p className="text-sm font-semibold text-zinc-300">Chart unavailable for manually added trades</p>
+                        <p className="mt-1 max-w-sm text-xs text-zinc-500">
+                          This trade was entered manually, so there is no synced market chart to display. Add a screenshot in the Screenshots tab to keep a visual record.
+                        </p>
+                      </div>
+                    ) : (
+                      <Suspense fallback={<TradeChartSkeleton />}>
+                        <TradeChart
+                          trade={selectedTrade}
+                          theme={detailChartTheme}
+                          onToggleTheme={() => setDetailChartTheme(detailChartTheme === 'light' ? 'dark' : 'light')}
+                          fullscreen={detailChartFullscreen}
+                          onFullscreenChange={setDetailChartFullscreen}
+                        />
+                      </Suspense>
+                    )}
                   </TabsContent>
 
                   {/* 📸 SCREENSHOTS TAB */}

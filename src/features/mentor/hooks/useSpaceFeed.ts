@@ -15,6 +15,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { mapSpaceError } from '@/features/mentor/hooks/useMentorshipSpaces';
+import type { ReactionAggregate } from '@/constants/feedReactions';
+export type { ReactionAggregate };
 
 // ================================================
 // INLINE TYPES (do not re-export via src/types/mentorship.ts)
@@ -34,7 +36,8 @@ export interface FeedPost {
   created_at: string;
   comment_count: number;
   reaction_count: number;
-  my_reacted: boolean;
+  reactions: ReactionAggregate[];
+  my_reaction: string | null;
 }
 
 export interface FeedComment {
@@ -90,7 +93,11 @@ export function useSpaceFeed(spaceId?: string): {
         p_space: spaceId,
       });
       if (error) throw error;
-      return (data ?? []) as FeedPost[];
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        ...row,
+        reactions: (row.reactions as ReactionAggregate[] | null) ?? [],
+        my_reaction: (row.my_reaction as string | null) ?? null,
+      })) as FeedPost[];
     },
   });
 

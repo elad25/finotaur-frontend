@@ -1,7 +1,7 @@
 // src/features/automation/components/CopierRouteCard.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Edit a single copier route: source connection, targets (with scale + max
-// contracts), symbol filter, opens/closes/reverse toggles.
+// Edit a single copier route: source account, targets (with scale, max
+// contracts, cross_to_micro), symbol filter, opens/closes/reverse toggles.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
@@ -12,13 +12,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AccountPicker } from './AccountPicker';
-import type { CopierRoute, CopierRouteTargetInput } from '../lib/automationTypes';
+import type {
+  CopierRoute,
+  CopierRouteTargetInput,
+  SelectedAccount,
+} from '../lib/automationTypes';
 
-interface CopierRouteCardProps {
+export interface CopierRouteCardProps {
   route: CopierRoute;
   onSave: (params: {
     routeId: string;
-    sourceId: string;
+    sourceAccountId: string;
+    sourceAccountName: string;
+    sourceBroker: string | null;
+    sourceEnvironment: string | null;
     label: string;
     symbolFilter: string[];
     copyOpens: boolean;
@@ -32,17 +39,25 @@ interface CopierRouteCardProps {
 }
 
 interface LocalTarget {
-  destinationId: string;
-  scaleRatio: string;   // string for controlled input
-  maxContracts: string; // string for controlled input
+  destinationAccountId: string;
+  destinationAccountName: string;
+  destinationBroker: string | null;
+  destinationEnvironment: string | null;
+  scaleRatio: string;    // string for controlled input
+  maxContracts: string;  // string for controlled input
+  crossToMicro: boolean;
   isActive: boolean;
 }
 
 function buildLocalTargets(route: CopierRoute): LocalTarget[] {
   return (route.automation_copier_route_targets ?? []).map((t) => ({
-    destinationId: t.destination_connection_id,
+    destinationAccountId: t.destination_account_id,
+    destinationAccountName: t.destination_account_name,
+    destinationBroker: t.destination_broker ?? null,
+    destinationEnvironment: t.destination_environment ?? null,
     scaleRatio: t.scale_ratio?.toString() ?? '1',
     maxContracts: t.max_contracts?.toString() ?? '',
+    crossToMicro: t.cross_to_micro ?? false,
     isActive: t.is_active,
   }));
 }
@@ -51,7 +66,12 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
   const [expanded, setExpanded] = useState(false);
 
   const [label, setLabel] = useState(route.label);
-  const [sourceId, setSourceId] = useState(route.source_connection_id);
+  const [sourceAccountId, setSourceAccountId] = useState(route.source_account_id);
+  const [sourceAccountName, setSourceAccountName] = useState(route.source_account_name);
+  const [sourceBroker, setSourceBroker] = useState<string | null>(route.source_broker ?? null);
+  const [sourceEnvironment, setSourceEnvironment] = useState<string | null>(
+    route.source_environment ?? null,
+  );
   const [symbolFilter, setSymbolFilter] = useState(route.symbol_filter?.join(', ') ?? '');
   const [copyOpens, setCopyOpens] = useState(route.copy_opens);
   const [copyCloses, setCopyCloses] = useState(route.copy_closes);
@@ -59,10 +79,42 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
   const [isActive, setIsActive] = useState(route.is_active);
   const [targets, setTargets] = useState<LocalTarget[]>(() => buildLocalTargets(route));
 
+  const handleSourceChange = (account: SelectedAccount | null) => {
+    setSourceAccountId(account?.account_id ?? '');
+    setSourceAccountName(account?.account_name ?? '');
+    setSourceBroker(account?.broker ?? null);
+    setSourceEnvironment(account?.environment ?? null);
+  };
+
+  const handleTargetAccountChange = (idx: number, account: SelectedAccount | null) => {
+    setTargets((prev) =>
+      prev.map((t, i) =>
+        i === idx
+          ? {
+              ...t,
+              destinationAccountId: account?.account_id ?? '',
+              destinationAccountName: account?.account_name ?? '',
+              destinationBroker: account?.broker ?? null,
+              destinationEnvironment: account?.environment ?? null,
+            }
+          : t,
+      ),
+    );
+  };
+
   const addTarget = () => {
     setTargets((prev) => [
       ...prev,
-      { destinationId: '', scaleRatio: '1', maxContracts: '', isActive: true },
+      {
+        destinationAccountId: '',
+        destinationAccountName: '',
+        destinationBroker: null,
+        destinationEnvironment: null,
+        scaleRatio: '1',
+        maxContracts: '',
+        crossToMicro: false,
+        isActive: true,
+      },
     ]);
   };
 
@@ -81,17 +133,24 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
       .filter(Boolean);
 
     const parsedTargets: CopierRouteTargetInput[] = targets
-      .filter((t) => t.destinationId)
+      .filter((t) => t.destinationAccountId)
       .map((t) => ({
-        destination_connection_id: t.destinationId,
+        destination_account_id: t.destinationAccountId,
+        destination_account_name: t.destinationAccountName,
+        destination_broker: t.destinationBroker,
+        destination_environment: t.destinationEnvironment,
         scale_ratio: parseFloat(t.scaleRatio) || 1,
         max_contracts: t.maxContracts ? parseInt(t.maxContracts, 10) : null,
+        cross_to_micro: t.crossToMicro,
         is_active: t.isActive,
       }));
 
     onSave({
       routeId: route.id,
-      sourceId,
+      sourceAccountId,
+      sourceAccountName,
+      sourceBroker,
+      sourceEnvironment,
       label: label.trim() || 'Unnamed route',
       symbolFilter: symbols,
       copyOpens,
@@ -143,7 +202,7 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
 
       {!expanded && (
         <p className="text-xs text-zinc-500 pl-6">
-          {targetCount} destination{targetCount !== 1 ? 's' : ''} ·{' '}
+          {sourceAccountName || 'No source'} · {targetCount} destination{targetCount !== 1 ? 's' : ''} ·{' '}
           {[copyOpens && 'opens', copyCloses && 'closes', reverse && 'reversed']
             .filter(Boolean)
             .join(', ') || 'no copy settings'}
@@ -156,8 +215,8 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
           <div className="space-y-1">
             <Label className="text-xs text-zinc-400">Source account (copy FROM)</Label>
             <AccountPicker
-              value={sourceId}
-              onChange={(v) => setSourceId(v ?? '')}
+              value={sourceAccountId || null}
+              onChange={handleSourceChange}
               includeGlobal={false}
               className="h-8 text-sm"
             />
@@ -193,52 +252,62 @@ export function CopierRouteCard({ route, onSave, onDelete, isSaving }: CopierRou
           </div>
 
           {/* Targets */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Label className="text-xs text-zinc-400">Destination accounts (copy TO)</Label>
             {targets.map((target, idx) => (
-              <div key={idx} className="flex items-start gap-2">
-                <div className="flex-1 grid grid-cols-3 gap-2">
-                  <AccountPicker
-                    value={target.destinationId || null}
-                    onChange={(v) => updateTarget(idx, { destinationId: v ?? '' })}
-                    includeGlobal={false}
-                    placeholder="Destination"
-                    className="h-7 text-sm col-span-1"
-                  />
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step={0.01}
-                    value={target.scaleRatio}
-                    onChange={(e) => updateTarget(idx, { scaleRatio: e.target.value })}
-                    placeholder="Scale (1 = 100%)"
-                    className="h-7 text-sm"
-                  />
-                  <Input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={target.maxContracts}
-                    onChange={(e) => updateTarget(idx, { maxContracts: e.target.value })}
-                    placeholder="Max contracts"
-                    className="h-7 text-sm"
-                  />
+              <div key={idx} className="space-y-1.5 rounded-md border border-zinc-800 p-2">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <AccountPicker
+                      value={target.destinationAccountId || null}
+                      onChange={(acc) => handleTargetAccountChange(idx, acc)}
+                      includeGlobal={false}
+                      placeholder="Destination"
+                      className="h-7 text-sm col-span-1"
+                    />
+                    <Input
+                      type="number"
+                      min={0.01}
+                      step={0.01}
+                      value={target.scaleRatio}
+                      onChange={(e) => updateTarget(idx, { scaleRatio: e.target.value })}
+                      placeholder="Scale (1 = 100%)"
+                      className="h-7 text-sm"
+                    />
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={target.maxContracts}
+                      onChange={(e) => updateTarget(idx, { maxContracts: e.target.value })}
+                      placeholder="Max contracts"
+                      className="h-7 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 pt-1">
+                    <Checkbox
+                      checked={target.isActive}
+                      onCheckedChange={(v) => updateTarget(idx, { isActive: Boolean(v) })}
+                      aria-label="Target active"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTarget(idx)}
+                      className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+                      aria-label="Remove target"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 pt-1">
+                {/* Cross-to-micro toggle */}
+                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer pl-0.5">
                   <Checkbox
-                    checked={target.isActive}
-                    onCheckedChange={(v) => updateTarget(idx, { isActive: Boolean(v) })}
-                    aria-label="Target active"
+                    checked={target.crossToMicro}
+                    onCheckedChange={(v) => updateTarget(idx, { crossToMicro: Boolean(v) })}
                   />
-                  <button
-                    type="button"
-                    onClick={() => removeTarget(idx)}
-                    className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
-                    aria-label="Remove target"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                  Cross to micro (e.g. NQ → MNQ)
+                </label>
               </div>
             ))}
             <button
