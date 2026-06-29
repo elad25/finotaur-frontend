@@ -276,9 +276,9 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo }: Props) 
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[96vh] w-[calc(100vw-24px)] max-w-[560px] overflow-hidden rounded-[9px] border border-[#C9A646]/18 bg-[#070707] p-0 text-ink-primary shadow-[0_0_42px_rgba(201,166,70,0.16)] [&>button]:hidden"
+        className="max-h-[96dvh] w-[calc(100vw-24px)] max-w-[560px] overflow-hidden rounded-[9px] border border-[#C9A646]/18 bg-[#070707] p-0 text-ink-primary shadow-[0_0_42px_rgba(201,166,70,0.16)] [&>button]:hidden"
       >
-        <div className="relative flex max-h-[96vh] flex-col overflow-hidden rounded-[9px] bg-[radial-gradient(circle_at_12%_0%,rgba(201,166,70,0.13),transparent_28%),radial-gradient(circle_at_92%_92%,rgba(201,166,70,0.08),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.032),rgba(255,255,255,0.008))]">
+        <div className="relative flex max-h-[96dvh] flex-col overflow-hidden rounded-[9px] bg-[radial-gradient(circle_at_12%_0%,rgba(201,166,70,0.13),transparent_28%),radial-gradient(circle_at_92%_92%,rgba(201,166,70,0.08),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.032),rgba(255,255,255,0.008))]">
           <button
             type="button"
             onClick={() => onOpenChange(false)}

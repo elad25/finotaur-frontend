@@ -483,7 +483,7 @@ export default function BinanceConnectionPopup({ onClose, onSuccess }: Props) {
       onClick={onClose}
     >
       <div
-        className="relative max-h-[calc(100vh-32px)] w-full max-w-[460px] overflow-y-auto rounded-[16px] border bg-[#141414] p-4 shadow-[0_0_50px_rgba(240,185,11,0.2)] sm:p-5"
+        className="relative max-h-[calc(100dvh-32px)] w-full max-w-[460px] overflow-y-auto rounded-[16px] border bg-[#141414] p-4 shadow-[0_0_50px_rgba(240,185,11,0.2)] sm:p-5"
         style={{ borderColor: 'rgba(240,185,11,0.08)' }}
         onClick={(e) => e.stopPropagation()}
       >
