@@ -4,14 +4,13 @@
 // Keeping it here guarantees the two pages can never diverge.
 // ================================================
 
-import { getAssetMultiplier } from '@/utils/tradeCalculations';
 import { computeActualR } from '@/utils/rResolver';
+import { clusterByOverlap, summedInitialRisk } from '@/lib/journal/positionGrouping';
 
 export type AggregationMode = 'all-accounts' | 'trader';
 
-// In all-accounts mode, trades that share the same symbol+side and whose
-// open_at timestamps fall within this window are treated as a single logical
-// position (partials + copier copies of the same entry signal).
+// Trader-mode (legacy Map-keyed) bucket width. all-accounts mode no longer uses
+// a time window — it groups by net-flat interval overlap (see clusterByOverlap).
 const ENTRY_CLUSTER_WINDOW_MS = 5_000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,8 +42,17 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
   );
   const rep = sorted[0];
 
-  // Single-row clusters: return as-is (own actual_r is correct for an unsplit trade).
-  if (group.length === 1) return { ...rep, group_trade_ids: [rep.id] };
+  // Single-row clusters: in all-accounts mode, recompute R against the initial
+  // 1R so an uncopied decision matches TRADER and merged rows (never the stored
+  // full-risk value). Other modes keep the row's own actual_r.
+  if (group.length === 1) {
+    if (mode === 'all-accounts') {
+      const initRisk = summedInitialRisk(group);
+      const r = initRisk && initRisk > 0 ? computeActualR(Number(rep.pnl) || 0, initRisk) : null;
+      return { ...rep, actual_r: r, group_trade_ids: [rep.id] };
+    }
+    return { ...rep, group_trade_ids: [rep.id] };
+  }
 
   const totalPnL = numericSum(group, 'pnl');
   const totalQuantity = numericSum(group, 'quantity');
@@ -60,24 +68,9 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
   const financialFields =
     mode === 'all-accounts'
       ? (() => {
-          // Compute a single whole-position R for merged clusters. Individual per-leg
-          // R values must not be used — they reflect partial exits, not the full trade.
-          const summedRisk = numericSum(group, 'risk_usd');
-          let unifiedRisk: number | null = summedRisk > 0 ? summedRisk : null;
-
-          if (!unifiedRisk) {
-            // Stop-based fallback: |entry - stop| × total_qty × multiplier
-            const stopPrice = Number(rep.stop_price);
-            const entryPrice = Number(rep.entry_price);
-            const mult =
-              Number(rep.multiplier) > 0
-                ? Number(rep.multiplier)
-                : getAssetMultiplier(rep.symbol || '');
-            const stopDist = Math.abs(entryPrice - stopPrice);
-            if (Number.isFinite(stopDist) && stopDist > 0 && totalQuantity > 0 && mult > 0) {
-              unifiedRisk = stopDist * totalQuantity * mult;
-            }
-          }
+          // R relative to the INITIAL 1R (first-entry risk), shared with TRADER
+          // via summedInitialRisk — never the full consolidated-position risk.
+          const unifiedRisk = summedInitialRisk(group);
 
           return {
             pnl: totalPnL,
@@ -120,10 +113,11 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
  * multiple portfolios. Summing P&L preserves Net P&L while reducing trade count
  * to the number of unique decisions — matching the "My Trades" display.
  *
- * In all-accounts mode the grouping key is entry-time proximity: trades sharing
- * the same symbol+side whose open_at falls within ENTRY_CLUSTER_WINDOW_MS of the
- * cluster anchor are merged into one position. This collapses partial take-profits
- * and copier copies of the same signal regardless of exit price or close time.
+ * In all-accounts mode grouping is NET-FLAT: trades sharing the same symbol+side
+ * whose [open_at, close_at] intervals overlap are merged into one position (see
+ * clusterByOverlap). This collapses copier copies and scale-ins of one decision
+ * while keeping genuinely separate flat→flat round-trips distinct. R is anchored
+ * to the initial entry's 1R (summedInitialRisk), identical to TRADER mode.
  *
  * In trader mode the original Map-keyed grouping is still used (no change there).
  *
@@ -165,69 +159,10 @@ export function aggregateCopiedTrades<T extends Record<string, any>>(
       .sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
   }
 
-  // all-accounts mode: cluster by entry-time proximity.
-  // Sort ascending: symbol → side → open_at (invalid open_at sorts last).
-  const sorted = [...trades].sort((a, b) => {
-    const symA = (a.symbol || '').trim().toUpperCase();
-    const symB = (b.symbol || '').trim().toUpperCase();
-    if (symA < symB) return -1;
-    if (symA > symB) return 1;
-    const sideA = a.side || '';
-    const sideB = b.side || '';
-    if (sideA < sideB) return -1;
-    if (sideA > sideB) return 1;
-    const tsA = new Date(a.open_at).getTime();
-    const tsB = new Date(b.open_at).getTime();
-    const validA = Number.isFinite(tsA);
-    const validB = Number.isFinite(tsB);
-    if (!validA && !validB) return 0;
-    if (!validA) return 1;  // invalid sorts last
-    if (!validB) return -1;
-    return tsA - tsB;
-  });
-
-  const clusters: T[][] = [];
-  let currentCluster: T[] = [];
-  let anchorSymbol = '';
-  let anchorSide = '';
-  let anchorTs = NaN;
-
-  for (const trade of sorted) {
-    const sym = (trade.symbol || '').trim().toUpperCase();
-    const side = trade.side || '';
-    const ts = new Date(trade.open_at).getTime();
-    const validTs = Number.isFinite(ts);
-
-    const sameSymbolSide = sym === anchorSymbol && side === anchorSide;
-    const withinWindow = validTs && Number.isFinite(anchorTs) && (ts - anchorTs) <= ENTRY_CLUSTER_WINDOW_MS;
-
-    if (currentCluster.length === 0) {
-      // Start the very first cluster.
-      currentCluster.push(trade);
-      anchorSymbol = sym;
-      anchorSide = side;
-      anchorTs = validTs ? ts : NaN;
-    } else if (!validTs) {
-      // Trades with invalid/missing open_at never merge — each forms its own cluster.
-      clusters.push(currentCluster);
-      currentCluster = [trade];
-      anchorSymbol = sym;
-      anchorSide = side;
-      anchorTs = NaN;
-    } else if (sameSymbolSide && withinWindow) {
-      currentCluster.push(trade);
-    } else {
-      // Different symbol/side or outside the window — start a new cluster.
-      clusters.push(currentCluster);
-      currentCluster = [trade];
-      anchorSymbol = sym;
-      anchorSide = side;
-      anchorTs = ts;
-    }
-  }
-  if (currentCluster.length > 0) clusters.push(currentCluster);
-
-  return clusters
+  // all-accounts mode: net-flat clustering by [open_at, close_at] interval
+  // overlap, shared with TRADER (normalizeTraderTrades) via clusterByOverlap so
+  // both views group the same fills into the same decisions.
+  return clusterByOverlap(trades)
     .map(cluster => aggregateTradeGroup(cluster, mode))
     .sort((a, b) => new Date(b.open_at).getTime() - new Date(a.open_at).getTime());
 }
