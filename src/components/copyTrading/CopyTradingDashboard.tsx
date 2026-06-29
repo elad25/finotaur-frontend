@@ -5,12 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertOctagon, Crown, Plus, Search, SlidersHorizontal, Users, X } from 'lucide-react';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
+import { AlertOctagon, Crown, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
@@ -84,129 +79,10 @@ const POPULAR_CONTRACTS = [
 ] as const;
 
 // ─── Table column grid (shared by header + rows) ──────────────
-// 14 cols: leader-radio · follow · connection · account · symbol · ratio · cross · options · position · balance · dayPnL · openPnL · qty · actions
+// 13 cols: leader-radio · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
 
 const GRID_COLS =
-  'grid-cols-[56px_60px_120px_minmax(160px,1fr)_80px_120px_64px_64px_90px_100px_100px_100px_64px_80px] min-w-[1340px]';
-
-// ─── Options popover sub-component ───────────────────────────
-
-function RowOptionsPopover({
-  rule,
-  isFollowing,
-  onUpdateRule,
-}: {
-  rule: CopyRule | null;
-  isFollowing: boolean;
-  onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
-}) {
-  const copyOpens  = rule?.copy_opens  ?? true;
-  const copyCloses = rule?.copy_closes ?? true;
-  const reverse    = rule?.reverse     ?? false;
-
-  // Non-default if any flag differs from its default value.
-  const hasNonDefault = !copyOpens || !copyCloses || reverse;
-
-  function Toggle({
-    label,
-    value,
-    disabled,
-    title,
-    onChange,
-  }: {
-    label: string;
-    value: boolean;
-    disabled: boolean;
-    title?: string;
-    onChange: () => void;
-  }) {
-    return (
-      <div className="flex items-center justify-between gap-ds-3" title={title}>
-        <span className={`text-xs ${disabled ? 'text-ink-tertiary' : 'text-ink-secondary'}`}>
-          {label}
-        </span>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onChange}
-          className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors duration-base ${
-            value
-              ? 'bg-status-success'
-              : 'bg-status-offline border border-border-ds-default'
-          } ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-          aria-label={label}
-        >
-          <span
-            className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-base ${
-              value ? 'left-[18px]' : 'left-0.5'
-            }`}
-          />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={`relative flex h-7 w-7 items-center justify-center rounded-md border transition-colors duration-base ${
-            hasNonDefault
-              ? 'border-gold-border/60 bg-gold-primary/10 text-gold-primary'
-              : 'border-border-ds-subtle bg-surface-base text-ink-tertiary hover:border-border-ds-default hover:text-ink-secondary'
-          }`}
-          aria-label="Copy options"
-          title="Copy options"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          {hasNonDefault && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-gold-primary" />
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        className="w-56 border-border-ds-subtle bg-surface-1 p-ds-3"
-      >
-        <p className="mb-ds-3 text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
-          Copy Options
-        </p>
-        <p className="mb-ds-3 text-[11px] text-ink-tertiary">
-          These apply to all accounts following this leader.
-        </p>
-        {!isFollowing && (
-          <p className="mb-ds-3 text-xs text-ink-tertiary">
-            Follow this leader first to enable options.
-          </p>
-        )}
-        <div className="flex flex-col gap-ds-3">
-          <Toggle
-            label="Copy entries"
-            value={copyOpens}
-            disabled={!isFollowing}
-            title="Copy the leader's position opens (entries) to this account"
-            onChange={() => void onUpdateRule({ copy_opens: !copyOpens })}
-          />
-          <Toggle
-            label="Copy exits"
-            value={copyCloses}
-            disabled={!isFollowing}
-            title="Copy the leader's position closes (exits) to this account"
-            onChange={() => void onUpdateRule({ copy_closes: !copyCloses })}
-          />
-          <Toggle
-            label="Reverse"
-            value={reverse}
-            disabled={!isFollowing}
-            title="Mirror the opposite side — leader buys → this account sells"
-            onChange={() => void onUpdateRule({ reverse: !reverse })}
-          />
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+  'grid-cols-[56px_60px_120px_minmax(160px,1fr)_80px_120px_64px_90px_100px_100px_100px_64px_80px] min-w-[1276px]';
 
 // ─── Internal AccountRow ──────────────────────────────────────
 
@@ -353,7 +229,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
                 : 'bg-status-offline border border-border-ds-default'
           }`}
         />
-        <span className="text-sm text-ink-primary truncate">{row.accountName}</span>
+        <span className="text-xs text-ink-primary truncate">{row.accountName}</span>
       </div>
 
       {/* Symbol */}
@@ -444,19 +320,6 @@ const CopyAccountRow = memo(function CopyAccountRow({
               }`}
             />
           </button>
-        )}
-      </div>
-
-      {/* Options popover — copy_opens / copy_closes / reverse */}
-      <div className="flex items-center justify-center">
-        {isLeader ? (
-          <span className="text-sm text-ink-tertiary">—</span>
-        ) : (
-          <RowOptionsPopover
-            rule={rule}
-            isFollowing={isFollowing}
-            onUpdateRule={onUpdateRule}
-          />
         )}
       </div>
 
@@ -947,7 +810,6 @@ export function CopyTradingDashboard() {
           <div>Symbol</div>
           <div className="text-center">Ratio</div>
           <div className="text-center">Cross</div>
-          <div className="text-center">Options</div>
           <div className="text-right">Position</div>
           <div className="text-right">Balance</div>
           <div className="text-right">Day PnL</div>
