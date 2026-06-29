@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertOctagon, Crown, Plus, Search, Users, X } from 'lucide-react';
+import { AlertOctagon, ChevronDown, ChevronUp, Crown, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
@@ -532,6 +532,66 @@ export function CopyTradingDashboard() {
     setShowSuggestions(false);
   };
 
+  // ── Sort state ───────────────────────────────────────────────
+  const [sort, setSort] = useState<{
+    key: 'account' | 'connection' | 'balance';
+    dir: 'asc' | 'desc';
+  } | null>(null);
+
+  const toggleSort = (key: 'account' | 'connection' | 'balance') => {
+    setSort((prev) => {
+      if (prev?.key !== key) return { key, dir: 'asc' };
+      return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+    });
+  };
+
+  const sortedRows = useMemo<AccountRowData[]>(() => {
+    if (sort === null) return rows;
+
+    const { key, dir } = sort;
+    const multiplier = dir === 'asc' ? 1 : -1;
+
+    return [...rows].sort((a, b) => {
+      // Always keep the leader row(s) at the top regardless of sort direction.
+      const aIsLeader = a.id === leaderId;
+      const bIsLeader = b.id === leaderId;
+      if (aIsLeader && !bIsLeader) return -1;
+      if (!aIsLeader && bIsLeader) return 1;
+
+      if (key === 'account') {
+        return (
+          multiplier *
+          a.accountName.localeCompare(b.accountName, undefined, {
+            sensitivity: 'base',
+            numeric: true,
+          })
+        );
+      }
+
+      if (key === 'connection') {
+        return (
+          multiplier *
+          a.connectionName.localeCompare(b.connectionName, undefined, {
+            sensitivity: 'base',
+            numeric: true,
+          })
+        );
+      }
+
+      // balance: nulls always sink to the bottom regardless of direction.
+      if (key === 'balance') {
+        const aNull = a.balance == null;
+        const bNull = b.balance == null;
+        if (aNull && bNull) return 0;
+        if (aNull) return 1;
+        if (bNull) return -1;
+        return multiplier * ((a.balance as number) - (b.balance as number));
+      }
+
+      return 0;
+    });
+  }, [rows, sort, leaderId]);
+
   // Flatten is handled by the local desktop agent — no cloud-engine endpoints.
 
   // ── Flatten All ───────────────────────────────────────────────
@@ -768,13 +828,58 @@ export function CopyTradingDashboard() {
         >
           <div className="text-center">Leader</div>
           <div className="text-center">Follow</div>
-          <div>Connection</div>
-          <div>Account</div>
+          <button
+            type="button"
+            onClick={() => toggleSort('connection')}
+            className="flex items-center gap-ds-1 cursor-pointer select-none hover:text-ink-primary transition-colors duration-base text-left"
+          >
+            Connection
+            {sort?.key === 'connection' ? (
+              sort.dir === 'asc' ? (
+                <ChevronUp className="h-3 w-3 text-gold-primary flex-shrink-0" />
+              ) : (
+                <ChevronDown className="h-3 w-3 text-gold-primary flex-shrink-0" />
+              )
+            ) : (
+              <ChevronUp className="h-3 w-3 text-ink-tertiary/40 flex-shrink-0" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleSort('account')}
+            className="flex items-center gap-ds-1 cursor-pointer select-none hover:text-ink-primary transition-colors duration-base text-left"
+          >
+            Account
+            {sort?.key === 'account' ? (
+              sort.dir === 'asc' ? (
+                <ChevronUp className="h-3 w-3 text-gold-primary flex-shrink-0" />
+              ) : (
+                <ChevronDown className="h-3 w-3 text-gold-primary flex-shrink-0" />
+              )
+            ) : (
+              <ChevronUp className="h-3 w-3 text-ink-tertiary/40 flex-shrink-0" />
+            )}
+          </button>
           <div>Symbol</div>
           <div className="text-center">Ratio</div>
           <div className="text-center">Cross</div>
           <div className="text-right">Position</div>
-          <div className="text-right">Balance</div>
+          <button
+            type="button"
+            onClick={() => toggleSort('balance')}
+            className="flex items-center justify-end gap-ds-1 cursor-pointer select-none hover:text-ink-primary transition-colors duration-base w-full"
+          >
+            {sort?.key === 'balance' ? (
+              sort.dir === 'asc' ? (
+                <ChevronUp className="h-3 w-3 text-gold-primary flex-shrink-0" />
+              ) : (
+                <ChevronDown className="h-3 w-3 text-gold-primary flex-shrink-0" />
+              )
+            ) : (
+              <ChevronUp className="h-3 w-3 text-ink-tertiary/40 flex-shrink-0" />
+            )}
+            Balance
+          </button>
           <div className="text-right">Day PnL</div>
           <div className="text-right">Open PnL</div>
           <div className="text-right">Qty</div>
@@ -782,7 +887,7 @@ export function CopyTradingDashboard() {
         </div>
 
         {/* Rows */}
-        {rows.map((row) => {
+        {sortedRows.map((row) => {
           const rule = ruleFor(row.portfolioId);
           const isLeader = row.id === leaderId;
           return (
