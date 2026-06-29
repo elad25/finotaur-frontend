@@ -4,17 +4,17 @@
 // trade rows into one "decision" row, normalizing dollar P&L
 // by either total contract quantity OR distinct account count.
 //
-// Grouping (net-flat overlap) and the initial-1R risk basis are shared with
-// aggregateCopiedTrades (ALL ACCOUNTS) via positionGrouping.ts, so the two
-// views can never disagree on which fills form a decision or on R.
+// Grouping (net-flat overlap, micro+mini by contract root) and the classic risk
+// basis are shared with aggregateCopiedTrades (ALL ACCOUNTS) via
+// positionGrouping.ts, so the two views can never disagree on which fills form a
+// decision or on R.
 //
-// R is computed relative to the INITIAL 1R (first-entry risk), NOT the full
-// consolidated-position risk: actual_r = Σpnl / Σ(initial-entry risk). A
-// position scaled into still earns R against the risk on the table at entry.
+// R is CLASSIC: actual_r = Σpnl / Σ(full-position risk) — independent of scale-in
+// size or copier count, so the same trade reads the same R in every view.
 // ════════════════════════════════════════════════════════
 
 import { computeActualR } from '@/utils/rResolver';
-import { clusterByOverlap, initialEntryRisk, summedInitialRisk } from '@/lib/journal/positionGrouping';
+import { clusterByOverlap, summedClassicRisk } from '@/lib/journal/positionGrouping';
 
 export type TraderMode = 'per-contract' | 'per-account';
 
@@ -76,14 +76,11 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
       const qty = representative.quantity != null ? Number(representative.quantity) : 1;
       const rawPnl = representative.pnl != null ? Number(representative.pnl) : 0;
       const normPnl = mode === 'per-contract' ? rawPnl / Math.max(qty, 1) : rawPnl;
-      // R vs initial-1R uses RAW pnl / RAW initial risk (ratio is normalization-independent).
-      const initRisk = initialEntryRisk(representative);
-      const singleR = initRisk && initRisk > 0 ? computeActualR(rawPnl, initRisk) : null;
+      // Single row → its own stored actual_r (classic, full-risk) is already correct.
       result.push({
         ...representative,
         pnl: normPnl,
         quantity: 1,
-        actual_r: singleR,
         group_trade_ids: [representative.id],
       } as T);
       continue;
@@ -96,9 +93,9 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
     const divisor = Math.max(rawDivisor, 1);
     const normPnl = totalPnl / divisor;
 
-    // R relative to the INITIAL 1R: Σpnl / Σ(first-entry risk) across the copies.
+    // Classic R for the merged decision: Σpnl / Σ(full-position risk) across rows.
     // actual_user_r and rr are nulled for merged decisions.
-    const unifiedRisk = summedInitialRisk(sorted);
+    const unifiedRisk = summedClassicRisk(sorted);
     const mergedActualR =
       unifiedRisk && unifiedRisk > 0 ? computeActualR(totalPnl, unifiedRisk) : null;
 
