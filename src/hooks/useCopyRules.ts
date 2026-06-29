@@ -31,6 +31,7 @@ export interface CopyRule {
   max_position_size:    number | null;
   kill_switch_active:   boolean;
   cross_to_micro:       boolean;
+  reverse:              boolean;
   created_at:           string;
 }
 
@@ -101,8 +102,9 @@ export function useCopyRules() {
           target_portfolio_id: targetEntry.portfolioId,
           ratio:               target.scale_ratio,
           is_active:           route.is_active && target.is_active,
-          copy_opens:          true,         // default — route-level field
-          copy_closes:         true,         // default — route-level field
+          copy_opens:          route.copy_opens  ?? true,
+          copy_closes:         route.copy_closes ?? true,
+          reverse:             route.reverse     ?? false,
           max_contracts:       target.max_contracts,
           max_daily_loss_usd:  null,         // no equivalent in agent model
           max_position_size:   null,         // no equivalent in agent model
@@ -130,6 +132,9 @@ export function useCopyRules() {
     ratio?:              number;
     is_active?:          boolean;
     cross_to_micro?:     boolean;
+    copy_opens?:         boolean;
+    copy_closes?:        boolean;
+    reverse?:            boolean;
   }) => {
     const sourceEntry = portfolioByIdRef.current.get(input.source_portfolio_id);
     const targetEntry = portfolioByIdRef.current.get(input.target_portfolio_id);
@@ -192,9 +197,9 @@ export function useCopyRules() {
           sourceAccount,
           label:        existingRoute.label ?? sourceEntry.name,
           symbolFilter: existingRoute.symbol_filter ?? [],
-          copyOpens:    true,
-          copyCloses:   true,
-          reverse:      false,
+          copyOpens:    input.copy_opens  ?? existingRoute.copy_opens  ?? true,
+          copyCloses:   input.copy_closes ?? existingRoute.copy_closes ?? true,
+          reverse:      input.reverse     ?? existingRoute.reverse     ?? false,
           isActive:     true,
           targets,
         });
@@ -204,9 +209,9 @@ export function useCopyRules() {
           sourceAccount,
           label:        sourceEntry.name,
           symbolFilter: [],
-          copyOpens:    true,
-          copyCloses:   true,
-          reverse:      false,
+          copyOpens:    input.copy_opens  ?? true,
+          copyCloses:   input.copy_closes ?? true,
+          reverse:      input.reverse     ?? false,
           isActive:     true,
           targets:      [newTarget],
         });
@@ -334,9 +339,9 @@ export function useCopyRules() {
         },
         label:        foundRoute.label ?? (sourceEntry?.name ?? foundRoute.source_account_name),
         symbolFilter: foundRoute.symbol_filter ?? [],
-        copyOpens:    foundRoute.copy_opens,
-        copyCloses:   foundRoute.copy_closes,
-        reverse:      foundRoute.reverse,
+        copyOpens:    patch.copy_opens  !== undefined ? patch.copy_opens  : foundRoute.copy_opens,
+        copyCloses:   patch.copy_closes !== undefined ? patch.copy_closes : foundRoute.copy_closes,
+        reverse:      patch.reverse     !== undefined ? patch.reverse     : foundRoute.reverse,
         isActive:     foundRoute.is_active,
         targets:      updatedTargets,
       });

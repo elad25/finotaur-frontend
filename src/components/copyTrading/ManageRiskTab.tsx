@@ -73,7 +73,7 @@ const GLOBAL_DEFAULTS: RiskCardInitial = {
   maxPositionSize: '',
 };
 
-// ── Agent risk-rule RPC (best-effort dual-write) ────────────────────────────
+// ── Agent risk-rule RPC (blocking dual-write) ───────────────────────────────
 
 /** Inline params type — mirrors the DB RPC signature. */
 interface AgentRiskRuleParams {
@@ -158,23 +158,36 @@ function usePortfolioRisk() {
         .single();
       if (error) throw error;
 
-      // 2. Best-effort agent sync — fire in the BACKGROUND so the "Saving…"
-      //    spinner reflects the fast portfolios write, not the extra RPC
-      //    round-trip. A failure still surfaces a non-blocking warning toast,
-      //    but never holds up (or fails) the save.
-      void callAgentRiskRpc(input.tradovateAccountId, input.accountName, input.patch)
-        .then((agentErr) => {
-          if (agentErr) toast.warning(`Risk saved, but agent sync failed: ${agentErr}`);
-        })
-        .catch((e) => {
-          toast.warning(
-            `Risk saved, but agent sync failed: ${e instanceof Error ? e.message : String(e)}`,
-          );
-        });
+      // 2. Agent rule sync — BLOCKING and failure = hard error.
+      //    The NT8 agent enforces risk limits exclusively from
+      //    automation_risk_rules (NOT from portfolios). If this mirror fails,
+      //    the user's accounts are silently unprotected even though the UI
+      //    would otherwise show "saved". Throwing here makes the mutation
+      //    reject and routes to onError so the user is told loudly to retry.
+      //    callAgentRiskRpc returns null (no error) when tradovateAccountId is
+      //    null — non-Tradovate accounts are not copier-traded, so there is no
+      //    agent rule to write; that is NOT treated as a failure.
+      //
+      // TODO: kill_switch_active is written to portfolios above but is NOT
+      //    propagated to automation_upsert_risk_rule — the per-account kill
+      //    switch is not enforced by the agent yet (out of scope here).
+      const agentErr = await callAgentRiskRpc(
+        input.tradovateAccountId,
+        input.accountName,
+        input.patch,
+      );
+      if (agentErr != null) {
+        throw new Error(
+          `Risk saved to your journal, but the trading agent did NOT receive it — your accounts are not protected by this limit yet. (agent sync: ${agentErr})`,
+        );
+      }
 
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolios'] }),
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : String(err));
+    },
   });
 
   return {
