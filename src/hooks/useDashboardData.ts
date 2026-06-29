@@ -719,7 +719,7 @@ async function fetchAllTradesForTrader(
     id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
     open_at, close_at, stop_price, entry_price, quantity, exit_price,
     multiplier, session, input_mode, tags, strategy_id, account_equity_at_entry,
-    portfolio_id, broker_connection_id, side
+    portfolio_id, broker_connection_id, side, partial_entries
   `;
 
   const isAllAccounts = !portfolioIds || portfolioIds.length === 0;
@@ -873,7 +873,7 @@ export function useDashboardStats(
           id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
           open_at, close_at, stop_price, entry_price, quantity, exit_price,
           multiplier, session, input_mode, tags, side, fees, portfolio_id,
-          strategy_id, account_equity_at_entry
+          strategy_id, account_equity_at_entry, partial_entries
         `)
         .eq('user_id', userId)
         .is('deleted_at', null)
