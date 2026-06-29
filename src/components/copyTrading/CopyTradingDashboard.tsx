@@ -32,11 +32,6 @@ function parsePositiveNumber(raw: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function parsePositiveInt(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
 // ─── Types ────────────────────────────────────────────────────
 
 interface AccountRowData {
@@ -267,14 +262,6 @@ const CopyAccountRow = memo(function CopyAccountRow({
     setRatioDraft(String(rule?.ratio ?? 1));
   }, [rule?.ratio]);
 
-  // Local max_contracts draft — empty string means "no cap" (null).
-  const [maxDraft, setMaxDraft] = useState(
-    rule?.max_contracts != null ? String(rule.max_contracts) : '',
-  );
-  useEffect(() => {
-    setMaxDraft(rule?.max_contracts != null ? String(rule.max_contracts) : '');
-  }, [rule?.max_contracts]);
-
   // Derive disabled / title for the Follow toggle. Note: we intentionally do
   // NOT disable on the global isCreating/isUpdating — that froze every row while
   // one saved. Per-row double-fire is guarded via the optimistic overlay below.
@@ -361,54 +348,30 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {row.symbol ?? '—'}
       </div>
 
-      {/* Ratio + max contracts — inline editable for non-leaders */}
+      {/* Ratio — inline editable for non-leaders */}
       <div className="flex items-center justify-center gap-ds-3">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
-          <>
-            {/* Copy ratio */}
-            <div className="flex flex-col items-center" title="Copy ratio from leader to this account (e.g. 0.5 = half size)">
-              <span className="text-[9px] uppercase tracking-wide text-ink-tertiary leading-none mb-0.5">ratio</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={ratioDraft}
-                onChange={(e) => setRatioDraft(e.target.value)}
-                onBlur={async (e) => {
-                  const newRatio = parsePositiveNumber(e.target.value, 1);
-                  // Normalize display value even if not following yet.
-                  setRatioDraft(String(newRatio));
-                  if (isFollowing && rule) {
-                    await onUpdateRule({ ratio: newRatio });
-                  }
-                }}
-                aria-label={`Copy ratio for ${row.accountName}`}
-                className="w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
-              />
-            </div>
-            {/* Max contracts — empty = no cap */}
-            <div className="flex flex-col items-center" title="Max contracts cap (empty = no limit)">
-              <span className="text-[9px] uppercase tracking-wide text-ink-tertiary leading-none mb-0.5">max</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={maxDraft}
-                placeholder="∞"
-                onChange={(e) => setMaxDraft(e.target.value)}
-                onBlur={async (e) => {
-                  const parsed = parsePositiveInt(e.target.value.trim());
-                  // Normalize display: empty if null.
-                  setMaxDraft(parsed != null ? String(parsed) : '');
-                  if (isFollowing && rule) {
-                    await onUpdateRule({ max_contracts: parsed });
-                  }
-                }}
-                aria-label={`Max contracts for ${row.accountName}`}
-                className="w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none placeholder:text-ink-tertiary"
-              />
-            </div>
-          </>
+          <div className="flex flex-col items-center" title="Copy ratio from leader to this account (e.g. 0.5 = half size)">
+            <span className="text-[9px] uppercase tracking-wide text-ink-tertiary leading-none mb-0.5">ratio</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={ratioDraft}
+              onChange={(e) => setRatioDraft(e.target.value)}
+              onBlur={async (e) => {
+                const newRatio = parsePositiveNumber(e.target.value, 1);
+                // Normalize display value even if not following yet.
+                setRatioDraft(String(newRatio));
+                if (isFollowing && rule) {
+                  await onUpdateRule({ ratio: newRatio });
+                }
+              }}
+              aria-label={`Copy ratio for ${row.accountName}`}
+              className="w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
+            />
+          </div>
         )}
       </div>
 
