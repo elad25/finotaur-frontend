@@ -195,8 +195,8 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Journal',     path: '/app/journal/overview' },
       { label: 'Backtest',    path: '/app/journal/backtest/overview', locked: true },
-      { label: 'The Floor',   path: '/app/floor/feed', beta: true },
-      { label: 'Mentor',      path: '/app/mentor/rooms', beta: true },
+      { label: 'The Floor',   path: '/app/floor/feed' },
+      { label: 'Mentor',      path: '/app/mentor/rooms' },
     ],
     sidebar: [
       { label: 'Dashboard',     path: '/app/journal/overview',    icon: LayoutDashboard },
@@ -213,13 +213,13 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
-  // MENTORSHIP — beta/admin-only (Early Access)
+  // MENTORSHIP — open to all logged-in users (The Floor sidebar)
   // ===========================================================================
   mentorship: {
     id: 'mentorship',
     label: 'The Floor',
     locked: false,
-    beta: true, // 🔒 Non-beta users see AdminBetaGate (Early Access screen)
+    beta: false,
     defaultPath: '/app/floor/feed',
     subNav: [
       { label: 'Feed', path: '/app/floor/feed' },
@@ -234,13 +234,13 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
-  // MENTOR — Mentor Mode + Rooms (beta/admin-only); split out of The Floor
+  // MENTOR — Mentor Mode + Rooms (open to all logged-in users); split out of The Floor
   // ===========================================================================
   mentor: {
     id: 'mentor',
     label: 'Mentor',
     locked: false,
-    beta: true,
+    beta: false,
     defaultPath: '/app/mentor/mode',
     subNav: [
       { label: 'Rooms', path: '/app/mentor/rooms' },

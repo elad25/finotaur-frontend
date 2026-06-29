@@ -771,19 +771,19 @@ function AppContent() {
 <Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
-        {/* THE FLOOR — Feed / Leaderboard / DM (beta/admin-only) */}
+        {/* THE FLOOR — Feed / Leaderboard / DM (open to all logged-in users) */}
         <Route path="floor" element={<Navigate to="/app/floor/feed" replace />} />
-        <Route path="floor/feed" element={<SuspenseRoute><AdminBetaGate><FloorFeed /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/leaderboard" element={<SuspenseRoute><AdminBetaGate><FloorLeaderboard /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="floor/dm" element={<SuspenseRoute><AdminBetaGate><DirectMessages /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="floor/feed" element={<SuspenseRoute><FloorFeed /></SuspenseRoute>} />
+        <Route path="floor/leaderboard" element={<SuspenseRoute><FloorLeaderboard /></SuspenseRoute>} />
+        <Route path="floor/dm" element={<SuspenseRoute><DirectMessages /></SuspenseRoute>} />
         {/* legacy redirect: old community URL → feed */}
         <Route path="floor/community" element={<Navigate to="/app/floor/feed" replace />} />
 
-        {/* MENTOR — Mentor Mode + Rooms (beta/admin-only) */}
+        {/* MENTOR — Mentor Mode + Rooms (open to all logged-in users) */}
         <Route path="mentor" element={<Navigate to="/app/mentor/mode" replace />} />
-        <Route path="mentor/mode" element={<SuspenseRoute><AdminBetaGate><Mentor /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="mentor/rooms" element={<SuspenseRoute><AdminBetaGate><MentorshipSpaces /></AdminBetaGate></SuspenseRoute>} />
-        <Route path="mentor/rooms/:id" element={<SuspenseRoute><AdminBetaGate><SpaceDetail /></AdminBetaGate></SuspenseRoute>} />
+        <Route path="mentor/mode" element={<SuspenseRoute><Mentor /></SuspenseRoute>} />
+        <Route path="mentor/rooms" element={<SuspenseRoute><MentorshipSpaces /></SuspenseRoute>} />
+        <Route path="mentor/rooms/:id" element={<SuspenseRoute><SpaceDetail /></SuspenseRoute>} />
         {/* legacy redirects: old /app/floor/* mentor+rooms → /app/mentor/* */}
         <Route path="floor/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
         <Route path="floor/rooms" element={<Navigate to="/app/mentor/rooms" replace />} />
