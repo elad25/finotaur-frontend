@@ -143,22 +143,27 @@ const CopyAccountRow = memo(function CopyAccountRow({
     <div
       className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-3 border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2 transition-colors duration-base`}
     >
-      {/* Leader radio col */}
-      <div className="flex items-center justify-center gap-ds-1">
-        <input
-          type="radio"
-          name="leader-select"
-          checked={isLeader}
-          onChange={onSelectLeader}
+      {/* Leader select col — empty gold-bordered square; crown marks the leader */}
+      <div className="flex items-center justify-center">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={isLeader}
+          onClick={onSelectLeader}
           title="Set as leader"
           aria-label={`Set ${row.accountName} as leader`}
-          className="h-3.5 w-3.5 cursor-pointer accent-gold-primary"
-        />
-        {isLeader && <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />}
+          className={`flex h-6 w-6 items-center justify-center rounded-md border transition-colors duration-base ${
+            isLeader
+              ? 'border-gold-primary bg-gold-primary/10'
+              : 'border-gold-border/50 hover:border-gold-primary/70'
+          }`}
+        >
+          {isLeader && <Crown className="h-3.5 w-3.5 text-gold-primary" />}
+        </button>
       </div>
 
       {/* Follow toggle */}
-      <div className="flex items-center">
+      <div className="flex items-center justify-center">
         {!isLeader && (
           <button
             disabled={followDisabled}
@@ -174,8 +179,8 @@ const CopyAccountRow = memo(function CopyAccountRow({
             title={followTitle}
           >
             <span
-              className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
-                isFollowing ? 'translate-x-[18px]' : 'translate-x-0.5'
+              className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-base ${
+                isFollowing ? 'left-[18px]' : 'left-0.5'
               }`}
             />
           </button>
@@ -205,7 +210,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Ratio + max contracts — inline editable for non-leaders */}
-      <div className="flex items-center gap-ds-1">
+      <div className="flex items-center justify-center gap-ds-1">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
@@ -253,7 +258,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Cross-to-micro toggle */}
-      <div className="flex items-center">
+      <div className="flex items-center justify-center">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
@@ -279,8 +284,8 @@ const CopyAccountRow = memo(function CopyAccountRow({
             }
           >
             <span
-              className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
-                rule?.cross_to_micro ? 'translate-x-[18px]' : 'translate-x-0.5'
+              className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-base ${
+                rule?.cross_to_micro ? 'left-[18px]' : 'left-0.5'
               }`}
             />
           </button>
@@ -329,7 +334,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Actions — flatten runs via desktop agent */}
-      <div className="flex items-center justify-start">
+      <div className="flex items-center justify-center">
         <span className="text-xs text-ink-tertiary">via agent</span>
       </div>
     </div>
@@ -767,19 +772,19 @@ export function CopyTradingDashboard() {
         <div
           className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-2 border-b border-border-ds-subtle text-[10px] font-medium uppercase tracking-wider text-ink-secondary`}
         >
-          <div>Leader</div>
-          <div>Follow</div>
+          <div className="text-center">Leader</div>
+          <div className="text-center">Follow</div>
           <div>Connection</div>
           <div>Account</div>
           <div>Symbol</div>
-          <div>Ratio</div>
-          <div>Cross</div>
+          <div className="text-center">Ratio</div>
+          <div className="text-center">Cross</div>
           <div className="text-right">Position</div>
           <div className="text-right">Balance</div>
           <div className="text-right">Day PnL</div>
           <div className="text-right">Open PnL</div>
           <div className="text-right">Qty</div>
-          <div>Actions</div>
+          <div className="text-center">Actions</div>
         </div>
 
         {/* Rows */}
