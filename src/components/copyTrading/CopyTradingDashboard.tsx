@@ -82,7 +82,7 @@ const POPULAR_CONTRACTS = [
 // 14 cols: leader-radio · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
 
 const GRID_COLS =
-  'grid-cols-[56px_60px_120px_minmax(160px,1fr)_80px_80px_60px_90px_100px_100px_100px_60px_80px]';
+  'grid-cols-[56px_60px_120px_minmax(160px,1fr)_80px_120px_64px_90px_100px_100px_100px_64px_80px] min-w-[1280px]';
 
 // ─── Internal AccountRow ──────────────────────────────────────
 
@@ -107,7 +107,33 @@ const CopyAccountRow = memo(function CopyAccountRow({
   onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
   onSelectLeader: () => void;
 }) {
-  const isFollowing = rule?.is_active ?? false;
+  // ── Optimistic toggle overlays ──────────────────────────────
+  // Reflect the user's click instantly; the overlay is dropped once the
+  // server-backed rule catches up, and reverted by a safety timeout if the
+  // write fails. This makes Follow / Cross feel immediate.
+  const [optFollowing, setOptFollowing] = useState<boolean | null>(null);
+  const [optCross, setOptCross]         = useState<boolean | null>(null);
+
+  const realFollowing = rule?.is_active ?? false;
+  const realCross     = rule?.cross_to_micro ?? false;
+  const isFollowing   = optFollowing ?? realFollowing;
+  const crossOn       = optCross ?? realCross;
+
+  // Reconcile follow overlay: clear when reality matches, else revert after 6s.
+  useEffect(() => {
+    if (optFollowing === null) return;
+    if (realFollowing === optFollowing) { setOptFollowing(null); return; }
+    const t = setTimeout(() => setOptFollowing(null), 6000);
+    return () => clearTimeout(t);
+  }, [optFollowing, realFollowing]);
+
+  // Reconcile cross overlay.
+  useEffect(() => {
+    if (optCross === null) return;
+    if (realCross === optCross) { setOptCross(null); return; }
+    const t = setTimeout(() => setOptCross(null), 6000);
+    return () => clearTimeout(t);
+  }, [optCross, realCross]);
 
   // Local ratio draft — used as the value when creating a new rule, and kept
   // in sync with the persisted ratio when one exists.
@@ -125,8 +151,10 @@ const CopyAccountRow = memo(function CopyAccountRow({
     setMaxDraft(rule?.max_contracts != null ? String(rule.max_contracts) : '');
   }, [rule?.max_contracts]);
 
-  // Derive disabled / title for the Follow toggle.
-  const followDisabled = !hasLeader || isLeader || isCreating || isUpdating;
+  // Derive disabled / title for the Follow toggle. Note: we intentionally do
+  // NOT disable on the global isCreating/isUpdating — that froze every row while
+  // one saved. Per-row double-fire is guarded via the optimistic overlay below.
+  const followDisabled = !hasLeader || isLeader;
   const followTitle = isLeader
     ? 'This account is the leader — it cannot follow itself'
     : !hasLeader
@@ -136,8 +164,6 @@ const CopyAccountRow = memo(function CopyAccountRow({
         : isFollowing
           ? 'Click to unfollow this leader'
           : 'Click to follow this leader';
-
-  const isPending = isCreating || isUpdating;
 
   return (
     <div
@@ -167,14 +193,16 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {!isLeader && (
           <button
             disabled={followDisabled}
-            onClick={() => onFollowToggle(parsePositiveNumber(ratioDraft, 1))}
+            onClick={() => {
+              if (optFollowing !== null) return; // a write for this row is in flight
+              setOptFollowing(!isFollowing);     // move instantly (optimistic)
+              void onFollowToggle(parsePositiveNumber(ratioDraft, 1));
+            }}
             className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
               isFollowing
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
-            } ${followDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${
-              isPending ? 'animate-pulse' : ''
-            }`}
+            } ${followDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
             aria-label={`Follow toggle for ${row.accountName}`}
             title={followTitle}
           >
@@ -210,31 +238,34 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Ratio + max contracts — inline editable for non-leaders */}
-      <div className="flex items-center justify-center gap-ds-1">
+      <div className="flex items-center justify-center gap-ds-3">
         {isLeader ? (
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
           <>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={ratioDraft}
-              onChange={(e) => setRatioDraft(e.target.value)}
-              onBlur={async (e) => {
-                const newRatio = parsePositiveNumber(e.target.value, 1);
-                // Normalize display value even if not following yet.
-                setRatioDraft(String(newRatio));
-                if (isFollowing && rule) {
-                  await onUpdateRule({ ratio: newRatio });
-                }
-              }}
-              aria-label={`Copy ratio for ${row.accountName}`}
-              title="Copy ratio from leader to this account (e.g. 0.5 = half size)"
-              className="w-10 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
-            />
+            {/* Copy ratio */}
+            <div className="flex flex-col items-center" title="Copy ratio from leader to this account (e.g. 0.5 = half size)">
+              <span className="text-[9px] uppercase tracking-wide text-ink-tertiary leading-none mb-0.5">ratio</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={ratioDraft}
+                onChange={(e) => setRatioDraft(e.target.value)}
+                onBlur={async (e) => {
+                  const newRatio = parsePositiveNumber(e.target.value, 1);
+                  // Normalize display value even if not following yet.
+                  setRatioDraft(String(newRatio));
+                  if (isFollowing && rule) {
+                    await onUpdateRule({ ratio: newRatio });
+                  }
+                }}
+                aria-label={`Copy ratio for ${row.accountName}`}
+                className="w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
+              />
+            </div>
             {/* Max contracts — empty = no cap */}
             <div className="flex flex-col items-center" title="Max contracts cap (empty = no limit)">
-              <span className="text-[9px] text-ink-tertiary leading-none mb-0.5">max</span>
+              <span className="text-[9px] uppercase tracking-wide text-ink-tertiary leading-none mb-0.5">max</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -250,7 +281,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
                   }
                 }}
                 aria-label={`Max contracts for ${row.accountName}`}
-                className="w-8 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none placeholder:text-ink-tertiary"
+                className="w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none placeholder:text-ink-tertiary"
               />
             </div>
           </>
@@ -263,29 +294,29 @@ const CopyAccountRow = memo(function CopyAccountRow({
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
           <button
-            disabled={!isFollowing || isPending}
-            onClick={async () => {
-              if (rule) {
-                await onUpdateRule({ cross_to_micro: !rule.cross_to_micro });
-              }
+            disabled={!isFollowing}
+            onClick={() => {
+              if (!rule || optCross !== null) return; // need a saved rule; guard double-fire
+              setOptCross(!crossOn);                  // move instantly (optimistic)
+              void onUpdateRule({ cross_to_micro: !crossOn });
             }}
             className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
-              rule?.cross_to_micro
+              crossOn
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
-            } ${!isFollowing || isPending ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'} ${isPending ? 'animate-pulse' : ''}`}
+            } ${!isFollowing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
             aria-label="Cross-to-micro toggle"
             title={
               !isFollowing
                 ? 'Follow this leader first to enable cross-to-micro (e.g. NQ→MNQ)'
-                : rule?.cross_to_micro
+                : crossOn
                   ? 'Cross-to-micro ON — copies the leader\'s instrument as its micro contract (e.g. NQ→MNQ). Click to disable.'
                   : 'Cross-to-micro OFF — copies the same instrument as the leader. Click to enable (e.g. NQ→MNQ).'
             }
           >
             <span
               className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-base ${
-                rule?.cross_to_micro ? 'left-[18px]' : 'left-0.5'
+                crossOn ? 'left-[18px]' : 'left-0.5'
               }`}
             />
           </button>
@@ -767,7 +798,7 @@ export function CopyTradingDashboard() {
       </div>
 
       {/* ── 3. Account table ── */}
-      <div className="rounded-lg bg-surface-1 border border-border-ds-subtle overflow-hidden">
+      <div className="rounded-lg bg-surface-1 border border-border-ds-subtle overflow-x-auto">
         {/* Table header */}
         <div
           className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-2 border-b border-border-ds-subtle text-[10px] font-medium uppercase tracking-wider text-ink-secondary`}
