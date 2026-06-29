@@ -5,7 +5,7 @@
 // ================================================
 
 import { computeActualR } from '@/utils/rResolver';
-import { clusterByOverlap, summedInitialRisk } from '@/lib/journal/positionGrouping';
+import { clusterByOverlap, summedClassicRisk } from '@/lib/journal/positionGrouping';
 
 export type AggregationMode = 'all-accounts' | 'trader';
 
@@ -42,17 +42,8 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
   );
   const rep = sorted[0];
 
-  // Single-row clusters: in all-accounts mode, recompute R against the initial
-  // 1R so an uncopied decision matches TRADER and merged rows (never the stored
-  // full-risk value). Other modes keep the row's own actual_r.
-  if (group.length === 1) {
-    if (mode === 'all-accounts') {
-      const initRisk = summedInitialRisk(group);
-      const r = initRisk && initRisk > 0 ? computeActualR(Number(rep.pnl) || 0, initRisk) : null;
-      return { ...rep, actual_r: r, group_trade_ids: [rep.id] };
-    }
-    return { ...rep, group_trade_ids: [rep.id] };
-  }
+  // Single-row clusters: the row's own stored actual_r (classic, full-risk) is correct.
+  if (group.length === 1) return { ...rep, group_trade_ids: [rep.id] };
 
   const totalPnL = numericSum(group, 'pnl');
   const totalQuantity = numericSum(group, 'quantity');
@@ -68,9 +59,9 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
   const financialFields =
     mode === 'all-accounts'
       ? (() => {
-          // R relative to the INITIAL 1R (first-entry risk), shared with TRADER
-          // via summedInitialRisk — never the full consolidated-position risk.
-          const unifiedRisk = summedInitialRisk(group);
+          // Classic R: Σpnl / Σ(full-position risk), shared with TRADER via
+          // summedClassicRisk so both views read the same R.
+          const unifiedRisk = summedClassicRisk(group);
 
           return {
             pnl: totalPnL,
@@ -113,11 +104,12 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
  * multiple portfolios. Summing P&L preserves Net P&L while reducing trade count
  * to the number of unique decisions — matching the "My Trades" display.
  *
- * In all-accounts mode grouping is NET-FLAT: trades sharing the same symbol+side
- * whose [open_at, close_at] intervals overlap are merged into one position (see
- * clusterByOverlap). This collapses copier copies and scale-ins of one decision
- * while keeping genuinely separate flat→flat round-trips distinct. R is anchored
- * to the initial entry's 1R (summedInitialRisk), identical to TRADER mode.
+ * In all-accounts mode grouping is NET-FLAT and contract-family aware: trades
+ * sharing the same contract root + side whose [open_at, close_at] intervals
+ * overlap are merged into one position (see clusterByOverlap). This collapses
+ * copier copies, scale-ins, and micro+mini of one decision while keeping
+ * genuinely separate flat→flat round-trips distinct. R is classic (Σpnl ÷
+ * Σ full-position risk, summedClassicRisk), identical to TRADER mode.
  *
  * In trader mode the original Map-keyed grouping is still used (no change there).
  *
