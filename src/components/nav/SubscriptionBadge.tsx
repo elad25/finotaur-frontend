@@ -101,12 +101,12 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     useGoldClass: false,
   },
   elite: {
-    label: 'ELITE',
+    label: 'CO-PILOT',
     color: '#34D399',
     icon: Gem,
-    description: 'Top platform tier — full access to everything',
+    description: 'Fly with FINO — the inner circle, full access to everything',
     group: 'Platform',
-    tag: 'TOP TIER',
+    tag: 'INNER CIRCLE',
     edge: '#10B981',
     peak: '#6EE7B7',
     onColor: '#053826',
@@ -140,7 +140,7 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     useGoldClass: false,
   },
   premium: {
-    label: 'PREMIUM',
+    label: 'JOURNAL',
     color: '#D4D4D8',
     icon: Gem,
     description: 'Unlimited Trade Journal access',
@@ -184,9 +184,7 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
 const TIER_DISPLAY_ORDER: TierKey[] = [
   'elite',
   'finotaur',
-  'pro',
   'premium',
-  'basic',
   'free',
 ];
 
