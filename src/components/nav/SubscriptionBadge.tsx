@@ -17,7 +17,7 @@ import {
 
 // ── Types ────────────────────────────────────────────────────
 
-export type TierKey = 'admin' | 'vip' | 'elite' | 'finotaur' | 'pro' | 'premium' | 'basic' | 'free';
+export type TierKey = 'admin' | 'vip' | 'elite' | 'finotaur' | 'pro' | 'topsecret' | 'premium' | 'basic' | 'free';
 
 interface TierConfig {
   label: string;
@@ -139,6 +139,21 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     labelColor: '#C084FC',
     useGoldClass: false,
   },
+  // TOP SECRET — Intelligence add-on. Reuses the PRO visual identity 1:1
+  // (purple glossy chip + Sparkles) with a 'PRO' tag, per Elad's request.
+  topsecret: {
+    label: 'TOP SECRET',
+    color: '#A855F7',
+    icon: Sparkles,
+    description: 'Intelligence envelope — daily War Zone & premium reports',
+    group: 'Platform',
+    tag: 'PRO',
+    edge: '#7C3AED',
+    peak: '#C4A2FC',
+    onColor: '#FFFFFF',
+    labelColor: '#C084FC',
+    useGoldClass: false,
+  },
   premium: {
     label: 'JOURNAL',
     color: '#D4D4D8',
@@ -184,6 +199,7 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
 const TIER_DISPLAY_ORDER: TierKey[] = [
   'elite',
   'finotaur',
+  'topsecret',
   'premium',
   'free',
 ];
@@ -219,6 +235,9 @@ export function resolveTier(
 export interface SubscriptionBadgeProps {
   platformPlan: string | null;
   accountType: string | null;
+  /** TOP SECRET is an orthogonal add-on (not part of the plan ladder); when the
+   *  user holds it, its row is flagged CURRENT independently of the resolved tier. */
+  hasTopSecret?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────
@@ -226,6 +245,7 @@ export interface SubscriptionBadgeProps {
 export function SubscriptionBadge({
   platformPlan,
   accountType,
+  hasTopSecret = false,
 }: SubscriptionBadgeProps) {
   const navigate = useNavigate();
   const currentTier = resolveTier(platformPlan, accountType);
@@ -268,7 +288,8 @@ export function SubscriptionBadge({
         {TIER_DISPLAY_ORDER.map((key) => {
           const cfg = TIER_CONFIG[key];
           const TierIcon = cfg.icon;
-          const isCurrent = key === currentTier;
+          const isCurrent =
+            key === 'topsecret' ? hasTopSecret : key === currentTier;
           const isFree = key === 'free';
           const rowGlossy = glossyStyle(key);
 
