@@ -5,7 +5,7 @@
 // ================================================
 
 import { computeActualR } from '@/utils/rResolver';
-import { clusterByOverlap, summedClassicRisk } from '@/lib/journal/positionGrouping';
+import { clusterByOverlap, summedInitialRisk } from '@/lib/journal/positionGrouping';
 
 export type AggregationMode = 'all-accounts' | 'trader';
 
@@ -42,8 +42,13 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
   );
   const rep = sorted[0];
 
-  // Single-row clusters: the row's own stored actual_r (classic, full-risk) is correct.
-  if (group.length === 1) return { ...rep, group_trade_ids: [rep.id] };
+  // Single-row clusters: recompute R against the initial-1R (its own stop) so an
+  // uncopied decision matches merged rows and TRADER.
+  if (group.length === 1) {
+    const initRisk = summedInitialRisk(group);
+    const r = initRisk && initRisk > 0 ? computeActualR(Number(rep.pnl) || 0, initRisk) : rep.actual_r ?? null;
+    return { ...rep, actual_r: r, group_trade_ids: [rep.id] };
+  }
 
   const totalPnL = numericSum(group, 'pnl');
   const totalQuantity = numericSum(group, 'quantity');
@@ -59,9 +64,9 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
   const financialFields =
     mode === 'all-accounts'
       ? (() => {
-          // Classic R: Σpnl / Σ(full-position risk), shared with TRADER via
-          // summedClassicRisk so both views read the same R.
-          const unifiedRisk = summedClassicRisk(group);
+          // Initial-1R: Σpnl / Σ(initial-entry risk to one unified stop), shared
+          // with TRADER via summedInitialRisk so both views read the same R.
+          const unifiedRisk = summedInitialRisk(group);
 
           return {
             pnl: totalPnL,
@@ -108,8 +113,8 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
  * sharing the same contract root + side whose [open_at, close_at] intervals
  * overlap are merged into one position (see clusterByOverlap). This collapses
  * copier copies, scale-ins, and micro+mini of one decision while keeping
- * genuinely separate flat→flat round-trips distinct. R is classic (Σpnl ÷
- * Σ full-position risk, summedClassicRisk), identical to TRADER mode.
+ * genuinely separate flat→flat round-trips distinct. R is initial-1R (Σpnl ÷
+ * Σ initial-entry risk to one unified stop, summedInitialRisk), identical to TRADER mode.
  *
  * In trader mode the original Map-keyed grouping is still used (no change there).
  *

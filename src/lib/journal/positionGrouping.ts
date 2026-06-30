@@ -15,9 +15,11 @@
 //   • Micro and mini of the same underlying (MNQ+NQ, MES+ES, …) share a root → merge.
 //   • Separate flat→flat round-trips don't overlap → stay distinct.
 //
-// R is CLASSIC: realized P&L ÷ full-position risk (|avgEntry − stop| × qty × mult,
-// i.e. trades.risk_usd). It does not depend on scale-in size or copier count, so
-// the same trade reads the same R regardless of how it was sized.
+// R is INITIAL-1R (credits scale-in): realized P&L ÷ the risk on the table at the
+// INITIAL entry = |firstEntry − stop| × firstQty × mult. The whole merged position
+// uses ONE unified stop — the widest (initial/protective) stop across its legs
+// (lowest price for a long, highest for a short) — so copier copies / micro+mini
+// that each recorded a slightly different (e.g. trailed) stop don't distort R.
 // ════════════════════════════════════════════════════════
 
 import { getAssetMultiplier } from '@/utils/tradeCalculations';
@@ -57,33 +59,53 @@ function partitionKey(trade: Record<string, any>): string {
   return `${contractRoot(trade.symbol)}|${trade.side ?? ''}`;
 }
 
-/**
- * Classic risk in $ for one row: full-position risk = |avgEntry − stop| × qty ×
- * multiplier. Prefers the stored trades.risk_usd; falls back to entry/stop/qty.
- * Returns null when there's no usable stop (UI then falls back to user-1R).
- */
+/** First entry leg of a row: partial_entries[0], falling back to entry_price/quantity. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function classicRisk(trade: Record<string, any>): number | null {
-  const stored = Number(trade.risk_usd);
-  if (Number.isFinite(stored) && stored > 0) return stored;
-  if (trade.stop_price == null) return null;
-  const entry = Number(trade.entry_price);
-  const stop = Number(trade.stop_price);
-  const qty = Number(trade.quantity ?? 0);
-  const mult =
-    Number(trade.multiplier) > 0 ? Number(trade.multiplier) : getAssetMultiplier(trade.symbol || '');
-  const dist = Math.abs(entry - stop);
-  if (Number.isFinite(dist) && dist > 0 && qty > 0 && mult > 0) return dist * qty * mult;
-  return null;
+function firstLeg(trade: Record<string, any>): { price: number; qty: number } {
+  const legs = Array.isArray(trade.partial_entries) ? trade.partial_entries : [];
+  const first = legs.length > 0 ? legs[0] : undefined;
+  return {
+    price: Number(first?.price ?? trade.entry_price),
+    qty: Number(first?.quantity ?? trade.quantity ?? 0),
+  };
 }
 
-/** Σ classic risk across the decision's rows; null when no row has a usable stop. */
+/**
+ * One unified stop for a whole merged decision: the WIDEST (initial/protective)
+ * stop across its legs — lowest price for a long, highest for a short. Using the
+ * widest stop avoids letting a tighter (trailed / copier-variant) stop on one leg
+ * inflate R. Null when no leg has a usable stop.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function summedClassicRisk(trades: Record<string, any>[]): number | null {
+export function unifiedStop(cluster: Record<string, any>[]): number | null {
+  const isShort = (cluster[0]?.side ?? '').toString().toUpperCase() === 'SHORT';
+  const stops = cluster
+    .filter((t) => t.stop_price != null) // Number(null)===0 is finite — exclude before mapping
+    .map((t) => Number(t.stop_price))
+    .filter((s) => Number.isFinite(s));
+  if (stops.length === 0) return null;
+  return isShort ? Math.max(...stops) : Math.min(...stops);
+}
+
+/**
+ * INITIAL-1R risk in $ for a whole decision: Σ over legs of
+ * |firstEntry − unifiedStop| × firstQty × mult. Credits scale-in (P&L is earned
+ * on the grown size, risk stays anchored to the initial entry). Returns null when
+ * there's no usable stop (UI then falls back to user-1R from settings).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function summedInitialRisk(cluster: Record<string, any>[]): number | null {
+  const stop = unifiedStop(cluster);
+  if (stop == null) return null;
   let sum = 0;
-  for (const t of trades) {
-    const r = classicRisk(t);
-    if (r != null) sum += r;
+  for (const t of cluster) {
+    const { price, qty } = firstLeg(t);
+    const mult =
+      Number(t.multiplier) > 0 ? Number(t.multiplier) : getAssetMultiplier(t.symbol || '');
+    const dist = Math.abs(price - stop);
+    if (Number.isFinite(price) && Number.isFinite(qty) && dist > 0 && qty > 0 && mult > 0) {
+      sum += dist * qty * mult;
+    }
   }
   return sum > 0 ? sum : null;
 }
