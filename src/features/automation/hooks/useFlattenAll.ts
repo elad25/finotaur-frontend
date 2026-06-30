@@ -1,56 +1,22 @@
 // src/features/automation/hooks/useFlattenAll.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Sends a customer-initiated "flatten_all" command to every online desktop
-// agent device the user owns via the automation_enqueue_command RPC.
-//
-// The RPC is user-scoped (RLS via auth.uid). It inserts a pending command row
-// for EVERY online device and returns the inserted rows as SETOF. If the
-// returned array is empty the user has no online agent devices.
-//
-// Nothing executes server-side — the local NinjaScript agent polls for pending
-// commands, executes them locally (close all positions + cancel working orders),
-// and reports back.
+// Backward-compatible re-export shim.
+// The real implementation lives in useAgentCommand.ts — all command types
+// (flatten_all, cancel_orders, flatten_symbol) are handled there.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useCallback } from 'react';
+import { useAgentCommand, type AgentCommandResult } from './useAgentCommand';
 
-export type FlattenResult =
-  | { status: 'sent'; devices: number }
-  | { status: 'no_agent' }
-  | { status: 'error'; message: string };
+export type FlattenResult = AgentCommandResult;
 
 export function useFlattenAll() {
-  const [isFlattening, setIsFlattening] = useState(false);
-  const [result, setResult] = useState<FlattenResult | null>(null);
+  const { flattenAll: _flattenAll, isRunning, result } = useAgentCommand();
 
+  // Expose under the original name so all existing callers continue to work.
   const flattenAll = useCallback(async (): Promise<FlattenResult> => {
-    setIsFlattening(true);
-    setResult(null);
+    return _flattenAll();
+  }, [_flattenAll]);
 
-    const { data, error } = await supabase.rpc('automation_enqueue_command', {
-      p_command_type: 'flatten_all',
-      p_symbol: null,
-    });
-
-    setIsFlattening(false);
-
-    if (error) {
-      const r: FlattenResult = { status: 'error', message: error.message };
-      setResult(r);
-      return r;
-    }
-
-    // RPC returns SETOF — data is an array of inserted rows (or [] if no online agent).
-    const rows = Array.isArray(data) ? data : [];
-    const r: FlattenResult =
-      rows.length === 0
-        ? { status: 'no_agent' }
-        : { status: 'sent', devices: rows.length };
-
-    setResult(r);
-    return r;
-  }, []);
-
-  return { flattenAll, isFlattening, result };
+  return { flattenAll, isFlattening: isRunning, result };
 }

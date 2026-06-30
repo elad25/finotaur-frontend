@@ -1,7 +1,7 @@
 // src/components/copyTrading/ManageRiskTab.tsx
 // Compact Finotaur-branded Loss / Profit per Trade / Day / Week risk panel.
 
-import { memo, useState } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import {
   ChevronDown,
@@ -97,6 +97,14 @@ interface AgentRiskRuleParams {
   p_is_active:               boolean;
 }
 
+/** Extra automation_risk_rules fields that don't live on portfolios. */
+interface AgentOnlyRiskFields {
+  maxPositionUsd:      number | null;
+  maxTradesPerDay:     number | null;
+  tiltLossStreak:      number | null;
+  tiltCooldownMinutes: number | null;
+}
+
 /**
  * Calls automation_upsert_risk_rule for a single Tradovate account.
  * Returns an error string on failure, null on success.
@@ -106,6 +114,7 @@ async function callAgentRiskRpc(
   tradovateAccountId: number | null,
   accountName: string,
   patch: PortfolioRiskPatch,
+  agentOnly: AgentOnlyRiskFields,
 ): Promise<string | null> {
   if (tradovateAccountId == null) return null; // not a Tradovate account — skip
 
@@ -121,10 +130,10 @@ async function callAgentRiskRpc(
     p_weekly_profit_target_usd:patch.weekly_profit_target_usd,
     p_max_contracts:           patch.max_contracts_per_trade,
     p_max_position_size:       patch.max_position_size,
-    p_max_position_usd:        null,
-    p_max_trades_per_day:      null,
-    p_tilt_loss_streak:        null,
-    p_tilt_cooldown_minutes:   null,
+    p_max_position_usd:        agentOnly.maxPositionUsd,
+    p_max_trades_per_day:      agentOnly.maxTradesPerDay,
+    p_tilt_loss_streak:        agentOnly.tiltLossStreak,
+    p_tilt_cooldown_minutes:   agentOnly.tiltCooldownMinutes,
     p_risk_breach_action:      patch.risk_breach_action,
     p_enforce:                 patch.risk_management_enabled,
     p_is_active:               patch.risk_management_enabled,
@@ -148,11 +157,15 @@ function usePortfolioRisk() {
       tradovateAccountId: number | null;
       /** Human-readable account name used as the agent rule label. */
       accountName: string;
+      /** Fields that live only in automation_risk_rules (not on portfolios). */
+      agentOnly: AgentOnlyRiskFields;
     }) => {
-      // 1. Primary write — portfolios table (existing behaviour, unchanged).
+      // 1. Primary write — portfolios table.
+      //    updated_at is set explicitly so automation_get_config picks up the
+      //    change via its config_version (which includes portfolios.updated_at).
       const { data, error } = await supabase
         .from('portfolios')
-        .update(input.patch)
+        .update({ ...input.patch, updated_at: new Date().toISOString() })
         .eq('id', input.id)
         .select()
         .single();
@@ -168,13 +181,14 @@ function usePortfolioRisk() {
       //    null — non-Tradovate accounts are not copier-traded, so there is no
       //    agent rule to write; that is NOT treated as a failure.
       //
-      // TODO: kill_switch_active is written to portfolios above but is NOT
-      //    propagated to automation_upsert_risk_rule — the per-account kill
-      //    switch is not enforced by the agent yet (out of scope here).
+      // kill_switch_active is propagated to the agent via automation_get_config
+      // (which reads portfolios.kill_switch_active per account). The agent
+      // re-pulls config whenever portfolios.updated_at changes (set above).
       const agentErr = await callAgentRiskRpc(
         input.tradovateAccountId,
         input.accountName,
         input.patch,
+        input.agentOnly,
       );
       if (agentErr != null) {
         throw new Error(
@@ -229,7 +243,8 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   }
 
   // Broadcast handler: applies the same patch to every Tradovate account.
-  const handleBroadcast = async (patch: PortfolioRiskPatch) => {
+  // agentOnly fields are broadcast as-is (they come from the global card's form).
+  const handleBroadcast = async (patch: PortfolioRiskPatch, agentOnly: AgentOnlyRiskFields) => {
     await Promise.all(
       tradovatePortfolios.map((p) =>
         updatePortfolioRisk({
@@ -237,6 +252,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
           patch,
           tradovateAccountId: p.tradovate_account_id,
           accountName: p.name,
+          agentOnly,
         }),
       ),
     );
@@ -250,6 +266,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
       <RiskCard
         mode="global"
         initial={GLOBAL_DEFAULTS}
+        tradovateAccountId={null}
         headerTitle="All Accounts"
         headerBadge={null}
         headerSubtitle="Apply settings to every connected account"
@@ -272,12 +289,13 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
         <PortfolioRiskCard
           key={`${p.id}:${p.max_loss_per_trade_usd}:${p.max_daily_loss_usd}:${p.max_weekly_loss_usd}:${p.trade_profit_target_usd}:${p.daily_profit_target_usd}:${p.weekly_profit_target_usd}:${p.risk_management_enabled}:${p.kill_switch_active}:${p.risk_breach_action}:${p.max_contracts_per_trade}:${p.max_position_size}`}
           portfolio={p}
-          onSave={(patch) =>
+          onSave={(patch, agentOnly) =>
             updatePortfolioRisk({
               id: p.id,
               patch,
               tradovateAccountId: p.tradovate_account_id,
               accountName: p.name,
+              agentOnly,
             })
           }
           isSaving={isUpdating}
@@ -291,7 +309,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
 
 interface PortfolioRiskCardProps {
   portfolio: Portfolio;
-  onSave: (patch: PortfolioRiskPatch) => Promise<unknown>;
+  onSave: (patch: PortfolioRiskPatch, agentOnly: AgentOnlyRiskFields) => Promise<unknown>;
   isSaving: boolean;
 }
 
@@ -318,6 +336,7 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
     <RiskCard
       mode="account"
       initial={initial}
+      tradovateAccountId={portfolio.tradovate_account_id}
       headerTitle={portfolio.tradovate_account_spec ?? portfolio.name ?? portfolio.id.slice(0, 8)}
       headerBadge={portfolio.environment ?? 'unknown'}
       headerSubtitle="Risk management"
@@ -334,10 +353,12 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
 interface RiskCardProps {
   mode: 'account' | 'global';
   initial: RiskCardInitial;
+  /** Tradovate account id — used to fetch existing agent risk rule on load. */
+  tradovateAccountId?: number | null;
   headerTitle: string;
   headerBadge: string | null;
   headerSubtitle: string;
-  onSave: (patch: PortfolioRiskPatch) => Promise<unknown>;
+  onSave: (patch: PortfolioRiskPatch, agentOnly: AgentOnlyRiskFields) => Promise<unknown>;
   isSaving: boolean;
   saveLabel: string;
   successMessage: string;
@@ -346,6 +367,7 @@ interface RiskCardProps {
 const RiskCard = memo(function RiskCard({
   mode,
   initial,
+  tradovateAccountId,
   headerTitle,
   headerBadge,
   headerSubtitle,
@@ -372,6 +394,44 @@ const RiskCard = memo(function RiskCard({
   const [maxContracts,    setMaxContracts]    = useState<string>(initial.maxContracts);
   const [maxPositionSize, setMaxPositionSize] = useState<string>(initial.maxPositionSize);
   const [advancedOpen,    setAdvancedOpen]    = useState(false);
+  // ── Agent-only risk fields (from automation_risk_rules) ──────
+  const [maxPositionUsd,      setMaxPositionUsd]      = useState<string>('');
+  const [maxTradesPerDay,     setMaxTradesPerDay]      = useState<string>('');
+  const [tiltLossStreak,      setTiltLossStreak]       = useState<string>('');
+  const [tiltCooldownMinutes, setTiltCooldownMinutes]  = useState<string>('');
+  // Track the fetched values so dirty detection is accurate.
+  const [agentInitial, setAgentInitial] = useState({
+    maxPositionUsd: '', maxTradesPerDay: '', tiltLossStreak: '', tiltCooldownMinutes: '',
+  });
+
+  // Fetch the active risk rule for this account on load.
+  // Runs once per card when tradovateAccountId is known (per-account mode only).
+  useEffect(() => {
+    if (tradovateAccountId == null) return;
+    supabase
+      .from('automation_risk_rules')
+      .select('max_position_usd, max_trades_per_day, tilt_loss_streak, tilt_cooldown_minutes')
+      .eq('account_id', String(tradovateAccountId))
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        const vals = {
+          maxPositionUsd:      data.max_position_usd      != null ? String(data.max_position_usd)      : '',
+          maxTradesPerDay:     data.max_trades_per_day     != null ? String(data.max_trades_per_day)     : '',
+          tiltLossStreak:      data.tilt_loss_streak       != null ? String(data.tilt_loss_streak)       : '',
+          tiltCooldownMinutes: data.tilt_cooldown_minutes  != null ? String(data.tilt_cooldown_minutes)  : '',
+        };
+        setAgentInitial(vals);
+        setMaxPositionUsd(vals.maxPositionUsd);
+        setMaxTradesPerDay(vals.maxTradesPerDay);
+        setTiltLossStreak(vals.tiltLossStreak);
+        setTiltCooldownMinutes(vals.tiltCooldownMinutes);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradovateAccountId]);
 
   // ── Helpers ──────────────────────────────────────────────────
   const parseNum = (s: string): number | null => {
@@ -384,17 +444,21 @@ const RiskCard = memo(function RiskCard({
 
   // ── Dirty detection (compare against initial prop values) ────
   const dirty =
-    lossPerTrade    !== initial.lossPerTrade    ||
-    lossPerDay      !== initial.lossPerDay      ||
-    lossPerWeek     !== initial.lossPerWeek     ||
-    profitPerTrade  !== initial.profitPerTrade  ||
-    profitPerDay    !== initial.profitPerDay    ||
-    profitPerWeek   !== initial.profitPerWeek   ||
-    riskEnabled     !== initial.riskEnabled     ||
-    killSwitch      !== initial.killSwitch      ||
-    breachAction    !== initial.breachAction    ||
-    maxContracts    !== initial.maxContracts    ||
-    maxPositionSize !== initial.maxPositionSize;
+    lossPerTrade        !== initial.lossPerTrade        ||
+    lossPerDay          !== initial.lossPerDay          ||
+    lossPerWeek         !== initial.lossPerWeek         ||
+    profitPerTrade      !== initial.profitPerTrade      ||
+    profitPerDay        !== initial.profitPerDay        ||
+    profitPerWeek       !== initial.profitPerWeek       ||
+    riskEnabled         !== initial.riskEnabled         ||
+    killSwitch          !== initial.killSwitch          ||
+    breachAction        !== initial.breachAction        ||
+    maxContracts        !== initial.maxContracts        ||
+    maxPositionSize     !== initial.maxPositionSize     ||
+    maxPositionUsd      !== agentInitial.maxPositionUsd      ||
+    maxTradesPerDay     !== agentInitial.maxTradesPerDay     ||
+    tiltLossStreak      !== agentInitial.tiltLossStreak      ||
+    tiltCooldownMinutes !== agentInitial.tiltCooldownMinutes;
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -411,8 +475,16 @@ const RiskCard = memo(function RiskCard({
       max_contracts_per_trade:  parseNum(maxContracts),
       max_position_size:        parseNum(maxPositionSize),
     };
+    const agentOnly: AgentOnlyRiskFields = {
+      maxPositionUsd:      parseNum(maxPositionUsd),
+      maxTradesPerDay:     parseNum(maxTradesPerDay),
+      tiltLossStreak:      parseNum(tiltLossStreak),
+      tiltCooldownMinutes: parseNum(tiltCooldownMinutes),
+    };
     try {
-      await onSave(patch);
+      await onSave(patch, agentOnly);
+      // Update local initial so dirty resets correctly.
+      setAgentInitial({ maxPositionUsd, maxTradesPerDay, tiltLossStreak, tiltCooldownMinutes });
       toast.success(successMessage);
     } catch (err) {
       toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -497,11 +569,15 @@ const RiskCard = memo(function RiskCard({
             </button>
           </label>
 
-          {/* Lock button — red outline when active */}
+          {/* Lock button — disables copying for this account when active */}
           <button
             type="button"
             onClick={() => setKillSwitch((v) => !v)}
-            title={killSwitch ? 'Account locked — click to unlock' : 'Lock account'}
+            title={
+              killSwitch
+                ? 'Copying DISABLED for this account — click to re-enable'
+                : 'Lock: disables copying to/from this account (does not close open positions)'
+            }
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition-colors duration-base ${
               killSwitch
                 ? 'border-status-danger/60 bg-status-danger/10 text-status-danger'
@@ -632,23 +708,105 @@ const RiskCard = memo(function RiskCard({
         </button>
 
         {advancedOpen && (
-          <div className="grid grid-cols-1 gap-ds-3 px-ds-4 pb-ds-4 lg:grid-cols-2">
-            <StepperPanel
-              icon={<FileText className="h-5 w-5" />}
-              title="Max contracts / trade"
-              subtitle="Quantity cap per copy"
-              value={maxContracts}
-              onChange={setMaxContracts}
-              step={1}
-            />
-            <StepperPanel
-              icon={<Layers className="h-5 w-5" />}
-              title="Max position size"
-              subtitle="Total open contracts"
-              value={maxPositionSize}
-              onChange={setMaxPositionSize}
-              step={1}
-            />
+          <div className="space-y-ds-3 px-ds-4 pb-ds-4">
+            <div className="grid grid-cols-1 gap-ds-3 lg:grid-cols-2">
+              <StepperPanel
+                icon={<FileText className="h-5 w-5" />}
+                title="Max contracts / trade"
+                subtitle="Quantity cap per copy"
+                value={maxContracts}
+                onChange={setMaxContracts}
+                step={1}
+              />
+              <StepperPanel
+                icon={<Layers className="h-5 w-5" />}
+                title="Max position size"
+                subtitle="Total open contracts"
+                value={maxPositionSize}
+                onChange={setMaxPositionSize}
+                step={1}
+              />
+            </div>
+
+            {/* Agent-only risk fields — stored in automation_risk_rules */}
+            <div className="rounded-md border border-border-ds-subtle bg-[#080808] px-ds-3 py-ds-3">
+              <p className="mb-ds-3 text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary">
+                Agent risk limits
+              </p>
+              <div className="grid grid-cols-1 gap-ds-3 sm:grid-cols-2">
+                {/* Max Position USD */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-secondary">
+                    Max Position (USD)
+                  </label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-xs text-ink-tertiary">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      placeholder="No limit"
+                      value={maxPositionUsd}
+                      onChange={(e) => setMaxPositionUsd(e.target.value)}
+                      className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] pl-5 pr-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
+                    />
+                  </div>
+                </div>
+
+                {/* Max Trades / Day */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-secondary">
+                    Max Trades / Day
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    placeholder="No limit"
+                    value={maxTradesPerDay}
+                    onChange={(e) => setMaxTradesPerDay(e.target.value)}
+                    className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] px-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
+                  />
+                </div>
+
+                {/* Tilt Loss Streak */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-secondary">
+                    Tilt Loss Streak
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    placeholder="No limit"
+                    value={tiltLossStreak}
+                    onChange={(e) => setTiltLossStreak(e.target.value)}
+                    className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] px-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
+                  />
+                </div>
+
+                {/* Tilt Cooldown (min) */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-ink-secondary">
+                    Tilt Cooldown (min)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    placeholder="No limit"
+                    value={tiltCooldownMinutes}
+                    onChange={(e) => setTiltCooldownMinutes(e.target.value)}
+                    className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] px-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
