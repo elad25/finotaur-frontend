@@ -1,7 +1,7 @@
 // src/components/copyTrading/ManageRiskTab.tsx
 // Compact Finotaur-branded Loss / Profit per Trade / Day / Week risk panel.
 
-import { memo, useState, useEffect } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
   ChevronDown,
@@ -403,6 +403,10 @@ const RiskCard = memo(function RiskCard({
   const [agentInitial, setAgentInitial] = useState({
     maxPositionUsd: '', maxTradesPerDay: '', tiltLossStreak: '', tiltCooldownMinutes: '',
   });
+  // Guard: once the user edits an agent-only field, the async risk-rule fetch
+  // must NOT overwrite their input (the fetch can resolve after typing → would
+  // silently clobber the typed value back to the DB default, e.g. null).
+  const agentEditedRef = useRef(false);
 
   // Fetch the active risk rule for this account on load.
   // Runs once per card when tradovateAccountId is known (per-account mode only).
@@ -418,6 +422,8 @@ const RiskCard = memo(function RiskCard({
       .maybeSingle()
       .then(({ data }) => {
         if (!data) return;
+        // Don't clobber values the user already started typing.
+        if (agentEditedRef.current) return;
         const vals = {
           maxPositionUsd:      data.max_position_usd      != null ? String(data.max_position_usd)      : '',
           maxTradesPerDay:     data.max_trades_per_day     != null ? String(data.max_trades_per_day)     : '',
@@ -749,7 +755,7 @@ const RiskCard = memo(function RiskCard({
                       min={0}
                       placeholder="No limit"
                       value={maxPositionUsd}
-                      onChange={(e) => setMaxPositionUsd(e.target.value)}
+                      onChange={(e) => { agentEditedRef.current = true; setMaxPositionUsd(e.target.value); }}
                       className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] pl-5 pr-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
                     />
                   </div>
@@ -767,7 +773,7 @@ const RiskCard = memo(function RiskCard({
                     step={1}
                     placeholder="No limit"
                     value={maxTradesPerDay}
-                    onChange={(e) => setMaxTradesPerDay(e.target.value)}
+                    onChange={(e) => { agentEditedRef.current = true; setMaxTradesPerDay(e.target.value); }}
                     className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] px-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
                   />
                 </div>
@@ -784,7 +790,7 @@ const RiskCard = memo(function RiskCard({
                     step={1}
                     placeholder="No limit"
                     value={tiltLossStreak}
-                    onChange={(e) => setTiltLossStreak(e.target.value)}
+                    onChange={(e) => { agentEditedRef.current = true; setTiltLossStreak(e.target.value); }}
                     className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] px-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
                   />
                 </div>
@@ -801,7 +807,7 @@ const RiskCard = memo(function RiskCard({
                     step={1}
                     placeholder="No limit"
                     value={tiltCooldownMinutes}
-                    onChange={(e) => setTiltCooldownMinutes(e.target.value)}
+                    onChange={(e) => { agentEditedRef.current = true; setTiltCooldownMinutes(e.target.value); }}
                     className="h-8 w-full rounded-md border border-border-ds-subtle bg-[#0b0b0b] px-2 text-xs text-ink-primary placeholder-ink-tertiary outline-none transition-colors focus:border-gold-primary/40 focus:ring-0"
                   />
                 </div>
