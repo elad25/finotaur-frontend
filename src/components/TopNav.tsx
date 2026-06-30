@@ -46,6 +46,7 @@ export const TopNav = () => {
   const { toggle: toggleDrawer } = useProductDrawer();
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
+  const [hasTopSecret, setHasTopSecret] = useState(false);
   const [floorProfileOpen, setFloorProfileOpen] = useState(false);
 
   // Get platform plan + journal tier for the subscription badge
@@ -55,13 +56,25 @@ export const TopNav = () => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('platform_plan, account_type')
+        .select(
+          'platform_plan, account_type, top_secret_status, top_secret_enabled, top_secret_expires_at',
+        )
         .eq('id', user.id)
         .maybeSingle();
 
       if (data) {
         setPlatformPlan(data.platform_plan);
         setAccountType(data.account_type);
+        // TOP SECRET is an orthogonal add-on — active only when enabled, status
+        // 'active', and not past its expiry (mirrors useTopSecret's check).
+        const notExpired =
+          !data.top_secret_expires_at ||
+          new Date(data.top_secret_expires_at) > new Date();
+        setHasTopSecret(
+          data.top_secret_status === 'active' &&
+            data.top_secret_enabled === true &&
+            notExpired,
+        );
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -151,7 +164,7 @@ export const TopNav = () => {
 
           {/* Subscription tier badge */}
           <div className="hidden md:flex items-center">
-            <SubscriptionBadge platformPlan={platformPlan} accountType={accountType} />
+            <SubscriptionBadge platformPlan={platformPlan} accountType={accountType} hasTopSecret={hasTopSecret} />
           </div>
 
           {/* ✨ Upgrade CTA */}
