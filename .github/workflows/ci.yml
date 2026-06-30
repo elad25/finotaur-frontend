@@ -138,3 +138,24 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+
+  # BLOCKING gate. Runs the Vitest unit suite (vitest.config.ts → src/**/*.test.*).
+  # Until 2026-06-30 the suite existed but no CI job ran it, so logic-only
+  # regressions shipped unguarded — e.g. the copier micro+mini "double trade"
+  # (one decision fanned to N accounts + translated mini→micro showed as 2 rows;
+  # fixed in #1168/#1169 but with no test pinning it). See
+  # src/lib/journal/positionGrouping.test.ts.
+  test:
+    name: test (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests (blocking)
+        run: npm run test
