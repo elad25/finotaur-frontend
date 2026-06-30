@@ -1070,12 +1070,29 @@ function DayView({ trades, barsByTrade }: { trades: Trade[]; barsByTrade: Map<st
       return cumBe;
     });
 
-    return agg.points.map((pt, i) => ({
+    const rows = agg.points.map((pt, i) => ({
       ...pt,
       breakevenStop: beValues[i] ?? pt.actual,
       targetScenario: targetData.curve[i] ?? pt.actual,
       originalStop: originalStopData.curve[i] ?? pt.actual,
     }));
+
+    // Prepend a $0 origin so every cumulative line starts from zero and rises
+    // into its P&L, instead of jumping straight to the first trade's value.
+    return [
+      {
+        idx: -1,
+        label: '',
+        actual: 0,
+        stop: 0,
+        target: 0,
+        breakeven: 0,
+        breakevenStop: 0,
+        targetScenario: 0,
+        originalStop: 0,
+      },
+      ...rows,
+    ];
   }, [agg.points, sortedClosed, allWhatIfTrades, barsByTrade, beR, targetData.curve, originalStopData.curve]);
 
   if (agg.points.length === 0) {
