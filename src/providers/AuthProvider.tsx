@@ -243,9 +243,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 { hasStoredSession }
               );
             }
+          } else if (authStateUserRef.current) {
+            // onAuthStateChange has ALREADY delivered a valid session in
+            // parallel (INITIAL_SESSION / SIGNED_IN). The getSession + getUser
+            // timeouts were auth-lock contention at startup, NOT a real session
+            // loss — the paying user is logged in and using the app. So:
+            //   (a) do NOT fire the terminal ERROR — it is a false positive that
+            //       also dirties Sentry with a phantom auth outage; and
+            //   (b) do NOT purge the stored token — it is valid (the live session
+            //       was just delivered from it); purging would log the user out
+            //       on the next load.
+            // Downgrade to a rate-limited warn. See the 2026-06-30 incident +
+            // .lessons/projects/finotaur/2026-06-30-auth-timeout-false-positive-error.md
+            const now = Date.now();
+            if (now - _lastTimeoutWarnAt >= TIMEOUT_WARN_INTERVAL_MS) {
+              _lastTimeoutWarnAt = now;
+              logger.warn(
+                '[Auth] getSession + getUser timed out, but onAuthStateChange ' +
+                'delivered a session (auth lock contention — user not affected)',
+                { hasStoredSession }
+              );
+            }
           } else {
-            // Every fallback attempt failed — genuine no-session (or sustained
-            // outage). This is the terminal error that should reach Sentry.
+            // Every fallback attempt failed AND onAuthStateChange has not
+            // delivered a user — genuine no-session (or sustained outage). This
+            // is the terminal error that should reach Sentry.
             logger.error('[Auth] getSession timeout and getUser fallback failed', {
               hasStoredSession,
             });
