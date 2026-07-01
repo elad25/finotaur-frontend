@@ -307,6 +307,14 @@ export function usePortfolios() {
     staleTime: 2 * 60 * 1000,
     gcTime:    10 * 60 * 1000,
     placeholderData: keepPreviousData,
+    // Broker accounts are discovered server-side (tradovate-sync self-heal) and can
+    // appear/disappear at any time — e.g. buying new APEX accounts under an existing
+    // connection. Poll so the copier/journal account list reflects the connection
+    // without a full page reload, matching the "Auto-syncing — no manual refresh
+    // needed" promise in the UI. Also override the global refetchOnWindowFocus:false
+    // for this one query so returning to the tab picks up freshly-synced accounts.
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const portfolios = query.data ?? [];
