@@ -23,6 +23,8 @@ import { matchStop, type StopOrder } from './_stopMatch.ts';
 // Diagnostic: last stop-index summary, surfaced in non-cron responses for verification.
 let lastStopDiag: Record<string, unknown> | null = null;
 
+let brokerRiskBudget = 12; // max auto-liq hydrations per cron invocation (rate-limit guard)
+
 // Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
 // is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
 // per Tradovate's official guidance, plus 5xx fixed-delay backoff).
@@ -1575,6 +1577,83 @@ async function processAccountFills(args: {
       `accountName=${accountName} connection=${connectionId}`,
       propErr,
     );
+  }
+
+  // Pull the prop firm's enforced drawdown/risk config from Tradovate's risk engine
+  // (auto-liquidation). Static per account, so refresh at most once / 24h. Isolated;
+  // a failure here must never affect the fills path. Stores raw + best-effort parse.
+  try {
+    const { data: existingRisk } = await supabaseAdmin
+      .from('prop_account_broker_risk')
+      .select('fetched_at')
+      .eq('user_id', userId)
+      .eq('account_name', accountName)
+      .maybeSingle();
+    const lastFetch = existingRisk?.fetched_at ? new Date(existingRisk.fetched_at).getTime() : 0;
+    const stale = Date.now() - lastFetch > 24 * 60 * 60 * 1000;
+    if (stale && brokerRiskBudget > 0) {
+      brokerRiskBudget--;
+      const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
+      const j = async (u: string) => {
+        const r = await fetch(`${base}${u}`, hdr);
+        return r.ok ? await r.json() : { _status: r.status };
+      };
+      const acct = await j(`/account/item?id=${accountIdNum}`);
+      const alpId = acct?.autoLiqProfileId ?? null;
+      const autoLiqProfile = alpId ? await j(`/autoLiqProfile/item?id=${alpId}`) : null;
+      const autoLiqDeps = await j(`/userAccountAutoLiq/deps?masterid=${accountIdNum}`);
+      const autoLiqLdeps = await j(`/userAccountAutoLiq/ldeps?masterids=${accountIdNum}`);
+      const riskParam = await j(`/userAccountRiskParameter/deps?masterid=${accountIdNum}`);
+      const raw = { account: acct, autoLiqProfile, autoLiqDeps, autoLiqLdeps, riskParam };
+
+      // Best-effort parse of the enforced trailing drawdown + daily loss ($).
+      // Tradovate's auto-liq entity field names vary; try known candidates across
+      // the profile and the account auto-liq deps. Store raw regardless for refinement.
+      const num = (v: unknown): number | null => {
+        const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+        return typeof n === 'number' && isFinite(n) && n !== 0 ? Math.abs(n) : null;
+      };
+      const pick = (obj: unknown, keys: string[]): number | null => {
+        if (!obj || typeof obj !== 'object') return null;
+        // search this object and, if it's an array or has an array, its elements
+        const candidates: any[] = Array.isArray(obj) ? obj : [obj];
+        for (const c of candidates) {
+          if (c && typeof c === 'object') {
+            for (const k of keys) {
+              if (k in c) { const v = num((c as any)[k]); if (v != null) return v; }
+            }
+          }
+        }
+        return null;
+      };
+      const ddKeys = ['trailingMaxDrawdown', 'trailMaxDrawdown', 'trailAmount', 'maxDrawdown', 'trailingDrawdown', 'drawdown'];
+      const dlKeys = ['dailyLossAmount', 'dailyLoss', 'maxDailyLoss', 'dailyLossLimit'];
+      const flatSources = [autoLiqProfile, autoLiqDeps, autoLiqLdeps, riskParam];
+      let trailing: number | null = null;
+      let daily: number | null = null;
+      for (const s of flatSources) {
+        trailing = trailing ?? pick(s, ddKeys);
+        daily = daily ?? pick(s, dlKeys);
+        // also scan nested userAccountAutoLiq arrays commonly returned by deps/ldeps
+        const nested = (s as any)?.userAccountAutoLiq ?? (Array.isArray(s) ? s : null);
+        if (nested) { trailing = trailing ?? pick(nested, ddKeys); daily = daily ?? pick(nested, dlKeys); }
+      }
+      const parsedOk = trailing != null || daily != null;
+
+      const { error: riskErr } = await supabaseAdmin.rpc('prop_store_broker_risk', {
+        p_user_id: userId,
+        p_account_name: accountName,
+        p_auto_liq_profile_id: alpId,
+        p_trailing_amount: trailing,
+        p_daily_loss_limit: daily,
+        p_drawdown_type: null,
+        p_parsed_ok: parsedOk,
+        p_raw: raw,
+      });
+      if (riskErr) console.warn('[broker-risk] store error', accountName, riskErr.message);
+    }
+  } catch (riskProbeErr) {
+    console.warn('[broker-risk] fetch error', accountName, String(riskProbeErr));
   }
 
   let inserted = 0;
