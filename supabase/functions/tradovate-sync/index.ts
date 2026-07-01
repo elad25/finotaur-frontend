@@ -1336,10 +1336,9 @@ async function syncCredential(cred: {
     const accountFills = (fillsByAccount.get(acctId) ?? [])
       .filter(f => f.id > cursor.last_fill_id);
 
-    // Pull the prop firm's enforced drawdown/risk config from Tradovate's auto-liq
-    // engine for EVERY discovered account (before the fills gate, so idle/demo accounts
-    // are covered). Static per account -> refresh at most once / 24h, capped per
-    // invocation. Isolated; a failure here must never affect the fills path.
+    // Pull the prop firm's ENFORCED drawdown from Tradovate's auto-liq engine
+    // (userAccountAutoLiq) for every discovered account, before the fills gate.
+    // Throttled 24h + capped per invocation. Isolated; never affects the fills path.
     try {
       const brAccountName = nameByAccountId.get(acctId) ?? String(acctId);
       const { data: existingRisk } = await supabaseAdmin
@@ -1353,52 +1352,36 @@ async function syncCredential(cred: {
       if (stale && brokerRiskBudget > 0) {
         brokerRiskBudget--;
         const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
-        const j = async (u: string) => {
+        const jget = async (u: string) => {
           const r = await fetch(`${base}${u}`, hdr);
           return r.ok ? await r.json() : { _status: r.status };
         };
-        const acct = await j(`/account/item?id=${acctId}`);
-        const alpId = acct?.autoLiqProfileId ?? null;
-        const autoLiqProfile = alpId ? await j(`/autoLiqProfile/item?id=${alpId}`) : null;
-        const autoLiqDeps = await j(`/userAccountAutoLiq/deps?masterid=${acctId}`);
-        const autoLiqLdeps = await j(`/userAccountAutoLiq/ldeps?masterids=${acctId}`);
-        const riskParam = await j(`/userAccountRiskParameter/deps?masterid=${acctId}`);
-        const raw = { account: acct, autoLiqProfile, autoLiqDeps, autoLiqLdeps, riskParam };
-        const num = (v: unknown): number | null => {
+        const acct = await jget(`/account/item?id=${acctId}`);
+        const autoLiqDeps = await jget(`/userAccountAutoLiq/deps?masterid=${acctId}`);
+        const raw = { account: acct, autoLiqDeps };
+        // userAccountAutoLiq/deps returns an array of the account's auto-liq configs.
+        const cfg = Array.isArray(autoLiqDeps) ? autoLiqDeps[0] : null;
+        const toNum = (v: unknown): number | null => {
           const n = typeof v === 'string' ? parseFloat(v) : (v as number);
-          return typeof n === 'number' && isFinite(n) && n !== 0 ? Math.abs(n) : null;
+          return typeof n === 'number' && isFinite(n) ? n : null;
         };
-        const pick = (obj: unknown, keys: string[]): number | null => {
-          if (!obj || typeof obj !== 'object') return null;
-          const candidates: any[] = Array.isArray(obj) ? obj : [obj];
-          for (const c of candidates) {
-            if (c && typeof c === 'object') {
-              for (const k of keys) {
-                if (k in c) { const v = num((c as any)[k]); if (v != null) return v; }
-              }
-            }
-          }
-          return null;
-        };
-        const ddKeys = ['trailingMaxDrawdown', 'trailMaxDrawdown', 'trailAmount', 'maxDrawdown', 'trailingDrawdown', 'drawdown'];
-        const dlKeys = ['dailyLossAmount', 'dailyLoss', 'maxDailyLoss', 'dailyLossLimit'];
-        const flatSources = [autoLiqProfile, autoLiqDeps, autoLiqLdeps, riskParam];
-        let trailing: number | null = null;
-        let daily: number | null = null;
-        for (const s of flatSources) {
-          trailing = trailing ?? pick(s, ddKeys);
-          daily = daily ?? pick(s, dlKeys);
-          const nested = (s as any)?.userAccountAutoLiq ?? (Array.isArray(s) ? s : null);
-          if (nested) { trailing = trailing ?? pick(nested, ddKeys); daily = daily ?? pick(nested, dlKeys); }
-        }
-        const parsedOk = trailing != null || daily != null;
-        const { error: riskErr } = await supabaseAdmin.rpc('prop_store_broker_risk', {
+        const trailing = cfg ? toNum((cfg as any).trailingMaxDrawdown) : null;
+        const floor = cfg ? toNum((cfg as any).trailingMaxDrawdownLimit) : null;
+        const daily = cfg ? toNum((cfg as any).dailyLossAutoLiq) : null;
+        const mode =
+          cfg && typeof (cfg as any).trailingMaxDrawdownMode === 'string'
+            ? (cfg as any).trailingMaxDrawdownMode
+            : null;
+        const alpId = (acct as any)?.autoLiqProfileId ?? null;
+        const parsedOk = trailing != null || floor != null || daily != null;
+        const { error: riskErr } = await supabaseAdmin.rpc('prop_store_broker_risk_v2', {
           p_user_id: cred.user_id,
           p_account_name: brAccountName,
           p_auto_liq_profile_id: alpId,
           p_trailing_amount: trailing,
           p_daily_loss_limit: daily,
-          p_drawdown_type: null,
+          p_drawdown_floor: floor,
+          p_drawdown_mode: mode,
           p_parsed_ok: parsedOk,
           p_raw: raw,
         });
