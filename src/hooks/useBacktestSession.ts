@@ -84,11 +84,12 @@ export interface PaperPosition {
 
 // Phase 6: Pending orders — placed via right-click on the replay chart,
 // fired automatically when a future bar's range touches the trigger price.
-//   LIMIT BUY  fills when bar.low  ≤ triggerPrice   (buy the dip — price came down)
-//   LIMIT SELL fills when bar.high ≥ triggerPrice   (sell the rally — price came up)
-//   STOP  BUY  fills when bar.high ≥ triggerPrice   (breakout — price broke above)
-//   STOP  SELL fills when bar.low  ≤ triggerPrice   (breakdown — price broke below)
-export type PendingOrderType = 'LIMIT' | 'STOP';
+// Four-type vocabulary (NinjaTrader semantics):
+//   LIMIT      — touch (buy: low≤T / sell: high≥T), fills limit-or-better, no slippage.
+//   MIT        — touch (same as LIMIT), fills at T (market), slippage applies.
+//   STOP       — breakout (buy: high≥T / sell: low≤T), fills at T (market), slippage.
+//   STOP_LIMIT — breakout (same as STOP), fills at T (limit), no slippage.
+export type PendingOrderType = 'LIMIT' | 'STOP' | 'MIT' | 'STOP_LIMIT';
 export interface PendingOrder {
   id: string;
   side: PaperSide;
@@ -728,6 +729,11 @@ function reducer(state: SessionState, action: Action): SessionState {
       // slippage per the order's type — both are handled inside OPEN's
       // applySlippage call using order.type.
       const transient: SessionState = { ...state, pendingOrders: remainingOrders };
+      // Map the 4-type vocabulary to the 3-value slippage model:
+      // limit-priced fills (LIMIT, STOP_LIMIT) → 'LIMIT' (no slippage);
+      // market fills (MIT, STOP) → 'STOP' (slippage applies).
+      const slipType: 'LIMIT' | 'STOP' =
+        order.type === 'LIMIT' || order.type === 'STOP_LIMIT' ? 'LIMIT' : 'STOP';
       return reducer(transient, {
         type: 'OPEN',
         payload: {
@@ -738,7 +744,7 @@ function reducer(state: SessionState, action: Action): SessionState {
           stopLoss: order.stopLoss,
           takeProfit: order.takeProfit,
           strategyId: order.strategyId,
-          entryOrderType: order.type,
+          entryOrderType: slipType,
         },
       });
     }
@@ -1216,7 +1222,7 @@ function loadPersistedState(initialBalance: number, key: string | null): Session
         return (
           typeof r.id === 'string'
           && (r.side === 'LONG' || r.side === 'SHORT')
-          && (r.type === 'LIMIT' || r.type === 'STOP')
+          && (r.type === 'LIMIT' || r.type === 'STOP' || r.type === 'MIT' || r.type === 'STOP_LIMIT')
           && typeof r.triggerPrice === 'number' && Number.isFinite(r.triggerPrice)
           && typeof r.size === 'number' && Number.isFinite(r.size) && r.size > 0
           && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt)
