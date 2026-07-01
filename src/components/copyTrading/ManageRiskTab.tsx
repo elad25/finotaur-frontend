@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
 import { toast } from 'sonner';
 import { nextSessionOpen, formatSessionOpen } from '@/lib/futuresSession';
-import { useAutomationEvents, parseEnforcementEvent } from '@/features/automation/hooks/useAutomationEvents';
+import { useAutomationEvents, parseEnforcementEvent, humanizeCheck } from '@/features/automation/hooks/useAutomationEvents';
 
 // ── Patch interface ─────────────────────────────────────────────────────────
 
@@ -341,33 +341,58 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
   // A risk breach can lock an account (flatten + block all trading until the
   // next futures session open) even when `kill_switch_active` is false — the
   // agent writes an `automation_events` row, not the portfolios table, for
-  // breach locks. We read recent enforcement events and match them to this
-  // portfolio defensively, since the payload may carry either the numeric
-  // Tradovate account id or the account name/label.
+  // breach locks. `risk_enforced` payloads carry NO account reference at all
+  // (verified prod shape) — the only way to attribute an event to THIS
+  // account is by matching `parsed.ruleId` against this account's own
+  // `automation_risk_rules.id` (fetched below). If this account has no saved
+  // risk rule yet, breach detection is skipped entirely (manual lock still
+  // works via `kill_switch_active`).
   const { events } = useAutomationEvents({ eventTypes: ['risk_enforced'], limit: 30 });
+
+  // The active risk-rule id for this account, sourced from the same
+  // automation_risk_rules fetch RiskCard already performs on load.
+  const [riskRuleId, setRiskRuleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (portfolio.tradovate_account_id == null) return;
+    let cancelled = false;
+    supabase
+      .from('automation_risk_rules')
+      .select('id')
+      .eq('account_id', String(portfolio.tradovate_account_id))
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setRiskRuleId(data?.id ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [portfolio.tradovate_account_id]);
 
   const now = new Date();
   // Events are already ordered newest-first by useAutomationEvents, so the
   // first match found is the most recent qualifying breach-lock event.
-  const breachEvent = events
-    .map((e) => ({ e, parsed: parseEnforcementEvent(e) }))
-    .find(({ e, parsed }) => {
-      const isLockAction = parsed.action === 'close_lock' || parsed.action === 'stop_copies';
-      if (!isLockAction) return false;
-      const matchesAccount =
-        parsed.accountId != null &&
-        (parsed.accountId === String(portfolio.tradovate_account_id ?? '') ||
-          parsed.accountId === portfolio.name);
-      if (!matchesAccount) return false;
-      // Lock persists until the session open that follows the event.
-      return nextSessionOpen(new Date(e.created_at)) > now;
-    });
+  const breachEvent = riskRuleId
+    ? events
+        .map((e) => ({ e, parsed: parseEnforcementEvent(e) }))
+        .find(({ e, parsed }) => {
+          const isLockAction = parsed.action === 'close_lock' || parsed.action === 'stop_copies';
+          if (!isLockAction) return false;
+          if (parsed.ruleId !== riskRuleId) return false;
+          // Lock persists until the session open that follows the event.
+          return nextSessionOpen(new Date(e.created_at)) > now;
+        })
+    : undefined;
 
   const manualLocked = portfolio.kill_switch_active ?? false;
   const lockInfo: LockInfo = {
     locked: manualLocked || !!breachEvent,
     reason: breachEvent ? 'breach' : manualLocked ? 'manual' : null,
-    breachCheck: breachEvent?.parsed.limit ?? null,
+    breachCheck: humanizeCheck(breachEvent?.parsed.check ?? null),
     autoUnlockAt: breachEvent
       ? nextSessionOpen(new Date(breachEvent.e.created_at))
       : manualLocked

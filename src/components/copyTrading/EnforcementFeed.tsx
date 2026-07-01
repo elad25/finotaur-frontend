@@ -20,7 +20,15 @@ import {
 // ---------------------------------------------------------------------------
 
 export interface EnforcementFeedProps {
-  /** When provided, only events for this account are shown. */
+  /**
+   * When provided, only events for this account are shown. Only effective
+   * for `copy_failed` events (matched by account name) — `risk_enforced`
+   * events carry no account reference in their payload at all, so they
+   * cannot be attributed to a specific account here; they are included
+   * unfiltered. The primary use of this component mounts it WITHOUT
+   * `accountId` (show everything), so this is a soft best-effort filter,
+   * not a hard per-account guarantee.
+   */
   accountId?: string | null;
   className?: string;
 }
@@ -79,8 +87,13 @@ export function EnforcementFeed({ accountId, className }: EnforcementFeedProps) 
     limit: 30,
   });
 
+  // Only copy_failed events carry an account name to match against; risk_enforced
+  // events have no account reference in their payload and are always included.
   const filteredEvents: AutomationEvent[] = accountId
-    ? events.filter((e) => parseEnforcementEvent(e).accountId === accountId)
+    ? events.filter((e) => {
+        if (e.event_type === 'risk_enforced') return true;
+        return parseEnforcementEvent(e).accountName === accountId;
+      })
     : events;
 
   return (
@@ -122,9 +135,14 @@ export function EnforcementFeed({ accountId, className }: EnforcementFeedProps) 
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm text-zinc-300 truncate">{parsed.message}</p>
-                      {!accountId && parsed.accountId && (
+                      {!accountId && (parsed.accountName || parsed.symbol) && (
                         <p className="text-xs text-zinc-600 truncate">
-                          Account: {parsed.accountId}
+                          {[
+                            parsed.accountName ? `Account: ${parsed.accountName}` : null,
+                            parsed.symbol ? `Symbol: ${parsed.symbol}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </p>
                       )}
                     </div>
