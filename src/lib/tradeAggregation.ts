@@ -5,7 +5,7 @@
 // ================================================
 
 import { computeActualR } from '@/utils/rResolver';
-import { clusterByOverlap, summedInitialRisk } from '@/lib/journal/positionGrouping';
+import { clusterByOverlap, summedInitialRisk, displaySymbol } from '@/lib/journal/positionGrouping';
 
 export type AggregationMode = 'all-accounts' | 'trader';
 
@@ -86,6 +86,8 @@ function aggregateTradeGroup<T extends Record<string, any>>(group: T[], mode: Ag
     ...rep,
     ...financialFields,
     id: rep.id,
+    // Uniform micro label when a decision mixes micro+mini (else rep's own symbol).
+    symbol: displaySymbol(group),
     group_trade_ids: group.map((t) => t.id),
     entry_price: entry ?? rep.entry_price,
     exit_price: exit ?? rep.exit_price,

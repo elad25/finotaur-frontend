@@ -14,7 +14,7 @@
 // ════════════════════════════════════════════════════════
 
 import { computeActualR } from '@/utils/rResolver';
-import { clusterByOverlap, summedInitialRisk } from '@/lib/journal/positionGrouping';
+import { clusterByOverlap, summedInitialRisk, displaySymbol } from '@/lib/journal/positionGrouping';
 
 export type TraderMode = 'per-contract' | 'per-account';
 
@@ -106,6 +106,8 @@ export function normalizeTraderTrades<T extends NormalizableTrade>(
 
     result.push({
       ...representative,
+      // Uniform micro label when a decision mixes micro+mini (else rep's own symbol).
+      symbol: displaySymbol(sorted),
       pnl: normPnl,
       quantity: 1,
       actual_r: mergedActualR,
