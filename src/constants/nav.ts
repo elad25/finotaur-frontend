@@ -33,6 +33,7 @@ import {
   Trophy,
   Monitor,
   Download,
+  Gauge,
   type LucideIcon,
 } from 'lucide-react';
 import { FEATURES } from '@/config/features';
@@ -266,6 +267,7 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Connections',  path: '/app/copy-trade/overview',      icon: Link },
       { label: 'Trade Copier', path: '/app/copy-trade/trade-copier',   icon: Copy },
+      { label: 'Prop Risk',    path: '/app/copy-trade/prop-risk',       icon: Gauge },
       { label: 'Manage Risk',  path: '/app/copy-trade/manage-risk',    icon: Shield },
         { label: 'FINOTAUR Agent', path: '/app/copy-trade/install',       icon: Download },
     ],
