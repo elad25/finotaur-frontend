@@ -22,7 +22,7 @@ import { matchStop, type StopOrder } from './_stopMatch.ts';
 
 // Diagnostic: last stop-index summary, surfaced in non-cron responses for verification.
 let lastStopDiag: Record<string, unknown> | null = null;
-let brokerRiskBudget = 12; // max auto-liq hydrations per cron invocation (rate-limit guard)
+let brokerRiskBudget = 50; // max auto-liq hydrations per cron invocation (rate-limit guard)
 
 // Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
 // is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
