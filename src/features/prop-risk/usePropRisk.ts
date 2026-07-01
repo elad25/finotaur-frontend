@@ -136,8 +136,8 @@ export interface UsePropRiskResult {
 export function usePropRisk(): UsePropRiskResult {
   const { id: userId } = useEffectiveUser();
   const qc = useQueryClient();
-  const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
-  const { snapshots, snapshotByAccountName, isLoading: snapshotLoading } = useAgentAccountSnapshots();
+  const { tradovatePortfolios, brokerPortfolios, isLoading: portfoliosLoading } = usePortfolios();
+  const { snapshotByAccountName, isLoading: snapshotLoading } = useAgentAccountSnapshots();
 
   const configQuery = useQuery({
     queryKey: configKey(userId ?? ''),
@@ -185,25 +185,17 @@ export function usePropRisk(): UsePropRiskResult {
   // Collect all account names from portfolios (tradovate/broker, is_active)
   const accountSet = new Map<string, { portfolioId: string | null; env: 'live' | 'demo' | null }>();
 
-  for (const p of portfolios) {
-    if (p.source !== 'tradovate' && p.source !== 'broker') continue;
-    if (!p.is_active) continue;
+  // Source of truth = exactly the accounts the Connections tab shows: active
+  // portfolios whose broker connection is active. usePortfolios already applies
+  // is_active + credential-match filtering, so tradovatePortfolios/brokerPortfolios
+  // are the real, active accounts (~the Connections list). Agent snapshots are a
+  // LIVE-DATA source ONLY — never an account-enumeration source (the NT8 agent
+  // reports hundreds of demo accounts that are not real/active).
+  for (const p of [...tradovatePortfolios, ...brokerPortfolios]) {
     const key = (p.name ?? '').trim();
     if (!key) continue;
     if (!accountSet.has(key)) {
-      accountSet.set(key, {
-        portfolioId: p.id,
-        env: p.environment ?? null,
-      });
-    }
-  }
-
-  // Also include any agent snapshot account names not already in portfolios
-  for (const snap of snapshots) {
-    const key = snap.accountName.trim();
-    if (!key) continue;
-    if (!accountSet.has(key)) {
-      accountSet.set(key, { portfolioId: null, env: (snap.env as 'live' | 'demo' | null) ?? null });
+      accountSet.set(key, { portfolioId: p.id, env: p.environment ?? null });
     }
   }
 
