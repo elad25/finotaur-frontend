@@ -73,6 +73,38 @@ function ddBarColor(pct: number): string {
   return 'bg-red-400';
 }
 
+// ── Auto-detect hint pill ─────────────────────────────────────────
+
+function AutoDetectPill({ source }: { source: PropRiskRow['resolvedSource'] }) {
+  if (source === 'manual') {
+    return (
+      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border bg-base-800 text-muted-foreground border-border">
+        Custom
+      </span>
+    );
+  }
+  if (source === 'broker') {
+    return (
+      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border bg-green-400/10 text-green-400 border-green-400/30">
+        Auto · Tradovate
+      </span>
+    );
+  }
+  if (source === 'balance') {
+    return (
+      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border bg-base-800 text-muted-foreground border-border">
+        Auto · detected
+      </span>
+    );
+  }
+  // 'default' or null with computed data still present
+  return (
+    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border bg-base-800 text-muted-foreground border-border">
+      Auto
+    </span>
+  );
+}
+
 // ── Alert banner ──────────────────────────────────────────────────
 
 function AlertBanner({ rows }: { rows: PropRiskRow[] }) {
@@ -118,7 +150,7 @@ function AlertBanner({ rows }: { rows: PropRiskRow[] }) {
 // ── Summary strip ─────────────────────────────────────────────────
 
 function SummaryStrip({ rows }: { rows: PropRiskRow[] }) {
-  const mapped = rows.filter((r) => r.config !== null);
+  const mapped = rows.filter((r) => r.computed !== null);
   const onTrack = mapped.filter(
     (r) => r.computed?.status === 'on_track' || r.computed?.status === 'funded' || r.computed?.status === 'target_hit',
   ).length;
@@ -176,6 +208,7 @@ function MappedAccountCard({ row, onEdit }: { row: PropRiskRow; onEdit: (r: Prop
                 {row.planLabel}
               </span>
             )}
+            <AutoDetectPill source={row.resolvedSource} />
           </div>
           <p className="text-sm font-semibold text-foreground mt-1 truncate">{row.accountName}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
@@ -195,7 +228,7 @@ function MappedAccountCard({ row, onEdit }: { row: PropRiskRow; onEdit: (r: Prop
           <button
             onClick={() => onEdit(row)}
             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-base-800 transition-colors"
-            title="Edit plan"
+            title="Override plan manually (optional)"
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -288,7 +321,7 @@ function MappedAccountCard({ row, onEdit }: { row: PropRiskRow; onEdit: (r: Prop
   );
 }
 
-function UnmappedAccountCard({ row, onAssign }: { row: PropRiskRow; onAssign: (r: PropRiskRow) => void }) {
+function UnsupportedFirmCard({ row, onAssign }: { row: PropRiskRow; onAssign: (r: PropRiskRow) => void }) {
   return (
     <div className="bg-base-800/30 border border-border rounded-xl p-5 space-y-3 opacity-75">
       <div className="flex items-start justify-between gap-2">
@@ -308,13 +341,14 @@ function UnmappedAccountCard({ row, onAssign }: { row: PropRiskRow; onAssign: (r
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Assign a plan to track drawdown and targets for this account.
+        Unsupported firm — {row.detectedFirmLabel || 'not recognized'}. Set the plan manually to track this account.
       </p>
       <button
         onClick={() => onAssign(row)}
-        className="w-full rounded-lg border border-gold/40 bg-gold/10 text-gold text-sm font-medium py-2 hover:bg-gold/20 transition-colors"
+        className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-border bg-base-800 text-muted-foreground text-xs font-medium py-2 hover:text-foreground hover:bg-base-700 transition-colors"
       >
-        Assign Plan
+        <Settings className="w-3.5 h-3.5" />
+        Set plan manually
       </button>
     </div>
   );
@@ -365,8 +399,8 @@ export default function PropRiskPage() {
     prevStatusRef.current = next;
   }, [rows]);
 
-  const mappedRows = rows.filter((r) => r.config !== null);
-  const unmappedRows = rows.filter((r) => r.config === null);
+  const trackedRows = rows.filter((r) => r.computed !== null);
+  const unsupportedRows = rows.filter((r) => r.computed === null);
 
   return (
     <div className="flex-1 overflow-auto">
@@ -405,29 +439,29 @@ export default function PropRiskPage() {
           </div>
         )}
 
-        {/* Mapped accounts */}
-        {mappedRows.length > 0 && (
+        {/* Tracked accounts — fully auto-resolved, no user action required */}
+        {trackedRows.length > 0 && (
           <div>
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Tracked accounts ({mappedRows.length})
+              Tracked accounts ({trackedRows.length})
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {mappedRows.map((row) => (
+              {trackedRows.map((row) => (
                 <MappedAccountCard key={row.accountName} row={row} onEdit={openDialog} />
               ))}
             </div>
           </div>
         )}
 
-        {/* Unmapped accounts */}
-        {unmappedRows.length > 0 && (
+        {/* Unsupported firm — rare: no catalog match, plan must be set manually */}
+        {unsupportedRows.length > 0 && (
           <div>
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Untracked accounts ({unmappedRows.length})
+              Unsupported firm ({unsupportedRows.length})
             </h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {unmappedRows.map((row) => (
-                <UnmappedAccountCard key={row.accountName} row={row} onAssign={openDialog} />
+              {unsupportedRows.map((row) => (
+                <UnsupportedFirmCard key={row.accountName} row={row} onAssign={openDialog} />
               ))}
             </div>
           </div>
