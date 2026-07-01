@@ -22,6 +22,7 @@ import { matchStop, type StopOrder } from './_stopMatch.ts';
 
 // Diagnostic: last stop-index summary, surfaced in non-cron responses for verification.
 let lastStopDiag: Record<string, unknown> | null = null;
+let brokerRiskBudget = 12; // max auto-liq hydrations per cron invocation (rate-limit guard)
 
 // Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
 // is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
@@ -1334,6 +1335,61 @@ async function syncCredential(cred: {
     // fetched with minCursor which may be lower than this account's cursor).
     const accountFills = (fillsByAccount.get(acctId) ?? [])
       .filter(f => f.id > cursor.last_fill_id);
+
+    // Pull the prop firm's ENFORCED drawdown from Tradovate's auto-liq engine
+    // (userAccountAutoLiq) for every discovered account, before the fills gate.
+    // Throttled 24h + capped per invocation. Isolated; never affects the fills path.
+    try {
+      const brAccountName = nameByAccountId.get(acctId) ?? String(acctId);
+      const { data: existingRisk } = await supabaseAdmin
+        .from('prop_account_broker_risk')
+        .select('fetched_at')
+        .eq('user_id', cred.user_id)
+        .eq('account_name', brAccountName)
+        .maybeSingle();
+      const lastFetch = existingRisk?.fetched_at ? new Date(existingRisk.fetched_at).getTime() : 0;
+      const stale = Date.now() - lastFetch > 24 * 60 * 60 * 1000;
+      if (stale && brokerRiskBudget > 0) {
+        brokerRiskBudget--;
+        const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
+        const jget = async (u: string) => {
+          const r = await fetch(`${base}${u}`, hdr);
+          return r.ok ? await r.json() : { _status: r.status };
+        };
+        const acct = await jget(`/account/item?id=${acctId}`);
+        const autoLiqDeps = await jget(`/userAccountAutoLiq/deps?masterid=${acctId}`);
+        const raw = { account: acct, autoLiqDeps };
+        // userAccountAutoLiq/deps returns an array of the account's auto-liq configs.
+        const cfg = Array.isArray(autoLiqDeps) ? autoLiqDeps[0] : null;
+        const toNum = (v: unknown): number | null => {
+          const n = typeof v === 'string' ? parseFloat(v) : (v as number);
+          return typeof n === 'number' && isFinite(n) ? n : null;
+        };
+        const trailing = cfg ? toNum((cfg as any).trailingMaxDrawdown) : null;
+        const floor = cfg ? toNum((cfg as any).trailingMaxDrawdownLimit) : null;
+        const daily = cfg ? toNum((cfg as any).dailyLossAutoLiq) : null;
+        const mode =
+          cfg && typeof (cfg as any).trailingMaxDrawdownMode === 'string'
+            ? (cfg as any).trailingMaxDrawdownMode
+            : null;
+        const alpId = (acct as any)?.autoLiqProfileId ?? null;
+        const parsedOk = trailing != null || floor != null || daily != null;
+        const { error: riskErr } = await supabaseAdmin.rpc('prop_store_broker_risk_v2', {
+          p_user_id: cred.user_id,
+          p_account_name: brAccountName,
+          p_auto_liq_profile_id: alpId,
+          p_trailing_amount: trailing,
+          p_daily_loss_limit: daily,
+          p_drawdown_floor: floor,
+          p_drawdown_mode: mode,
+          p_parsed_ok: parsedOk,
+          p_raw: raw,
+        });
+        if (riskErr) console.warn('[broker-risk] store error', brAccountName, riskErr.message);
+      }
+    } catch (riskProbeErr) {
+      console.warn('[broker-risk] fetch error', String(riskProbeErr));
+    }
 
     if (accountFills.length === 0) continue;
     anyAccountHadFills = true;
