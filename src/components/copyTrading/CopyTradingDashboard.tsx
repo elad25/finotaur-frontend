@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertOctagon, Ban, ChevronDown, ChevronUp, Crown, Plus, Search, Users, X } from 'lucide-react';
+import { AlertOctagon, Ban, ChevronDown, ChevronUp, Crown, Lock, LockOpen, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
@@ -21,6 +21,9 @@ import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
 import { useAgentCommand } from '@/features/automation/hooks/useAgentCommand';
 import { useAgentAccountSnapshots } from '@/features/automation/hooks/useAgentAccountSnapshots';
 import { AutomationMasterSwitch } from '@/features/automation/components/AutomationMasterSwitch';
+import { useLockAllAccounts } from '@/features/automation/hooks/useLockAllAccounts';
+import { useAccountRiskSummaries } from '@/features/automation/hooks/useAccountRiskSummaries';
+import { EnforcementFeed } from '@/components/copyTrading/EnforcementFeed';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -45,6 +48,9 @@ interface AccountRowData {
   qty: number | null;
   following: boolean;
   portfolioId: string | null;
+  locked: boolean;
+  riskSummaryLabel: string | null;
+  riskSummaryTooltip: string | null;
 }
 
 interface InstrumentTab {
@@ -207,18 +213,37 @@ const CopyAccountRow = memo(function CopyAccountRow({
       {/* Connection */}
       <div className="text-sm text-ink-primary truncate">{row.connectionName}</div>
 
-      {/* Account + status dot */}
-      <div className="flex items-center gap-ds-2 min-w-0">
-        <span
-          className={`h-2 w-2 rounded-full flex-shrink-0 ${
-            row.live
-              ? 'bg-status-success animate-pulse'
-              : row.issue
-                ? 'bg-status-warning'
-                : 'bg-status-offline border border-border-ds-default'
-          }`}
-        />
-        <span className="text-xs text-ink-primary truncate">{row.accountName}</span>
+      {/* Account + status dot + lock badge + risk summary */}
+      <div className="flex flex-col min-w-0 justify-center gap-0.5">
+        <div className="flex items-center gap-ds-2 min-w-0">
+          <span
+            className={`h-2 w-2 rounded-full flex-shrink-0 ${
+              row.live
+                ? 'bg-status-success animate-pulse'
+                : row.issue
+                  ? 'bg-status-warning'
+                  : 'bg-status-offline border border-border-ds-default'
+            }`}
+          />
+          <span className="text-xs text-ink-primary truncate">{row.accountName}</span>
+          {row.locked && (
+            <span
+              title="Locked — copying disabled and account flattened until next session open"
+              className="flex items-center gap-0.5 rounded-sm border border-status-danger/40 bg-status-danger/10 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-status-danger flex-shrink-0"
+            >
+              <Lock className="h-2.5 w-2.5" />
+              Locked
+            </span>
+          )}
+        </div>
+        {row.riskSummaryLabel && (
+          <span
+            title={row.riskSummaryTooltip ?? undefined}
+            className="ml-3.5 truncate text-[10px] text-ink-tertiary"
+          >
+            {row.riskSummaryLabel}
+          </span>
+        )}
       </div>
 
       {/* Symbol */}
@@ -358,7 +383,14 @@ export function CopyTradingDashboard() {
   const liveCredentialIds = useMemo(() => new Set<string>(), []);
   // Desktop agent snapshots — hydrates live balance/PnL/position columns.
   const { snapshotByAccountName } = useAgentAccountSnapshots();
-  const { tradovatePortfolios, brokerPortfolios } = usePortfolios();
+  const { tradovatePortfolios, brokerPortfolios, portfolios } = usePortfolios();
+  const { summaryByAccountId } = useAccountRiskSummaries();
+  // Lookup: portfolio id -> kill_switch_active, sourced from the full
+  // portfolios list (accountGroups only carries a subset of fields downstream).
+  const killSwitchByPortfolioId = useMemo(
+    () => new Map(portfolios.map((p) => [p.id, p.kill_switch_active ?? false])),
+    [portfolios],
+  );
   const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
     { id: 'asset-1', symbol: 'NQ' },
   ]);
@@ -452,6 +484,23 @@ export function CopyTradingDashboard() {
               )
             : null;
 
+        // Compact risk-rule summary, keyed by the Tradovate account id
+        // (matches ManageRiskTab / automation_risk_rules.account_id).
+        const riskSummary =
+          p.tradovate_account_id != null
+            ? summaryByAccountId.get(String(p.tradovate_account_id))
+            : undefined;
+        const riskParts: string[] = [];
+        const riskTooltipParts: string[] = [];
+        if (riskSummary?.dailyLossLimitUsd != null) {
+          riskParts.push(`DL $${riskSummary.dailyLossLimitUsd}`);
+          riskTooltipParts.push(`Daily loss limit: $${riskSummary.dailyLossLimitUsd}`);
+        }
+        if (riskSummary?.maxContracts != null) {
+          riskParts.push(`MC ${riskSummary.maxContracts}`);
+          riskTooltipParts.push(`Max contracts: ${riskSummary.maxContracts}`);
+        }
+
         return {
           id:             p.id,
           connectionName: group.label,
@@ -467,10 +516,21 @@ export function CopyTradingDashboard() {
           qty:      snap != null ? snap.qty : null,
           following: p.is_active,
           portfolioId: p.id,
+          locked: killSwitchByPortfolioId.get(p.id) ?? false,
+          riskSummaryLabel: riskParts.length > 0 ? riskParts.join(' · ') : null,
+          riskSummaryTooltip: riskTooltipParts.length > 0 ? riskTooltipParts.join(' · ') : null,
         };
       }),
     );
-  }, [accountGroups, connectionById, liveCredentialIds, instrument, snapshotByAccountName]);
+  }, [
+    accountGroups,
+    connectionById,
+    liveCredentialIds,
+    instrument,
+    snapshotByAccountName,
+    killSwitchByPortfolioId,
+    summaryByAccountId,
+  ]);
 
   // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
@@ -607,6 +667,21 @@ export function CopyTradingDashboard() {
   }, [rows, sort, leaderId]);
 
   // Flatten is handled by the local desktop agent — no cloud-engine endpoints.
+
+  // ── Lock all / Unlock all ───────────────────────────────────────
+  const { lockAll, unlockAll, isLocking } = useLockAllAccounts();
+  const [showLockAllConfirm, setShowLockAllConfirm] = useState(false);
+  const [showUnlockAllConfirm, setShowUnlockAllConfirm] = useState(false);
+
+  const handleLockAllConfirm = async () => {
+    setShowLockAllConfirm(false);
+    await lockAll();
+  };
+
+  const handleUnlockAllConfirm = async () => {
+    setShowUnlockAllConfirm(false);
+    await unlockAll();
+  };
 
   // ── Flatten All ───────────────────────────────────────────────
   const { flattenAll, isFlattening } = useFlattenAll();
@@ -765,9 +840,38 @@ export function CopyTradingDashboard() {
       </div>
       {/* ── Automation control ── */}
       <div className="mb-ds-4">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary mb-ds-2">
-          Automation control
-        </p>
+        <div className="flex items-center justify-between gap-ds-3 mb-ds-2">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
+            Automation control
+          </p>
+          <div className="flex items-center gap-ds-2">
+            {/* Lock all accounts */}
+            <button
+              type="button"
+              onClick={() => setShowLockAllConfirm(true)}
+              disabled={isLocking}
+              className="flex items-center gap-ds-2 rounded-lg border border-red-600/60 bg-red-600/10 px-ds-3 py-ds-2 text-sm font-semibold text-red-400 shadow-[0_0_14px_rgba(220,38,38,0.08)] transition-colors hover:border-red-500 hover:bg-red-600/20 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Lock all accounts"
+              title="Flattens and locks every account until the next session open"
+            >
+              <Lock className="h-4 w-4 flex-shrink-0" />
+              {isLocking ? 'Sending…' : 'Lock all accounts'}
+            </button>
+
+            {/* Unlock all accounts */}
+            <button
+              type="button"
+              onClick={() => setShowUnlockAllConfirm(true)}
+              disabled={isLocking}
+              className="flex items-center gap-ds-2 rounded-lg border border-amber-600/60 bg-amber-600/10 px-ds-3 py-ds-2 text-sm font-semibold text-amber-400 shadow-[0_0_14px_rgba(217,119,6,0.08)] transition-colors hover:border-amber-500 hover:bg-amber-600/20 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Unlock all accounts"
+              title="Re-enables copying and manual trading on every account"
+            >
+              <LockOpen className="h-4 w-4 flex-shrink-0" />
+              {isLocking ? 'Sending…' : 'Unlock all accounts'}
+            </button>
+          </div>
+        </div>
         <AutomationMasterSwitch />
       </div>
 
@@ -1037,6 +1141,14 @@ export function CopyTradingDashboard() {
         )}
       </div>
 
+      {/* ── Protection activity (observability) ── */}
+      <div className="mt-ds-4">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary mb-ds-2">
+          Recent risk enforcement
+        </p>
+        <EnforcementFeed />
+      </div>
+
       {/* ── Flatten All confirm modal ── */}
       <Dialog open={showFlattenConfirm} onOpenChange={setShowFlattenConfirm}>
         <DialogContent className="max-w-md border-red-600/40 bg-[#0d0f14]">
@@ -1149,6 +1261,74 @@ export function CopyTradingDashboard() {
             >
               <AlertOctagon className="h-4 w-4 flex-shrink-0" />
               Flatten {flattenSymbolDraft.trim() || '—'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Lock All confirm modal ── */}
+      <Dialog open={showLockAllConfirm} onOpenChange={setShowLockAllConfirm}>
+        <DialogContent className="max-w-md border-red-600/40 bg-[#0d0f14]">
+          <DialogTitle className="flex items-center gap-ds-2 text-red-400">
+            <Lock className="h-5 w-5 flex-shrink-0" />
+            Lock All Accounts
+          </DialogTitle>
+
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            This immediately flattens <span className="font-semibold text-ink-primary">every account</span> and
+            blocks <span className="font-semibold text-ink-primary">all new trades — including manual</span> — on
+            each account until the next session open (5:00 PM CT), then auto-resets.
+          </p>
+
+          <div className="mt-ds-2 flex justify-end gap-ds-3">
+            <button
+              type="button"
+              onClick={() => setShowLockAllConfirm(false)}
+              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleLockAllConfirm}
+              className="flex items-center gap-ds-2 rounded-md border border-red-600/60 bg-red-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-red-400 transition-colors hover:border-red-500 hover:bg-red-600/25 hover:text-red-300"
+            >
+              <Lock className="h-4 w-4 flex-shrink-0" />
+              Yes, Lock All Accounts
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Unlock All confirm modal ── */}
+      <Dialog open={showUnlockAllConfirm} onOpenChange={setShowUnlockAllConfirm}>
+        <DialogContent className="max-w-md border-amber-600/40 bg-[#0d0f14]">
+          <DialogTitle className="flex items-center gap-ds-2 text-amber-400">
+            <LockOpen className="h-5 w-5 flex-shrink-0" />
+            Unlock All Accounts
+          </DialogTitle>
+
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            This re-enables <span className="font-semibold text-ink-primary">copying and manual trading</span> on
+            every account. Accounts still under a risk-breach lock will remain locked until their own condition
+            clears.
+          </p>
+
+          <div className="mt-ds-2 flex justify-end gap-ds-3">
+            <button
+              type="button"
+              onClick={() => setShowUnlockAllConfirm(false)}
+              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleUnlockAllConfirm}
+              className="flex items-center gap-ds-2 rounded-md border border-amber-600/60 bg-amber-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-amber-400 transition-colors hover:border-amber-500 hover:bg-amber-600/25 hover:text-amber-300"
+            >
+              <LockOpen className="h-4 w-4 flex-shrink-0" />
+              Yes, Unlock All Accounts
             </button>
           </div>
         </DialogContent>

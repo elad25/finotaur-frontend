@@ -20,6 +20,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
 import { toast } from 'sonner';
+import { nextSessionOpen, formatSessionOpen } from '@/lib/futuresSession';
+import { useAutomationEvents, parseEnforcementEvent } from '@/features/automation/hooks/useAutomationEvents';
 
 // ── Patch interface ─────────────────────────────────────────────────────────
 
@@ -55,6 +57,23 @@ interface RiskCardInitial {
   breachAction:    'pause_copies' | 'stop_copies' | 'close_lock';
   maxContracts:    string;
   maxPositionSize: string;
+}
+
+// ── Lock status (daily halt) shown per account ──────────────────────────────
+// The v1.4.0 Lock is a hard daily halt: the agent immediately flattens the
+// account and blocks ALL new trades (including manual) until the next
+// futures session open (5:00 PM CT), then auto-resets. An account can be
+// locked two independent ways:
+//   - "manual": the user toggled the Lock button (`kill_switch_active`).
+//   - "breach": the agent locked it after a risk-limit breach — this is
+//     driven entirely by `automation_events` rows and is NOT reflected in
+//     `kill_switch_active`, so it must be derived separately.
+interface LockInfo {
+  locked: boolean;
+  reason: 'manual' | 'breach' | null;
+  /** The breached rule/check description, when reason === 'breach'. */
+  breachCheck: string | null;
+  autoUnlockAt: Date | null;
 }
 
 // ── Global defaults for the "All Accounts" broadcast card ──────────────────
@@ -318,6 +337,44 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
   onSave,
   isSaving,
 }: PortfolioRiskCardProps) {
+  // ── Breach-lock detection (read-only — the agent enforces this) ──────────
+  // A risk breach can lock an account (flatten + block all trading until the
+  // next futures session open) even when `kill_switch_active` is false — the
+  // agent writes an `automation_events` row, not the portfolios table, for
+  // breach locks. We read recent enforcement events and match them to this
+  // portfolio defensively, since the payload may carry either the numeric
+  // Tradovate account id or the account name/label.
+  const { events } = useAutomationEvents({ eventTypes: ['risk_enforced'], limit: 30 });
+
+  const now = new Date();
+  // Events are already ordered newest-first by useAutomationEvents, so the
+  // first match found is the most recent qualifying breach-lock event.
+  const breachEvent = events
+    .map((e) => ({ e, parsed: parseEnforcementEvent(e) }))
+    .find(({ e, parsed }) => {
+      const isLockAction = parsed.action === 'close_lock' || parsed.action === 'stop_copies';
+      if (!isLockAction) return false;
+      const matchesAccount =
+        parsed.accountId != null &&
+        (parsed.accountId === String(portfolio.tradovate_account_id ?? '') ||
+          parsed.accountId === portfolio.name);
+      if (!matchesAccount) return false;
+      // Lock persists until the session open that follows the event.
+      return nextSessionOpen(new Date(e.created_at)) > now;
+    });
+
+  const manualLocked = portfolio.kill_switch_active ?? false;
+  const lockInfo: LockInfo = {
+    locked: manualLocked || !!breachEvent,
+    reason: breachEvent ? 'breach' : manualLocked ? 'manual' : null,
+    breachCheck: breachEvent?.parsed.limit ?? null,
+    autoUnlockAt: breachEvent
+      ? nextSessionOpen(new Date(breachEvent.e.created_at))
+      : manualLocked
+        ? nextSessionOpen(now)
+        : null,
+  };
+
   const initial: RiskCardInitial = {
     lossPerTrade:    portfolio.max_loss_per_trade_usd?.toString() ?? '',
     lossPerDay:      portfolio.max_daily_loss_usd?.toString() ?? '',
@@ -344,6 +401,7 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
       isSaving={isSaving}
       saveLabel="Save changes"
       successMessage="Risk limits saved"
+      lockInfo={lockInfo}
     />
   );
 });
@@ -362,6 +420,8 @@ interface RiskCardProps {
   isSaving: boolean;
   saveLabel: string;
   successMessage: string;
+  /** Current lock status (manual or breach) — omitted for global mode. */
+  lockInfo?: LockInfo;
 }
 
 const RiskCard = memo(function RiskCard({
@@ -375,6 +435,7 @@ const RiskCard = memo(function RiskCard({
   isSaving,
   saveLabel,
   successMessage,
+  lockInfo,
 }: RiskCardProps) {
   // ── Loss limits ──────────────────────────────────────────────
   const [lossPerTrade, setLossPerTrade] = useState<string>(initial.lossPerTrade);
@@ -575,14 +636,20 @@ const RiskCard = memo(function RiskCard({
             </button>
           </label>
 
-          {/* Lock button — disables copying for this account when active */}
+          {/* Lock button — daily halt: flattens the account and blocks ALL
+              new trades (including manual) until the next session open */}
           <button
             type="button"
             onClick={() => setKillSwitch((v) => !v)}
             title={
               killSwitch
-                ? 'Copying DISABLED for this account — click to re-enable'
-                : 'Lock: disables copying to/from this account (does not close open positions)'
+                ? 'LOCKED — account flattened and all trading blocked until the next session open (5:00 PM CT). Click to unlock now.'
+                : 'Lock (daily halt): immediately flattens this account and blocks ALL new trades — including manual — until the next session open (5:00 PM CT), then auto-resets.'
+            }
+            aria-label={
+              killSwitch
+                ? 'LOCKED — account flattened and all trading blocked until the next session open (5:00 PM CT). Click to unlock now.'
+                : 'Lock (daily halt): immediately flattens this account and blocks ALL new trades — including manual — until the next session open (5:00 PM CT), then auto-resets.'
             }
             className={`flex h-7 w-7 items-center justify-center rounded-md border transition-colors duration-base ${
               killSwitch
@@ -594,6 +661,29 @@ const RiskCard = memo(function RiskCard({
           </button>
         </div>
       </div>
+
+      {/* ── LOCKED banner — shown when this account is halted (manual or
+           breach). Breach locks are agent-driven via automation_events and
+           can be active even when kill_switch_active is false. ────────── */}
+      {mode === 'account' && lockInfo?.locked && (
+        <div
+          className={`mx-ds-4 mb-ds-3 flex items-center gap-1.5 rounded-md border px-ds-3 py-1.5 text-[11px] font-medium ${
+            lockInfo.reason === 'breach'
+              ? 'border-status-danger/40 bg-status-danger/10 text-status-danger'
+              : 'border-gold-primary/40 bg-gold-primary/10 text-gold-primary'
+          }`}
+        >
+          <Lock className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>
+            {lockInfo.reason === 'breach'
+              ? `LOCKED — risk breach: ${lockInfo.breachCheck ?? 'limit exceeded'}`
+              : 'LOCKED — manual halt'}
+            {lockInfo.autoUnlockAt && (
+              <> · auto-unlocks at {formatSessionOpen(lockInfo.autoUnlockAt)}</>
+            )}
+          </span>
+        </div>
+      )}
 
       {/* ── GRID: Loss / Profit per Trade / Day / Week ──────────── */}
       <div
