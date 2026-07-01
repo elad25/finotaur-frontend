@@ -61,6 +61,8 @@ interface PropBrokerRiskRow {
   account_name: string;
   trailing_amount: number | null;
   daily_loss_limit: number | null;
+  drawdown_floor: number | null;
+  drawdown_mode: string | null;
   parsed_ok: boolean;
 }
 
@@ -133,7 +135,7 @@ async function fetchBrokerAccounts(userId: string): Promise<BrokerAccountRow[]> 
 async function fetchBrokerRisk(userId: string): Promise<PropBrokerRiskRow[]> {
   const { data, error } = await supabase
     .from('prop_account_broker_risk')
-    .select('account_name,trailing_amount,daily_loss_limit,parsed_ok')
+    .select('account_name,trailing_amount,daily_loss_limit,drawdown_floor,drawdown_mode,parsed_ok')
     .eq('user_id', userId);
   if (error?.code === '42P01') return [];
   if (error) throw error;
@@ -286,8 +288,26 @@ export function usePropRisk(): UsePropRiskResult {
     let planLabel = '';
     let resolvedSource: 'manual' | 'broker' | 'balance' | 'default' | null = null;
 
+    const brokerRisk = brokerRiskMap.get(lower) ?? null;
+
+    // The broker-reported drawdown_floor is only an absolute $ threshold for EOD
+    // (end-of-day trailing) accounts. RealTime/Intraday-mode accounts report a
+    // small relative value there (e.g. 100), not a dollar floor — using it as an
+    // absolute floor would be wrong. Guard with a sanity check against balance.
+    const useExactFloor =
+      brokerRisk?.drawdown_mode === 'EOD' &&
+      brokerRisk.drawdown_floor != null &&
+      balance != null &&
+      brokerRisk.drawdown_floor > balance * 0.5;
+    const enforcedFloor = useExactFloor ? brokerRisk!.drawdown_floor : null;
+    const enforcedTrailing = brokerRisk?.trailing_amount ?? null;
+    // We pulled real broker data whenever trailing_amount is present, even if the
+    // absolute floor itself wasn't usable (RealTime mode) — still 'broker'-sourced.
+    const brokerDataPulled = brokerRisk?.trailing_amount != null;
+
     if (config) {
       // Manual override — user explicitly assigned a plan via the settings gear.
+      // Still benefits from the exact broker-enforced floor when available.
       const rules = ruleSetFromConfig(config);
       computed = computePropStatus(rules, {
         balance,
@@ -295,6 +315,8 @@ export function usePropRisk(): UsePropRiskResult {
         dayPnl,
         hwmEquity: state?.hwm_equity ?? null,
         dayStartEquity: state?.day_start_equity ?? null,
+        enforcedFloor,
+        enforcedTrailing,
       });
 
       // Resolve plan label from catalog or config key
@@ -303,7 +325,6 @@ export function usePropRisk(): UsePropRiskResult {
       resolvedSource = 'manual';
     } else {
       // No manual override — auto-resolve firm + size + drawdown/target rules.
-      const brokerRisk = brokerRiskMap.get(lower) ?? null;
       const resolved: ResolvedPlan | null = detectedFirmKey
         ? resolvePlan(detectedFirmKey, balance, brokerRisk)
         : null;
@@ -318,9 +339,11 @@ export function usePropRisk(): UsePropRiskResult {
           dayPnl,
           hwmEquity: state?.hwm_equity ?? null,
           dayStartEquity: state?.day_start_equity ?? null,
+          enforcedFloor,
+          enforcedTrailing,
         });
         planLabel = resolved.plan.label;
-        resolvedSource = resolved.source; // 'broker' | 'balance' | 'default'
+        resolvedSource = brokerDataPulled ? 'broker' : resolved.source; // 'broker' | 'balance' | 'default'
       }
     }
 

@@ -26,6 +26,8 @@ export interface PropLiveInput {
   dayPnl?: number | null; // session P&L if directly known (the agent reports this)
   hwmEquity?: number | null; // persisted equity high-water-mark
   dayStartEquity?: number | null; // session baseline for daily loss
+  enforcedFloor?: number | null; // exact auto-liq threshold from broker (overrides HWM-derived floor)
+  enforcedTrailing?: number | null; // broker trailing amount, for the buffer % denominator
 }
 
 export type PropStatus =
@@ -61,6 +63,8 @@ export interface PropComputed {
   dailyRemaining: number | null;
   dailyBreached: boolean;
   recommendation: PropRecommendation;
+  /** 'broker' when drawdownFloor came from the exact enforced value pulled from the broker; 'computed' when derived from HWM/lock rules. */
+  floorSource: 'broker' | 'computed';
 }
 
 const AT_RISK_THRESHOLD = 0.25; // buffer ≤ 25% of the trailing amount → flag "at risk"
@@ -148,9 +152,16 @@ export function computePropStatus(rules: PropRuleSet, live: PropLiveInput): Prop
   const hwmEquity = Math.max(live.hwmEquity ?? currentEquity, currentEquity);
 
   // ── Drawdown floor ──
+  // When the broker reports the exact enforced auto-liq threshold, use it directly —
+  // it IS the dollar level the account gets liquidated at, no HWM/lock derivation needed.
   let drawdownFloor: number;
-  if (rules.drawdownType === 'static') {
+  let floorSource: 'broker' | 'computed';
+  if (live.enforcedFloor != null) {
+    drawdownFloor = live.enforcedFloor;
+    floorSource = 'broker';
+  } else if (rules.drawdownType === 'static') {
     drawdownFloor = rules.startingBalance - rules.trailingAmount;
+    floorSource = 'computed';
   } else {
     const rawFloor = hwmEquity - rules.trailingAmount;
     if (rules.lockType === 'none') {
@@ -159,10 +170,12 @@ export function computePropStatus(rules: PropRuleSet, live: PropLiveInput): Prop
       const cap = rules.startingBalance + (rules.lockType === 'start_plus' ? rules.lockValue : 0);
       drawdownFloor = Math.min(rawFloor, cap);
     }
+    floorSource = 'computed';
   }
 
   const ddBufferUsd = currentEquity - drawdownFloor;
-  const ddBufferPct = rules.trailingAmount > 0 ? ddBufferUsd / rules.trailingAmount : 0;
+  const effTrailing = live.enforcedTrailing ?? rules.trailingAmount;
+  const ddBufferPct = effTrailing > 0 ? ddBufferUsd / effTrailing : 0;
   const breached = hasData && currentEquity <= drawdownFloor;
 
   // ── Target ──
@@ -218,6 +231,7 @@ export function computePropStatus(rules: PropRuleSet, live: PropLiveInput): Prop
     dailyRemaining,
     dailyBreached,
     recommendation,
+    floorSource,
   };
 }
 
