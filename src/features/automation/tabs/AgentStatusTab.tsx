@@ -7,43 +7,11 @@ import { useState } from 'react';
 import { Plus, Clock } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
-import { useTimedQuery } from '@/hooks/useTimedQuery';
-import { supabase } from '@/lib/supabase';
-import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { DataState } from '@/components/ds/DataState';
+import { useAutomationEvents } from '../hooks/useAutomationEvents';
 import { AutomationMasterSwitch } from '../components/AutomationMasterSwitch';
 import { PairDeviceDialog } from '../components/PairDeviceDialog';
 import { DeviceList } from '../components/DeviceList';
-
-// ── recent events (optional, read-only) ──────────────────────────────────────
-
-interface AutomationEvent {
-  id: string;
-  event_type: string;
-  payload: Record<string, unknown> | null;
-  created_at: string;
-}
-
-function useRecentEvents() {
-  const { id: userId } = useEffectiveUser();
-  return useTimedQuery({
-    queryKey: ['automation', 'events', userId ?? ''],
-    queryFn: async (): Promise<AutomationEvent[]> => {
-      const { data, error } = await supabase
-        .from('automation_events')
-        .select('id,event_type,payload,created_at')
-        .eq('user_id', userId!)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (error?.code === '42P01') return [];
-      if (error) throw error;
-      return (data ?? []) as AutomationEvent[];
-    },
-    enabled: !!userId,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
-  });
-}
 
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -58,7 +26,7 @@ function formatRelative(iso: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AgentStatusTab() {
-  const { data: events = [], isLoading, isError, error, refetch } = useRecentEvents();
+  const { events, isLoading, isError, refetch } = useAutomationEvents({ limit: 20 });
   const [pairOpen, setPairOpen] = useState(false);
 
   return (
@@ -105,7 +73,6 @@ export default function AgentStatusTab() {
         <DataState
           isLoading={isLoading}
           isError={isError}
-          error={error}
           data={events}
           onRetry={refetch}
           empty={
