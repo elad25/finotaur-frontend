@@ -1169,6 +1169,14 @@ async function syncCredential(cred: {
   };
   console.log(JSON.stringify({ event: 'stop_index_built', ...lastStopDiag }));
 
+  // Prop Risk (additive): tradovate_account_id → Tradovate account `name`.
+  // Used only to attribute cash-balance snapshots to prop_touch_equity /
+  // portfolios.account_name; never affects fill sync logic.
+  const nameByAccountId = new Map<number, string>();
+  for (const acc of discoveredAccounts as Array<{ id: number; name?: string }>) {
+    if (acc.name) nameByAccountId.set(acc.id, acc.name);
+  }
+
   // Step L3: build portfolio map: tradovate_account_id → portfolios.id.
   // tradovate-auth already creates one portfolios row per account on connect.
   // Self-healing: if a discovered account has no portfolio row (e.g. eval→live
@@ -1324,10 +1332,12 @@ async function syncCredential(cred: {
     anyAccountHadFills = true;
 
     const portfolioId = portfolioMap.get(acctId) ?? null;
+    const accountName = nameByAccountId.get(acctId) ?? String(acctId);
     const result = await processAccountFills({
       connectionId:          cred.id,
       userId:                cred.user_id,
       accountIdNum:          acctId,
+      accountName,
       environment:           resolvedEnvironment,
       portfolioId,
       base,
@@ -1453,6 +1463,9 @@ async function processAccountFills(args: {
   connectionId:          string;
   userId:                string;
   accountIdNum:          number;
+  // Prop Risk (additive): Tradovate account `name` (matches portfolios.account_name),
+  // used only to attribute the cash-balance snapshot to prop_touch_equity.
+  accountName:           string;
   environment:           'live' | 'demo';
   portfolioId:           string | null;
   base:                  string;
@@ -1465,7 +1478,7 @@ async function processAccountFills(args: {
   stopOrders?:           StopOrder[];
 }): Promise<{ inserted: number; errors: number }> {
   const {
-    connectionId, userId, accountIdNum, environment, portfolioId,
+    connectionId, userId, accountIdNum, accountName, environment, portfolioId,
     base, accessToken, fills, syncMode, syncStartedAt, attribution,
     prevFillsProcessed, stopOrders = [],
   } = args;
@@ -1502,6 +1515,58 @@ async function processAccountFills(args: {
       `[tradovate-sync] cash_balance_fetch_error: accountId=${accountIdNum} ` +
       `connection=${connectionId}`,
       balanceErr,
+    );
+  }
+
+  // ─── Prop Risk equity capture (additive, fully isolated) ───────────────────
+  // Feeds the "Prop Risk" dashboard's live drawdown view for accounts that are
+  // NOT running the desktop copier agent (which reports equity via a separate
+  // path — see useAgentAccountSnapshots). Re-fetches the same cash balance
+  // snapshot endpoint used above (independent call, kept isolated so any
+  // change here can never affect account_equity_at_entry or the fills sync).
+  // A failure here MUST NOT throw out of / abort the fills sync for this or
+  // any other account — log and continue.
+  try {
+    const propBalanceRes = await fetch(
+      `${base}/cashBalance/getCashBalanceSnapshot?accountId=${accountIdNum}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (propBalanceRes.ok) {
+      const propBalanceBody = await propBalanceRes.json();
+      const balance = Number(propBalanceBody?.amount);
+      const openPnl = Number(propBalanceBody?.openPnL);
+      if (Number.isFinite(balance)) {
+        const { error: propRpcErr } = await supabaseAdmin.rpc('prop_touch_equity', {
+          p_user_id:      userId,
+          p_account_name: accountName,
+          p_balance:      balance,
+          p_open_pnl:     Number.isFinite(openPnl) ? openPnl : null,
+          p_source:       'tradovate',
+        });
+        if (propRpcErr) {
+          console.warn(
+            `[tradovate-sync] prop_touch_equity_failed: accountId=${accountIdNum} ` +
+            `accountName=${accountName} connection=${connectionId}`,
+            propRpcErr,
+          );
+        }
+      } else {
+        console.warn(
+          `[tradovate-sync] prop_equity_parse_failed: accountId=${accountIdNum} ` +
+          `connection=${connectionId} amount_type=${typeof propBalanceBody?.amount}`,
+        );
+      }
+    } else {
+      console.warn(
+        `[tradovate-sync] prop_equity_balance_non_ok: accountId=${accountIdNum} ` +
+        `connection=${connectionId} status=${propBalanceRes.status}`,
+      );
+    }
+  } catch (propErr) {
+    console.warn(
+      `[tradovate-sync] prop_equity_capture_error: accountId=${accountIdNum} ` +
+      `accountName=${accountName} connection=${connectionId}`,
+      propErr,
     );
   }
 

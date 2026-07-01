@@ -157,6 +157,7 @@ const TheFloorTab = lazy(() => import("@/features/settings/tabs/TheFloorTab"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
+const PropRiskPage = lazy(() => import('@/pages/app/journal/PropRiskPage'));
 const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccessPage"));
 const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailurePage"));
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
@@ -832,6 +833,7 @@ function AppContent() {
           {/* TRADE COPIER — four-tab page (Connections / Trade Copier / Manage Risk / FINOTAUR Agent) */}
           <Route path="copy-trade/overview"     element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
           <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/prop-risk"    element={<LockedRoute domainId="copy-trade"><PropRiskPage /></LockedRoute>} />
           <Route path="copy-trade/manage-risk"  element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
           <Route path="copy-trade/agent"        element={<Navigate to="/app/copy-trade/install" replace />} />
           <Route path="copy-trade/install"      element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
