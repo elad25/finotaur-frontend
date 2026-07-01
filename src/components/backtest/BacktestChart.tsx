@@ -609,7 +609,15 @@ export function BacktestChart({
             // SELL LIMIT fills at max(triggerPrice, bar.open) — seller gets limit or better.
             triggered = true; fillPrice = Math.max(order.triggerPrice, bar.open);
           }
-        } else { // STOP
+        } else if (order.type === 'MIT') {
+          // Market-If-Touched: same touch condition as LIMIT, but fills at trigger (market).
+          if (order.side === 'LONG' && bar.low <= order.triggerPrice) {
+            triggered = true; fillPrice = order.triggerPrice;
+          } else if (order.side === 'SHORT' && bar.high >= order.triggerPrice) {
+            triggered = true; fillPrice = order.triggerPrice;
+          }
+        } else {
+          // STOP (Stop Market) and STOP_LIMIT share the breakout trigger; both fill at trigger.
           if (order.side === 'LONG' && bar.high >= order.triggerPrice) {
             triggered = true; fillPrice = order.triggerPrice;
           } else if (order.side === 'SHORT' && bar.low <= order.triggerPrice) {
@@ -1459,7 +1467,7 @@ export function BacktestChart({
             onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
           />
           <div
-            className="fixed z-[120] min-w-[200px] rounded-md border border-zinc-700 bg-zinc-950 p-1 shadow-2xl"
+            className="fixed z-[120] min-w-[210px] rounded-md border border-zinc-700 bg-zinc-950 p-1 shadow-2xl"
             style={{
               left: Math.min(contextMenu.x, window.innerWidth - 220),
               top: Math.min(contextMenu.y, window.innerHeight - 160),
@@ -1471,18 +1479,32 @@ export function BacktestChart({
             {contextMenu.price > contextMenu.currentPrice ? (
               <>
                 <button
-                  onClick={() => handlePlacePendingOrder('LONG', 'STOP', contextMenu)}
-                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
-                >
-                  <span className="font-bold">BUY STOP</span>
-                  <span className="ml-2 text-[10px] text-zinc-500">(breakout buy)</span>
-                </button>
-                <button
                   onClick={() => handlePlacePendingOrder('SHORT', 'LIMIT', contextMenu)}
                   className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
                 >
                   <span className="font-bold">SELL LIMIT</span>
                   <span className="ml-2 text-[10px] text-zinc-500">(sell into rally)</span>
+                </button>
+                <button
+                  onClick={() => handlePlacePendingOrder('SHORT', 'MIT', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
+                >
+                  <span className="font-bold">SELL MIT</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(market if touched)</span>
+                </button>
+                <button
+                  onClick={() => handlePlacePendingOrder('LONG', 'STOP', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
+                >
+                  <span className="font-bold">BUY STOP MARKET</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakout buy)</span>
+                </button>
+                <button
+                  onClick={() => handlePlacePendingOrder('LONG', 'STOP_LIMIT', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
+                >
+                  <span className="font-bold">BUY STOP LIMIT</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakout, limit fill)</span>
                 </button>
               </>
             ) : (
@@ -1495,11 +1517,25 @@ export function BacktestChart({
                   <span className="ml-2 text-[10px] text-zinc-500">(buy the dip)</span>
                 </button>
                 <button
+                  onClick={() => handlePlacePendingOrder('LONG', 'MIT', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
+                >
+                  <span className="font-bold">BUY MIT</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(market if touched)</span>
+                </button>
+                <button
                   onClick={() => handlePlacePendingOrder('SHORT', 'STOP', contextMenu)}
                   className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
                 >
-                  <span className="font-bold">SELL STOP</span>
+                  <span className="font-bold">SELL STOP MARKET</span>
                   <span className="ml-2 text-[10px] text-zinc-500">(breakdown short)</span>
+                </button>
+                <button
+                  onClick={() => handlePlacePendingOrder('SHORT', 'STOP_LIMIT', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
+                >
+                  <span className="font-bold">SELL STOP LIMIT</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakdown, limit fill)</span>
                 </button>
               </>
             )}

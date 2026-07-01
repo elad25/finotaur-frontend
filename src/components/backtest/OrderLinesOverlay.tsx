@@ -352,27 +352,11 @@ export function OrderLinesOverlay({
     }
   }
 
-  // Pending order trigger lines
-  for (const order of pendingOrders) {
-    const isDraggingThis = drag?.kind === 'pending' && drag.pendingId === order.id;
-    const pendingY = isDraggingThis
-      ? drag.previewY
-      : priceToY(series, order.triggerPrice);
-    const pendingPrice = isDraggingThis ? drag.previewPrice : order.triggerPrice;
-    if (pendingY == null || pendingY <= 0) continue;
-    const sideLabel = order.side === 'LONG' ? 'BUY' : 'SELL';
-    lines.push(
-      <OrderLine
-        key={`pending-${order.id}`}
-        y={pendingY}
-        label={`${sideLabel} ${order.type} ${pendingPrice.toFixed(2)}`}
-        color={COLOR.pending}
-        draggable={draggingEnabled}
-        isPreview={isDraggingThis}
-        onPointerDown={(e) => startDrag(e, 'pending', order.triggerPrice, order.id)}
-      />,
-    );
-  }
+  // Pending order trigger lines are now rendered exclusively as NinjaTrader-style
+  // price lines + pill tags inside BacktestReplayChart. The loop below is removed
+  // to avoid duplication. The prop + drag machinery for 'pending' kind are kept
+  // intact (harmless) to avoid interface churn.
+  void pendingOrders;
 
   if (lines.length === 0 && !drag) return null;
 

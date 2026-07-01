@@ -64,6 +64,16 @@ const THEME = {
   brandGold: '#eab308',
 } as const;
 
+// NinjaTrader-style order/position marker palette
+const NT_LIMIT_COLOR = '#26C6DA';   // cyan — Limit + MIT family
+const NT_STOP_COLOR  = '#E64980';   // magenta — Stop Market + Stop Limit family
+const NT_POS_COLOR   = '#D6A03C';   // orange/gold — position average line
+const ORDER_CODE: Record<'LIMIT' | 'STOP' | 'MIT' | 'STOP_LIMIT', string> = {
+  LIMIT: 'LMT', MIT: 'MIT', STOP: 'STPM', STOP_LIMIT: 'SLM',
+};
+const isLimitFamily = (t: string) => t === 'LIMIT' || t === 'MIT';
+const orderMarkerColor = (t: string) => (isLimitFamily(t) ? NT_LIMIT_COLOR : NT_STOP_COLOR);
+
 // Forward "future" runway revealed by PLAY after the replay-start moment.
 const BARS_AFTER_START = 500;
 
@@ -243,6 +253,7 @@ export function BacktestReplayChart({
   // latest setCursor from the playback engine, even after bars reload.
   const setCursorRef = useRef<((c: number) => void) | null>(null);
   const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
+  const positionLineRef = useRef<IPriceLine | null>(null);
   const jumpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Replay cursor overlay state ─────────────────────────────
@@ -898,9 +909,10 @@ export function BacktestReplayChart({
     // Add or update lines for current pending orders.
     // title is intentionally '' — the label is rendered as a custom React pill
     // overlay (below) so the native on-chart text label is suppressed. The
-    // dashed line + right-axis price tag (axisLabelVisible:true) are kept.
+    // solid line + right-axis price tag (axisLabelVisible:true) are kept.
+    // Color follows the NinjaTrader type-family palette (cyan=limit, magenta=stop).
     for (const o of pendingOrders) {
-      const color = o.side === 'LONG' ? THEME.candleUp : THEME.candleDown;
+      const color = orderMarkerColor(o.type);
       const cached = existing.get(o.id);
       if (cached) {
         cached.applyOptions({ price: o.triggerPrice, color, title: '' });
@@ -909,7 +921,7 @@ export function BacktestReplayChart({
           price: o.triggerPrice,
           color,
           lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
+          lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
           title: '',
         });
@@ -917,6 +929,30 @@ export function BacktestReplayChart({
       }
     }
   }, [pendingOrders]);
+
+  // Position average-price line — NinjaTrader gold horizontal at entry price.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    // Remove any stale line first.
+    if (positionLineRef.current) { series.removePriceLine(positionLineRef.current); positionLineRef.current = null; }
+    if (activePosition) {
+      positionLineRef.current = series.createPriceLine({
+        price: activePosition.entryPrice,
+        color: NT_POS_COLOR,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: '',
+      });
+    }
+    return () => {
+      if (positionLineRef.current && seriesRef.current) {
+        seriesRef.current.removePriceLine(positionLineRef.current);
+        positionLineRef.current = null;
+      }
+    };
+  }, [activePosition]);
 
   // ─── Replay cursor X: recompute on every cursor/bar advance ─
   useEffect(() => {
@@ -1041,8 +1077,8 @@ export function BacktestReplayChart({
               const containerHeight = containerRef.current?.clientHeight ?? 0;
               if (y == null || y < 0 || y > containerHeight) return null;
               const axisW = chartRef.current!.priceScale('right').width() ?? 60;
-              const pillColor = o.side === 'LONG' ? THEME.candleUp : THEME.candleDown;
-              const label = `${o.side === 'LONG' ? 'BUY' : 'SELL'} ${o.type} ${o.size}× @ ${o.triggerPrice.toFixed(2)}`;
+              const pillColor = orderMarkerColor(o.type);
+              const label = `${o.size} ${o.side === 'LONG' ? 'Buy' : 'Sell'} ${ORDER_CODE[o.type]}`;
               return (
                 <div
                   key={o.id}
@@ -1051,7 +1087,7 @@ export function BacktestReplayChart({
                     top: y - 10,
                     right: axisW + 4,
                     backgroundColor: pillColor,
-                    color: '#fff',
+                    color: '#08080a',
                     userSelect: 'none',
                   }}
                   onPointerDown={(e) => {
@@ -1166,30 +1202,33 @@ export function BacktestReplayChart({
                 mark != null && Number.isFinite(mark)
                   ? (mark - pos.entryPrice) * dir * pos.size
                   : null;
-              // PnL sign drives the color: green = winning, red = losing,
-              // neutral gray until a mark price is available.
-              const pillColor =
-                pnl == null ? '#52525b' : pnl >= 0 ? THEME.candleUp : THEME.candleDown;
-              const pnlText =
-                pnl == null
-                  ? '—'
-                  : `${pnl >= 0 ? '+' : ''}${pnl.toLocaleString('en-US', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`;
-              const label = `${pos.side} ${units}× · ${pnlText}`;
+              // PnL cell color: green = winning, red = losing, gray = no mark yet.
+              const pnlCellColor =
+                pnl == null ? '#52525b' : pnl >= 0 ? '#26A65B' : '#E64980';
+              const pnlText = pnl == null ? '—' : Math.round(pnl).toString();
               return (
                 <div
-                  className="absolute flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow"
+                  className="absolute flex items-center rounded overflow-hidden shadow"
                   style={{
                     top: y - 10,
                     right: axisW + 4,
-                    backgroundColor: pillColor,
-                    color: '#fff',
                     userSelect: 'none',
                   }}
                 >
-                  {label}
+                  {/* Left cell: unrealized P&L */}
+                  <span
+                    className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
+                    style={{ backgroundColor: pnlCellColor, color: '#fff' }}
+                  >
+                    {pnlText}
+                  </span>
+                  {/* Right cell: position size */}
+                  <span
+                    className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
+                    style={{ backgroundColor: '#3f3f46', color: '#fff' }}
+                  >
+                    {units}
+                  </span>
                 </div>
               );
             })()}
