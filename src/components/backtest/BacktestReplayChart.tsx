@@ -1150,12 +1150,14 @@ export function BacktestReplayChart({
                     pillEl.addEventListener('pointercancel', handleCancel);
                   }}
                 >
-                  {/* ✕ cancel button — always pointer-receptive (visibility
-                      toggled via opacity only); pointerdown stops propagation
-                      so it never accidentally starts a pill drag. */}
+                  <span>{label}</span>
+                  {/* ✕ cancel box — ALWAYS visible (NinjaTrader-style), on the
+                      right edge toward the price axis so every pending order is
+                      obviously cancellable. pointerdown stops propagation so a
+                      click never starts a pill drag. */}
                   <button
                     type="button"
-                    className="-ml-0.5 rounded opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/25"
+                    className="-mr-0.5 ml-1 flex items-center rounded-sm bg-black/25 px-0.5 transition-colors hover:bg-black/50"
                     style={{ pointerEvents: 'auto' }}
                     title="Cancel order"
                     aria-label="Cancel order"
@@ -1171,7 +1173,6 @@ export function BacktestReplayChart({
                   >
                     <X size={11} />
                   </button>
-                  <span>{label}</span>
                 </div>
               );
             })}
