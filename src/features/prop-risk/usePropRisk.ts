@@ -21,8 +21,10 @@ import {
 import {
   computePropStatus,
   ruleSetFromConfig,
+  ruleSetFromPlan,
 } from './computePropStatus';
 import type { PropComputed } from './computePropStatus';
+import { resolvePlan, type ResolvedPlan } from './resolvePlan';
 
 // ── DB row shapes ─────────────────────────────────────────────────
 
@@ -55,6 +57,13 @@ interface BrokerAccountRow {
   balance_snapshot: { cash_balance?: number | null; open_pnl?: number | null } | null;
 }
 
+interface PropBrokerRiskRow {
+  account_name: string;
+  trailing_amount: number | null;
+  daily_loss_limit: number | null;
+  parsed_ok: boolean;
+}
+
 // ── Public row type ───────────────────────────────────────────────
 
 export interface PropRiskRow {
@@ -70,6 +79,8 @@ export interface PropRiskRow {
   online: boolean;
   hasLive: boolean;
   lastSource: string | null;
+  /** How the current plan/status was determined — drives the "auto-detected" UI hint. */
+  resolvedSource: 'manual' | 'broker' | 'balance' | 'default' | null;
 }
 
 // ── Query keys ────────────────────────────────────────────────────
@@ -77,6 +88,7 @@ export interface PropRiskRow {
 const configKey = (userId: string) => ['prop-risk', 'configs', userId] as const;
 const equityKey = (userId: string) => ['prop-risk', 'equity', userId] as const;
 const brokerKey = (userId: string) => ['prop-risk', 'broker', userId] as const;
+const brokerRiskKey = (userId: string) => ['prop-risk', 'broker-risk', userId] as const;
 
 // ── Fetchers ──────────────────────────────────────────────────────
 
@@ -116,6 +128,16 @@ async function fetchBrokerAccounts(userId: string): Promise<BrokerAccountRow[]> 
     return [];
   }
   return (data ?? []) as BrokerAccountRow[];
+}
+
+async function fetchBrokerRisk(userId: string): Promise<PropBrokerRiskRow[]> {
+  const { data, error } = await supabase
+    .from('prop_account_broker_risk')
+    .select('account_name,trailing_amount,daily_loss_limit,parsed_ok')
+    .eq('user_id', userId);
+  if (error?.code === '42P01') return [];
+  if (error) throw error;
+  return (data ?? []) as PropBrokerRiskRow[];
 }
 
 // ── Hook ──────────────────────────────────────────────────────────
@@ -166,6 +188,15 @@ export function usePropRisk(): UsePropRiskResult {
     gcTime: 5 * 60 * 1000,
   });
 
+  const brokerRiskQuery = useQuery({
+    queryKey: brokerRiskKey(userId ?? ''),
+    queryFn: () => fetchBrokerRisk(userId!),
+    enabled: !!userId,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    gcTime: 5 * 60 * 1000,
+  });
+
   // Build case-insensitive maps
   const configMap = new Map<string, PropConfigRow>();
   for (const c of configQuery.data ?? []) {
@@ -180,6 +211,11 @@ export function usePropRisk(): UsePropRiskResult {
   const brokerMap = new Map<string, BrokerAccountRow>();
   for (const b of brokerQuery.data ?? []) {
     brokerMap.set(b.account_name.trim().toLowerCase(), b);
+  }
+
+  const brokerRiskMap = new Map<string, PropBrokerRiskRow>();
+  for (const r of brokerRiskQuery.data ?? []) {
+    brokerRiskMap.set(r.account_name.trim().toLowerCase(), r);
   }
 
   // Collect all account names from portfolios (tradovate/broker, is_active)
@@ -248,8 +284,10 @@ export function usePropRisk(): UsePropRiskResult {
 
     let computed: PropComputed | null = null;
     let planLabel = '';
+    let resolvedSource: 'manual' | 'broker' | 'balance' | 'default' | null = null;
 
     if (config) {
+      // Manual override — user explicitly assigned a plan via the settings gear.
       const rules = ruleSetFromConfig(config);
       computed = computePropStatus(rules, {
         balance,
@@ -262,6 +300,28 @@ export function usePropRisk(): UsePropRiskResult {
       // Resolve plan label from catalog or config key
       const planEntry = getPlanByKey(config.plan_key);
       planLabel = planEntry?.plan.label ?? config.plan_key;
+      resolvedSource = 'manual';
+    } else {
+      // No manual override — auto-resolve firm + size + drawdown/target rules.
+      const brokerRisk = brokerRiskMap.get(lower) ?? null;
+      const resolved: ResolvedPlan | null = detectedFirmKey
+        ? resolvePlan(detectedFirmKey, balance, brokerRisk)
+        : null;
+
+      if (resolved) {
+        const rules = ruleSetFromPlan(resolved.plan); // phase defaults to 'evaluation'
+        rules.trailingAmount = resolved.trailingAmount; // broker-pulled override
+        rules.dailyLossLimit = resolved.dailyLossLimit; // broker-pulled override
+        computed = computePropStatus(rules, {
+          balance,
+          openPnl,
+          dayPnl,
+          hwmEquity: state?.hwm_equity ?? null,
+          dayStartEquity: state?.day_start_equity ?? null,
+        });
+        planLabel = resolved.plan.label;
+        resolvedSource = resolved.source; // 'broker' | 'balance' | 'default'
+      }
     }
 
     rows.push({
@@ -276,6 +336,7 @@ export function usePropRisk(): UsePropRiskResult {
       online,
       hasLive,
       lastSource,
+      resolvedSource,
     });
   }
 
@@ -284,6 +345,7 @@ export function usePropRisk(): UsePropRiskResult {
     void qc.invalidateQueries({ queryKey: configKey(userId) });
     void qc.invalidateQueries({ queryKey: equityKey(userId) });
     void qc.invalidateQueries({ queryKey: brokerKey(userId) });
+    void qc.invalidateQueries({ queryKey: brokerRiskKey(userId) });
   }, [userId, qc]);
 
   const assignPlan = useCallback(
