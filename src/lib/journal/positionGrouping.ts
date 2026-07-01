@@ -48,6 +48,27 @@ export function contractRoot(symbol?: string | null): string {
   return `${mini}${month}${year}`;
 }
 
+/** True when the symbol's root is a micro contract (MNQ, MES, M2K, …). */
+function isMicroSymbol(symbol?: string | null): boolean {
+  const m = (symbol ?? '').trim().toUpperCase().match(FUTURES_RE);
+  return m ? Object.prototype.hasOwnProperty.call(MICRO_TO_MINI, m[1]) : false;
+}
+
+/**
+ * Symbol to DISPLAY for a merged decision. When a position mixes micro and
+ * mini/standard contracts of the same family (e.g. MNQU6 + NQU6), show the
+ * MICRO symbol so every row of that family reads uniformly (Elad's 2026-06-30
+ * request: "if there's a micro+mini combination, make it one micro row").
+ * A pure mini/standard (or non-futures) cluster keeps the representative's own
+ * symbol. Display-only — grouping, P&L, quantity and R are unaffected.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function displaySymbol(cluster: Record<string, any>[]): string {
+  const micro = cluster.find((t) => isMicroSymbol(t.symbol));
+  const rep = cluster[0];
+  return String((micro ?? rep)?.symbol ?? '');
+}
+
 function timeMs(ts?: string | null): number {
   if (!ts) return NaN;
   const v = new Date(ts).getTime();

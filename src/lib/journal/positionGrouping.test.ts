@@ -13,7 +13,7 @@
 // covering positionGrouping / tradeAggregation / traderNormalization).
 
 import { describe, it, expect } from 'vitest';
-import { contractRoot, clusterByOverlap } from '@/lib/journal/positionGrouping';
+import { contractRoot, clusterByOverlap, displaySymbol } from '@/lib/journal/positionGrouping';
 import { aggregateCopiedTrades } from '@/lib/tradeAggregation';
 import { normalizeTraderTrades } from '@/lib/journal/traderNormalization';
 
@@ -90,5 +90,37 @@ describe('normalizeTraderTrades — TRADER shows one row per decision', () => {
     expect(rows).toHaveLength(1);
     expect(Number(rows[0].pnl)).toBeCloseTo(SHORT_SUM_PNL / SHORT_ACCOUNTS, 6); // -409
     expect(rows[0].group_trade_ids).toHaveLength(4);
+  });
+});
+
+describe('displaySymbol — uniform MICRO label for micro+mini decisions', () => {
+  it('shows the micro symbol when a decision mixes micro and mini', () => {
+    expect(displaySymbol(SHORT_DECISION)).toBe('MNQU6'); // mixes NQU6 (mini) + MNQU6 (micro)
+  });
+
+  it('keeps the symbol for a pure mini/standard decision', () => {
+    const pureMini: Row[] = [
+      { id: 'a', symbol: 'NQU6', side: 'SHORT', open_at: '2026-06-30T14:00:00.000Z', close_at: '2026-06-30T14:01:00.000Z' },
+      { id: 'b', symbol: 'NQU6', side: 'SHORT', open_at: '2026-06-30T14:00:00.500Z', close_at: '2026-06-30T14:01:00.000Z' },
+    ];
+    expect(displaySymbol(pureMini)).toBe('NQU6');
+  });
+
+  it('keeps the symbol for a pure micro decision', () => {
+    expect(displaySymbol([{ id: 'a', symbol: 'MESZ5' }])).toBe('MESZ5');
+  });
+});
+
+describe('merged rows expose the uniform micro symbol in both scopes', () => {
+  it('ALL ACCOUNTS: the merged micro+mini short row is labeled MNQU6', () => {
+    const rows = aggregateCopiedTrades(SHORT_DECISION, 'all-accounts');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].symbol).toBe('MNQU6');
+  });
+
+  it('TRADER: the merged micro+mini short row is labeled MNQU6', () => {
+    const rows = normalizeTraderTrades(SHORT_DECISION, 'per-account');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].symbol).toBe('MNQU6');
   });
 });
