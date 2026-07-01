@@ -305,7 +305,13 @@ const CopyAccountRow = memo(function CopyAccountRow({
       {/* Day PnL */}
       <div
         className={`text-sm text-right ${
-          row.dayPnL != null && row.dayPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
+          row.dayPnL == null
+            ? 'text-ink-primary'
+            : row.dayPnL > 0
+            ? 'text-emerald-400'
+            : row.dayPnL < 0
+            ? 'text-num-negative'
+            : 'text-ink-primary'
         }`}
       >
         {row.dayPnL != null
@@ -316,7 +322,13 @@ const CopyAccountRow = memo(function CopyAccountRow({
       {/* Open PnL */}
       <div
         className={`text-sm text-right ${
-          row.openPnL != null && row.openPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
+          row.openPnL == null
+            ? 'text-ink-primary'
+            : row.openPnL > 0
+            ? 'text-emerald-400'
+            : row.openPnL < 0
+            ? 'text-num-negative'
+            : 'text-ink-primary'
         }`}
       >
         {row.openPnL != null
@@ -704,7 +716,15 @@ export function CopyTradingDashboard() {
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Total Day PnL
           </div>
-          <div className="text-base font-semibold text-ink-primary mt-1">
+          <div
+            className={`text-base font-semibold mt-1 ${
+              totalDayPnL > 0
+                ? 'text-emerald-400'
+                : totalDayPnL < 0
+                ? 'text-num-negative'
+                : 'text-ink-primary'
+            }`}
+          >
             {totalDayPnL >= 0 ? '$' : '-$'}
             {Math.abs(totalDayPnL).toFixed(2)}
           </div>
@@ -715,7 +735,11 @@ export function CopyTradingDashboard() {
           </div>
           <div
             className={`text-base font-semibold mt-1 ${
-              totalOpenPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
+              totalOpenPnL > 0
+                ? 'text-emerald-400'
+                : totalOpenPnL < 0
+                ? 'text-num-negative'
+                : 'text-ink-primary'
             }`}
           >
             {totalOpenPnL >= 0 ? '$' : '-$'}
