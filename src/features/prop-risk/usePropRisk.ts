@@ -241,6 +241,16 @@ export function usePropRisk(): UsePropRiskResult {
 
   for (const [accountName, { portfolioId, env }] of accountSet) {
     const lower = accountName.toLowerCase();
+
+    // Show only Tradovate-confirmed accounts: a matched broker_risk row means the
+    // account appears in Tradovate's /account/list; a manual config is an explicit
+    // user opt-in. Everything else is a stale/duplicate portfolio record — hide it.
+    const hasBrokerRisk = brokerRiskMap.has(lower);
+    const hasConfig = configMap.has(lower);
+    if (!hasBrokerRisk && !hasConfig) {
+      continue;
+    }
+
     const detected = detectFirmGroup(accountName);
     const catalogFirm = firmFromDetectKey(detected.key);
     const detectedFirmKey = catalogFirm?.key ?? '';
