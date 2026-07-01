@@ -951,9 +951,16 @@ async function syncCredential(cred: {
     let accountsFound = false;
     for (const url of candidateUrls) {
       try {
-        const accountRes = await fetch(url, {
+        // Tradovate-aware retry wrapper (429 p-time/p-ticket + 5xx backoff),
+        // same as every other Tradovate call in this file. A bare fetch() here
+        // meant a transient rate-limit during multi-connection sync returned a
+        // non-ok response → both candidates skipped → discovery silently fell
+        // back to primary-account-only, so newly-added accounts (e.g. new APEX
+        // accounts under an existing connection) were never self-healed into
+        // portfolios. Retrying fixes that.
+        const accountRes = await fetchWithRetry(url, {
           headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        }, attribution);
         if (!accountRes.ok) {
           console.warn(
             `[tradovate-sync] account discovery: ${url} returned HTTP ${accountRes.status} — ` +
