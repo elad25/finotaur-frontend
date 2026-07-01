@@ -20,6 +20,7 @@ import {
 import { useFlattenAll } from '@/features/automation/hooks/useFlattenAll';
 import { useAgentCommand } from '@/features/automation/hooks/useAgentCommand';
 import { useAgentAccountSnapshots } from '@/features/automation/hooks/useAgentAccountSnapshots';
+import { AutomationMasterSwitch } from '@/features/automation/components/AutomationMasterSwitch';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -738,6 +739,14 @@ export function CopyTradingDashboard() {
           </div>
         </div>
       </div>
+      {/* ── Automation control ── */}
+      <div className="mb-ds-4">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary mb-ds-2">
+          Automation control
+        </p>
+        <AutomationMasterSwitch />
+      </div>
+
       {/* ── 1. Asset selector + action bar ── */}
       <div className="relative z-20 flex items-center justify-between mb-ds-4 gap-ds-4">
         {/* ── Active Contract with typeahead ── */}

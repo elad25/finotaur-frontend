@@ -14,8 +14,11 @@ import { toast } from 'sonner';
 import type { AutomationSettings } from '../lib/automationTypes';
 
 // Stable default so callers don't get undefined on first render.
+// master_enabled defaults to TRUE to match the backend's COALESCE(master_enabled, true)
+// behaviour: when no settings row exists yet, the agent IS enabled from the server's
+// perspective. Showing the toggle as OFF while the agent is ON is misleading.
 const DEFAULT_SETTINGS: Omit<AutomationSettings, 'user_id' | 'updated_at'> = {
-  master_enabled: false,
+  master_enabled: true,
   kill_switch_engaged: false,
 };
 
