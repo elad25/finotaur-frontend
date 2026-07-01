@@ -266,7 +266,13 @@ function MappedAccountCard({ row, onEdit }: { row: PropRiskRow; onEdit: (r: Prop
         <ProgressBar value={ddPct} colorClass={ddBarColor(ddPct)} />
         <div className="flex justify-between text-[10px] text-muted-foreground">
           <span>Buffer {fmtUsd(c.ddBufferUsd)}</span>
-          <span>Floor {fmtUsd(c.drawdownFloor)}</span>
+          <span>
+            {c.floorSource === 'broker' ? (
+              <>Liquidation floor {fmtUsd(c.drawdownFloor)} <span className="text-gold/70">(exact)</span></>
+            ) : (
+              <>Floor {fmtUsd(c.drawdownFloor)}</>
+            )}
+          </span>
         </div>
       </div>
 
