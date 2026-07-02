@@ -254,20 +254,20 @@ export const domains: Record<string, Domain> = {
   },
 
   // ===========================================================================
-  // TRADE COPIER — hidden from drawer (beta/admin-only); kept for DomainGuard
+  // TRADE COPIER — open to all users (GA 2026-07-02). Prop Risk stays beta-only.
   // ===========================================================================
   'copy-trade': {
     id: 'copy-trade',
     label: 'Trade Copier',
     locked: false,
-    beta: true, // 🔒 Non-beta users get hidden tab + DomainGuard redirect
+    beta: false,
     subNav: [
       { label: 'Trade Copier', path: '/app/copy-trade/overview' },
     ],
     sidebar: [
       { label: 'Connections',  path: '/app/copy-trade/overview',      icon: Link },
       { label: 'Trade Copier', path: '/app/copy-trade/trade-copier',   icon: Copy },
-      { label: 'Prop Risk',    path: '/app/copy-trade/prop-risk',       icon: Gauge },
+      { label: 'Prop Risk',    path: '/app/copy-trade/prop-risk',       icon: Gauge, beta: true },
       { label: 'Manage Risk',  path: '/app/copy-trade/manage-risk',    icon: Shield },
         { label: 'FINOTAUR Agent', path: '/app/copy-trade/install',       icon: Download },
     ],
@@ -588,7 +588,7 @@ export const domains: Record<string, Domain> = {
 // ===========================================================================
 // PRODUCT DRAWER ORDER (Phase 1)
 // markets | ai | war-zone | top-secret | journal
-// copy-trade is hidden from non-beta users (beta:true on the domain)
+// copy-trade is GA (open to all users); its Prop Risk tab stays beta-only
 // ===========================================================================
 export const domainOrder = [
   'markets',
@@ -602,7 +602,7 @@ export const domainOrder = [
   // 'mentorship' (The Floor) intentionally NOT in the Drawer — it is reached
   // via the beta-gated "The Floor" tab in the Journal subNav. Domain def,
   // routes, subNav, sidebar, and AdminBetaGate all remain intact.
-  'copy-trade',     // hidden for non-beta; admin-only in practice
+  'copy-trade',     // GA — visible to all users (Prop Risk sub-tab stays beta)
   'trading-arena',  // hidden for non-beta; full-screen workstation (Phase 0)
   // Removed from Drawer (routes/pages/domain defs preserved):
   //   'all-markets', 'stocks', 'crypto', 'futures', 'forex',
