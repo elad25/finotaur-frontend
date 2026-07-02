@@ -16,6 +16,12 @@ import { AgentGuideModal } from '@/features/automation/components/AgentGuideModa
 import { DeviceList } from '@/features/automation/components/DeviceList';
 import { PairDeviceDialog } from '@/features/automation/components/PairDeviceDialog';
 
+// The version inside the shipped /downloads/finotaur-agent.zip. MUST be bumped
+// together with the zip on every agent release (built by
+// automation-agent/package-agent.py — see the standing rule in that script).
+const AGENT_VERSION = '1.6.3';
+const AGENT_UPDATED = 'Jul 2, 2026';
+
 // Short, ordered teaser of what the GUIDE walks through.
 const STEP_TEASERS = [
   'Download the agent',
@@ -59,6 +65,10 @@ export default function InstallAgentTab() {
             <Download className="h-4 w-4" aria-hidden="true" />
             Download agent
           </a>
+
+          <span className="text-xs text-zinc-500">
+            Version <span className="font-semibold text-zinc-400">{AGENT_VERSION}</span> · updated {AGENT_UPDATED}
+          </span>
         </div>
 
         {/* teaser of the steps inside the GUIDE */}
