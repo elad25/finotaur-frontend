@@ -51,6 +51,13 @@ export interface AgentAccountSnapshot {
   env: string | null;
   balance: number | null;
   dayPnl: number | null;
+  /**
+   * dayPnl scoped to the current trading day (America/New_York calendar day).
+   * When the snapshot's captured_at falls on a prior ET calendar day, the
+   * agent's day P&L is stale (a new trading day has started) → 0 ("reset").
+   * null only when the agent never reported a day P&L at all.
+   */
+  dayPnlToday: number | null;
   openPnl: number | null;
   /** Full position list from the agent. */
   positions: AgentPosition[];
@@ -71,17 +78,37 @@ export interface AgentAccountSnapshot {
 
 const ONLINE_THRESHOLD_MS = 30_000;
 
+// Formats a Date as its America/New_York calendar day (YYYY-MM-DD), DST-aware.
+const ET_DAY_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** True when both instants land on the same ET calendar day. */
+function isSameEtCalendarDay(a: Date, b: Date): boolean {
+  return ET_DAY_FMT.format(a) === ET_DAY_FMT.format(b);
+}
+
 const queryKey = (userId: string) =>
   ['automation', 'automation_account_snapshots', userId] as const;
 
 function normalizeRow(row: SnapshotRow): AgentAccountSnapshot {
   const positions: AgentPosition[] = Array.isArray(row.positions) ? row.positions : [];
   const capturedAt = new Date(row.captured_at);
+  const dayPnlToday =
+    row.day_pnl == null
+      ? null
+      : isSameEtCalendarDay(capturedAt, new Date())
+      ? row.day_pnl
+      : 0;
   return {
     accountName: row.account_name,
     env:         row.env,
     balance:     row.balance,
     dayPnl:      row.day_pnl,
+    dayPnlToday,
     openPnl:     row.open_pnl,
     positions,
     qty:         positions.reduce((sum, p) => sum + Math.abs(p.qty), 0),
