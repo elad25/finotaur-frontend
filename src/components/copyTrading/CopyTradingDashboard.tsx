@@ -85,7 +85,7 @@ const POPULAR_CONTRACTS = [
 // 13 cols: leader-radio · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
 
 const GRID_COLS =
-  'grid-cols-[56px_60px_120px_minmax(160px,1fr)_80px_120px_64px_90px_100px_100px_100px_64px_80px] min-w-[1276px]';
+  'grid-cols-[56px_60px_120px_minmax(230px,1.5fr)_80px_120px_64px_90px_100px_100px_100px_64px_80px] min-w-[1346px]';
 
 // ─── Internal AccountRow ──────────────────────────────────────
 
@@ -225,7 +225,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
                   : 'bg-status-offline border border-border-ds-default'
             }`}
           />
-          <span className="text-xs text-ink-primary truncate">{row.accountName}</span>
+          <span title={row.accountName} className="text-xs text-ink-primary truncate">{row.accountName}</span>
           {row.locked && (
             <span
               title="Locked — copying disabled and account flattened until next session open"
@@ -511,7 +511,7 @@ export function CopyTradingDashboard() {
           // Live data from the desktop agent snapshot — null when no snapshot exists.
           position: netPosition,
           balance:  snap?.balance  ?? null,
-          dayPnL:   snap?.dayPnl   ?? null,
+          dayPnL:   snap?.dayPnlToday ?? null,
           openPnL:  snap?.openPnl  ?? null,
           qty:      snap != null ? snap.qty : null,
           following: p.is_active,
