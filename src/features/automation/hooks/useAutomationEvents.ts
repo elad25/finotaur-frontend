@@ -212,6 +212,69 @@ function readFirstTargetReason(payload: Record<string, unknown>): string | null 
   return typeof reason === 'string' && reason.length > 0 ? reason : null;
 }
 
+/** Defensively reads every `payload.per_target[].account` (order_copy_* payloads carry one entry per mirrored target). */
+function readAllTargetAccounts(payload: Record<string, unknown>): string[] {
+  const perTarget = payload['per_target'];
+  if (!Array.isArray(perTarget)) return [];
+  return perTarget
+    .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
+    .map((t) => t['account'])
+    .filter((a): a is string => typeof a === 'string' && a.length > 0);
+}
+
+/** `order_type` raw value → short human English label used in the order-copy one-liner. */
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  limit: 'LIMIT',
+  stop: 'STOP',
+  stoplimit: 'STOP LIMIT',
+  mit: 'MIT',
+  market: 'MARKET',
+};
+
+/**
+ * Builds the compact one-liner for `order_copy_*` events, e.g.
+ * `BUY LIMIT 1 NQ 09-26 @ 29953.25 (GTC) → PAAPEX...162`.
+ * For `order_copy_modified` uses "updated" phrasing; `order_copy_cancelled`
+ * omits the price (orders are cancelled, not re-priced).
+ */
+function buildOrderCopyMessage(e: AutomationEvent, payload: Record<string, unknown>): string {
+  const side = readString(payload, ['side'])?.toUpperCase() ?? null;
+  const orderTypeRaw = readString(payload, ['order_type']);
+  const orderTypeLabel = orderTypeRaw ? (ORDER_TYPE_LABELS[orderTypeRaw.toLowerCase()] ?? orderTypeRaw.toUpperCase()) : null;
+  const qty = readNumber(payload, ['source_qty']);
+  const symbol = e.symbol ?? readString(payload, ['symbol']);
+  const limitPrice = readNumber(payload, ['limit_price']);
+  const stopPrice = readNumber(payload, ['stop_price']);
+  const price = limitPrice ?? stopPrice;
+  const tif = readString(payload, ['tif']);
+  const targetAccounts = readAllTargetAccounts(payload);
+  const accountsSuffix = targetAccounts.length > 0 ? ` → ${targetAccounts.join(', ')}` : '';
+
+  const head = [side, orderTypeLabel, qty != null ? String(qty) : null, symbol].filter(Boolean).join(' ');
+
+  if (e.event_type === 'order_copy_failed') {
+    const reason = readFirstTargetReason(payload) ?? 'blocked by risk rule';
+    const base = head || 'Order';
+    return `${base} — copy failed (${reason})`;
+  }
+
+  if (e.event_type === 'order_copy_cancelled') {
+    const base = head || 'Order';
+    return `${base} cancelled${accountsSuffix}`;
+  }
+
+  const priceSuffix = price != null ? ` @ ${price}` : '';
+  const tifSuffix = tif && tif.toLowerCase() === 'gtc' ? ' (GTC)' : '';
+  const base = head || 'Order';
+
+  if (e.event_type === 'order_copy_modified') {
+    return `${base} updated${priceSuffix}${tifSuffix}${accountsSuffix}`;
+  }
+
+  // order_copy_executed
+  return `${base}${priceSuffix}${tifSuffix}${accountsSuffix}`;
+}
+
 export interface ParsedEnforcementEvent {
   /** The risk rule that fired, e.g. from `payload.rule_id`. NOT present for copy_failed. */
   ruleId: string | null;
@@ -228,6 +291,13 @@ export interface ParsedEnforcementEvent {
    * `per_target[0].account` or `source_account`.
    */
   accountName: string | null;
+  /**
+   * All target account names referenced by the payload. `order_copy_*`
+   * events can mirror to multiple targets at once via `per_target[]` —
+   * use this (not `accountName`) when matching an `accountId` filter
+   * against those event types. Empty array when none present.
+   */
+  accountNames: string[];
   /** Instrument symbol, when present (event column first, then payload). */
   symbol: string | null;
   /** Concise English human summary — always resolves to something, never empty. */
@@ -245,9 +315,20 @@ export interface ParsedEnforcementEvent {
  *   only via `ruleId` (matched against `automation_risk_rules.id`).
  * - `copy_failed` DOES carry an account, via `per_target[0].account` or
  *   `source_account`.
+ * - `order_copy_executed` / `order_copy_modified` / `order_copy_cancelled` /
+ *   `order_copy_failed` carry the mirrored working-order fields (`order_type`,
+ *   `side`, `source_qty`, `limit_price`/`stop_price`, `tif`) plus one or more
+ *   mirror targets via `per_target[].account`.
  */
 export function parseEnforcementEvent(e: AutomationEvent): ParsedEnforcementEvent {
   const payload = e.payload ?? {};
+
+  const ORDER_COPY_TYPES = new Set([
+    'order_copy_executed',
+    'order_copy_modified',
+    'order_copy_cancelled',
+    'order_copy_failed',
+  ]);
 
   const ruleId = readString(payload, ['rule_id']);
   const ruleLabel = readString(payload, ['rule_label']);
@@ -256,8 +337,13 @@ export function parseEnforcementEvent(e: AutomationEvent): ParsedEnforcementEven
   const symbol = e.symbol ?? readString(payload, ['symbol']);
 
   let accountName: string | null = null;
+  let accountNames: string[] = [];
   if (e.event_type === 'copy_failed') {
     accountName = readFirstTargetAccount(payload) ?? readString(payload, ['source_account']);
+    if (accountName) accountNames = [accountName];
+  } else if (ORDER_COPY_TYPES.has(e.event_type)) {
+    accountNames = readAllTargetAccounts(payload);
+    accountName = accountNames[0] ?? null;
   }
   // risk_enforced: no account field in payload by design — stays null.
 
@@ -271,9 +357,11 @@ export function parseEnforcementEvent(e: AutomationEvent): ParsedEnforcementEven
   } else if (e.event_type === 'copy_failed') {
     const reason = readFirstTargetReason(payload) ?? 'blocked';
     message = `Copy blocked on ${accountName ?? 'account'} — ${reason}`;
+  } else if (ORDER_COPY_TYPES.has(e.event_type)) {
+    message = buildOrderCopyMessage(e, payload);
   } else {
     message = e.event_type;
   }
 
-  return { ruleId, ruleLabel, check, action, accountName, symbol, message };
+  return { ruleId, ruleLabel, check, action, accountName, accountNames, symbol, message };
 }
