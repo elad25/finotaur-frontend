@@ -38,7 +38,7 @@ const PRODUCT_CARD: Record<string, { icon: LucideIcon; blurb: string }> = {
   'war-zone':   { icon: Flame,      blurb: 'High-conviction daily setups.' },
   'top-secret': { icon: FileText,   blurb: 'Premium monthly research.' },
   journal:      { icon: BookOpen,   blurb: 'Track, review, improve.' },
-  'copy-trade': { icon: Zap,        blurb: 'Mirror trades across accounts.' },
+  'copy-trade': { icon: Zap,        blurb: 'Beta: trade copier.' },
 };
 
 // ---------------------------------------------------------------------------
@@ -246,6 +246,7 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-ds-4">
           {domainOrder.map((id) => {
+            if (id === 'copy-trade') return null;
             if (id === 'trading-arena') return null; // kept in side-nav drawer; removed from Home grid only
             const domain = domains[id];
             if (!domain) return null;

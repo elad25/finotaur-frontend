@@ -41,7 +41,7 @@ const PRODUCT_META: Record<string, { icon: LucideIcon; sublabel: string }> = {
   'war-zone':      { icon: Flame,      sublabel: 'High Conviction Setups' },
   'top-secret':    { icon: FileText,   sublabel: 'Premium Research' },
   journal:         { icon: BookOpen,   sublabel: 'Track. Review. Improve.' },
-  'copy-trade':    { icon: Zap,            sublabel: 'Mirror Trades Across Accounts' },
+  'copy-trade':    { icon: Zap,            sublabel: 'Beta: Trade Copier' },
   'trading-arena': { icon: Swords,         sublabel: 'Beta: Trading Workstation' },
   mentorship:      { icon: GraduationCap,  sublabel: 'Beta: Mentor Community' },
 };
