@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Target,
   TrendingUp,
+  Megaphone,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -97,6 +98,15 @@ export const ADMIN_TABS: AdminTab[] = [
     phase: 2,
     enabled: true,
     description: 'Traffic, sources, funnel and signup attribution',
+  },
+  {
+    id: 'attribution',
+    label: 'Ad Attribution',
+    path: '/app/admin/attribution',
+    icon: Megaphone,
+    phase: 2,
+    enabled: true,
+    description: 'Signup attribution by ad, campaign and platform',
   },
   {
     id: 'seo',
