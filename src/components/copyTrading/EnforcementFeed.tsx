@@ -5,7 +5,7 @@
 // blocked copies) rather than trusting it blindly.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { ShieldAlert, XOctagon } from 'lucide-react';
+import { ShieldAlert, XOctagon, Copy, PencilLine, Ban } from 'lucide-react';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { DataState } from '@/components/ds/DataState';
 import { cn } from '@/lib/utils';
@@ -22,12 +22,13 @@ import {
 export interface EnforcementFeedProps {
   /**
    * When provided, only events for this account are shown. Only effective
-   * for `copy_failed` events (matched by account name) — `risk_enforced`
-   * events carry no account reference in their payload at all, so they
-   * cannot be attributed to a specific account here; they are included
-   * unfiltered. The primary use of this component mounts it WITHOUT
-   * `accountId` (show everything), so this is a soft best-effort filter,
-   * not a hard per-account guarantee.
+   * for `copy_failed` and `order_copy_*` events (matched by account name,
+   * including multi-target `order_copy_*` payloads via `per_target[]`) —
+   * `risk_enforced` events carry no account reference in their payload at
+   * all, so they cannot be attributed to a specific account here; they are
+   * included unfiltered. The primary use of this component mounts it
+   * WITHOUT `accountId` (show everything), so this is a soft best-effort
+   * filter, not a hard per-account guarantee.
    */
   accountId?: string | null;
   className?: string;
@@ -65,6 +66,26 @@ const BADGE_BY_TYPE: Record<string, EventBadgeConfig> = {
     className: 'bg-red-500/10 border border-red-500/30 text-red-400',
     Icon: XOctagon,
   },
+  order_copy_executed: {
+    label: 'Order mirrored',
+    className: 'bg-gold-primary/10 border border-gold-border text-gold-muted',
+    Icon: Copy,
+  },
+  order_copy_modified: {
+    label: 'Order updated',
+    className: 'bg-zinc-500/10 border border-zinc-500/30 text-zinc-400',
+    Icon: PencilLine,
+  },
+  order_copy_cancelled: {
+    label: 'Order cancelled',
+    className: 'bg-zinc-500/10 border border-zinc-500/30 text-zinc-400',
+    Icon: Ban,
+  },
+  order_copy_failed: {
+    label: 'Order copy failed',
+    className: 'bg-red-500/10 border border-red-500/30 text-red-400',
+    Icon: XOctagon,
+  },
 };
 
 function getBadgeConfig(eventType: string): EventBadgeConfig {
@@ -83,16 +104,24 @@ function getBadgeConfig(eventType: string): EventBadgeConfig {
 
 export function EnforcementFeed({ accountId, className }: EnforcementFeedProps) {
   const { events, isLoading, isError, refetch } = useAutomationEvents({
-    eventTypes: ['risk_enforced', 'copy_failed'],
+    eventTypes: [
+      'risk_enforced',
+      'copy_failed',
+      'order_copy_executed',
+      'order_copy_failed',
+      'order_copy_modified',
+      'order_copy_cancelled',
+    ],
     limit: 30,
   });
 
-  // Only copy_failed events carry an account name to match against; risk_enforced
+  // Only copy_failed and order_copy_* events carry account references to match
+  // against (order_copy_* via per_target[], possibly multiple); risk_enforced
   // events have no account reference in their payload and are always included.
   const filteredEvents: AutomationEvent[] = accountId
     ? events.filter((e) => {
         if (e.event_type === 'risk_enforced') return true;
-        return parseEnforcementEvent(e).accountName === accountId;
+        return parseEnforcementEvent(e).accountNames.includes(accountId);
       })
     : events;
 
