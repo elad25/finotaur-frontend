@@ -13,6 +13,8 @@ import { useLocation } from 'react-router-dom';
 import { hasConsent, onConsentChange } from '@/lib/consent';
 import { initGA4, destroyGA4, trackPageView as ga4PageView, trackEvent as ga4Event } from './ga4';
 import { initPostHog, destroyPostHog, trackPageView as phPageView, trackEvent as phEvent } from './posthog';
+import { initXPixel, trackXSignup } from './xPixel';
+import { initMetaPixel, trackMetaSignup } from './metaPixel';
 import { sendServerEvent } from './serverEvents';
 
 // ─── Allowed event names (enforced at compile time) ──────────────────────────
@@ -54,6 +56,10 @@ function bootAnalytics(): void {
   if (phKey) {
     initPostHog(phKey, posthogHost());
   }
+
+  // No-op internally if their respective env vars are unset.
+  initXPixel();
+  initMetaPixel();
 }
 
 function teardownAnalytics(): void {
@@ -73,6 +79,12 @@ export function track(
 ): void {
   ga4Event(eventName, params);
   phEvent(eventName, params);
+  // Ad-platform conversion pixels only care about the signup conversion —
+  // no-op internally if their pixel IDs are unset or consent wasn't granted.
+  if (eventName === 'signup') {
+    trackXSignup(params);
+    trackMetaSignup();
+  }
   // Mirror to our backend for AI agents (consent-gated, fire-and-forget).
   sendServerEvent(eventName, params);
 }
