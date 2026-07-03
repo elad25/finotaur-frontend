@@ -14,8 +14,11 @@
  */
 
 import {
+  HandleScaleOptions,
+  HandleScrollOptions,
   IChartApi,
   ISeriesApi,
+  MismatchDirection,
   MouseEventParams,
   Time,
 } from 'lightweight-charts';
@@ -34,16 +37,25 @@ import {
   RectangleDrawing,
   hexToRgba,
 } from './tools';
+import { snapToOHLC, type SnapCandidate } from './geometry';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 export interface DrawingControllerOptions {
   symbol: string;
   onChange?: () => void;
-  onSelectionChange?: (hasSelection: boolean) => void;
+  onSelectionChange?: (sel: { options: DrawingOptions } | null) => void;
   /** Fired when the controller auto-switches tools (e.g. back to 'cursor'
    *  after finishing a drawing) so the React toolbar can stay in sync. */
   onActiveToolChange?: (tool: ToolId) => void;
+  /**
+   * Resolve a Unix-seconds timestamp to the bar-index (`logical`) on the
+   * CURRENTLY loaded `bars` array. Supplied by BacktestReplayChart (binary
+   * search over its `bars` closure). Used only to recompute `logical` for
+   * loaded points that DO resolve to a real time — see D2. Returns null if
+   * the timestamp isn't found (e.g. whitespace beyond the loaded window).
+   */
+  resolveLogical?: (timeSec: number) => number | null;
 }
 
 // ─── Persistence key ─────────────────────────────────────────────────────────
@@ -75,8 +87,9 @@ export class DrawingController {
   private _series: ISeriesApi<'Candlestick'>;
   private _symbol: string;
   private _onChange?: () => void;
-  private _onSelectionChange?: (hasSelection: boolean) => void;
+  private _onSelectionChange?: (sel: { options: DrawingOptions } | null) => void;
   private _onActiveToolChange?: (tool: ToolId) => void;
+  private _resolveLogical?: (timeSec: number) => number | null;
 
   private _activeTool: ToolId = 'cursor';
   private _drawings: BaseDrawing[] = [];
@@ -94,9 +107,19 @@ export class DrawingController {
   private _dragBody: boolean = false;
   private _dragLastX: number = 0;
   private _dragLastY: number = 0;
+  // D3: chart pan/zoom options captured right before a drag starts, so we can
+  // restore EXACTLY what the chart had (not assume defaults) once the drag ends.
+  private _savedHandleScroll: boolean | HandleScrollOptions | undefined;
+  private _savedHandleScale: boolean | HandleScaleOptions | undefined;
 
   // Drawing options for new drawings
   private _options: DrawingOptions = { color: '#C9A646', width: 2 };
+
+  // ── P2: utility toggle flags ──────────────────────────────────────────────
+  private _magnetOn: boolean = false;
+  private _stayInDrawModeOn: boolean = false;
+  private _lockAllOn: boolean = false;
+  private _hideAllOn: boolean = false;
 
   // Bound handlers stored for unsubscription
   private _clickHandler: (p: MouseEventParams) => void;
@@ -116,6 +139,7 @@ export class DrawingController {
     this._onChange = opts.onChange;
     this._onSelectionChange = opts.onSelectionChange;
     this._onActiveToolChange = opts.onActiveToolChange;
+    this._resolveLogical = opts.resolveLogical;
 
     this._clickHandler = (p) => this._onClick(p);
     this._moveHandler  = (p) => this._onCrosshairMove(p);
@@ -132,8 +156,35 @@ export class DrawingController {
     container.addEventListener('mousedown', this._mousedownHandler);
     window.addEventListener('mousemove', this._mousemoveHandler);
     window.addEventListener('mouseup', this._mouseupHandler);
+    window.addEventListener('blur', this._onDragFailsafe);
+    container.addEventListener('mouseleave', this._onDragFailsafe);
 
     this._loadFromStorage();
+    this._installE2EHook();
+  }
+
+  // ── E2E test hook ─────────────────────────────────────────────────────────
+
+  /**
+   * Exposes a minimal read-only surface on `window.__drawings2` for
+   * Playwright/E2E assertions. Only installed in dev builds or when the
+   * operator has explicitly opted in via localStorage (survives a prod
+   * build for manual QA). Never installed in a plain production session.
+   */
+  private _installE2EHook(): void {
+    let e2eFlag = false;
+    try {
+      e2eFlag = localStorage.getItem('finotaur_e2e') === '1';
+    } catch { /* localStorage unavailable (privacy mode, SSR, etc.) */ }
+
+    if (!(import.meta.env.DEV || e2eFlag)) return;
+
+    (window as any).__drawings2 = {
+      controller: this,
+      count: () => this._drawings.length,
+      tools: () => this._drawings.map(d => d.serialize()),
+      activeTool: () => this._activeTool,
+    };
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -147,11 +198,43 @@ export class DrawingController {
     } else {
       // Deselect when picking a draw tool
       this._deselectAll();
+      // P2 HIDE ALL: selecting a draw tool while hidden auto-unhides, so the
+      // user can see what they're drawing relative to existing shapes.
+      if (this._hideAllOn) this.setHideAll(false);
     }
   }
 
   getActiveTool(): ToolId {
     return this._activeTool;
+  }
+
+  // ── P2: utility toggles ───────────────────────────────────────────────────
+
+  setMagnet(on: boolean): void {
+    this._magnetOn = on;
+  }
+
+  setStayInDrawMode(on: boolean): void {
+    this._stayInDrawModeOn = on;
+  }
+
+  setLockAll(on: boolean): void {
+    this._lockAllOn = on;
+    if (on) this._deselectAll();
+  }
+
+  setHideAll(on: boolean): void {
+    if (this._hideAllOn === on) return;
+    this._hideAllOn = on;
+    if (on) {
+      // Detach primitives from the series without touching `points`/`options`
+      // state — reattach on unhide restores exactly what was there.
+      for (const d of this._drawings) this._detach(d);
+    } else {
+      for (const d of this._drawings) {
+        try { this._series.attachPrimitive(d as any); } catch { /* already attached */ }
+      }
+    }
   }
 
   setOptions(o: Partial<DrawingOptions>): void {
@@ -196,9 +279,17 @@ export class DrawingController {
     try {
       const container = this._chart.chartElement() as HTMLElement;
       container.removeEventListener('mousedown', this._mousedownHandler);
+      container.removeEventListener('mouseleave', this._onDragFailsafe);
     } catch { /* chart may already be removed */ }
     window.removeEventListener('mousemove', this._mousemoveHandler);
     window.removeEventListener('mouseup', this._mouseupHandler);
+    window.removeEventListener('blur', this._onDragFailsafe);
+
+    // Clean up the E2E hook only if it still points at this instance (avoids
+    // clobbering a newer controller's hook if destroy() runs out of order).
+    if ((window as any).__drawings2?.controller === this) {
+      delete (window as any).__drawings2;
+    }
   }
 
   // ── Coordinate conversion ─────────────────────────────────────────────────
@@ -206,17 +297,59 @@ export class DrawingController {
   /**
    * Convert a pixel point (from param.point or MouseEvent) to a DPoint.
    * Uses logical (bar-index) x so clicks in whitespace right of last bar work.
+   *
+   * When `snap` is true and the MAGNET toggle (P2) is on, the point is
+   * snapped to the nearest OHLC value of the bar under the pointer.
+   * Callers pass `snap: true` for creation clicks, crosshair preview moves,
+   * and HANDLE drags — but NOT for body-translate drags (a whole-shape move
+   * should preserve its shape, not warp toward whichever OHLC value is
+   * nearest at each mouse position).
    */
-  private _toDPoint(px: number, py: number): DPoint | null {
+  private _toDPoint(px: number, py: number, snap: boolean = false): DPoint | null {
     const ts = this._chart.timeScale();
     const price = (this._series as unknown as ISeriesApi<'Candlestick'>).coordinateToPrice(py as any);
     if (price == null) return null;
     const logical = ts.coordinateToLogical(px as any);
     const timeAt = ts.coordinateToTime(px as any) as Time | null;
-    return {
+
+    const base: DPoint = {
       time: timeAt ?? (0 as Time),
       price: Number(price),
       logical: logical != null ? Number(logical) : undefined,
+    };
+
+    if (!snap || !this._magnetOn) return base;
+    return this._snapDPoint(base, py);
+  }
+
+  /**
+   * MAGNET (P2): snap a raw DPoint's price + x-coordinate to the nearest
+   * OHLC value of the nearest bar at-or-left of the pointer's logical index.
+   * Whitespace to the right of the last loaded bar has no bar to snap to —
+   * returns the point unmodified in that case.
+   */
+  private _snapDPoint(pt: DPoint, py: number): DPoint {
+    if (pt.logical == null) return pt;
+    const roundedLogical = Math.round(pt.logical);
+    const bar = this._series.dataByIndex(roundedLogical, MismatchDirection.NearestLeft) as
+      | { time: Time; open: number; high: number; low: number; close: number }
+      | null;
+    if (!bar || bar.open == null) return pt; // whitespace — nothing to snap to
+
+    const candidates: SnapCandidate[] = [];
+    for (const price of [bar.open, bar.high, bar.low, bar.close]) {
+      const y = this._series.priceToCoordinate(price);
+      if (y != null) candidates.push({ price, y: y as number });
+    }
+    const nearest = snapToOHLC(py, candidates);
+    if (!nearest) return pt;
+
+    // `time` is the render-time-preferred coordinate (see D2 / toPixel);
+    // `logical` is kept as the whitespace-fallback anchor only.
+    return {
+      time: bar.time,
+      price: nearest.price,
+      logical: roundedLogical,
     };
   }
 
@@ -236,6 +369,9 @@ export class DrawingController {
   }
 
   private _handleCursorClick(x: number, y: number): void {
+    // P2 LOCK ALL: selection is disabled entirely while drawings are locked.
+    if (this._lockAllOn) return;
+
     // Hit-test all drawings; select the first hit
     for (const d of [...this._drawings].reverse()) {
       const hit = d.hitTest(x, y);
@@ -252,15 +388,17 @@ export class DrawingController {
     const tool = this._activeTool;
     if (tool === 'cursor') return;
 
-    const dp = this._toDPoint(x, y);
+    const dp = this._toDPoint(x, y, true); // creation click — snap when magnet on
     if (!dp) return;
 
     // Single-point tools (horizontal line / horizontal ray) → finalize immediately.
     // Stop after one mark: switch back to cursor so the next click does NOT
-    // draw another shape (the user must reselect the tool to draw again).
+    // draw another shape (the user must reselect the tool to draw again) —
+    // UNLESS stay-in-draw-mode (P2) is on, in which case the tool stays armed
+    // for repeated marks.
     if (tool === 'horizontal' || tool === 'horizontal_ray') {
       this._finalize(tool, [dp]);
-      this._resetToCursor();
+      if (!this._stayInDrawModeOn) this._resetToCursor();
       return;
     }
 
@@ -271,11 +409,13 @@ export class DrawingController {
       // First click: attach preview
       this._attachPreview(tool, dp);
     } else if (this._pendingPoints.length >= 2) {
-      // Second click: finalize, then stop (back to cursor — no auto-repeat).
+      // Second click: finalize, then stop (back to cursor — no auto-repeat) —
+      // UNLESS stay-in-draw-mode (P2) is on, in which case re-arm pending
+      // points so the next click starts a new shape of the same tool.
       this._cancelPreview();
       this._finalize(tool, this._pendingPoints.slice(0, 2));
       this._pendingPoints = [];
-      this._resetToCursor();
+      if (!this._stayInDrawModeOn) this._resetToCursor();
     }
   }
 
@@ -297,7 +437,7 @@ export class DrawingController {
     if (this._pendingPoints.length === 0) return;
     if (!this._preview) return;
 
-    const dp = this._toDPoint(param.point.x, param.point.y);
+    const dp = this._toDPoint(param.point.x, param.point.y, true); // preview move — snap when magnet on
     if (!dp) return;
 
     // Update preview's second point
@@ -315,6 +455,8 @@ export class DrawingController {
     if (e.button !== 0) return;
     if (this._activeTool !== 'cursor') return;
     if (!this._selected) return;
+    // P2 LOCK ALL: dragging is disabled entirely while drawings are locked.
+    if (this._lockAllOn) return;
 
     const rect = container.getBoundingClientRect();
     const cx = e.clientX - rect.left;
@@ -330,7 +472,32 @@ export class DrawingController {
     this._dragLastX = cx;
     this._dragLastY = cy;
 
+    // D3: freeze chart pan/zoom for the duration of the drag. lightweight-
+    // charts' own canvas mousedown/mousemove handlers run alongside ours
+    // (they're on the same element), so without this a drawing-drag also
+    // pans/zooms the chart underneath it.
+    this._freezeChartNavigation();
+
     e.stopPropagation(); // Prevent chart pan
+  }
+
+  /** D3: capture current handleScroll/handleScale, then disable both. */
+  private _freezeChartNavigation(): void {
+    const current = this._chart.options();
+    this._savedHandleScroll = current.handleScroll;
+    this._savedHandleScale = current.handleScale;
+    this._chart.applyOptions({ handleScroll: false, handleScale: false });
+  }
+
+  /** D3: restore exactly what was captured in _freezeChartNavigation. */
+  private _restoreChartNavigation(): void {
+    if (this._savedHandleScroll === undefined && this._savedHandleScale === undefined) return;
+    this._chart.applyOptions({
+      handleScroll: this._savedHandleScroll,
+      handleScale: this._savedHandleScale,
+    });
+    this._savedHandleScroll = undefined;
+    this._savedHandleScale = undefined;
   }
 
   private _onMousemove(e: MouseEvent): void {
@@ -359,13 +526,14 @@ export class DrawingController {
         if (newDp) this._dragDrawing.points[i] = newDp;
       }
     } else {
-      // Move single anchor
+      // Move single anchor (handle drag) — snap when magnet on. Body-translate
+      // above intentionally does NOT snap (see _toDPoint doc comment).
       const idx = this._dragHandleIndex;
       if (idx >= 0 && idx < this._dragDrawing.points.length) {
         const pt = this._dragDrawing.points[idx];
         const pix = this._dragDrawing.toPixel(pt);
         if (pix) {
-          const newDp = this._toDPoint(pix.x + dx, pix.y + dy);
+          const newDp = this._toDPoint(pix.x + dx, pix.y + dy, true);
           if (newDp) this._dragDrawing.points[idx] = newDp;
         }
       }
@@ -379,9 +547,24 @@ export class DrawingController {
     if (!this._dragging) return;
     this._dragging = false;
     this._dragDrawing = null;
+    this._restoreChartNavigation();
     this._saveToStorage();
     this._onChange?.();
   }
+
+  /**
+   * D3 failsafe: if the drag never sees a mouseup (e.g. the user alt-tabs
+   * away, or drags the mouse out of the window and releases elsewhere),
+   * `window.mouseup` may not fire reliably in every browser. Window `blur`
+   * and the chart container's `mouseleave` both re-run the same cleanup so
+   * chart navigation never stays stuck disabled.
+   */
+  private _onDragFailsafe = (): void => {
+    if (!this._dragging) return;
+    this._dragging = false;
+    this._dragDrawing = null;
+    this._restoreChartNavigation();
+  };
 
   // ── Preview management ────────────────────────────────────────────────────
 
@@ -429,7 +612,7 @@ export class DrawingController {
       d.requestUpdate();
     }
     this._selected = d;
-    this._onSelectionChange?.(true);
+    this._onSelectionChange?.({ options: d.options });
   }
 
   private _deselectAll(): void {
@@ -440,7 +623,7 @@ export class DrawingController {
       }
     }
     this._selected = null;
-    this._onSelectionChange?.(false);
+    this._onSelectionChange?.(null);
   }
 
   // ── Detach helper ─────────────────────────────────────────────────────────
@@ -464,11 +647,31 @@ export class DrawingController {
       if (!raw) return;
       const data: SerializedDrawing[] = JSON.parse(raw);
       for (const item of data) {
-        const d = createDrawing(item.tool, item.points, item.options);
+        const points = item.points.map((pt) => this._reconcilePoint(pt));
+        const d = createDrawing(item.tool, points, item.options);
         if (!d) continue;
         this._series.attachPrimitive(d as any);
         this._drawings.push(d);
       }
     } catch { /* corrupt storage — skip silently */ }
+  }
+
+  /**
+   * D2 fix: a `logical` bar-index saved while viewing one timeframe (e.g. 5m)
+   * points at a completely different bar on another timeframe (e.g. 1h) —
+   * `time` is the only cross-timeframe-stable coordinate. For every loaded
+   * point with a real `time` (time !== 0), recompute `logical` against the
+   * CURRENTLY loaded bars via the injected `resolveLogical`. Only keep the
+   * stored `logical` as-is for whitespace-anchored points (time === 0, or
+   * a time that doesn't resolve on the current window) — those have no
+   * other stable anchor.
+   */
+  private _reconcilePoint(pt: DPoint): DPoint {
+    const hasRealTime = pt.time != null && (pt.time as unknown as number) !== 0;
+    if (!hasRealTime || !this._resolveLogical) return pt;
+
+    const resolved = this._resolveLogical(pt.time as unknown as number);
+    if (resolved == null) return pt; // unresolvable — keep stored logical as fallback anchor
+    return { ...pt, logical: resolved };
   }
 }

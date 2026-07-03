@@ -12,8 +12,11 @@
  * Only tools with `supported: true` are forwarded to `onSelectTool`; the rest
  * are visually dimmed "Soon" in the flyout and are no-ops.
  *
- * Props are kept identical to the previous flat toolbar so BacktestReplayChart
- * requires no changes.
+ * P2 (2026-07-03): the four utility toggles (magnet / stay-in-draw-mode /
+ * lock-all / hide-all) are now controlled props — state lives in
+ * BacktestReplayChart, not locally here, because the DrawingController
+ * instance is destroyed/recreated on every `bars` change and must be
+ * re-armed from persisted React state after each (re)construction.
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -54,6 +57,17 @@ export interface DrawingToolbar2Props {
   onColorChange: (color: string) => void;
   onWidthChange: (width: number) => void;
   className?: string;
+  // P2: utility toggles — state lives in BacktestReplayChart (controller is
+  // destroyed/recreated on bars change and must be re-armed from React state
+  // after each (re)construction), not locally in this component.
+  magnetOn: boolean;
+  onToggleMagnet: () => void;
+  stayDrawOn: boolean;
+  onToggleStayDraw: () => void;
+  lockAllOn: boolean;
+  onToggleLockAll: () => void;
+  hideAllOn: boolean;
+  onToggleHideAll: () => void;
 }
 
 // ─── Hook: flyout open/close with hover-delay timers ────────────────────────
@@ -310,14 +324,16 @@ export function DrawingToolbar2({
   onColorChange,
   onWidthChange,
   className = '',
+  magnetOn,
+  onToggleMagnet,
+  stayDrawOn,
+  onToggleStayDraw,
+  lockAllOn,
+  onToggleLockAll,
+  hideAllOn,
+  onToggleHideAll,
 }: DrawingToolbar2Props) {
   const { openId, open, close, cancelClose, closeImmediate } = useFlyout();
-
-  // Per-utility toggle states (local-only; wiring to controller is a later round)
-  const [magnetOn, setMagnetOn]       = useState(false);
-  const [stayDrawOn, setStayDrawOn]   = useState(false);
-  const [lockAllOn, setLockAllOn]     = useState(false);
-  const [hideAllOn, setHideAllOn]     = useState(false);
 
   // Handler: user picks a sub-tool from a group flyout
   const handleSubToolSelect = useCallback(
@@ -349,7 +365,7 @@ export function DrawingToolbar2({
     [activeTool, onSelectTool, closeImmediate],
   );
 
-  // Utility toggle lookup
+  // Utility toggle lookup — state + handlers are controlled props (see header comment).
   const utilityToggles: Record<string, boolean> = {
     magnet: magnetOn,
     stay_draw: stayDrawOn,
@@ -358,10 +374,10 @@ export function DrawingToolbar2({
   };
 
   const utilityToggleHandlers: Record<string, () => void> = {
-    magnet:    () => setMagnetOn((v) => !v),
-    stay_draw: () => setStayDrawOn((v) => !v),
-    lock_all:  () => setLockAllOn((v) => !v),
-    hide_all:  () => setHideAllOn((v) => !v),
+    magnet:    onToggleMagnet,
+    stay_draw: onToggleStayDraw,
+    lock_all:  onToggleLockAll,
+    hide_all:  onToggleHideAll,
   };
 
   return (
