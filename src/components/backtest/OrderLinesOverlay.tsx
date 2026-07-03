@@ -103,16 +103,20 @@ interface OrderLineProps {
   color: string;
   draggable: boolean;
   isPreview?: boolean;
+  /** Fraction of the chart width where the line STARTS (0 = full width,
+   *  0.5 = from mid-chart to the price axis). Broker-style position lines
+   *  use 0.5 so they don't run across the whole chart. */
+  startFrac?: number;
   onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
 }
 
-function OrderLine({ y, label, color, draggable, isPreview = false, onPointerDown }: OrderLineProps) {
+function OrderLine({ y, label, color, draggable, isPreview = false, startFrac = 0, onPointerDown }: OrderLineProps) {
   return (
     <div
       style={{
         position: 'absolute',
         top: y - HIT_ZONE_PX,
-        left: 0,
+        left: `${startFrac * 100}%`,
         right: 0,
         height: HIT_ZONE_PX * 2,
         pointerEvents: draggable ? 'auto' : 'none',
@@ -269,6 +273,9 @@ export function OrderLinesOverlay({
           label={`Entry ${activePosition.entryPrice.toFixed(2)}`}
           color={COLOR.entry}
           draggable={false}
+          // Broker-style: the position line starts at mid-chart (the P&L/size
+          // tag in BacktestReplayChart anchors to this same 50% start point).
+          startFrac={0.5}
         />,
       );
     }

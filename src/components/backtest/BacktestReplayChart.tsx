@@ -925,10 +925,23 @@ export function BacktestReplayChart({
 
     chart.timeScale().subscribeVisibleTimeRangeChange(updateCursorX);
 
+    // VERTICAL pan / price-scale drags don't change the visible TIME range,
+    // so the subscription above never fires for them — the HTML overlays
+    // (order pills, entry line, SL/TP lines) froze at stale pixel positions
+    // while the canvas moved (Elad report). A container-level pointermove
+    // bump (rAF-coalesced, so at most one re-render per frame) keeps every
+    // overlay glued through any drag gesture, including over the price axis.
+    container.addEventListener('pointermove', bumpOverlay, { passive: true });
+    // Wheel zoom over the price scale also changes coordinates without a
+    // pointer move — same coalesced bump.
+    container.addEventListener('wheel', bumpOverlay, { passive: true });
+
     return () => {
       cancelled = true;
       if (coalesceRaf) cancelAnimationFrame(coalesceRaf);
       ro.disconnect();
+      container.removeEventListener('pointermove', bumpOverlay);
+      container.removeEventListener('wheel', bumpOverlay);
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('mousedown', handlePlaceOrderMousedown);
       container.removeEventListener('mouseleave', handleMouseLeave);
@@ -1098,6 +1111,11 @@ export function BacktestReplayChart({
         color: NT_POS_COLOR,
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
+        // The gold entry price stays on the axis, but the full-chart-width
+        // line is hidden — the visible half-line (mid-chart → axis) is drawn
+        // by OrderLinesOverlay's entry OrderLine (startFrac 0.5) per Elad's
+        // request: the position line must not run across the whole chart.
+        lineVisible: false,
         axisLabelVisible: true,
         title: '',
       });
@@ -1384,7 +1402,11 @@ export function BacktestReplayChart({
                   className="absolute flex items-center rounded overflow-hidden shadow"
                   style={{
                     top: y - 10,
-                    right: axisW + 4,
+                    // Sit at the LEFT end of the half-width entry line (which
+                    // starts at mid-chart), so the P&L/size box reads like a
+                    // broker position tag anchored where the line begins.
+                    left: '50%',
+                    transform: 'translateX(-100%)',
                     userSelect: 'none',
                   }}
                 >
