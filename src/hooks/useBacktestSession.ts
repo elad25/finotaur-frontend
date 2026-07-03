@@ -659,16 +659,24 @@ function reducer(state: SessionState, action: Action): SessionState {
       const { orderId, stopLoss, takeProfit, triggerPrice } = action.payload;
       return {
         ...state,
-        pendingOrders: state.pendingOrders.map((o) =>
-          o.id === orderId
-            ? {
-                ...o,
-                ...(triggerPrice !== undefined ? { triggerPrice } : {}),
-                ...(stopLoss !== undefined ? { stopLoss } : {}),
-                ...(takeProfit !== undefined ? { takeProfit } : {}),
-              }
-            : o,
-        ),
+        pendingOrders: state.pendingOrders.map((o) => {
+          if (o.id !== orderId) return o;
+          // Dragging a STOP_LIMIT moves its limit price by the same delta so
+          // the trigger/limit offset the user chose is preserved (previously
+          // only triggerPrice moved, leaving a broken order — e.g. a SELL
+          // stop-limit whose limit ended up ABOVE its trigger could never fill).
+          const limitShift =
+            triggerPrice !== undefined && o.type === 'STOP_LIMIT' && o.limitPrice != null
+              ? { limitPrice: o.limitPrice + (triggerPrice - o.triggerPrice) }
+              : {};
+          return {
+            ...o,
+            ...(triggerPrice !== undefined ? { triggerPrice } : {}),
+            ...limitShift,
+            ...(stopLoss !== undefined ? { stopLoss } : {}),
+            ...(takeProfit !== undefined ? { takeProfit } : {}),
+          };
+        }),
       };
     }
 

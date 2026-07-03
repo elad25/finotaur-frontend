@@ -1077,8 +1077,10 @@ export function BacktestReplayChart({
 
     // Add or update lines for current pending orders.
     // title is intentionally '' — the label is rendered as a custom React pill
-    // overlay (below) so the native on-chart text label is suppressed. The
-    // solid line + right-axis price tag (axisLabelVisible:true) are kept.
+    // overlay (below). lineVisible:false — the visible HALF-WIDTH order line
+    // (mid-chart → axis, drag-follows the pill) is drawn by the pill row
+    // overlay; here only the right-axis price tag (axisLabelVisible) is kept,
+    // matching the position entry line treatment.
     // Color follows the NinjaTrader type-family palette (cyan=limit, magenta=stop).
     for (const o of pendingOrders) {
       const color = orderMarkerColor(o.type);
@@ -1091,6 +1093,7 @@ export function BacktestReplayChart({
           color,
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
+          lineVisible: false,
           axisLabelVisible: true,
           title: '',
         });
@@ -1265,17 +1268,30 @@ export function BacktestReplayChart({
                     : `${o.size} ${sideLabel} STOP LIMIT ${o.triggerPrice.toFixed(2)} / L ${(o.limitPrice ?? o.triggerPrice).toFixed(2)}`)
                 : `${o.size} ${sideLabel} ${ORDER_CODE[o.type]}`;
               return (
+                // Row wrapper = half-width order line + its pill, so a drag
+                // transform on the ROW moves the line together with the pill
+                // in real time (Elad request). Broker-style: the line runs
+                // mid-chart → price axis, same as the position entry line.
                 <div
                   key={o.id}
-                  className="group pointer-events-auto absolute flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow cursor-grab active:cursor-grabbing"
-                  style={{
-                    top: y - 10,
-                    right: axisW + 4,
-                    backgroundColor: pillColor,
-                    color: '#08080a',
-                    userSelect: 'none',
-                  }}
-                  onPointerDown={(e) => {
+                  className="pointer-events-none absolute"
+                  style={{ top: y - 10, left: '50%', right: 0, height: 20 }}
+                >
+                  {/* Half-width order line, colored by order-type family. */}
+                  <div
+                    className="pointer-events-none absolute"
+                    style={{ top: 9, left: 0, right: axisW, height: 2, backgroundColor: pillColor }}
+                  />
+                  <div
+                    className="group pointer-events-auto absolute flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow cursor-grab active:cursor-grabbing"
+                    style={{
+                      top: 0,
+                      right: axisW + 4,
+                      backgroundColor: pillColor,
+                      color: '#08080a',
+                      userSelect: 'none',
+                    }}
+                    onPointerDown={(e) => {
                     // Pill drag — move the pending order's trigger price.
                     // Only active in cursor mode (same gate as OrderLinesOverlay).
                     // Propagation is stopped so the chart underneath does not pan.
@@ -1294,12 +1310,15 @@ export function BacktestReplayChart({
                     let moved = false;
 
                     // Drag feedback uses `transform`, which React never writes
-                    // on pills — so clearing it in cleanup cannot fight React's
+                    // here — so clearing it in cleanup cannot fight React's
                     // style diffing, and no container remount is needed. (The
                     // old key={overlayTick} remount-per-tick approach leaked
                     // orphan pill containers into the DOM — stale "ghost
                     // orders" stayed visible after fill/cancel.)
-                    const baseTop = pillEl.offsetTop;
+                    // The transform targets the ROW wrapper so the half-width
+                    // order line follows the pointer together with the pill.
+                    const rowEl = pillEl.parentElement as HTMLElement;
+                    const baseTop = rowEl.offsetTop;
 
                     const handleMove = (ev: PointerEvent) => {
                       if (!seriesRef.current || !containerRef.current) return;
@@ -1309,8 +1328,8 @@ export function BacktestReplayChart({
                       if (raw == null || !Number.isFinite(raw)) return;
                       moved = true;
                       latestPrice = raw;
-                      // Visual feedback: move the pill to follow the pointer.
-                      pillEl.style.transform = `translateY(${localY - 10 - baseTop}px)`;
+                      // Visual feedback: move the line + pill to follow the pointer.
+                      rowEl.style.transform = `translateY(${localY - 10 - baseTop}px)`;
                     };
 
                     const cleanup = () => {
@@ -1321,7 +1340,7 @@ export function BacktestReplayChart({
                       // was never touched, so a zero-distance interaction snaps
                       // back exactly; a committed drag re-renders with the new
                       // trigger price via onUpdatePendingPrice.
-                      pillEl.style.transform = '';
+                      rowEl.style.transform = '';
                       setOverlayTick((n) => n + 1);
                     };
 
@@ -1362,7 +1381,8 @@ export function BacktestReplayChart({
                     }}
                   >
                     <X size={11} />
-                  </button>
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1396,7 +1416,12 @@ export function BacktestReplayChart({
               // PnL cell color: green = winning, red = losing, gray = no mark yet.
               const pnlCellColor =
                 pnl == null ? '#52525b' : pnl >= 0 ? '#26A65B' : '#E64980';
-              const pnlText = pnl == null ? '—' : Math.round(pnl).toString();
+              // Dollar-formatted P&L, e.g. "-$142.80" / "+$25.10" (Elad request:
+              // the tag reads "<units> = <P&L in dollars>").
+              const pnlText =
+                pnl == null
+                  ? '—'
+                  : `${pnl < 0 ? '-' : '+'}$${Math.abs(pnl).toFixed(2)}`;
               return (
                 <div
                   className="absolute flex items-center rounded overflow-hidden shadow"
@@ -1410,19 +1435,19 @@ export function BacktestReplayChart({
                     userSelect: 'none',
                   }}
                 >
-                  {/* Left cell: unrealized P&L */}
-                  <span
-                    className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
-                    style={{ backgroundColor: pnlCellColor, color: '#fff' }}
-                  >
-                    {pnlText}
-                  </span>
-                  {/* Right cell: position size */}
+                  {/* Left cell: units */}
                   <span
                     className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
                     style={{ backgroundColor: '#3f3f46', color: '#fff' }}
                   >
                     {units}
+                  </span>
+                  {/* Right cell: "= <unrealized P&L in dollars>" */}
+                  <span
+                    className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
+                    style={{ backgroundColor: pnlCellColor, color: '#fff' }}
+                  >
+                    {`= ${pnlText}`}
                   </span>
                 </div>
               );
