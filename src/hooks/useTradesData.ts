@@ -20,6 +20,8 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMemo, useRef, useEffect } from 'react';
 import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { excludeHiddenWhenAllAccounts } from '@/lib/journal/hiddenAccounts';
+import { getDemoTrades } from '@/utils/demoJournalData';
+import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 
 // ================================================
 // 🔥 ASSET MULTIPLIERS - For R calculation
@@ -383,6 +385,7 @@ export function useTrades(
         () => {
           qc.invalidateQueries({ queryKey: ['trades', targetUserId] });
           qc.invalidateQueries({ queryKey: ['dashboard'] });
+          qc.invalidateQueries({ queryKey: ['has-any-trades'] });
         },
       )
       .subscribe();
@@ -391,7 +394,9 @@ export function useTrades(
     };
   }, [targetUserId, qc]);
 
-  return useQuery({
+  const { isDemo } = useJournalDemoMode();
+
+  const query = useQuery({
     queryKey: [
       ...queryKeys.trades(targetUserId || ''),
       isImpersonating ? 'admin' : 'user',
@@ -415,6 +420,14 @@ export function useTrades(
     refetchOnMount: 'always',
     refetchInterval: false,
   });
+
+  // Zero-trade users see a sample-filled journal on the /app/journal surface
+  // only — home dashboard, AI Arena etc. must never render demo data.
+  const inJournal = typeof window !== 'undefined' && window.location.pathname.startsWith('/app/journal');
+  if (isDemo && inJournal && !query.isLoading && (!query.data || query.data.length === 0)) {
+    return { ...query, data: getDemoTrades() };
+  }
+  return query;
 }
 
 // ================================================
@@ -646,6 +659,8 @@ export function useCreateTrade() {
       // 🚀 Invalidate to trigger fresh fetch
       const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
       queryClient.invalidateQueries({ queryKey });
+      // First real trade flips demo mode off immediately.
+      queryClient.invalidateQueries({ queryKey: ['has-any-trades'] });
     },
   });
 }

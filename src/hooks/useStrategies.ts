@@ -2,12 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { StrategyComponent } from '@/utils/strategyComponents';
+import { getDemoStrategies } from '@/utils/demoJournalData';
+import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 
 // ==========================================
 // 🎯 FETCH ALL STRATEGIES - WITH IMPERSONATION SUPPORT
 // ==========================================
 export function useStrategiesOptimized(userId?: string) {
-  return useQuery({
+  const { isDemo } = useJournalDemoMode();
+
+  const query = useQuery({
     queryKey: ['strategies', userId],
     queryFn: async () => {
       console.log('🔍 useStrategiesOptimized: Fetching for userId:', userId);
@@ -60,6 +64,14 @@ export function useStrategiesOptimized(userId?: string) {
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+
+  // Zero-trade users see sample strategies on /app/journal only — their
+  // per-strategy stats are backed by useTrades' demo data.
+  const inJournal = typeof window !== 'undefined' && window.location.pathname.startsWith('/app/journal');
+  if (isDemo && inJournal && !query.isLoading && (!query.data || query.data.length === 0)) {
+    return { ...query, data: getDemoStrategies() };
+  }
+  return query;
 }
 
 // ==========================================
