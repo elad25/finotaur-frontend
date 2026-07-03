@@ -96,7 +96,7 @@ export default function WelcomeIntro() {
 
   return (
     // Full-screen backdrop — bg-surface-base is the deepest DS layer
-    <div className="fixed inset-0 z-[9990] bg-surface-base flex items-center justify-center p-4 overflow-hidden">
+    <div className="fixed inset-0 z-[9990] bg-black/70 backdrop-blur-2xl flex items-center justify-center p-4 overflow-hidden">
       {/* Gold blur orbs — DS gold token only */}
       <div
         className="absolute top-0 left-0 w-[560px] h-[560px] rounded-full pointer-events-none"

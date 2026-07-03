@@ -10,7 +10,7 @@
 // ================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
 import { logger } from '@/lib/logger';
@@ -22,6 +22,8 @@ import dayjs from 'dayjs';
 import { aggregateCopiedTrades } from '@/lib/tradeAggregation';
 import { normalizeTraderTrades, type TraderMode } from '@/lib/journal/traderNormalization';
 import { excludeHiddenWhenAllAccounts } from '@/lib/journal/hiddenAccounts';
+import { getDemoTrades } from '@/utils/demoJournalData';
+import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 
 // ================================================
 // TYPES & INTERFACES
@@ -961,6 +963,27 @@ export function useDashboardStats(
     }
   }, [userId, query.isSuccess, queryClient, daysBack]);
 
+  // Demo mode: a zero-trade user in the journal sees the dashboard filled with
+  // the same deterministic sample trades as the rest of the journal, computed
+  // through the real computeStats pipeline. Route-gated so non-journal surfaces
+  // are untouched; flips off automatically once real trades exist.
+  const { isDemo } = useJournalDemoMode();
+  const inJournal =
+    typeof window !== 'undefined' &&
+    window.location.pathname.startsWith('/app/journal');
+  const demoStats = useMemo(
+    // getDemoTrades() returns the app Trade[]; computeStats accepts the DB row
+    // shape which is a structural subset here, so the cast is safe (demo only).
+    () => (isDemo && inJournal ? computeStats(getDemoTrades() as any) : null),
+    [isDemo, inJournal],
+  );
+  if (
+    demoStats &&
+    !query.isLoading &&
+    (!query.data || !query.data.trades || query.data.trades.length === 0)
+  ) {
+    return { ...query, data: demoStats };
+  }
   return query;
 }
 

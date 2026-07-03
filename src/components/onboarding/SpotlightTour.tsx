@@ -149,6 +149,32 @@ function SpotlightHighlight({ rect }: SpotlightProps) {
   );
 }
 
+// Frosted backdrop — blurs the whole viewport EXCEPT the spotlighted target
+// rect (four strips around the cutout), so the highlighted element stays crisp
+// while the rest of the page reads as soft frosted glass. Purely visual.
+function SpotlightBlur({ rect }: SpotlightProps) {
+  const x = rect.left - PAD;
+  const y = rect.top - PAD;
+  const w = rect.width + PAD * 2;
+  const h = rect.height + PAD * 2;
+  const base: React.CSSProperties = {
+    position: 'fixed',
+    backdropFilter: 'blur(7px)',
+    WebkitBackdropFilter: 'blur(7px)',
+    transition: SPOT_TRANSITION,
+    zIndex: 9988,
+    pointerEvents: 'none',
+  };
+  return (
+    <div aria-hidden="true">
+      <div style={{ ...base, left: 0, top: 0, width: '100vw', height: Math.max(0, y) }} />
+      <div style={{ ...base, left: 0, top: y + h, width: '100vw', height: `calc(100vh - ${y + h}px)` }} />
+      <div style={{ ...base, left: 0, top: y, width: Math.max(0, x), height: h }} />
+      <div style={{ ...base, left: x + w, top: y, width: `calc(100vw - ${x + w}px)`, height: h }} />
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Animated chevron pointer — points from the card toward the target
 // ---------------------------------------------------------------------------
@@ -679,10 +705,13 @@ export default function SpotlightTour() {
       >
         {/* ── Dim / spotlight cutout (pointer-events:none — purely visual) ── */}
         {mode === 'spotlight' && targetRect ? (
-          <SpotlightHighlight rect={targetRect} />
+          <>
+            <SpotlightBlur rect={targetRect} />
+            <SpotlightHighlight rect={targetRect} />
+          </>
         ) : mode === 'fallback' ? (
           <div
-            className="fixed inset-0 bg-black/90 pointer-events-none"
+            className="fixed inset-0 bg-black/90 backdrop-blur-md pointer-events-none"
             style={{ zIndex: 9990 }}
           />
         ) : null}
