@@ -18,6 +18,9 @@ export const ONBOARDING_SEEN_KEY = 'finotaur_onboarding_seen';
 /** Set to '1' in sessionStorage while the spotlight tour is in progress. */
 export const TOUR_ACTIVE_KEY = 'finotaur_tour_active';
 
+/** Set to '1' in sessionStorage while the welcome intro overlay should show. */
+export const WELCOME_ACTIVE_KEY = 'finotaur_welcome_active';
+
 // ---------------------------------------------------------------------------
 // recordOnboardingCompletion
 // Best-effort: if the user is not authenticated or the request fails we still
