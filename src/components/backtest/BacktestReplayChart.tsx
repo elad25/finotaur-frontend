@@ -1225,9 +1225,12 @@ export function BacktestReplayChart({
             button inside it on hover) gets pointer-events. Re-evaluates on
             overlayTick so pills stay glued after pan / zoom / resize. ── */}
         {onCancelPending && seriesRef.current && chartRef.current && pendingOrders.length > 0 && (
-          // key={overlayTick} forces React to re-evaluate coordinate math on
-          // every pan / zoom / resize — same pattern used by DrawingLayer above.
-          <div key={overlayTick} className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+          // The overlayTick STATE bump re-runs this render (recomputing every
+          // pill's coordinate math) — no key-remount needed. Keying this
+          // container by overlayTick remounted it on every pan/zoom/replay
+          // tick and leaked orphan pill nodes ("ghost orders" that stayed on
+          // the chart after the order filled or was cancelled).
+          <div className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
             {pendingOrders.map((o) => {
               const y = seriesRef.current!.priceToCoordinate(o.triggerPrice);
               const containerHeight = containerRef.current?.clientHeight ?? 0;
@@ -1272,6 +1275,14 @@ export function BacktestReplayChart({
                     // rewrite the trigger price nor leave the pill displaced.
                     let moved = false;
 
+                    // Drag feedback uses `transform`, which React never writes
+                    // on pills — so clearing it in cleanup cannot fight React's
+                    // style diffing, and no container remount is needed. (The
+                    // old key={overlayTick} remount-per-tick approach leaked
+                    // orphan pill containers into the DOM — stale "ghost
+                    // orders" stayed visible after fill/cancel.)
+                    const baseTop = pillEl.offsetTop;
+
                     const handleMove = (ev: PointerEvent) => {
                       if (!seriesRef.current || !containerRef.current) return;
                       const rect = containerRef.current.getBoundingClientRect();
@@ -1281,21 +1292,18 @@ export function BacktestReplayChart({
                       moved = true;
                       latestPrice = raw;
                       // Visual feedback: move the pill to follow the pointer.
-                      pillEl.style.top = `${localY - 10}px`;
+                      pillEl.style.transform = `translateY(${localY - 10 - baseTop}px)`;
                     };
 
                     const cleanup = () => {
                       pillEl.removeEventListener('pointermove', handleMove);
                       pillEl.removeEventListener('pointerup', handleUp);
                       pillEl.removeEventListener('pointercancel', handleCancel);
-                      // Force the pill overlay to REMOUNT so React re-applies the
-                      // correct computed `top` to every pill. Just clearing
-                      // style.top to '' is not enough: React skips re-writing an
-                      // unchanged virtual `top`, so a zero-distance interaction
-                      // would leave the imperatively-moved pill stuck at top:0
-                      // (the "pill jumps to the chart top" bug). Bumping
-                      // overlayTick changes the container key → fresh nodes with
-                      // correct inline `top`.
+                      // Drop the imperative drag offset. React's computed `top`
+                      // was never touched, so a zero-distance interaction snaps
+                      // back exactly; a committed drag re-renders with the new
+                      // trigger price via onUpdatePendingPrice.
+                      pillEl.style.transform = '';
                       setOverlayTick((n) => n + 1);
                     };
 
@@ -1352,7 +1360,7 @@ export function BacktestReplayChart({
             playback STEP re-renders the parent), and the coordinate math
             re-runs on overlayTick (pan / zoom / resize). ── */}
         {activePosition && seriesRef.current && chartRef.current && (
-          <div key={`pos-${overlayTick}`} className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+          <div className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
             {(() => {
               const pos = activePosition;
               const y = seriesRef.current!.priceToCoordinate(pos.entryPrice);
@@ -1405,9 +1413,11 @@ export function BacktestReplayChart({
             is selected) so drawing creation is never intercepted.
             Only mounted when at least one callback is wired so legacy callers
             that don't pass onUpdateSL/TP are unaffected. ── */}
+        {/* No key-remount: OrderLinesOverlay already recomputes its geometry
+            from the viewVersion prop; remounting it per tick tore down its
+            pointer listeners mid-gesture and contributed to overlay leaks. */}
         {(onUpdateSL || onUpdateTP || onUpdatePendingPrice) && seriesRef.current && containerRef.current && (
           <OrderLinesOverlay
-            key={overlayTick}
             series={seriesRef.current}
             container={containerRef.current}
             activePosition={activePosition}
