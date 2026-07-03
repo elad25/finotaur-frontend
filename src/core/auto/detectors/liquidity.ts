@@ -39,6 +39,10 @@ export function detect(
 
 // ----------------------------------------------------------------------------
 // Sweep mode
+//
+// NOTE: sweep mode intentionally does NOT read params.minTouches or
+// params.equalTolerancePct -- those two knobs govern clustering in
+// detectEqualLevels() below only. See the doc-comments on LiquidityParams.
 // ----------------------------------------------------------------------------
 
 function detectSweep(
