@@ -7,8 +7,8 @@
 //   to /app/stocks/overview (SpotlightTour opens the drawer from there).
 // ================================================
 
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Newspaper,
@@ -25,7 +25,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Wordmark } from '@/components/ds/Wordmark';
-import { TOUR_ACTIVE_KEY } from './onboardingFlags';
+import { TOUR_ACTIVE_KEY, WELCOME_ACTIVE_KEY } from './onboardingFlags';
 
 // The scattered tools a trader/investor usually juggles across many apps —
 // now unified inside Finotaur. Shown as a quick visual on the welcome screen.
@@ -42,7 +42,14 @@ const CAPABILITIES: { icon: LucideIcon; label: string }[] = [
 
 export default function WelcomeIntro() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const [active, setActive] = useState(
+    () => sessionStorage.getItem(WELCOME_ACTIVE_KEY) === '1',
+  );
+  useEffect(() => {
+    if (sessionStorage.getItem(WELCOME_ACTIVE_KEY) === '1') setActive(true);
+  }, [location.pathname]);
 
   // Derive firstName — same logic as OnboardingCarousel / WelcomeScreen
   const firstName = (() => {
@@ -62,6 +69,7 @@ export default function WelcomeIntro() {
   // first journal trade (src/pages/app/journal/New.tsx). Imported lazily so
   // it never blocks first paint; cleaned up on unmount.
   useEffect(() => {
+    if (!active) return;
     let raf = 0;
     let cancelled = false;
     import('canvas-confetti')
@@ -85,14 +93,22 @@ export default function WelcomeIntro() {
       cancelled = true;
       if (raf) cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [active]);
 
   const handleStart = () => {
+    try {
+      sessionStorage.removeItem(WELCOME_ACTIVE_KEY);
+    } catch {
+      /* ignore */
+    }
     sessionStorage.setItem(TOUR_ACTIVE_KEY, '1');
+    setActive(false);
     // Navigate to Research Lab — the tour's backdrop and destination.
     // SpotlightTour opens the drawer and spotlights the first item from there.
     navigate('/app/all-markets/overview', { replace: true });
   };
+
+  if (!active) return null;
 
   return (
     // Full-screen backdrop — bg-surface-base is the deepest DS layer
@@ -156,6 +172,17 @@ export default function WelcomeIntro() {
               <Wordmark size="large" tone="gradient" />
             </div>
 
+            <img
+              src="/BULL%20ONLY.png"
+              alt=""
+              aria-hidden="true"
+              className="h-20 w-auto -mt-1"
+              style={{
+                maskImage: 'radial-gradient(ellipse at center, black 58%, transparent 82%)',
+                WebkitMaskImage: 'radial-gradient(ellipse at center, black 58%, transparent 82%)',
+              }}
+            />
+
             <Eyebrow>WELCOME</Eyebrow>
 
             {/* Headline */}
@@ -178,10 +205,7 @@ export default function WelcomeIntro() {
 
             {/* Mission body — what Finotaur is & why it exists */}
             <p className="text-ink-secondary text-sm md:text-base leading-relaxed max-w-md">
-              Finotaur is your central terminal for trading and investing —
-              every tool a trader and investor needs, finally in one place.
-              In the next 30 seconds we'll walk you through the rooms where
-              your edge gets built.
+              Every trading and investing tool, in one terminal. Here's your 30-second tour.
             </p>
 
             {/* Capability grid — the scattered tools Finotaur unifies */}

@@ -16,6 +16,7 @@ import { AssetSelectorProvider } from '@/contexts/AssetSelectorContext';
 import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
 import { ProductDrawer } from '@/components/ProductDrawer';
 import SpotlightTour from '@/components/onboarding/SpotlightTour';
+import WelcomeIntro from '@/components/onboarding/WelcomeIntro';
 import { useOAuthReturnRedirect } from '@/hooks/useOAuthReturnRedirect';
 import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 import { DemoBanner } from '@/components/journal/DemoBanner';
@@ -159,6 +160,8 @@ export const ProtectedAppLayout = () => {
         <ComplianceFooterBar />
         {/* Spotlight onboarding tour — renders null when tour is not active */}
         <SpotlightTour />
+        {/* Welcome intro overlay — renders null unless the welcome flag is set */}
+        <WelcomeIntro />
       </div>
     </PortfolioProvider>
     </ProductDrawerProvider>
