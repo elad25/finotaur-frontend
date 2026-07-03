@@ -15,6 +15,7 @@ import {
   ISeriesPrimitivePaneView,
 } from 'lightweight-charts';
 import { BaseDrawing, DPoint, DrawingOptions, HitResult, PixelPoint, ToolId } from './base';
+import { clipLineToRect, type ClipMode, type Rect } from './geometry';
 
 // ─── Handle rendering constants ──────────────────────────────────────────────
 
@@ -43,10 +44,18 @@ export function hexToRgba(hex: string, alpha: number): string {
 //  TREND LINE
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Maps the TrendLineDrawing `extend` constructor param to a geometry ClipMode. */
+function extendToClipMode(extend: TrendLineExtend): ClipMode {
+  return extend; // 'none' | 'right' | 'both' — same literal union as ClipMode
+}
+
+export type TrendLineExtend = 'none' | 'right' | 'both';
+
 class TrendLinePaneRenderer implements ISeriesPrimitivePaneRenderer {
   constructor(
     private _p0: PixelPoint | null,
     private _p1: PixelPoint | null,
+    private _extend: TrendLineExtend,
     private _options: DrawingOptions,
     private _selected: boolean,
   ) {}
@@ -58,22 +67,27 @@ class TrendLinePaneRenderer implements ISeriesPrimitivePaneRenderer {
       const hr = scope.horizontalPixelRatio;
       const vr = scope.verticalPixelRatio;
 
-      const x0 = Math.round(this._p0.x * hr);
-      const y0 = Math.round(this._p0.y * vr);
-      const x1 = Math.round(this._p1.x * hr);
-      const y1 = Math.round(this._p1.y * vr);
+      const x0 = this._p0.x * hr;
+      const y0 = this._p0.y * vr;
+      const x1 = this._p1.x * hr;
+      const y1 = this._p1.y * vr;
+
+      const rect: Rect = { left: 0, top: 0, right: scope.bitmapSize.width, bottom: scope.bitmapSize.height };
+      const clipped = clipLineToRect(x0, y0, x1, y1, rect, extendToClipMode(this._extend));
 
       ctx.beginPath();
       ctx.strokeStyle = this._options.color;
       ctx.lineWidth = this._options.width * vr;
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
+      ctx.moveTo(Math.round(clipped.x0), Math.round(clipped.y0));
+      ctx.lineTo(Math.round(clipped.x1), Math.round(clipped.y1));
       ctx.stroke();
 
+      // Handles always render at the true anchor points (not the clipped
+      // visual endpoints) so drag targets stay where the user placed them.
       if (this._selected) {
         const hc = selectedColor(this._options.color);
         const hs = HANDLE_HALF * hr;
-        for (const [hx, hy] of [[x0, y0], [x1, y1]]) {
+        for (const [hx, hy] of [[Math.round(x0), Math.round(y0)], [Math.round(x1), Math.round(y1)]]) {
           ctx.fillStyle = hc;
           ctx.strokeStyle = this._options.color;
           ctx.lineWidth = 1.5 * vr;
@@ -104,6 +118,7 @@ class TrendLinePaneView implements ISeriesPrimitivePaneView {
   renderer(): ISeriesPrimitivePaneRenderer {
     return new TrendLinePaneRenderer(
       this._p0, this._p1,
+      this._source.extend,
       this._source.options,
       this._source.selected,
     );
@@ -112,27 +127,50 @@ class TrendLinePaneView implements ISeriesPrimitivePaneView {
 
 export class TrendLineDrawing extends BaseDrawing {
   private _views: TrendLinePaneView[];
+  readonly extend: TrendLineExtend;
 
-  constructor(points: DPoint[], options: DrawingOptions) {
+  constructor(points: DPoint[], options: DrawingOptions, extend: TrendLineExtend = 'none') {
     super(points, options);
+    this.extend = extend;
     this._views = [new TrendLinePaneView(this)];
   }
 
   paneViews(): ISeriesPrimitivePaneView[] { return this._views; }
-  protected _toolId(): ToolId { return 'trendline'; }
+
+  protected _toolId(): ToolId {
+    if (this.extend === 'right') return 'ray';
+    if (this.extend === 'both') return 'extended_line';
+    return 'trendline';
+  }
 
   hitTest(cx: number, cy: number): HitResult | null {
     const p0 = this.points[0] ? this.toPixel(this.points[0]) : null;
     const p1 = this.points[1] ? this.toPixel(this.points[1]) : null;
     if (!p0 || !p1) return null;
 
-    // Check handles first (only when selected)
+    // Check handles first (only when selected) — always at the true anchors.
     if (this.selected) {
       if (Math.hypot(cx - p0.x, cy - p0.y) <= HIT_TOLERANCE) return { isBody: false, handleIndex: 0 };
       if (Math.hypot(cx - p1.x, cy - p1.y) <= HIT_TOLERANCE) return { isBody: false, handleIndex: 1 };
     }
-    // Body: distance to segment
-    if (BaseDrawing._distToSegment(cx, cy, p0.x, p0.y, p1.x, p1.y) <= HIT_TOLERANCE) {
+
+    // Body: clip in CSS space (chart client dims), then distance to the
+    // clipped segment — so ray/extended_line are hit-testable along their
+    // full visible length, not just the original two-anchor segment.
+    if (this.extend === 'none') {
+      if (BaseDrawing._distToSegment(cx, cy, p0.x, p0.y, p1.x, p1.y) <= HIT_TOLERANCE) {
+        return { isBody: true };
+      }
+      return null;
+    }
+
+    const container = this._chart?.chartElement?.() as HTMLElement | undefined;
+    const rect: Rect = container
+      ? { left: 0, top: 0, right: container.clientWidth, bottom: container.clientHeight }
+      : { left: 0, top: 0, right: p1.x + Math.abs(p1.x - p0.x) + 1000, bottom: p1.y + Math.abs(p1.y - p0.y) + 1000 };
+
+    const clipped = clipLineToRect(p0.x, p0.y, p1.x, p1.y, rect, this.extend);
+    if (BaseDrawing._distToSegment(cx, cy, clipped.x0, clipped.y0, clipped.x1, clipped.y1) <= HIT_TOLERANCE) {
       return { isBody: true };
     }
     return null;

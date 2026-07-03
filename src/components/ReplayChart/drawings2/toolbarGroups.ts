@@ -12,13 +12,19 @@ import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
   EyeOff,
+  GalleryVerticalEnd,
   Lock,
   Magnet,
   Minus,
+  MoveDiagonal,
+  MoveUpRight,
   Pin,
+  Rows3,
+  SeparatorVertical,
   Square,
   Trash2,
   TrendingUp,
+  Type,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -70,6 +76,9 @@ export const TOOL_GROUPS: ToolGroup[] = [
       { id: 'trendline', label: 'Trend Line', icon: TrendingUp, supported: true, shortcut: 'T' },
       { id: 'horizontal', label: 'Horizontal Line', icon: Minus, supported: true, shortcut: 'M' },
       { id: 'horizontal_ray', label: 'Horizontal Ray', icon: ArrowRight, supported: true, shortcut: 'H' },
+      { id: 'vertical', label: 'Vertical Line', icon: SeparatorVertical, supported: true, shortcut: 'V' },
+      { id: 'ray', label: 'Ray', icon: MoveUpRight, supported: true },
+      { id: 'extended_line', label: 'Extended Line', icon: MoveDiagonal, supported: true },
     ],
   },
   {
@@ -78,6 +87,23 @@ export const TOOL_GROUPS: ToolGroup[] = [
     icon: Square,
     tools: [
       { id: 'rectangle', label: 'Rectangle', icon: Square, supported: true, shortcut: 'R' },
+      { id: 'parallel_channel', label: 'Parallel Channel', icon: GalleryVerticalEnd, supported: true },
+    ],
+  },
+  {
+    id: 'fibonacci',
+    label: 'Fibonacci',
+    icon: Rows3,
+    tools: [
+      { id: 'fibonacci', label: 'Fib Retracement', icon: Rows3, supported: true, shortcut: 'F' },
+    ],
+  },
+  {
+    id: 'annotations',
+    label: 'Annotations',
+    icon: Type,
+    tools: [
+      { id: 'text', label: 'Text', icon: Type, supported: true },
     ],
   },
 ];
