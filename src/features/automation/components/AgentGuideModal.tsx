@@ -93,7 +93,7 @@ function AgentWindowIllustration() {
           <span className="h-9 w-9 rounded-full" style={{ background: '#C9A646' }} />
           <div>
             <p className="text-sm font-bold tracking-wide" style={{ color: '#C9A646' }}>FINOTAUR AGENT</p>
-            <p className="text-[11px]" style={{ color: '#9a9a9e' }}>v1.0.0</p>
+            <p className="text-[11px]" style={{ color: '#9a9a9e' }}>v1.10.0</p>
           </div>
         </div>
         {/* device pairing card */}
