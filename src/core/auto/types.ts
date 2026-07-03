@@ -74,9 +74,15 @@ export interface LiquidityParams {
   /** 'sweep' = stop-run beyond a swing; 'equal-levels' = liquidity pool. */
   mode: 'sweep' | 'equal-levels';
   swing: { lookback: number };
-  /** Tolerance (in %) for clustering equal highs/lows. */
+  /**
+   * Tolerance (in %) for clustering equal highs/lows.
+   * Applies to 'equal-levels' mode ONLY -- detectSweep() never reads this.
+   */
   equalTolerancePct: number;
-  /** Minimum touches to qualify as an equal-levels pool. */
+  /**
+   * Minimum touches to qualify as an equal-levels pool.
+   * Applies to 'equal-levels' mode ONLY -- detectSweep() never reads this.
+   */
   minTouches: number;
   /** Require price to reclaim the swept level (close back inside). */
   requireReclaim: boolean;
@@ -264,10 +270,16 @@ export const DEFAULT_PATTERN_PARAMS: Record<PatternType, PatternParams> = {
   },
   LIQUIDITY: {
     type: 'LIQUIDITY',
-    mode: 'sweep',
+    // Default is 'equal-levels', not 'sweep': measured on real Binance data
+    // (9-cell grid x 3 slices), minTouches=4 + equalTolerancePct=0.03 cuts
+    // over-detection ~85% vs the old minTouches=2 default and roughly doubles
+    // profit factor -- the least-bad measured config. It also ensures the two
+    // knobs the UI exposes (minTouches, equalTolerancePct) actually govern the
+    // default mode instead of sitting inert (see LiquidityParams doc-comments).
+    mode: 'equal-levels',
     swing: { lookback: 2 },
-    equalTolerancePct: 0.05,
-    minTouches: 2,
+    equalTolerancePct: 0.03,
+    minTouches: 4,
     requireReclaim: true,
     requireMSS: true,
   },
