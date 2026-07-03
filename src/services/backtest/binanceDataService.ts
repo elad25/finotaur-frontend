@@ -1,6 +1,71 @@
 // ==================== BINANCE DATA SERVICE ====================
 // Fetch real market data from Binance API
 
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+import { candleFetchErrorFromResponse, candleFetchErrorFromThrown } from './errors';
+
+const FETCH_TIMEOUT_MS = 15000;
+const MAX_ATTEMPTS = 3;
+const BASE_BACKOFF_MS = 500;
+
+/**
+ * Retry wrapper for Binance requests.
+ * Retries ONLY on network errors, 5xx, 429, and 418 — never on other 4xx
+ * (those are permanent, e.g. bad symbol/params). Honors Retry-After when the
+ * server provides one; otherwise falls back to exponential backoff + jitter.
+ */
+async function fetchBinanceWithRetry(url: string): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, undefined, FETCH_TIMEOUT_MS);
+
+      if (response.ok) return response;
+
+      const isRetryableStatus =
+        response.status === 429 || response.status === 418 || response.status >= 500;
+
+      if (!isRetryableStatus || attempt === MAX_ATTEMPTS - 1) {
+        throw await candleFetchErrorFromResponse(response);
+      }
+
+      const retryAfterHeader = response.headers.get('Retry-After');
+      const retryAfterMs = retryAfterHeader
+        ? Number(retryAfterHeader) * 1000
+        : undefined;
+      const backoffMs =
+        Number.isFinite(retryAfterMs) && retryAfterMs !== undefined
+          ? retryAfterMs
+          : BASE_BACKOFF_MS * 2 ** attempt + Math.random() * 250;
+
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      continue;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'CandleFetchError') {
+        // Already a typed, non-retryable error (e.g. symbol-not-found) —
+        // surfaced from candleFetchErrorFromResponse above.
+        throw error;
+      }
+
+      lastError = error;
+      const typed = candleFetchErrorFromThrown(error);
+      const isRetryable = typed.kind === 'network' || typed.kind === 'timeout';
+
+      if (!isRetryable || attempt === MAX_ATTEMPTS - 1) {
+        throw typed;
+      }
+
+      const backoffMs = BASE_BACKOFF_MS * 2 ** attempt + Math.random() * 250;
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+
+  // Unreachable in practice — loop always returns or throws — but keep
+  // TypeScript happy and preserve the last error for debugging.
+  throw candleFetchErrorFromThrown(lastError);
+}
+
 export interface BinanceCandle {
   openTime: number;
   open: string;
@@ -60,44 +125,58 @@ export class BinanceDataService {
       if (startTime) params.append('startTime', startTime.toString());
       if (endTime) params.append('endTime', endTime.toString());
 
-      const response = await fetch(`${endpoint}?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`Binance API error: ${response.statusText}`);
-      }
+      const response = await fetchBinanceWithRetry(`${endpoint}?${params}`);
 
       // Binance /klines returns POSITIONAL tuples, not named objects:
       // [openTime, open, high, low, close, volume, closeTime, quoteVol, trades, ...]
       // Reading named fields (candle.open) yields undefined → NaN for every OHLC.
       const data = (await response.json()) as Array<Array<string | number>>;
 
-      return data.map(k => ({
-        time: Math.floor(Number(k[0]) / 1000), // openTime ms → seconds
-        open: parseFloat(String(k[1])),
-        high: parseFloat(String(k[2])),
-        low: parseFloat(String(k[3])),
-        close: parseFloat(String(k[4])),
-        volume: parseFloat(String(k[5])),
-      }));
+      const candles: CandleData[] = [];
+      for (const k of data) {
+        const time = Math.floor(Number(k[0]) / 1000); // openTime ms → seconds
+        const open = parseFloat(String(k[1]));
+        const high = parseFloat(String(k[2]));
+        const low = parseFloat(String(k[3]));
+        const close = parseFloat(String(k[4]));
+        const volume = parseFloat(String(k[5]));
+
+        // Drop malformed rows instead of poisoning the dataset with NaN OHLC
+        // (matches the skip pattern in BinanceSource.ts).
+        if (![time, open, high, low, close].every(Number.isFinite)) continue;
+
+        candles.push({ time, open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 });
+      }
+
+      return candles;
     } catch (error) {
       console.error('Error fetching Binance data:', error);
-      throw error;
+      throw candleFetchErrorFromThrown(error);
     }
   }
 
   /**
    * Fetch multiple pages of historical data
-   * Useful for getting more than 1000 candles
+   * Useful for getting more than 1000 candles.
+   *
+   * Pages BACKWARD from `endTime` (defaults to now) so callers requesting an
+   * older window (e.g. "6 months ago to 3 months ago") get the correct
+   * candles instead of always the most recent `totalCandles` bars. When
+   * `fromMs` is provided, the loop also stops as soon as the oldest fetched
+   * candle reaches or passes it — avoids over-fetching beyond the requested
+   * range.
    */
   async fetchHistoricalData(
     symbol: string,
     interval: Timeframe,
     totalCandles: number,
-    futures: boolean = false
+    futures: boolean = false,
+    endTimeParam: number = Date.now(),
+    fromMs?: number
   ): Promise<CandleData[]> {
     const allCandles: CandleData[] = [];
     const maxLimit = 1000;
-    let endTime = Date.now();
+    let endTime = endTimeParam;
 
     while (allCandles.length < totalCandles) {
       const remaining = totalCandles - allCandles.length;
@@ -116,6 +195,8 @@ export class BinanceDataService {
 
       allCandles.unshift(...candles);
       endTime = candles[0].time * 1000 - 1; // Move back in time
+
+      if (fromMs !== undefined && candles[0].time * 1000 <= fromMs) break;
 
       // Rate limiting
       await new Promise(resolve => setTimeout(resolve, 250));
@@ -136,17 +217,13 @@ export class BinanceDataService {
         symbol: symbol.toUpperCase(),
       });
 
-      const response = await fetch(`${endpoint}?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`Binance API error: ${response.statusText}`);
-      }
+      const response = await fetchBinanceWithRetry(`${endpoint}?${params}`);
 
       const data = await response.json();
       return parseFloat(data.price);
     } catch (error) {
       console.error('Error fetching current price:', error);
-      throw error;
+      throw candleFetchErrorFromThrown(error);
     }
   }
 

@@ -27,6 +27,52 @@ export interface CachedDataset {
   };
 }
 
+/**
+ * Pure validity check for a cached dataset.
+ * - `candles` must be a non-empty array.
+ * - The first candle must have finite time/OHLC (matches the corruption
+ *   guard already used at the call site — a prior bug stored NaN OHLC).
+ * - When `metadata` is present, its numeric fields must be finite too.
+ */
+export function isValidDataset(d: CachedDataset | null | undefined): boolean {
+  if (!d) return false;
+  if (!Array.isArray(d.candles) || d.candles.length === 0) return false;
+
+  const first = d.candles[0];
+  const firstIsValid =
+    first != null &&
+    [first.time, first.open, first.high, first.low, first.close].every((v) =>
+      Number.isFinite(v),
+    );
+  if (!firstIsValid) return false;
+
+  if (d.metadata) {
+    const { startTime, endTime, candleCount } = d.metadata;
+    if (startTime !== undefined && !Number.isFinite(startTime)) return false;
+    if (endTime !== undefined && !Number.isFinite(endTime)) return false;
+    if (candleCount !== undefined && !Number.isFinite(candleCount)) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Pure predicate: does a candle array (sorted ascending by `time`, seconds)
+ * cover the requested [fromSec, toSec] range within one bar (`barSec`) of
+ * tolerance on each edge?
+ */
+export function rangeCovered(
+  candles: Pick<CandleData, 'time'>[],
+  fromSec: number,
+  toSec: number,
+  barSec: number,
+): boolean {
+  if (candles.length === 0) return false;
+  const first = candles[0].time;
+  const last = candles[candles.length - 1].time;
+  return first <= fromSec + barSec && last >= toSec - barSec;
+}
+
 interface BacktestDB extends DBSchema {
   datasets: {
     key: string;
@@ -128,10 +174,18 @@ export class DataCacheService {
     if (!this.db) throw new Error('Database not initialized');
 
     const id = this.getCacheKey(symbol, timeframe, source);
-    
+
     try {
       const dataset = await this.db.get('datasets', id);
-      return dataset || null;
+      if (!dataset) return null;
+
+      if (!isValidDataset(dataset)) {
+        // Corrupt/invalid entry — best-effort cleanup, treat as cache miss.
+        this.db.delete('datasets', id).catch(() => {/* non-fatal */});
+        return null;
+      }
+
+      return dataset;
     } catch (error) {
       console.error('Failed to get dataset:', error);
       return null;

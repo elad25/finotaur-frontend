@@ -13,6 +13,7 @@ import type { SetupDefinition, PatternParams, PatternType } from '@/core/auto/ty
 import { makeDefaultSetup, DEFAULT_PATTERN_PARAMS } from '@/core/auto/types';
 import type { AutoBacktestResult } from '@/core/auto/AutoBacktestEngine';
 import { getCandleSource } from '@/services/backtest/candleSource';
+import { CandleFetchError } from '@/services/backtest/errors';
 import { runAutoBacktestInWorker } from '@/services/backtest/autoBacktestRunner';
 import {
   listSetups,
@@ -106,6 +107,29 @@ export type AutoBacktestStore = AutoBacktestState & AutoBacktestActions;
 // ---------------------------------------------------------------------------
 
 const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000;
+
+/**
+ * Map a candle-fetch failure to a friendly, actionable English message.
+ * CandleFetchError carries a `kind` from binanceDataService's retry/error
+ * mapping; anything else falls back to a generic message.
+ */
+function mapCandleFetchErrorToMessage(err: unknown): string {
+  if (err instanceof CandleFetchError) {
+    switch (err.kind) {
+      case 'symbol-not-found':
+        return 'Symbol not found on Binance — check the ticker (e.g. BTCUSDT).';
+      case 'rate-limited':
+        return 'Binance rate limit hit — wait a minute and try again.';
+      case 'timeout':
+        return 'Request timed out — check your connection and try again.';
+      case 'network':
+        return 'Network error while fetching data — check your connection.';
+      default:
+        return err.message || 'Failed to load candles.';
+    }
+  }
+  return err instanceof Error ? err.message : 'Failed to load candles.';
+}
 
 const initialState: AutoBacktestState = {
   currentSetup: makeDefaultSetup('BTCUSDT', '15m'),
@@ -261,8 +285,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
             to,
           );
         } catch (err) {
-          const message =
-            err instanceof Error ? err.message : 'Failed to load candles.';
+          const message = mapCandleFetchErrorToMessage(err);
           set((state) => {
             state.error = message;
             state.status = 'error';

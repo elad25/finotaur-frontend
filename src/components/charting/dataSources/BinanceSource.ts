@@ -27,6 +27,7 @@
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { Bar, ChartDataSource, Interval } from '../types';
 import { getCached, makeCacheKey, setCached } from './cache';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 const BINANCE_BASE_URL = 'https://api.binance.com/api/v3/klines';
 const MAX_BARS = 1000;
@@ -72,7 +73,7 @@ export class BinanceSource implements ChartDataSource {
     url.searchParams.set('endTime', String(Number(to) * 1000));
     url.searchParams.set('limit', String(MAX_BARS));
 
-    const resp = await fetch(url.toString());
+    const resp = await fetchWithTimeout(url.toString(), undefined, 15000);
     if (!resp.ok) {
       throw new Error(`BinanceSource: HTTP ${resp.status} ${resp.statusText} for ${symbol}`);
     }
