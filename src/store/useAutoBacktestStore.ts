@@ -317,6 +317,11 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
                 state.progress = { scanned, total, found };
               });
             },
+            () => {
+              toast.warning(
+                'Running the backtest on the main thread (worker unavailable) — the UI may be less responsive on large datasets.'
+              );
+            },
           );
 
           // 3. Show the result immediately — do NOT block the UI on persistence.
@@ -324,6 +329,12 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
             state.result = result;
             state.status = 'done';
           });
+
+          if (result.detectionsCapped) {
+            toast.warning(
+              'Too many pattern detections — showing the first 10,000. Narrow the date range or tighten the pattern.'
+            );
+          }
 
           // 4. Persist the run (Supabase-first, localStorage fallback), then
           //    refresh the saved-runs library. Persistence never throws — the

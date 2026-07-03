@@ -13,6 +13,7 @@
 //  - takeProfits[] included in PlaceOrderSubmit
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -271,6 +272,18 @@ export function PlaceOrderPanel({
       const legVal = validateTakeProfitLegs(legs);
       if (!legVal.ok) {
         setLegError(legVal.reason);
+        return;
+      }
+      // Manual editing of a leg's sizePercent (unlike add/remove, which
+      // auto-splits to 100) can leave the total short of 100 even though
+      // validateTakeProfitLegs only rejects sums OVER 100. Block submission
+      // until the legs actually total 100% — don't auto-correct, just tell
+      // the user what to fix.
+      const legSum = legs.reduce((acc, l) => acc + l.sizePercent, 0);
+      if (Math.abs(legSum - 100) > 0.5) {
+        const reason = `Take-profit legs must total 100% (currently ${legSum.toFixed(1)}%).`;
+        setLegError(reason);
+        toast.error(reason);
         return;
       }
     }

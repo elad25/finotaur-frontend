@@ -27,6 +27,12 @@ export function runAutoBacktestInWorker(
   candles: Candle[],
   htfCandles: Candle[] | undefined,
   onProgress?: (scanned: number, total: number, found: number) => void,
+  /**
+   * Called when Worker construction fails and the run falls back to the
+   * main thread. Lets the caller surface a UI warning (this service stays
+   * free of UI imports — no toast here).
+   */
+  onWorkerFallback?: () => void,
 ): Promise<AutoBacktestResult> {
   // --- Attempt Worker path ---
   let worker: Worker;
@@ -37,6 +43,7 @@ export function runAutoBacktestInWorker(
     );
   } catch {
     // Worker construction failed (SSR / unsupported env) — fallback to sync.
+    onWorkerFallback?.();
     return syncFallback(setup, candles, htfCandles, onProgress);
   }
 
