@@ -10,7 +10,7 @@
     "prerender": "node scripts/seo/prerender.mjs",
     "build": "npm run build:client && npm run build:ssr && npm run prerender",
     "build:dev": "vite build --mode development",
-    "lint": "eslint .",
+    "lint": "eslint . --cache --cache-location .eslintcache --cache-strategy content --concurrency auto",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "typecheck:crash-guard": "node scripts/ci/crash-guard.mjs",
