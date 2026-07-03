@@ -1213,8 +1213,11 @@ async function syncCredential(cred: {
 
     // Auto-create portfolio rows for any discovered account that has no row yet.
     // Uses discoveredAccounts (has name + id) vs discoveredAccountIds (ids only).
+    // Live accounts only: never (re)create a portfolio row for an account the
+    // broker reports archived/inactive — dead prop-firm accounts must not be
+    // resurrected into the journal/copier account lists.
     const missingAccounts = discoveredAccounts.filter(
-      a => !portfolioMap.has(a.id)
+      a => !portfolioMap.has(a.id) && a.archived !== true && a.active !== false
     );
     if (missingAccounts.length > 0) {
       console.log(JSON.stringify({
@@ -1926,6 +1929,11 @@ Deno.serve(async (req: Request) => {
       entry.connIds.add(bc.id);
     }
     const processedByUserEnv = new Map<string, { liveIds: Set<number>; coveredConnIds: Set<string> }>();
+    // Per-connection live sets for credential-scoped reconciliation + unique-claimer
+    // re-attribution. Unlike processedByUserEnv, entries here are actionable even
+    // when the (user, env) is not fully covered — a dead sibling connection must
+    // not block cleanup of THIS connection's own accounts.
+    const perConnLive: Array<{ userId: string; environment: string; connectionId: string; liveIds: number[] }> = [];
 
     // Phase 1B.2 — active-user filter (cron mode only).
     //
@@ -2048,6 +2056,9 @@ Deno.serve(async (req: Request) => {
             if (!pe) { pe = { liveIds: new Set<number>(), coveredConnIds: new Set<string>() }; processedByUserEnv.set(key, pe); }
             for (const id of rec.liveAccountIds) pe.liveIds.add(id);
             pe.coveredConnIds.add(rec.connectionId);
+            if (rec.liveAccountIds.length > 0) {
+              perConnLive.push({ userId: rec.userId, environment: rec.environment, connectionId: rec.connectionId, liveIds: rec.liveAccountIds });
+            }
           }
         } else {
           const err = outcome.reason;
@@ -2091,11 +2102,79 @@ Deno.serve(async (req: Request) => {
       }).catch(() => {});
     }
 
+    // ── Per-connection re-attribution + reconciliation ───────────────────────
+    // Step 1 — unique-claimer re-attribution: an account returned live by exactly
+    // ONE connection this run belongs to that connection. Historical upserts were
+    // last-writer-wins on credential_id, which mis-assigned accounts across
+    // connections (e.g. APEX accounts displayed under a Lucid connection).
+    // Accounts claimed by 2+ connections are left untouched — no flip-flops.
+    // Runs BEFORE deactivation so a row rescued from a wrong owner is judged
+    // against the live set of its true owner, not the wrong one's.
+    const claimersByUserEnv = new Map<string, Map<number, Set<string>>>();
+    for (const pc of perConnLive) {
+      const key = `${pc.userId}::${pc.environment}`;
+      let byAcct = claimersByUserEnv.get(key);
+      if (!byAcct) { byAcct = new Map<number, Set<string>>(); claimersByUserEnv.set(key, byAcct); }
+      for (const id of pc.liveIds) {
+        let s = byAcct.get(id);
+        if (!s) { s = new Set<string>(); byAcct.set(id, s); }
+        s.add(pc.connectionId);
+      }
+    }
+    for (const pc of perConnLive) {
+      const byAcct = claimersByUserEnv.get(`${pc.userId}::${pc.environment}`);
+      const uniquelyMine = pc.liveIds.filter(id => byAcct?.get(id)?.size === 1);
+      if (uniquelyMine.length === 0) continue;
+      try {
+        const { data: movedRows, error: mErr } = await supabaseAdmin
+          .from('portfolios')
+          .update({ credential_id: pc.connectionId, updated_at: new Date().toISOString() })
+          .eq('user_id', pc.userId)
+          .eq('environment', pc.environment)
+          .eq('source', 'tradovate')
+          .in('tradovate_account_id', uniquelyMine)
+          .or(`credential_id.is.null,credential_id.neq.${pc.connectionId}`)
+          .select('id');
+        if (mErr) {
+          console.error('[tradovate-sync] reattribute_failed:', pc.connectionId, String(mErr.message ?? mErr).slice(0, 300));
+        } else if ((movedRows ?? []).length > 0) {
+          console.log(JSON.stringify({ event: 'portfolios_reattributed', connection_id: pc.connectionId, moved: (movedRows ?? []).length }));
+        }
+      } catch (mEx) {
+        console.error('[tradovate-sync] reattribute_exception:', pc.connectionId, String(mEx).slice(0, 300));
+      }
+    }
+
+    // Step 2 — credential-scoped deactivation: portfolios attributed to this
+    // connection whose account the broker no longer reports live. Scoped by
+    // credential_id (4-arg RPC overload), so a failing sibling connection can
+    // neither block this cleanup nor cause false wipes of foreign accounts.
+    for (const pc of perConnLive) {
+      try {
+        const { data: pcDeactivated, error: pErr } = await supabaseAdmin.rpc(
+          'reconcile_tradovate_portfolios',
+          { p_user_id: pc.userId, p_environment: pc.environment, p_live_account_ids: pc.liveIds, p_credential_id: pc.connectionId },
+        );
+        if (pErr) {
+          console.error('[tradovate-sync] reconcile_per_conn_failed:', pc.connectionId, String(pErr.message ?? pErr).slice(0, 300));
+        } else if (typeof pcDeactivated === 'number' && pcDeactivated > 0) {
+          console.log(JSON.stringify({ event: 'portfolios_reconciled_per_connection', connection_id: pc.connectionId, deactivated: pcDeactivated, live_count: pc.liveIds.length }));
+        }
+      } catch (pEx) {
+        console.error('[tradovate-sync] reconcile_per_conn_exception:', pc.connectionId, String(pEx).slice(0, 300));
+      }
+    }
+
     // ── Live account reconciliation ──────────────────────────────────────────
     // For each (user, env) whose EVERY owning connection was covered by a
     // successful non-empty discovery this run, deactivate portfolios whose
     // account is no longer in the live (non-archived, non-inactive) set. The RPC
     // has its own empty-array guard; we also skip empty sets here defensively.
+    // NOTE: p_credential_id is passed explicitly (null) — the DB has two
+    // overloads of this function and a 3-named-arg call is ambiguous (42725 /
+    // PGRST203), which silently disabled reconciliation between 2026-06-24 and
+    // 2026-07-03 until the 3-arg overload was dropped. Four named args resolve
+    // uniquely to the 4-arg overload regardless.
     let reconciledUserEnvs = 0;
     let reconciledRows = 0;
     for (const [key, exp] of expectedByUserEnv) {
@@ -2111,7 +2190,7 @@ Deno.serve(async (req: Request) => {
       try {
         const { data: deactivated, error: rErr } = await supabaseAdmin.rpc(
           'reconcile_tradovate_portfolios',
-          { p_user_id: exp.userId, p_environment: exp.environment, p_live_account_ids: liveIds },
+          { p_user_id: exp.userId, p_environment: exp.environment, p_live_account_ids: liveIds, p_credential_id: null },
         );
         if (rErr) {
           console.error('[tradovate-sync] reconcile_portfolios_failed:', key, String(rErr.message ?? rErr).slice(0, 300));
