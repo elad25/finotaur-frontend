@@ -17,6 +17,9 @@ import { ProductDrawerProvider } from '@/contexts/ProductDrawerContext';
 import { ProductDrawer } from '@/components/ProductDrawer';
 import SpotlightTour from '@/components/onboarding/SpotlightTour';
 import { useOAuthReturnRedirect } from '@/hooks/useOAuthReturnRedirect';
+import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
+import { DemoBanner } from '@/components/journal/DemoBanner';
+import { DemoSyncOverlay } from '@/components/journal/DemoSyncOverlay';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -65,6 +68,8 @@ export const ProtectedAppLayout = () => {
   // Redirect after OAuth if the flow was started from a non-journal page
   // (e.g. the Trade Copier). When no key is set in sessionStorage this is a no-op.
   useOAuthReturnRedirect();
+
+  const { isDemo: isJournalDemo } = useJournalDemoMode();
 
   // Each top banner (admin impersonation / mentor view) is a fixed 52px bar.
   // In-flow chrome (TopNav/SubNav/main) is already pushed by each banner's
@@ -145,10 +150,12 @@ export const ProtectedAppLayout = () => {
             )}
           >
             <div className={hideSidebar ? "p-0" : "w-full"}>
+              {isJournalRoute && isJournalDemo && <DemoBanner />}
               <Outlet />
             </div>
           </main>
         </div>
+        {isJournalRoute && isJournalDemo && <DemoSyncOverlay />}
         <ComplianceFooterBar />
         {/* Spotlight onboarding tour — renders null when tour is not active */}
         <SpotlightTour />
