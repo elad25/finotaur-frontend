@@ -13,6 +13,7 @@ import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TabErrorFallback } from '@/components/ai-arena/TabErrorFallback';
 
 // ── Lazy tabs (code-split) ──
 const OverviewTab        = lazy(() => import('@/features/options-ai/components/tabs/OverviewTab').then(m => ({ default: m.OverviewTab })));
@@ -151,17 +152,19 @@ function OptionsIntelligenceContent() {
         <AnimatePresence mode="wait">
           {data && !isLoading && (
             <motion.div key={activeTab} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="min-h-[400px]">
-              <Suspense fallback={<TabFallback />}>
-                {activeTab === 'overview'   && <OverviewTab data={data} />}
-                {activeTab === 'flow'       && <FlowTab blockTrades={filteredBlocks} />}
-                {activeTab === 'squeeze'    && <SqueezeDetectorTab data={data} />}
-                {activeTab === 'darkpool'   && <DarkPoolTab />}
-                {activeTab === 'deepdive'   && (
-                  <ErrorBoundary boundary="options-ai-analysis">
-                    <AIAnalysisTab symbol="SPY" />
-                  </ErrorBoundary>
-                )}
-              </Suspense>
+              <ErrorBoundary boundary="options-intelligence-tab" fallback={<TabErrorFallback />}>
+                <Suspense fallback={<TabFallback />}>
+                  {activeTab === 'overview'   && <OverviewTab data={data} />}
+                  {activeTab === 'flow'       && <FlowTab blockTrades={filteredBlocks} />}
+                  {activeTab === 'squeeze'    && <SqueezeDetectorTab data={data} />}
+                  {activeTab === 'darkpool'   && <DarkPoolTab />}
+                  {activeTab === 'deepdive'   && (
+                    <ErrorBoundary boundary="options-ai-analysis">
+                      <AIAnalysisTab symbol="SPY" />
+                    </ErrorBoundary>
+                  )}
+                </Suspense>
+              </ErrorBoundary>
             </motion.div>
           )}
         </AnimatePresence>

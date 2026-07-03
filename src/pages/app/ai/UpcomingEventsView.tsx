@@ -21,6 +21,8 @@ import { AiUpcomingEventsSkeletonPage } from '@/components/skeletons/AiUpcomingE
 import { useSubscriptionStatus } from '@/hooks/useSubscription';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { Card } from '@/components/ds/Card';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TabErrorFallback } from '@/components/ai-arena/TabErrorFallback';
 import { RangeSelector } from '@/components/upcoming-events/RangeSelector';
 import { UpcomingEventCard } from '@/components/upcoming-events/UpcomingEventCard';
 import { EventThesisDrawer } from '@/components/upcoming-events/EventThesisDrawer';
@@ -131,25 +133,27 @@ export default function UpcomingEventsView() {
         </div>
 
         {/* Content */}
-        {loading && <ListSkeleton />}
-        {!loading && events.length === 0 && <EmptyState range={range} />}
-        {!loading && events.length > 0 && (
-          <motion.ul
-            className="space-y-ds-3 list-none p-0 m-0"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-          >
-            {events.map((ev) => (
-              <li key={ev.id}>
-                <UpcomingEventCard
-                  event={ev}
-                  onThesisClick={() => setSelectedEvent(ev)}
-                />
-              </li>
-            ))}
-          </motion.ul>
-        )}
+        <ErrorBoundary boundary="upcoming-events-list" fallback={<TabErrorFallback label="Upcoming Events" />}>
+          {loading && <ListSkeleton />}
+          {!loading && events.length === 0 && <EmptyState range={range} />}
+          {!loading && events.length > 0 && (
+            <motion.ul
+              className="space-y-ds-3 list-none p-0 m-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            >
+              {events.map((ev) => (
+                <li key={ev.id}>
+                  <UpcomingEventCard
+                    event={ev}
+                    onThesisClick={() => setSelectedEvent(ev)}
+                  />
+                </li>
+              ))}
+            </motion.ul>
+          )}
+        </ErrorBoundary>
       </div>
 
       {/* Thesis drawer */}

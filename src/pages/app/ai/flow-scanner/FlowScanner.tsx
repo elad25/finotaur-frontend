@@ -20,6 +20,8 @@ import { QuickStats, TabNav } from './components/StatsAndNav';
 import { SignalFeedSection } from './components/SignalFeedSection';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TabErrorFallback } from '@/components/ai-arena/TabErrorFallback';
 import { FlowDrawer } from './tabs/AllFlowTab';
 import type { FlowItem } from './shared/types';
 
@@ -171,28 +173,30 @@ const FlowScannerContent = memo(function FlowScannerContent() {
             transition={{ duration: 0.2 }}
             className="mb-8"
           >
-            <Suspense fallback={<TabFallback />}>
-              {isAllFlowTab && (
-                <AllFlowTab
-                  flowData={flowData}
-                  activeTab={activeTab}
-                  onRefresh={refresh}
-                  isRefreshing={isRefreshing}
-                />
-              )}
-              {isDarkPoolTab && (
-                <DarkPoolTab flowData={flowData} onItemClick={handleItemClick} />
-              )}
-              {isInsiderTab && (
-                <InsiderInstitutionalTab flowData={flowData} onItemClick={handleItemClick} />
-              )}
-              {isConfluenceTab && (
-                <ConfluenceTab flowData={flowData} onItemClick={handleItemClick} />
-              )}
-              {isSectorTab && (
-                <SectorFlowTab sectorData={sectorData} />
-              )}
-            </Suspense>
+            <ErrorBoundary boundary="flow-scanner-tab" fallback={<TabErrorFallback />}>
+              <Suspense fallback={<TabFallback />}>
+                {isAllFlowTab && (
+                  <AllFlowTab
+                    flowData={flowData}
+                    activeTab={activeTab}
+                    onRefresh={refresh}
+                    isRefreshing={isRefreshing}
+                  />
+                )}
+                {isDarkPoolTab && (
+                  <DarkPoolTab flowData={flowData} onItemClick={handleItemClick} />
+                )}
+                {isInsiderTab && (
+                  <InsiderInstitutionalTab flowData={flowData} onItemClick={handleItemClick} />
+                )}
+                {isConfluenceTab && (
+                  <ConfluenceTab flowData={flowData} onItemClick={handleItemClick} />
+                )}
+                {isSectorTab && (
+                  <SectorFlowTab sectorData={sectorData} />
+                )}
+              </Suspense>
+            </ErrorBoundary>
           </motion.div>
         </AnimatePresence>
 

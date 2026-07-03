@@ -340,6 +340,7 @@ const IndicatorRow = memo(({ ind, isExpanded, onToggle }: {
       <button
         onClick={onToggle}
         disabled={!hasChart}
+        title={hasChart ? undefined : 'No chart history available for this indicator yet'}
         className={cn(
           "w-full flex items-center justify-between px-4 py-2.5 transition-colors",
           hasChart ? "hover:bg-white/[0.02] cursor-pointer" : "cursor-default"

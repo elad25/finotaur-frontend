@@ -34,6 +34,8 @@ import { Sector, TabType, SentimentType } from '@/components/SectorAnalyzer/type
 import { useAllSectorAnalysis, useSectorAnalysis, sectorNameToId } from '@/hooks/useSectorAnalysis';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TabErrorFallback } from '@/components/ai-arena/TabErrorFallback';
 import type { SectorSnapshot } from '@/hooks/useSectorAnalysis';
 
 // =====================================================
@@ -160,7 +162,9 @@ const SectorAnalysisView = memo<SectorAnalysisViewProps>(({ sector, onBack }) =>
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.2 }}
         >
-          {renderTabContent()}
+          <ErrorBoundary boundary="sector-analyzer-tab" fallback={<TabErrorFallback />}>
+            {renderTabContent()}
+          </ErrorBoundary>
         </motion.div>
       </AnimatePresence>
     </motion.div>
