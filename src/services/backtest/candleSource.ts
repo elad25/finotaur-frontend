@@ -7,7 +7,7 @@ import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition } from '@/core/auto/types';
 import { BinanceDataService } from './binanceDataService';
 import type { Timeframe as BinanceTimeframe } from './binanceDataService';
-import { dataCacheService } from './dataCache';
+import { dataCacheService, rangeCovered } from './dataCache';
 
 // ---------------------------------------------------------------------------
 // Public interface
@@ -110,6 +110,11 @@ export class BinanceCandleSource implements CandleSource {
   ): Promise<Candle[]> {
     const interval = toBinanceInterval(timeframe);
 
+    const barMs = this.service.getTimeframeDuration(interval);
+    const barSec = barMs / 1000;
+    const fromSec = Math.floor(from / 1000);
+    const toSec = Math.floor(to / 1000);
+
     // --- IndexedDB cache check ---
     const cached = await dataCacheService.getDataset(symbol, timeframe, 'binance').catch(
       () => null, // non-fatal: IndexedDB may be unavailable in some environments
@@ -123,10 +128,15 @@ export class BinanceCandleSource implements CandleSource {
         [sample.time, sample.open, sample.high, sample.low, sample.close].every(
           (v) => Number.isFinite(v),
         );
-      if (cacheIsValid) {
-        // Filter to requested range (timestamps in the cache are in seconds).
-        const fromSec = Math.floor(from / 1000);
-        const toSec = Math.floor(to / 1000);
+      // Coverage check: the cached dataset must actually span the requested
+      // [fromSec, toSec] range (within one bar's tolerance). Without this, a
+      // cache holding only a recent slice was silently served for older
+      // range requests, and a request whose `to` is ~now would keep serving
+      // a stale cached tail forever. A request with `to ≈ now` against a
+      // cache last updated hours ago will correctly miss and refetch.
+      const covers = rangeCovered(cached.candles, fromSec, toSec, barSec);
+
+      if (cacheIsValid && covers) {
         const filtered = cached.candles
           .filter((c) => c.time >= fromSec && c.time <= toSec)
           .map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }));
@@ -137,7 +147,6 @@ export class BinanceCandleSource implements CandleSource {
     // --- Fetch from Binance ---
     // Estimate total bars needed.
     const durationMs = to - from;
-    const barMs = this.service.getTimeframeDuration(interval);
     const estimatedBars = Math.ceil(durationMs / barMs) + 1;
 
     let rawCandles;
@@ -150,7 +159,7 @@ export class BinanceCandleSource implements CandleSource {
         to,
       );
     } else {
-      rawCandles = await this.service.fetchHistoricalData(symbol, interval, estimatedBars);
+      rawCandles = await this.service.fetchHistoricalData(symbol, interval, estimatedBars, false, to, from);
     }
 
     // Map CandleData (seconds) → canonical Candle (same shape, volume optional)

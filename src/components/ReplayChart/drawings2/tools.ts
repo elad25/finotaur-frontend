@@ -29,7 +29,7 @@ function selectedColor(color: string): string {
 
 // ─── Inline helpers ───────────────────────────────────────────────────────────
 
-function hexToRgba(hex: string, alpha: number): string {
+export function hexToRgba(hex: string, alpha: number): string {
   // Support #rrggbb and #rgb
   let h = hex.replace('#', '');
   if (h.length === 3) h = h.split('').map(c => c + c).join('');

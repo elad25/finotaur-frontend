@@ -40,12 +40,17 @@ export interface PlaceOrderSubmit {
   takeProfit: number | null;
   /** Phase 7: multi-leg TP schedule. When present and non-empty, takes precedence over takeProfit. */
   takeProfits?: TakeProfitLeg[];
+  /** stop_limit only: distance from the trigger price to the enforced limit price.
+   *  0 = marketable stop-limit (limit at the trigger). */
+  stopLimitOffset?: number | null;
 }
 
 export interface PlaceOrderDraft {
   size: number;
   stopLoss: number | null;
   takeProfit: number | null;
+  /** stop_limit only: distance from trigger to the enforced limit price (>= 0). */
+  stopLimitOffset: number | null;
 }
 
 interface PlaceOrderPanelProps {
@@ -115,6 +120,10 @@ export function PlaceOrderPanel({
   // Standard-mode inputs — default size 1 (minimum valid entry).
   const [positionSize, setPositionSize] = useState('1');
   const [limitPrice, setLimitPrice] = useState('');
+
+  // stop_limit only: offset from the trigger price to the enforced limit price.
+  // Default '' (= 0 = marketable stop-limit, limit at trigger).
+  const [stopLimitOffset, setStopLimitOffset] = useState('');
 
   // Shared SL / single TP
   const [stopLoss, setStopLoss] = useState('');
@@ -201,13 +210,15 @@ export function PlaceOrderPanel({
     if (!onDraftChange) return;
     const sl = num(stopLoss);
     const tp = num(takeProfit);
+    const offset = num(stopLimitOffset);
     onDraftChange({
       size: computedSize,
       stopLoss: Number.isFinite(sl) ? sl : null,
       takeProfit: Number.isFinite(tp) ? tp : null,
+      stopLimitOffset: Number.isFinite(offset) ? Math.max(0, offset) : null,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [computedSize, stopLoss, takeProfit]);
+  }, [computedSize, stopLoss, takeProfit, stopLimitOffset]);
 
   // ─── Multi-leg TP handlers ──────────────────────────────────────
 
@@ -280,6 +291,7 @@ export function PlaceOrderPanel({
     }
     setError(null);
     setLegError(null);
+    const offset = num(stopLimitOffset);
     onSubmit?.({
       side,
       kind,
@@ -288,6 +300,7 @@ export function PlaceOrderPanel({
       stopLoss: slVal,
       takeProfit: tpVal,
       takeProfits: multiLegMode && legs.length > 0 ? legs : undefined,
+      stopLimitOffset: kind === 'stop_limit' ? (Number.isFinite(offset) ? Math.max(0, offset) : 0) : undefined,
     });
     // Reset position size to default 1 after each submission so the next
     // order starts from a clean, valid value rather than the previous entry.
@@ -321,18 +334,18 @@ export function PlaceOrderPanel({
 
       {/* Order kind (advanced only) */}
       {advanced && (
-        <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/5 p-1 mb-3">
-          {(['market', 'limit', 'stop'] as OrderKind[]).map((k) => (
+        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/5 p-1 mb-3">
+          {(['market', 'limit', 'stop', 'stop_limit'] as OrderKind[]).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setKind(k)}
               className={cn(
-                'rounded-md py-1 text-xs font-medium capitalize transition-all',
+                'rounded-md py-1 text-[11px] font-medium capitalize transition-all',
                 kind === k ? 'bg-[#C9A646] text-black' : 'text-gray-400 hover:text-white'
               )}
             >
-              {k}
+              {k === 'stop_limit' ? 'Stop Lmt' : k}
             </button>
           ))}
         </div>
@@ -346,6 +359,22 @@ export function PlaceOrderPanel({
             value={limitPrice}
             onChange={(e) => setLimitPrice(e.target.value)}
             placeholder={marketPrice ? String(marketPrice) : '0'}
+            className={inputCls}
+          />
+        </Field>
+      )}
+
+      {/* Stop-limit offset (advanced + stop_limit only). Distance from the
+          breakout trigger to the enforced limit price. 0 (default) = a
+          marketable stop-limit — the limit sits exactly at the trigger. */}
+      {advanced && kind === 'stop_limit' && (
+        <Field label="Stop-limit offset" suffix="pts">
+          <input
+            type="number"
+            min={0}
+            value={stopLimitOffset}
+            onChange={(e) => setStopLimitOffset(e.target.value)}
+            placeholder="0"
             className={inputCls}
           />
         </Field>
@@ -471,6 +500,12 @@ export function PlaceOrderPanel({
             {multiLegMode ? 'Single target' : 'Multi-leg'}
           </button>
         </div>
+
+        {multiLegMode && (
+          <p className="text-[10px] text-gray-500 mb-1">
+            Scaling in keeps your existing TP legs. Each leg closes its % of the original position size (clamped to what remains).
+          </p>
+        )}
 
         {!multiLegMode ? (
           <input

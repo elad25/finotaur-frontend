@@ -13,6 +13,7 @@
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { Bar, ChartDataSource, Interval } from '../types';
 import { getCached, makeCacheKey, setCached } from './cache';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 interface ChartBarsResponse {
   bars: Array<{
@@ -59,12 +60,16 @@ export class YahooFinanceSource implements ChartDataSource {
       `&from=${Number(from)}` +
       `&to=${Number(to)}`;
 
-    const resp = await fetch(edgeUrl, {
-      method: 'GET',
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
+    const resp = await fetchWithTimeout(
+      edgeUrl,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+        },
       },
-    });
+      15000,
+    );
 
     if (!resp.ok) {
       throw new Error(`YahooFinanceSource: chart-bars HTTP ${resp.status}`);

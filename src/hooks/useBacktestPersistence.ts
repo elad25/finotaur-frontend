@@ -63,8 +63,12 @@ export interface SavedSessionDetail {
     pending_orders: Array<{
       id: string;
       side: 'LONG' | 'SHORT';
-      type: 'LIMIT' | 'STOP';
+      type: 'LIMIT' | 'STOP' | 'MIT' | 'STOP_LIMIT';
       trigger_price: number;
+      /** STOP_LIMIT only: the enforced limit price. */
+      limit_price?: number | null;
+      /** STOP_LIMIT only: unix seconds when the breakout trigger fired. */
+      triggered_at?: number | null;
       size: number;
       stop_loss: number | null;
       take_profit: number | null;
@@ -132,6 +136,8 @@ function pendingToWire(o: PendingOrder) {
     side: o.side,
     type: o.type,
     trigger_price: o.triggerPrice,
+    limit_price: o.limitPrice,
+    triggered_at: o.triggeredAt,
     size: o.size,
     stop_loss: o.stopLoss,
     take_profit: o.takeProfit,
