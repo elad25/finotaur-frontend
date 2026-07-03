@@ -24,7 +24,7 @@ import {
   selectAutoStatus,
   selectAutoResult,
 } from '@/store/useAutoBacktestStore';
-import { SetupBuilderForm } from '@/components/backtest/auto/SetupBuilderForm';
+import { SetupBuilderForm, getSetupGeometryWarnings } from '@/components/backtest/auto/SetupBuilderForm';
 import { RunProgress } from '@/components/backtest/auto/RunProgress';
 import { TradeListTable } from '@/components/backtest/auto/TradeListTable';
 import { TradeDetailPanel } from '@/components/backtest/auto/TradeDetailPanel';
@@ -87,7 +87,9 @@ export default function AutoBacktest() {
   const isBusy = status === 'loading-data' || status === 'running';
   const hasResult = status === 'done' && !!result;
   const dateRangeValid = isValidDateRange(from, to);
-  const canRun = setup.patterns.length > 0 && !isBusy && dateRangeValid;
+  const geometryWarnings = getSetupGeometryWarnings(setup);
+  const hasGeometryWarning = geometryWarnings.length > 0;
+  const canRun = setup.patterns.length > 0 && !isBusy && dateRangeValid && !hasGeometryWarning;
 
   const { symbol, timeframe, source } = setup.instrument;
 
@@ -157,6 +159,12 @@ export default function AutoBacktest() {
                 {setup.patterns.length > 0 && !dateRangeValid && (
                   <p className="text-[12px] text-red-400">
                     Invalid date range — pick a valid From and To (From must be before To).
+                  </p>
+                )}
+                {setup.patterns.length > 0 && dateRangeValid && hasGeometryWarning && (
+                  <p className="text-[12px] text-red-400">
+                    Fix the stop/target settings above — the current values would reject every
+                    signal.
                   </p>
                 )}
                 <div className="sm:ml-auto">

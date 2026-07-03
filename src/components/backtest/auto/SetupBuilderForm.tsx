@@ -48,6 +48,59 @@ import {
 } from './formControls';
 
 // ---------------------------------------------------------------------------
+// Inline geometry validation
+// ---------------------------------------------------------------------------
+//
+// SignalBuilder.buildSignal() rejects (returns null → zero trades, silently)
+// whenever the resolved stop/target distance collapses to zero or negative:
+//   - stop basis 'atr'       needs atrMult   > 0 (else stop == entry)
+//   - stop basis 'fixed-pct' needs fixedPct  > 0 (else stop == entry)
+//   - target basis 'r-multiple' needs rMultiple > 0 (else target on the
+//     wrong side of / equal to entry)
+//   - target basis 'fixed-pct'  needs fixedPct  > 0 (else target == entry)
+// These are the only geometry facts knowable from the form alone — the rest
+// (zone edges, swing prices, ATR value) only exist per-detection at run
+// time, so they cannot be pre-validated here.
+
+export interface SetupGeometryWarning {
+  field: 'stop' | 'target';
+  message: string;
+}
+
+/** Static, form-only geometry check mirroring SignalBuilder's rejections. */
+export function getSetupGeometryWarnings(setup: SetupDefinition): SetupGeometryWarning[] {
+  const warnings: SetupGeometryWarning[] = [];
+
+  if (setup.stop.basis === 'atr' && (setup.stop.atrMult ?? 0) <= 0) {
+    warnings.push({
+      field: 'stop',
+      message: 'ATR multiple must be greater than 0, or every signal will be rejected (stop would equal entry).',
+    });
+  }
+  if (setup.stop.basis === 'fixed-pct' && (setup.stop.fixedPct ?? 0) <= 0) {
+    warnings.push({
+      field: 'stop',
+      message: 'Fixed stop % must be greater than 0, or every signal will be rejected (stop would equal entry).',
+    });
+  }
+
+  if (setup.target.basis === 'r-multiple' && (setup.target.rMultiple ?? 0) <= 0) {
+    warnings.push({
+      field: 'target',
+      message: 'R-multiple must be greater than 0, or every signal will be rejected (target would not be on the profit side of entry).',
+    });
+  }
+  if (setup.target.basis === 'fixed-pct' && (setup.target.fixedPct ?? 0) <= 0) {
+    warnings.push({
+      field: 'target',
+      message: 'Fixed target % must be greater than 0, or every signal will be rejected (target would equal entry).',
+    });
+  }
+
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------
 // Static option lists & copy
 // ---------------------------------------------------------------------------
 
@@ -150,6 +203,10 @@ export function SetupBuilderForm() {
   const updateSetup = useAutoBacktestStore((s) => s.updateSetup);
 
   const activePattern: PatternParams | undefined = setup.patterns[0];
+
+  const geometryWarnings = getSetupGeometryWarnings(setup);
+  const stopWarning = geometryWarnings.find((w) => w.field === 'stop');
+  const targetWarning = geometryWarnings.find((w) => w.field === 'target');
 
   // -------------------------------------------------------------------------
   // Pattern selection helpers
@@ -344,6 +401,11 @@ export function SetupBuilderForm() {
             onChange={(bufferPct) => patchStop({ bufferPct })}
           />
         </div>
+        {stopWarning && (
+          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-400">
+            {stopWarning.message}
+          </p>
+        )}
       </Card>
 
       {/* ─── Take profit ───────────────────────────────────────────── */}
@@ -379,6 +441,11 @@ export function SetupBuilderForm() {
             />
           )}
         </div>
+        {targetWarning && (
+          <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-400">
+            {targetWarning.message}
+          </p>
+        )}
       </Card>
 
       {/* ─── Filters & risk ────────────────────────────────────────── */}

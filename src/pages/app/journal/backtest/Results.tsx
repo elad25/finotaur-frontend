@@ -2,7 +2,7 @@
 // BACKTEST PLAYBOOK GRID (Phase 2 — image 3 parity)
 // ==========================================
 // TradeZella "Playbook" → our "Strategies". Grid of strategy cards showing
-// win rate, Net P&L, Profit Factor, Missed Trades, Expectancy, Avg Winner/Loser,
+// win rate, Net P&L, Profit Factor, Expectancy, Avg Winner/Loser,
 // computed from the user's trades (live + backtest), in Finotaur gold-on-black.
 
 import { useMemo } from 'react';
@@ -23,7 +23,6 @@ interface PlaybookCardData {
   expectancy: number;
   avgWinner: number;
   avgLoser: number;
-  missedTrades: number;
 }
 
 const GREEN = '#34D399';
@@ -57,8 +56,6 @@ function buildCard(strategy: any, allTrades: any[]): PlaybookCardData {
     expectancy: stats.expectancy,
     avgWinner,
     avgLoser,
-    // "Missed trades" has no source yet — surfaced as 0 (parity placeholder).
-    missedTrades: 0,
   };
 }
 
@@ -107,7 +104,6 @@ function PlaybookCard({ data, onOpen }: { data: PlaybookCardData; onOpen: () => 
           label="Profit Factor"
           value={data.profitFactor ? data.profitFactor.toFixed(2) : 'N/A'}
         />
-        <Stat label="Missed Trades" value={String(data.missedTrades)} />
         <Stat label="Expectancy" value={fmtUsd(data.expectancy)} />
         <Stat label="Avg Winner" value={fmtUsd(data.avgWinner)} color={GREEN} />
         <Stat label="Avg Loser" value={fmtUsd(data.avgLoser)} color={data.avgLoser < 0 ? RED : '#EAEAEA'} />
