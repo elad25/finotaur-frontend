@@ -74,6 +74,9 @@ export interface JournalTradePayload {
   broker: string;
   external_id: string;
   session: null;
+  open_at: string;
+  close_at: string | null;
+  idempotency_key: string;
   created_at: string;
   updated_at: string;
 }
@@ -252,6 +255,12 @@ export function buildJournalPayload(
     broker: 'backtest',
     external_id: `bt:${session.id}:${pos.id}`,
     session: null,
+    // trades.open_at and trades.idempotency_key are NOT NULL — omitting them
+    // fails the insert (23502). idempotency_key mirrors the upsert identity
+    // (user + broker + external_id) so re-saves update instead of colliding.
+    open_at: toIso(pos.entryTime) ?? new Date().toISOString(),
+    close_at: toIso(pos.exitTime),
+    idempotency_key: `${userId}:backtest:bt:${session.id}:${pos.id}`,
     created_at: toIso(pos.entryTime) ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -339,6 +348,9 @@ export async function saveBacktestTradesToJournal(
         broker: 'backtest',
         external_id: `bt:${session.id}:${p.positionId || p.id || ''}`,
         session: null,
+        open_at: toIso(p.entryTime) ?? new Date().toISOString(),
+        close_at: toIso(p.exitTime),
+        idempotency_key: `${userId}:backtest:bt:${session.id}:${p.positionId || p.id || ''}`,
         created_at: toIso(p.entryTime) ?? new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
