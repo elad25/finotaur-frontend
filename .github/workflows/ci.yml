@@ -146,11 +146,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
       # Key ends in the run's SHA so every run saves a fresh cache; restore
-      # falls back to the newest cache for the same deps + eslint config
-      # (PR branches can restore caches created by main). --cache-strategy
-      # content (set in the lint script) is what makes a restored cache
-      # valid here — CI checkouts get fresh mtimes, so the default metadata
-      # strategy would invalidate every entry.
+      # falls back to the newest cache for the same deps + eslint config,
+      # then to ANY eslint cache (PR branches can restore caches created by
+      # main). The bare fallback is safe: ESLint's LintResultCache stores a
+      # per-file config hash (config or eslint-version change ⇒ entries
+      # self-invalidate and those files re-lint), so a stale cache degrades
+      # to a partial re-lint, never to stale results. Measured cold run is
+      # ~17m on the 4-core runner, so without the bare fallback every
+      # package-lock bump would start from zero. --cache-strategy content
+      # (set in the lint script) is what makes a restored cache valid here —
+      # CI checkouts get fresh mtimes, so the default metadata strategy
+      # would invalidate every entry.
       - name: Restore ESLint cache
         uses: actions/cache@v4
         with:
@@ -158,6 +164,7 @@ jobs:
           key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js') }}-${{ github.sha }}
           restore-keys: |
             eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js') }}-
+            eslint-${{ runner.os }}-
       - name: Lint
         run: npm run lint
 
