@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { BacktestChart } from "@/components/backtest/BacktestChart";
 import { displaySymbol } from "@/utils/displaySymbol";
 import type { Interval } from "@/components/charting/types";
@@ -6,6 +7,7 @@ import { CreateBacktestSessionModal } from "@/components/backtest/CreateBacktest
 import { useBacktestSessionStore } from "@/store/useBacktestSessionStore";
 import type { BacktestSession } from "@/types/backtestSession";
 import type { CommissionConfig } from "@/lib/backtest/orderEngine";
+import type { ReplayHandoff } from "@/core/auto/replayBridge";
 import { Button } from "@/components/ui/button";
 import {
   Plus, History, LineChart, BookOpen, Share2, Clock,
@@ -38,15 +40,42 @@ const FEATURES = [
   },
 ];
 
+/** Minimal shape guard — router state is untyped, so validate before use. */
+function isValidHandoff(value: unknown): value is ReplayHandoff {
+  if (!value || typeof value !== "object") return false;
+  const h = value as Partial<ReplayHandoff>;
+  return (
+    typeof h.symbol === "string" &&
+    h.symbol.length > 0 &&
+    typeof h.windowFrom === "number" &&
+    Number.isFinite(h.windowFrom) &&
+    typeof h.windowTo === "number" &&
+    Number.isFinite(h.windowTo)
+  );
+}
+
+/** yyyy-mm-dd in local time, matching CreateBacktestSessionModal's toIsoDate. */
+function msToIsoDate(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function Chart() {
   const [isImmersiveMode, setIsImmersiveMode] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingCommissionConfig, setPendingCommissionConfig] = useState<CommissionConfig | undefined>(undefined);
 
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const sessions = useBacktestSessionStore((s) => s.sessions);
   const activeSession = useBacktestSessionStore((s) => s.getActiveSession());
   const setActiveSession = useBacktestSessionStore((s) => s.setActiveSession);
   const deleteSession = useBacktestSessionStore((s) => s.deleteSession);
+  const createSession = useBacktestSessionStore((s) => s.createSession);
 
   // Cleanup TradingView widgets on unmount
   useEffect(() => {
@@ -63,6 +92,33 @@ export default function Chart() {
     setPendingCommissionConfig(commissionConfig);
     setIsImmersiveMode(true);
   };
+
+  // Inspect-in-Replay handoff from the Auto Backtest results panel: create a
+  // session from the handed-off symbol/timeframe/window and jump straight
+  // into it. Malformed/missing state is ignored — page renders normally.
+  useEffect(() => {
+    const handoff = (location.state as { handoff?: unknown } | null)?.handoff;
+    if (!isValidHandoff(handoff)) return;
+
+    const session = createSession({
+      name: `Replay: ${handoff.symbol} ${handoff.timeframe} ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
+      assetType: "crypto",
+      symbol: handoff.symbol,
+      timeframe: handoff.timeframe || "1m",
+      startBalance: 10000,
+      leverage: 1,
+      dateRange: {
+        from: msToIsoDate(handoff.windowFrom),
+        to: msToIsoDate(handoff.windowTo),
+      },
+    });
+
+    enterSession(session);
+
+    // Clear the router state so a refresh doesn't re-create the session.
+    navigate(location.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   if (isImmersiveMode) {
     return (
