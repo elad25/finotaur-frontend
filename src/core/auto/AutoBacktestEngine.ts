@@ -98,12 +98,19 @@ export interface RMultipleDistribution {
   '> 3R': number;
 }
 
+/** Hard cap on accumulated detections to avoid unbounded memory growth on
+ *  wide date ranges / loose patterns. When exceeded, the array is truncated
+ *  and `detectionsCapped` is set so the UI can warn the user. */
+export const MAX_DETECTIONS = 10000;
+
 export interface AutoBacktestResult {
   detections: Detection[];
   trades: AutoPosition[];
   statistics: BacktestStatisticsLike;
   equityCurve: EquityCurvePoint[];
   rMultipleDistribution: RMultipleDistribution;
+  /** True when raw detections exceeded MAX_DETECTIONS and were truncated. */
+  detectionsCapped?: boolean;
 }
 
 export function runAutoBacktest(
@@ -126,7 +133,11 @@ export function runAutoBacktest(
   });
 
   // 2. Detect everything up front (each tagged with a look-ahead-safe index).
-  const detections = runDetectors(setup.patterns, candles, ctx);
+  const rawDetections = runDetectors(setup.patterns, candles, ctx);
+  const detectionsCapped = rawDetections.length > MAX_DETECTIONS;
+  const detections = detectionsCapped
+    ? rawDetections.slice(0, MAX_DETECTIONS)
+    : rawDetections;
 
   // Group detections by formedAtIndex for O(1) lookup during the scan.
   const byIndex = new Map<number, Detection[]>();
@@ -262,6 +273,7 @@ export function runAutoBacktest(
     statistics,
     equityCurve: statistics.equityCurve ?? [],
     rMultipleDistribution,
+    detectionsCapped,
   };
 }
 

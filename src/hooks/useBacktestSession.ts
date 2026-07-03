@@ -21,6 +21,7 @@
  */
 
 import { useReducer, useCallback, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import {
   type CommissionConfig,
@@ -1339,6 +1340,11 @@ export function useBacktestSession(initialBalance: number = 10000, sessionId?: s
   // per key and never re-clobber mid-session. Also gates the write effect.
   const hydratedKeyRef = useRef<string | null>(null);
 
+  // Guards the persist-failure toast so a blocked/quota-exceeded localStorage
+  // (private mode, disabled storage, etc.) warns the user exactly once per
+  // session instead of spamming on every debounced write.
+  const persistFailureWarnedRef = useRef(false);
+
   // Hydrate from localStorage as soon as the user key becomes available.
   useEffect(() => {
     if (!key) return;
@@ -1362,7 +1368,15 @@ export function useBacktestSession(initialBalance: number = 10000, sessionId?: s
       try {
         window.localStorage.setItem(key, JSON.stringify(state));
       } catch {
-        // quota exceeded / private-mode / disabled — silently drop.
+        // quota exceeded / private-mode / disabled — persistence drops here.
+        // Surface it once per session so the user knows progress may not
+        // survive a reload, without spamming a toast on every debounced write.
+        if (!persistFailureWarnedRef.current) {
+          persistFailureWarnedRef.current = true;
+          toast.error(
+            "Couldn't save your backtest session — browser storage is full or blocked. Your progress may be lost on reload."
+          );
+        }
       }
       writeTimerRef.current = null;
     }, PERSIST_THROTTLE_MS);

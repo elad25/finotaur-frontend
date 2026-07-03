@@ -1,12 +1,37 @@
 // src/components/routes/BacktestRoute.tsx
 // 🧪 BACKTEST PROTECTION - Checks if locked first
-import { memo, Suspense, ReactNode } from 'react';
+import { memo, Suspense, ReactNode, useEffect, useState } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { domains } from '@/constants/nav';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { Button } from '@/components/ds/Button';
+
+// How long the access-check skeleton is allowed to spin before we treat it
+// as hung and offer the user a way out instead of an infinite spinner.
+const ACCESS_CHECK_TIMEOUT_MS = 15000;
+
+/** Shown when isLoading/isAdminLoading never resolve within the timeout. */
+const BacktestAccessTimeoutFallback = memo(() => (
+  <div className="w-full flex flex-col items-center justify-center gap-3 py-24 text-center px-4">
+    <AlertCircle className="text-[#9a9484] shrink-0" size={28} aria-hidden="true" />
+    <p className="text-sm text-ink-muted leading-snug max-w-xs">
+      This is taking longer than expected. We couldn't confirm your access.
+    </p>
+    <Button
+      variant="goldOutline"
+      size="compact"
+      showArrow={false}
+      onClick={() => window.location.reload()}
+    >
+      Retry
+    </Button>
+  </div>
+));
+BacktestAccessTimeoutFallback.displayName = 'BacktestAccessTimeoutFallback';
 
 // PageLoader imported from @/components/ds/Spinner
 
@@ -119,8 +144,23 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
   // 🔒 Check if backtest domain is globally locked
   const isBacktestLocked = domains['journal-backtest']?.locked === true;
 
-  if (isLoading || isAdminLoading) {
-    return <RouteSkeleton />;
+  const accessLoading = isLoading || isAdminLoading;
+
+  // Guard against the access hooks never resolving (e.g. a hung auth/admin
+  // check) leaving the user stuck on the skeleton forever — surface a
+  // Retry after ACCESS_CHECK_TIMEOUT_MS instead.
+  const [accessCheckTimedOut, setAccessCheckTimedOut] = useState(false);
+  useEffect(() => {
+    if (!accessLoading) {
+      setAccessCheckTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAccessCheckTimedOut(true), ACCESS_CHECK_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [accessLoading]);
+
+  if (accessLoading) {
+    return accessCheckTimedOut ? <BacktestAccessTimeoutFallback /> : <RouteSkeleton />;
   }
 
   // 🔒 If backtest is globally locked, show Coming Soon page
