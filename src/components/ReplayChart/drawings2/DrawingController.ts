@@ -215,6 +215,7 @@ export class DrawingController {
   setActiveTool(tool: ToolId): void {
     if (this._activeTool === tool) return;
     this._cancelPreview();
+    this._pendingPoints = [];
     this._activeTool = tool;
     if (tool === 'cursor') {
       // Keep selection when switching to cursor
@@ -313,12 +314,14 @@ export class DrawingController {
     this._drawings = [];
     this._selected = null;
     this._cancelPreview();
+    this._pendingPoints = [];
     this._saveToStorage();
     this._onChange?.();
   }
 
   destroy(): void {
     this._cancelPreview();
+    this._pendingPoints = [];
     for (const d of this._drawings) this._detach(d);
     this._drawings = [];
     this._selected = null;
@@ -667,7 +670,10 @@ export class DrawingController {
       try { this._series.detachPrimitive(this._preview as any); } catch { /* ok */ }
       this._preview = null;
     }
-    this._pendingPoints = [];
+    // NOTE: does NOT reset _pendingPoints — _attachPreview calls this right
+    // after the first pending point is pushed, and wiping it here made every
+    // multi-point tool restart on each click (preview loop, never finalized).
+    // Abort paths (setActiveTool / clearAll / destroy) reset it explicitly.
   }
 
   // ── Finalize drawing ──────────────────────────────────────────────────────
