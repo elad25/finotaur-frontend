@@ -1396,7 +1396,12 @@ export function BacktestReplayChart({
               // PnL cell color: green = winning, red = losing, gray = no mark yet.
               const pnlCellColor =
                 pnl == null ? '#52525b' : pnl >= 0 ? '#26A65B' : '#E64980';
-              const pnlText = pnl == null ? '—' : Math.round(pnl).toString();
+              // Dollar-formatted P&L, e.g. "-$142.80" / "+$25.10" (Elad request:
+              // the tag reads "<units> = <P&L in dollars>").
+              const pnlText =
+                pnl == null
+                  ? '—'
+                  : `${pnl < 0 ? '-' : '+'}$${Math.abs(pnl).toFixed(2)}`;
               return (
                 <div
                   className="absolute flex items-center rounded overflow-hidden shadow"
@@ -1410,19 +1415,19 @@ export function BacktestReplayChart({
                     userSelect: 'none',
                   }}
                 >
-                  {/* Left cell: unrealized P&L */}
-                  <span
-                    className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
-                    style={{ backgroundColor: pnlCellColor, color: '#fff' }}
-                  >
-                    {pnlText}
-                  </span>
-                  {/* Right cell: position size */}
+                  {/* Left cell: units */}
                   <span
                     className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
                     style={{ backgroundColor: '#3f3f46', color: '#fff' }}
                   >
                     {units}
+                  </span>
+                  {/* Right cell: "= <unrealized P&L in dollars>" */}
+                  <span
+                    className="px-1.5 text-[11px] font-semibold whitespace-nowrap"
+                    style={{ backgroundColor: pnlCellColor, color: '#fff' }}
+                  >
+                    {`= ${pnlText}`}
                   </span>
                 </div>
               );
