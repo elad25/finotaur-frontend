@@ -24,6 +24,7 @@ import { AutomationMasterSwitch } from '@/features/automation/components/Automat
 import { useLockAllAccounts } from '@/features/automation/hooks/useLockAllAccounts';
 import { useAccountRiskSummaries } from '@/features/automation/hooks/useAccountRiskSummaries';
 import { EnforcementFeed } from '@/components/copyTrading/EnforcementFeed';
+import { MirroredOrdersPanel } from '@/components/copyTrading/MirroredOrdersPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -51,6 +52,14 @@ interface AccountRowData {
   locked: boolean;
   riskSummaryLabel: string | null;
   riskSummaryTooltip: string | null;
+  /**
+   * True when the account currently holds any open position across ALL
+   * instruments (not just the active tab's `position` column, which is
+   * filtered to the active instrument). Sourced from the same desktop-agent
+   * snapshot (`positions[]`) that hydrates the live columns — used to warn
+   * before an unfollow leaves exposure unmanaged.
+   */
+  hasAnyOpenPosition: boolean;
 }
 
 interface InstrumentTab {
@@ -97,6 +106,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
   isCreating,
   isUpdating,
   onFollowToggle,
+  onRequestUnfollowWithExposure,
   onUpdateRule,
   onSelectLeader,
 }: {
@@ -107,6 +117,13 @@ const CopyAccountRow = memo(function CopyAccountRow({
   isCreating: boolean;
   isUpdating: boolean;
   onFollowToggle: (currentRatioDraft: number) => Promise<void>;
+  /**
+   * Called instead of `onFollowToggle` when the user clicks unfollow on an
+   * account that currently has open exposure. The parent shows a confirm
+   * dialog and, if the user proceeds, flips `resolveOptimistic` + calls
+   * `onFollowToggle` itself.
+   */
+  onRequestUnfollowWithExposure: (resolveOptimistic: () => void) => void;
   onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
   onSelectLeader: () => void;
 }) {
@@ -190,6 +207,18 @@ const CopyAccountRow = memo(function CopyAccountRow({
             disabled={followDisabled}
             onClick={() => {
               if (optFollowing !== null) return; // a write for this row is in flight
+
+              // Unfollowing an account that still has open exposure would
+              // silently leave it unmanaged — confirm with the user first
+              // instead of flipping straight to optimistic + write.
+              if (isFollowing && row.hasAnyOpenPosition) {
+                onRequestUnfollowWithExposure(() => {
+                  setOptFollowing(false);
+                  void onFollowToggle(parsePositiveNumber(ratioDraft, 1));
+                });
+                return;
+              }
+
               setOptFollowing(!isFollowing);     // move instantly (optimistic)
               void onFollowToggle(parsePositiveNumber(ratioDraft, 1));
             }}
@@ -519,6 +548,9 @@ export function CopyTradingDashboard() {
           locked: killSwitchByPortfolioId.get(p.id) ?? false,
           riskSummaryLabel: riskParts.length > 0 ? riskParts.join(' · ') : null,
           riskSummaryTooltip: riskTooltipParts.length > 0 ? riskTooltipParts.join(' · ') : null,
+          // Unlike `netPosition` above (filtered to the active instrument tab),
+          // this checks across every symbol the agent last reported.
+          hasAnyOpenPosition: (snap?.positions ?? []).some((pos) => pos.qty !== 0),
         };
       }),
     );
@@ -531,6 +563,9 @@ export function CopyTradingDashboard() {
     killSwitchByPortfolioId,
     summaryByAccountId,
   ]);
+
+  // Leader account name — used in the unfollow-with-exposure confirm copy.
+  const leaderAccountName = rows.find((r) => r.id === leaderId)?.accountName ?? 'the leader';
 
   // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
@@ -720,6 +755,16 @@ export function CopyTradingDashboard() {
   // Customer-initiated; executed by the local desktop agent.
   const [showFlattenSymbolDialog, setShowFlattenSymbolDialog] = useState(false);
   const [flattenSymbolDraft, setFlattenSymbolDraft] = useState('');
+
+  // ── Unfollow-with-exposure confirm ──────────────────────────────
+  // Guards against silently orphaning open exposure when a follower
+  // account is unfollowed while it still holds a position and/or working
+  // mirrored orders. Pure client-side warning — no flatten command exists
+  // per-account on the agent, so this is informed consent, not automation.
+  const [unfollowConfirm, setUnfollowConfirm] = useState<{
+    accountName: string;
+    resolve: () => void;
+  } | null>(null);
 
   const handleFlattenSymbolConfirm = async () => {
     const sym = flattenSymbolDraft.trim().toUpperCase();
@@ -1104,6 +1149,9 @@ export function CopyTradingDashboard() {
               isCreating={isCreating}
               isUpdating={isUpdating}
               onSelectLeader={() => setLeaderId(row.id)}
+              onRequestUnfollowWithExposure={(resolveOptimistic) => {
+                setUnfollowConfirm({ accountName: row.accountName, resolve: resolveOptimistic });
+              }}
               onFollowToggle={async (currentRatioDraft) => {
                 if (!leaderPortfolioId || !row.portfolioId || isLeader) return;
                 if (rule?.is_active) {
@@ -1142,11 +1190,19 @@ export function CopyTradingDashboard() {
       </div>
 
       {/* ── Protection activity (observability) ── */}
-      <div className="mt-ds-4">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary mb-ds-2">
-          Recent risk enforcement
-        </p>
-        <EnforcementFeed />
+      <div className="mt-ds-4 grid grid-cols-1 lg:grid-cols-2 gap-ds-4">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary mb-ds-2">
+            Recent risk enforcement
+          </p>
+          <EnforcementFeed />
+        </div>
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary mb-ds-2">
+            Live mirrored orders
+          </p>
+          <MirroredOrdersPanel />
+        </div>
       </div>
 
       {/* ── Flatten All confirm modal ── */}
@@ -1329,6 +1385,49 @@ export function CopyTradingDashboard() {
             >
               <LockOpen className="h-4 w-4 flex-shrink-0" />
               Yes, Unlock All Accounts
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Unfollow-with-exposure confirm modal ── */}
+      <Dialog
+        open={unfollowConfirm !== null}
+        onOpenChange={(open) => { if (!open) setUnfollowConfirm(null); }}
+      >
+        <DialogContent className="max-w-md border-red-600/40 bg-[#0d0f14]">
+          <DialogTitle className="flex items-center gap-ds-2 text-red-400">
+            <AlertOctagon className="h-5 w-5 flex-shrink-0" />
+            This account still has an open position
+          </DialogTitle>
+
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            <span className="font-semibold text-ink-primary">{unfollowConfirm?.accountName}</span> is currently
+            following <span className="font-semibold text-ink-primary">{leaderAccountName}</span> and still has live
+            exposure (open position and/or working orders). Unfollowing stops the copier from managing it — any open
+            position and pending orders will remain on the account and will{' '}
+            <span className="font-semibold text-ink-primary">NOT</span> be closed automatically. Close them yourself
+            in your platform if you don't want them left unmanaged.
+          </p>
+
+          <div className="mt-ds-2 flex justify-end gap-ds-3">
+            <button
+              type="button"
+              onClick={() => setUnfollowConfirm(null)}
+              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                unfollowConfirm?.resolve();
+                setUnfollowConfirm(null);
+              }}
+              className="flex items-center gap-ds-2 rounded-md border border-red-600/60 bg-red-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-red-400 transition-colors hover:border-red-500 hover:bg-red-600/25 hover:text-red-300"
+            >
+              <AlertOctagon className="h-4 w-4 flex-shrink-0" />
+              Unfollow anyway
             </button>
           </div>
         </DialogContent>
