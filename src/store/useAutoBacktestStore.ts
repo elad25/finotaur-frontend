@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { toast } from 'sonner';
 import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition, PatternParams, PatternType } from '@/core/auto/types';
 import { makeDefaultSetup, DEFAULT_PATTERN_PARAMS } from '@/core/auto/types';
@@ -325,14 +326,20 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           });
 
           // 4. Persist the run (Supabase-first, localStorage fallback), then
-          //    refresh the saved-runs library. Persistence never throws.
+          //    refresh the saved-runs library. Persistence never throws — the
+          //    typed result tells us whether the user needs to be warned.
           const run = buildSavedRun(currentSetup, result, {
             symbol,
             timeframe,
             from,
             to,
           });
-          await saveRun(run);
+          const saveResult = await saveRun(run);
+          if (saveResult.ok && saveResult.storage === 'local') {
+            toast.warning('Run saved locally only — cloud sync failed');
+          } else if (saveResult.ok === false) {
+            toast.error('Run could not be saved — results will be lost on reload');
+          }
           const savedRuns = await listRuns();
           set((state) => {
             state.savedRuns = savedRuns;

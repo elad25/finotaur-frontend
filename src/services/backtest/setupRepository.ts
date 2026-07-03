@@ -111,12 +111,15 @@ function readJSON<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJSON(key: string, value: unknown): void {
+function writeJSON(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    // Storage quota exceeded or unavailable — fail silently.
+    // Storage quota exceeded or unavailable — fail silently (caller decides
+    // whether to surface this; see saveRun for the one path that does).
     console.warn(`[setupRepository] Failed to write to localStorage key "${key}".`);
+    return false;
   }
 }
 
@@ -158,12 +161,13 @@ function localGetRun(id: string): SavedRun | null {
   return arr.find((r) => r.id === id) ?? null;
 }
 
-function localSaveRun(run: SavedRun): SavedRun {
+/** Returns whether the localStorage write actually succeeded (quota/private-mode aware). */
+function localSaveRun(run: SavedRun): { run: SavedRun; ok: boolean } {
   const arr = readJSON<SavedRun[]>(RUNS_KEY, []);
   const filtered = arr.filter((r) => r.id !== run.id);
   const next = [run, ...filtered].slice(0, MAX_RUNS);
-  writeJSON(RUNS_KEY, next);
-  return run;
+  const ok = writeJSON(RUNS_KEY, next);
+  return { run, ok };
 }
 
 function localDeleteRun(id: string): void {
@@ -525,13 +529,59 @@ export async function getRun(id: string): Promise<SavedRun | null> {
 }
 
 /**
- * Persist a new run. Inserts into bt_runs, then best-effort bulk-inserts
- * bt_detections (a detection insert failure does NOT discard the run). Runs are
- * immutable snapshots. Falls back to localStorage on failure / no auth.
+ * Outcome of a `saveRun` call. The repository NEVER throws — callers use this
+ * typed result to decide whether to inform the user, instead of the run
+ * silently reloading later with stats but zero trade detail.
+ *
+ *  - `storage: 'supabase'` — full success, bt_runs + bt_detections both persisted.
+ *  - `storage: 'local'`    — degraded: either Supabase was unreachable/no-auth
+ *                            (expected fallback), or the bt_detections insert
+ *                            failed twice and the orphan bt_runs row was
+ *                            rolled back, so we fell back to localStorage to
+ *                            avoid losing the run entirely.
+ *  - `storage: 'none'`     — total failure: nothing could be persisted (e.g.
+ *                            localStorage quota/private-mode AND Supabase both
+ *                            failed). The run only lives in in-memory state.
  */
-export async function saveRun(run: SavedRun): Promise<SavedRun> {
+export type SaveRunResult =
+  | { ok: true; run: SavedRun; storage: 'supabase' | 'local' }
+  | {
+      ok: false;
+      run: SavedRun;
+      storage: 'local' | 'none';
+      reason: 'detections-insert-failed' | 'run-insert-failed' | 'local-write-failed';
+    };
+
+/** Insert bt_detections rows once; returns the Supabase error, or null on success. */
+async function insertDetectionRows(
+  rows: Record<string, unknown>[],
+): Promise<{ message: string } | null> {
+  if (rows.length === 0) return null;
+  const { error } = await supabase.from('bt_detections').insert(rows);
+  return error ? { message: error.message } : null;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Persist a new run. Inserts into bt_runs, then persists per-detection /
+ * per-trade detail into bt_detections with one retry. If the detections
+ * insert still fails after the retry, the orphan bt_runs row is deleted
+ * (best effort) and the run falls back to localStorage — a run is NEVER
+ * left half-persisted (stats present, zero trades, no way to know why).
+ * Runs are immutable snapshots. Never throws — see SaveRunResult.
+ */
+export async function saveRun(run: SavedRun): Promise<SaveRunResult> {
   const userId = await getUserId();
-  if (!userId) return localSaveRun(run);
+  if (!userId) {
+    const { run: savedRun, ok } = localSaveRun(run);
+    return ok
+      ? { ok: true, run: savedRun, storage: 'local' }
+      : { ok: false, run: savedRun, storage: 'none', reason: 'local-write-failed' };
+  }
+
   try {
     const { data, error } = await supabase
       .from('bt_runs')
@@ -556,25 +606,47 @@ export async function saveRun(run: SavedRun): Promise<SavedRun> {
     if (error) throw error;
 
     const runId = (data as { id: string }).id;
-
-    // Best-effort: persist per-detection / per-trade detail. Never block the run.
     const detectionRows = buildDetectionRows(run, runId, userId);
-    if (detectionRows.length > 0) {
-      const { error: detError } = await supabase
-        .from('bt_detections')
-        .insert(detectionRows);
-      if (detError) {
-        console.warn(
-          '[setupRepository] saveRun: detections insert failed (run kept).',
-          detError,
-        );
-      }
+
+    let detError = await insertDetectionRows(detectionRows);
+    if (detError) {
+      console.warn(
+        '[setupRepository] saveRun: detections insert failed, retrying once.',
+        detError,
+      );
+      await delay(500);
+      detError = await insertDetectionRows(detectionRows);
     }
 
-    return { ...run, id: runId };
+    if (detError && detectionRows.length > 0) {
+      // Both attempts failed — do not leave a stats-only orphan run in
+      // Supabase. Roll it back (best effort) and fall back to localStorage
+      // so the run's trade detail is never silently lost.
+      console.warn(
+        '[setupRepository] saveRun: detections insert failed twice, rolling back bt_runs row.',
+        detError,
+      );
+      const { error: deleteError } = await supabase.from('bt_runs').delete().eq('id', runId);
+      if (deleteError) {
+        console.warn(
+          '[setupRepository] saveRun: failed to roll back orphan bt_runs row.',
+          deleteError,
+        );
+      }
+
+      const { run: savedRun, ok } = localSaveRun({ ...run, id: runId });
+      return ok
+        ? { ok: false, run: savedRun, storage: 'local', reason: 'detections-insert-failed' }
+        : { ok: false, run: savedRun, storage: 'none', reason: 'detections-insert-failed' };
+    }
+
+    return { ok: true, run: { ...run, id: runId }, storage: 'supabase' };
   } catch (err) {
     console.warn('[setupRepository] saveRun: Supabase failed, using localStorage.', err);
-    return localSaveRun(run);
+    const { run: savedRun, ok } = localSaveRun(run);
+    return ok
+      ? { ok: true, run: savedRun, storage: 'local' }
+      : { ok: false, run: savedRun, storage: 'none', reason: 'run-insert-failed' };
   }
 }
 
