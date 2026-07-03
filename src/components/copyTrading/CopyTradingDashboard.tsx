@@ -5,13 +5,13 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AlertOctagon, Ban, ChevronDown, ChevronUp, Crown, Lock, LockOpen, Plus, Search, Users, X } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Ban, ChevronDown, ChevronUp, Crown, Lock, LockOpen, Pencil, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { buildAccountGroups } from '@/components/journal/accountGrouping';
-import { useCopyRules } from '@/hooks/useCopyRules';
-import type { CopyRule } from '@/hooks/useCopyRules';
+import { useCopierRoutes } from '@/features/automation/hooks/useCopierRoutes';
+import type { CopierRoute, CopierRouteTargetInput, JournalAccount } from '@/features/automation/lib/automationTypes';
 import {
   Dialog,
   DialogContent,
@@ -60,12 +60,41 @@ interface AccountRowData {
    * before an unfollow leaves exposure unmanaged.
    */
   hasAnyOpenPosition: boolean;
+  /**
+   * True when this account is a target in 2+ active groups (routes) — its
+   * trades will be copied from multiple leaders simultaneously. Non-blocking
+   * warning surfaced on the row.
+   */
+  isDuplicateFollower: boolean;
 }
 
-interface InstrumentTab {
-  id: string;
-  symbol: string;
+/**
+ * Per-row copy config for the ACTIVE group only — derived directly from the
+ * active route's `automation_copier_route_targets`, keyed by target row id.
+ * Replaces the old cross-tab `CopyRule` (from useCopyRules), which assumed
+ * one route per source account and would incorrectly merge writes across
+ * independent groups sharing the same leader.
+ */
+interface RouteRule {
+  id:             string; // target row id
+  ratio:          number;
+  is_active:      boolean;
+  cross_to_micro: boolean;
 }
+
+/**
+ * A tab = one active copier route ("group"). Derived from the loaded routes,
+ * ordered by created_at (oldest first) — NOT stored in component state, so
+ * tabs persist across refreshes. Only `activeRouteId` is client state.
+ */
+interface GroupTab {
+  id:     string; // route id
+  label:  string; // route.label — the group name
+  symbol: string | null; // route.symbol_filter[0] ?? null (unset)
+  route:  CopierRoute;
+}
+
+const ACTIVE_GROUP_STORAGE_KEY = 'copier.activeGroupId';
 
 // ─── Popular futures contracts for autocomplete ───────────────
 
@@ -113,7 +142,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
   row: AccountRowData;
   isLeader: boolean;
   hasLeader: boolean;
-  rule: CopyRule | null;
+  rule: RouteRule | null;
   isCreating: boolean;
   isUpdating: boolean;
   onFollowToggle: (currentRatioDraft: number) => Promise<void>;
@@ -124,7 +153,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
    * `onFollowToggle` itself.
    */
   onRequestUnfollowWithExposure: (resolveOptimistic: () => void) => void;
-  onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
+  onUpdateRule: (patch: Partial<Pick<RouteRule, 'ratio' | 'cross_to_micro'>>) => Promise<void>;
   onSelectLeader: () => void;
 }) {
   // ── Optimistic toggle overlays ──────────────────────────────
@@ -255,6 +284,15 @@ const CopyAccountRow = memo(function CopyAccountRow({
             }`}
           />
           <span title={row.accountName} className="text-xs text-ink-primary truncate">{row.accountName}</span>
+          {row.isDuplicateFollower && (
+            <span
+              title="This account also follows another group — trades from both leaders will be copied."
+              aria-label="This account also follows another group — trades from both leaders will be copied."
+              className="flex-shrink-0"
+            >
+              <AlertTriangle className="h-3 w-3 text-amber-400" />
+            </span>
+          )}
           {row.locked && (
             <span
               title="Locked — copying disabled and account flattened until next session open"
@@ -420,22 +458,72 @@ export function CopyTradingDashboard() {
     () => new Map(portfolios.map((p) => [p.id, p.kill_switch_active ?? false])),
     [portfolios],
   );
-  const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
-    { id: 'asset-1', symbol: 'NQ' },
-  ]);
-  const [activeInstrumentTabId, setActiveInstrumentTabId] = useState('asset-1');
-  const activeInstrumentTab = useMemo(
-    () => instrumentTabs.find((tab) => tab.id === activeInstrumentTabId) ?? instrumentTabs[0],
-    [activeInstrumentTabId, instrumentTabs],
+  // ── Routes (= groups) — one route per tab, source of truth for tabs ──────
+  const { routes, upsertRoute, deleteRoute } = useCopierRoutes();
+  const [isSavingRoute, setIsSavingRoute] = useState(false);
+
+  // Tabs are DERIVED from routes (ordered by created_at) — not stored in
+  // component state — so they persist across refreshes.
+  const groupTabs = useMemo<GroupTab[]>(
+    () =>
+      routes.map((route) => ({
+        id: route.id,
+        label: route.label?.trim() || route.source_account_name || 'Untitled group',
+        symbol: route.symbol_filter?.[0]?.trim() || null,
+        route,
+      })),
+    [routes],
   );
-  const instrument = activeInstrumentTab?.symbol ?? 'NQ';
+
+  // Active route id — client state, restored from localStorage if still valid.
+  const [activeRouteId, setActiveRouteIdState] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(ACTIVE_GROUP_STORAGE_KEY);
+  });
+
+  const setActiveRouteId = (id: string | null) => {
+    setActiveRouteIdState(id);
+    if (id) localStorage.setItem(ACTIVE_GROUP_STORAGE_KEY, id);
+    else localStorage.removeItem(ACTIVE_GROUP_STORAGE_KEY);
+  };
+
+  // Resolve the active tab: prefer the stored id if it still exists, else the
+  // first tab (oldest route). Falls back to null when there are no routes.
+  const activeGroupTab = useMemo<GroupTab | null>(() => {
+    if (groupTabs.length === 0) return null;
+    return groupTabs.find((t) => t.id === activeRouteId) ?? groupTabs[0];
+  }, [groupTabs, activeRouteId]);
+
+  // Keep the persisted active id in sync once tabs resolve (covers first load
+  // and the case where the stored id no longer exists).
+  useEffect(() => {
+    if (activeGroupTab && activeGroupTab.id !== activeRouteId) {
+      setActiveRouteId(activeGroupTab.id);
+    }
+  }, [activeGroupTab, activeRouteId]);
+
+  const activeRoute = activeGroupTab?.route ?? null;
+  const instrument = activeGroupTab?.symbol ?? '';
   const [instrumentDraft, setInstrumentDraft] = useState(instrument);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const { rules, updateRule, isUpdating, createRule, isCreating } = useCopyRules();
 
   useEffect(() => {
     setInstrumentDraft(instrument);
   }, [instrument]);
+
+  // ── New-group dialog ─────────────────────────────────────────────────
+  const [showNewGroupDialog, setShowNewGroupDialog] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupSymbol, setNewGroupSymbol] = useState('');
+  const [newGroupLeaderId, setNewGroupLeaderId] = useState<string | null>(null);
+  const [showNewGroupSuggestions, setShowNewGroupSuggestions] = useState(false);
+
+  // ── Rename active group ──────────────────────────────────────────────
+  const [isRenamingGroup, setIsRenamingGroup] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
+
+  // ── Delete group confirm ─────────────────────────────────────────────
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState<GroupTab | null>(null);
 
   // Build account groups from portfolios — identical to the journal's AccountFilterDropdown.
   // Exclude manual portfolios (no broker = not copyable). This is the ONE source of truth.
@@ -456,24 +544,135 @@ export function CopyTradingDashboard() {
     [connections],
   );
 
-  // Leader: portfolio id — defaults to the first non-manual portfolio.
-  const [leaderId, setLeaderId] = useState<string | null>(
-    brokerAccountPortfolios[0]?.id ?? null,
-  );
+  // ── Portfolio ↔ tradovate account_id maps (routing is tradovate-only — ──
+  // mirrors the same constraint the legacy useCopyRules adapter enforced).
+  const portfolioByAccountId = useMemo(() => {
+    const map = new Map<string, (typeof tradovatePortfolios)[number]>();
+    for (const p of tradovatePortfolios) {
+      if (p.tradovate_account_id == null) continue;
+      map.set(String(p.tradovate_account_id), p);
+    }
+    return map;
+  }, [tradovatePortfolios]);
 
-  // leaderPortfolioId is the same as leaderId (portfolios are the source of truth now).
+  const portfolioIdByAccountId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [accountId, p] of portfolioByAccountId) map.set(accountId, p.id);
+    return map;
+  }, [portfolioByAccountId]);
+
+  const toJournalAccount = (portfolioId: string): JournalAccount | null => {
+    const p = brokerAccountPortfolios.find((x) => x.id === portfolioId);
+    if (!p || p.tradovate_account_id == null) return null;
+    return {
+      account_id:   String(p.tradovate_account_id),
+      account_name: p.name,
+      broker:       'tradovate',
+      environment:  p.environment ?? null,
+      label:        p.connection_label ?? undefined,
+    };
+  };
+
+  // Leader: derived from the ACTIVE route's source_account_id — scoped per tab.
+  const leaderId = activeRoute
+    ? (portfolioIdByAccountId.get(activeRoute.source_account_id) ?? null)
+    : null;
   const leaderPortfolioId = leaderId;
 
-  // Helper: find rule for a given follower portfolio
-  function ruleFor(targetPortfolioId: string | null): CopyRule | null {
-    if (!leaderPortfolioId || !targetPortfolioId) return null;
-    return (
-      rules.find(
-        (r) =>
-          r.source_portfolio_id === leaderPortfolioId &&
-          r.target_portfolio_id === targetPortfolioId,
-      ) ?? null
+  // Target account ids that belong to the ACTIVE route only.
+  const activeGroupTargetAccountIds = useMemo(
+    () => new Set((activeRoute?.automation_copier_route_targets ?? []).map((t) => t.destination_account_id)),
+    [activeRoute],
+  );
+
+  // Duplicate-follower detection: account_id → number of ACTIVE routes where it's a target.
+  const followerAccountIdCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const route of routes) {
+      for (const t of route.automation_copier_route_targets ?? []) {
+        counts.set(t.destination_account_id, (counts.get(t.destination_account_id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [routes]);
+
+  // Helper: find the per-row rule (from the ACTIVE route's targets) for a follower portfolio.
+  function ruleFor(targetPortfolioId: string | null): RouteRule | null {
+    if (!activeRoute || !targetPortfolioId) return null;
+    const p = brokerAccountPortfolios.find((x) => x.id === targetPortfolioId);
+    if (!p || p.tradovate_account_id == null) return null;
+    const targetAccountId = String(p.tradovate_account_id);
+    const target = (activeRoute.automation_copier_route_targets ?? []).find(
+      (t) => t.destination_account_id === targetAccountId,
     );
+    if (!target) return null;
+    return {
+      id:             target.id,
+      ratio:          target.scale_ratio,
+      is_active:      activeRoute.is_active && target.is_active,
+      cross_to_micro: target.cross_to_micro,
+    };
+  }
+
+  /** Serializes an existing target row back into the RPC input shape. */
+  function targetToInput(t: NonNullable<CopierRoute['automation_copier_route_targets']>[number]): CopierRouteTargetInput {
+    return {
+      destination_account_id:   t.destination_account_id,
+      destination_account_name: t.destination_account_name,
+      destination_broker:       t.destination_broker,
+      destination_environment:  t.destination_environment,
+      scale_ratio:              t.scale_ratio,
+      max_contracts:            t.max_contracts,
+      is_active:                t.is_active,
+      cross_to_micro:           t.cross_to_micro,
+    };
+  }
+
+  /** Persists a patched target list for the ACTIVE route via upsertRoute. */
+  async function saveActiveRouteTargets(targets: CopierRouteTargetInput[]) {
+    if (!activeRoute) return;
+    setIsSavingRoute(true);
+    try {
+      if (targets.length === 0) {
+        // No followers left — keep the group itself (empty followers state),
+        // do NOT delete the route just because it lost its last target.
+        await upsertRoute({
+          routeId:      activeRoute.id,
+          sourceAccount: {
+            account_id:   activeRoute.source_account_id,
+            account_name: activeRoute.source_account_name,
+            broker:       activeRoute.source_broker,
+            environment:  activeRoute.source_environment,
+          },
+          label:        activeRoute.label,
+          symbolFilter: activeRoute.symbol_filter ?? [],
+          copyOpens:    activeRoute.copy_opens,
+          copyCloses:   activeRoute.copy_closes,
+          reverse:      activeRoute.reverse,
+          isActive:     activeRoute.is_active,
+          targets:      [],
+        });
+      } else {
+        await upsertRoute({
+          routeId:      activeRoute.id,
+          sourceAccount: {
+            account_id:   activeRoute.source_account_id,
+            account_name: activeRoute.source_account_name,
+            broker:       activeRoute.source_broker,
+            environment:  activeRoute.source_environment,
+          },
+          label:        activeRoute.label,
+          symbolFilter: activeRoute.symbol_filter ?? [],
+          copyOpens:    activeRoute.copy_opens,
+          copyCloses:   activeRoute.copy_closes,
+          reverse:      activeRoute.reverse,
+          isActive:     activeRoute.is_active,
+          targets,
+        });
+      }
+    } finally {
+      setIsSavingRoute(false);
+    }
   }
 
   // Build rows from portfolios (journal source of truth), grouped by connection.
@@ -551,6 +750,10 @@ export function CopyTradingDashboard() {
           // Unlike `netPosition` above (filtered to the active instrument tab),
           // this checks across every symbol the agent last reported.
           hasAnyOpenPosition: (snap?.positions ?? []).some((pos) => pos.qty !== 0),
+          // 2+ active routes target this account → trades copy from multiple leaders.
+          isDuplicateFollower: p.tradovate_account_id != null
+            ? (followerAccountIdCounts.get(String(p.tradovate_account_id)) ?? 0) >= 2
+            : false,
         };
       }),
     );
@@ -562,16 +765,28 @@ export function CopyTradingDashboard() {
     snapshotByAccountName,
     killSwitchByPortfolioId,
     summaryByAccountId,
+    followerAccountIdCounts,
   ]);
 
   // Leader account name — used in the unfollow-with-exposure confirm copy.
   const leaderAccountName = rows.find((r) => r.id === leaderId)?.accountName ?? 'the leader';
 
-  // Summary bar
-  const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
-  const totalOpenPnL       = rows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
-  const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
-  const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
+  // Summary bar — scoped to the ACTIVE GROUP only: the leader + its targets.
+  // (Not all connected accounts — each tab/group is fully independent.)
+  const activeGroupRows = useMemo(
+    () => rows.filter((r) => r.id === leaderId || activeGroupTargetAccountIds.has(
+      (() => {
+        const p = brokerAccountPortfolios.find((x) => x.id === r.id);
+        return p?.tradovate_account_id != null ? String(p.tradovate_account_id) : '';
+      })(),
+    )),
+    [rows, leaderId, activeGroupTargetAccountIds, brokerAccountPortfolios],
+  );
+
+  const totalDayPnL        = activeGroupRows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
+  const totalOpenPnL       = activeGroupRows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
+  const totalBalance       = activeGroupRows.reduce((s, r) => s + (r.balance ?? 0), 0);
+  const openPositionsCount = activeGroupRows.filter((r) => (r.position ?? 0) !== 0).length;
 
   // ── Contract autocomplete suggestions ─────────────────────────
   const normalizedDraftInstrument = instrumentDraft.trim().toUpperCase();
@@ -585,60 +800,53 @@ export function CopyTradingDashboard() {
       c.symbol.toUpperCase().includes(normalizedDraftInstrument),
   ).slice(0, 8);
 
-  const setActiveTabInstrument = (symbol: string) => {
+  // Sets the ACTIVE GROUP's symbol — persists symbol_filter=[symbol] on its route.
+  const setActiveTabInstrument = async (symbol: string) => {
     const nextSymbol = symbol.trim().toUpperCase();
-    if (!nextSymbol) return;
+    if (!nextSymbol || !activeRoute) return;
     if (nextSymbol === instrument) {
       setInstrumentDraft(nextSymbol);
       setShowSuggestions(false);
       return;
     }
-    setInstrumentTabs((current) =>
-      current.map((tab) =>
-        tab.id === activeInstrumentTabId
-          ? { ...tab, symbol: nextSymbol }
-          : tab,
-      ),
-    );
     setInstrumentDraft(nextSymbol);
     setShowSuggestions(false);
-    toast.success(`Tracking ${nextSymbol} in this tab`);
+    setIsSavingRoute(true);
+    try {
+      await upsertRoute({
+        routeId:      activeRoute.id,
+        sourceAccount: {
+          account_id:   activeRoute.source_account_id,
+          account_name: activeRoute.source_account_name,
+          broker:       activeRoute.source_broker,
+          environment:  activeRoute.source_environment,
+        },
+        label:        activeRoute.label,
+        symbolFilter: [nextSymbol],
+        copyOpens:    activeRoute.copy_opens,
+        copyCloses:   activeRoute.copy_closes,
+        reverse:      activeRoute.reverse,
+        isActive:     activeRoute.is_active,
+        targets:      (activeRoute.automation_copier_route_targets ?? []).map(targetToInput),
+      });
+      toast.success(`Tracking ${nextSymbol} in ${activeGroupTab?.label ?? 'this group'}`);
+    } finally {
+      setIsSavingRoute(false);
+    }
   };
 
   const handleAddInstrumentToWatch = () => {
-    setActiveTabInstrument(normalizedDraftInstrument);
+    void setActiveTabInstrument(normalizedDraftInstrument);
   };
 
-  const handleAddInstrumentTab = () => {
-    const usedSymbols = new Set(instrumentTabs.map((tab) => tab.symbol));
-    const nextSymbol =
-      POPULAR_CONTRACTS.find((contract) => !usedSymbols.has(contract.symbol))?.symbol ?? 'NQ';
-    const nextTab: InstrumentTab = {
-      id: `asset-${Date.now()}`,
-      symbol: nextSymbol,
-    };
-
-    setInstrumentTabs((current) => [...current, nextTab]);
-    setActiveInstrumentTabId(nextTab.id);
-    setInstrumentDraft(nextSymbol);
-    setShowSuggestions(false);
-  };
-
-  const handleCloseInstrumentTab = (tabId: string) => {
-    if (instrumentTabs.length <= 1) return;
-    const closingIndex = instrumentTabs.findIndex((tab) => tab.id === tabId);
-    const nextTabs = instrumentTabs.filter((tab) => tab.id !== tabId);
-    const nextActiveTab =
-      activeInstrumentTabId === tabId
-        ? nextTabs[Math.max(0, closingIndex - 1)] ?? nextTabs[0]
-        : activeInstrumentTab;
-
-    setInstrumentTabs(nextTabs);
-    if (nextActiveTab) {
-      setActiveInstrumentTabId(nextActiveTab.id);
-      setInstrumentDraft(nextActiveTab.symbol);
-    }
-    setShowSuggestions(false);
+  // "+" tab button → opens the New Group dialog (see JSX below) instead of
+  // silently creating a tab — a group needs a name + leader before it exists.
+  const handleOpenNewGroupDialog = () => {
+    setNewGroupName('');
+    setNewGroupSymbol('');
+    setNewGroupLeaderId(brokerAccountPortfolios[0]?.id ?? null);
+    setShowNewGroupSuggestions(false);
+    setShowNewGroupDialog(true);
   };
 
   // ── Sort state ───────────────────────────────────────────────
@@ -781,51 +989,178 @@ export function CopyTradingDashboard() {
     }
   };
 
+  // ── Group management: rename / delete / create ───────────────────────
+
+  const handleRenameCommit = async (tab: GroupTab) => {
+    setIsRenamingGroup(false);
+    const nextLabel = renameDraft.trim();
+    if (!nextLabel || nextLabel === tab.label) return;
+    setIsSavingRoute(true);
+    try {
+      await upsertRoute({
+        routeId:      tab.route.id,
+        sourceAccount: {
+          account_id:   tab.route.source_account_id,
+          account_name: tab.route.source_account_name,
+          broker:       tab.route.source_broker,
+          environment:  tab.route.source_environment,
+        },
+        label:        nextLabel,
+        symbolFilter: tab.route.symbol_filter ?? [],
+        copyOpens:    tab.route.copy_opens,
+        copyCloses:   tab.route.copy_closes,
+        reverse:      tab.route.reverse,
+        isActive:     tab.route.is_active,
+        targets:      (tab.route.automation_copier_route_targets ?? []).map(targetToInput),
+      });
+    } finally {
+      setIsSavingRoute(false);
+    }
+  };
+
+  // "×" on a tab — never deletes silently. Surfaces the standard delete
+  // confirm, PLUS the #1204-style exposure warning if any follower of that
+  // group currently holds an open position.
+  const groupHasOpenExposure = (tab: GroupTab): boolean => {
+    const targetAccountIds = new Set(
+      (tab.route.automation_copier_route_targets ?? []).map((t) => t.destination_account_id),
+    );
+    // Include the leader itself — exposure on the leader account also matters.
+    targetAccountIds.add(tab.route.source_account_id);
+    return rows.some((r) => {
+      const p = brokerAccountPortfolios.find((x) => x.id === r.id);
+      const accountId = p?.tradovate_account_id != null ? String(p.tradovate_account_id) : null;
+      return accountId != null && targetAccountIds.has(accountId) && r.hasAnyOpenPosition;
+    });
+  };
+
+  const handleDeleteGroupConfirmed = async (tab: GroupTab) => {
+    setDeleteGroupConfirm(null);
+    setIsSavingRoute(true);
+    try {
+      const result = await deleteRoute(tab.route.id);
+      if (result.success && activeRouteId === tab.id) {
+        // Move the active tab off the deleted route — the next render's
+        // groupTabs will no longer contain it, so clear and let the
+        // "restore or fall back to first tab" effect resolve it.
+        setActiveRouteId(null);
+      }
+    } finally {
+      setIsSavingRoute(false);
+    }
+  };
+
+  const canCreateNewGroup =
+    newGroupName.trim().length > 0 &&
+    newGroupSymbol.trim().length > 0 &&
+    newGroupLeaderId != null;
+
+  const handleCreateGroup = async () => {
+    if (!canCreateNewGroup || !newGroupLeaderId) return;
+    const leaderAccount = toJournalAccount(newGroupLeaderId);
+    if (!leaderAccount) {
+      toast.error('Select a valid leader account (Tradovate only).');
+      return;
+    }
+    setIsSavingRoute(true);
+    try {
+      const result = await upsertRoute({
+        sourceAccount: leaderAccount,
+        label:         newGroupName.trim(),
+        symbolFilter:  [newGroupSymbol.trim().toUpperCase()],
+        copyOpens:     true,
+        copyCloses:    true,
+        reverse:       false,
+        isActive:      true,
+        targets:       [],
+      });
+      if (result.success && result.routeId) {
+        setActiveRouteId(result.routeId);
+        setShowNewGroupDialog(false);
+      }
+    } finally {
+      setIsSavingRoute(false);
+    }
+  };
+
   return (
     <div className="min-h-[620px]">
       <div className="-mt-ds-6 mb-ds-4 flex items-end gap-ds-1 overflow-x-auto border-b border-gold-border/40 px-ds-3 pt-ds-1">
-        {instrumentTabs.map((tab) => {
-          const isActive = tab.id === activeInstrumentTabId;
+        {groupTabs.map((tab) => {
+          const isActive = tab.id === activeGroupTab?.id;
+          const isRenamingThis = isActive && isRenamingGroup;
           return (
             <div
               key={tab.id}
-              className={`flex h-9 min-w-[92px] items-center gap-ds-1 rounded-t-md border border-b-0 px-ds-2 transition-colors ${
+              className={`flex h-9 min-w-[120px] items-center gap-ds-1 rounded-t-md border border-b-0 px-ds-2 transition-colors ${
                 isActive
                   ? 'border-gold-border bg-gold-primary/10 text-gold-primary shadow-[0_0_18px_rgba(201,166,70,0.10)]'
                   : 'border-gold-border/20 bg-gold-primary/[0.03] text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-primary'
               }`}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveInstrumentTabId(tab.id);
-                  setInstrumentDraft(tab.symbol);
-                  setShowSuggestions(false);
-                }}
-                className="min-w-0 flex-1 truncate text-left text-xs font-semibold"
-              >
-                {tab.symbol}
-              </button>
-              {instrumentTabs.length > 1 && (
+              {isRenamingThis ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={() => void handleRenameCommit(tab)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); void handleRenameCommit(tab); }
+                    if (e.key === 'Escape') { setIsRenamingGroup(false); }
+                  }}
+                  className="min-w-0 flex-1 border-0 bg-transparent text-xs font-semibold text-gold-primary outline-none"
+                  aria-label="Group name"
+                />
+              ) : (
                 <button
                   type="button"
-                  onClick={() => handleCloseInstrumentTab(tab.id)}
-                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-ink-tertiary transition-colors hover:bg-white/10 hover:text-ink-primary"
-                  aria-label={`Close ${tab.symbol} tab`}
-                  title={`Close ${tab.symbol}`}
+                  onClick={() => setActiveRouteId(tab.id)}
+                  onDoubleClick={() => {
+                    if (!isActive) return;
+                    setRenameDraft(tab.label);
+                    setIsRenamingGroup(true);
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-ds-1 truncate text-left text-xs font-semibold"
+                  title="Double-click to rename"
                 >
-                  <X className="h-3 w-3" />
+                  <span className="truncate">{tab.label}</span>
+                  {tab.symbol && (
+                    <span className="flex-shrink-0 rounded-sm bg-gold-primary/15 px-1 py-0.5 text-[9px] uppercase tracking-wide text-gold-primary/80">
+                      {tab.symbol}
+                    </span>
+                  )}
                 </button>
               )}
+              {isActive && !isRenamingThis && (
+                <button
+                  type="button"
+                  onClick={() => { setRenameDraft(tab.label); setIsRenamingGroup(true); }}
+                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-ink-tertiary transition-colors hover:bg-white/10 hover:text-ink-primary"
+                  aria-label={`Rename ${tab.label}`}
+                  title="Rename group"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setDeleteGroupConfirm(tab)}
+                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-ink-tertiary transition-colors hover:bg-white/10 hover:text-ink-primary"
+                aria-label={`Delete ${tab.label}`}
+                title={`Delete ${tab.label}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
             </div>
           );
         })}
         <button
           type="button"
-          onClick={handleAddInstrumentTab}
+          onClick={handleOpenNewGroupDialog}
           className="mb-px flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-gold-border/30 bg-gold-primary/[0.05] text-gold-primary/80 transition-colors hover:border-gold-border hover:bg-gold-primary/10 hover:text-gold-primary"
-          aria-label="Add asset tab"
-          title="Add asset tab"
+          aria-label="Add group"
+          title="Add group"
         >
           <Plus className="h-4 w-4" />
         </button>
@@ -930,6 +1265,7 @@ export function CopyTradingDashboard() {
               <input
                 type="text"
                 value={instrumentDraft}
+                disabled={!activeRoute}
                 onChange={(e) => {
                   setInstrumentDraft(e.target.value.toUpperCase());
                   setShowSuggestions(true);
@@ -942,8 +1278,8 @@ export function CopyTradingDashboard() {
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                placeholder="Search ticker..."
-                className="w-36 border-0 bg-transparent text-sm font-semibold uppercase text-blue-100 outline-none placeholder:normal-case placeholder:text-blue-200/40"
+                placeholder={activeRoute ? 'Search ticker...' : 'Create a group first'}
+                className="w-36 border-0 bg-transparent text-sm font-semibold uppercase text-blue-100 outline-none placeholder:normal-case placeholder:text-blue-200/40 disabled:cursor-not-allowed"
               />
               <button
                 type="button"
@@ -951,10 +1287,10 @@ export function CopyTradingDashboard() {
                   e.preventDefault();
                   handleAddInstrumentToWatch();
                 }}
-                disabled={!canAddInstrument}
+                disabled={!canAddInstrument || !activeRoute}
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-400/35 bg-blue-400/10 text-blue-100 transition-colors hover:border-blue-300/60 hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:opacity-35"
-                aria-label="Set active tab ticker"
-                title="Set active tab ticker"
+                aria-label="Set active group's symbol"
+                title="Set active group's symbol"
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
@@ -1135,8 +1471,8 @@ export function CopyTradingDashboard() {
           <div className="text-center">Actions</div>
         </div>
 
-        {/* Rows */}
-        {sortedRows.map((row) => {
+        {/* Rows — only rendered when the active group has a leader (i.e. there IS an active route) */}
+        {activeRoute && sortedRows.map((row) => {
           const rule = ruleFor(row.portfolioId);
           const isLeader = row.id === leaderId;
           return (
@@ -1146,45 +1482,129 @@ export function CopyTradingDashboard() {
               isLeader={isLeader}
               hasLeader={leaderPortfolioId != null}
               rule={rule}
-              isCreating={isCreating}
-              isUpdating={isUpdating}
-              onSelectLeader={() => setLeaderId(row.id)}
+              isCreating={isSavingRoute}
+              isUpdating={isSavingRoute}
+              onSelectLeader={async () => {
+                if (!activeRoute || row.portfolioId === leaderId) return;
+                const nextLeader = toJournalAccount(row.portfolioId ?? '');
+                if (!nextLeader) {
+                  toast.error('Only Tradovate accounts can lead a copy group.');
+                  return;
+                }
+                // Re-pointing the leader drops existing targets pointing at the
+                // NEW leader account (can't follow yourself) — everything else
+                // about the group (name, symbol, other targets) is preserved.
+                const remainingTargets = (activeRoute.automation_copier_route_targets ?? [])
+                  .filter((t) => t.destination_account_id !== nextLeader.account_id)
+                  .map(targetToInput);
+                setIsSavingRoute(true);
+                try {
+                  await upsertRoute({
+                    routeId:      activeRoute.id,
+                    sourceAccount: nextLeader,
+                    label:        activeRoute.label,
+                    symbolFilter: activeRoute.symbol_filter ?? [],
+                    copyOpens:    activeRoute.copy_opens,
+                    copyCloses:   activeRoute.copy_closes,
+                    reverse:      activeRoute.reverse,
+                    isActive:     activeRoute.is_active,
+                    targets:      remainingTargets,
+                  });
+                } finally {
+                  setIsSavingRoute(false);
+                }
+              }}
               onRequestUnfollowWithExposure={(resolveOptimistic) => {
                 setUnfollowConfirm({ accountName: row.accountName, resolve: resolveOptimistic });
               }}
               onFollowToggle={async (currentRatioDraft) => {
-                if (!leaderPortfolioId || !row.portfolioId || isLeader) return;
+                if (!activeRoute || !row.portfolioId || isLeader) return;
+                const targetAccount = toJournalAccount(row.portfolioId);
+                if (!targetAccount) {
+                  toast.error('Only Tradovate accounts can follow a copy group.');
+                  return;
+                }
+                const existingTargets = activeRoute.automation_copier_route_targets ?? [];
+
                 if (rule?.is_active) {
-                  // Unfollow: set is_active false (hook will remove the target).
-                  await updateRule({ id: rule.id, patch: { is_active: false } });
+                  // Unfollow: remove this target from the ACTIVE route only.
+                  await saveActiveRouteTargets(
+                    existingTargets
+                      .filter((t) => t.destination_account_id !== targetAccount.account_id)
+                      .map(targetToInput),
+                  );
                 } else {
-                  // Follow: create the rule (or re-activate if a stale rule exists).
-                  await createRule({
-                    source_portfolio_id: leaderPortfolioId,
-                    target_portfolio_id: row.portfolioId,
-                    ratio:               currentRatioDraft,
-                    is_active:           true,
-                  });
+                  // Follow: add (or re-activate) this target on the ACTIVE route only.
+                  const alreadyPresent = existingTargets.some(
+                    (t) => t.destination_account_id === targetAccount.account_id,
+                  );
+                  const newTarget: CopierRouteTargetInput = {
+                    destination_account_id:   targetAccount.account_id,
+                    destination_account_name: targetAccount.account_name,
+                    destination_broker:       targetAccount.broker,
+                    destination_environment:  targetAccount.environment,
+                    scale_ratio:              currentRatioDraft,
+                    max_contracts:            null,
+                    is_active:                true,
+                    cross_to_micro:           false,
+                  };
+                  const nextTargets: CopierRouteTargetInput[] = alreadyPresent
+                    ? existingTargets.map((t) =>
+                        t.destination_account_id === targetAccount.account_id
+                          ? { ...targetToInput(t), scale_ratio: currentRatioDraft, is_active: true }
+                          : targetToInput(t),
+                      )
+                    : [...existingTargets.map(targetToInput), newTarget];
+                  await saveActiveRouteTargets(nextTargets);
                 }
               }}
               onUpdateRule={async (patch) => {
-                if (rule) {
-                  await updateRule({ id: rule.id, patch });
-                }
+                if (!activeRoute || !rule) return;
+                const existingTargets = activeRoute.automation_copier_route_targets ?? [];
+                const nextTargets = existingTargets.map((t) =>
+                  t.id === rule.id
+                    ? {
+                        ...targetToInput(t),
+                        scale_ratio:    patch.ratio          ?? t.scale_ratio,
+                        cross_to_micro: patch.cross_to_micro ?? t.cross_to_micro,
+                      }
+                    : targetToInput(t),
+                );
+                await saveActiveRouteTargets(nextTargets);
                 // If not yet following, patches are held locally in the row's
-                // draft state (ratio/max) and applied when the user enables Follow.
+                // draft state (ratio) and applied when the user enables Follow.
               }}
             />
           );
         })}
 
-        {/* Empty state */}
-        {rows.length === 0 && (
+        {/* Empty state: no accounts connected at all */}
+        {activeRoute && rows.length === 0 && (
           <div className="px-ds-5 py-ds-7 flex flex-col items-center justify-center gap-ds-2">
             <Users className="w-8 h-8 text-ink-tertiary" />
             <p className="text-sm text-ink-secondary">
               No connected accounts. Connect a broker in the Connections tab.
             </p>
+          </div>
+        )}
+
+        {/* Empty state: no groups exist yet — "Create your first copy group" */}
+        {!activeRoute && (
+          <div className="px-ds-5 py-ds-9 flex flex-col items-center justify-center gap-ds-3">
+            <Users className="w-10 h-10 text-ink-tertiary" />
+            <p className="text-sm font-semibold text-ink-primary">Create your first copy group</p>
+            <p className="max-w-sm text-center text-xs text-ink-secondary">
+              A copy group has one leader account and its own followers, symbol, and name — fully
+              independent from any other group.
+            </p>
+            <button
+              type="button"
+              onClick={handleOpenNewGroupDialog}
+              className="mt-ds-1 flex items-center gap-ds-2 rounded-lg border border-gold-border/60 bg-gold-primary/10 px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary transition-colors hover:border-gold-border hover:bg-gold-primary/20"
+            >
+              <Plus className="h-4 w-4 flex-shrink-0" />
+              New group
+            </button>
           </div>
         )}
       </div>
@@ -1428,6 +1848,152 @@ export function CopyTradingDashboard() {
             >
               <AlertOctagon className="h-4 w-4 flex-shrink-0" />
               Unfollow anyway
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── New Group dialog ── */}
+      <Dialog open={showNewGroupDialog} onOpenChange={setShowNewGroupDialog}>
+        <DialogContent className="max-w-md border-gold-border/40 bg-[#0d0f14]">
+          <DialogTitle className="flex items-center gap-ds-2 text-gold-primary">
+            <Plus className="h-5 w-5 flex-shrink-0" />
+            New copy group
+          </DialogTitle>
+
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            A group has its own leader, followers, symbol, and name — fully independent from your
+            other groups.
+          </p>
+
+          <div className="flex flex-col gap-ds-3">
+            <label className="flex flex-col gap-ds-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
+                Group name
+              </span>
+              <input
+                type="text"
+                autoFocus
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="e.g. NQ Scalps"
+                className="h-9 w-full rounded-md border border-border-ds-default bg-[#111] px-ds-3 text-sm text-ink-primary outline-none focus:border-gold-border"
+              />
+            </label>
+
+            <label className="relative flex flex-col gap-ds-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
+                Symbol
+              </span>
+              <input
+                type="text"
+                value={newGroupSymbol}
+                onChange={(e) => { setNewGroupSymbol(e.target.value.toUpperCase()); setShowNewGroupSuggestions(true); }}
+                onFocus={() => setShowNewGroupSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowNewGroupSuggestions(false), 150)}
+                placeholder="e.g. NQ"
+                className="h-9 w-full rounded-md border border-border-ds-default bg-[#111] px-ds-3 text-sm font-semibold uppercase text-ink-primary outline-none focus:border-gold-border"
+              />
+              {showNewGroupSuggestions && newGroupSymbol.trim().length > 0 && (
+                <div className="absolute top-full z-50 mt-1 w-full overflow-hidden rounded-md border border-border-ds-default bg-[#111] shadow-lg">
+                  {POPULAR_CONTRACTS.filter((c) =>
+                    c.symbol.toUpperCase().includes(newGroupSymbol.trim().toUpperCase()),
+                  ).slice(0, 6).map((c) => (
+                    <button
+                      key={c.symbol}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); setNewGroupSymbol(c.symbol); setShowNewGroupSuggestions(false); }}
+                      className="flex w-full items-center justify-between px-ds-3 py-ds-2 text-left hover:bg-gold-primary/10"
+                    >
+                      <span className="text-sm font-semibold text-ink-primary">{c.symbol}</span>
+                      <span className="ml-ds-2 truncate text-[11px] text-ink-tertiary">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </label>
+
+            <label className="flex flex-col gap-ds-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
+                Leader account
+              </span>
+              <select
+                value={newGroupLeaderId ?? ''}
+                onChange={(e) => setNewGroupLeaderId(e.target.value || null)}
+                className="h-9 w-full rounded-md border border-border-ds-default bg-[#111] px-ds-3 text-sm text-ink-primary outline-none focus:border-gold-border"
+              >
+                <option value="" disabled>Select an account…</option>
+                {brokerAccountPortfolios
+                  .filter((p) => p.tradovate_account_id != null)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-ds-2 flex justify-end gap-ds-3">
+            <button
+              type="button"
+              onClick={() => setShowNewGroupDialog(false)}
+              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateGroup}
+              disabled={!canCreateNewGroup || isSavingRoute}
+              className="flex items-center gap-ds-2 rounded-md border border-gold-border/60 bg-gold-primary/15 px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary transition-colors hover:border-gold-border hover:bg-gold-primary/25 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4 flex-shrink-0" />
+              {isSavingRoute ? 'Creating…' : 'Create group'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Group confirm modal ── */}
+      <Dialog
+        open={deleteGroupConfirm !== null}
+        onOpenChange={(open) => { if (!open) setDeleteGroupConfirm(null); }}
+      >
+        <DialogContent className="max-w-md border-red-600/40 bg-[#0d0f14]">
+          <DialogTitle className="flex items-center gap-ds-2 text-red-400">
+            <AlertOctagon className="h-5 w-5 flex-shrink-0" />
+            Delete "{deleteGroupConfirm?.label}"?
+          </DialogTitle>
+
+          <p className="text-sm text-ink-secondary leading-relaxed">
+            This permanently deletes the group <span className="font-semibold text-ink-primary">{deleteGroupConfirm?.label}</span>{' '}
+            and stops copying between its leader and followers. This cannot be undone.
+          </p>
+
+          {deleteGroupConfirm && groupHasOpenExposure(deleteGroupConfirm) && (
+            <p className="text-sm text-red-400 leading-relaxed">
+              <AlertOctagon className="mr-ds-1 inline h-4 w-4 flex-shrink-0" />
+              One or more accounts in this group still have live exposure (open position and/or
+              working orders). Deleting the group stops the copier from managing them — any open
+              position and pending orders will remain and will <span className="font-semibold">NOT</span> be
+              closed automatically.
+            </p>
+          )}
+
+          <div className="mt-ds-2 flex justify-end gap-ds-3">
+            <button
+              type="button"
+              onClick={() => setDeleteGroupConfirm(null)}
+              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteGroupConfirm && void handleDeleteGroupConfirmed(deleteGroupConfirm)}
+              className="flex items-center gap-ds-2 rounded-md border border-red-600/60 bg-red-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-red-400 transition-colors hover:border-red-500 hover:bg-red-600/25 hover:text-red-300"
+            >
+              <AlertOctagon className="h-4 w-4 flex-shrink-0" />
+              Yes, Delete Group
             </button>
           </div>
         </DialogContent>
