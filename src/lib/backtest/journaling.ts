@@ -348,7 +348,7 @@ export async function saveBacktestTradesToJournal(
   // Upsert on external_id so re-saving the same session updates rather than duplicates.
   const { error } = await supabase
     .from('trades')
-    .upsert(rows, { onConflict: 'external_id', ignoreDuplicates: false });
+    .upsert(rows, { onConflict: 'user_id,broker,external_id', ignoreDuplicates: false });
 
   if (!error) {
     result.saved = rows.length;
@@ -364,7 +364,7 @@ export async function saveBacktestTradesToJournal(
   for (const row of rows) {
     const { error: rowError } = await supabase
       .from('trades')
-      .upsert(row, { onConflict: 'external_id', ignoreDuplicates: false });
+      .upsert(row, { onConflict: 'user_id,broker,external_id', ignoreDuplicates: false });
 
     if (rowError) {
       failedRows.push({

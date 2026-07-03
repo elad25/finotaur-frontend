@@ -30,9 +30,47 @@ export interface DPoint {
 export interface DrawingOptions {
   color: string;
   width: number;
+  /**
+   * Text-label content (STAGE 2 `text` tool only). Optional so existing
+   * DrawingOptions payloads (all other tools) don't carry a stray field;
+   * defaults to '' on deserialize, and serialize() always includes it
+   * (via the object spread on `options`, which already carries whatever
+   * was set — no special-casing needed there).
+   */
+  text?: string;
 }
 
-export type ToolId = 'cursor' | 'trendline' | 'horizontal' | 'horizontal_ray' | 'rectangle';
+export type ToolId =
+  | 'cursor'
+  | 'trendline'
+  | 'horizontal'
+  | 'horizontal_ray'
+  | 'vertical'
+  | 'ray'
+  | 'extended_line'
+  | 'rectangle'
+  | 'fibonacci'
+  | 'text'
+  | 'parallel_channel';
+
+/**
+ * How many anchor points each tool needs before a drawing is finalized.
+ * DrawingController's click handler is generalized around this map instead
+ * of hardcoded 1-point / 2-point branches — see `_handleDrawClick`.
+ */
+export const POINTS_REQUIRED: Record<ToolId, number> = {
+  cursor: 0,
+  horizontal: 1,
+  horizontal_ray: 1,
+  vertical: 1,
+  text: 1,
+  trendline: 2,
+  ray: 2,
+  extended_line: 2,
+  rectangle: 2,
+  fibonacci: 2,
+  parallel_channel: 3,
+};
 
 // ─── Hit test result ─────────────────────────────────────────────────────────
 
@@ -120,18 +158,41 @@ export abstract class BaseDrawing {
 
   /**
    * Convert a DPoint to canvas pixel coordinates.
-   * Uses `logical` when available (whitespace-safe), otherwise `time`.
-   * Returns null if either coordinate is unavailable.
+   *
+   * Prefers `time` (stable across timeframe switches — a timestamp always
+   * means the same instant regardless of which interval is loaded).
+   * Falls back to `logical` ONLY for whitespace-anchored points where
+   * `time` is unresolvable on the current series (time === 0, or a point
+   * placed beyond the last loaded bar). See D2: a bar-index saved on a 5m
+   * chart points at a completely different bar on a 1h chart, so `logical`
+   * must never be trusted as the primary coordinate once persisted.
+   * Returns null if neither coordinate is resolvable.
    */
   toPixel(pt: DPoint): PixelPoint | null {
     if (!this._chart || !this._series) return null;
     const ts = this._chart.timeScale();
-    const rawX = pt.logical != null
-      ? ts.logicalToCoordinate(pt.logical as any)
-      : ts.timeToCoordinate(pt.time);
+    let rawX: number | null = null;
+    if (pt.time && (pt.time as unknown as number) !== 0) {
+      rawX = ts.timeToCoordinate(pt.time) as number | null;
+    }
+    if (rawX == null && pt.logical != null) {
+      rawX = ts.logicalToCoordinate(pt.logical as any) as number | null;
+    }
     const rawY = this._series.priceToCoordinate(pt.price);
     if (rawX == null || rawY == null) return null;
     return { x: rawX as number, y: rawY as number };
+  }
+
+  /**
+   * Convert a raw price to its Y pixel coordinate via the attached series.
+   * Returns null if not attached or the price is out of the visible range.
+   * Used by renderers (e.g. Fibonacci) that need per-level Y coordinates
+   * without a full DPoint (levels have no `time`/`logical`, only price).
+   */
+  priceToCoordinate(price: number): number | null {
+    if (!this._series) return null;
+    const y = this._series.priceToCoordinate(price);
+    return y == null ? null : (y as number);
   }
 
   // ── Hit testing ───────────────────────────────────────────────────────────

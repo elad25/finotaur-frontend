@@ -132,6 +132,42 @@ function centerCursorBar(chart: IChartApi, container: HTMLDivElement, animated: 
   chart.timeScale().scrollToPosition((w / barSpacing) / 2, animated);
 }
 
+// ─── Drawing utility-toggle prefs (drawings2 P2) ─────────────────────────────
+// Persisted GLOBALLY (not per-symbol) — these are user workflow preferences,
+// not per-chart drawing state.
+const DRAWING_PREFS_KEY = 'finotaur_drawings2_prefs';
+
+interface DrawingPrefs {
+  magnetOn: boolean;
+  stayDrawOn: boolean;
+  lockAllOn: boolean;
+  hideAllOn: boolean;
+}
+
+const DEFAULT_DRAWING_PREFS: DrawingPrefs = {
+  magnetOn: false,
+  stayDrawOn: false,
+  lockAllOn: false,
+  hideAllOn: false,
+};
+
+function readDrawingPrefs(): DrawingPrefs {
+  try {
+    const raw = localStorage.getItem(DRAWING_PREFS_KEY);
+    if (!raw) return { ...DEFAULT_DRAWING_PREFS };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_DRAWING_PREFS, ...parsed };
+  } catch {
+    return { ...DEFAULT_DRAWING_PREFS };
+  }
+}
+
+function writeDrawingPrefs(prefs: DrawingPrefs): void {
+  try {
+    localStorage.setItem(DRAWING_PREFS_KEY, JSON.stringify(prefs));
+  } catch { /* storage full or unavailable */ }
+}
+
 export interface ContextMenuPriceInfo {
   /** Price the user right-clicked at (computed from screen Y via priceScale). */
   price: number;
@@ -301,11 +337,89 @@ export function BacktestReplayChart({
   const [drawingWidth, setDrawingWidth] = useState(2);
   const [hasSelection, setHasSelection] = useState(false);
 
+  // STAGE 2 — text-label edit popover. `wasEmpty` tracks whether the drawing
+  // had no text when the popover opened (freshly created) so Escape can
+  // delete it instead of leaving an empty text drawing behind.
+  const [textEdit, setTextEdit] = useState<
+    { id: string; x: number; y: number; text: string; wasEmpty: boolean } | null
+  >(null);
+  const textEditRef = useRef(textEdit);
+  useEffect(() => { textEditRef.current = textEdit; }, [textEdit]);
+
+  // P2: utility toggle prefs — persisted globally (not per-symbol) in
+  // localStorage, and lifted up here (not local to DrawingToolbar2) because
+  // the DrawingController is destroyed/recreated whenever `bars` changes and
+  // must be re-armed from this state right after each (re)construction.
+  const [drawingPrefs, setDrawingPrefs] = useState(() => readDrawingPrefs());
+  const drawingPrefsRef = useRef(drawingPrefs);
+  useEffect(() => { drawingPrefsRef.current = drawingPrefs; }, [drawingPrefs]);
+
+  const toggleMagnet = useCallback(() => {
+    setDrawingPrefs((prev) => {
+      const next = { ...prev, magnetOn: !prev.magnetOn };
+      writeDrawingPrefs(next);
+      drawingControllerRef.current?.setMagnet(next.magnetOn);
+      return next;
+    });
+  }, []);
+  const toggleStayDraw = useCallback(() => {
+    setDrawingPrefs((prev) => {
+      const next = { ...prev, stayDrawOn: !prev.stayDrawOn };
+      writeDrawingPrefs(next);
+      drawingControllerRef.current?.setStayInDrawMode(next.stayDrawOn);
+      return next;
+    });
+  }, []);
+  const toggleLockAll = useCallback(() => {
+    setDrawingPrefs((prev) => {
+      const next = { ...prev, lockAllOn: !prev.lockAllOn };
+      writeDrawingPrefs(next);
+      drawingControllerRef.current?.setLockAll(next.lockAllOn);
+      return next;
+    });
+  }, []);
+  const toggleHideAll = useCallback(() => {
+    setDrawingPrefs((prev) => {
+      const next = { ...prev, hideAllOn: !prev.hideAllOn };
+      writeDrawingPrefs(next);
+      drawingControllerRef.current?.setHideAll(next.hideAllOn);
+      return next;
+    });
+  }, []);
+
+  // STAGE 2 — text-edit popover commit/cancel. Enter or blur commits;
+  // Escape cancels (deleting the drawing if it was just created empty).
+  const commitTextEdit = useCallback(() => {
+    const state = textEditRef.current;
+    if (!state) return;
+    drawingControllerRef.current?.updateText(state.id, state.text);
+    setTextEdit(null);
+  }, []);
+
+  const cancelTextEdit = useCallback(() => {
+    const state = textEditRef.current;
+    if (!state) return;
+    // A freshly-created text drawing with no prior content: cancel = delete,
+    // not "leave an empty text drawing behind" (matches the commit-empty
+    // semantics of updateText, just without writing the (empty) text first).
+    if (state.wasEmpty) {
+      drawingControllerRef.current?.updateText(state.id, '');
+    }
+    setTextEdit(null);
+  }, []);
+
   // Keep a ref for currentTool so chart-lifecycle closures read the latest value.
   const currentToolRef = useRef<ToolId>(currentTool);
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
 
   // Delete key binding for selected drawings.
+  // IMPORTANT: the `target.tagName === 'INPUT'` guard below already covers
+  // the text-edit popover's <input> (STAGE 2) — while the popover is open
+  // and focused, Delete/Backspace/Escape keystrokes originate from the
+  // input element itself and are skipped here entirely, so typing text with
+  // a Backspace never deletes the underlying drawing. Verified: the popover
+  // input (below, in the JSX) has its own onKeyDown for Enter/Escape and
+  // does not call window-level handlers.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -529,19 +643,57 @@ export function BacktestReplayChart({
     }));
     series.setData(visible);
 
+    // D2: resolve a Unix-seconds timestamp to a bar-index on the CURRENTLY
+    // loaded `bars` array via binary search. `bars` is stable for the
+    // lifetime of this effect (chart is re-mounted whenever `bars` changes),
+    // so a closure over it here is safe.
+    const resolveLogical = (timeSec: number): number | null => {
+      let lo = 0;
+      let hi = bars.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const t = bars[mid].time as number;
+        if (t === timeSec) return mid;
+        if (t < timeSec) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return null; // not found — e.g. whitespace beyond the loaded window
+    };
+
     // Create the drawings2 controller — subscribes to click + crosshair,
     // attaches/detaches per-primitive drawings, persists to localStorage.
     const dc = new DrawingController(chart, series as unknown as import('lightweight-charts').ISeriesApi<'Candlestick'>, {
       symbol,
       onChange: () => setOverlayTick((n) => n + 1),
-      onSelectionChange: (has) => setHasSelection(has),
+      // D4: forward the selected drawing's own options so the toolbar's
+      // color/width pickers reflect the SELECTED shape, not the last-used values.
+      onSelectionChange: (sel) => {
+        setHasSelection(sel !== null);
+        if (sel) {
+          setDrawingColor(sel.options.color);
+          setDrawingWidth(sel.options.width);
+        }
+      },
       // After a shape is drawn the controller switches back to cursor — keep the
       // React toolbar state in sync so the tool de-highlights (one mark per pick).
       onActiveToolChange: (t) => setCurrentTool(t),
+      resolveLogical,
+      // STAGE 2 — open the text-edit popover at the given chart-relative pixel.
+      onTextEditRequest: (id, px, currentText) => {
+        setTextEdit({ id, x: px.x, y: px.y, text: currentText, wasEmpty: currentText.trim() === '' });
+      },
     });
     drawingControllerRef.current = dc;
     // Sync the current tool into the controller (in case it was set before mount).
     dc.setActiveTool(currentToolRef.current);
+    // P2: re-arm the persisted utility-toggle prefs — the controller instance
+    // is fresh (destroyed/recreated whenever `bars` changes) and starts with
+    // all flags off, so React state must push them back in right after construction.
+    const prefs = drawingPrefsRef.current;
+    dc.setMagnet(prefs.magnetOn);
+    dc.setStayInDrawMode(prefs.stayDrawOn);
+    dc.setLockAll(prefs.lockAllOn);
+    dc.setHideAll(prefs.hideAllOn);
 
     // Center the current (cursor) bar on load — history on the left half, open
     // "future" room on the right that reveals as you PLAY (Elad 2026-05-31:
@@ -1089,7 +1241,7 @@ export function BacktestReplayChart({
               const label = o.type === 'STOP_LIMIT'
                 ? (o.triggeredAt != null
                     ? `${o.size} ${sideLabel} LIMIT (triggered)`
-                    : `${o.size} ${sideLabel} STOP LIMIT ${o.triggerPrice} / L ${o.limitPrice ?? o.triggerPrice}`)
+                    : `${o.size} ${sideLabel} STOP LIMIT ${o.triggerPrice.toFixed(2)} / L ${(o.limitPrice ?? o.triggerPrice).toFixed(2)}`)
                 : `${o.size} ${sideLabel} ${ORDER_CODE[o.type]}`;
               return (
                 <div
@@ -1296,11 +1448,52 @@ export function BacktestReplayChart({
               setDrawingWidth(w);
               drawingControllerRef.current?.setOptions({ width: w });
             }}
+            magnetOn={drawingPrefs.magnetOn}
+            onToggleMagnet={toggleMagnet}
+            stayDrawOn={drawingPrefs.stayDrawOn}
+            onToggleStayDraw={toggleStayDraw}
+            lockAllOn={drawingPrefs.lockAllOn}
+            onToggleLockAll={toggleLockAll}
+            hideAllOn={drawingPrefs.hideAllOn}
+            onToggleHideAll={toggleHideAll}
             className="absolute left-0 top-0 bottom-0 z-[30]"
           />
         )}
 
         {/* DrawingStylePopover removed — style is set via the toolbar swatches/width buttons. */}
+
+        {/* ── STAGE 2: text-label edit popover — minimal input, no buttons.
+            Enter/blur commits, Escape cancels (deletes if freshly created empty).
+            Styled to match DrawingToolbar2's StyleFlyout dark-surface treatment. ── */}
+        {enableDrawings && textEdit && (
+          <div
+            className="absolute z-[40] rounded-[10px] border border-border-ds-default bg-surface-1 p-1 shadow-xl"
+            style={{ left: `${textEdit.x}px`, top: `${textEdit.y - 16}px` }}
+          >
+            <input
+              autoFocus
+              type="text"
+              value={textEdit.text}
+              placeholder="Label text…"
+              onChange={(e) => setTextEdit((prev) => (prev ? { ...prev, text: e.target.value } : prev))}
+              onBlur={commitTextEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitTextEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelTextEdit();
+                }
+                // Stop Delete/Backspace/Escape from bubbling to the window-level
+                // drawing keybinding — though the tagName==='INPUT' guard there
+                // already covers it; stopPropagation is defense-in-depth.
+                e.stopPropagation();
+              }}
+              className="w-40 rounded-md bg-surface-2 px-2 py-1 text-[12px] text-ink-primary outline-none border border-border-ds-subtle focus:border-gold-primary"
+            />
+          </div>
+        )}
 
         {/* ── TV-style replay cursor overlays — only while the scissors tool
             is armed; after a rewind it disarms and a normal crosshair returns. ── */}

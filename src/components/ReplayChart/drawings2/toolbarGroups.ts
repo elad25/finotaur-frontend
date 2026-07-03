@@ -11,7 +11,20 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
+  EyeOff,
+  GalleryVerticalEnd,
+  Lock,
+  Magnet,
+  Minus,
+  MoveDiagonal,
+  MoveUpRight,
+  Pin,
+  Rows3,
+  SeparatorVertical,
+  Square,
   Trash2,
+  TrendingUp,
+  Type,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,22 +60,62 @@ export interface UtilityTool {
 
 // ─── Tool groups (top section) ────────────────────────────────────────────────
 
-// Per Elad (2026-06-26): the entire drawing palette is reduced to a SINGLE
-// tool — a horizontal ray that starts at a clicked point and extends to the
-// RIGHT only. Every other tool/group was removed.
+// Per Elad (2026-06-26): the entire drawing palette had been temporarily
+// reduced to a SINGLE tool — a horizontal ray that starts at a clicked point
+// and extends to the RIGHT only. Every other tool/group was removed.
+//
+// REVERSED by Elad (2026-07-03): the latent trendline/horizontal/rectangle
+// tools (already implemented in tools.ts) are re-enabled below, grouped by
+// TradingView-style categories.
 export const TOOL_GROUPS: ToolGroup[] = [
   {
     id: 'lines',
-    label: 'Horizontal Ray',
-    icon: ArrowRight,
+    label: 'Lines',
+    icon: TrendingUp,
     tools: [
+      { id: 'trendline', label: 'Trend Line', icon: TrendingUp, supported: true, shortcut: 'T' },
+      { id: 'horizontal', label: 'Horizontal Line', icon: Minus, supported: true, shortcut: 'M' },
       { id: 'horizontal_ray', label: 'Horizontal Ray', icon: ArrowRight, supported: true, shortcut: 'H' },
+      { id: 'vertical', label: 'Vertical Line', icon: SeparatorVertical, supported: true, shortcut: 'V' },
+      { id: 'ray', label: 'Ray', icon: MoveUpRight, supported: true },
+      { id: 'extended_line', label: 'Extended Line', icon: MoveDiagonal, supported: true },
+    ],
+  },
+  {
+    id: 'shapes',
+    label: 'Shapes',
+    icon: Square,
+    tools: [
+      { id: 'rectangle', label: 'Rectangle', icon: Square, supported: true, shortcut: 'R' },
+      { id: 'parallel_channel', label: 'Parallel Channel', icon: GalleryVerticalEnd, supported: true },
+    ],
+  },
+  {
+    id: 'fibonacci',
+    label: 'Fibonacci',
+    icon: Rows3,
+    tools: [
+      { id: 'fibonacci', label: 'Fib Retracement', icon: Rows3, supported: true, shortcut: 'F' },
+    ],
+  },
+  {
+    id: 'annotations',
+    label: 'Annotations',
+    icon: Type,
+    tools: [
+      { id: 'text', label: 'Text', icon: Type, supported: true },
     ],
   },
 ];
 
 // ─── Utility tools (bottom section) ──────────────────────────────────────────
-// Only "Remove All" survives so a user can clear rays they no longer want.
+// P2 (2026-07-03): magnet / stay-in-draw-mode / lock-all / hide-all toggles
+// are now wired to real controller behavior (see DrawingController.ts).
+// "Remove All" remains the only action-kind utility.
 export const UTILITY_TOOLS: UtilityTool[] = [
-  { id: 'remove_all', label: 'Remove All Drawings',  icon: Trash2,     kind: 'action', supported: true  },
+  { id: 'magnet',      label: 'Magnet (snap to OHLC)',    icon: Magnet,  kind: 'toggle', supported: true },
+  { id: 'stay_draw',   label: 'Stay in Drawing Mode',     icon: Pin,     kind: 'toggle', supported: true },
+  { id: 'lock_all',    label: 'Lock All Drawings',        icon: Lock,    kind: 'toggle', supported: true },
+  { id: 'hide_all',    label: 'Hide All Drawings',        icon: EyeOff,  kind: 'toggle', supported: true },
+  { id: 'remove_all',  label: 'Remove All Drawings',      icon: Trash2,  kind: 'action', supported: true },
 ];
