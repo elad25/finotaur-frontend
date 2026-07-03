@@ -124,10 +124,19 @@ jobs:
       - name: Dropdown dark-theme guard (blocking)
         run: node scripts/check-dropdown-theme.mjs
 
+  # 2026-07-02: this job was chronically cancelled by its own 10-minute
+  # timeout (last several main runs + PR #1200 twice). Step timings showed
+  # npm ci at ~20s (npm cache was fine) — the `eslint .` step alone ran past
+  # 9m30s: single-threaded full-repo lint of ~2,090 TS/TSX files. Fix is
+  # three-part: (1) `npm run lint` now runs eslint with --concurrency auto
+  # (multi-core, eslint >=9.34) and --cache; (2) the .eslintcache file is
+  # persisted across runs below, so warm runs re-lint only changed files;
+  # (3) timeout raised to 20 as headroom for cold-cache runs — a run killed
+  # by timeout skips post steps, so the cache would never populate at 10.
   lint:
     name: lint (eslint)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -136,6 +145,19 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      # Key ends in the run's SHA so every run saves a fresh cache; restore
+      # falls back to the newest cache for the same deps + eslint config
+      # (PR branches can restore caches created by main). --cache-strategy
+      # content (set in the lint script) is what makes a restored cache
+      # valid here — CI checkouts get fresh mtimes, so the default metadata
+      # strategy would invalidate every entry.
+      - name: Restore ESLint cache
+        uses: actions/cache@v4
+        with:
+          path: .eslintcache
+          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.js') }}-
       - name: Lint
         run: npm run lint
 
