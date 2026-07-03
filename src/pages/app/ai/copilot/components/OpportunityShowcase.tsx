@@ -37,6 +37,9 @@ import type { EtfBarsRange } from '@/services/etf-analyzer.api';
 import { useMarketStatus } from '@/lib/marketStatus';
 import { routeForSuggest } from '@/lib/tickerRouting';
 import type { SuggestItem } from '@/components/Search/useSymbolSuggest';
+import { fetchHoldingsFundamentals } from '@/services/copilotFundamentalsApi';
+import { FundamentalsGradeBadge } from './FundamentalsGradeBadge';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -633,6 +636,49 @@ function RightColumn({ opp }: RightColumnProps) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Fundamentals badge — compact P/E + revenue growth + overall grade line,
+// shown in the Detail Header when data is available for the ticker.
+// ---------------------------------------------------------------------------
+
+function fmtPeCompact(v: number | null | undefined): string {
+  return v == null ? '—' : v.toFixed(1);
+}
+
+function fmtGrowthCompact(v: number | null | undefined): string {
+  if (v == null) return '—';
+  const sign = v > 0 ? '+' : v < 0 ? '−' : '';
+  return `${sign}${Math.abs(v).toFixed(1)}%`;
+}
+
+interface OppFundamentalsBadgeProps {
+  ticker: string;
+  fundamentalsMap: Record<string, import('@/services/copilotFundamentalsApi').FundamentalsSnapshot>;
+}
+
+function OppFundamentalsBadge({ ticker, fundamentalsMap }: OppFundamentalsBadgeProps) {
+  const primary = ticker.split('/')[0].trim().toUpperCase();
+  const snapshot = fundamentalsMap[primary];
+  if (!snapshot) return null;
+
+  return (
+    <div className="flex items-center gap-ds-2 rounded-[6px] border border-white/8 bg-white/[0.02] px-2.5 py-1.5">
+      <span className="text-[10px] uppercase tracking-[0.06em] text-ink-tertiary">Fundamentals</span>
+      <span className="font-mono text-[11px] tabular-nums text-ink-secondary">
+        P/E {fmtPeCompact(snapshot.peRatio)}
+      </span>
+      <span
+        className={`font-mono text-[11px] tabular-nums ${
+          (snapshot.revenueGrowthYoy ?? 0) < 0 ? 'text-num-negative' : 'text-num-positive'
+        }`}
+      >
+        Rev {fmtGrowthCompact(snapshot.revenueGrowthYoy)}
+      </span>
+      <FundamentalsGradeBadge grades={snapshot.grades} />
+    </div>
+  );
+}
+
 function ImpactBadge({ impact }: { impact: 'High' | 'Medium' | 'Low' }) {
   if (impact === 'High') {
     return (
@@ -719,6 +765,18 @@ export function OpportunityShowcase({ opportunities }: Props) {
     refetchIntervalInBackground: false,
   });
 
+  // Batch-fetch fundamentals for all visible tickers (first symbol of any
+  // multi-leg ticker like "MON / CF"). Graceful degradation: missing/failed
+  // symbols are simply absent from the map — badge omits itself.
+  const fundamentalsSymbols = allTickers.map((t) => t.split('/')[0].trim().toUpperCase());
+  const { data: fundamentalsMap = {} } = useQuery({
+    queryKey: ['opp-batch-fundamentals', fundamentalsSymbols.slice().sort().join(',')],
+    queryFn: () => fetchHoldingsFundamentals(fundamentalsSymbols),
+    enabled: fundamentalsSymbols.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   const scrollRight = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollBy({ left: 300, behavior: 'smooth' });
@@ -792,6 +850,9 @@ export function OpportunityShowcase({ opportunities }: Props) {
               {opp.sector}
             </span>
           )}
+          <ErrorBoundary boundary="copilot-opp-fundamentals-badge" fallback={null}>
+            <OppFundamentalsBadge ticker={opp.ticker} fundamentalsMap={fundamentalsMap} />
+          </ErrorBoundary>
         </div>
         {/* View Analysis link — no fake watchlist button (see note above) */}
         <Link

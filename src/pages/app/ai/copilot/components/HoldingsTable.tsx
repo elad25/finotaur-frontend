@@ -1,10 +1,15 @@
 // src/pages/app/ai/copilot/components/HoldingsTable.tsx
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ds/Card';
 import { Price } from '@/components/ds/NumberDisplay';
 import { Holding } from '../hooks/usePortfolioMockData';
 import { cn } from '@/lib/utils';
 import { getCompanyLogo } from '../utils/companyLogo';
+import { fetchHoldingsFundamentals, type FundamentalsSnapshot } from '@/services/copilotFundamentalsApi';
+import { FundamentalsGradeBadge } from './FundamentalsGradeBadge';
+import { HoldingFundamentalsDrawer } from './HoldingFundamentalsDrawer';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface Props {
   holdings: Holding[];
@@ -58,8 +63,65 @@ function CompanyLogo({ symbol, colorClass }: { symbol: string; colorClass: strin
   );
 }
 
-export function HoldingsTable({ holdings }: Props) {
+function fmtPeCell(v: number | null | undefined): string {
+  return v == null ? '—' : v.toFixed(1);
+}
+
+function fmtGrowthCell(v: number | null | undefined): string {
+  if (v == null) return '—';
+  const sign = v > 0 ? '+' : v < 0 ? '−' : '';
+  return `${sign}${Math.abs(v).toFixed(1)}%`;
+}
+
+function FundamentalsCell({
+  loading,
+  snapshot,
+}: {
+  loading: boolean;
+  snapshot: FundamentalsSnapshot | undefined;
+}) {
+  if (loading) {
+    return <div className="ml-auto h-3 w-16 animate-pulse rounded-sm bg-white/[0.06]" />;
+  }
+  if (!snapshot) {
+    return <span className="text-xs text-ink-tertiary">—</span>;
+  }
+  return (
+    <div className="flex items-center justify-end gap-ds-2">
+      <div className="flex flex-col items-end leading-tight">
+        <span className="font-mono text-xs tabular-nums text-ink-secondary">
+          P/E {fmtPeCell(snapshot.peRatio)}
+        </span>
+        <span
+          className={cn(
+            'font-mono text-[11px] tabular-nums',
+            (snapshot.revenueGrowthYoy ?? 0) < 0 ? 'text-num-negative' : 'text-num-positive',
+          )}
+        >
+          Rev {fmtGrowthCell(snapshot.revenueGrowthYoy)}
+        </span>
+      </div>
+      <FundamentalsGradeBadge grades={snapshot.grades} />
+    </div>
+  );
+}
+
+function HoldingsTableInner({ holdings }: Props) {
   const sorted = [...holdings].sort((a, b) => b.marketValue - a.marketValue);
+  const [drilldownSymbol, setDrilldownSymbol] = useState<string | null>(null);
+
+  const symbols = sorted.map((h) => h.symbol);
+  const { data: fundamentalsMap = {}, isLoading: fundamentalsLoading } = useQuery({
+    queryKey: ['copilot-holdings-fundamentals', symbols.slice().sort().join(',')],
+    queryFn: () => fetchHoldingsFundamentals(symbols),
+    enabled: symbols.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
+  const drilldownSnapshot = drilldownSymbol
+    ? fundamentalsMap[drilldownSymbol.toUpperCase()] ?? null
+    : null;
 
   return (
     <Card className="relative overflow-hidden bg-[#0b0a07]/90 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.35)]">
@@ -83,13 +145,15 @@ export function HoldingsTable({ holdings }: Props) {
               <th className="text-right font-medium pb-ds-3">Market value</th>
               <th className="text-right font-medium pb-ds-3">P&amp;L $</th>
               <th className="text-right font-medium pb-ds-3">P&amp;L %</th>
+              <th className="text-right font-medium pb-ds-3">Fundamentals</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map(h => (
               <tr
                 key={h.symbol}
-                className="border-b border-gold-primary/10 hover:bg-gold-primary/[0.045] transition-colors"
+                onClick={() => setDrilldownSymbol(h.symbol)}
+                className="cursor-pointer border-b border-gold-primary/10 hover:bg-gold-primary/[0.045] transition-colors"
               >
                 <td className="py-ds-3">
                   <div className="flex items-center gap-ds-2">
@@ -116,12 +180,34 @@ export function HoldingsTable({ holdings }: Props) {
                     {fmtPercent(h.unrealizedPnlPercent)}
                   </span>
                 </td>
+                <td className="text-right">
+                  <FundamentalsCell
+                    loading={fundamentalsLoading}
+                    snapshot={fundamentalsMap[h.symbol.toUpperCase()]}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       </div>
+
+      {drilldownSymbol && (
+        <HoldingFundamentalsDrawer
+          snapshot={drilldownSnapshot}
+          fallbackSymbol={drilldownSymbol}
+          onClose={() => setDrilldownSymbol(null)}
+        />
+      )}
     </Card>
+  );
+}
+
+export function HoldingsTable(props: Props) {
+  return (
+    <ErrorBoundary boundary="copilot-holdings-table">
+      <HoldingsTableInner {...props} />
+    </ErrorBoundary>
   );
 }
