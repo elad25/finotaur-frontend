@@ -337,6 +337,15 @@ export function BacktestReplayChart({
   const [drawingWidth, setDrawingWidth] = useState(2);
   const [hasSelection, setHasSelection] = useState(false);
 
+  // STAGE 2 — text-label edit popover. `wasEmpty` tracks whether the drawing
+  // had no text when the popover opened (freshly created) so Escape can
+  // delete it instead of leaving an empty text drawing behind.
+  const [textEdit, setTextEdit] = useState<
+    { id: string; x: number; y: number; text: string; wasEmpty: boolean } | null
+  >(null);
+  const textEditRef = useRef(textEdit);
+  useEffect(() => { textEditRef.current = textEdit; }, [textEdit]);
+
   // P2: utility toggle prefs — persisted globally (not per-symbol) in
   // localStorage, and lifted up here (not local to DrawingToolbar2) because
   // the DrawingController is destroyed/recreated whenever `bars` changes and
@@ -378,11 +387,39 @@ export function BacktestReplayChart({
     });
   }, []);
 
+  // STAGE 2 — text-edit popover commit/cancel. Enter or blur commits;
+  // Escape cancels (deleting the drawing if it was just created empty).
+  const commitTextEdit = useCallback(() => {
+    const state = textEditRef.current;
+    if (!state) return;
+    drawingControllerRef.current?.updateText(state.id, state.text);
+    setTextEdit(null);
+  }, []);
+
+  const cancelTextEdit = useCallback(() => {
+    const state = textEditRef.current;
+    if (!state) return;
+    // A freshly-created text drawing with no prior content: cancel = delete,
+    // not "leave an empty text drawing behind" (matches the commit-empty
+    // semantics of updateText, just without writing the (empty) text first).
+    if (state.wasEmpty) {
+      drawingControllerRef.current?.updateText(state.id, '');
+    }
+    setTextEdit(null);
+  }, []);
+
   // Keep a ref for currentTool so chart-lifecycle closures read the latest value.
   const currentToolRef = useRef<ToolId>(currentTool);
   useEffect(() => { currentToolRef.current = currentTool; }, [currentTool]);
 
   // Delete key binding for selected drawings.
+  // IMPORTANT: the `target.tagName === 'INPUT'` guard below already covers
+  // the text-edit popover's <input> (STAGE 2) — while the popover is open
+  // and focused, Delete/Backspace/Escape keystrokes originate from the
+  // input element itself and are skipped here entirely, so typing text with
+  // a Backspace never deletes the underlying drawing. Verified: the popover
+  // input (below, in the JSX) has its own onKeyDown for Enter/Escape and
+  // does not call window-level handlers.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -641,6 +678,10 @@ export function BacktestReplayChart({
       // React toolbar state in sync so the tool de-highlights (one mark per pick).
       onActiveToolChange: (t) => setCurrentTool(t),
       resolveLogical,
+      // STAGE 2 — open the text-edit popover at the given chart-relative pixel.
+      onTextEditRequest: (id, px, currentText) => {
+        setTextEdit({ id, x: px.x, y: px.y, text: currentText, wasEmpty: currentText.trim() === '' });
+      },
     });
     drawingControllerRef.current = dc;
     // Sync the current tool into the controller (in case it was set before mount).
@@ -1420,6 +1461,39 @@ export function BacktestReplayChart({
         )}
 
         {/* DrawingStylePopover removed — style is set via the toolbar swatches/width buttons. */}
+
+        {/* ── STAGE 2: text-label edit popover — minimal input, no buttons.
+            Enter/blur commits, Escape cancels (deletes if freshly created empty).
+            Styled to match DrawingToolbar2's StyleFlyout dark-surface treatment. ── */}
+        {enableDrawings && textEdit && (
+          <div
+            className="absolute z-[40] rounded-[10px] border border-border-ds-default bg-surface-1 p-1 shadow-xl"
+            style={{ left: `${textEdit.x}px`, top: `${textEdit.y - 16}px` }}
+          >
+            <input
+              autoFocus
+              type="text"
+              value={textEdit.text}
+              placeholder="Label text…"
+              onChange={(e) => setTextEdit((prev) => (prev ? { ...prev, text: e.target.value } : prev))}
+              onBlur={commitTextEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitTextEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelTextEdit();
+                }
+                // Stop Delete/Backspace/Escape from bubbling to the window-level
+                // drawing keybinding — though the tagName==='INPUT' guard there
+                // already covers it; stopPropagation is defense-in-depth.
+                e.stopPropagation();
+              }}
+              className="w-40 rounded-md bg-surface-2 px-2 py-1 text-[12px] text-ink-primary outline-none border border-border-ds-subtle focus:border-gold-primary"
+            />
+          </div>
+        )}
 
         {/* ── TV-style replay cursor overlays — only while the scissors tool
             is armed; after a rewind it disarms and a normal crosshair returns. ── */}

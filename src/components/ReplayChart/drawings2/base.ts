@@ -30,9 +30,47 @@ export interface DPoint {
 export interface DrawingOptions {
   color: string;
   width: number;
+  /**
+   * Text-label content (STAGE 2 `text` tool only). Optional so existing
+   * DrawingOptions payloads (all other tools) don't carry a stray field;
+   * defaults to '' on deserialize, and serialize() always includes it
+   * (via the object spread on `options`, which already carries whatever
+   * was set — no special-casing needed there).
+   */
+  text?: string;
 }
 
-export type ToolId = 'cursor' | 'trendline' | 'horizontal' | 'horizontal_ray' | 'rectangle';
+export type ToolId =
+  | 'cursor'
+  | 'trendline'
+  | 'horizontal'
+  | 'horizontal_ray'
+  | 'vertical'
+  | 'ray'
+  | 'extended_line'
+  | 'rectangle'
+  | 'fibonacci'
+  | 'text'
+  | 'parallel_channel';
+
+/**
+ * How many anchor points each tool needs before a drawing is finalized.
+ * DrawingController's click handler is generalized around this map instead
+ * of hardcoded 1-point / 2-point branches — see `_handleDrawClick`.
+ */
+export const POINTS_REQUIRED: Record<ToolId, number> = {
+  cursor: 0,
+  horizontal: 1,
+  horizontal_ray: 1,
+  vertical: 1,
+  text: 1,
+  trendline: 2,
+  ray: 2,
+  extended_line: 2,
+  rectangle: 2,
+  fibonacci: 2,
+  parallel_channel: 3,
+};
 
 // ─── Hit test result ─────────────────────────────────────────────────────────
 
@@ -143,6 +181,18 @@ export abstract class BaseDrawing {
     const rawY = this._series.priceToCoordinate(pt.price);
     if (rawX == null || rawY == null) return null;
     return { x: rawX as number, y: rawY as number };
+  }
+
+  /**
+   * Convert a raw price to its Y pixel coordinate via the attached series.
+   * Returns null if not attached or the price is out of the visible range.
+   * Used by renderers (e.g. Fibonacci) that need per-level Y coordinates
+   * without a full DPoint (levels have no `time`/`logical`, only price).
+   */
+  priceToCoordinate(price: number): number | null {
+    if (!this._series) return null;
+    const y = this._series.priceToCoordinate(price);
+    return y == null ? null : (y as number);
   }
 
   // ── Hit testing ───────────────────────────────────────────────────────────

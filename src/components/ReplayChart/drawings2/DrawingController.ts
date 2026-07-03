@@ -27,6 +27,7 @@ import {
   DPoint,
   DrawingOptions,
   HitResult,
+  POINTS_REQUIRED,
   SerializedDrawing,
   ToolId,
 } from './base';
@@ -37,6 +38,10 @@ import {
   RectangleDrawing,
   hexToRgba,
 } from './tools';
+import { VerticalLineDrawing } from './toolsVertical';
+import { FibonacciDrawing } from './toolsFib';
+import { TextDrawing } from './toolsText';
+import { ParallelChannelDrawing } from './toolsChannel';
 import { snapToOHLC, type SnapCandidate } from './geometry';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
@@ -56,6 +61,16 @@ export interface DrawingControllerOptions {
    * the timestamp isn't found (e.g. whitespace beyond the loaded window).
    */
   resolveLogical?: (timeSec: number) => number | null;
+  /**
+   * STAGE 2 — fired when a `text` drawing needs its content edited:
+   *   (a) right after a `text` drawing is finalized (creation click) — fires
+   *       with `currentText: ''` so the popover opens empty for first entry.
+   *   (b) in cursor mode, when the user clicks an ALREADY-SELECTED text
+   *       drawing (a cheap re-edit affordance — no separate "edit" button).
+   * `px` is the CSS-space pixel point (chart-relative) where the popover
+   * should be anchored; BacktestReplayChart owns the actual <input> UI.
+   */
+  onTextEditRequest?: (drawingId: string, px: { x: number; y: number }, currentText: string) => void;
 }
 
 // ─── Persistence key ─────────────────────────────────────────────────────────
@@ -72,10 +87,16 @@ function createDrawing(
   options: DrawingOptions,
 ): BaseDrawing | null {
   switch (tool) {
-    case 'trendline':      return new TrendLineDrawing(points, options);
+    case 'trendline':      return new TrendLineDrawing(points, options, 'none');
+    case 'ray':             return new TrendLineDrawing(points, options, 'right');
+    case 'extended_line':   return new TrendLineDrawing(points, options, 'both');
     case 'horizontal':     return new HorizontalLineDrawing(points, options);
     case 'horizontal_ray': return new HorizontalRayDrawing(points, options);
+    case 'vertical':        return new VerticalLineDrawing(points, options);
     case 'rectangle':      return new RectangleDrawing(points, options);
+    case 'fibonacci':       return new FibonacciDrawing(points, options);
+    case 'text':            return new TextDrawing(points, options);
+    case 'parallel_channel': return new ParallelChannelDrawing(points, options);
     default:               return null;
   }
 }
@@ -90,6 +111,7 @@ export class DrawingController {
   private _onSelectionChange?: (sel: { options: DrawingOptions } | null) => void;
   private _onActiveToolChange?: (tool: ToolId) => void;
   private _resolveLogical?: (timeSec: number) => number | null;
+  private _onTextEditRequest?: (drawingId: string, px: { x: number; y: number }, currentText: string) => void;
 
   private _activeTool: ToolId = 'cursor';
   private _drawings: BaseDrawing[] = [];
@@ -140,6 +162,7 @@ export class DrawingController {
     this._onSelectionChange = opts.onSelectionChange;
     this._onActiveToolChange = opts.onActiveToolChange;
     this._resolveLogical = opts.resolveLogical;
+    this._onTextEditRequest = opts.onTextEditRequest;
 
     this._clickHandler = (p) => this._onClick(p);
     this._moveHandler  = (p) => this._onCrosshairMove(p);
@@ -254,6 +277,33 @@ export class DrawingController {
     this._detach(this._selected);
     this._drawings = this._drawings.filter(d => d !== this._selected);
     this._selected = null;
+    this._saveToStorage();
+    this._onChange?.();
+  }
+
+  /**
+   * STAGE 2 — commit edited text for the `text` drawing identified by
+   * `id` (the ephemeral index-based id handed out via onTextEditRequest).
+   * Empty/whitespace-only text deletes the drawing instead (reuses the same
+   * detach + filter + persist path as deleteSelected — see file header spec:
+   * "Empty/whitespace text = the drawing should be deleted").
+   */
+  updateText(id: string, text: string): void {
+    const idx = Number(id);
+    const drawing = this._drawings[idx];
+    if (!drawing) return;
+
+    if (text.trim() === '') {
+      this._detach(drawing);
+      this._drawings = this._drawings.filter(d => d !== drawing);
+      if (this._selected === drawing) this._selected = null;
+      this._saveToStorage();
+      this._onChange?.();
+      return;
+    }
+
+    drawing.options = { ...drawing.options, text };
+    drawing.requestUpdate();
     this._saveToStorage();
     this._onChange?.();
   }
@@ -376,12 +426,31 @@ export class DrawingController {
     for (const d of [...this._drawings].reverse()) {
       const hit = d.hitTest(x, y);
       if (hit) {
+        // Cheap re-edit affordance: clicking a text drawing that is ALREADY
+        // selected re-opens the text-edit popover instead of a no-op reselect.
+        // (Clicking an UNselected text drawing just selects it, same as any
+        // other tool — the user clicks again to enter edit mode.)
+        const isTextDrawing = d.serialize().tool === 'text';
+        const wasAlreadySelected = d.selected && d === this._selected;
         this._selectOnly(d);
+        if (isTextDrawing && wasAlreadySelected) {
+          this._requestTextEdit(d, x, y);
+        }
         return;
       }
     }
     // Clicked empty space → deselect
     this._deselectAll();
+  }
+
+  /** Resolve a drawing's position in `_drawings` as its ephemeral id string. */
+  private _drawingId(d: BaseDrawing): string {
+    return String(this._drawings.indexOf(d));
+  }
+
+  private _requestTextEdit(d: BaseDrawing, px: number, py: number): void {
+    if (!this._onTextEditRequest) return;
+    this._onTextEditRequest(this._drawingId(d), { x: px, y: py }, d.options.text ?? '');
   }
 
   private _handleDrawClick(x: number, y: number): void {
@@ -391,29 +460,39 @@ export class DrawingController {
     const dp = this._toDPoint(x, y, true); // creation click — snap when magnet on
     if (!dp) return;
 
-    // Single-point tools (horizontal line / horizontal ray) → finalize immediately.
-    // Stop after one mark: switch back to cursor so the next click does NOT
-    // draw another shape (the user must reselect the tool to draw again) —
-    // UNLESS stay-in-draw-mode (P2) is on, in which case the tool stays armed
-    // for repeated marks.
-    if (tool === 'horizontal' || tool === 'horizontal_ray') {
-      this._finalize(tool, [dp]);
+    const required = POINTS_REQUIRED[tool];
+
+    // 1-point tools (horizontal line / horizontal ray / vertical) → finalize
+    // immediately. Stop after one mark: switch back to cursor so the next
+    // click does NOT draw another shape (the user must reselect the tool to
+    // draw again) — UNLESS stay-in-draw-mode (P2) is on, in which case the
+    // tool stays armed for repeated marks.
+    if (required <= 1) {
+      const created = this._finalize(tool, [dp]);
       if (!this._stayInDrawModeOn) this._resetToCursor();
+      // STAGE 2: a freshly-finalized `text` drawing immediately opens the
+      // edit popover (empty currentText) so the user can type right away.
+      if (tool === 'text' && created) {
+        this._selectOnly(created);
+        this._requestTextEdit(created, x, y);
+      }
       return;
     }
 
-    // Trend line / Rectangle: 2 points
+    // Multi-point tools (trendline / ray / extended_line / rectangle /
+    // fibonacci): push the pending point; attach/refresh the preview on
+    // every click before the last one, finalize once `required` is reached.
     this._pendingPoints.push(dp);
 
     if (this._pendingPoints.length === 1) {
       // First click: attach preview
       this._attachPreview(tool, dp);
-    } else if (this._pendingPoints.length >= 2) {
-      // Second click: finalize, then stop (back to cursor — no auto-repeat) —
+    } else if (this._pendingPoints.length >= required) {
+      // Final click: finalize, then stop (back to cursor — no auto-repeat) —
       // UNLESS stay-in-draw-mode (P2) is on, in which case re-arm pending
       // points so the next click starts a new shape of the same tool.
       this._cancelPreview();
-      this._finalize(tool, this._pendingPoints.slice(0, 2));
+      this._finalize(tool, this._pendingPoints.slice(0, required));
       this._pendingPoints = [];
       if (!this._stayInDrawModeOn) this._resetToCursor();
     }
@@ -440,12 +519,16 @@ export class DrawingController {
     const dp = this._toDPoint(param.point.x, param.point.y, true); // preview move — snap when magnet on
     if (!dp) return;
 
-    // Update preview's second point
-    if (this._preview.points.length >= 2) {
-      this._preview.points[1] = dp;
-    } else {
-      this._preview.points = [this._pendingPoints[0], dp];
-    }
+    // Update the preview point at the index of the NEXT pending click — i.e.
+    // the confirmed pending points stay fixed, and the crosshair drives the
+    // one point that hasn't been clicked yet. For today's 2-point tools this
+    // is always index 1, but this generalizes cleanly to future 3-point
+    // tools (e.g. fib extension) without another branch here.
+    const nextIndex = this._pendingPoints.length; // 0-based index of the point being previewed
+    const basePoints = this._pendingPoints.slice(0, nextIndex);
+    const previewPoints = [...basePoints];
+    previewPoints[nextIndex] = dp;
+    this._preview.points = previewPoints;
     this._preview.requestUpdate();
   }
 
@@ -589,13 +672,14 @@ export class DrawingController {
 
   // ── Finalize drawing ──────────────────────────────────────────────────────
 
-  private _finalize(tool: ToolId, points: DPoint[]): void {
+  private _finalize(tool: ToolId, points: DPoint[]): BaseDrawing | null {
     const drawing = createDrawing(tool, [...points], { ...this._options });
-    if (!drawing) return;
+    if (!drawing) return null;
     this._series.attachPrimitive(drawing as any);
     this._drawings.push(drawing);
     this._saveToStorage();
     this._onChange?.();
+    return drawing;
   }
 
   // ── Selection helpers ─────────────────────────────────────────────────────
