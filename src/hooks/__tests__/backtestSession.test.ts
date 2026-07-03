@@ -72,6 +72,39 @@ describe('reducer — ADD_PENDING with limitPrice', () => {
   });
 });
 
+describe('reducer — UPDATE_PENDING shifts STOP_LIMIT limit with trigger', () => {
+  it('moves limitPrice by the same delta as triggerPrice (offset preserved)', () => {
+    let state = baseState();
+    state = reducer(state, {
+      type: 'ADD_PENDING',
+      payload: { side: 'SHORT', type: 'STOP_LIMIT', triggerPrice: 100, limitPrice: 99, size: 1, time: 1000 },
+    });
+    const id = state.pendingOrders[0].id;
+    const next = reducer(state, {
+      type: 'UPDATE_PENDING',
+      payload: { orderId: id, triggerPrice: 95 },
+    });
+    expect(next.pendingOrders[0].triggerPrice).toBe(95);
+    // Offset was -1 → limit follows to 94.
+    expect(next.pendingOrders[0].limitPrice).toBe(94);
+  });
+
+  it('does not touch limitPrice on non-STOP_LIMIT orders', () => {
+    let state = baseState();
+    state = reducer(state, {
+      type: 'ADD_PENDING',
+      payload: { side: 'LONG', type: 'LIMIT', triggerPrice: 100, size: 1, time: 1000 },
+    });
+    const id = state.pendingOrders[0].id;
+    const next = reducer(state, {
+      type: 'UPDATE_PENDING',
+      payload: { orderId: id, triggerPrice: 98 },
+    });
+    expect(next.pendingOrders[0].triggerPrice).toBe(98);
+    expect(next.pendingOrders[0].limitPrice).toBeUndefined();
+  });
+});
+
 describe('reducer — TRIGGER_PENDING', () => {
   it('sets triggeredAt on the matching order only', () => {
     const order1: PendingOrder = {
