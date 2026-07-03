@@ -4,7 +4,7 @@
 // Leader dropdown, inline Ratio/Cross editing, FLATTEN double-check.
 // ═══════════════════════════════════════════════════════════════
 
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertOctagon, AlertTriangle, Ban, ChevronDown, ChevronUp, Crown, Lock, LockOpen, Pencil, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -216,14 +216,15 @@ const CopyAccountRow = memo(function CopyAccountRow({
           type="button"
           role="radio"
           aria-checked={isLeader}
+          disabled={isCreating || isUpdating}
           onClick={onSelectLeader}
-          title="Set as leader"
+          title={isCreating || isUpdating ? 'Saving…' : 'Set as leader'}
           aria-label={`Set ${row.accountName} as leader`}
           className={`flex h-6 w-6 items-center justify-center rounded-md border transition-colors duration-base ${
             isLeader
               ? 'border-gold-primary bg-gold-primary/10'
               : 'border-gold-border/50 hover:border-gold-primary/70'
-          }`}
+          } ${isCreating || isUpdating ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           {isLeader && <Crown className="h-3.5 w-3.5 text-gold-primary" />}
         </button>
@@ -773,6 +774,10 @@ export function CopyTradingDashboard() {
 
   // Summary bar — scoped to the ACTIVE GROUP only: the leader + its targets.
   // (Not all connected accounts — each tab/group is fully independent.)
+  // NOTE (by design, confirmed with Elad): this is ACCOUNT-scoped, not
+  // symbol-scoped — PnL/position totals below cover every instrument on the
+  // leader + target accounts, not just the group's tracked symbol. Do not
+  // "fix" this to filter by `instrument`/`activeGroupTab.symbol`.
   const activeGroupRows = useMemo(
     () => rows.filter((r) => r.id === leaderId || activeGroupTargetAccountIds.has(
       (() => {
@@ -969,8 +974,14 @@ export function CopyTradingDashboard() {
   // account is unfollowed while it still holds a position and/or working
   // mirrored orders. Pure client-side warning — no flatten command exists
   // per-account on the agent, so this is informed consent, not automation.
+  // Also reused by the leader re-point flow (`onSelectLeader`): re-pointing
+  // the leader drops the target whose destination == the new leader
+  // ("can't follow yourself") — if that dropped target has an open
+  // position, it's the exact same unmanaged-exposure risk as a plain
+  // unfollow, so it shares this same confirm dialog/state.
   const [unfollowConfirm, setUnfollowConfirm] = useState<{
     accountName: string;
+    reason: 'unfollow' | 'leader-repoint';
     resolve: () => void;
   } | null>(null);
 
@@ -1055,13 +1066,21 @@ export function CopyTradingDashboard() {
     newGroupSymbol.trim().length > 0 &&
     newGroupLeaderId != null;
 
+  // Synchronous re-entrancy latch: `isSavingRoute` state updates are async
+  // and won't be visible to a second call fired in the same tick (e.g. a
+  // fast double-Enter on the dialog's plain <input>s, which aren't wrapped
+  // in a <form>). A ref flips instantly and closes that race.
+  const isCreatingGroupRef = useRef(false);
+
   const handleCreateGroup = async () => {
+    if (isSavingRoute || isCreatingGroupRef.current) return;
     if (!canCreateNewGroup || !newGroupLeaderId) return;
     const leaderAccount = toJournalAccount(newGroupLeaderId);
     if (!leaderAccount) {
       toast.error('Select a valid leader account (Tradovate only).');
       return;
     }
+    isCreatingGroupRef.current = true;
     setIsSavingRoute(true);
     try {
       const result = await upsertRoute({
@@ -1080,6 +1099,7 @@ export function CopyTradingDashboard() {
       }
     } finally {
       setIsSavingRoute(false);
+      isCreatingGroupRef.current = false;
     }
   };
 
@@ -1485,6 +1505,7 @@ export function CopyTradingDashboard() {
               isCreating={isSavingRoute}
               isUpdating={isSavingRoute}
               onSelectLeader={async () => {
+                if (isSavingRoute) return; // a route write is already in flight
                 if (!activeRoute || row.portfolioId === leaderId) return;
                 const nextLeader = toJournalAccount(row.portfolioId ?? '');
                 if (!nextLeader) {
@@ -1494,28 +1515,58 @@ export function CopyTradingDashboard() {
                 // Re-pointing the leader drops existing targets pointing at the
                 // NEW leader account (can't follow yourself) — everything else
                 // about the group (name, symbol, other targets) is preserved.
-                const remainingTargets = (activeRoute.automation_copier_route_targets ?? [])
+                const existingTargets = activeRoute.automation_copier_route_targets ?? [];
+                const droppedTarget = existingTargets.find(
+                  (t) => t.destination_account_id === nextLeader.account_id,
+                );
+                const remainingTargets = existingTargets
                   .filter((t) => t.destination_account_id !== nextLeader.account_id)
                   .map(targetToInput);
-                setIsSavingRoute(true);
-                try {
-                  await upsertRoute({
-                    routeId:      activeRoute.id,
-                    sourceAccount: nextLeader,
-                    label:        activeRoute.label,
-                    symbolFilter: activeRoute.symbol_filter ?? [],
-                    copyOpens:    activeRoute.copy_opens,
-                    copyCloses:   activeRoute.copy_closes,
-                    reverse:      activeRoute.reverse,
-                    isActive:     activeRoute.is_active,
-                    targets:      remainingTargets,
+
+                const performRepoint = async () => {
+                  setIsSavingRoute(true);
+                  try {
+                    await upsertRoute({
+                      routeId:      activeRoute.id,
+                      sourceAccount: nextLeader,
+                      label:        activeRoute.label,
+                      symbolFilter: activeRoute.symbol_filter ?? [],
+                      copyOpens:    activeRoute.copy_opens,
+                      copyCloses:   activeRoute.copy_closes,
+                      reverse:      activeRoute.reverse,
+                      isActive:     activeRoute.is_active,
+                      targets:      remainingTargets,
+                    });
+                  } finally {
+                    setIsSavingRoute(false);
+                  }
+                };
+
+                // If the dropped target ("can't follow yourself") currently
+                // holds an open position, re-pointing the leader would
+                // silently leave it unmanaged — same risk the unfollow-
+                // exposure confirm was built for. Warn first; only proceed
+                // without a prompt when the dropped target is flat.
+                if (droppedTarget) {
+                  const droppedRow = rows.find((r) => {
+                    const p = brokerAccountPortfolios.find((x) => x.id === r.id);
+                    return p?.tradovate_account_id != null
+                      && String(p.tradovate_account_id) === droppedTarget.destination_account_id;
                   });
-                } finally {
-                  setIsSavingRoute(false);
+                  if (droppedRow?.hasAnyOpenPosition) {
+                    setUnfollowConfirm({
+                      accountName: droppedTarget.destination_account_name,
+                      reason: 'leader-repoint',
+                      resolve: () => { void performRepoint(); },
+                    });
+                    return;
+                  }
                 }
+
+                await performRepoint();
               }}
               onRequestUnfollowWithExposure={(resolveOptimistic) => {
-                setUnfollowConfirm({ accountName: row.accountName, resolve: resolveOptimistic });
+                setUnfollowConfirm({ accountName: row.accountName, reason: 'unfollow', resolve: resolveOptimistic });
               }}
               onFollowToggle={async (currentRatioDraft) => {
                 if (!activeRoute || !row.portfolioId || isLeader) return;
@@ -1821,14 +1872,26 @@ export function CopyTradingDashboard() {
             This account still has an open position
           </DialogTitle>
 
-          <p className="text-sm text-ink-secondary leading-relaxed">
-            <span className="font-semibold text-ink-primary">{unfollowConfirm?.accountName}</span> is currently
-            following <span className="font-semibold text-ink-primary">{leaderAccountName}</span> and still has live
-            exposure (open position and/or working orders). Unfollowing stops the copier from managing it — any open
-            position and pending orders will remain on the account and will{' '}
-            <span className="font-semibold text-ink-primary">NOT</span> be closed automatically. Close them yourself
-            in your platform if you don't want them left unmanaged.
-          </p>
+          {unfollowConfirm?.reason === 'leader-repoint' ? (
+            <p className="text-sm text-ink-secondary leading-relaxed">
+              <span className="font-semibold text-ink-primary">{unfollowConfirm?.accountName}</span> still has live
+              exposure (open position and/or working orders). Making a different account the leader of this group
+              requires removing <span className="font-semibold text-ink-primary">{unfollowConfirm?.accountName}</span>{' '}
+              as a follower (an account can't follow itself) — it will no longer be managed by this group. Any open
+              position and pending orders will remain on the account and will{' '}
+              <span className="font-semibold text-ink-primary">NOT</span> be closed automatically. Close them yourself
+              in your platform if you don't want them left unmanaged.
+            </p>
+          ) : (
+            <p className="text-sm text-ink-secondary leading-relaxed">
+              <span className="font-semibold text-ink-primary">{unfollowConfirm?.accountName}</span> is currently
+              following <span className="font-semibold text-ink-primary">{leaderAccountName}</span> and still has live
+              exposure (open position and/or working orders). Unfollowing stops the copier from managing it — any open
+              position and pending orders will remain on the account and will{' '}
+              <span className="font-semibold text-ink-primary">NOT</span> be closed automatically. Close them yourself
+              in your platform if you don't want them left unmanaged.
+            </p>
+          )}
 
           <div className="mt-ds-2 flex justify-end gap-ds-3">
             <button
@@ -1847,7 +1910,7 @@ export function CopyTradingDashboard() {
               className="flex items-center gap-ds-2 rounded-md border border-red-600/60 bg-red-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-red-400 transition-colors hover:border-red-500 hover:bg-red-600/25 hover:text-red-300"
             >
               <AlertOctagon className="h-4 w-4 flex-shrink-0" />
-              Unfollow anyway
+              {unfollowConfirm?.reason === 'leader-repoint' ? 'Change leader anyway' : 'Unfollow anyway'}
             </button>
           </div>
         </DialogContent>
