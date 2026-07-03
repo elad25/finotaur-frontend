@@ -32,6 +32,7 @@ import {
   HorizontalLineDrawing,
   HorizontalRayDrawing,
   RectangleDrawing,
+  hexToRgba,
 } from './tools';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
@@ -388,7 +389,7 @@ export class DrawingController {
     this._cancelPreview();
     const preview = createDrawing(tool, [firstPoint, firstPoint], {
       ...this._options,
-      color: this._options.color + 'aa', // slightly transparent
+      color: hexToRgba(this._options.color, 0.67), // slightly transparent
     });
     if (!preview) return;
     this._preview = preview;
