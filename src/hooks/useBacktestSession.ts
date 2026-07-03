@@ -95,6 +95,12 @@ export interface PendingOrder {
   side: PaperSide;
   type: PendingOrderType;
   triggerPrice: number;
+  /** STOP_LIMIT only: the limit price enforced once the breakout trigger fires.
+   *  Defaults to triggerPrice (marketable stop-limit) when omitted. */
+  limitPrice?: number;
+  /** STOP_LIMIT only: unix seconds when the breakout trigger fired (bar.time).
+   *  Once set, the order behaves as a working LIMIT resting at limitPrice. */
+  triggeredAt?: number;
   size: number;
   stopLoss?: number;
   takeProfit?: number;
@@ -153,6 +159,8 @@ interface AddPendingPayload {
   side: PaperSide;
   type: PendingOrderType;
   triggerPrice: number;
+  /** STOP_LIMIT only: the limit price enforced once the breakout trigger fires. */
+  limitPrice?: number;
   size: number;
   stopLoss?: number;
   takeProfit?: number;
@@ -161,6 +169,7 @@ interface AddPendingPayload {
 }
 interface CancelPendingPayload { orderId: string; }
 interface FillPendingPayload { orderId: string; fillPrice: number; fillTime: number; }
+interface TriggerPendingPayload { orderId: string; time: number; }
 interface UpdatePendingPayload {
   orderId: string;
   stopLoss?: number;
@@ -219,6 +228,7 @@ type Action =
   | { type: 'ADD_PENDING'; payload: AddPendingPayload }
   | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
   | { type: 'FILL_PENDING'; payload: FillPendingPayload }
+  | { type: 'TRIGGER_PENDING'; payload: TriggerPendingPayload }
   | { type: 'UPDATE_PENDING'; payload: UpdatePendingPayload }
   | { type: 'LOAD_SESSION'; payload: LoadSessionPayload }
   // Replace the entire session state from a persisted/restored snapshot.
@@ -391,6 +401,10 @@ export function computeStats(closed: PaperPosition[], startingBalance: number): 
 
 // ─── Reducer ────────────────────────────────────────────────────
 
+/** Test-only export of the internal reducer — exercised directly by
+ *  backtestSession.test.ts without needing to mount the hook. */
+export const _sessionReducerForTests = reducer;
+
 function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case 'OPEN': {
@@ -449,7 +463,16 @@ function reducer(state: SessionState, action: Action): SessionState {
         // If the panel supplied SL/TP values (non-zero), update them; otherwise keep existing.
         const newStopLoss = (stopLoss != null && stopLoss > 0) ? stopLoss : pos.stopLoss;
         const newTakeProfit = (takeProfit != null && takeProfit > 0) ? takeProfit : pos.takeProfit;
-        const newTakeProfits = (takeProfits && takeProfits.length > 0) ? takeProfits : pos.takeProfits;
+        // Multi-leg TP legs: if the existing position already has ANY legs
+        // (including filled ones), they are PRESERVED as-is — the scale-in
+        // order's own TP-leg payload is ignored. Payload legs only apply when
+        // the position had none to begin with. This prevents a scale-in from
+        // silently discarding partially-filled TP progress on the original
+        // legs (e.g. a filled TP1 reappearing as unfilled).
+        const hasExistingLegs = (pos.takeProfits?.length ?? 0) > 0;
+        const newTakeProfits = hasExistingLegs
+          ? pos.takeProfits
+          : (takeProfits && takeProfits.length > 0) ? takeProfits : pos.takeProfits;
         return {
           ...state,
           activePosition: {
@@ -689,12 +712,13 @@ function reducer(state: SessionState, action: Action): SessionState {
     }
 
     case 'ADD_PENDING': {
-      const { side, type: orderType, triggerPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
+      const { side, type: orderType, triggerPrice, limitPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
       const order: PendingOrder = {
         id: `ord_${time}_${Math.random().toString(36).slice(2, 8)}`,
         side,
         type: orderType,
         triggerPrice,
+        limitPrice,
         size,
         stopLoss,
         takeProfit,
@@ -708,6 +732,19 @@ function reducer(state: SessionState, action: Action): SessionState {
       return {
         ...state,
         pendingOrders: state.pendingOrders.filter((o) => o.id !== action.payload.orderId),
+      };
+    }
+
+    case 'TRIGGER_PENDING': {
+      // STOP_LIMIT breakout fired but the limit price wasn't reachable this bar.
+      // Mark the order as triggered so subsequent bars treat it as a working
+      // LIMIT resting at limitPrice (see evaluatePendingOrder in pendingFills.ts).
+      const { orderId, time } = action.payload;
+      return {
+        ...state,
+        pendingOrders: state.pendingOrders.map((o) =>
+          o.id === orderId ? { ...o, triggeredAt: time } : o,
+        ),
       };
     }
 
@@ -1069,6 +1106,8 @@ export interface UseBacktestSessionReturn {
   addPendingOrder: (payload: AddPendingPayload) => void;
   cancelPendingOrder: (orderId: string) => void;
   fillPendingOrder: (orderId: string, fillPrice: number, fillTime: number) => void;
+  /** Mark a STOP_LIMIT order as triggered (breakout fired, limit not yet reachable). */
+  triggerPendingOrder: (orderId: string, time: number) => void;
   /** Update a pending order's SL/TP/trigger (used by the draggable position box). */
   updatePendingRisk: (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => void;
   /** Hydrate the full session from a saved record (Phase 7+ load flow). */
@@ -1192,30 +1231,35 @@ function migratePosition(p: PaperPosition): PaperPosition {
   };
 }
 
-function loadPersistedState(initialBalance: number, key: string | null): SessionState {
-  const empty = makeEmptyState(initialBalance);
-  if (!key || typeof window === 'undefined') return empty;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return empty;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return empty;
-    if (!Array.isArray(parsed.closedPositions) || !Array.isArray(parsed.pendingOrders)) return empty;
+/**
+ * Pure sanitizer for a parsed (JSON.parse'd) persisted session blob. No
+ * `window` access — safe to unit-test in a node environment. Extracted from
+ * `loadPersistedState` so the sanitization/migration logic can be tested
+ * directly without mocking localStorage.
+ *
+ * Returns `null` when the blob is structurally invalid (caller falls back to
+ * an empty state built from `initialBalance`).
+ */
+export function sanitizePersistedSession(parsed: unknown, initialBalance: number): SessionState | null {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const p = parsed as Record<string, unknown>;
+  if (!Array.isArray(p.closedPositions) || !Array.isArray(p.pendingOrders)) return null;
 
-    // Field-level sanitization: keep only well-formed positions, validate the
-    // active one, and ALWAYS recompute stats from the cleaned set so the
-    // persisted `stats` can never disagree with the trades (or carry NaN).
-    const startingBalance =
-      typeof parsed.startingBalance === 'number' && Number.isFinite(parsed.startingBalance) && parsed.startingBalance > 0
-        ? parsed.startingBalance
-        : initialBalance;
-    const closedPositions = (parsed.closedPositions as unknown[])
-      .filter(isValidPaperPosition)
-      .map(migratePosition) as PaperPosition[];
-    const rawActive = isValidPaperPosition(parsed.activePosition)
-      ? migratePosition(parsed.activePosition as PaperPosition)
-      : undefined;
-    const pendingOrders = (Array.isArray(parsed.pendingOrders) ? parsed.pendingOrders : []).filter(
+  // Field-level sanitization: keep only well-formed positions, validate the
+  // active one, and ALWAYS recompute stats from the cleaned set so the
+  // persisted `stats` can never disagree with the trades (or carry NaN).
+  const startingBalance =
+    typeof p.startingBalance === 'number' && Number.isFinite(p.startingBalance) && p.startingBalance > 0
+      ? p.startingBalance
+      : initialBalance;
+  const closedPositions = (p.closedPositions as unknown[])
+    .filter(isValidPaperPosition)
+    .map(migratePosition) as PaperPosition[];
+  const rawActive = isValidPaperPosition(p.activePosition)
+    ? migratePosition(p.activePosition as PaperPosition)
+    : undefined;
+  const pendingOrders = (Array.isArray(p.pendingOrders) ? p.pendingOrders : [])
+    .filter(
       (o): o is PendingOrder => {
         if (!o || typeof o !== 'object') return false;
         const r = o as Record<string, unknown>;
@@ -1226,27 +1270,42 @@ function loadPersistedState(initialBalance: number, key: string | null): Session
           && typeof r.triggerPrice === 'number' && Number.isFinite(r.triggerPrice)
           && typeof r.size === 'number' && Number.isFinite(r.size) && r.size > 0
           && typeof r.createdAt === 'number' && Number.isFinite(r.createdAt)
+          && (r.limitPrice === undefined || (typeof r.limitPrice === 'number' && Number.isFinite(r.limitPrice)))
+          && (r.triggeredAt === undefined || (typeof r.triggeredAt === 'number' && Number.isFinite(r.triggeredAt)))
         );
       }
-    );
+    )
+    // Migrate STOP_LIMIT rows persisted before limitPrice existed: default to
+    // the trigger price (marketable stop-limit — matches prior fill behavior).
+    .map((o) => (o.type === 'STOP_LIMIT' && o.limitPrice == null ? { ...o, limitPrice: o.triggerPrice } : o));
 
-    // Restore commissionConfig if saved; fall back to defaults so existing
-    // sessions without a stored config continue to work.
-    const commissionConfig: CommissionConfig =
-      parsed.commissionConfig &&
-      typeof parsed.commissionConfig === 'object' &&
-      typeof (parsed.commissionConfig as Record<string, unknown>).commissionPerOrder === 'number'
-        ? (parsed.commissionConfig as CommissionConfig)
-        : { ...DEFAULT_COMMISSION_CONFIG };
+  // Restore commissionConfig if saved; fall back to defaults so existing
+  // sessions without a stored config continue to work.
+  const commissionConfig: CommissionConfig =
+    p.commissionConfig &&
+    typeof p.commissionConfig === 'object' &&
+    typeof (p.commissionConfig as Record<string, unknown>).commissionPerOrder === 'number'
+      ? (p.commissionConfig as CommissionConfig)
+      : { ...DEFAULT_COMMISSION_CONFIG };
 
-    return {
-      startingBalance,
-      activePosition: rawActive,
-      closedPositions,
-      pendingOrders,
-      stats: computeStats(closedPositions, startingBalance),
-      commissionConfig,
-    };
+  return {
+    startingBalance,
+    activePosition: rawActive,
+    closedPositions,
+    pendingOrders,
+    stats: computeStats(closedPositions, startingBalance),
+    commissionConfig,
+  };
+}
+
+function loadPersistedState(initialBalance: number, key: string | null): SessionState {
+  const empty = makeEmptyState(initialBalance);
+  if (!key || typeof window === 'undefined') return empty;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw);
+    return sanitizePersistedSession(parsed, initialBalance) ?? empty;
   } catch {
     // corrupt JSON / quota / blocked storage — fall through to empty.
   }
@@ -1343,6 +1402,10 @@ export function useBacktestSession(initialBalance: number = 10000, sessionId?: s
     dispatch({ type: 'FILL_PENDING', payload: { orderId, fillPrice, fillTime } });
   }, []);
 
+  const triggerPendingOrder = useCallback((orderId: string, time: number) => {
+    dispatch({ type: 'TRIGGER_PENDING', payload: { orderId, time } });
+  }, []);
+
   const updatePendingRisk = useCallback(
     (orderId: string, changes: { stopLoss?: number; takeProfit?: number; triggerPrice?: number }) => {
       dispatch({ type: 'UPDATE_PENDING', payload: { orderId, ...changes } });
@@ -1406,6 +1469,7 @@ export function useBacktestSession(initialBalance: number = 10000, sessionId?: s
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    triggerPendingOrder,
     updatePendingRisk,
     loadSession,
     addTpLeg,

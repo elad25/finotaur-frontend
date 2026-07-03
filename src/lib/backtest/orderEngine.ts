@@ -5,7 +5,7 @@
 // order kinds, risk-based auto position sizing, and reward/risk calculation.
 // Kept framework-agnostic so it can be unit-tested and reused by the replay engine.
 
-export type OrderKind = 'market' | 'limit' | 'stop';
+export type OrderKind = 'market' | 'limit' | 'stop' | 'stop_limit';
 export type OrderSide = 'buy' | 'sell';
 
 export interface RiskSizingParams {

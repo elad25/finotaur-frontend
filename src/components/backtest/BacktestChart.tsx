@@ -44,6 +44,7 @@ import {
   type PendingOrderType,
 } from '@/hooks/useBacktestSession';
 import type { CommissionConfig } from '@/lib/backtest/orderEngine';
+import { evaluatePendingOrder } from '@/lib/backtest/pendingFills';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 import { useQueryClient } from '@tanstack/react-query';
 import { backtestStatsKeys } from '@/hooks/useBacktestStats';
@@ -345,7 +346,7 @@ export function BacktestChart({
 
   // Live draft from PlaceOrderPanel — lets right-click and click-to-place use
   // the panel's current size/SL/TP without duplicating input state here.
-  const [orderDraft, setOrderDraft] = useState<PlaceOrderDraft>({ size: 0, stopLoss: null, takeProfit: null });
+  const [orderDraft, setOrderDraft] = useState<PlaceOrderDraft>({ size: 0, stopLoss: null, takeProfit: null, stopLimitOffset: null });
 
   // Click-to-place LIMIT armed toggle. When true, left-click on the chart drops
   // a LIMIT order at that price instead of opening/jumping.
@@ -369,6 +370,7 @@ export function BacktestChart({
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    triggerPendingOrder,
     updatePendingRisk,
     // Phase 7: broker-grade position management
     partialClose,
@@ -518,6 +520,10 @@ export function BacktestChart({
           side: o.side,
           type: o.type,
           triggerPrice: o.trigger_price,
+          // Migrate STOP_LIMIT rows saved before limit_price existed: default
+          // to the trigger price (marketable stop-limit — matches prior fill behavior).
+          limitPrice: o.type === 'STOP_LIMIT' ? (o.limit_price ?? o.trigger_price) : (o.limit_price ?? undefined),
+          triggeredAt: o.triggered_at ?? undefined,
           size: o.size,
           stopLoss: o.stop_loss ?? undefined,
           takeProfit: o.take_profit ?? undefined,
@@ -593,41 +599,22 @@ export function BacktestChart({
     // Phase 6: pending order fills come FIRST (before SL/TP checks).
     // The reducer's FILL_PENDING → OPEN netting handles all cases:
     //   same-side pending → scale-in; opposite-side pending → reduce/close/flip.
+    // Fill/trigger evaluation is delegated to the pure evaluatePendingOrder()
+    // (src/lib/backtest/pendingFills.ts) so it can be unit-tested in isolation.
     if (state.pendingOrders.length > 0) {
       for (const order of state.pendingOrders) {
-        let triggered = false;
-        let fillPrice = order.triggerPrice;
-        if (order.type === 'LIMIT') {
-          if (order.side === 'LONG' && bar.low <= order.triggerPrice) {
-            // Limit-or-better: BUY LIMIT fills at min(triggerPrice, bar.open) so a
-            // gap-down open (or a bar that opened well below the limit) doesn't produce
-            // a fill price that is WORSE than the current market (the original bug where
-            // a LONG LIMIT at 202.72 with market at 200.09 filled at 202.72 instead of
-            // 200.09). bar.open is always available on a revealed bar.
-            triggered = true; fillPrice = Math.min(order.triggerPrice, bar.open);
-          } else if (order.side === 'SHORT' && bar.high >= order.triggerPrice) {
-            // SELL LIMIT fills at max(triggerPrice, bar.open) — seller gets limit or better.
-            triggered = true; fillPrice = Math.max(order.triggerPrice, bar.open);
-          }
-        } else if (order.type === 'MIT') {
-          // Market-If-Touched: same touch condition as LIMIT, but fills at trigger (market).
-          if (order.side === 'LONG' && bar.low <= order.triggerPrice) {
-            triggered = true; fillPrice = order.triggerPrice;
-          } else if (order.side === 'SHORT' && bar.high >= order.triggerPrice) {
-            triggered = true; fillPrice = order.triggerPrice;
-          }
-        } else {
-          // STOP (Stop Market) and STOP_LIMIT share the breakout trigger; both fill at trigger.
-          if (order.side === 'LONG' && bar.high >= order.triggerPrice) {
-            triggered = true; fillPrice = order.triggerPrice;
-          } else if (order.side === 'SHORT' && bar.low <= order.triggerPrice) {
-            triggered = true; fillPrice = order.triggerPrice;
-          }
-        }
-        if (triggered) {
-          fillPendingOrder(order.id, fillPrice, bar.time as number);
+        const result = evaluatePendingOrder(order, bar);
+        if (result.action === 'fill') {
+          fillPendingOrder(order.id, result.fillPrice, bar.time as number);
           // Known limitation: at most ONE pending order fills per revealed bar; if several trigger in the same bar, the rest fill on subsequent bars (intra-bar ordering is unknowable — conservative).
           return;
+        }
+        if (result.action === 'trigger') {
+          // STOP_LIMIT breakout fired but the limit price wasn't reachable this
+          // bar. Mark it triggered and keep scanning — this does NOT consume
+          // the one-fill-per-bar budget since nothing filled.
+          triggerPendingOrder(order.id, bar.time as number);
+          continue;
         }
       }
     }
@@ -691,16 +678,26 @@ export function BacktestChart({
         return;
       }
     }
-  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder, fillTpLeg]);
+  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder, triggerPendingOrder, fillTpLeg]);
 
   // Phase 6: place a pending order from the context-menu selection. Size/SL/TP
   // come from the PlaceOrderPanel draft (orderDraft), falling back to the legacy
   // input state so existing behaviour is preserved when the panel has no values.
+  //
+  // STOP_LIMIT: the panel's stopLimitOffset (default 0 = marketable stop-limit,
+  // i.e. limit at the trigger price) computes the enforced limit price.
+  // Context-menu placement has no panel input for offset, so it always places
+  // a marketable stop-limit (limitPrice = trigger price).
   const handlePlacePendingOrder = useCallback((side: PaperSide, type: PendingOrderType, info: ContextMenuPriceInfo) => {
+    const offset = Math.max(0, orderDraft.stopLimitOffset ?? 0);
+    const limitPrice = type === 'STOP_LIMIT'
+      ? (side === 'LONG' ? info.price + offset : info.price - offset)
+      : undefined;
     addPendingOrder({
       side,
       type,
       triggerPrice: info.price,
+      limitPrice,
       size: orderDraft.size > 0 ? orderDraft.size : size,
       stopLoss: orderDraft.stopLoss ?? (slInput ? parseFloat(slInput) : undefined),
       takeProfit: orderDraft.takeProfit ?? (tpInput ? parseFloat(tpInput) : undefined),
@@ -873,10 +870,17 @@ export function BacktestChart({
         strategyId: activeStrategyId,
       });
     } else {
+      const type: PendingOrderType =
+        order.kind === 'limit' ? 'LIMIT' : order.kind === 'stop_limit' ? 'STOP_LIMIT' : 'STOP';
+      const offset = Math.max(0, order.stopLimitOffset ?? 0);
+      const limitPrice = type === 'STOP_LIMIT'
+        ? (side === 'LONG' ? order.price + offset : order.price - offset)
+        : undefined;
       addPendingOrder({
         side,
-        type: order.kind === 'limit' ? 'LIMIT' : 'STOP',
+        type,
         triggerPrice: order.price,
+        limitPrice,
         size: order.size,
         stopLoss: sl,
         takeProfit: tp,
@@ -927,7 +931,13 @@ export function BacktestChart({
         userId,
       );
       if (res.errors > 0) {
-        toast.error('Failed to save some trades to journal');
+        const total = res.saved + res.errors;
+        toast.error(`Failed to save ${res.errors} of ${total} trades`, {
+          action: {
+            label: 'Retry',
+            onClick: () => void handleSaveToJournal(),
+          },
+        });
       } else {
         toast.success(
           `Saved ${res.saved} trade${res.saved === 1 ? '' : 's'} to journal${activeStrategy ? ` · ${activeStrategy.name}` : ''}`,
@@ -1327,6 +1337,7 @@ export function BacktestChart({
               <button
                 type="button"
                 onClick={() => cancelAllPending()}
+                title="Conservative fills: at most one pending order fills per bar."
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-900/40 py-2 text-xs font-semibold text-zinc-400 hover:border-rose-700 hover:text-rose-400 transition-colors"
               >
                 Cancel All Pending ({state.pendingOrders.length})
@@ -1504,7 +1515,7 @@ export function BacktestChart({
                   className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
                 >
                   <span className="font-bold">BUY STOP LIMIT</span>
-                  <span className="ml-2 text-[10px] text-zinc-500">(breakout, limit fill)</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakout, limit at trigger)</span>
                 </button>
               </>
             ) : (
@@ -1535,10 +1546,13 @@ export function BacktestChart({
                   className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
                 >
                   <span className="font-bold">SELL STOP LIMIT</span>
-                  <span className="ml-2 text-[10px] text-zinc-500">(breakdown, limit fill)</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakdown, limit at trigger)</span>
                 </button>
               </>
             )}
+            <div className="mt-1 border-t border-zinc-800 px-2 py-1.5 text-[10px] text-zinc-600">
+              Conservative fills: at most one pending order fills per bar.
+            </div>
           </div>
         </>
       )}

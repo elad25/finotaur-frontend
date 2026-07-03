@@ -47,6 +47,9 @@ export interface SaveResult {
   saved: number;
   skipped: number;
   errors: number;
+  /** Per-row failure detail, populated only when the bulk upsert fails and the
+   *  per-row fallback identifies which specific rows failed (and why). */
+  failedRows?: Array<{ externalId: string; symbol: string; message: string }>;
 }
 
 /**
@@ -347,12 +350,36 @@ export async function saveBacktestTradesToJournal(
     .from('trades')
     .upsert(rows, { onConflict: 'external_id', ignoreDuplicates: false });
 
-  if (error) {
-    console.error('❌ saveBacktestTradesToJournal error:', error);
-    result.errors = rows.length;
+  if (!error) {
+    result.saved = rows.length;
     return result;
   }
 
-  result.saved = rows.length;
+  console.error('❌ saveBacktestTradesToJournal bulk upsert error, falling back to per-row:', error);
+
+  // Bulk upsert failed (e.g. one bad row poisons the whole batch). Fall back to
+  // per-row upserts so a single problem trade doesn't block the rest, and so
+  // failures are individually identifiable + retryable by the caller.
+  const failedRows: Array<{ externalId: string; symbol: string; message: string }> = [];
+  for (const row of rows) {
+    const { error: rowError } = await supabase
+      .from('trades')
+      .upsert(row, { onConflict: 'external_id', ignoreDuplicates: false });
+
+    if (rowError) {
+      failedRows.push({
+        externalId: row.external_id,
+        symbol: row.symbol,
+        message: rowError.message,
+      });
+    } else {
+      result.saved += 1;
+    }
+  }
+
+  result.errors = failedRows.length;
+  if (failedRows.length > 0) {
+    result.failedRows = failedRows;
+  }
   return result;
 }

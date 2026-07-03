@@ -391,11 +391,15 @@ export function BacktestReplayChart({
       })
       .catch((err) => {
         if (cancelled) return;
+        const isTimeout =
+          (err instanceof DOMException || err instanceof Error) && err.name === 'AbortError';
         const raw = err instanceof Error ? err.message : 'Failed to fetch bars';
         const isUpstream = /chart-bars HTTP|upstream|Failed to fetch|malformed/i.test(raw);
         setLoad({
           kind: 'error',
-          message: isUpstream
+          message: isTimeout
+            ? 'Data request timed out — try again.'
+            : isUpstream
             ? 'Market data is temporarily unavailable for this symbol and timeframe. Please try again, or switch to a shorter timeframe.'
             : raw,
         });
@@ -1078,7 +1082,15 @@ export function BacktestReplayChart({
               if (y == null || y < 0 || y > containerHeight) return null;
               const axisW = chartRef.current!.priceScale('right').width() ?? 60;
               const pillColor = orderMarkerColor(o.type);
-              const label = `${o.size} ${o.side === 'LONG' ? 'Buy' : 'Sell'} ${ORDER_CODE[o.type]}`;
+              const sideLabel = o.side === 'LONG' ? 'Buy' : 'Sell';
+              // STOP_LIMIT shows both prices (trigger + enforced limit) so the
+              // trader can see the breakout level and the fill ceiling/floor at
+              // a glance; once the breakout has fired it reads as a working LIMIT.
+              const label = o.type === 'STOP_LIMIT'
+                ? (o.triggeredAt != null
+                    ? `${o.size} ${sideLabel} LIMIT (triggered)`
+                    : `${o.size} ${sideLabel} STOP LIMIT ${o.triggerPrice} / L ${o.limitPrice ?? o.triggerPrice}`)
+                : `${o.size} ${sideLabel} ${ORDER_CODE[o.type]}`;
               return (
                 <div
                   key={o.id}
