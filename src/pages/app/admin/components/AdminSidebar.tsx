@@ -15,13 +15,20 @@ interface AdminSidebarProps {
   isSuperAdmin: boolean;
 }
 
-export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
+/**
+ * Nav content shared between the desktop <aside> and the mobile drawer.
+ * `onNavigate` lets the mobile drawer close itself when a tab is tapped.
+ */
+export function AdminSidebarNav({
+  isSuperAdmin,
+  onNavigate,
+}: AdminSidebarProps & { onNavigate?: () => void }) {
   const visible = ADMIN_TABS.filter(
     (tab) => !tab.superAdminOnly || isSuperAdmin
   );
 
   return (
-    <aside className="w-64 shrink-0 bg-[#0E0E0E] border-r border-gray-800 min-h-screen">
+    <>
       <div className="px-5 py-5 border-b border-gray-800">
         <a
           href="/app/home"
@@ -47,7 +54,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
 
       <nav className="px-2 py-3 space-y-0.5">
         {visible.map((tab) => (
-          <SidebarTab key={tab.id} tab={tab} />
+          <SidebarTab key={tab.id} tab={tab} onNavigate={onNavigate} />
         ))}
       </nav>
 
@@ -57,11 +64,25 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
           in planning — content is a preview of upcoming features.
         </p>
       </div>
+    </>
+  );
+}
+
+export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
+  return (
+    <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-[#0E0E0E] border-r border-gray-800 min-h-screen">
+      <AdminSidebarNav isSuperAdmin={isSuperAdmin} />
     </aside>
   );
 }
 
-function SidebarTab({ tab }: { tab: AdminTab }) {
+function SidebarTab({
+  tab,
+  onNavigate,
+}: {
+  tab: AdminTab;
+  onNavigate?: () => void;
+}) {
   const { label, path, icon: Icon, description, planned } = tab;
 
   return (
@@ -69,6 +90,7 @@ function SidebarTab({ tab }: { tab: AdminTab }) {
       to={path}
       end={path === '/app/admin'}
       title={description}
+      onClick={onNavigate}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-2 px-3 py-2 rounded-md transition-colors',

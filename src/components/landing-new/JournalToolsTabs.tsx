@@ -156,7 +156,7 @@ const JournalDashboardMock = () => {
   return (
     <div className="bg-section-card-deep p-3 lg:p-4">
       {/* 4 stat cards row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
         <StatCard
           label="Net P&L"
           value="+$8,247.30"
@@ -263,12 +263,12 @@ const MeetFinoIntro = () => {
             alt=""
             aria-hidden="true"
             draggable={false}
-            className="w-full max-w-[320px] sm:max-w-[440px] h-auto mx-auto object-contain"
+            className="w-full max-w-[320px] sm:max-w-[400px] md:max-w-[440px] h-auto mx-auto object-contain"
           />
         ) : (
           <video
             ref={videoRef}
-            className="w-full max-w-[320px] sm:max-w-[440px] h-auto mx-auto object-contain"
+            className="w-full max-w-[320px] sm:max-w-[400px] md:max-w-[440px] h-auto mx-auto object-contain"
             poster="/fino/fino-home-natural-v4-poster.png"
             autoPlay
             muted
@@ -471,7 +471,7 @@ const JournalToolsTabs = () => {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: "easeOut" }}
-        className="grid lg:grid-cols-[1fr_1.2fr] gap-10 lg:gap-12 items-center"
+        className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-10 lg:gap-12 items-center"
       >
           {/* LEFT — text */}
           <div>

@@ -339,7 +339,7 @@ export default function AdminUsers() {
       {/* Users Table */}
       <div className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[900px]">
             <thead className="bg-[#0A0A0A] border-b border-gray-800">
               <tr>
                 <TableHeader>User</TableHeader>

@@ -24,12 +24,15 @@
 //   /app/admin/executive      — forecasting / anomaly detection
 // ============================================
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { lazy } from '@/lib/lazyWithRetry';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { SkeletonTable } from '@/components/ds/Skeleton';
-import { AdminSidebar } from './components/AdminSidebar';
+import { cn } from '@/lib/utils';
+import { AdminSidebar, AdminSidebarNav } from './components/AdminSidebar';
+import { findTabByPath } from './config/adminTabs';
 import { OverviewTab } from './tabs/OverviewTab';
 import { LeadsPlaceholder } from './tabs/LeadsPlaceholder';
 import { OnboardingPlaceholder } from './tabs/OnboardingPlaceholder';
@@ -96,12 +99,62 @@ function Lazy({ children }: { children: React.ReactNode }) {
 
 export function AdminCRMShell() {
   const { isSuperAdmin } = useAdminAuth();
+  const location = useLocation();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const currentTab = findTabByPath(location.pathname);
 
   return (
     <div className="flex bg-[#080808] min-h-screen">
       <AdminSidebar isSuperAdmin={isSuperAdmin} />
 
+      {/* Mobile drawer overlay */}
+      {drawerOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/60 z-50"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* Mobile slide-in drawer */}
+      <div
+        className={cn(
+          'lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-full',
+          'bg-[#0E0E0E] border-r border-gray-800 overflow-y-auto',
+          'transition-transform duration-200 ease-out',
+          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <div className="flex items-center justify-end px-2 pt-2">
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="p-2.5 text-gray-400 hover:text-white transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <AdminSidebarNav
+          isSuperAdmin={isSuperAdmin}
+          onNavigate={() => setDrawerOpen(false)}
+        />
+      </div>
+
       <div className="flex-1 min-w-0">
+        {/* Mobile header bar */}
+        <div className="lg:hidden flex items-center gap-3 px-4 border-b border-gray-800 bg-[#0E0E0E] min-h-[56px]">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="p-2.5 -ml-2.5 text-gray-300 hover:text-white transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <span className="text-white font-semibold text-sm truncate">
+            {currentTab?.label ?? 'Admin CRM'}
+          </span>
+        </div>
+
         <Routes>
           {/* Cockpit is the default landing — index redirects here */}
           <Route index element={<Navigate to="cockpit" replace />} />

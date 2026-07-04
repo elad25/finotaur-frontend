@@ -305,7 +305,7 @@ export default function AdminSubscribers() {
       {/* Table */}
       <div className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[800px]">
             <thead className="bg-black border-b border-gray-800">
               <tr>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300">User</th>

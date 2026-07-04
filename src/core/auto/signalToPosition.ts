@@ -24,6 +24,7 @@
 // ============================================================================
 
 import type { TradeSignal } from './types';
+import type { RLadderOutcome } from './rLadderAnalysis';
 
 /**
  * Self-contained Position superset covering every field read by
@@ -50,6 +51,9 @@ export interface AutoPosition {
   // Risk metrics (read by StatisticsEngine).
   riskRewardRatio?: number;
   riskAmount?: number;
+
+  /** Fill-anchored R-ladder outcome per reward:risk level (see rLadderAnalysis.ts). */
+  rLadder?: Record<number, RLadderOutcome>;
 }
 
 /**

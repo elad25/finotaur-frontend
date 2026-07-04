@@ -1,21 +1,32 @@
 // src/pages/app/journal/backtest/components/ResultsSummary.tsx
 // ============================================================================
-// RESULTS SUMMARY — "The results" section.
-// Headline + $-denominated equity curve + stat cards, all derived from the
-// REAL trades the engine produced (result.trades: AutoPosition[]). The AI
-// never touches these numbers — this is pure arithmetic over engine output.
+// RESULTS SUMMARY — "The results" section (HONEST, R-ladder-driven).
 //
-// $ P&L model (futures):
-//   pnl$ = (exitPrice - entryPrice) * dirSign * pointValue[symbol] * CONTRACTS
-//   dirSign: +1 for 'long', -1 for 'short' (AutoPosition.type)
-//   Net P&L = sum(pnl$); equity curve cumulates from ACCOUNT_SIZE.
-//   Max DD$ = max peak-to-trough on that $ curve; % = DD$ / ACCOUNT_SIZE.
+// WHY THIS EXISTS (honesty fix)
+// ------------------------------
+// The engine fills market/limit orders at (or after) the NEXT bar's open,
+// which can gap past a take-profit level that was priced off the signal's
+// PRE-FILL reference entry. That can record a "win" whose real fill sat on
+// the losing side of the actual market path -- an equity curve that only
+// declines while individual trades say "take profit". Instead of trusting
+// the engine's own exit bookkeeping, this component drives EVERY number here
+// (headline P&L, equity curve, all 6 stat cards) from the fill-anchored
+// R-ladder (`core/auto/rLadderAnalysis.ts`): for each REAL trade's actual
+// fill (entryPrice/stopLoss/direction), re-simulate fixed reward:risk targets
+// against the REAL candles and score wins/losses off that, not off the
+// engine's own take-profit/stop-loss exit reason.
 //
-// Crypto fallback (no futures multiplier): pnl per 1 unit =
-//   (exitPrice - entryPrice) * dirSign — reasonable, futures is the priority.
+// FIXED-RISK MODEL
+// -----------------
+//   ACCOUNT = $50,000, RISK_PCT = 1% -> riskPerTrade = $500 per trade.
+//   At a selected reward:risk R: resolved trade pnl = win ? +R*500 : -500.
+//   'open' trades (never resolved within available candle history) are
+//   EXCLUDED from every stat and reported as a footnote count.
+//   Equity curve = cumulative from $50,000, trades sorted by entryTime.
+//   Max drawdown = max peak-to-trough on that cumulative curve.
 // ============================================================================
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AreaChart,
   Area,
@@ -34,64 +45,39 @@ import {
   selectAutoSetup,
 } from '@/store/useAutoBacktestStore';
 import type { AutoPosition } from '@/core/auto/signalToPosition';
+import { R_LADDER_LEVELS } from '@/core/auto/AutoBacktestEngine';
 
 // ---------------------------------------------------------------------------
-// Simulation constants
+// Simulation constants (fixed-risk model)
 // ---------------------------------------------------------------------------
 
 const ACCOUNT_SIZE = 50_000;
-const CONTRACTS = 1;
+const RISK_PCT = 1; // 1% of account risked per trade
+const RISK_PER_TRADE = (ACCOUNT_SIZE * RISK_PCT) / 100; // $500
 
-/** USD value of a 1.0-point move, per contract, for each supported futures symbol. */
-const POINT_VALUE: Record<string, number> = {
-  MNQ: 2,
-  NQ: 20,
-  MES: 5,
-  ES: 50,
-  MYM: 0.5,
-  YM: 5,
-  M2K: 5,
-  RTY: 50,
-  MGC: 10,
-  GC: 100,
-  SIL: 1000,
-  SI: 5000,
-  MCL: 100,
-  CL: 1000,
-};
+const DEFAULT_R = 2;
 
 const GREEN = '#4AD295';
 const RED = '#E36363';
 
 // ---------------------------------------------------------------------------
-// $ P&L derivation
+// Fixed-risk R-ladder derivation
 // ---------------------------------------------------------------------------
 
-function dirSign(type: AutoPosition['type']): 1 | -1 {
-  return type === 'long' ? 1 : -1;
-}
-
-/** Real dollar P&L for one closed trade, using the point-value map when the
- *  symbol is a known futures contract; otherwise a plain per-unit fallback
- *  (used for crypto pairs, which have no fixed contract multiplier here). */
-function tradePnlUsd(trade: AutoPosition, symbol: string): number {
-  if (trade.exitPrice == null || !Number.isFinite(trade.exitPrice)) return 0;
-  const delta = trade.exitPrice - trade.entryPrice;
-  const sign = dirSign(trade.type);
-  const pointValue = POINT_VALUE[symbol.toUpperCase()];
-  if (pointValue != null) {
-    return delta * sign * pointValue * CONTRACTS;
-  }
-  // Crypto fallback: no futures multiplier, treat as 1 unit per contract.
-  return delta * sign;
-}
-
 interface EquityPoint {
-  time: number; // seconds, from the trade's exitTime
+  time: number; // seconds, from the trade's entryTime
   balance: number;
 }
 
-interface DollarStats {
+interface RRow {
+  r: number;
+  trades: number; // resolved (win+loss) trade count
+  winRate: number; // 0-100
+  netPnl: number; // $
+  expectancy: number; // avg R per resolved trade
+}
+
+interface SelectedRStats {
   netPnl: number;
   winRate: number;
   profitFactor: number;
@@ -102,57 +88,123 @@ interface DollarStats {
   shortCount: number;
   shortWinRate: number;
   equityCurve: EquityPoint[];
+  openCount: number;
+  resolvedCount: number;
 }
 
-function computeDollarStats(
-  trades: AutoPosition[],
-  symbol: string,
-  engineWinRate: number,
-  engineProfitFactor: number,
-): DollarStats {
+/** Trades sorted by entryTime, oldest first — shared ordering for equity/DD. */
+function sortedByEntry(trades: AutoPosition[]): AutoPosition[] {
+  return [...trades].sort((a, b) => a.entryTime - b.entryTime);
+}
+
+/** Per-trade pnl at a given R under the fixed-risk model. `null` if 'open'. */
+function tradePnlAtR(trade: AutoPosition, r: number): number | null {
+  const outcome = trade.rLadder?.[r];
+  if (outcome === 'win') return r * RISK_PER_TRADE;
+  if (outcome === 'loss') return -RISK_PER_TRADE;
+  return null; // 'open' or missing -> excluded
+}
+
+/** Full stat set for the currently-selected R, computed from the R-ladder. */
+function computeSelectedRStats(trades: AutoPosition[], r: number): SelectedRStats {
+  const ordered = sortedByEntry(trades);
+
   let balance = ACCOUNT_SIZE;
   let peak = ACCOUNT_SIZE;
   let maxDrawdown = 0;
   const equityCurve: EquityPoint[] = [];
 
+  let grossWin = 0;
+  let grossLoss = 0;
+  let wins = 0;
+  let openCount = 0;
+
   let longCount = 0;
   let longWins = 0;
+  let longResolved = 0;
   let shortCount = 0;
   let shortWins = 0;
-  let netPnl = 0;
+  let shortResolved = 0;
 
-  for (const trade of trades) {
-    const pnl = tradePnlUsd(trade, symbol);
-    netPnl += pnl;
+  for (const trade of ordered) {
+    const pnl = tradePnlAtR(trade, r);
+    if (pnl === null) {
+      openCount++;
+      continue;
+    }
+
     balance += pnl;
     peak = Math.max(peak, balance);
     maxDrawdown = Math.max(maxDrawdown, peak - balance);
+    equityCurve.push({ time: trade.entryTime, balance });
 
-    equityCurve.push({ time: trade.exitTime ?? trade.entryTime, balance });
+    if (pnl > 0) {
+      grossWin += pnl;
+      wins++;
+    } else {
+      grossLoss += Math.abs(pnl);
+    }
 
     if (trade.type === 'long') {
       longCount++;
+      longResolved++;
       if (pnl > 0) longWins++;
     } else {
       shortCount++;
+      shortResolved++;
       if (pnl > 0) shortWins++;
     }
   }
 
+  const resolvedCount = ordered.length - openCount;
+  const netPnl = grossWin - grossLoss;
+
   return {
     netPnl,
-    // Prefer the engine's ratio-based statistics (win rate / profit factor
-    // are ratios, not $ amounts, so they don't need the point-value math).
-    winRate: engineWinRate,
-    profitFactor: engineProfitFactor,
+    winRate: resolvedCount > 0 ? (wins / resolvedCount) * 100 : 0,
+    profitFactor: grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0,
     maxDrawdown,
     maxDrawdownPct: ACCOUNT_SIZE > 0 ? (maxDrawdown / ACCOUNT_SIZE) * 100 : 0,
     longCount,
-    longWinRate: longCount > 0 ? (longWins / longCount) * 100 : 0,
+    longWinRate: longResolved > 0 ? (longWins / longResolved) * 100 : 0,
     shortCount,
-    shortWinRate: shortCount > 0 ? (shortWins / shortCount) * 100 : 0,
+    shortWinRate: shortResolved > 0 ? (shortWins / shortResolved) * 100 : 0,
     equityCurve,
+    openCount,
+    resolvedCount,
   };
+}
+
+/** The R:R what-if table rows — one per R_LADDER_LEVELS entry. */
+function computeRRows(trades: AutoPosition[]): RRow[] {
+  return R_LADDER_LEVELS.map((r) => {
+    let wins = 0;
+    let losses = 0;
+    let netR = 0;
+    let netPnl = 0;
+
+    for (const trade of trades) {
+      const outcome = trade.rLadder?.[r];
+      if (outcome === 'win') {
+        wins++;
+        netR += r;
+        netPnl += r * RISK_PER_TRADE;
+      } else if (outcome === 'loss') {
+        losses++;
+        netR -= 1;
+        netPnl -= RISK_PER_TRADE;
+      }
+    }
+
+    const resolved = wins + losses;
+    return {
+      r,
+      trades: resolved,
+      winRate: resolved > 0 ? (wins / resolved) * 100 : 0,
+      netPnl,
+      expectancy: resolved > 0 ? netR / resolved : 0,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +212,7 @@ function computeDollarStats(
 // ---------------------------------------------------------------------------
 
 function fmtUsd(n: number): string {
+  if (!Number.isFinite(n)) return n > 0 ? '+$∞' : '$0';
   const sign = n < 0 ? '−' : '';
   return `${sign}$${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
@@ -195,6 +248,109 @@ function StatCard({
 }
 
 // ---------------------------------------------------------------------------
+// R:R selector
+// ---------------------------------------------------------------------------
+
+function RSelector({
+  selected,
+  onSelect,
+}: {
+  selected: number;
+  onSelect: (r: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] font-medium uppercase tracking-[1px] text-ink-tertiary">
+        Reward : Risk
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {R_LADDER_LEVELS.map((r) => {
+          const isSelected = r === selected;
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onSelect(r)}
+              className={cn(
+                'rounded-lg border-[0.5px] px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors',
+                isSelected
+                  ? 'border-gold-primary bg-gold-primary/15 text-gold-primary'
+                  : 'border-border-ds-subtle bg-surface-1 text-ink-secondary hover:border-gold-primary/40 hover:text-ink-primary',
+              )}
+            >
+              {r}:1
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// R:R what-if table
+// ---------------------------------------------------------------------------
+
+function RLadderTable({
+  rows,
+  selected,
+  onSelect,
+}: {
+  rows: RRow[];
+  selected: number;
+  onSelect: (r: number) => void;
+}) {
+  return (
+    <Card padding="default">
+      <h3 className="text-sm font-semibold text-ink-primary">Reward : Risk — what-if</h3>
+      <p className="mt-0.5 text-[12px] text-ink-tertiary">
+        Same real trades, re-scored at each fixed reward:risk target against real candles.
+      </p>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[480px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border-ds-subtle text-left text-[11px] uppercase tracking-[0.5px] text-ink-tertiary">
+              <th className="py-2 pr-4 font-medium">R:R</th>
+              <th className="py-2 pr-4 font-medium">Trades</th>
+              <th className="py-2 pr-4 font-medium">Win Rate</th>
+              <th className="py-2 pr-4 font-medium">Net P&amp;L</th>
+              <th className="py-2 pr-4 font-medium">Expectancy</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const isSelected = row.r === selected;
+              const pnlTone = row.netPnl > 0 ? GREEN : row.netPnl < 0 ? RED : undefined;
+              return (
+                <tr
+                  key={row.r}
+                  onClick={() => onSelect(row.r)}
+                  className={cn(
+                    'cursor-pointer border-b border-border-ds-subtle/60 transition-colors last:border-b-0',
+                    isSelected ? 'bg-gold-primary/10' : 'hover:bg-surface-1',
+                  )}
+                >
+                  <td className="py-2.5 pr-4 font-semibold tabular-nums text-ink-primary">
+                    {isSelected && <span className="mr-1.5 text-gold-primary">●</span>}
+                    {row.r}:1
+                  </td>
+                  <td className="py-2.5 pr-4 tabular-nums text-ink-secondary">{row.trades}</td>
+                  <td className="py-2.5 pr-4 tabular-nums text-ink-secondary">{row.winRate.toFixed(1)}%</td>
+                  <td className="py-2.5 pr-4 font-semibold tabular-nums" style={{ color: pnlTone }}>
+                    {fmtUsd(row.netPnl)}
+                  </td>
+                  <td className="py-2.5 pr-4 tabular-nums text-ink-secondary">{row.expectancy.toFixed(2)}R</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -204,22 +360,20 @@ export function ResultsSummary() {
   const from = useAutoBacktestStore((s) => s.from);
   const to = useAutoBacktestStore((s) => s.to);
 
+  const [selectedR, setSelectedR] = useState<number>(DEFAULT_R);
+
   const symbol = setup.instrument.symbol;
   const timeframe = setup.instrument.timeframe;
 
   const stats = useMemo(() => {
     if (!result) return null;
-    const engineStats = result.statistics as Record<string, unknown>;
-    const engineWinRate =
-      typeof engineStats.winRate === 'number' && Number.isFinite(engineStats.winRate)
-        ? engineStats.winRate
-        : 0;
-    const engineProfitFactor =
-      typeof engineStats.profitFactor === 'number' && Number.isFinite(engineStats.profitFactor)
-        ? engineStats.profitFactor
-        : 0;
-    return computeDollarStats(result.trades, symbol, engineWinRate, engineProfitFactor);
-  }, [result, symbol]);
+    return computeSelectedRStats(result.trades, selectedR);
+  }, [result, selectedR]);
+
+  const rRows = useMemo(() => {
+    if (!result) return [];
+    return computeRRows(result.trades);
+  }, [result]);
 
   const chartData = useMemo(() => {
     if (!stats) return [];
@@ -240,7 +394,6 @@ export function ResultsSummary() {
 
   if (!result || !stats) return null;
 
-  const tradeCount = result.trades.length;
   const dateRangeLabel = `${fmtDateShort(from)} – ${fmtDateShort(to)}`;
   const isPos = stats.netPnl >= 0;
   const accent = isPos ? GREEN : RED;
@@ -249,15 +402,18 @@ export function ResultsSummary() {
   return (
     <div className="flex flex-col gap-6">
       {/* Headline */}
-      <div>
-        <h2 className="text-xl font-bold text-gold-primary sm:text-2xl">The results</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          $50,000 account, {dateRangeLabel}. {tradeCount.toLocaleString()}{' '}
-          {tradeCount === 1 ? 'trade' : 'trades'} — here&apos;s how it held up.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gold-primary sm:text-2xl">The results</h2>
+          <p className="mt-1 text-sm text-ink-secondary">
+            $50,000 account, {dateRangeLabel}. {stats.resolvedCount.toLocaleString()}{' '}
+            {stats.resolvedCount === 1 ? 'trade' : 'trades'} at {selectedR}:1 reward:risk.
+          </p>
+        </div>
+        <RSelector selected={selectedR} onSelect={setSelectedR} />
       </div>
 
-      {/* Equity curve — green area, $-denominated */}
+      {/* Equity curve — green/red area, $-denominated, from the R-ladder */}
       <Card padding="default">
         {hasCurve ? (
           <ResponsiveContainer width="100%" height={320}>
@@ -317,13 +473,13 @@ export function ResultsSummary() {
         ) : (
           <div className="flex h-[200px] w-full items-center justify-center rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1">
             <p className="text-sm text-ink-tertiary">
-              No trades were executed for this setup and range.
+              No trades resolved for this setup and range at {selectedR}:1.
             </p>
           </div>
         )}
       </Card>
 
-      {/* Stat cards */}
+      {/* Stat cards — driven entirely by the selected-R fill-anchored R-ladder */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           label="Net P&L"
@@ -337,7 +493,7 @@ export function ResultsSummary() {
         />
         <StatCard
           label="Profit factor"
-          value={stats.profitFactor.toFixed(2)}
+          value={Number.isFinite(stats.profitFactor) ? stats.profitFactor.toFixed(2) : '∞'}
           tone={stats.profitFactor >= 1 ? 'positive' : 'negative'}
         />
         <StatCard
@@ -358,9 +514,13 @@ export function ResultsSummary() {
         />
       </div>
 
+      {/* R:R what-if table */}
+      <RLadderTable rows={rRows} selected={selectedR} onSelect={setSelectedR} />
+
       {/* Disclosure */}
       <p className="text-[12px] text-ink-tertiary">
-        Simulated on a $50,000 account, 1 contract — {symbol} {timeframe}.
+        Simulated on a $50,000 account risking 1% per trade at {selectedR}:1 reward:risk —{' '}
+        {symbol} {timeframe}. {stats.openCount} trades never resolved (excluded).
       </p>
     </div>
   );
