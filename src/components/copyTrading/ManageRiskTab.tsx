@@ -37,6 +37,7 @@ interface PortfolioRiskPatch {
   // CONTROL
   risk_management_enabled:  boolean;
   kill_switch_active:        boolean;
+  kill_switch_locked_until?: string | null;
   risk_breach_action:        'pause_copies' | 'stop_copies' | 'close_lock';
   // ADVANCED
   max_contracts_per_trade:  number | null;
@@ -54,6 +55,7 @@ interface RiskCardInitial {
   profitPerWeek:   string;
   riskEnabled:     boolean;
   killSwitch:      boolean;
+  killSwitchLockedUntil: string | null;
   breachAction:    'pause_copies' | 'stop_copies' | 'close_lock';
   maxContracts:    string;
   maxPositionSize: string;
@@ -87,6 +89,7 @@ const GLOBAL_DEFAULTS: RiskCardInitial = {
   profitPerWeek:   '',
   riskEnabled:     true,
   killSwitch:      false,
+  killSwitchLockedUntil: null,
   breachAction:    'pause_copies',
   maxContracts:    '',
   maxPositionSize: '',
@@ -306,7 +309,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
       {/* ── Per-account cards ────────────────────────────────────── */}
       {tradovatePortfolios.map((p) => (
         <PortfolioRiskCard
-          key={`${p.id}:${p.max_loss_per_trade_usd}:${p.max_daily_loss_usd}:${p.max_weekly_loss_usd}:${p.trade_profit_target_usd}:${p.daily_profit_target_usd}:${p.weekly_profit_target_usd}:${p.risk_management_enabled}:${p.kill_switch_active}:${p.risk_breach_action}:${p.max_contracts_per_trade}:${p.max_position_size}`}
+          key={`${p.id}:${p.max_loss_per_trade_usd}:${p.max_daily_loss_usd}:${p.max_weekly_loss_usd}:${p.trade_profit_target_usd}:${p.daily_profit_target_usd}:${p.weekly_profit_target_usd}:${p.risk_management_enabled}:${p.kill_switch_active}:${p.kill_switch_locked_until}:${p.risk_breach_action}:${p.max_contracts_per_trade}:${p.max_position_size}`}
           portfolio={p}
           onSave={(patch, agentOnly) =>
             updatePortfolioRisk({
@@ -388,16 +391,23 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
         })
     : undefined;
 
-  const manualLocked = portfolio.kill_switch_active ?? false;
+  const manualLockedUntil = portfolio.kill_switch_locked_until
+    ? new Date(portfolio.kill_switch_locked_until)
+    : null;
+  // A manual lock is effective only while the boolean is set AND the
+  // precomputed auto-release instant is still in the future. A null
+  // expiry (legacy lock) is treated as unlocked (fail-open).
+  const manualLocked =
+    (portfolio.kill_switch_active ?? false) &&
+    manualLockedUntil != null &&
+    manualLockedUntil > now;
   const lockInfo: LockInfo = {
     locked: manualLocked || !!breachEvent,
     reason: breachEvent ? 'breach' : manualLocked ? 'manual' : null,
     breachCheck: humanizeCheck(breachEvent?.parsed.check ?? null),
     autoUnlockAt: breachEvent
       ? nextSessionOpen(new Date(breachEvent.e.created_at))
-      : manualLocked
-        ? nextSessionOpen(now)
-        : null,
+      : manualLockedUntil,
   };
 
   const initial: RiskCardInitial = {
@@ -409,6 +419,7 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
     profitPerWeek:   portfolio.weekly_profit_target_usd?.toString() ?? '',
     riskEnabled:     portfolio.risk_management_enabled ?? true,
     killSwitch:      portfolio.kill_switch_active ?? false,
+    killSwitchLockedUntil: portfolio.kill_switch_locked_until ?? null,
     breachAction:    (portfolio.risk_breach_action as 'pause_copies' | 'stop_copies' | 'close_lock') ?? 'pause_copies',
     maxContracts:    portfolio.max_contracts_per_trade?.toString() ?? '',
     maxPositionSize: portfolio.max_position_size?.toString() ?? '',
@@ -427,6 +438,7 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
       saveLabel="Save changes"
       successMessage="Risk limits saved"
       lockInfo={lockInfo}
+      manualLockEffective={manualLocked}
     />
   );
 });
@@ -447,6 +459,10 @@ interface RiskCardProps {
   successMessage: string;
   /** Current lock status (manual or breach) — omitted for global mode. */
   lockInfo?: LockInfo;
+  /** True when the manual lock is currently in effect (armed + not yet
+   * expired) — disables the Lock button so it can never be manually
+   * unlocked. Omitted/false for global mode. */
+  manualLockEffective?: boolean;
 }
 
 const RiskCard = memo(function RiskCard({
@@ -461,6 +477,7 @@ const RiskCard = memo(function RiskCard({
   saveLabel,
   successMessage,
   lockInfo,
+  manualLockEffective = false,
 }: RiskCardProps) {
   // ── Loss limits ──────────────────────────────────────────────
   const [lossPerTrade, setLossPerTrade] = useState<string>(initial.lossPerTrade);
@@ -554,6 +571,13 @@ const RiskCard = memo(function RiskCard({
 
   // ── Save ─────────────────────────────────────────────────────
   const handleSave = async () => {
+    const wasLocked = initial.killSwitch && initial.killSwitchLockedUntil != null;
+    const killSwitchLockedUntil: string | null =
+      killSwitch && !wasLocked
+        ? nextSessionOpen(new Date()).toISOString()   // newly locking → fresh expiry
+        : killSwitch && wasLocked
+          ? initial.killSwitchLockedUntil             // already locked → preserve (don't extend on unrelated edits)
+          : null;                                      // unlocked
     const patch: PortfolioRiskPatch = {
       max_loss_per_trade_usd:   parseNum(lossPerTrade),
       max_daily_loss_usd:       parseNum(lossPerDay),
@@ -563,6 +587,7 @@ const RiskCard = memo(function RiskCard({
       weekly_profit_target_usd: parseNum(profitPerWeek),
       risk_management_enabled:  riskEnabled,
       kill_switch_active:       killSwitch,
+      kill_switch_locked_until: killSwitchLockedUntil,
       risk_breach_action:       breachAction,
       max_contracts_per_trade:  parseNum(maxContracts),
       max_position_size:        parseNum(maxPositionSize),
@@ -665,18 +690,23 @@ const RiskCard = memo(function RiskCard({
               new trades (including manual) until the next session open */}
           <button
             type="button"
+            disabled={manualLockEffective}
             onClick={() => setKillSwitch((v) => !v)}
             title={
-              killSwitch
-                ? 'LOCKED — account flattened and all trading blocked until the next session open (5:00 PM CT). Click to unlock now.'
-                : 'Lock (daily halt): immediately flattens this account and blocks ALL new trades — including manual — until the next session open (5:00 PM CT), then auto-resets.'
+              manualLockEffective
+                ? 'LOCKED — flattened and all trading blocked until the next session open (5:00 PM CT). Auto-releases then; there is no manual unlock.'
+                : killSwitch
+                  ? 'Lock armed — click Save to commit. Locks until the next session open (5:00 PM CT), then auto-resets. This is a commitment — no manual unlock.'
+                  : 'Lock (daily halt): immediately flattens this account and blocks ALL new trades — including manual — until the next session open (5:00 PM CT), then auto-resets. Commitment — no manual unlock.'
             }
             aria-label={
-              killSwitch
-                ? 'LOCKED — account flattened and all trading blocked until the next session open (5:00 PM CT). Click to unlock now.'
-                : 'Lock (daily halt): immediately flattens this account and blocks ALL new trades — including manual — until the next session open (5:00 PM CT), then auto-resets.'
+              manualLockEffective
+                ? 'LOCKED — flattened and all trading blocked until the next session open (5:00 PM CT). Auto-releases then; there is no manual unlock.'
+                : killSwitch
+                  ? 'Lock armed — click Save to commit. Locks until the next session open (5:00 PM CT), then auto-resets. This is a commitment — no manual unlock.'
+                  : 'Lock (daily halt): immediately flattens this account and blocks ALL new trades — including manual — until the next session open (5:00 PM CT), then auto-resets. Commitment — no manual unlock.'
             }
-            className={`flex h-7 w-7 items-center justify-center rounded-md border transition-colors duration-base ${
+            className={`flex h-7 w-7 items-center justify-center rounded-md border transition-colors duration-base disabled:cursor-not-allowed ${
               killSwitch
                 ? 'border-status-danger/60 bg-status-danger/10 text-status-danger'
                 : 'border-border-ds-subtle text-ink-secondary hover:border-border-ds-default hover:text-ink-primary'
