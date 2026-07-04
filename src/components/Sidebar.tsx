@@ -67,6 +67,7 @@ import {
   Link2,
   GitCompare,
   MessageSquare,
+  Bot,
 } from 'lucide-react';
 import {
   prefetchAdminStats,
@@ -321,13 +322,13 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // surface lives inline on the Dashboard, and Market Replay is reachable via
   // the Chart page's Immersive Mode button.
   backtest: [
-    { label: 'Automated Backtest', path: '/app/backtest/auto', icon: FlaskConical, locked: true },
     { label: 'Dashboard', path: '/app/backtest/overview', icon: FlaskConical },
     { label: 'Chart', path: '/app/backtest/chart', icon: PlusCircle },
     { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
     { label: 'My Backtests', path: '/app/backtest/results', icon: FileText },
     { label: 'Strategy Builder', path: '/app/backtest/builder', icon: Layers },
     { label: 'Analytics', path: '/app/backtest/analytics', icon: TrendingUp },
+    { label: 'Automated Backtest', path: '/app/backtest/auto', icon: Bot, locked: true },
   ],
 
   // Trade Copier is GA (open to all users, 2026-07-02).
