@@ -126,7 +126,7 @@ function fmtGreen(value: number | null) {
   if (value === null) return <span style={{ color: '#444' }}>—</span>;
   return (
     <span style={{ color: '#3fd27a' }}>
-      +{Math.round(value).toLocaleString()}
+      +{Math.round(value).toLocaleString('en-US')}
     </span>
   );
 }
@@ -135,7 +135,7 @@ function fmtRed(value: number | null) {
   if (value === null) return <span style={{ color: '#444' }}>—</span>;
   return (
     <span style={{ color: '#e26b6b' }}>
-      −{Math.round(Math.abs(value)).toLocaleString()}
+      −{Math.round(Math.abs(value)).toLocaleString('en-US')}
     </span>
   );
 }

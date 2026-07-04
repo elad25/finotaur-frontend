@@ -193,26 +193,26 @@ export function GrowthTab() {
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Page Views (30d)"
-          value={traffic.pageviews_30d.toLocaleString()}
-          subtitle={`${traffic.pageviews_7d.toLocaleString()} in last 7d`}
+          value={traffic.pageviews_30d.toLocaleString('en-US')}
+          subtitle={`${traffic.pageviews_7d.toLocaleString('en-US')} in last 7d`}
           icon={Eye}
         />
         <StatsCard
           title="Sessions (30d)"
-          value={traffic.sessions_30d.toLocaleString()}
+          value={traffic.sessions_30d.toLocaleString('en-US')}
           subtitle="rolling 30 days"
           icon={Activity}
         />
         <StatsCard
           title="Unique Visitors (30d)"
-          value={traffic.visitors_30d.toLocaleString()}
+          value={traffic.visitors_30d.toLocaleString('en-US')}
           subtitle="distinct anon_ids"
           icon={Users}
         />
         <StatsCard
           title="Events (30d)"
-          value={traffic.events_30d.toLocaleString()}
-          subtitle={`${traffic.events_7d.toLocaleString()} in last 7d`}
+          value={traffic.events_30d.toLocaleString('en-US')}
+          subtitle={`${traffic.events_7d.toLocaleString('en-US')} in last 7d`}
           icon={BarChart2}
         />
       </section>
@@ -225,7 +225,7 @@ export function GrowthTab() {
           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-[#0A0A0A] rounded-lg text-center">
             <span className="text-xs text-gray-500 uppercase tracking-wide mb-1">Visitors</span>
             <span className="text-3xl font-bold text-white">
-              {funnel.visitors_30d.toLocaleString()}
+              {funnel.visitors_30d.toLocaleString('en-US')}
             </span>
           </div>
 
@@ -242,7 +242,7 @@ export function GrowthTab() {
           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-[#0A0A0A] rounded-lg text-center">
             <span className="text-xs text-gray-500 uppercase tracking-wide mb-1">Signups</span>
             <span className="text-3xl font-bold text-white">
-              {funnel.signups_30d.toLocaleString()}
+              {funnel.signups_30d.toLocaleString('en-US')}
             </span>
           </div>
 
@@ -259,7 +259,7 @@ export function GrowthTab() {
           <div className="flex-1 flex flex-col items-center justify-center p-4 bg-[#0A0A0A] rounded-lg text-center">
             <span className="text-xs text-gray-500 uppercase tracking-wide mb-1">Paying</span>
             <span className="text-3xl font-bold text-white">
-              {funnel.paying.toLocaleString()}
+              {funnel.paying.toLocaleString('en-US')}
             </span>
           </div>
         </div>
@@ -337,7 +337,7 @@ export function GrowthTab() {
                       {shortenPath(page.page)}
                     </span>
                     <span className="text-xs text-[#C9A646] font-semibold shrink-0">
-                      {page.views.toLocaleString()}
+                      {page.views.toLocaleString('en-US')}
                     </span>
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -442,7 +442,7 @@ export function GrowthTab() {
                       {s.source}
                     </span>
                     <span className="text-xs text-[#C9A646] font-semibold shrink-0">
-                      {s.signups.toLocaleString()}
+                      {s.signups.toLocaleString('en-US')}
                     </span>
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">

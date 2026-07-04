@@ -124,7 +124,7 @@ export default function WhisperSetupsPanel() {
                       {formatTakeTime(s.take_time_ny)}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-300 text-right font-mono">
-                      {Number(s.level_taken).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {Number(s.level_taken).toLocaleString('en-US', { maximumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-400">
                       {OUTCOME_LABELS[s.outcome] ?? s.outcome}

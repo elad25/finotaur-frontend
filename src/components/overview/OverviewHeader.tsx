@@ -1,6 +1,6 @@
 import React from "react";
 type Props = { symbol: string; companyName?: string; price?: number | null; changePct?: number | null; aiLine?: string; };
-function fmt(n?: number | null, d: number = 2) { if (n == null || Number.isNaN(n)) return "—"; return n.toLocaleString(undefined, { maximumFractionDigits: d }); }
+function fmt(n?: number | null, d: number = 2) { if (n == null || Number.isNaN(n)) return "—"; return n.toLocaleString('en-US', { maximumFractionDigits: d }); }
 export default function OverviewHeader({ symbol, companyName, price, changePct, aiLine }: Props) {
   const color = changePct == null ? "" : changePct > 0 ? "text-emerald-400" : changePct < 0 ? "text-red-400" : "text-zinc-300";
   return (<div className="w-full max-w-[1200px] mx-auto">

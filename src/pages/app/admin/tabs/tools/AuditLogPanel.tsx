@@ -48,7 +48,7 @@ function formatRelative(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString('en-US');
 }
 
 export function AuditLogPanel() {
@@ -90,7 +90,7 @@ export function AuditLogPanel() {
             Recent admin actions
           </h3>
           <span className="text-[10px] text-gray-500 uppercase tracking-wide">
-            last {PAGE_SIZE} · {total.toLocaleString()} total
+            last {PAGE_SIZE} · {total.toLocaleString('en-US')} total
           </span>
         </div>
         <button

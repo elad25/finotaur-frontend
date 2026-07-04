@@ -109,7 +109,7 @@ const WallRow = memo(function WallRow({
         {formatPrice(wall.price)}
       </td>
       <td className="py-2 px-2 text-right font-mono text-white/60">
-        {wall.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+        {wall.qty.toLocaleString('en-US', { maximumFractionDigits: 4 })}
       </td>
       <td className="py-2 px-2 text-right">
         <div className="flex items-center justify-end gap-2">
@@ -173,7 +173,7 @@ function SymbolWallsTable({
                 {formatPrice(wall.price)}
               </td>
               <td className="py-1.5 px-1 text-right font-mono text-white/60 text-[11px]">
-                {wall.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                {wall.qty.toLocaleString('en-US', { maximumFractionDigits: 4 })}
               </td>
               <td className="py-1.5 px-1 text-right">
                 <div className="flex items-center justify-end gap-1.5">

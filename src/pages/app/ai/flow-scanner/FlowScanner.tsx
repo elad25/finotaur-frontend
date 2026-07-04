@@ -219,7 +219,7 @@ const FlowScannerContent = memo(function FlowScannerContent() {
           <p className="text-xs text-[#4A4A4A]">
             Data refreshes every 30 seconds
             <span className="mx-2 text-[#3A3A3A]">•</span>
-            Last update: {lastUpdated ? lastUpdated.toLocaleTimeString() : '—'}
+            Last update: {lastUpdated ? lastUpdated.toLocaleTimeString('en-US') : '—'}
           </p>
         </motion.div>
       </div>

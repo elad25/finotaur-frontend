@@ -318,7 +318,7 @@ const AISectorCommentary = memo<AISectorCommentaryProps>(({ sector, cachedAnalys
               <p className="text-[10px] text-[#6B6B6B] mt-0.5">
                 {hasData
                   ? generatedAt
-                    ? `Generated ${new Date(generatedAt).toLocaleTimeString()} • Pre-cached sector intelligence`
+                    ? `Generated ${new Date(generatedAt).toLocaleTimeString('en-US')} • Pre-cached sector intelligence`
                     : 'Pre-generated macro-aware sector intelligence'
                   : 'Analysis from sector data'}
               </p>

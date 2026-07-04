@@ -2,7 +2,7 @@
 export const fmt = {
   n(v: number | null | undefined, d = 2) {
     if (v === null || v === undefined || isNaN(Number(v))) return "—";
-    return Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+    return Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
   },
   p(v: number | null | undefined, d = 1) {
     if (v === null || v === undefined || isNaN(Number(v))) return "—";
@@ -10,6 +10,6 @@ export const fmt = {
   },
   $n(v: number | null | undefined, d = 2) {
     if (v === null || v === undefined || isNaN(Number(v))) return "—";
-    return `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: d })}`;
+    return `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: d })}`;
   }
 };

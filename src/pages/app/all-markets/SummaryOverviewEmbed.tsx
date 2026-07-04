@@ -691,7 +691,7 @@ const CompanyOverviewCard = memo<CompanyOverviewCardProps>(({ symbol, preloadedP
           </div>
           <div>
             <span className="text-xs text-zinc-600">Employees</span>
-            <p className="text-sm text-zinc-300">{profile?.employees?.toLocaleString() || '—'}</p>
+            <p className="text-sm text-zinc-300">{profile?.employees?.toLocaleString('en-US') || '—'}</p>
           </div>
           <div>
             <span className="text-xs text-zinc-600">Industry</span>

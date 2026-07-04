@@ -34,7 +34,7 @@ export function fmtMoney(v: number | null | undefined): string {
   const prefix = v < 0 ? '-' : '';
   if (abs >= 1_000_000_000) return `${prefix}$${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000)     return `${prefix}$${(abs / 1_000_000).toFixed(1)}M`;
-  return `${prefix}$${abs.toLocaleString()}`;
+  return `${prefix}$${abs.toLocaleString('en-US')}`;
 }
 
 export function fmtPrice(v: number | null | undefined, decimals = 2): string {

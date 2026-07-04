@@ -134,7 +134,7 @@ function StatCell({ stat, index, active }: StatCellProps) {
 
   let display: string;
   if (stat.format === "locale") {
-    display = Math.floor(raw).toLocaleString();
+    display = Math.floor(raw).toLocaleString('en-US');
   } else if (stat.format === "decimal1") {
     display = raw.toFixed(1);
   } else {

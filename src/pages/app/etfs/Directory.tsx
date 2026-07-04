@@ -99,7 +99,7 @@ export default function ETFDirectory() {
           <>
             <div className="flex items-center justify-between mb-ds-3">
               <span className="text-[11px] text-ink-tertiary uppercase tracking-wider">
-                {loading ? 'Loading…' : `${total.toLocaleString()} ETFs`}
+                {loading ? 'Loading…' : `${total.toLocaleString('en-US')} ETFs`}
               </span>
             </div>
 

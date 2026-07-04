@@ -45,49 +45,51 @@ const DISCOUNT_TIERS: { id: DiscountTier; label: string; discount: number }[] = 
   { id: 'vip', label: 'VIP', discount: 15 },
 ];
 
-// ─── Pre-built rejection reasons with rich Hebrew affiliate-facing messages ───
+// ─── Pre-built rejection reasons with rich English affiliate-facing messages ───
+// Wording matches the detailed rejection emails in affiliateEmailTemplates.ts (REJECTION_DETAIL_MAP)
+// so the preset message shown here and the email the affiliate receives read consistently.
 const REJECTION_REASONS: { value: string; label: string; affiliateMessage: string }[] = [
   {
     value: 'insufficient_audience',
     label: 'Insufficient audience size',
     affiliateMessage:
-      'לאחר בדיקת הבקשה שלך, מצאנו שגודל הקהל הנוכחי שלך טרם הגיע לסף המינימלי הנדרש בתוכנית שלנו. זו לא ביקורת על האיכות שלך — פשוט אנחנו מחפשים שותפים עם בסיס עוקבים שמאפשר השפעה אמיתית. כשהקהל שלך יגדל, נשמח מאוד לקבל בקשה מחדש.',
+      "After reviewing your application, we found that your current audience size hasn't yet reached the minimum threshold required for our program. This isn't a judgment of your quality — we're simply looking for partners with a follower base that allows for real influence. Once your audience grows, we'd love to receive a new application.",
   },
   {
     value: 'brand_mismatch',
     label: 'Content not aligned with our brand',
     affiliateMessage:
-      'Finotaur מתמקדת בשוקי ההון, מסחר וניתוח פיננסי — ואנחנו מחפשים שותפים שהתוכן שלהם פונה ישירות לקהל שמתעניין בנושאים אלו. לאחר בחינה, מצאנו שהנישה הנוכחית שלך שונה מהקהל שאנחנו מיועדים לו. אם בעתיד הכיוון שלך ישתנה לכיוון פיננסי — הדלת תמיד פתוחה.',
+      "Finotaur is focused on capital markets, trading, and financial analysis — and we're looking for partners whose content speaks directly to an audience interested in these topics. After review, we found that your current niche differs from the audience we're targeting. If your direction shifts toward finance in the future, the door is always open.",
   },
   {
     value: 'geographic_restrictions',
     label: 'Geographic restrictions',
     affiliateMessage:
-      'תוכנית האפילייטים שלנו פועלת כרגע במדינות מוגבלות בלבד, בשל דרישות רגולטוריות ומגבלות תשלום בינלאומיות. לצערנו האזור שלך אינו נכלל בשלב זה — אך אנחנו עובדים על הרחבת הכיסוי. נשמח שתחזור ותגיש בקשה כשנרחיב לאזורך.',
+      "Our affiliate program currently operates in a limited number of countries due to regulatory requirements and international payment restrictions. Unfortunately your region isn't included at this stage, but we're working on expanding coverage. We'd love for you to reapply once we expand to your region.",
   },
   {
     value: 'incomplete_application',
     label: 'Incomplete application',
     affiliateMessage:
-      'בבדיקת הבקשה שלך שמנו לב שחסרים בה פרטים חיוניים — ייתכן שחלק מהשדות לא מולאו, קישורים לא היו פעילים, או שמידע מסוים חסר. הבשורה הטובה: זה קל מאוד לתיקון. פשוט הגש בקשה מחדש עם כל הפרטים המלאים, כולל קישורים פעילים לערוצים שלך — ונשמח לבחון אותה מחדש.',
+      "While reviewing your application, we noticed it was missing essential details — some fields may not have been filled in, links may not have been active, or some information may be missing. The good news: this is easy to fix. Simply reapply with all the required details, including active links to your channels, and we'll be happy to review it again.",
   },
   {
     value: 'duplicate_application',
     label: 'Duplicate application',
     affiliateMessage:
-      'מצאנו במערכת שלנו בקשה קיימת או חשבון הקשורים לפרטים שלך. אנחנו לא מאפשרים בקשות כפולות מאותו אדם. אם אתה חושב שמדובר בטעות — למשל, אם הגשת בעבר עם כתובת אימייל שונה — אנא פנה אלינו ישירות ונבדוק את זה יחד.',
+      "We found an existing application or account in our system linked to your details. We don't allow duplicate applications from the same person. If you believe this is a mistake — for example, if you previously applied with a different email address — please reach out to us directly and we'll look into it together.",
   },
   {
     value: 'low_quality_content',
     label: 'Content quality below standards',
     affiliateMessage:
-      'בבחינת הנוכחות הדיגיטלית שלך, הרגשנו שהתוכן הנוכחי שלך עדיין לא מגיע לרמת האיכות, המקצועיות והעקביות שאנחנו מחפשים בשותפינו. זה שלב טבעי בדרך של כל יוצר תוכן. אנחנו ממליצים להמשיך לפתח את הסגנון שלך — ולאחר שתבנה תיק עבודות חזק יותר, נשמח לראות את הבקשה שלך שוב.',
+      "In reviewing your digital presence, we felt your current content hasn't yet reached the level of quality, professionalism, and consistency we look for in our partners. This is a natural stage every content creator goes through. We recommend continuing to develop your style, and once you've built a stronger portfolio, we'd love to see your application again.",
   },
   {
     value: 'no_active_channels',
     label: 'No active channels verified',
     affiliateMessage:
-      'בניסיון לאמת את ערוצי התוכן שציינת, לא הצלחנו למצוא פעילות מאומתת — ייתכן שהקישורים לא עבדו, שהערוצים לא היו ציבוריים, או שהפרטים לא תאמו את הפרופילים. אנחנו ממליצים לוודא שכל הפרופילים שלך ציבוריים ופעילים, ולאחר מכן להגיש בקשה מחדש עם פרטים מדויקים.',
+      "In attempting to verify the content channels you listed, we were unable to find verified activity — the links may not have worked, the channels may not have been public, or the details didn't match the profiles we found. We recommend making sure all your profiles are public and active, then reapplying with accurate details.",
   },
   {
     value: 'other',
@@ -346,7 +348,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                     {app.total_followers > 0 && (
                       <span className="flex items-center gap-1 text-xs text-purple-400">
                         <Users className="w-3 h-3" />
-                        {app.total_followers.toLocaleString()} followers
+                        {app.total_followers.toLocaleString('en-US')} followers
                       </span>
                     )}
                     {app.country && (
@@ -410,9 +412,9 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
 
               {/* Date */}
               <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between text-xs text-gray-500">
-                <span>Applied: {new Date(app.created_at).toLocaleDateString()}</span>
+                <span>Applied: {new Date(app.created_at).toLocaleDateString('en-US')}</span>
                 {app.reviewed_at && (
-                  <span>Reviewed: {new Date(app.reviewed_at).toLocaleDateString()}</span>
+                  <span>Reviewed: {new Date(app.reviewed_at).toLocaleDateString('en-US')}</span>
                 )}
               </div>
             </div>
@@ -467,7 +469,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 mb-1">Total Followers</p>
-                    <p className="text-white">{selectedApp.total_followers?.toLocaleString() || '0'}</p>
+                    <p className="text-white">{selectedApp.total_followers?.toLocaleString('en-US') || '0'}</p>
                   </div>
                 </div>
               </div>
@@ -580,7 +582,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                   Affiliate Code (Whop Coupon)
                 </label>
                 <p className="text-gray-500 text-xs mb-2">
-                  קוד זה ייווצר ב-Whop. ניתן לשנותו — הקוד יעניק הנחה לקונים ויקשר את העמלה לאפילייט.
+                  This code will be created in Whop. It can be changed — the code grants a discount to buyers and links the commission to the affiliate.
                 </p>
                 
                 {selectedApp.requested_code ? (
@@ -696,7 +698,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                   ))}
                 </div>
                 <p className="text-gray-500 text-xs mt-2">
-                  הנחה שיקבלו לקוחות כשישתמשו בקוד — תקף לכל התוכניות. האפילייט מקבל 10% עמלה על כל תשלום ל-12 חודשים.
+                  Discount customers receive when using the code — valid on all plans. The affiliate earns a 10% commission on every payment for 12 months.
                 </p>
               </div>
 

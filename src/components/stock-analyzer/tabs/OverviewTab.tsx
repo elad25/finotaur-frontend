@@ -1278,7 +1278,7 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
                   </div>
                   <p className="text-xs text-[#6B6B6B] mt-0.5">
                     {isGenerating ? `Analyzing ${data.ticker} with real-time data... (${completedCount}/${AI_SECTIONS_CONFIG.length})` :
-                     generatedAt ? `Generated ${new Date(generatedAt).toLocaleTimeString()} • ${completedCount} sections • ${searchCount} used live data` :
+                     generatedAt ? `Generated ${new Date(generatedAt).toLocaleTimeString('en-US')} • ${completedCount} sections • ${searchCount} used live data` :
                      '7-section deep analysis powered by AI '}
                   </p>
                 </div>

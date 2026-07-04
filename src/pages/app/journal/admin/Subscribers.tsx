@@ -185,7 +185,7 @@ export default function AdminSubscribers() {
           change={`${stats.basicSubscribers} Basic · ${stats.premiumSubscribers} Premium`}
           changeType="neutral"
           icon={DollarSign}
-          subtitle={`$${(stats.basicMRR + stats.premiumMRR).toLocaleString()} MRR`}
+          subtitle={`$${(stats.basicMRR + stats.premiumMRR).toLocaleString('en-US')} MRR`}
         />
         <StatsCard
           title="Newsletter"
@@ -193,12 +193,12 @@ export default function AdminSubscribers() {
           change={`${stats.newsletterSubscribers ?? 0} Top Secret · ${stats.topSecretSubscribers ?? 0} Top Secret`}
           changeType="neutral"
           icon={TrendingUp}
-          subtitle={`$${((stats.newsletterMRR ?? 0) + (stats.topSecretMRR ?? 0)).toLocaleString()} MRR`}
+          subtitle={`$${((stats.newsletterMRR ?? 0) + (stats.topSecretMRR ?? 0)).toLocaleString('en-US')} MRR`}
         />
         <StatsCard
           title="Total MRR"
-          value={`$${stats.totalMRR.toLocaleString()}`}
-          change={`$${stats.totalARR.toLocaleString()} ARR`}
+          value={`$${stats.totalMRR.toLocaleString('en-US')}`}
+          change={`$${stats.totalARR.toLocaleString('en-US')} ARR`}
           changeType="positive"
           icon={Calendar}
           subtitle={`${stats.churnRate.toFixed(1)}% churn`}
@@ -224,29 +224,29 @@ export default function AdminSubscribers() {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Journal · Basic MRR</span>
-              <span className="text-white font-semibold">${stats.basicMRR.toLocaleString()}</span>
+              <span className="text-white font-semibold">${stats.basicMRR.toLocaleString('en-US')}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Journal · Premium MRR</span>
-              <span className="text-white font-semibold">${stats.premiumMRR.toLocaleString()}</span>
+              <span className="text-white font-semibold">${stats.premiumMRR.toLocaleString('en-US')}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Newsletter · Top Secret MRR</span>
-              <span className="text-white font-semibold">${(stats.newsletterMRR ?? 0).toLocaleString()}</span>
+              <span className="text-white font-semibold">${(stats.newsletterMRR ?? 0).toLocaleString('en-US')}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Newsletter · Top Secret MRR</span>
-              <span className="text-white font-semibold">${(stats.topSecretMRR ?? 0).toLocaleString()}</span>
+              <span className="text-white font-semibold">${(stats.topSecretMRR ?? 0).toLocaleString('en-US')}</span>
             </div>
             <div className="border-t border-gray-800 pt-4">
               <div className="flex justify-between items-center">
                 <span className="text-gray-300 font-medium">Total MRR</span>
-                <span className="text-[#D4AF37] font-bold text-lg">${stats.totalMRR.toLocaleString()}</span>
+                <span className="text-[#D4AF37] font-bold text-lg">${stats.totalMRR.toLocaleString('en-US')}</span>
               </div>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-300 font-medium">Projected ARR</span>
-              <span className="text-[#D4AF37] font-bold text-lg">${stats.totalARR.toLocaleString()}</span>
+              <span className="text-[#D4AF37] font-bold text-lg">${stats.totalARR.toLocaleString('en-US')}</span>
             </div>
           </div>
         </div>
@@ -431,7 +431,7 @@ function SubscriberRow({ subscriber: sub }: { subscriber: Subscriber }) {
         {sub.subscription_end_date ? new Date(sub.subscription_end_date).toLocaleDateString('en-US') : '-'}
       </td>
       <td className="px-6 py-4 text-right">
-        <span className="text-[#D4AF37] font-semibold">${sub.monthly_revenue.toLocaleString()}</span>
+        <span className="text-[#D4AF37] font-semibold">${sub.monthly_revenue.toLocaleString('en-US')}</span>
       </td>
     </tr>
   );

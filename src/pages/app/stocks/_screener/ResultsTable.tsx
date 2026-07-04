@@ -297,7 +297,7 @@ export const ResultsTable = memo(function ResultsTable({
       {/* Match count */}
       <div className="text-[11px] text-white/30 px-1">
         {rows.length} of{' '}
-        <span className="text-white/50 font-semibold">{total.toLocaleString()}</span>{' '}
+        <span className="text-white/50 font-semibold">{total.toLocaleString('en-US')}</span>{' '}
         match
       </div>
 

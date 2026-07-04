@@ -103,7 +103,7 @@ const InsiderCard = memo(({ item, index, onClick }: {
           <div className="text-center min-w-[80px]">
             <div className="text-[10px] text-[#6B6B6B] uppercase tracking-wider mb-0.5">Shares</div>
             <div className="text-sm font-bold text-white">
-              {item.insiderShares ? item.insiderShares.toLocaleString() : '—'}
+              {item.insiderShares ? item.insiderShares.toLocaleString('en-US') : '—'}
             </div>
           </div>
           <div className="text-center min-w-[70px]">

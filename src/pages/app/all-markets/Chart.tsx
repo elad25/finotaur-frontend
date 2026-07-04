@@ -457,7 +457,7 @@ async function fetchStockData(symbol: string): Promise<StockData | null> {
           beta: 0,
           relVolume: 0,
           avgVolume: 'N/A',
-          volume: (data.volume || 0).toLocaleString(),
+          volume: (data.volume || 0).toLocaleString('en-US'),
           week52High: data.high ? `${data.high.toFixed(2)}` : 'N/A',
           week52Low: data.low ? `${data.low.toFixed(2)}` : 'N/A',
           perfWeek: 'N/A',
@@ -1196,7 +1196,7 @@ export default function ChartPage() {
             price: lastCandle.close,
             prevClose: prevCandle.close,
             change: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
-            volume: ((chartData[chartData.length - 1] as any).volume || 0).toLocaleString(),
+            volume: ((chartData[chartData.length - 1] as any).volume || 0).toLocaleString('en-US'),
           }));
         }
       }

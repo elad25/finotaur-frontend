@@ -5,7 +5,7 @@ type Analyst = { buy:number; hold:number; sell:number; targetAvg:number|null; ta
 function sum(a:number,b:number){ return (a||0)+(b||0); }
 function fmt(n?: number | null, d: number = 2) {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
-  return n.toLocaleString(undefined, { maximumFractionDigits: d });
+  return n.toLocaleString('en-US', { maximumFractionDigits: d });
 }
 
 export default function AnalystBlock({ data }:{ data:Analyst }){

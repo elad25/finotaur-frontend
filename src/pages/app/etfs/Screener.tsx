@@ -213,8 +213,8 @@ export default function ETFScreener() {
                 {loading
                   ? 'Loading…'
                   : exchange
-                    ? `${filtered.length.toLocaleString()} ETFs (filtered by exchange)`
-                    : `${total.toLocaleString()} ETFs`}
+                    ? `${filtered.length.toLocaleString('en-US')} ETFs (filtered by exchange)`
+                    : `${total.toLocaleString('en-US')} ETFs`}
               </span>
             </div>
 

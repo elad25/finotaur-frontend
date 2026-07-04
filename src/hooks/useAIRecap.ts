@@ -88,7 +88,7 @@ function buildMockRecap(period: RecapPeriod, periodStart: string, periodEnd: str
   const label = PERIOD_LABELS[period];
 
   const narrative =
-    `During ${label} (${periodStart} – ${periodEnd}), you placed ${tradeCount} trades with a net P&L of $${netPnl.toLocaleString()}. ` +
+    `During ${label} (${periodStart} – ${periodEnd}), you placed ${tradeCount} trades with a net P&L of $${netPnl.toLocaleString('en-US')}. ` +
     `Your strongest pattern was ${setup}. The biggest leak was ${mistake}. ` +
     `Sessions with 5+ trades showed ${insight}.`;
 
@@ -102,7 +102,7 @@ function buildMockRecap(period: RecapPeriod, periodStart: string, periodEnd: str
     keyMetrics: [
       { label: 'Trades', value: String(tradeCount) },
       { label: 'Win rate', value: `${winRate}%` },
-      { label: 'Net P&L', value: `$${netPnl.toLocaleString()}` },
+      { label: 'Net P&L', value: `$${netPnl.toLocaleString('en-US')}` },
       { label: 'Avg R', value: avgR },
     ],
     observations: [

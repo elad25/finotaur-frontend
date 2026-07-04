@@ -29,7 +29,7 @@ const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data, initial
       date: dayjs(point.date).format('MMM DD'),
       fullDate: point.date,
       value: point.value,
-      displayValue: `$${point.value.toLocaleString()}`
+      displayValue: `$${point.value.toLocaleString('en-US')}`
     }));
 
     // Prepend a synthetic baseline point at INITIAL_CAPITAL so the equity
@@ -42,7 +42,7 @@ const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data, initial
       date: 'Start',
       fullDate: '',
       value: initialCapital,
-      displayValue: `$${initialCapital.toLocaleString()}`
+      displayValue: `$${initialCapital.toLocaleString('en-US')}`
     };
 
     return [baselinePoint, ...mapped];
@@ -90,7 +90,7 @@ const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data, initial
           <div className={`text-xl font-bold ${
             data[data.length - 1].value >= initialValue ? 'text-[#4AD295]' : 'text-[#E36363]'
           }`}>
-            ${data[data.length - 1].value.toLocaleString()}
+            ${data[data.length - 1].value.toLocaleString('en-US')}
           </div>
         </div>
       </div>
@@ -120,7 +120,7 @@ const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data, initial
             }}
             labelStyle={{ color: '#F4F4F4', marginBottom: '8px', fontWeight: 600 }}
             itemStyle={{ color: '#4AD295' }}
-            formatter={(value: any) => [`$${value.toLocaleString()}`, 'Equity']}
+            formatter={(value: any) => [`$${value.toLocaleString('en-US')}`, 'Equity']}
           />
           <ReferenceLine
             y={initialValue}

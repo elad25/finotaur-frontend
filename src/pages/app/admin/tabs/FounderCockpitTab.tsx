@@ -136,7 +136,7 @@ function shortDate(isoString: string): string {
 }
 
 function formatCurrency(n: number): string {
-  return `$${n.toLocaleString()}`;
+  return `$${n.toLocaleString('en-US')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,8 +375,8 @@ export function FounderCockpitTab() {
             />
             <StatsCard
               title="Paying Customers"
-              value={revenue.paying.toLocaleString()}
-              subtitle={`${revenue.active_users_live.toLocaleString()} active · ${revenue.total_users_live.toLocaleString()} total`}
+              value={revenue.paying.toLocaleString('en-US')}
+              subtitle={`${revenue.active_users_live.toLocaleString('en-US')} active · ${revenue.total_users_live.toLocaleString('en-US')} total`}
               icon={Crown}
             />
           </div>
@@ -394,32 +394,32 @@ export function FounderCockpitTab() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <StatsCard
               title="Total Users"
-              value={metrics.users.total.toLocaleString()}
+              value={metrics.users.total.toLocaleString('en-US')}
               subtitle={`+${metrics.users.signups24h} today · +${metrics.users.signups7d} this week`}
               icon={Users}
             />
             <StatsCard
               title="Active (7d)"
-              value={metrics.users.activeLogins7d.toLocaleString()}
+              value={metrics.users.activeLogins7d.toLocaleString('en-US')}
               subtitle="unique logins last 7 days"
               icon={Activity}
             />
             <StatsCard
               title="Paying"
-              value={totalPaying.toLocaleString()}
+              value={totalPaying.toLocaleString('en-US')}
               subtitle={`Platform ${metrics.subs.platform} · Journal ${metrics.subs.journalPremium} · NL ${metrics.subs.newsletter} · TS ${metrics.subs.topSecret}`}
               icon={Crown}
             />
             <StatsCard
               title="Signups (30d)"
-              value={metrics.users.signups30d.toLocaleString()}
+              value={metrics.users.signups30d.toLocaleString('en-US')}
               change={`+${metrics.users.signups7d} this week`}
               changeType="positive"
               icon={UserPlus}
             />
             <StatsCard
               title="Churn Total"
-              value={metrics.churn.total.toLocaleString()}
+              value={metrics.churn.total.toLocaleString('en-US')}
               change={`${metrics.churn.last7d} last 7 days`}
               changeType={metrics.churn.last7d > 0 ? 'negative' : 'neutral'}
               icon={TrendingDown}
@@ -445,7 +445,7 @@ export function FounderCockpitTab() {
                 ${metrics.ai.cost24h.toFixed(3)}
               </p>
               <p className="text-xs text-gray-500">
-                {metrics.ai.calls24h.toLocaleString()} calls
+                {metrics.ai.calls24h.toLocaleString('en-US')} calls
               </p>
             </div>
 
@@ -467,7 +467,7 @@ export function FounderCockpitTab() {
                           {engine.service}
                         </td>
                         <td className="py-2 text-right text-gray-400 text-xs">
-                          {engine.calls.toLocaleString()}
+                          {engine.calls.toLocaleString('en-US')}
                         </td>
                         <td className="py-2 text-right text-[#C9A646] text-xs font-medium">
                           ${engine.cost.toFixed(3)}

@@ -685,9 +685,9 @@ const ReportViewerModal: React.FC<{
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-3 border-t border-gray-800 bg-[#080812] rounded-b-2xl">
           <div className="flex items-center gap-4 text-sm text-gray-500">
-            <span>{report.split(' ').length.toLocaleString()} words</span>
+            <span>{report.split(' ').length.toLocaleString('en-US')} words</span>
             <span>•</span>
-            <span>{report.length.toLocaleString()} characters</span>
+            <span>{report.length.toLocaleString('en-US')} characters</span>
             <span>•</span>
             <span>{(report.match(/^-+$/gm) || []).length + 1} sections</span>
             <span>•</span>

@@ -135,7 +135,7 @@ export default function TradovateConnectModal({ onClose, onAddConnection, initia
                 )}
                 {credential?.last_sync_at && (
                   <p className="text-xs text-zinc-500">
-                    Last sync: {new Date(credential.last_sync_at).toLocaleString()}
+                    Last sync: {new Date(credential.last_sync_at).toLocaleString('en-US')}
                   </p>
                 )}
               </div>

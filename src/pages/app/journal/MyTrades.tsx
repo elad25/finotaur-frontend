@@ -2752,7 +2752,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                             {selectedTrade.lot_size != null && (
                               <div>
                                 <div className="text-[11px] text-zinc-500 mb-1">Lot Size</div>
-                                <div className="text-base font-semibold text-white">{selectedTrade.lot_size.toLocaleString()}</div>
+                                <div className="text-base font-semibold text-white">{selectedTrade.lot_size.toLocaleString('en-US')}</div>
                               </div>
                             )}
                             <div>

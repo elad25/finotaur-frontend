@@ -17,7 +17,7 @@ export const EquityChart = memo(({ trades }: EquityChartProps) => {
       const equity = prevEquity + (trade.pnl || 0);
 
       acc.push({
-        date: new Date(trade.date).toLocaleDateString(),
+        date: new Date(trade.date).toLocaleDateString('en-US'),
         equity,
       });
 

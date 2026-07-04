@@ -2904,7 +2904,7 @@ const SecurityTab = () => {
                     <DialogDescription>
                       Your account has been scheduled for deletion
                       {deletionResult.undo_deadline
-                        ? ` and will be permanently removed on ${new Date(deletionResult.undo_deadline).toLocaleDateString()}`
+                        ? ` and will be permanently removed on ${new Date(deletionResult.undo_deadline).toLocaleDateString('en-US')}`
                         : ''}
                       . We've emailed you a link to undo this if you change your mind.
                     </DialogDescription>

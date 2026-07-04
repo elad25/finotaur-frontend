@@ -23,7 +23,7 @@ function isClosed(t: any): boolean {
 
 function fmtUsd(v: number): string {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
-  return `${sign}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  return `${sign}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
 function pnlColor(v: number): string {
@@ -124,7 +124,7 @@ function buildCalendar(trades: any[]): MonthCell[] {
   for (const [key, monthTrades] of byMonth) {
     const stats = calculateAllStats(monthTrades as Trade[]);
     const [y, m] = key.split('-').map(Number);
-    const label = new Date(y, m - 1, 1).toLocaleDateString(undefined, {
+    const label = new Date(y, m - 1, 1).toLocaleDateString('en-US', {
       month: 'short',
       year: 'numeric',
     });

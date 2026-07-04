@@ -176,7 +176,7 @@ export function SubscriptionStatus() {
               <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
                 <Clock className="h-3 w-3" />
                 <span>
-                  Renews on {new Date(limits.subscription_expires_at).toLocaleDateString()}
+                  Renews on {new Date(limits.subscription_expires_at).toLocaleDateString('en-US')}
                 </span>
               </div>
             )}

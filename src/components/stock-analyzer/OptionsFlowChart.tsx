@@ -365,7 +365,7 @@ const OptionsFlowChart = memo(({ ticker }: OptionsFlowChartProps) => {
                 </span>
               </div>
               <p className="text-[11px] text-[#6B6B6B] mt-0.5">
-                {data.contractsAnalyzed} contracts analyzed • {new Date(data.timestamp).toLocaleTimeString()}
+                {data.contractsAnalyzed} contracts analyzed • {new Date(data.timestamp).toLocaleTimeString('en-US')}
               </p>
             </div>
           </div>
@@ -688,7 +688,7 @@ const OptionsFlowChart = memo(({ ticker }: OptionsFlowChartProps) => {
           Data: Polygon.io • {data.contractsAnalyzed} contracts • Cached 24h
         </span>
         <span className="text-[9px] text-[#3B3B3B]">
-          {new Date(data.timestamp).toLocaleString()}
+          {new Date(data.timestamp).toLocaleString('en-US')}
         </span>
       </div>
     </div>

@@ -21,116 +21,116 @@ const REJECTION_DETAIL_MAP: Record<string, { bodyHtml: string; bodyText: string;
   'Insufficient audience size': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  אחת הדרישות המרכזיות בתוכנית האפילייטים שלנו היא שלשותפים תהיה קהל מינימלי שמאפשר השפעה אמיתית על ההחלטות של עוקביהם.
-  לאחר בחינת הבקשה שלך, מצאנו שבשלב זה גודל הקהל שלך טרם הגיע לסף הנדרש.
+  One of the core requirements of our affiliate program is that partners have a minimum audience size that allows for real influence over their followers' decisions.
+  After reviewing your application, we found that your current audience size hasn't yet reached the required threshold.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  זה <strong style="color:#fff;">לא</strong> אומר שאין לך פוטנציאל — אנחנו רואים אנשים שצומחים מהר מאוד ומצטרפים לתוכנית בהצלחה.
-  אנחנו ממליצים להמשיך לפתח את התוכן שלך, להגדיל את מעורבות הקהל ולחזור אלינו כשתרגיש שהגעת לנקודה חדשה.
+  This <strong style="color:#fff;">doesn't</strong> mean you have no potential — we regularly see people grow very quickly and join the program successfully.
+  We recommend continuing to build your content, growing audience engagement, and coming back to us once you feel you've reached a new milestone.
 </p>`,
     bodyText: `
-אחת הדרישות המרכזיות שלנו היא שלשותפים תהיה קהל מינימלי שמאפשר השפעה אמיתית.
-בשלב זה גודל הקהל שלך טרם הגיע לסף הנדרש — אך זה בהחלט ניתן לשינוי.
-אנחנו ממליצים להמשיך לצמוח ולחזור אלינו כשתגיע לנקודה חדשה.`,
-    reapplyTip: 'כשהקהל שלך יגדל — אנחנו כאן. הגש בקשה מחדש בכל עת.',
+One of our core requirements is that partners have a minimum audience size that allows for real influence.
+Your current audience size hasn't yet reached the required threshold — but this can definitely change.
+We recommend continuing to grow and reaching back out to us once you hit a new milestone.`,
+    reapplyTip: 'Once your audience grows — we are here. Reapply at any time.',
   },
 
   'Content not aligned with our brand': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  Finotaur היא פלטפורמה המתמקדת בשוקי ההון, מסחר, וניתוח פיננסי מקצועי.
-  אנחנו מחפשים שותפים שהתוכן שלהם מדבר ישירות לקהל שמתעניין בנושאים אלו — משקיעים, סוחרים, ואנשים שמחפשים כלים פיננסיים רציניים.
+  Finotaur is a platform focused on capital markets, trading, and professional financial analysis.
+  We're looking for partners whose content speaks directly to an audience interested in these topics — investors, traders, and people seeking serious financial tools.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  לאחר בחינת הפעילות שלך, הגענו למסקנה שהנישה הנוכחית שלך שונה מהקהל שאנחנו מיועדים לו.
-  אם בעתיד הכיוון שלך ישתנה ותתחיל לעסוק יותר בנושאים פיננסיים — נשמח מאוד לשמוע ממך שוב.
+  After reviewing your activity, we concluded that your current niche differs from the audience we're targeting.
+  If your direction changes in the future and you start focusing more on financial topics — we'd love to hear from you again.
 </p>`,
     bodyText: `
-Finotaur מיועדת לקהל שמתעניין בשוקי הון, מסחר וניתוח פיננסי.
-לאחר בחינה, מצאנו שהנישה הנוכחית שלך שונה מהקהל שאנחנו פונים אליו.
-אם הכיוון שלך ישתנה לכיוון פיננסי בעתיד — נשמח לשמוע ממך שוב.`,
-    reapplyTip: 'אם הכיוון התוכן שלך ישתנה — הדלת פתוחה. הגש בקשה מחדש בכל עת.',
+Finotaur is aimed at an audience interested in capital markets, trading, and financial analysis.
+After review, we found that your current niche differs from the audience we're targeting.
+If your direction shifts toward finance in the future — we'd love to hear from you again.`,
+    reapplyTip: 'If your content direction changes — the door is open. Reapply at any time.',
   },
 
   'Geographic restrictions': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  כרגע תוכנית האפילייטים שלנו פועלת במספר מוגבל של מדינות, בעיקר בשל דרישות רגולטוריות ומגבלות תשלום בינלאומיות.
-  לצערנו, האזור הגאוגרפי שלך אינו נכלל בשלב זה בין האזורים שאנו תומכים בהם.
+  Our affiliate program currently operates in a limited number of countries, mainly due to regulatory requirements and international payment restrictions.
+  Unfortunately, your geographic region isn't currently included among the regions we support.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  אנחנו עובדים באופן פעיל על הרחבת הכיסוי הגאוגרפי של התוכנית, ומקווים להוסיף אזורים נוספים בקרוב.
-  נשמח אם תחזור ותגיש בקשה כאשר נרחיב את הכיסוי לאזורך.
+  We're actively working on expanding the program's geographic coverage and hope to add more regions soon.
+  We'd love for you to come back and apply once we expand coverage to your region.
 </p>`,
     bodyText: `
-תוכנית האפילייטים שלנו פועלת כרגע במדינות מוגבלות בלבד בשל דרישות רגולטוריות.
-האזור שלך אינו נכלל בשלב זה, אך אנחנו עובדים על הרחבת הכיסוי.
-נשמח שתחזור ותגיש בקשה כשנרחיב לאזורך.`,
-    reapplyTip: 'עקוב אחר עדכונים שלנו — כשנרחיב לאזורך, נשמח לקבל אותך.',
+Our affiliate program currently operates only in limited countries due to regulatory requirements.
+Your region isn't currently included, but we're working on expanding coverage.
+We'd love for you to come back and apply once we expand to your region.`,
+    reapplyTip: 'Follow our updates — once we expand to your region, we would love to have you.',
   },
 
   'Incomplete application': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  בעת בדיקת הבקשה שלך, שמנו לב שחסרים בה פרטים חיוניים שאנו זקוקים להם כדי להעריך את ההתאמה שלך לתוכנית.
-  ייתכן שחלק מהשדות לא מולאו, קישורים לא היו פעילים, או שמידע מסוים חסר.
+  While reviewing your application, we noticed it was missing essential details we need to evaluate your fit for the program.
+  Some fields may not have been filled in, links may not have been active, or some information may be missing.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  הבשורה הטובה היא שזו הסיבה הפשוטה ביותר לתיקון — פשוט הגש בקשה מחדש עם כל הפרטים הנדרשים, כולל קישורים פעילים לערוצים שלך ופרטי יצירת קשר מלאים.
-  נשמח לבחון את הבקשה המעודכנת.
+  The good news is this is the simplest reason to fix — just reapply with all the required details, including active links to your channels and complete contact information.
+  We'd be happy to review the updated application.
 </p>`,
     bodyText: `
-הבקשה שלך חסרה פרטים חיוניים שאנו זקוקים להם להערכה מלאה.
-הבשורה הטובה: זה קל לתיקון — הגש בקשה מחדש עם כל הפרטים, קישורים פעילים ופרטי קשר מלאים.`,
-    reapplyTip: 'הגש בקשה מחדש עם כל הפרטים המלאים — נשמח לבחון אותה בהקדם.',
+Your application is missing essential details we need for a complete evaluation.
+The good news: this is easy to fix — reapply with all details, active links, and complete contact information.`,
+    reapplyTip: 'Reapply with all complete details — we would be happy to review it soon.',
   },
 
   'Duplicate application': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  מצאנו במערכת שלנו בקשה קיימת או חשבון הקשורים לפרטים שלך.
-  כדי לשמור על סדר ועקביות בתוכנית, אנחנו לא מאפשרים בקשות כפולות מאותו אדם.
+  We found an existing application or account in our system linked to your details.
+  To maintain order and consistency in the program, we don't allow duplicate applications from the same person.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  אם אתה חושב שמדובר בטעות — למשל, אם הגשת בקשה עם כתובת אימייל אחרת בעבר, או שיש בלבול עם חשבון אחר —
-  אנא פנה אלינו ישירות ונבדוק את זה יחד. אנחנו כאן כדי לעזור.
+  If you believe this is a mistake — for example, if you previously applied with a different email address, or there's confusion with another account —
+  please reach out to us directly and we'll look into it together. We're here to help.
 </p>`,
     bodyText: `
-מצאנו בקשה קיימת או חשבון הקשורים לפרטים שלך במערכת.
-אם לדעתך מדובר בטעות, פנה אלינו ישירות ונבדוק.`,
-    reapplyTip: 'לשאלות על חשבון קיים — צור קשר ישירות עם הצוות שלנו.',
+We found an existing application or account in our system linked to your details.
+If you believe this is a mistake, reach out to us directly and we'll look into it.`,
+    reapplyTip: 'For questions about an existing account — contact our team directly.',
   },
 
   'Content quality below standards': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  בבחינת הנוכחות הדיגיטלית שלך, הרגשנו שהתוכן הנוכחי שלך עדיין לא מגיע לרמת האיכות, המקצועיות והעקביות שאנחנו מחפשים בשותפינו.
-  זה לא ביקורת — זה פשוט שלב בדרך שכל יוצר תוכן עובר.
+  In reviewing your digital presence, we felt your current content hasn't yet reached the level of quality, professionalism, and consistency we look for in our partners.
+  This isn't a criticism — it's simply a stage every content creator goes through.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  אנחנו ממליצים להמשיך לפתח את הסגנון שלך, להשקיע במראה ובעריכה, ולשאוף לעקביות בפרסום.
-  לאחר שתבנה תיק עבודות חזק יותר — נשמח לראות את הבקשה שלך שוב.
+  We recommend continuing to develop your style, investing in visuals and editing, and aiming for consistency in publishing.
+  Once you've built a stronger portfolio — we'd love to see your application again.
 </p>`,
     bodyText: `
-התוכן הנוכחי שלך טרם הגיע לרמת האיכות והמקצועיות שאנחנו מחפשים בשותפינו.
-אנחנו ממליצים לפתח עוד את הסגנון שלך ולשוב כשתרגיש שהתוצאות מדברות בעד עצמן.`,
-    reapplyTip: 'כשתרגיש שהתוכן שלך הגיע לרמה הבאה — הגש בקשה מחדש. נשמח לראות את הגדילה שלך.',
+Your current content hasn't yet reached the level of quality and professionalism we look for in our partners.
+We recommend further developing your style and returning once you feel your results speak for themselves.`,
+    reapplyTip: 'Once you feel your content has reached the next level — reapply. We would love to see your growth.',
   },
 
   'No active channels verified': {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  בניסיון לאמת את ערוצי התוכן שציינת בבקשה, לא הצלחנו למצוא פעילות מאומתת.
-  ייתכן שהקישורים לא עבדו, שהערוצים לא היו ציבוריים, או שהפרטים שנרשמו לא תאמו את הפרופילים שמצאנו.
+  In attempting to verify the content channels you listed in your application, we were unable to find verified activity.
+  The links may not have worked, the channels may not have been public, or the details submitted didn't match the profiles we found.
 </p>
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  אנחנו ממליצים לוודא שכל הקישורים לפרופילים שלך ציבוריים ופעילים, ולאחר מכן להגיש בקשה מחדש עם פרטים מדויקים.
-  זה יעזור לנו לבחון את הבקשה שלך בצורה הטובה ביותר.
+  We recommend making sure all links to your profiles are public and active, then reapplying with accurate details.
+  This will help us review your application in the best possible way.
 </p>`,
     bodyText: `
-לא הצלחנו לאמת את ערוצי התוכן שציינת — ייתכן שהקישורים לא עבדו או שהפרטים לא תאמו.
-וודא שכל הפרופילים שלך ציבוריים ופעילים, ולאחר מכן הגש בקשה מחדש עם פרטים מדויקים.`,
-    reapplyTip: 'עדכן את הקישורים שלך וודא שהם ציבוריים — ואז הגש מחדש.',
+We were unable to verify the content channels you listed — the links may not have worked or the details didn't match.
+Make sure all your profiles are public and active, then reapply with accurate details.`,
+    reapplyTip: 'Update your links and make sure they are public — then reapply.',
   },
 };
 
@@ -146,11 +146,11 @@ function buildRejectionBody(rejectionReason: string, messageToAffiliate: string)
   return {
     bodyHtml: `
 <p style="color:#cccccc;font-size:15px;margin:0 0 16px 0;line-height:1.8;">
-  לאחר בחינה מדוקדקת של הבקשה שלך, החלטנו בשלב זה שלא לאשר אותה.
-  הסיבה המפורטת מצוינת למטה.
+  After careful review of your application, we've decided not to approve it at this time.
+  The detailed reason is noted below.
 </p>`,
-    bodyText: `לאחר בחינה של הבקשה שלך, החלטנו בשלב זה שלא לאשר אותה.`,
-    reapplyTip: 'נשמח לקבל בקשה מחדש בעתיד כשהנסיבות ישתנו.',
+    bodyText: `After reviewing your application, we've decided not to approve it at this time.`,
+    reapplyTip: 'We would love to receive a new application in the future once circumstances change.',
   };
 }
 
@@ -160,19 +160,19 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
   const supportEmail = 'support@finotaur.com';
   const applyUrl = 'https://www.finotaur.com/affiliate';
 
-  const subject = `עדכון בנוגע לבקשת האפילייט שלך – Finotaur`;
+  const subject = `Update on Your Affiliate Application – Finotaur`;
 
   const { bodyHtml, bodyText, reapplyTip } = buildRejectionBody(rejectionReason, messageToAffiliate);
 
   const html = `
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>עדכון בקשת אפילייט</title>
+  <title>Affiliate Application Update</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0A0A0A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; direction: rtl;">
+<body style="margin: 0; padding: 0; background-color: #0A0A0A; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
@@ -192,9 +192,9 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
               <!-- Header Bar -->
               <table role="presentation" style="width: 100%; border-collapse: collapse;">
                 <tr>
-                  <td style="background: linear-gradient(90deg, #1a1a1a 0%, #222 100%); border-bottom: 2px solid #333; padding: 20px 30px; text-align: right;">
+                  <td style="background: linear-gradient(90deg, #1a1a1a 0%, #222 100%); border-bottom: 2px solid #333; padding: 20px 30px; text-align: left;">
                     <h1 style="margin: 0; color: #fff; font-size: 20px; font-weight: 700;">
-                      עדכון על בקשת הצטרפות לתוכנית השותפים
+                      Update on Your Affiliate Program Application
                     </h1>
                   </td>
                 </tr>
@@ -206,19 +206,19 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
                   <td style="padding: 40px 30px;">
 
                     <p style="color: #ffffff; font-size: 17px; margin: 0 0 16px 0; line-height: 1.6;">
-                      היי ${firstName},
+                      Hi ${firstName},
                     </p>
 
                     <p style="color: #cccccc; font-size: 15px; margin: 0 0 24px 0; line-height: 1.7;">
-                      תודה רבה שהגשת בקשה להצטרף לתוכנית השותפים של <strong style="color: #D4AF37;">Finotaur</strong>.
-                      אנחנו מעריכים את הזמן שהשקעת ואת הרצון שלך להיות חלק מהקהילה שלנו.
+                      Thank you so much for applying to join the <strong style="color: #D4AF37;">Finotaur</strong> Affiliate Program.
+                      We appreciate the time you invested and your interest in becoming part of our community.
                     </p>
 
                     <!-- Reason Box -->
                     <table role="presentation" style="width: 100%; border-collapse: collapse; margin-bottom: 28px;">
                       <tr>
-                        <td style="background: rgba(255,255,255,0.03); border: 1px solid #2a2a2a; border-right: 3px solid #D4AF37; border-radius: 8px; padding: 22px 24px;">
-                          <p style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 8px 0;">סיבת הדחייה</p>
+                        <td style="background: rgba(255,255,255,0.03); border: 1px solid #2a2a2a; border-left: 3px solid #D4AF37; border-radius: 8px; padding: 22px 24px;">
+                          <p style="color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 8px 0;">Reason for Rejection</p>
                           <p style="color: #e0e0e0; font-size: 15px; font-weight: 600; margin: 0 0 16px 0;">${rejectionReason}</p>
                           <p style="color: #bbb; font-size: 14px; margin: 0; line-height: 1.75;">${messageToAffiliate}</p>
                         </td>
@@ -238,20 +238,20 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
                       <tr>
                         <td style="background: rgba(212,175,55,0.06); border: 1px solid rgba(212,175,55,0.2); border-radius: 10px; padding: 20px 24px;">
                           <p style="color: #D4AF37; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 8px 0;">
-                            🚪 הדלת פתוחה עבורך
+                            🚪 The Door Is Open for You
                           </p>
                           <p style="color: #ccc; font-size: 14px; margin: 0; line-height: 1.75;">
                             ${reapplyTip}
                             <br/>
-                            תהליך ההגשה פשוט ומהיר — <a href="${applyUrl}" style="color: #D4AF37; text-decoration: none; font-weight: 600;">לחץ כאן להגשת בקשה חדשה</a>.
+                            The application process is quick and simple — <a href="${applyUrl}" style="color: #D4AF37; text-decoration: none; font-weight: 600;">click here to submit a new application</a>.
                           </p>
                         </td>
                       </tr>
                     </table>
 
                     <p style="color: #cccccc; font-size: 15px; margin: 0 0 28px 0; line-height: 1.7;">
-                      אם יש לך שאלות, רוצה לקבל הבהרה נוספת, או שאתה מאמין שמדובר בטעות — אל תהסס לפנות אלינו ישירות.
-                      אנחנו כאן וישמח לנו לעזור.
+                      If you have any questions, would like further clarification, or believe this is a mistake — don't hesitate to reach out to us directly.
+                      We're here and happy to help.
                     </p>
 
                     <!-- CTA -->
@@ -259,7 +259,7 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
                       <tr>
                         <td align="center" style="padding-bottom: 10px;">
                           <a href="mailto:${supportEmail}" style="display: inline-block; background: transparent; color: #D4AF37; font-size: 14px; font-weight: 600; text-decoration: none; padding: 12px 32px; border-radius: 8px; border: 1.5px solid #D4AF37;">
-                            צור קשר עם הצוות שלנו
+                            Contact Our Team
                           </a>
                         </td>
                       </tr>
@@ -276,11 +276,11 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
           <tr>
             <td style="padding: 30px; text-align: center;">
               <p style="color: #555; font-size: 12px; margin: 0 0 8px 0;">
-                שאלות? פנה אלינו בכתובת
+                Questions? Reach us at
                 <a href="mailto:${supportEmail}" style="color: #D4AF37; text-decoration: none;">${supportEmail}</a>
               </p>
               <p style="color: #333; font-size: 11px; margin: 0;">
-                © ${new Date().getFullYear()} Finotaur. כל הזכויות שמורות.
+                © ${new Date().getFullYear()} Finotaur. All rights reserved.
               </p>
             </td>
           </tr>
@@ -294,25 +294,25 @@ export function generateRejectionEmail(data: RejectionEmailData): { html: string
   `.trim();
 
   const text = `
-היי ${firstName},
+Hi ${firstName},
 
-תודה שהגשת בקשה לתוכנית השותפים של Finotaur.
-אנחנו מעריכים את הזמן שהשקעת.
+Thank you for applying to the Finotaur Affiliate Program.
+We appreciate the time you invested.
 
-לאחר בחינה, החלטנו שלא לאשר את הבקשה בשלב זה.
+After review, we've decided not to approve the application at this time.
 
-סיבה: ${rejectionReason}
+Reason: ${rejectionReason}
 
 ${messageToAffiliate}
 
 ${bodyText}
 
 ${reapplyTip}
-הגש בקשה חדשה כאן: ${applyUrl}
+Submit a new application here: ${applyUrl}
 
-לשאלות, ניתן לפנות אלינו ב: ${supportEmail}
+For questions, you can reach us at: ${supportEmail}
 
-© ${new Date().getFullYear()} Finotaur. כל הזכויות שמורות.
+© ${new Date().getFullYear()} Finotaur. All rights reserved.
   `.trim();
 
   return { html, text, subject };

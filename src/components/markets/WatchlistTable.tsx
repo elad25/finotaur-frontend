@@ -88,7 +88,7 @@ export const WatchlistTable: React.FC<WatchlistTableProps> = ({ value, onChange 
     if (value === sym && arr.length) onChange(arr[0]);
   };
 
-  const fmtNum = (n: number | null) => n == null ? "—" : (Math.abs(n) >= 1000 ? n.toLocaleString(undefined, {maximumFractionDigits: 2}) : n.toFixed(2));
+  const fmtNum = (n: number | null) => n == null ? "—" : (Math.abs(n) >= 1000 ? n.toLocaleString('en-US', {maximumFractionDigits: 2}) : n.toFixed(2));
   const fmtPct = (n: number | null) => n == null ? "—" : ((n>=0?"+":"") + n.toFixed(2) + "%");
   const color = (n: number | null) => n == null ? "" : (n >= 0 ? "text-emerald-400" : "text-rose-400");
 

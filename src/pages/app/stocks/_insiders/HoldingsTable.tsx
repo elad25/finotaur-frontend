@@ -21,7 +21,7 @@ interface SortState { sort: SortKey; dir: SortDir; }
 function fmtShares(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return n.toLocaleString();
+  return n.toLocaleString('en-US');
 }
 
 function changeLabel(type: ChangeType): string {

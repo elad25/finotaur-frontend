@@ -96,7 +96,7 @@ export const AiSummaryCard = memo(function AiSummaryCard({ feature, className }:
 
           {!isPending && data?.generatedAt && (
             <p className="text-[10px] text-ink-tertiary mt-2">
-              {data.model} · {new Date(data.generatedAt).toLocaleString()}
+              {data.model} · {new Date(data.generatedAt).toLocaleString('en-US')}
             </p>
           )}
         </div>

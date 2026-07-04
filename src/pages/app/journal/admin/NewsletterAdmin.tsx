@@ -270,7 +270,7 @@ export default function NewsletterAdmin() {
   }
 
   function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleString('he-IL');
+    return new Date(dateString).toLocaleString('en-US');
   }
 
   // ==========================================

@@ -1351,7 +1351,7 @@ const rPerformance = useMemo(() => {
       
       const rows = trades.map((trade: any) => {
         return [
-          new Date(trade.open_at).toLocaleDateString(),
+          new Date(trade.open_at).toLocaleDateString('en-US'),
           trade.symbol,
           trade.side,
           trade.entry_price,

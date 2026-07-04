@@ -79,7 +79,7 @@ export function getNextResetDate(limits: TradeLimits | null | undefined): string
   
   try {
     const resetDate = new Date(limits.reset_date);
-    return resetDate.toLocaleDateString('he-IL', {
+    return resetDate.toLocaleDateString('en-US', {
       day: 'numeric',
       month: 'long',
       year: 'numeric'

@@ -279,13 +279,13 @@ export function AIUsageTab() {
         />
         <StatsCard
           title="Total questions"
-          value={totals.questions.toLocaleString()}
-          subtitle={`${totals.tokens.toLocaleString()} tokens`}
+          value={totals.questions.toLocaleString('en-US')}
+          subtitle={`${totals.tokens.toLocaleString('en-US')} tokens`}
           icon={MessageSquare}
         />
         <StatsCard
           title="Active AI users"
-          value={users.length.toLocaleString()}
+          value={users.length.toLocaleString('en-US')}
           subtitle="at least 1 question"
           icon={Cpu}
         />
@@ -341,10 +341,10 @@ export function AIUsageTab() {
                   </td>
                   <td className="px-5 py-2 text-gray-300">{u.accountType}</td>
                   <td className="text-right px-5 py-2 text-gray-300">
-                    {u.questions.toLocaleString()}
+                    {u.questions.toLocaleString('en-US')}
                   </td>
                   <td className="text-right px-5 py-2 text-gray-400">
-                    {u.tokens.toLocaleString()}
+                    {u.tokens.toLocaleString('en-US')}
                   </td>
                   <td className="text-right px-5 py-2 text-[#D4AF37] font-medium">
                     ${u.costUsd.toFixed(2)}
@@ -392,10 +392,10 @@ export function AIUsageTab() {
                 >
                   <td className="px-5 py-2 text-white">{t.tier}</td>
                   <td className="text-right px-5 py-2 text-gray-300">
-                    {t.users.toLocaleString()}
+                    {t.users.toLocaleString('en-US')}
                   </td>
                   <td className="text-right px-5 py-2 text-gray-300">
-                    {t.totalQuestions.toLocaleString()}
+                    {t.totalQuestions.toLocaleString('en-US')}
                   </td>
                   <td className="text-right px-5 py-2 text-[#D4AF37] font-medium">
                     ${t.totalCost.toFixed(2)}

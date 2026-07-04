@@ -146,7 +146,7 @@ function LiveStat({
         {label}
       </p>
       <p className="text-xl font-bold text-white mt-1">
-        {typeof value === 'number' ? value.toLocaleString() : value}
+        {typeof value === 'number' ? value.toLocaleString('en-US') : value}
       </p>
       {hint && <p className="text-[10px] text-gray-600 mt-0.5">{hint}</p>}
     </div>

@@ -245,19 +245,19 @@ export function CustomerVoiceTab() {
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatsCard
           title="Total signals"
-          value={total.toLocaleString()}
+          value={total.toLocaleString('en-US')}
           subtitle="all time"
           icon={MessageSquare}
         />
         <StatsCard
           title="New (7d)"
-          value={new_7d.toLocaleString()}
+          value={new_7d.toLocaleString('en-US')}
           subtitle="last 7 days"
           icon={Zap}
         />
         <StatsCard
           title="New (30d)"
-          value={new_30d.toLocaleString()}
+          value={new_30d.toLocaleString('en-US')}
           subtitle="last 30 days"
           icon={TrendingDown}
         />

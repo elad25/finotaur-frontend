@@ -722,7 +722,6 @@ export interface StoredAffiliateData {
 
 export interface ReferralStatusDisplay {
   label: string;
-  labelHe: string;
   color: string;
   bgClass: string;
   textClass: string;
@@ -732,7 +731,6 @@ export interface ReferralStatusDisplay {
 export const REFERRAL_STATUS_DISPLAY: Record<ReferralStatus, ReferralStatusDisplay> = {
   pending: {
     label: 'Awaiting Payment',
-    labelHe: 'ממתין לתשלום',
     color: 'gray',
     bgClass: 'bg-gray-500/10',
     textClass: 'text-gray-400',
@@ -740,7 +738,6 @@ export const REFERRAL_STATUS_DISPLAY: Record<ReferralStatus, ReferralStatusDispl
   },
   verification_pending: {
     label: 'In Verification',
-    labelHe: 'בתקופת אימות',
     color: 'yellow',
     bgClass: 'bg-yellow-500/10',
     textClass: 'text-yellow-400',
@@ -748,23 +745,20 @@ export const REFERRAL_STATUS_DISPLAY: Record<ReferralStatus, ReferralStatusDispl
   },
   verification_failed: {
     label: 'Verification Failed',
-    labelHe: 'נכשל באימות',
     color: 'red',
     bgClass: 'bg-red-500/10',
     textClass: 'text-red-400',
     icon: 'XCircle',
   },
   qualified: {
-    label: 'Qualified',
-    labelHe: 'זכאי לעמלה',
+    label: 'Eligible for Commission',
     color: 'green',
     bgClass: 'bg-green-500/10',
     textClass: 'text-green-400',
     icon: 'CheckCircle',
   },
   churned: {
-    label: 'Churned',
-    labelHe: 'בוטל',
+    label: 'Cancelled',
     color: 'red',
     bgClass: 'bg-red-500/10',
     textClass: 'text-red-400',
@@ -772,7 +766,6 @@ export const REFERRAL_STATUS_DISPLAY: Record<ReferralStatus, ReferralStatusDispl
   },
   refunded: {
     label: 'Refunded',
-    labelHe: 'הוחזר',
     color: 'orange',
     bgClass: 'bg-orange-500/10',
     textClass: 'text-orange-400',

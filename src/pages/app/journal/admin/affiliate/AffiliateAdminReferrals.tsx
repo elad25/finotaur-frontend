@@ -429,7 +429,7 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
 
                       {/* Signup Date */}
                       <td className="px-4 py-3 text-gray-400 text-sm">
-                        {new Date(referral.signup_date).toLocaleDateString()}
+                        {new Date(referral.signup_date).toLocaleDateString('en-US')}
                       </td>
 
                       {/* First Payment */}
@@ -440,7 +440,7 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
                               ${referral.first_payment_amount_usd?.toFixed(2) || '0.00'}
                             </p>
                             <p className="text-gray-500 text-xs">
-                              {new Date(referral.first_payment_date).toLocaleDateString()}
+                              {new Date(referral.first_payment_date).toLocaleDateString('en-US')}
                             </p>
                           </div>
                         ) : (
@@ -605,7 +605,7 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
                     <div>
                       <p className="text-white text-sm">Signed Up</p>
                       <p className="text-gray-500 text-xs">
-                        {new Date(selectedReferral.signup_date).toLocaleString()}
+                        {new Date(selectedReferral.signup_date).toLocaleString('en-US')}
                       </p>
                     </div>
                   </div>
@@ -618,7 +618,7 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
                       <div>
                         <p className="text-white text-sm">First Payment (${selectedReferral.first_payment_amount_usd?.toFixed(2)})</p>
                         <p className="text-gray-500 text-xs">
-                          {new Date(selectedReferral.first_payment_date).toLocaleString()}
+                          {new Date(selectedReferral.first_payment_date).toLocaleString('en-US')}
                         </p>
                       </div>
                     </div>
@@ -632,9 +632,9 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
                       <div>
                         <p className="text-white text-sm">Verification Started</p>
                         <p className="text-gray-500 text-xs">
-                          {new Date(selectedReferral.verification_start).toLocaleString()}
+                          {new Date(selectedReferral.verification_start).toLocaleString('en-US')}
                           {selectedReferral.verification_end && (
-                            <> → Ends: {new Date(selectedReferral.verification_end).toLocaleDateString()}</>
+                            <> → Ends: {new Date(selectedReferral.verification_end).toLocaleDateString('en-US')}</>
                           )}
                         </p>
                       </div>
@@ -649,7 +649,7 @@ export default function AffiliateAdminReferrals({ onPendingVerificationsChange }
                       <div>
                         <p className="text-white text-sm">Qualified</p>
                         <p className="text-gray-500 text-xs">
-                          {new Date(selectedReferral.qualified_at).toLocaleString()}
+                          {new Date(selectedReferral.qualified_at).toLocaleString('en-US')}
                         </p>
                       </div>
                     </div>

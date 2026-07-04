@@ -335,7 +335,7 @@ export function findBestWorstTrades(trades: Trade[]): {
 
 trades.forEach(trade => {
     const r = getTradeR(trade);
-    const date = new Date(trade.open_at).toLocaleDateString();
+    const date = new Date(trade.open_at).toLocaleDateString('en-US');
     
     if (!best || r > best.r) {
       best = { trade, r, date };

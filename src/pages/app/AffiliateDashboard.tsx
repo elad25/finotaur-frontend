@@ -433,7 +433,7 @@ export default function AffiliateDashboard() {
                     <div>
                       <p className="text-white font-medium">{ref.referred_user_email}</p>
                       <p className="text-gray-500 text-sm">
-                        {new Date(ref.signup_date).toLocaleDateString()}
+                        {new Date(ref.signup_date).toLocaleDateString('en-US')}
                       </p>
                     </div>
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${

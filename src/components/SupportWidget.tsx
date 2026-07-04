@@ -83,41 +83,36 @@ interface CategoryOption {
   id: TicketCategory;
   icon: React.ReactNode;
   label: string;
-  labelHe: string;
   description: string;
   color: string;
 }
 
 const TICKET_CATEGORIES: CategoryOption[] = [
-  { 
-    id: 'technical', 
+  {
+    id: 'technical',
     icon: <Wrench className="h-5 w-5" />,
-    label: 'Technical Issue', 
-    labelHe: 'בעיה טכנית', 
+    label: 'Technical Issue',
     description: 'Bugs, sync issues, errors',
     color: 'text-red-400'
   },
-  { 
-    id: 'payment', 
+  {
+    id: 'payment',
     icon: <CreditCard className="h-5 w-5" />,
-    label: 'Payment Issue', 
-    labelHe: 'בעיית תשלום', 
+    label: 'Payment Issue',
     description: 'Billing, subscriptions, refunds',
     color: 'text-blue-400'
   },
-  { 
-    id: 'question', 
+  {
+    id: 'question',
     icon: <HelpCircle className="h-5 w-5" />,
-    label: 'Question', 
-    labelHe: 'שאלה', 
+    label: 'Question',
     description: 'How to use features',
     color: 'text-purple-400'
   },
-  { 
-    id: 'feedback', 
+  {
+    id: 'feedback',
     icon: <Lightbulb className="h-5 w-5" />,
-    label: 'Feedback', 
-    labelHe: 'המלצות לשיפור', 
+    label: 'Feedback',
     description: 'Suggestions, feature requests',
     color: 'text-yellow-400'
   },

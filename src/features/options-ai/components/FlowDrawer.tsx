@@ -42,7 +42,7 @@ export const FlowDrawer = memo(function FlowDrawer({ isOpen, onClose, flow }: { 
         </div>
         <Card><div className="p-5"><h4 className="text-sm font-semibold text-white mb-4">Volume Analysis</h4>
           <div className="space-y-4">{[{ l:'Volume',v:flow.volume,pct:Math.min((flow.volume/flow.openInterest)*100,100),gold:true },{ l:'Open Interest',v:flow.openInterest,pct:100,gold:false }].map(x => (
-            <div key={x.l}><div className="flex justify-between text-sm mb-2"><span className="text-[#8B8B8B]">{x.l}</span><span className="text-white font-semibold">{x.v.toLocaleString()}</span></div>
+            <div key={x.l}><div className="flex justify-between text-sm mb-2"><span className="text-[#8B8B8B]">{x.l}</span><span className="text-white font-semibold">{x.v.toLocaleString('en-US')}</span></div>
             <div className="h-2 bg-white/10 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width:`${x.pct}%`, background:x.gold?'linear-gradient(90deg,#C9A646,#F4D97B)':'#8B8B8B' }} /></div></div>
           ))}</div>
         </div></Card>

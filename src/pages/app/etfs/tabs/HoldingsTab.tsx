@@ -176,7 +176,7 @@ export function HoldingsTab({ data }: Props) {
                 Total Holdings
               </span>
               <span className="font-data text-base font-medium text-ink-primary">
-                {concentration.count !== null ? concentration.count.toLocaleString() : '—'}
+                {concentration.count !== null ? concentration.count.toLocaleString('en-US') : '—'}
               </span>
             </div>
           </div>

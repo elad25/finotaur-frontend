@@ -63,7 +63,7 @@ function fmtCompactUSD(v: number | null | undefined): string {
 
 function fmtNumber(v: number | null | undefined): string {
   if (v == null) return '—';
-  return v.toLocaleString();
+  return v.toLocaleString('en-US');
 }
 
 function fmtValue(

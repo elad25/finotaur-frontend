@@ -120,7 +120,7 @@ function LiveStat({
         {label}
       </p>
       <p className="text-xl font-bold text-white mt-1">
-        {typeof value === 'number' ? value.toLocaleString() : value}
+        {typeof value === 'number' ? value.toLocaleString('en-US') : value}
       </p>
     </div>
   );

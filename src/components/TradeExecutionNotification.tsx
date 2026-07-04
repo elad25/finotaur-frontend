@@ -103,7 +103,7 @@ export function TradeExecutionNotification({
             {config.icon} {config.label}
             {notification.quantity && ` ${notification.quantity}`}
             {notification.symbol && ` ${notification.symbol}`}
-            {' '}@ ${notification.price.toLocaleString()}
+            {' '}@ ${notification.price.toLocaleString('en-US')}
           </span>
         </div>
       </div>

@@ -761,7 +761,7 @@ const EquityCurve: React.FC<{
         fontSize="10"
         fontFamily="monospace"
       >
-        {lastPnl >= 0 ? '+' : ''}${Math.round(lastPnl).toLocaleString()}
+        {lastPnl >= 0 ? '+' : ''}${Math.round(lastPnl).toLocaleString('en-US')}
       </text>
 
       {/* Y-axis ticks */}
@@ -1042,7 +1042,7 @@ const WarZonePerformanceEdge: React.FC<{
             <p className="text-small text-ink-tertiary mt-0.5">
               Closed positions only (target hit or stopped). Modeling assumption:{' '}
               <span className="font-mono text-gold-muted">
-                ${POSITION_SIZE.toLocaleString()} per idea
+                ${POSITION_SIZE.toLocaleString('en-US')} per idea
               </span>
               {' '}— direction-aware P&amp;L.
             </p>
@@ -1078,7 +1078,7 @@ const WarZonePerformanceEdge: React.FC<{
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
               <StatTile
                 label="Closed Ideas"
-                value={totalClosed.toLocaleString()}
+                value={totalClosed.toLocaleString('en-US')}
                 icon={Activity}
               />
               <StatTile
@@ -1091,7 +1091,7 @@ const WarZonePerformanceEdge: React.FC<{
                 value={
                   <span className={pctColorClass(totalDollarPnl)}>
                     {totalDollarPnl !== null
-                      ? `${totalDollarPnl >= 0 ? '+' : ''}$${Math.abs(totalDollarPnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      ? `${totalDollarPnl >= 0 ? '+' : ''}$${Math.abs(totalDollarPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                       : '—'}
                   </span>
                 }
@@ -1102,7 +1102,7 @@ const WarZonePerformanceEdge: React.FC<{
                 value={
                   <span className={pctColorClass(avgDollarPerIdea)}>
                     {avgDollarPerIdea !== null
-                      ? `${avgDollarPerIdea >= 0 ? '+' : ''}$${Math.abs(avgDollarPerIdea).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      ? `${avgDollarPerIdea >= 0 ? '+' : ''}$${Math.abs(avgDollarPerIdea).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
                       : '—'}
                   </span>
                 }
@@ -1115,7 +1115,7 @@ const WarZonePerformanceEdge: React.FC<{
                     <span className="text-num-small font-sans leading-snug">
                       <span className="font-mono font-semibold text-gold-primary">{bestIdea.ticker}</span>
                       <span className={`block font-mono ${pctColorClass(bestIdea.dollar_pnl)}`}>
-                        +${bestIdea.dollar_pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        +${bestIdea.dollar_pnl.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </span>
                     </span>
                   ) : '—'
@@ -1129,7 +1129,7 @@ const WarZonePerformanceEdge: React.FC<{
                     <span className="text-num-small font-sans leading-snug">
                       <span className="font-mono font-semibold text-gold-primary">{worstIdea.ticker}</span>
                       <span className={`block font-mono ${pctColorClass(worstIdea.dollar_pnl)}`}>
-                        ${worstIdea.dollar_pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        ${worstIdea.dollar_pnl.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </span>
                     </span>
                   ) : '—'
@@ -1199,7 +1199,7 @@ const WarZonePerformanceEdge: React.FC<{
                           </td>
                           <td className={`px-3 py-2 font-mono font-semibold ${pctColorClass(row.total_dollar_pnl)}`}>
                             {row.total_dollar_pnl >= 0 ? '+' : ''}$
-                            {Math.abs(row.total_dollar_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            {Math.abs(row.total_dollar_pnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                           </td>
                         </tr>
                       ))}
@@ -1259,7 +1259,7 @@ const WarZonePerformanceEdge: React.FC<{
                         </td>
                         <td className={`px-3 py-2 font-mono font-semibold ${pctColorClass(row.dollar_pnl)}`}>
                           {row.dollar_pnl >= 0 ? '+' : ''}$
-                          {Math.abs(row.dollar_pnl).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          {Math.abs(row.dollar_pnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-ink-tertiary">
                           {row.outcome_date ? formatDate(row.outcome_date) : '—'}
@@ -1965,13 +1965,13 @@ const WarZoneAdmin: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
             <StatTile
               label="Open Positions"
-              value={focusAll.length === 0 && !focusAllData ? '—' : focusOpen.toLocaleString()}
+              value={focusAll.length === 0 && !focusAllData ? '—' : focusOpen.toLocaleString('en-US')}
               icon={Target}
               loading={!focusAllData && focusLoading}
             />
             <StatTile
               label="Closed"
-              value={focusAll.length === 0 && !focusAllData ? '—' : focusClosed.toLocaleString()}
+              value={focusAll.length === 0 && !focusAllData ? '—' : focusClosed.toLocaleString('en-US')}
               icon={Activity}
               loading={!focusAllData && focusLoading}
             />
@@ -2319,13 +2319,13 @@ const WarZoneAdmin: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatTile
           label="Total Mentions"
-          value={aggregates?.total_mentions?.toLocaleString() ?? '—'}
+          value={aggregates?.total_mentions?.toLocaleString('en-US') ?? '—'}
           icon={BarChart3}
           loading={aggregatesLoading}
         />
         <StatTile
           label="Active Tickers"
-          value={aggregates?.active_tickers?.toLocaleString() ?? '—'}
+          value={aggregates?.active_tickers?.toLocaleString('en-US') ?? '—'}
           icon={Target}
           loading={aggregatesLoading}
         />
@@ -2668,7 +2668,7 @@ const WarZoneAdmin: React.FC = () => {
                   Showing{' '}
                   <span className="text-ink-secondary">{offset + 1}–{Math.min(offset + pageSize, totalMentions)}</span>
                   {' '}of{' '}
-                  <span className="text-ink-secondary">{totalMentions.toLocaleString()}</span>
+                  <span className="text-ink-secondary">{totalMentions.toLocaleString('en-US')}</span>
                 </span>
                 <div className="flex items-center gap-2">
                   <button

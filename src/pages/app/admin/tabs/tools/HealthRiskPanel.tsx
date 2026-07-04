@@ -89,7 +89,7 @@ export function HealthRiskPanel() {
             <p className="text-sm text-gray-400 mt-1">
               Health Score 0-100 per subscriber.
               Pull from a sample of {SAMPLE_SIZE} Whop-verified users
-              {total > 0 && ` (of ${total.toLocaleString()} total)`}.
+              {total > 0 && ` (of ${total.toLocaleString('en-US')} total)`}.
             </p>
           </div>
         </div>
@@ -125,7 +125,7 @@ export function HealthRiskPanel() {
                 {meta.label}
               </p>
               <p className="text-3xl font-bold text-white mt-1">
-                {count.toLocaleString()}
+                {count.toLocaleString('en-US')}
               </p>
               <p className="text-xs text-gray-400 mt-1">
                 {percent.toFixed(1)}% of sample

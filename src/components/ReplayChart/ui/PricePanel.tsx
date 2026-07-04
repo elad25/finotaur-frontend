@@ -198,7 +198,7 @@ export const PricePanel: React.FC<PricePanelProps> = ({
               isDark ? 'text-white' : 'text-gray-900'
             )}
           >
-            {volume.toLocaleString()}
+            {volume.toLocaleString('en-US')}
           </div>
         </div>
       )}

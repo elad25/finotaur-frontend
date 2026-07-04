@@ -175,7 +175,7 @@ async function fetchAIAdvice(ticker: string, data: StockData, chain: OptionContr
   const prompt = `You are Finotaur's institutional options analyst. Analyze the options flow for ${data.name} (${data.ticker}).
 
 Current Price: $${data.price.toFixed(2)} | P/C OI Ratio: ${pcRatio} | Avg IV: ${avgIV}%
-Total Call OI: ${totalCallOI.toLocaleString()} | Total Put OI: ${totalPutOI.toLocaleString()}
+Total Call OI: ${totalCallOI.toLocaleString('en-US')} | Total Put OI: ${totalPutOI.toLocaleString('en-US')}
 
 ${topUnusual.length > 0 ? `Top Unusual Activity:
 ${topUnusual.map(u => `- ${u.type.toUpperCase()} $${u.strike} exp ${u.expiration} | Vol: ${u.volume} vs OI: ${u.openInterest} (${u.volOiRatio}x) | IV: ${((u.impliedVolatility || 0) * 100).toFixed(0)}% | Delta: ${u.delta?.toFixed(2) || 'N/A'}`).join('\n')}` : 'No significant unusual activity detected.'}
@@ -231,7 +231,7 @@ function generateLocalAdvice(
   if (top && top.volOiRatio > 3) {
     return {
       headline: `Unusual ${top.type.toUpperCase()} activity at $${top.strike} strike — volume is ${top.volOiRatio}x open interest`,
-      detail: `${top.volume.toLocaleString()} contracts traded vs ${top.openInterest.toLocaleString()} OI on the ${top.expiration} $${top.strike} ${top.type}. This ${top.volOiRatio}x Vol/OI ratio signals aggressive new positioning. IV at ${((top.impliedVolatility || 0) * 100).toFixed(0)}% suggests the market is pricing significant movement.`,
+      detail: `${top.volume.toLocaleString('en-US')} contracts traded vs ${top.openInterest.toLocaleString('en-US')} OI on the ${top.expiration} $${top.strike} ${top.type}. This ${top.volOiRatio}x Vol/OI ratio signals aggressive new positioning. IV at ${((top.impliedVolatility || 0) * 100).toFixed(0)}% suggests the market is pricing significant movement.`,
       sentiment: top.type === 'call' ? 'bullish' : 'bearish',
       confidence: top.volOiRatio > 5 ? 'high' : 'medium',
     };
@@ -1140,14 +1140,14 @@ const OIBarChart = memo(({ strikeData, currentPrice }: {
             stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
           <rect x={ttX + 10} y={ttY + 22} width="6" height="6" rx="1" fill="#3B82F6" />
           <text x={ttX + 20} y={ttY + 29} fill="#3B82F6" fontSize="8" fontWeight="600">
-            {hoverData.callOI.toLocaleString()}
+            {hoverData.callOI.toLocaleString('en-US')}
           </text>
           <rect x={ttX + ttW / 2 + 2} y={ttY + 22} width="6" height="6" rx="1" fill="#EF4444" />
           <text x={ttX + ttW / 2 + 12} y={ttY + 29} fill="#EF4444" fontSize="8" fontWeight="600">
-            {hoverData.putOI.toLocaleString()}
+            {hoverData.putOI.toLocaleString('en-US')}
           </text>
           <text x={ttX + ttW / 2} y={ttY + 37} fill="#5B5B5B" fontSize="7" textAnchor="middle">
-            Vol {(hoverData.callVolume + hoverData.putVolume).toLocaleString()}
+            Vol {(hoverData.callVolume + hoverData.putVolume).toLocaleString('en-US')}
           </text>
         </g>
       )}
@@ -1322,7 +1322,7 @@ const UnusualBlock = memo(({ item, currentPrice }: {
           <span className="text-[#5B5B5B] text-[9px]">{expLabel}</span>
         </div>
         <div className="flex items-center gap-3 mt-1 text-[9px] text-[#5B5B5B]">
-          <span>{item.volume.toLocaleString()} contracts</span>
+          <span>{item.volume.toLocaleString('en-US')} contracts</span>
           <span>@ ${item.lastPrice?.toFixed(2)}</span>
           <span className={otm ? '' : 'text-[#F59E0B]'}>{otm ? `${pctOTM}% OTM` : 'ATM'}</span>
           {item.volOiRatio > 2 && (
@@ -1574,8 +1574,8 @@ export const OptionsTab = memo(({ data }: { data: StockData }) => {
 
         {!isLoading && strikeData.length > 0 && (
           <div className="flex items-center gap-4 mt-3 text-[10px] text-[#6B6B6B]">
-            <span>Total Call OI: <span className="text-[#3B82F6] font-semibold">{totalCallOI.toLocaleString()}</span></span>
-            <span>Total Put OI: <span className="text-[#EF4444] font-semibold">{totalPutOI.toLocaleString()}</span></span>
+            <span>Total Call OI: <span className="text-[#3B82F6] font-semibold">{totalCallOI.toLocaleString('en-US')}</span></span>
+            <span>Total Put OI: <span className="text-[#EF4444] font-semibold">{totalPutOI.toLocaleString('en-US')}</span></span>
             <span>P/C Ratio: <span className="text-white font-semibold">
               {totalCallOI > 0 ? (totalPutOI / totalCallOI).toFixed(2) : 'N/A'}
             </span></span>

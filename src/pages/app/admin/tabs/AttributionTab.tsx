@@ -232,19 +232,19 @@ export function AttributionTab() {
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatsCard
           title="Total Signups"
-          value={totals.signups.toLocaleString()}
+          value={totals.signups.toLocaleString('en-US')}
           subtitle={`last ${data.window_days}d`}
           icon={Users}
         />
         <StatsCard
           title="Attributed"
-          value={totals.attributed.toLocaleString()}
+          value={totals.attributed.toLocaleString('en-US')}
           subtitle={`${pct(totals.attributed, totals.signups)} of total — from ads or tagged links`}
           icon={Target}
         />
         <StatsCard
           title="Organic / Direct"
-          value={totals.organic.toLocaleString()}
+          value={totals.organic.toLocaleString('en-US')}
           subtitle={`${pct(totals.organic, totals.signups)} of total`}
           icon={Compass}
         />
@@ -272,7 +272,7 @@ export function AttributionTab() {
                       {pct(p.signups, totals.signups)}
                     </span>
                     <span className="text-xs text-[#C9A646] font-semibold shrink-0">
-                      {p.signups.toLocaleString()}
+                      {p.signups.toLocaleString('en-US')}
                     </span>
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -323,7 +323,7 @@ export function AttributionTab() {
                     <td className="px-5 py-2.5 text-gray-200">{c.utm_campaign || '—'}</td>
                     <td className="px-5 py-2.5 text-gray-400">{c.utm_source || '—'}</td>
                     <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
-                      {c.signups.toLocaleString()}
+                      {c.signups.toLocaleString('en-US')}
                     </td>
                   </tr>
                 ))}
@@ -370,7 +370,7 @@ export function AttributionTab() {
                     <td className="px-5 py-2.5 text-gray-400">{a.utm_campaign || '—'}</td>
                     <td className="px-5 py-2.5 text-gray-400">{a.utm_source || '—'}</td>
                     <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
-                      {a.signups.toLocaleString()}
+                      {a.signups.toLocaleString('en-US')}
                     </td>
                   </tr>
                 ))}
@@ -387,7 +387,7 @@ export function AttributionTab() {
           <h3 className="text-white font-semibold">Recent Signups</h3>
           {signups.length > MAX_RECENT_SIGNUPS && (
             <span className="text-xs text-gray-500 ml-auto">
-              showing latest {MAX_RECENT_SIGNUPS} of {signups.length.toLocaleString()}
+              showing latest {MAX_RECENT_SIGNUPS} of {signups.length.toLocaleString('en-US')}
             </span>
           )}
         </header>

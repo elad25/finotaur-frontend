@@ -40,7 +40,7 @@ export function CopilotPageHeader() {
           <button
             type="button"
             onClick={() => setShowBrokerPopup(true)}
-            title={ib.lastSyncAt ? `Last sync: ${new Date(ib.lastSyncAt).toLocaleString()}` : 'Connected'}
+            title={ib.lastSyncAt ? `Last sync: ${new Date(ib.lastSyncAt).toLocaleString('en-US')}` : 'Connected'}
             className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-300 shadow-[0_0_18px_rgba(16,185,129,0.18)] transition hover:bg-emerald-500/15 xl:absolute xl:right-2 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2"
           >
             <span className="relative flex h-2.5 w-2.5">

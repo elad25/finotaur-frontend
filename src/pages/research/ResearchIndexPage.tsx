@@ -154,7 +154,7 @@ export default function ResearchIndexPage() {
           </h1>
           <p className="mt-3 text-white/60 md:text-lg">
             Fundamentals, news, and analysis for{' '}
-            <span className="font-semibold text-white">{allTickers.length.toLocaleString()}</span> US
+            <span className="font-semibold text-white">{allTickers.length.toLocaleString('en-US')}</span> US
             stocks and ETFs — all free.
           </p>
         </div>
@@ -188,7 +188,7 @@ export default function ResearchIndexPage() {
 
         {/* Result count */}
         <p className="mb-4 text-xs text-white/40">
-          {filtered.length.toLocaleString()} result{filtered.length !== 1 ? 's' : ''}
+          {filtered.length.toLocaleString('en-US')} result{filtered.length !== 1 ? 's' : ''}
           {debouncedSearch || sectorFilter !== 'All sectors'
             ? ` matching your filters`
             : ''}

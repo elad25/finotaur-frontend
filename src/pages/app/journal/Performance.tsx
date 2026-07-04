@@ -52,7 +52,7 @@ function exportTrades(trades: Trade[], period: Period) {
   ];
 
   const rows: (string | number | null | undefined)[][] = trades.map((t) => [
-    t.open_at ? new Date(t.open_at).toLocaleDateString() : '',
+    t.open_at ? new Date(t.open_at).toLocaleDateString('en-US') : '',
     t.symbol,
     t.side,
     t.entry_price,

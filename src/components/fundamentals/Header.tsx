@@ -11,7 +11,7 @@ export default function Header({ data, onCompare }: Props) {
           <div className="text-xl font-semibold text-white">
             {data?.companyName || '—'} <span className="text-zinc-400">({data?.symbol})</span>
           </div>
-          <div className="text-xs text-zinc-500">Last updated: {data ? new Date(data.lastUpdated).toLocaleString() : '—'}</div>
+          <div className="text-xs text-zinc-500">Last updated: {data ? new Date(data.lastUpdated).toLocaleString('en-US') : '—'}</div>
         </div>
         <TickerAutocomplete initialSymbol={data?.symbol} onSelect={(sym)=> {
           const url = new URL(window.location.href);

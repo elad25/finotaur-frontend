@@ -12,7 +12,7 @@ type Snapshot = {
   currentRatio?:number|null; quickRatio?:number|null; wk52?:{low:number; high:number}|null;
 };
 
-const fmtNum=(n?:number|null)=>n==null?"—":Number(n).toLocaleString();
+const fmtNum=(n?:number|null)=>n==null?"—":Number(n).toLocaleString('en-US');
 const fmtPct=(n?:number|null)=>n==null?"—":`${(Number(n)*100).toFixed(1)}%`;
 const fmtMC=(n?:number|null)=>{ if(n==null) return "—"; const u=['','K','M','B','T']; let i=0,x=Number(n); while(Math.abs(x)>=1000&&i<u.length-1){x/=1000;i++;} return `${x.toFixed(2)}${u[i]}`; };
 

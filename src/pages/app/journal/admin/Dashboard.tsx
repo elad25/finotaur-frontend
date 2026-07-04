@@ -76,7 +76,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatsCard
           title="Total Users"
-          value={stats.totalUsers.toLocaleString()}
+          value={stats.totalUsers.toLocaleString('en-US')}
           change={`+${stats.newUsersThisWeek} this week`}
           changeType="positive"
           icon={Users}
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
 
         <StatsCard
           title="Total Trades"
-          value={stats.totalTrades.toLocaleString()}
+          value={stats.totalTrades.toLocaleString('en-US')}
           change={`+${stats.tradesThisWeek} this week`}
           changeType="positive"
           icon={TrendingUp}
@@ -179,15 +179,15 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <p className="text-gray-400 text-sm mb-1">Total Trades</p>
-            <p className="text-2xl font-bold text-white">{stats.totalTrades.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-white">{stats.totalTrades.toLocaleString('en-US')}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm mb-1">This Week</p>
-            <p className="text-2xl font-bold text-white">{stats.tradesThisWeek.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-white">{stats.tradesThisWeek.toLocaleString('en-US')}</p>
           </div>
           <div>
             <p className="text-gray-400 text-sm mb-1">This Month</p>
-            <p className="text-2xl font-bold text-white">{stats.tradesThisMonth.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-white">{stats.tradesThisMonth.toLocaleString('en-US')}</p>
           </div>
         </div>
       </div>

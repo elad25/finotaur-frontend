@@ -270,7 +270,7 @@ const MarketPulse = memo(function MarketPulse() {
               {asOfLabel}
               {data?.universe && (
                 <span className="ml-2 text-ink-secondary opacity-60">
-                  · {data.universe.label} ({data.universe.count.toLocaleString()} stocks)
+                  · {data.universe.label} ({data.universe.count.toLocaleString('en-US')} stocks)
                 </span>
               )}
             </span>
@@ -458,18 +458,18 @@ const MarketPulse = memo(function MarketPulse() {
               ) : (
                 <div className="h-48 flex items-center justify-center">
                   <div className="grid grid-cols-3 gap-ds-3 w-full">
-                    <StatTile label="Advancers" value={data?.breadth?.advancers != null ? data.breadth.advancers.toLocaleString() : '—'} />
-                    <StatTile label="Decliners" value={data?.breadth?.decliners != null ? data.breadth.decliners.toLocaleString() : '—'} />
-                    <StatTile label="Unchanged" value={data?.breadth?.unchanged != null ? data.breadth.unchanged.toLocaleString() : '—'} />
+                    <StatTile label="Advancers" value={data?.breadth?.advancers != null ? data.breadth.advancers.toLocaleString('en-US') : '—'} />
+                    <StatTile label="Decliners" value={data?.breadth?.decliners != null ? data.breadth.decliners.toLocaleString('en-US') : '—'} />
+                    <StatTile label="Unchanged" value={data?.breadth?.unchanged != null ? data.breadth.unchanged.toLocaleString('en-US') : '—'} />
                   </div>
                 </div>
               )}
               {/* Show today's advancers/decliners below chart when we have both */}
               {data?.breadth?.history && data.breadth.history.length > 0 && data.breadth.advancers != null && (
                 <div className="grid grid-cols-3 gap-ds-3 mt-ds-4">
-                  <StatTile label="Advancers" value={data.breadth.advancers.toLocaleString()} />
-                  <StatTile label="Decliners" value={data.breadth.decliners.toLocaleString()} />
-                  <StatTile label="Unchanged" value={data.breadth.unchanged.toLocaleString()} />
+                  <StatTile label="Advancers" value={data.breadth.advancers.toLocaleString('en-US')} />
+                  <StatTile label="Decliners" value={data.breadth.decliners.toLocaleString('en-US')} />
+                  <StatTile label="Unchanged" value={data.breadth.unchanged.toLocaleString('en-US')} />
                 </div>
               )}
             </SectionCard>
@@ -515,11 +515,11 @@ const MarketPulse = memo(function MarketPulse() {
                   <div className="grid grid-cols-2 gap-ds-3 w-full">
                     <StatTile
                       label="New Highs (52w)"
-                      value={data?.breadth?.newHighs != null ? data.breadth.newHighs.toLocaleString() : '—'}
+                      value={data?.breadth?.newHighs != null ? data.breadth.newHighs.toLocaleString('en-US') : '—'}
                     />
                     <StatTile
                       label="New Lows (52w)"
-                      value={data?.breadth?.newLows != null ? data.breadth.newLows.toLocaleString() : '—'}
+                      value={data?.breadth?.newLows != null ? data.breadth.newLows.toLocaleString('en-US') : '—'}
                       valueClass={data?.breadth?.newLows != null && data.breadth.newLows > 0 ? 'text-num-negative' : 'text-ink-primary'}
                     />
                   </div>
@@ -528,10 +528,10 @@ const MarketPulse = memo(function MarketPulse() {
               {/* Show today's highs/lows below chart when we have both */}
               {data?.breadth?.history && data.breadth.history.length > 0 && data.breadth.newHighs != null && (
                 <div className="grid grid-cols-2 gap-ds-3 mt-ds-4">
-                  <StatTile label="New Highs (today)" value={data.breadth.newHighs.toLocaleString()} />
+                  <StatTile label="New Highs (today)" value={data.breadth.newHighs.toLocaleString('en-US')} />
                   <StatTile
                     label="New Lows (today)"
-                    value={data.breadth.newLows.toLocaleString()}
+                    value={data.breadth.newLows.toLocaleString('en-US')}
                     valueClass={data.breadth.newLows > 0 ? 'text-num-negative' : 'text-ink-primary'}
                   />
                 </div>

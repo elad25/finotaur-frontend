@@ -188,7 +188,7 @@ export default function ForexHeatmap() {
               <span className="text-red-400">■ Negative (base weaker)</span>
               {data.ts > 0 && (
                 <span className="ml-auto">
-                  Updated {new Date(data.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  Updated {new Date(data.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
             </div>

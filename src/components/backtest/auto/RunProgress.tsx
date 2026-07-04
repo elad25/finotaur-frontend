@@ -69,10 +69,10 @@ export function RunProgress() {
 
       <div className="mt-2 flex items-center justify-between text-[12px] text-ink-tertiary tabular-nums">
         <span>
-          {scanned.toLocaleString()} / {total.toLocaleString()} bars
+          {scanned.toLocaleString('en-US')} / {total.toLocaleString('en-US')} bars
         </span>
         <span>
-          <span className="font-medium text-ink-secondary">{found.toLocaleString()}</span>{' '}
+          <span className="font-medium text-ink-secondary">{found.toLocaleString('en-US')}</span>{' '}
           {found === 1 ? 'detection' : 'detections'} found
         </span>
       </div>

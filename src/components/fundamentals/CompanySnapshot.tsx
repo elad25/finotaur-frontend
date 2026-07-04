@@ -6,7 +6,7 @@ type Snapshot = {
   dividendYield?: number|null; debtToEquity?: number|null; roe?: number|null; roa?: number|null; assetTurnover?: number|null;
   inventoryTurnover?: number|null; currentRatio?: number|null; quickRatio?: number|null; wk52?: {low:number;high:number}|null;
 };
-const fmtNum=(n?:number|null)=>n==null?"—":Number(n).toLocaleString();
+const fmtNum=(n?:number|null)=>n==null?"—":Number(n).toLocaleString('en-US');
 const fmtPct=(n?:number|null)=>n==null?"—":`${(Number(n)).toFixed(2)}%`;
 const fmtMC=(n?:number|null)=>{ if(n==null) return "—"; const u=["","K","M","B","T"]; let i=0,x=Number(n); while(Math.abs(x)>=1000&&i<u.length-1){x/=1000;i++;} return `${x.toFixed(2)}${u[i]}`; };
 export const CompanySnapshot:React.FC<{data:Snapshot|null; onOpenSec?:()=>void;}>=({data,onOpenSec})=>{

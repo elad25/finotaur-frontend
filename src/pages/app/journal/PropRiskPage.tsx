@@ -17,7 +17,7 @@ import type { PropStatus } from '@/features/prop-risk/computePropStatus';
 
 function fmtUsd(v: number | null | undefined): string {
   if (v == null) return '--';
-  return '$' + Math.round(v).toLocaleString();
+  return '$' + Math.round(v).toLocaleString('en-US');
 }
 
 function clamp01(v: number): number {

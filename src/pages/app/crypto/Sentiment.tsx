@@ -557,7 +557,7 @@ const TreasuryCard = memo(function TreasuryCard({
         <div>
           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">Total Holdings</p>
           <p className="text-sm font-mono font-bold text-white/90">
-            {totalHoldings != null ? `${totalHoldings.toLocaleString()} ${ticker}` : '—'}
+            {totalHoldings != null ? `${totalHoldings.toLocaleString('en-US')} ${ticker}` : '—'}
           </p>
         </div>
         <div>
@@ -584,7 +584,7 @@ const TreasuryCard = memo(function TreasuryCard({
               </div>
               <div className="text-right shrink-0">
                 <p className="text-xs font-mono text-white/70">
-                  {co.total_holdings != null ? `${co.total_holdings.toLocaleString()} ${ticker}` : '—'}
+                  {co.total_holdings != null ? `${co.total_holdings.toLocaleString('en-US')} ${ticker}` : '—'}
                 </p>
                 <p className="text-[10px] text-white/40">
                   {formatCompact(co.total_current_value_usd ?? undefined)}

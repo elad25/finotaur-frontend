@@ -594,7 +594,7 @@ const IndexCard = ({ index, range, onClick }: { index: MarketIndex; range: TimeR
 
       {/* Value - neutral */}
       <div className="text-gray-400 text-xs mb-2">
-        {index.value.toLocaleString()}
+        {index.value.toLocaleString('en-US')}
       </div>
 
       {/* Bottom Row - neutral with colored sparkline */}
@@ -750,7 +750,7 @@ const FuturesPanel = ({ futures }: { futures: FuturesData[] }) => (
         <div key={f.symbol} className="flex items-center justify-between bg-[#0D0D0D] rounded-lg p-2">
           <div><span className="text-gray-200 text-sm font-medium">{f.symbol}</span><span className="text-gray-500 text-xs ml-2">{f.name}</span></div>
           <div className="text-right">
-            <div className="text-gray-300 text-sm">{f.value.toLocaleString()}</div>
+            <div className="text-gray-300 text-sm">{f.value.toLocaleString('en-US')}</div>
             <div className="flex items-center gap-2 text-[10px]">
               <span className={getTextColor(f.change)}>{f.change >= 0 ? '+' : ''}{f.change.toFixed(2)}%</span>
               <span className="text-gray-500">ON: {f.overnightChange >= 0 ? '+' : ''}{f.overnightChange.toFixed(2)}%</span>
@@ -1149,15 +1149,15 @@ const IndexDetailDrawer = ({ index, onClose }: { index: MarketIndex | null; onCl
       </div>
       <div className="p-4 space-y-6">
         <div className="text-center py-4">
-          <div className="text-4xl font-bold text-white mb-2">{index.value.toLocaleString()}</div>
+          <div className="text-4xl font-bold text-white mb-2">{index.value.toLocaleString('en-US')}</div>
           <div className={`text-2xl font-bold ${getTextColor(index.change)}`}>{isPositive ? '+' : ''}{index.change.toFixed(2)}%</div>
           <div className={`text-sm ${getTextColor(index.change)}`}>{isPositive ? '+' : ''}{(index.value - index.prevClose).toFixed(2)} pts</div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">Open</div><div className="text-white font-medium">{index.open.toLocaleString()}</div></div>
-          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">Prev Close</div><div className="text-white font-medium">{index.prevClose.toLocaleString()}</div></div>
-          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">High</div><div className="text-[#2ECC71] font-medium">{index.high.toLocaleString()}</div></div>
-          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">Low</div><div className="text-[#E74C3C] font-medium">{index.low.toLocaleString()}</div></div>
+          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">Open</div><div className="text-white font-medium">{index.open.toLocaleString('en-US')}</div></div>
+          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">Prev Close</div><div className="text-white font-medium">{index.prevClose.toLocaleString('en-US')}</div></div>
+          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">High</div><div className="text-[#2ECC71] font-medium">{index.high.toLocaleString('en-US')}</div></div>
+          <div className="bg-[#1A1A1A] rounded-lg p-3"><div className="text-xs text-gray-500">Low</div><div className="text-[#E74C3C] font-medium">{index.low.toLocaleString('en-US')}</div></div>
         </div>
         <div className="bg-[#1A1A1A] rounded-lg p-4">
           <h4 className="text-sm font-medium text-gray-400 mb-3">Performance</h4>
@@ -1553,7 +1553,7 @@ export default function GlobalHeatmap() {
 
         {/* Footer */}
         <div className="text-center py-4">
-          <p className="text-gray-600 text-xs">Last update: {new Date().toLocaleTimeString()} UTC | Data for demonstration purposes</p>
+          <p className="text-gray-600 text-xs">Last update: {new Date().toLocaleTimeString('en-US')} UTC | Data for demonstration purposes</p>
         </div>
       </div>
 

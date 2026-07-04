@@ -121,7 +121,7 @@ function formatLargeNumber(num: number | undefined | null): string {
   if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
   if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
   if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-  return `$${num.toLocaleString()}`;
+  return `$${num.toLocaleString('en-US')}`;
 }
 
 function formatVolume(num: number | undefined | null): string {
@@ -129,7 +129,7 @@ function formatVolume(num: number | undefined | null): string {
   if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
   if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
   if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
-  return num.toLocaleString();
+  return num.toLocaleString('en-US');
 }
 
 function formatCacheAge(ms: number | null): string {
@@ -644,7 +644,7 @@ const CompanyOverview: React.FC<CompanyOverviewProps> = ({ profile, symbol }) =>
           <div>
             <span className="text-xs text-zinc-600">Employees</span>
             <p className="text-sm text-zinc-300">
-              {profile?.employees?.toLocaleString() || "—"}
+              {profile?.employees?.toLocaleString('en-US') || "—"}
             </p>
           </div>
           {profile?.ceo && (
@@ -909,7 +909,7 @@ export default function AllMarketsSummary() {
                   </div>
                 </div>
                 <p className="text-xs text-zinc-600 mb-3">
-                  As of {quote?.timestamp ? new Date(quote.timestamp).toLocaleTimeString() : 'market close'} • USD
+                  As of {quote?.timestamp ? new Date(quote.timestamp).toLocaleTimeString('en-US') : 'market close'} • USD
                 </p>
                 
                 <div className="flex gap-5 justify-end text-sm">

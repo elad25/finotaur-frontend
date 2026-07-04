@@ -784,7 +784,7 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
             </div>
             <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
               <p className="text-[10px] uppercase tracking-wider text-[#6B6B6B] mb-1 font-medium">Employees</p>
-              <p className="text-sm font-medium text-white">{isValid(data.employees) ? data.employees!.toLocaleString() : 'N/A'}</p>
+              <p className="text-sm font-medium text-white">{isValid(data.employees) ? data.employees!.toLocaleString('en-US') : 'N/A'}</p>
             </div>
           </div>
         </div>

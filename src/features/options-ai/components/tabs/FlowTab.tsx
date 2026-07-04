@@ -72,8 +72,8 @@ function getSignal(block: BlockTrade): 'LONG' | 'SHORT' {
 
 function formatTime(value?: string): string {
   const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (Number.isNaN(date.getTime())) return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 function buildGroups(blocks: BlockTrade[]): SymbolGroup[] {

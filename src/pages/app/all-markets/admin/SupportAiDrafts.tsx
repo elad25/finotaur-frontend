@@ -103,7 +103,7 @@ function fmtSimilarity(s: number | null | undefined): string {
 }
 
 function fmtTime(ts: string): string {
-  try { return new Date(ts).toLocaleString(); } catch { return ts; }
+  try { return new Date(ts).toLocaleString('en-US'); } catch { return ts; }
 }
 
 // ==================== Main ====================

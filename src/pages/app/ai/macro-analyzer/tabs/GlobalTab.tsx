@@ -29,7 +29,7 @@ import { useMarketStatus } from '@/lib/marketStatus';
 const formatNumOrDash = (value: number | undefined | null, marketOpen: boolean, fractionDigits = 2): string => {
   if (value == null || !Number.isFinite(value)) return '—';
   if (!marketOpen && value === 0) return '—';
-  return value.toLocaleString(undefined, { maximumFractionDigits: fractionDigits });
+  return value.toLocaleString('en-US', { maximumFractionDigits: fractionDigits });
 };
 
 const formatPctOrDash = (value: number | undefined | null, marketOpen: boolean): string => {
@@ -346,7 +346,7 @@ const CommoditiesSection = memo(({ commodities, marketOpen }: { commodities: Glo
               <div key={idx} className="p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
                 <p className="text-xs text-[#6B6B6B] mb-1">{commodity.name}</p>
                 <p className="text-lg font-bold" style={{ color: valueMissing ? '#8B8B8B' : '#FFFFFF' }}>
-                  {valueMissing ? '—' : `$${commodity.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                  {valueMissing ? '—' : `$${commodity.value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`}
                 </p>
                 <p className={cn("text-xs font-medium",
                   changeMissing
@@ -584,7 +584,7 @@ function GlobalTab() {
       {lastUpdated && (
         <div className="flex items-center justify-center gap-2 text-xs text-[#6B6B6B]">
           <Clock className="w-3 h-3" />
-          Global data from Yahoo Finance & FRED • Updated {new Date(lastUpdated).toLocaleTimeString()}
+          Global data from Yahoo Finance & FRED • Updated {new Date(lastUpdated).toLocaleTimeString('en-US')}
           <button onClick={refresh} className="text-[#C9A646] hover:text-[#F4D97B] ml-2 flex items-center gap-1">
             <RefreshCw className="w-3 h-3" /> Refresh
           </button>

@@ -31,7 +31,7 @@ const RED = '#E36363';
 
 function fmtUsd(n: number): string {
   const sign = n < 0 ? '-' : '';
-  return `${sign}$${Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `${sign}$${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 /** Win rate / drawdown may be stored 0–1 or 0–100; normalise to a percent. */

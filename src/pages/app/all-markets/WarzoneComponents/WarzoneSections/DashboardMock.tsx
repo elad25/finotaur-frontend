@@ -215,7 +215,7 @@ export default function DashboardMock() {
                         Resistance
                       </div>
                       <div className="font-mono text-xs text-ink-primary tabular-nums">
-                        {row.resistance.toLocaleString()}
+                        {row.resistance.toLocaleString('en-US')}
                       </div>
                     </div>
                     <div className="text-right">
@@ -223,7 +223,7 @@ export default function DashboardMock() {
                         Support
                       </div>
                       <div className="font-mono text-xs text-ink-primary tabular-nums">
-                        {row.support.toLocaleString()}
+                        {row.support.toLocaleString('en-US')}
                       </div>
                     </div>
                   </div>
