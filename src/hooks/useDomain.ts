@@ -33,6 +33,12 @@ const FLOOR_PATHS = ['/app/floor'];
 // Mentor (Mentor Mode + Rooms) — split out of The Floor; also surfaced via the
 // Journal subNav, so it maps to the 'journal' product like FLOOR_PATHS.
 const MENTOR_PATHS = ['/app/mentor'];
+// Backtest (/app/backtest/*) is surfaced via the Journal subNav's "Backtest"
+// tab. Without this mapping productId would be extracted as 'backtest', miss
+// the domains config, fall back to 'markets', and wrongly render the Markets
+// asset tabs on backtest pages. (/app/journal/backtest legacy paths already
+// map to 'journal' via segment extraction.)
+const BACKTEST_PATHS = ['/app/backtest'];
 
 export const useDomain = () => {
   const location = useLocation();
@@ -54,6 +60,9 @@ export const useDomain = () => {
     productId = 'journal';
   } else if (MENTOR_PATHS.some((p) => pathname.startsWith(p))) {
     // Mentor (Mentor Mode + Rooms) also lives under the Journal product.
+    productId = 'journal';
+  } else if (BACKTEST_PATHS.some((p) => pathname.startsWith(p))) {
+    // Backtest lives under the Journal product (see BACKTEST_PATHS note above).
     productId = 'journal';
   } else if (isMarketsPath(pathname)) {
     // /app/etfs is now part of the Markets product (MARKETS_PATH_PREFIXES includes /app/etfs).
