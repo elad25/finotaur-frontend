@@ -49,8 +49,6 @@ const NO_SUBNAV_ROUTES = [
   '/app/all-markets/top-secret',
   '/app/all-markets/top-secret-admin',
   '/app/ai',                   // AI Arena uses the left sidebar as its only section navigation
-  '/app/backtest',             // Backtest uses its own left sidebar — Markets sub-nav is noise
-  '/app/journal/backtest',     // legacy backtest path alias
 ];
 
 // 🔥 Standalone surfaces — no TopNav, no SubNav, no footer.
