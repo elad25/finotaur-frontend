@@ -191,19 +191,6 @@ const FUTURES_SYMBOLS = new Set([
   'MNQ', 'NQ', 'MES', 'ES', 'MYM', 'YM', 'M2K', 'RTY', 'MGC', 'GC', 'SIL', 'SI', 'MCL', 'CL',
 ]);
 
-/** Row shape returned by `public.backtest_candles` (1-minute Databento bars). */
-interface BacktestCandleRow {
-  ts: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-/** Supabase caps rows per response at 1000 — page through with `.range()`. */
-const SUPABASE_PAGE_SIZE = 1000;
-
 /** Bucket sizes, in seconds, for the timeframes this source supports aggregating to. */
 const TIMEFRAME_SECONDS: Record<string, number> = {
   '1m': 60,
@@ -213,59 +200,6 @@ const TIMEFRAME_SECONDS: Record<string, number> = {
   '4h': 4 * 60 * 60,
   '1d': 24 * 60 * 60,
 };
-
-/**
- * Bucket-align a 1-minute-bar UTC timestamp (epoch seconds) down to the start
- * of its containing `timeframe` bucket (also epoch seconds), in UTC.
- */
-function bucketStart(timeSec: number, timeframe: string): number {
-  const bucketSec = TIMEFRAME_SECONDS[timeframe];
-  if (!bucketSec) {
-    throw new Error(
-      `Timeframe "${timeframe}" is not supported for aggregation. Use one of: ${Object.keys(TIMEFRAME_SECONDS).join(', ')}`,
-    );
-  }
-  return Math.floor(timeSec / bucketSec) * bucketSec;
-}
-
-/**
- * Aggregate ascending 1-minute candles into `timeframe` buckets.
- * `open` = first bar's open, `high`/`low` = extremes across the bucket,
- * `close` = last bar's close, `volume` = sum. Returns ascending by time.
- */
-function aggregateCandles(oneMinuteCandles: Candle[], timeframe: string): Candle[] {
-  if (timeframe === '1m') return oneMinuteCandles;
-
-  const result: Candle[] = [];
-  let currentBucketStart: number | null = null;
-  let bucket: Candle | null = null;
-
-  for (const candle of oneMinuteCandles) {
-    const timeSec = Number(candle.time);
-    const start = bucketStart(timeSec, timeframe);
-
-    if (bucket === null || currentBucketStart !== start) {
-      if (bucket !== null) result.push(bucket);
-      currentBucketStart = start;
-      bucket = {
-        time: start,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume ?? 0,
-      };
-    } else {
-      bucket.high = Math.max(bucket.high, candle.high);
-      bucket.low = Math.min(bucket.low, candle.low);
-      bucket.close = candle.close;
-      bucket.volume = (bucket.volume ?? 0) + (candle.volume ?? 0);
-    }
-  }
-  if (bucket !== null) result.push(bucket);
-
-  return result;
-}
 
 export class SupabaseCandleSource implements CandleSource {
   readonly capabilities = {
@@ -279,47 +213,37 @@ export class SupabaseCandleSource implements CandleSource {
     from: number,
     to: number,
   ): Promise<Candle[]> {
-    const fromIso = new Date(from).toISOString();
-    const toIso = new Date(to).toISOString();
+    const bucketSeconds = TIMEFRAME_SECONDS[timeframe] ?? 60;
 
-    // --- Fetch all 1-minute rows in range, paginated (Supabase caps at 1000/response) ---
-    const rows: BacktestCandleRow[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('backtest_candles')
-        .select('ts, open, high, low, close, volume')
-        .eq('source', 'databento')
-        .eq('symbol', symbol)
-        .eq('timeframe', '1m')
-        .gte('ts', fromIso)
-        .lte('ts', toIso)
-        .order('ts', { ascending: true })
-        .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+    // --- Single server-side aggregation call, replacing the 1000-row-per-page
+    // client-side pagination + aggregation (was ~175 requests for a 6-month
+    // window). The RPC aggregates 1-minute Databento bars into `bucketSeconds`
+    // buckets server-side and returns a jsonb array of
+    // [epochSeconds, open, high, low, close, volume] tuples, time-ascending.
+    const { data, error } = await supabase.rpc('get_backtest_candles', {
+      p_source: 'databento',
+      p_symbol: symbol,
+      p_bucket_seconds: bucketSeconds,
+      p_from: new Date(from).toISOString(),
+      p_to: new Date(to).toISOString(),
+    });
 
-      if (error) {
-        throw new Error(`Failed to load candles from Supabase: ${error.message}`);
-      }
-
-      const page = (data ?? []) as BacktestCandleRow[];
-      rows.push(...page);
-
-      if (page.length < SUPABASE_PAGE_SIZE) break;
-      offset += SUPABASE_PAGE_SIZE;
+    if (error) {
+      throw new Error(`Failed to load candles from Supabase: ${error.message}`);
     }
 
-    // Map DB rows (ts = ISO string, bar open time UTC) → canonical Candle
-    // (time = epoch seconds, matching BinanceCandleSource's convention).
-    const oneMinuteCandles: Candle[] = rows.map((row) => ({
-      time: Math.floor(new Date(row.ts).getTime() / 1000),
-      open: row.open,
-      high: row.high,
-      low: row.low,
-      close: row.close,
-      volume: row.volume,
-    }));
+    if (!Array.isArray(data)) return [];
 
-    return aggregateCandles(oneMinuteCandles, timeframe);
+    // Map each [epochSec, o, h, l, c, v] tuple → canonical Candle
+    // (time = epoch seconds, matching BinanceCandleSource's convention).
+    return (data as unknown[][]).map((row) => ({
+      time: Number(row[0]),
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+      volume: Number(row[5]),
+    }));
   }
 }
 

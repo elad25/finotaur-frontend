@@ -16,9 +16,11 @@
 import type { Interval } from '../types';
 import { YahooFinanceSource } from './YahooFinanceSource';
 import { BinanceSource } from './BinanceSource';
+import { DatabentoCacheSource } from './DatabentoCacheSource';
 
 export { YahooFinanceSource } from './YahooFinanceSource';
 export { BinanceSource } from './BinanceSource';
+export { DatabentoCacheSource } from './DatabentoCacheSource';
 
 // ---------------------------------------------------------------------------
 // Symbol pattern detection
@@ -165,19 +167,69 @@ export function toBinanceSymbol(raw: string | null | undefined): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Databento-cached futures roots
+// ---------------------------------------------------------------------------
+
+/**
+ * Futures roots with a fully-populated `backtest_candles` cache (Databento).
+ * Routing these here bypasses Yahoo entirely for our core day-trading
+ * instruments — the cache already has full coverage server-side.
+ */
+const DATABENTO_CACHED_ROOTS = new Set([
+  'MNQ', 'NQ', 'MES', 'ES', 'MYM', 'YM', 'M2K', 'RTY', 'MGC', 'GC', 'SIL', 'SI', 'MCL', 'CL',
+]);
+
+/**
+ * Extract the bare futures root from a raw or already-formatted symbol,
+ * stripping either a broker month/year contract code (e.g. `MNQM6` → `MNQ`,
+ * `ESH5` → `ES`) or a Yahoo continuous-contract `=F` suffix (e.g. `MNQ=F` →
+ * `MNQ` — this is the shape the backtest symbol universe bakes in, see
+ * `components/backtest/symbolUniverse.ts`). Bare roots with neither (e.g.
+ * `NQ`) pass through unchanged.
+ */
+function extractFuturesRoot(raw: string): string {
+  const symbol = raw.trim().toUpperCase();
+  if (symbol.endsWith('=F')) return symbol.slice(0, -2);
+  const futuresMatch = symbol.match(FUTURES_PATTERN);
+  if (futuresMatch) return futuresMatch[1];
+  return symbol;
+}
+
+/** True if the raw broker symbol resolves to one of our 14 Databento-cached futures roots. */
+export function isDatabentoCachedSymbol(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  return DATABENTO_CACHED_ROOTS.has(extractFuturesRoot(raw));
+}
+
+/**
+ * Map a raw broker symbol to its Databento-cache symbol (the bare futures
+ * root — matches the `p_symbol` values populated in `backtest_candles`).
+ * Returns null if the symbol isn't one of our 14 cached roots.
+ */
+export function toDatabentoCacheSymbol(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const root = extractFuturesRoot(raw);
+  return DATABENTO_CACHED_ROOTS.has(root) ? root : null;
+}
+
+// ---------------------------------------------------------------------------
 // Source router
 // ---------------------------------------------------------------------------
 
 // Singletons — sources are stateless so a single instance suffices and saves GC.
 const yahooSource = new YahooFinanceSource();
 const binanceSource = new BinanceSource();
+const databentoCacheSource = new DatabentoCacheSource();
 
 /**
  * Pick the right data source for the raw broker symbol.
- * Crypto pairs → Binance direct. Everything else → Yahoo via Edge Function.
+ * Order: crypto pairs → Binance direct; our 14 cached futures roots →
+ * DatabentoCacheSource; everything else (equities, indices, uncached
+ * futures) → Yahoo via Edge Function (unchanged fallback).
  */
 export function pickDataSource(raw: string | null | undefined) {
   if (raw && isCryptoSymbol(raw)) return binanceSource;
+  if (raw && isDatabentoCachedSymbol(raw)) return databentoCacheSource;
   return yahooSource;
 }
 

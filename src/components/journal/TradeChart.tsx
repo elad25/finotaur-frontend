@@ -25,7 +25,9 @@ import {
   pickInterval,
   toBinanceSymbol,
   toYahooSymbol,
+  toDatabentoCacheSymbol,
   isCryptoSymbol,
+  isDatabentoCachedSymbol,
 } from '@/components/charting/dataSources';
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { IndicatorToolbar } from '@/components/charting/IndicatorToolbar';
@@ -229,7 +231,12 @@ function computeWindow(trade: TradeChartTrade): { from: number; to: number; dura
 export function prewarmTradeChart(trade: TradeChartTrade): void {
   try {
     const isCrypto = isCryptoSymbol(trade.symbol ?? '');
-    const resolvedSymbol = isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol, trade.asset_class);
+    const isDatabentoCached = !isCrypto && isDatabentoCachedSymbol(trade.symbol);
+    const resolvedSymbol = isCrypto
+      ? toBinanceSymbol(trade.symbol)
+      : isDatabentoCached
+        ? toDatabentoCacheSymbol(trade.symbol)
+        : toYahooSymbol(trade.symbol, trade.asset_class);
     if (!resolvedSymbol) return;
     const dataSource = pickDataSource(trade.symbol);
     const { from, to, durationMs } = computeWindow(trade);
@@ -256,9 +263,18 @@ function ChartBody({
 }) {
   // Resolve symbol once per render — pure function of raw symbol
   const isCrypto = useMemo(() => isCryptoSymbol(trade.symbol ?? ''), [trade.symbol]);
+  const isDatabentoCached = useMemo(
+    () => !isCrypto && isDatabentoCachedSymbol(trade.symbol),
+    [trade.symbol, isCrypto],
+  );
   const resolvedSymbol = useMemo(
-    () => (isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol, trade.asset_class)),
-    [trade.symbol, isCrypto, trade.asset_class],
+    () =>
+      isCrypto
+        ? toBinanceSymbol(trade.symbol)
+        : isDatabentoCached
+          ? toDatabentoCacheSymbol(trade.symbol)
+          : toYahooSymbol(trade.symbol, trade.asset_class),
+    [trade.symbol, isCrypto, isDatabentoCached, trade.asset_class],
   );
 
   const window = useMemo(() => computeWindow(trade), [trade]);

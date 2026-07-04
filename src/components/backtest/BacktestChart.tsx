@@ -31,7 +31,7 @@ import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { saveBacktestTradesToJournal } from '@/lib/backtest/journaling';
 import type { BacktestSession } from '@/types/backtestSession';
 
-import { pickDataSource } from '@/components/charting/dataSources';
+import { pickDataSource, isDatabentoCachedSymbol, toDatabentoCacheSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
 import type { PositionBoxModel } from '@/components/charting/PositionBox';
 import { displaySymbol } from '@/utils/displaySymbol';
@@ -450,6 +450,15 @@ export function BacktestChart({
   );
 
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
+
+  // `symbol` here is already source-formatted for Yahoo/crypto (e.g. `MNQ=F`,
+  // baked in at the symbol-universe level — see symbolUniverse.ts). Databento
+  // cache is keyed by the bare futures root instead, so when the router picks
+  // DatabentoCacheSource we must resolve to the bare root before fetching.
+  const resolvedSymbol = useMemo(
+    () => (isDatabentoCachedSymbol(symbol) ? (toDatabentoCacheSymbol(symbol) ?? symbol) : symbol),
+    [symbol],
+  );
 
   // Bar window for the Run Strategy fetch (data-driven, mode-independent).
   const { from, to } = useMemo(() => {
@@ -963,7 +972,7 @@ export function BacktestChart({
     setRunSummary(null);
     try {
       // Fetch the same bar window the chart is currently showing.
-      const bars = await dataSource.getBars(symbol, barInterval, from as never, to as never);
+      const bars = await dataSource.getBars(resolvedSymbol, barInterval, from as never, to as never);
       if (!bars || bars.length < 2) {
         throw new Error('Not enough bars in window to run strategy');
       }
@@ -1200,7 +1209,7 @@ export function BacktestChart({
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="relative flex-1 min-w-0 bg-[#08080a] pr-80">
           <BacktestReplayChart
-            symbol={symbol}
+            symbol={resolvedSymbol}
             interval={barInterval}
             dataSource={dataSource}
             replayStartTime={Math.floor(replayStart.getTime() / 1000)}
