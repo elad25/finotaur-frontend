@@ -287,7 +287,11 @@ const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsA
 // DEV-ONLY: /__dev/seo-analytics — public screen-verification route for the
 // admin SEO widget. Remove import + route + delete src/__dev/SeoAnalyticsDevPage.tsx
 // before merging Wave 5 to main (the admin route at /app/admin/seo is the prod surface).
-import SeoAnalyticsDevPage from "@/__dev/SeoAnalyticsDevPage";
+// 🔥 PERF FIX: was a static `import`, unlike every neighboring route (all use
+// lazy()). That pulled recharts (via SeoAnalyticsPage -> ViewsSparkline/
+// SourceBreakdown) into the eager entry chunk, so the landing page fetched
+// vendor-charts on every load even though it never renders a chart.
+const SeoAnalyticsDevPage = lazy(() => import("@/__dev/SeoAnalyticsDevPage"));
 // ETFs
 const ETFOverview   = lazy(() => import("@/pages/app/etfs/Overview"));
 const ETFLayout     = lazy(() => import("@/pages/app/etfs/ETFLayout"));

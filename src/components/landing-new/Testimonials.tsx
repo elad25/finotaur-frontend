@@ -173,9 +173,36 @@ const Testimonials = () => {
   const [isPaused, setIsPaused] = useState(false);
   const scrollPositionRef = useRef(0);
 
+  // 🔥 PERF FIX: this rAF marquee used to run forever, off-screen and even
+  // with the tab backgrounded, causing recurring long tasks well after load.
+  // Pause the loop (without resetting position) whenever the carousel isn't
+  // on-screen or the tab is hidden — identical scroll behavior while visible.
+  const [isOnScreen, setIsOnScreen] = useState(true);
+  const [isTabVisible, setIsTabVisible] = useState(
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden"
+  );
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsOnScreen(entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => setIsTabVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   useEffect(() => {
     const scrollContainer = scrollRef.current;
     if (!scrollContainer) return;
+    if (isPaused || !isOnScreen || !isTabVisible) return;
 
     const scrollSpeed = 0.5;
     const cardWidth = 400;
@@ -184,17 +211,15 @@ const Testimonials = () => {
     let animationId: number;
 
     const animate = () => {
-      if (!isPaused) {
-        scrollPositionRef.current += scrollSpeed;
-        if (scrollPositionRef.current >= totalWidth) scrollPositionRef.current = 0;
-        if (scrollContainer) scrollContainer.scrollLeft = scrollPositionRef.current;
-      }
+      scrollPositionRef.current += scrollSpeed;
+      if (scrollPositionRef.current >= totalWidth) scrollPositionRef.current = 0;
+      if (scrollContainer) scrollContainer.scrollLeft = scrollPositionRef.current;
       animationId = requestAnimationFrame(animate);
     };
 
     animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
-  }, [isPaused]);
+  }, [isPaused, isOnScreen, isTabVisible]);
 
   return (
     <SectionShell id="testimonials" atmosphere="subtle" beam={false}>
