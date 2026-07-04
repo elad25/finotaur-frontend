@@ -525,7 +525,7 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
       ctx.setLineDash([]);
 
       // Price pill on the right edge
-      const label = lp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const label = lp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const pillW = 64;
       const pillH = 16;
       ctx.fillStyle = 'rgba(255,255,255,0.92)';
@@ -551,7 +551,7 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
       const y = priceToY(price);
       if (y < 10 || y > plotH - 10) continue;
       const label = price >= 1000
-        ? price.toLocaleString(undefined, { maximumFractionDigits: 0 })
+        ? price.toLocaleString('en-US', { maximumFractionDigits: 0 })
         : price.toFixed(4);
       ctx.fillText(label, plotW + 4, y);
     }
@@ -574,7 +574,7 @@ export function BookmapChart({ hook, symbol }: BookmapChartProps) {
           if (!col) continue; // defensive: should not happen, but guard anyway
           const x = ci * colW;
           const d = new Date(col.timestamp);
-          const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+          const label = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
           ctx.fillText(label, x, plotH + 4);
         }
       }

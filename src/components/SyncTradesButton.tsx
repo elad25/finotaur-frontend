@@ -64,7 +64,7 @@ export function SyncStatusCard({ lastSync, tradesImported, nextSync }: SyncStatu
         {lastSync && (
           <div className="flex justify-between text-zinc-400">
             <span>Last synced:</span>
-            <span className="text-white">{new Date(lastSync).toLocaleString()}</span>
+            <span className="text-white">{new Date(lastSync).toLocaleString('en-US')}</span>
           </div>
         )}
         
@@ -78,7 +78,7 @@ export function SyncStatusCard({ lastSync, tradesImported, nextSync }: SyncStatu
         {nextSync && (
           <div className="flex justify-between text-zinc-400">
             <span>Next sync:</span>
-            <span className="text-white">{new Date(nextSync).toLocaleString()}</span>
+            <span className="text-white">{new Date(nextSync).toLocaleString('en-US')}</span>
           </div>
         )}
       </div>

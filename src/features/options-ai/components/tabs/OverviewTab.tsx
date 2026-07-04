@@ -712,7 +712,7 @@ const TopActivity = memo(function TopActivity({ data }: { data: OptionsData }) {
                   <span style={{ fontSize: 9, color: C.textDim }}>{f.expiry}</span>
                 </div>
                 <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>
-                  Vol: {(f.volume ?? 0).toLocaleString()} - OI: {(f.openInterest ?? 0).toLocaleString()} - {(f.volOiRatio ?? 0).toFixed(1)}x
+                  Vol: {(f.volume ?? 0).toLocaleString('en-US')} - OI: {(f.openInterest ?? 0).toLocaleString('en-US')} - {(f.volOiRatio ?? 0).toFixed(1)}x
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>

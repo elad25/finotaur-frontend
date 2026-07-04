@@ -191,7 +191,7 @@ function fmtShares(n: number | null | undefined): string {
   if (n == null) return "—";
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 1_000)     return `${(n / 1_000).toFixed(0)}K`;
-  return n.toLocaleString();
+  return n.toLocaleString('en-US');
 }
 
 function fmtValue(n: number | null | undefined): string {
@@ -199,7 +199,7 @@ function fmtValue(n: number | null | undefined): string {
   if (Math.abs(n) >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
   if (Math.abs(n) >= 1_000_000)     return `$${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 1_000)         return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toLocaleString()}`;
+  return `$${n.toLocaleString('en-US')}`;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -858,7 +858,7 @@ export default function StocksInsider() {
             {institutionalState.ownership && (
               <div className="grid grid-cols-3 gap-3 mb-4 pb-4" style={{ borderBottom: `1px solid ${T.border}` }}>
                 {[
-                  { label: "Total Institutions",      value: institutionalState.ownership.total_institutions?.toLocaleString() ?? "—" },
+                  { label: "Total Institutions",      value: institutionalState.ownership.total_institutions?.toLocaleString('en-US') ?? "—" },
                   { label: "Total Shares (13F)",       value: fmtShares(institutionalState.ownership.total_shares ?? null) },
                   { label: "Total Value (13F)",        value: fmtValue(institutionalState.ownership.total_value ?? null) },
                 ].map(({ label, value }) => (

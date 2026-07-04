@@ -822,7 +822,7 @@ export function BacktestChart({
         trades: state.closedPositions,
         pendingOrders: state.pendingOrders,
         // Auto-name: "<symbol> · <interval> · <date>" (display ticker, no =F/=X)
-        name: `${displaySymbol(symbol)} · ${barInterval} · ${new Date().toLocaleDateString()}`,
+        name: `${displaySymbol(symbol)} · ${barInterval} · ${new Date().toLocaleDateString('en-US')}`,
         // Session-level strategy link — last active strategy at save time.
         // Per-trade strategy_id is already persisted via trades[].strategy_id.
         // Enables FINOTAUR AI Phase F compare_live_vs_backtest. 2026-05-29.
@@ -907,7 +907,7 @@ export function BacktestChart({
       // Reconstruct a minimal BacktestSession from available state.
       const sessionObj: BacktestSession = {
         id: `chart:${symbol}:${barInterval}`,
-        name: `${displaySymbol(symbol)} · ${barInterval} · ${new Date().toLocaleDateString()}`,
+        name: `${displaySymbol(symbol)} · ${barInterval} · ${new Date().toLocaleDateString('en-US')}`,
         symbol,
         timeframe: barInterval,
         assetType: assetClass,
@@ -1153,7 +1153,7 @@ export function BacktestChart({
               className="text-sm font-semibold text-zinc-200"
               title="Set when you created the session"
             >
-              ${state.startingBalance.toLocaleString()}
+              ${state.startingBalance.toLocaleString('en-US')}
             </div>
           </div>
           <div className="text-right">

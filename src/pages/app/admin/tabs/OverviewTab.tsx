@@ -177,20 +177,20 @@ export function OverviewTab() {
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Total Users"
-          value={stats.totalUsers.toLocaleString()}
-          subtitle={`${stats.activeUsers.toLocaleString()} active (30d)`}
+          value={stats.totalUsers.toLocaleString('en-US')}
+          subtitle={`${stats.activeUsers.toLocaleString('en-US')} active (30d)`}
           icon={Users}
         />
         <StatsCard
           title="New This Month"
-          value={stats.newUsersThisMonth.toLocaleString()}
+          value={stats.newUsersThisMonth.toLocaleString('en-US')}
           change={`+${stats.newUsersThisWeek} this week`}
           changeType="positive"
           icon={UserPlus}
         />
         <StatsCard
           title="Paying Subscribers"
-          value={subStats.activeSubscribers.toLocaleString()}
+          value={subStats.activeSubscribers.toLocaleString('en-US')}
           subtitle={`${subStats.newSubscribersThisMonth} new this month`}
           icon={Crown}
         />
@@ -206,13 +206,13 @@ export function OverviewTab() {
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="MRR"
-          value={`$${subStats.totalMRR.toLocaleString()}`}
+          value={`$${subStats.totalMRR.toLocaleString('en-US')}`}
           subtitle="Monthly recurring revenue"
           icon={DollarSign}
         />
         <StatsCard
           title="ARR"
-          value={`$${subStats.totalARR.toLocaleString()}`}
+          value={`$${subStats.totalARR.toLocaleString('en-US')}`}
           subtitle="Annualized run rate"
           icon={TrendingUp}
         />
@@ -407,7 +407,7 @@ export function OverviewTab() {
                     )}
                   </td>
                   <td className="text-right px-5 py-3 text-gray-300">
-                    {b.count.toLocaleString()}
+                    {b.count.toLocaleString('en-US')}
                   </td>
                   <td className="text-right px-5 py-3 text-gray-400">
                     {b.percentage.toFixed(1)}%
@@ -434,20 +434,20 @@ export function OverviewTab() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatsCard
             title="Total Trades"
-            value={stats.totalTrades.toLocaleString()}
+            value={stats.totalTrades.toLocaleString('en-US')}
             subtitle="All-time"
             icon={BarChart3}
           />
           <StatsCard
             title="Trades This Week"
-            value={`+${stats.tradesThisWeek.toLocaleString()}`}
+            value={`+${stats.tradesThisWeek.toLocaleString('en-US')}`}
             subtitle="Week to date"
             changeType="positive"
             icon={TrendingUp}
           />
           <StatsCard
             title="Trades This Month"
-            value={stats.tradesThisMonth.toLocaleString()}
+            value={stats.tradesThisMonth.toLocaleString('en-US')}
             subtitle="Month to date"
             icon={Calendar}
           />

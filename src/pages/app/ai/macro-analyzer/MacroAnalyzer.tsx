@@ -373,7 +373,7 @@ export default function MacroAnalyzer() {
               <p className="text-xs text-ink-tertiary">
                 Data updated in real-time from official sources - FRED, SEC, BLS
                 <span className="mx-2">-</span>
-                Last refresh: {new Date().toLocaleTimeString()}
+                Last refresh: {new Date().toLocaleTimeString('en-US')}
               </p>
             </div>
           </div>

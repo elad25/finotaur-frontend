@@ -132,7 +132,7 @@ export function GDPRTools() {
       },
       {
         label: 'Login count',
-        value: full.login_count.toLocaleString(),
+        value: full.login_count.toLocaleString('en-US'),
         icon: Activity,
       },
       {

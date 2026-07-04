@@ -134,15 +134,6 @@ function isJournalQuestion(message: string): boolean {
     "notes",
     "calendar",
     "analysis",
-    "יומן",
-    "מסחר",
-    "עסקה",
-    "עסקאות",
-    "רווח",
-    "הפסד",
-    "סיכון",
-    "אסטרטגיה",
-    "ביצועים",
   ];
 
   return journalTerms.some((term) => lowerMessage.includes(term));
@@ -411,7 +402,7 @@ export default function JournalAIReviewEnhanced() {
     const drainingStrategies = strategyStats.filter(s => s.stats.netPnl < 0);
 
     let report = `# 📊 COMPREHENSIVE TRADING ANALYSIS\n`;
-    report += `**Period:** ${timeRangeText} | **Generated:** ${new Date().toLocaleString()}\n\n`;
+    report += `**Period:** ${timeRangeText} | **Generated:** ${new Date().toLocaleString('en-US')}\n\n`;
     report += `---\n\n## 🎯 EXECUTIVE SUMMARY\n\n`;
     report += `**Overall:** ${stats.netPnl >= 0 ? '✅ PROFITABLE' : '❌ UNPROFITABLE'}\n\n`;
     report += `**Core Metrics:**\n`;

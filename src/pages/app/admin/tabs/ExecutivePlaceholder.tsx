@@ -299,21 +299,21 @@ export function ExecutivePlaceholder({ embedded = false }: ExecutivePlaceholderP
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Active users (30d projection)"
-          value={projectedActive.toLocaleString()}
-          change={`${activeDelta >= 0 ? '+' : ''}${activeDelta.toLocaleString()} (${activeDeltaPct >= 0 ? '+' : ''}${activeDeltaPct.toFixed(1)}%)`}
+          value={projectedActive.toLocaleString('en-US')}
+          change={`${activeDelta >= 0 ? '+' : ''}${activeDelta.toLocaleString('en-US')} (${activeDeltaPct >= 0 ? '+' : ''}${activeDeltaPct.toFixed(1)}%)`}
           changeType={slopeHealth}
           icon={Users}
         />
         <StatsCard
           title="Signups (next 30d)"
-          value={projectedSignups30d.toLocaleString()}
+          value={projectedSignups30d.toLocaleString('en-US')}
           subtitle={`Avg ${projectedNewPerDay.toFixed(1)} / day`}
           icon={Activity}
         />
         <StatsCard
           title="MRR (30d projection)"
-          value={`$${projectedMRR.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-          change={`${projectedMRRDelta >= 0 ? '+' : ''}$${Math.round(projectedMRRDelta).toLocaleString()}`}
+          value={`$${projectedMRR.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
+          change={`${projectedMRRDelta >= 0 ? '+' : ''}$${Math.round(projectedMRRDelta).toLocaleString('en-US')}`}
           changeType={projectedMRRDelta >= 0 ? 'positive' : 'negative'}
           icon={DollarSign}
         />
@@ -377,7 +377,7 @@ export function ExecutivePlaceholder({ embedded = false }: ExecutivePlaceholderP
                 if (name === 'Confidence band' && Array.isArray(value)) {
                   return [`${Math.round(value[0])} – ${Math.round(value[1])}`, name];
                 }
-                return [Math.round(value as number).toLocaleString(), name];
+                return [Math.round(value as number).toLocaleString('en-US'), name];
               }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />

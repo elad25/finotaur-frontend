@@ -32,7 +32,7 @@ interface AssignPlanDialogProps {
 // ── Helpers ───────────────────────────────────────────────────────
 
 function fmt(v: number): string {
-  return '$' + v.toLocaleString();
+  return '$' + v.toLocaleString('en-US');
 }
 
 function firstFirm(preferredKey?: string): PropFirm {

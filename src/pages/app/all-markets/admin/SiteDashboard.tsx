@@ -2589,7 +2589,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
             <div className="space-y-1 flex-1">
               <p className="text-sm text-[#808080]">{title}</p>
 <div className="text-3xl font-bold text-[#F4F4F4]">
-  {loading ? <Skeleton className="h-9 w-20" /> : typeof value === 'number' ? value.toLocaleString() : value}
+  {loading ? <Skeleton className="h-9 w-20" /> : typeof value === 'number' ? value.toLocaleString('en-US') : value}
 </div>
               {description && (
                 <p className="text-xs text-[#606060]">{description}</p>
@@ -2787,10 +2787,10 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       </Badge>
                     </td>
                     <td className="py-3 px-4 text-[#606060] text-xs">
-                      {user.started_at ? new Date(user.started_at).toLocaleDateString() : '—'}
+                      {user.started_at ? new Date(user.started_at).toLocaleDateString('en-US') : '—'}
                     </td>
                     <td className="py-3 px-4 text-[#606060] text-xs">
-                      {user.expires_at ? new Date(user.expires_at).toLocaleDateString() : '—'}
+                      {user.expires_at ? new Date(user.expires_at).toLocaleDateString('en-US') : '—'}
                     </td>
                   </tr>
                 ))}
@@ -3962,12 +3962,12 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                             <td className="py-3 px-4 text-[#C9A646] font-medium">{user.trade_count}</td>
                             {/* Created */}
                             <td className="py-3 px-4 text-[#606060] text-xs">
-                              {new Date(user.created_at).toLocaleDateString()}
+                              {new Date(user.created_at).toLocaleDateString('en-US')}
                             </td>
                             {/* Last Login */}
                             <td className="py-3 px-4 text-[#606060] text-xs">
-                              {user.last_login_at 
-                                ? new Date(user.last_login_at).toLocaleDateString() 
+                              {user.last_login_at
+                                ? new Date(user.last_login_at).toLocaleDateString('en-US')
                                 : 'Never'
                               }
                             </td>
@@ -4656,7 +4656,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                               style={{ width: `${(month.mrr / Math.max(...revenueOverTime.map(m => m.mrr))) * 100}%` }}
                             />
                             <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-[#F4F4F4]">
-                              ${month.mrr.toLocaleString()}
+                              ${month.mrr.toLocaleString('en-US')}
                             </span>
                           </div>
                         </div>
@@ -5472,10 +5472,10 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       {/* Timestamp */}
                       <div className="text-right">
                         <p className="text-xs text-[#808080]">
-                          {new Date(event.created_at).toLocaleDateString()}
+                          {new Date(event.created_at).toLocaleDateString('en-US')}
                         </p>
                         <p className="text-xs text-[#606060]">
-                          {new Date(event.created_at).toLocaleTimeString()}
+                          {new Date(event.created_at).toLocaleTimeString('en-US')}
                         </p>
                       </div>
                     </div>
@@ -5671,7 +5671,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                 <div className="flex items-center justify-between">
                   <span className="text-[#A0A0A0]">Estimated Recipients</span>
 <Badge className="bg-[#C9A646]/20 text-[#C9A646] text-lg px-4 py-1">
-  {estimatedRecipients.toLocaleString()} users
+  {estimatedRecipients.toLocaleString('en-US')} users
 </Badge>
                 </div>
               </div>
@@ -6161,13 +6161,13 @@ You can use these variables:
                 </div>
                 <div className="p-4 bg-[#1A1A1A] rounded-xl">
                   <p className="text-xs text-[#808080] mb-1">Created</p>
-                  <p className="text-[#F4F4F4]">{new Date(quickViewDialog.user.created_at).toLocaleDateString()}</p>
+                  <p className="text-[#F4F4F4]">{new Date(quickViewDialog.user.created_at).toLocaleDateString('en-US')}</p>
                 </div>
                 <div className="p-4 bg-[#1A1A1A] rounded-xl">
                   <p className="text-xs text-[#808080] mb-1">Last Login</p>
                   <p className="text-[#F4F4F4]">
-                    {quickViewDialog.user.last_login_at 
-                      ? new Date(quickViewDialog.user.last_login_at).toLocaleDateString() 
+                    {quickViewDialog.user.last_login_at
+                      ? new Date(quickViewDialog.user.last_login_at).toLocaleDateString('en-US')
                       : 'Never'}
                   </p>
                 </div>
@@ -6237,7 +6237,7 @@ You can use these variables:
                       <div className="flex justify-between">
                         <span className="text-[#A0A0A0]">Journal Trial</span>
                         <span className="text-orange-400">
-                          Ends: {new Date(quickViewDialog.user.trial_ends_at).toLocaleDateString()}
+                          Ends: {new Date(quickViewDialog.user.trial_ends_at).toLocaleDateString('en-US')}
                         </span>
                       </div>
                     )}
@@ -6245,7 +6245,7 @@ You can use these variables:
                       <div className="flex justify-between">
                         <span className="text-[#A0A0A0]">Top Secret Trial</span>
                         <span className="text-orange-400">
-                          Ends: {new Date(quickViewDialog.user.top_secret_trial_ends_at).toLocaleDateString()}
+                          Ends: {new Date(quickViewDialog.user.top_secret_trial_ends_at).toLocaleDateString('en-US')}
                         </span>
                       </div>
                     )}
@@ -6253,7 +6253,7 @@ You can use these variables:
                       <div className="flex justify-between">
                         <span className="text-[#A0A0A0]">Platform Trial</span>
                         <span className="text-orange-400">
-                          Ends: {new Date(quickViewDialog.user.platform_trial_ends_at).toLocaleDateString()}
+                          Ends: {new Date(quickViewDialog.user.platform_trial_ends_at).toLocaleDateString('en-US')}
                         </span>
                       </div>
                     )}
@@ -6621,7 +6621,7 @@ You can use these variables:
                   <div>
                     <p className="text-sm text-[#F4F4F4]">
                       {userStats.activity?.last_login 
-                        ? new Date(userStats.activity.last_login).toLocaleDateString() 
+                        ? new Date(userStats.activity.last_login).toLocaleDateString('en-US')
                         : 'Never'}
                     </p>
                     <p className="text-sm text-[#808080]">Last Login</p>
@@ -6664,7 +6664,7 @@ You can use these variables:
                         <p className="text-sm text-[#808080]">{event.reason}</p>
                       )}
                       <p className="text-xs text-[#606060] mt-1">
-                        {new Date(event.created_at).toLocaleString()}
+                        {new Date(event.created_at).toLocaleString('en-US')}
                       </p>
                     </div>
                   </div>

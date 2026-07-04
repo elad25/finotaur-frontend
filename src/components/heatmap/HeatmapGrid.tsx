@@ -30,7 +30,7 @@ export default function HeatmapGrid({ market }: { market: MarketKey }) {
   return (
     <div className="px-4 py-4">
       <div className="mb-2 text-xs text-muted-foreground">
-        Last updated: {data ? new Date(data.asOf).toLocaleString() : '-'}
+        Last updated: {data ? new Date(data.asOf).toLocaleString('en-US') : '-'}
         {data?.stale ? <span className="ml-2 text-amber-400">stale</span> : null}
       </div>
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(12, minmax(0,1fr))' }}>

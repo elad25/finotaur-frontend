@@ -827,7 +827,7 @@ export default function JournalTradeDetail() {
               {trade.lot_size != null && (
                 <div>
                   <label className="text-sm text-zinc-500 mb-1 block">Lot Size</label>
-                  <div className="text-lg font-semibold text-white">{trade.lot_size.toLocaleString()}</div>
+                  <div className="text-lg font-semibold text-white">{trade.lot_size.toLocaleString('en-US')}</div>
                 </div>
               )}
               <div>

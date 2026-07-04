@@ -11,7 +11,7 @@ export default function KpiCard({ label, value, sub }: Props) {
     if (typeof v === "number") {
       // heuristic: if big, add commas. Keep 1 decimal for percentages passed as string if needed externally.
       const abs = Math.abs(v);
-      if (abs >= 1000) return v.toLocaleString();
+      if (abs >= 1000) return v.toLocaleString('en-US');
       return String(v);
     }
     return String(v);

@@ -189,7 +189,7 @@ export const PriceHeader = memo(({ data, onPriceUpdate }: {
 
                 {/* Last updated time */}
                 <p className="text-xs text-[#6B6B6B]">
-                  Last updated: {new Date(data.lastUpdated).toLocaleTimeString()}
+                  Last updated: {new Date(data.lastUpdated).toLocaleTimeString('en-US')}
                 </p>
 
                 {/* Next refresh countdown */}

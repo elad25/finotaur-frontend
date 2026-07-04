@@ -209,14 +209,14 @@ function UserAnalytics({ stats }: { stats: AdminStats }) {
         <StatsCard
           icon={Users}
           title="Total Registered"
-          value={stats.totalUsers.toLocaleString()}
+          value={stats.totalUsers.toLocaleString('en-US')}
           subtitle="All-time users"
         />
 
         <StatsCard
           icon={Activity}
           title="Active Users (30d)"
-          value={stats.activeUsers.toLocaleString()}
+          value={stats.activeUsers.toLocaleString('en-US')}
           subtitle={`${metrics.retentionRate}% retention`}
           valueColor="text-green-400"
         />
@@ -499,7 +499,7 @@ function TradingActivityAnalytics({ stats }: { stats: AdminStats }) {
         <StatsCard
           icon={BarChart3}
           title="Total Trades"
-          value={stats.totalTrades.toLocaleString()}
+          value={stats.totalTrades.toLocaleString('en-US')}
           subtitle="All-time"
         />
 
@@ -514,7 +514,7 @@ function TradingActivityAnalytics({ stats }: { stats: AdminStats }) {
         <StatsCard
           icon={Calendar}
           title="This Month"
-          value={stats.tradesThisMonth.toLocaleString()}
+          value={stats.tradesThisMonth.toLocaleString('en-US')}
           subtitle="Month to date"
           valueColor="text-blue-400"
         />

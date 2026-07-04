@@ -70,7 +70,7 @@ export const DayDetailsModal = ({ open, onOpenChange, date, trades, onAddTrade }
             </CardHeader>
             <CardContent>
               <p className={`text-2xl font-bold ${totalPnL >= 0 ? "text-success" : "text-destructive"}`}>
-                ${totalPnL >= 0 ? "+" : ""}{totalPnL.toLocaleString()}
+                ${totalPnL >= 0 ? "+" : ""}{totalPnL.toLocaleString('en-US')}
               </p>
             </CardContent>
           </Card>

@@ -207,7 +207,7 @@ function InsightCard({ insight, onAction, actioning }: InsightCardProps) {
           </h3>
         </div>
         <span className="text-[11px] text-gray-600 shrink-0 pt-0.5">
-          {new Date(insight.created_at).toLocaleDateString()}
+          {new Date(insight.created_at).toLocaleDateString('en-US')}
         </span>
       </div>
 

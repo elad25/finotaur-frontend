@@ -209,22 +209,22 @@ export function IntegrationsPlaceholder() {
             <div className="px-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
               <SnapshotCard
                 label="Whop subscribers"
-                value={snapshot.whopSubscribers.toLocaleString()}
+                value={snapshot.whopSubscribers.toLocaleString('en-US')}
                 hint="active billing"
               />
               <SnapshotCard
                 label="New this month"
-                value={snapshot.newWhopThisMonth.toLocaleString()}
+                value={snapshot.newWhopThisMonth.toLocaleString('en-US')}
                 hint="via Whop webhook"
               />
               <SnapshotCard
                 label="Supabase users"
-                value={snapshot.totalUsers.toLocaleString()}
+                value={snapshot.totalUsers.toLocaleString('en-US')}
                 hint="auth.users total"
               />
               <SnapshotCard
                 label="Active (30d)"
-                value={snapshot.activeUsers.toLocaleString()}
+                value={snapshot.activeUsers.toLocaleString('en-US')}
                 hint="last_login window"
               />
             </div>

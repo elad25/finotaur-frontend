@@ -162,7 +162,7 @@ export const WallsDepthChart = memo(function WallsDepthChart({
       <div ref={containerRef} className="w-full" style={{ height: 280 }} />
       {midPrice != null && (
         <div className="absolute top-2 right-3 text-[10px] text-white/30 font-mono">
-          mid {midPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          mid {midPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
         </div>
       )}
     </div>

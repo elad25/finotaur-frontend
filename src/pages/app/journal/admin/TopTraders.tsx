@@ -163,7 +163,7 @@ export default function AdminTopTraders() {
             <span className="text-sm text-gray-400">Total Trades</span>
           </div>
           <p className="text-3xl font-bold text-white">
-            {traders.reduce((sum, t) => sum + t.total_trades, 0).toLocaleString()}
+            {traders.reduce((sum, t) => sum + t.total_trades, 0).toLocaleString('en-US')}
           </p>
         </div>
       </div>

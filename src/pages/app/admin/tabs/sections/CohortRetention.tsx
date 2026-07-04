@@ -187,7 +187,7 @@ export function CohortRetention({ growth }: CohortRetentionProps) {
                 Signups
               </div>
               <div className="text-lg text-white font-semibold mt-0.5">
-                {totalSignups.toLocaleString()}
+                {totalSignups.toLocaleString('en-US')}
               </div>
             </div>
             <div>

@@ -338,7 +338,7 @@ function InsiderCard({ item }: { item: FlowItem }) {
           <div className="text-xs font-bold font-mono tabular-nums text-gold-primary">{item.value}</div>
           {item.insiderShares != null && (
             <div className="text-[10px] font-mono tabular-nums text-ink-muted">
-              {item.insiderShares.toLocaleString()} sh
+              {item.insiderShares.toLocaleString('en-US')} sh
             </div>
           )}
         </div>

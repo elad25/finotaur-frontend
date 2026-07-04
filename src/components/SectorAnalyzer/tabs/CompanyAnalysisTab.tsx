@@ -85,7 +85,7 @@ const CompanyHeader = memo<CompanyHeaderProps>(({ company, onClose }) => {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Users className="h-4 w-4 text-[#6B6B6B]" />
-                  <span className="text-[#8B8B8B]">{company.employees.toLocaleString()} employees</span>
+                  <span className="text-[#8B8B8B]">{company.employees.toLocaleString('en-US')} employees</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Clock className="h-4 w-4 text-[#6B6B6B]" />
@@ -805,7 +805,7 @@ const InsiderTrading = memo<InsiderTradingProps>(({ ticker }) => {
                       {t.type}
                     </span>
                   </td>
-                  <td className="text-right py-3 px-3 text-sm text-white">{t.shares.toLocaleString()}</td>
+                  <td className="text-right py-3 px-3 text-sm text-white">{t.shares.toLocaleString('en-US')}</td>
                   <td className="text-right py-3 px-3 text-sm font-bold" style={{ color: t.type === 'buy' ? colors.positive : colors.negative }}>
                     {formatCurrency(t.value)}
                   </td>

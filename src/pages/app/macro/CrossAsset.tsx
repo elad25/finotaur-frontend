@@ -1649,7 +1649,7 @@ export default function CrossAssetTerminal() {
             <SectionCard><SectionHeader icon={Radio} title="Vol Dashboard" subtitle="Full cross-asset volatility matrix" /><div className="space-y-2 text-sm text-slate-500"><div className="flex justify-between"><span>VVIX</span><span>—</span></div><div className="flex justify-between"><span>MOVE Index</span><span>—</span></div><div className="flex justify-between"><span>OVX</span><span>—</span></div></div></SectionCard>
           </div>
 
-          <div className="text-center text-xs text-slate-500 pt-4 border-t border-white/5">For informational purposes only. Updated: {lastUpdate?.toLocaleString() || '—'}</div>
+          <div className="text-center text-xs text-slate-500 pt-4 border-t border-white/5">For informational purposes only. Updated: {lastUpdate?.toLocaleString('en-US') || '—'}</div>
         </>
       )}
     </div>

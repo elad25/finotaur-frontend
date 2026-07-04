@@ -17,9 +17,9 @@ export function formatNumber(n: number | null | undefined, fractionDigits=2): st
     return formatCache.get(cacheKey)!;
   }
   
-  const formatted = n.toLocaleString(undefined, { 
-    minimumFractionDigits: fractionDigits, 
-    maximumFractionDigits: fractionDigits 
+  const formatted = n.toLocaleString('en-US', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
   });
   
   if (formatCache.size < MAX_CACHE_SIZE) {

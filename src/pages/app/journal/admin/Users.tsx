@@ -680,7 +680,7 @@ const UserRow = React.memo<{
 
       {/* Joined */}
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-        {new Date(user.created_at).toLocaleDateString()}
+        {new Date(user.created_at).toLocaleDateString('en-US')}
       </td>
 
       {/* Actions */}

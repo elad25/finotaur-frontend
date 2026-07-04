@@ -257,7 +257,7 @@ export default function AffiliateAdminList() {
 
                     {/* Clicks */}
                     <td className="py-4 px-4 text-right">
-                      <span className="text-gray-300">{affiliate.total_clicks?.toLocaleString() || 0}</span>
+                      <span className="text-gray-300">{affiliate.total_clicks?.toLocaleString('en-US') || 0}</span>
                     </td>
 
                     {/* Signups */}
@@ -496,8 +496,8 @@ export default function AffiliateAdminList() {
 
               {/* Dates */}
               <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-gray-800">
-                <span>Activated: {new Date(selectedAffiliate.activated_at).toLocaleDateString()}</span>
-                <span>Last Activity: {new Date(selectedAffiliate.last_activity_at).toLocaleDateString()}</span>
+                <span>Activated: {new Date(selectedAffiliate.activated_at).toLocaleDateString('en-US')}</span>
+                <span>Last Activity: {new Date(selectedAffiliate.last_activity_at).toLocaleDateString('en-US')}</span>
               </div>
             </div>
           </div>

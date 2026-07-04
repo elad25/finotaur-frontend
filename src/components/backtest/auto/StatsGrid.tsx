@@ -156,7 +156,7 @@ export function StatsGrid() {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <StatTile label="Total trades">{num(stats, 'totalTrades').toLocaleString()}</StatTile>
+        <StatTile label="Total trades">{num(stats, 'totalTrades').toLocaleString('en-US')}</StatTile>
 
         <StatTile label="Win rate" tone={winRate >= 50 ? 'positive' : 'neutral'}>
           {winRate.toFixed(1)}%
@@ -195,11 +195,11 @@ export function StatsGrid() {
         </StatTile>
 
         <StatTile label="Win streak" tone="positive">
-          {maxWinStreak.toLocaleString()}
+          {maxWinStreak.toLocaleString('en-US')}
         </StatTile>
 
         <StatTile label="Loss streak" tone="negative">
-          {maxLossStreak.toLocaleString()}
+          {maxLossStreak.toLocaleString('en-US')}
         </StatTile>
       </div>
 

@@ -421,7 +421,7 @@ export function PlaceOrderPanel({
                   : 'border-white/10 text-gray-400 hover:text-white'
               )}
             >
-              Current ${currentBalance.toLocaleString()}
+              Current ${currentBalance.toLocaleString('en-US')}
             </button>
             <button
               type="button"
@@ -433,7 +433,7 @@ export function PlaceOrderPanel({
                   : 'border-white/10 text-gray-400 hover:text-white'
               )}
             >
-              Initial ${initialBalance.toLocaleString()}
+              Initial ${initialBalance.toLocaleString('en-US')}
             </button>
           </div>
 
@@ -468,7 +468,7 @@ export function PlaceOrderPanel({
       {/* Market price (read-only) */}
       <Field label="Market price" suffix="USD">
         <div className="flex h-9 items-center text-sm text-gray-300 font-mono">
-          {marketPrice ? marketPrice.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
+          {marketPrice ? marketPrice.toLocaleString('en-US', { maximumFractionDigits: 3 }) : '—'}
         </div>
       </Field>
 

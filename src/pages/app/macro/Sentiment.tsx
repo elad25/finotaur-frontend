@@ -675,7 +675,7 @@ const formatValue = (value: number, type: 'percent' | 'number' | 'currency' | 'r
     case 'ratio': return value.toFixed(2);
     case 'bps': return `${value.toFixed(0)}bps`;
     case 'yield': return `${value.toFixed(2)}%`;
-    default: return value >= 1000 ? value.toLocaleString() : value.toFixed(1);
+    default: return value >= 1000 ? value.toLocaleString('en-US') : value.toFixed(1);
   }
 };
 
@@ -2157,8 +2157,8 @@ export default function MacroSentiment() {
                   title="Risk Assets"
                   items={[
                     { label: 'BTC', value: `$${(data.crossAsset.riskAssets.crypto.value / 1000).toFixed(1)}K`, trend: data.crossAsset.riskAssets.crypto.trend, change: data.crossAsset.riskAssets.crypto.change, tooltipKey: 'crypto', sparkline: data.crossAsset.riskAssets.crypto.sparkline },
-                    { label: 'QQQ', value: data.crossAsset.riskAssets.tech.value.toLocaleString(), trend: data.crossAsset.riskAssets.tech.trend, change: data.crossAsset.riskAssets.tech.change, tooltipKey: 'crypto', sparkline: data.crossAsset.riskAssets.tech.sparkline },
-                    { label: 'IWM', value: data.crossAsset.riskAssets.smallCap.value.toLocaleString(), trend: data.crossAsset.riskAssets.smallCap.trend, change: data.crossAsset.riskAssets.smallCap.change, tooltipKey: 'crypto', sparkline: data.crossAsset.riskAssets.smallCap.sparkline },
+                    { label: 'QQQ', value: data.crossAsset.riskAssets.tech.value.toLocaleString('en-US'), trend: data.crossAsset.riskAssets.tech.trend, change: data.crossAsset.riskAssets.tech.change, tooltipKey: 'crypto', sparkline: data.crossAsset.riskAssets.tech.sparkline },
+                    { label: 'IWM', value: data.crossAsset.riskAssets.smallCap.value.toLocaleString('en-US'), trend: data.crossAsset.riskAssets.smallCap.trend, change: data.crossAsset.riskAssets.smallCap.change, tooltipKey: 'crypto', sparkline: data.crossAsset.riskAssets.smallCap.sparkline },
                   ]}
                   conclusion={data.crossAsset.riskAssets.crypto.trend === 'up' && data.crossAsset.riskAssets.tech.trend === 'up' ? 'Risk assets rallying → Full Risk-On' : data.crossAsset.riskAssets.crypto.trend === 'down' ? 'Risk assets selling → Risk-Off' : 'Risk assets mixed → Selective'}
                   conclusionType={data.crossAsset.riskAssets.crypto.trend === 'up' ? 'risk-on' : data.crossAsset.riskAssets.crypto.trend === 'down' ? 'risk-off' : 'mixed'}

@@ -21,7 +21,6 @@ const LOGO_TEXT_ONLY = '/logo-text.png'; // Text-only logo (or use the same if y
 interface Template {
   id: string;
   name: string;
-  nameHe: string;
   aspectRatio: '1:1' | '9:16' | '16:9';
   platform: 'instagram' | 'story' | 'twitter' | 'facebook';
   bgGradient: string;
@@ -36,7 +35,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'premium-dark',
     name: 'Premium Dark',
-    nameHe: 'פרימיום כהה',
     aspectRatio: '1:1',
     platform: 'instagram',
     bgGradient: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 40%, #1a1612 100%)',
@@ -48,7 +46,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'elegant-gold',
     name: 'Elegant Gold',
-    nameHe: 'זהב אלגנטי',
     aspectRatio: '1:1',
     platform: 'instagram',
     bgGradient: 'linear-gradient(145deg, #0a0a0a 0%, #1a1612 50%, #0a0a0a 100%)',
@@ -60,7 +57,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'gold-luxe',
     name: 'Gold Luxe',
-    nameHe: 'זהב יוקרתי',
     aspectRatio: '1:1',
     platform: 'instagram',
     bgGradient: 'linear-gradient(135deg, #C9A646 0%, #A08036 50%, #6B5B44 100%)',
@@ -72,7 +68,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'story-premium',
     name: 'Story Premium',
-    nameHe: 'סטורי פרימיום',
     aspectRatio: '9:16',
     platform: 'story',
     bgGradient: 'linear-gradient(180deg, #0d0d0d 0%, #1a1612 30%, #0d0d0d 70%, #1a1a1a 100%)',
@@ -84,7 +79,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'story-gold',
     name: 'Story Gold',
-    nameHe: 'סטורי זהב',
     aspectRatio: '9:16',
     platform: 'story',
     bgGradient: 'linear-gradient(180deg, #C9A646 0%, #8B7355 40%, #4a3f2e 100%)',
@@ -96,7 +90,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'twitter-elegant',
     name: 'Twitter Elegant',
-    nameHe: 'טוויטר אלגנטי',
     aspectRatio: '16:9',
     platform: 'twitter',
     bgGradient: 'linear-gradient(135deg, #0d0d0d 0%, #1a1612 50%, #0d0d0d 100%)',
@@ -108,7 +101,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'minimal-dark',
     name: 'Minimal Dark',
-    nameHe: 'מינימלי כהה',
     aspectRatio: '1:1',
     platform: 'instagram',
     bgGradient: 'linear-gradient(180deg, #0a0a0a 0%, #111111 100%)',
@@ -120,7 +112,6 @@ const TEMPLATES: Template[] = [
   {
     id: 'signature-black',
     name: 'Signature Black',
-    nameHe: 'חתימה שחור',
     aspectRatio: '1:1',
     platform: 'instagram',
     bgGradient: 'radial-gradient(ellipse at center, #1a1612 0%, #0a0a0a 70%)',
@@ -138,21 +129,21 @@ const DIMENSION_CONFIG = {
   '16:9': { width: 1200, height: 675, displayWidth: 380, displayHeight: 214 },
 };
 
-// Headlines in English and Hebrew
+// Ready-made headline options
 const HEADLINES = [
-  { en: 'Level Up Your Trading', he: 'שדרג את המסחר שלך' },
-  { en: 'Trade Smarter, Not Harder', he: 'סחר חכם, לא קשה' },
-  { en: 'Master Your Trades', he: 'שלוט בעסקאות שלך' },
-  { en: 'Track. Analyze. Profit.', he: 'עקוב. נתח. הרווח.' },
-  { en: 'Your Trading Edge', he: 'היתרון שלך במסחר' },
-  { en: 'Professional Trading Journal', he: 'יומן מסחר מקצועי' },
+  'Level Up Your Trading',
+  'Trade Smarter, Not Harder',
+  'Master Your Trades',
+  'Track. Analyze. Profit.',
+  'Your Trading Edge',
+  'Professional Trading Journal',
 ];
 
 // Discount messages
 const DISCOUNT_MESSAGES = {
-  10: { en: '10% OFF', he: '10% הנחה' },
-  15: { en: '15% OFF', he: '15% הנחה' },
-  20: { en: '20% OFF', he: '20% הנחה' },
+  10: '10% OFF',
+  15: '15% OFF',
+  20: '20% OFF',
 };
 
 export default function AffiliateMarketing() {
@@ -172,8 +163,7 @@ export default function AffiliateMarketing() {
   const [selectedHeadline, setSelectedHeadline] = useState(HEADLINES[0]);
   const [customHeadline, setCustomHeadline] = useState('');
   const [showCode, setShowCode] = useState(true);
-  const [language, setLanguage] = useState<'en' | 'he'>('en');
-  
+
   // Logo loading state
   const [logoLoaded, setLogoLoaded] = useState(false);
 
@@ -228,10 +218,8 @@ export default function AffiliateMarketing() {
 
   // Copy caption to clipboard
   const handleCopyCaption = async () => {
-    const caption = language === 'en' 
-      ? `🚀 Want to level up your trading game? Check out Finotaur - the ultimate trading journal for serious traders!\n\n📊 Track your trades\n📈 Analyze your performance\n🎯 Improve your strategy\n\nUse my code ${affiliateCode} for ${discountPercent}% OFF! 🔥\n\n👉 finotaur.com`
-      : `🚀 רוצים לשדרג את המסחר שלכם? הכירו את Finotaur - יומן המסחר האולטימטיבי לסוחרים רציניים!\n\n📊 עקבו אחרי העסקאות\n📈 נתחו את הביצועים\n🎯 שפרו את האסטרטגיה\n\nהשתמשו בקוד ${affiliateCode} וקבלו ${discountPercent}% הנחה! 🔥\n\n👉 finotaur.com`;
-    
+    const caption = `🚀 Want to level up your trading game? Check out Finotaur - the ultimate trading journal for serious traders!\n\n📊 Track your trades\n📈 Analyze your performance\n🎯 Improve your strategy\n\nUse my code ${affiliateCode} for ${discountPercent}% OFF! 🔥\n\n👉 finotaur.com`;
+
     try {
       await navigator.clipboard.writeText(caption);
       setCaptionCopied(true);
@@ -271,11 +259,9 @@ export default function AffiliateMarketing() {
 
   // Get display dimensions
   const dimensions = DIMENSION_CONFIG[selectedTemplate.aspectRatio];
-  const displayHeadline = customHeadline || (language === 'en' ? selectedHeadline.en : selectedHeadline.he);
-  const discountText = language === 'en' 
-    ? DISCOUNT_MESSAGES[discountPercent as keyof typeof DISCOUNT_MESSAGES].en
-    : DISCOUNT_MESSAGES[discountPercent as keyof typeof DISCOUNT_MESSAGES].he;
-  const useCodeText = language === 'en' ? 'Use code:' : 'השתמשו בקוד:';
+  const displayHeadline = customHeadline || selectedHeadline;
+  const discountText = DISCOUNT_MESSAGES[discountPercent as keyof typeof DISCOUNT_MESSAGES];
+  const useCodeText = 'Use code:';
 
   if (loading) {
     return <AffiliateMarketingSkeletonPage />;
@@ -642,18 +628,16 @@ export default function AffiliateMarketing() {
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <ImageIcon className="h-6 w-6 text-[#C9A646]" />
-          {language === 'en' ? 'Marketing Materials' : 'חומרי שיווק'}
+          Marketing Materials
         </h1>
         <p className="text-gray-400 mt-1">
-          {language === 'en' 
-            ? 'Create professional promotional images for social media' 
-            : 'צור תמונות שיווקיות מקצועיות לרשתות החברתיות'}
+          Create professional promotional images for social media
         </p>
       </div>
 
-      {/* Language Toggle + Your Code */}
+      {/* Your Code */}
       <div className="flex flex-wrap gap-4 items-center justify-between">
-        <div 
+        <div
           className="rounded-xl px-4 py-3 flex-1"
           style={{
             background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.05) 100%)',
@@ -662,54 +646,28 @@ export default function AffiliateMarketing() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-gray-400">{language === 'en' ? 'Your Code:' : 'הקוד שלך:'}</span>
+              <span className="text-gray-400">Your Code:</span>
               <span className="text-2xl font-mono font-bold text-[#C9A646]">{affiliateCode}</span>
             </div>
             <button
               onClick={handleCopyCode}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
-                copied 
+                copied
                   ? "bg-emerald-500/20 text-emerald-400"
                   : "bg-[#C9A646]/20 text-[#C9A646] hover:bg-[#C9A646]/30"
               )}
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? (language === 'en' ? 'Copied!' : 'הועתק!') : (language === 'en' ? 'Copy' : 'העתק')}
+              {copied ? 'Copied!' : 'Copy'}
             </button>
           </div>
-        </div>
-        
-        {/* Language Toggle */}
-        <div className="flex items-center gap-2 bg-black/30 rounded-lg p-1">
-          <button
-            onClick={() => setLanguage('en')}
-            className={cn(
-              "px-4 py-2 rounded-md text-sm font-medium transition-all",
-              language === 'en' 
-                ? "bg-[#C9A646] text-black" 
-                : "text-gray-400 hover:text-white"
-            )}
-          >
-            English
-          </button>
-          <button
-            onClick={() => setLanguage('he')}
-            className={cn(
-              "px-4 py-2 rounded-md text-sm font-medium transition-all",
-              language === 'he' 
-                ? "bg-[#C9A646] text-black" 
-                : "text-gray-400 hover:text-white"
-            )}
-          >
-            עברית
-          </button>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Preview Panel */}
-        <div 
+        <div
           className="rounded-xl p-6"
           style={{
             background: 'linear-gradient(180deg, rgba(26,26,26,0.8) 0%, rgba(20,20,20,0.9) 100%)',
@@ -717,12 +675,12 @@ export default function AffiliateMarketing() {
           }}
         >
           <h3 className="text-lg font-semibold text-white mb-4">
-            {language === 'en' ? 'Preview' : 'תצוגה מקדימה'}
+            Preview
           </h3>
-          
+
           {/* Preview Container */}
           <div className="flex justify-center">
-            <div 
+            <div
               ref={canvasRef}
               style={{
                 width: dimensions.displayWidth,
@@ -748,12 +706,12 @@ export default function AffiliateMarketing() {
               {generating ? (
                 <>
                   <RefreshCw className="h-5 w-5 animate-spin" />
-                  {language === 'en' ? 'Generating...' : 'מייצר...'}
+                  Generating...
                 </>
               ) : (
                 <>
                   <Download className="h-5 w-5" />
-                  {language === 'en' ? 'Download Image' : 'הורד תמונה'}
+                  Download Image
                 </>
               )}
             </button>
@@ -763,7 +721,7 @@ export default function AffiliateMarketing() {
         {/* Customization Panel */}
         <div className="space-y-6">
           {/* Template Selection */}
-          <div 
+          <div
             className="rounded-xl p-6"
             style={{
               background: 'linear-gradient(180deg, rgba(26,26,26,0.8) 0%, rgba(20,20,20,0.9) 100%)',
@@ -772,9 +730,9 @@ export default function AffiliateMarketing() {
           >
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Palette className="h-5 w-5 text-[#C9A646]" />
-              {language === 'en' ? 'Choose Template' : 'בחר תבנית'}
+              Choose Template
             </h3>
-            
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {TEMPLATES.map((template) => (
                 <button
@@ -787,12 +745,12 @@ export default function AffiliateMarketing() {
                       : "border-white/10 hover:border-white/20"
                   )}
                 >
-                  <div 
+                  <div
                     className="w-full h-14 rounded mb-2 flex items-center justify-center"
                     style={{ background: template.bgGradient }}
                   >
                     {/* Mini logo preview */}
-                    <span 
+                    <span
                       className="text-[8px] font-bold"
                       style={{ color: template.accentColor }}
                     >
@@ -800,7 +758,7 @@ export default function AffiliateMarketing() {
                     </span>
                   </div>
                   <p className="text-white text-xs font-medium truncate">
-                    {language === 'en' ? template.name : template.nameHe}
+                    {template.name}
                   </p>
                   <p className="text-gray-500 text-xs">{template.aspectRatio}</p>
                 </button>
@@ -818,9 +776,9 @@ export default function AffiliateMarketing() {
           >
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Type className="h-5 w-5 text-[#C9A646]" />
-              {language === 'en' ? 'Headline' : 'כותרת'}
+              Headline
             </h3>
-            
+
             {/* Pre-made headlines */}
             <div className="grid grid-cols-2 gap-2 mb-4">
               {HEADLINES.map((h, idx) => (
@@ -837,30 +795,29 @@ export default function AffiliateMarketing() {
                       : "bg-black/20 text-gray-300 border border-white/5 hover:border-white/10"
                   )}
                 >
-                  {language === 'en' ? h.en : h.he}
+                  {h}
                 </button>
               ))}
             </div>
-            
+
             {/* Custom headline */}
             <div>
               <label className="block text-sm text-gray-400 mb-2">
-                {language === 'en' ? 'Or write your own:' : 'או כתוב משלך:'}
+                Or write your own:
               </label>
               <input
                 type="text"
                 value={customHeadline}
                 onChange={(e) => setCustomHeadline(e.target.value)}
-                placeholder={language === 'en' ? 'Enter custom headline...' : 'הכנס כותרת מותאמת...'}
+                placeholder="Enter custom headline..."
                 maxLength={40}
                 className="w-full px-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#C9A646]/50"
-                dir={language === 'he' ? 'rtl' : 'ltr'}
               />
             </div>
           </div>
 
           {/* Options */}
-          <div 
+          <div
             className="rounded-xl p-6"
             style={{
               background: 'linear-gradient(180deg, rgba(26,26,26,0.8) 0%, rgba(20,20,20,0.9) 100%)',
@@ -869,9 +826,9 @@ export default function AffiliateMarketing() {
           >
             <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-[#C9A646]" />
-              {language === 'en' ? 'Options' : 'אפשרויות'}
+              Options
             </h3>
-            
+
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -880,13 +837,13 @@ export default function AffiliateMarketing() {
                 className="w-5 h-5 rounded border-white/20 bg-black/30 text-[#C9A646] focus:ring-[#C9A646]/50"
               />
               <span className="text-gray-300">
-                {language === 'en' ? 'Show coupon code on image' : 'הצג קוד קופון בתמונה'}
+                Show coupon code on image
               </span>
             </label>
           </div>
 
           {/* Platform Tips */}
-          <div 
+          <div
             className="rounded-xl p-6"
             style={{
               background: 'linear-gradient(180deg, rgba(26,26,26,0.8) 0%, rgba(20,20,20,0.9) 100%)',
@@ -894,7 +851,7 @@ export default function AffiliateMarketing() {
             }}
           >
             <h3 className="text-lg font-semibold text-white mb-4">
-              {language === 'en' ? 'Recommended Sizes' : 'גדלים מומלצים'}
+              Recommended Sizes
             </h3>
             
             <div className="space-y-3 text-sm">
@@ -920,7 +877,7 @@ export default function AffiliateMarketing() {
       </div>
 
       {/* Quick Share Text */}
-      <div 
+      <div
         className="rounded-xl p-6"
         style={{
           background: 'linear-gradient(180deg, rgba(26,26,26,0.8) 0%, rgba(20,20,20,0.9) 100%)',
@@ -929,63 +886,37 @@ export default function AffiliateMarketing() {
       >
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Share2 className="h-5 w-5 text-[#C9A646]" />
-          {language === 'en' ? 'Ready-to-Use Caption' : 'טקסט מוכן לשימוש'}
+          Ready-to-Use Caption
         </h3>
-        
-        <div 
-          className="bg-black/30 rounded-lg p-4 text-gray-300"
-          dir={language === 'he' ? 'rtl' : 'ltr'}
-        >
-          {language === 'en' ? (
-            <>
-              <p className="mb-4">
-                🚀 Want to level up your trading game? Check out Finotaur - the ultimate trading journal for serious traders!
-              </p>
-              <p className="mb-4">
-                📊 Track your trades<br/>
-                📈 Analyze your performance<br/>
-                🎯 Improve your strategy
-              </p>
-              <p className="text-[#C9A646] font-medium">
-                Use my code <span className="font-mono font-bold">{affiliateCode}</span> for {discountPercent}% OFF! 🔥
-              </p>
-              <p className="mt-4 text-gray-500">
-                👉 finotaur.com
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="mb-4">
-                🚀 רוצים לשדרג את המסחר שלכם? הכירו את Finotaur - יומן המסחר האולטימטיבי לסוחרים רציניים!
-              </p>
-              <p className="mb-4">
-                📊 עקבו אחרי העסקאות<br/>
-                📈 נתחו את הביצועים<br/>
-                🎯 שפרו את האסטרטגיה
-              </p>
-              <p className="text-[#C9A646] font-medium">
-                השתמשו בקוד <span className="font-mono font-bold">{affiliateCode}</span> וקבלו {discountPercent}% הנחה! 🔥
-              </p>
-              <p className="mt-4 text-gray-500">
-                👉 finotaur.com
-              </p>
-            </>
-          )}
+
+        <div className="bg-black/30 rounded-lg p-4 text-gray-300">
+          <p className="mb-4">
+            🚀 Want to level up your trading game? Check out Finotaur - the ultimate trading journal for serious traders!
+          </p>
+          <p className="mb-4">
+            📊 Track your trades<br/>
+            📈 Analyze your performance<br/>
+            🎯 Improve your strategy
+          </p>
+          <p className="text-[#C9A646] font-medium">
+            Use my code <span className="font-mono font-bold">{affiliateCode}</span> for {discountPercent}% OFF! 🔥
+          </p>
+          <p className="mt-4 text-gray-500">
+            👉 finotaur.com
+          </p>
         </div>
-        
+
         <button
           onClick={handleCopyCaption}
           className={cn(
             "mt-4 flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
-            captionCopied 
+            captionCopied
               ? "bg-emerald-500/20 text-emerald-400"
               : "bg-white/5 text-gray-300 hover:bg-white/10"
           )}
         >
           {captionCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          {captionCopied 
-            ? (language === 'en' ? 'Copied!' : 'הועתק!') 
-            : (language === 'en' ? 'Copy Caption' : 'העתק טקסט')}
+          {captionCopied ? 'Copied!' : 'Copy Caption'}
         </button>
       </div>
     </div>

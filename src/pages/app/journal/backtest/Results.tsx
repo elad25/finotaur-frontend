@@ -61,7 +61,7 @@ function buildCard(strategy: any, allTrades: any[]): PlaybookCardData {
 
 function fmtUsd(v: number): string {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
-  return `${sign}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `${sign}$${Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 }
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {

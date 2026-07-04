@@ -616,7 +616,7 @@ export default function AffiliateDashboard() {
                           <p className="text-white font-medium">{ref.referred_user_email}</p>
                           <div className="flex items-center gap-3 mt-1">
                             <p className="text-gray-500 text-sm">
-                              {new Date(ref.signup_date).toLocaleDateString()}
+                              {new Date(ref.signup_date).toLocaleDateString('en-US')}
                             </p>
                             {ref.subscription_plan && (
                               <span className="text-gray-400 text-sm">

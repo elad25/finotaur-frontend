@@ -121,7 +121,7 @@ export default function ForexPairs() {
       <GlassCard padding="md">
         <SectionHeader
           title="All Major Pairs"
-          subtitle={data ? `${sorted.length} pairs · updated ${new Date(data.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Loading…'}
+          subtitle={data ? `${sorted.length} pairs · updated ${new Date(data.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` : 'Loading…'}
         />
 
         {loading && <GlassTableSkeleton rows={10} />}

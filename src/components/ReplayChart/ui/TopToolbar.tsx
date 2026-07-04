@@ -303,7 +303,7 @@ export const TopToolbar: React.FC<TopToolbarProps> = ({
                   Vol
                 </span>
                 <span className={cn('font-semibold', isDark ? 'text-white' : 'text-gray-900')}>
-                  {ohlc.volume.toLocaleString()}
+                  {ohlc.volume.toLocaleString('en-US')}
                 </span>
               </div>
             </>

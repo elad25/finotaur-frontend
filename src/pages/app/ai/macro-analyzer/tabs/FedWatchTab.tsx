@@ -611,7 +611,7 @@ function FedWatchTab() {
       {lastUpdated && (
         <div className="flex items-center justify-center gap-2 text-[10px] text-[#6B6B6B]">
           <Clock className="w-3 h-3" />
-          Fed data from FRED • Updated {new Date(lastUpdated).toLocaleTimeString()}
+          Fed data from FRED • Updated {new Date(lastUpdated).toLocaleTimeString('en-US')}
           <button onClick={refresh} className="text-[#C9A646] hover:text-[#F4D97B] ml-2 flex items-center gap-1">
             <RefreshCw className="w-3 h-3" /> Refresh
           </button>

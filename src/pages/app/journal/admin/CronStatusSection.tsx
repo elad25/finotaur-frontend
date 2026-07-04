@@ -289,7 +289,7 @@ const CronStatusSection: React.FC = () => {
                   Last run: {lastStatus === 'success' ? 'Success' : lastStatus === 'error' ? 'Failed' : 'Pending'}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {new Date(cronStatus.lastRun).toLocaleString()}
+                  {new Date(cronStatus.lastRun).toLocaleString('en-US')}
                 </p>
               </div>
             </div>

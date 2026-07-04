@@ -8,7 +8,7 @@ type Props = { symbol: string };
 
 function fmtNumber(n: number|null, opts: Intl.NumberFormatOptions = {}) {
   if (n==null || Number.isNaN(n)) return "—";
-  return new Intl.NumberFormat(undefined, opts).format(n);
+  return new Intl.NumberFormat('en-US', opts).format(n);
 }
 function fmtPct(n: number|null) {
   if (n==null || Number.isNaN(n)) return "—";

@@ -461,7 +461,7 @@ function OverviewTab() {
       {lastUpdated && (
         <div className="flex items-center justify-center gap-2 text-xs text-[#6B6B6B]">
           <CheckCircle className="w-3 h-3 text-[#22C55E]" />
-          Data from FRED & Yahoo Finance • Updated {new Date(lastUpdated).toLocaleTimeString()}
+          Data from FRED & Yahoo Finance • Updated {new Date(lastUpdated).toLocaleTimeString('en-US')}
           <button onClick={refresh} className="text-[#C9A646] hover:text-[#F4D97B] ml-2 flex items-center gap-1">
             <RefreshCw className="w-3 h-3" /> Refresh
           </button>

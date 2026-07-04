@@ -30,7 +30,7 @@ export function formatCurrency(value: number): string {
   if (Math.abs(value) >= 1e12) return `$${(value / 1e12).toFixed(1)}T`;
   if (Math.abs(value) >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
   if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
-  return `$${value.toLocaleString()}`;
+  return `$${value.toLocaleString('en-US')}`;
 }
 
 // Color getters

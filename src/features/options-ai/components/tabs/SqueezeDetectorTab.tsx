@@ -252,7 +252,7 @@ const CandidateCard = memo(function CandidateCard({ candidate, index }: { candid
               {/* Compact metrics — two columns */}
               <div className="grid grid-cols-2 gap-x-8 divide-y divide-white/[0.04]" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                 <div className="divide-y divide-white/[0.04]">
-                  <CompactMetric rationaleKey="callWallOI" label="Call Wall OI" value={candidate.callWallOI.toLocaleString()}
+                  <CompactMetric rationaleKey="callWallOI" label="Call Wall OI" value={candidate.callWallOI.toLocaleString('en-US')}
                     intensity={candidate.callWallOI > 100000 ? 'high' : candidate.callWallOI > 50000 ? 'medium' : 'low'} />
                   <CompactMetric rationaleKey="gexValue" label="GEX Exposure" value={`${candidate.gexValue > 0 ? '+' : ''}${candidate.gexValue}B`}
                     intensity={gexIntensity} />

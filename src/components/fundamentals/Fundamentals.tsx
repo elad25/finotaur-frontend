@@ -94,6 +94,6 @@ export function ContextFooter({data}:{data:any}){
     <div className="mt-1 text-[11px] text-neutral-600">Sources: SEC (filings + submissions), Polygon (price)</div>
   </div>);
 }
-function fmtNum(n:any){ return (typeof n==='number' ? `${n.toLocaleString()}` : '—'); }
+function fmtNum(n:any){ return (typeof n==='number' ? `${n.toLocaleString('en-US')}` : '—'); }
 function fmtCap(n:any){ return (typeof n==='number' ? `$${(n/1e9).toFixed(1)}B` : '—'); }
 function fmtPct(n:any){ return (typeof n==='number' ? `${n.toFixed(1)}%` : '—'); }

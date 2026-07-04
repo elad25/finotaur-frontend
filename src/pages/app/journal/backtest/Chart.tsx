@@ -135,7 +135,7 @@ export default function Chart() {
             <span className="text-sm text-white font-medium">
               {activeSession.name}
               <span className="text-gray-500 font-normal">
-                {" · "}{displaySymbol(activeSession.symbol)} · ${activeSession.startBalance.toLocaleString()}
+                {" · "}{displaySymbol(activeSession.symbol)} · ${activeSession.startBalance.toLocaleString('en-US')}
               </span>
             </span>
           )}
@@ -203,7 +203,7 @@ export default function Chart() {
                   <div className="min-w-0">
                     <p className="text-white font-medium truncate">{s.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {displaySymbol(s.symbol)} · ${s.startBalance.toLocaleString()}
+                      {displaySymbol(s.symbol)} · ${s.startBalance.toLocaleString('en-US')}
                       {s.strategyName ? ` · ${s.strategyName}` : ""}
                     </p>
                   </div>

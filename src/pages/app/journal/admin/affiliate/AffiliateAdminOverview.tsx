@@ -124,7 +124,7 @@ export default function AffiliateAdminOverview() {
     },
     {
       label: 'Total Clicks',
-      value: stats.total_clicks.toLocaleString(),
+      value: stats.total_clicks.toLocaleString('en-US'),
       subValue: `${stats.conversion_rate.toFixed(1)}% conversion`,
       icon: MousePointer,
       color: 'text-purple-400',
@@ -132,7 +132,7 @@ export default function AffiliateAdminOverview() {
     },
     {
       label: 'Total Signups',
-      value: stats.total_signups.toLocaleString(),
+      value: stats.total_signups.toLocaleString('en-US'),
       subValue: `${stats.qualification_rate.toFixed(1)}% qualified`,
       icon: UserCheck,
       color: 'text-green-400',
@@ -140,7 +140,7 @@ export default function AffiliateAdminOverview() {
     },
     {
       label: 'Qualified Referrals',
-      value: stats.total_qualified.toLocaleString(),
+      value: stats.total_qualified.toLocaleString('en-US'),
       subValue: 'Paying customers',
       icon: TrendingUp,
       color: 'text-emerald-400',
@@ -148,7 +148,7 @@ export default function AffiliateAdminOverview() {
     },
     {
       label: 'Total Commissions',
-      value: `$${stats.total_commissions_usd.toLocaleString()}`,
+      value: `$${stats.total_commissions_usd.toLocaleString('en-US')}`,
       subValue: 'All time',
       icon: DollarSign,
       color: 'text-[#D4AF37]',
@@ -156,7 +156,7 @@ export default function AffiliateAdminOverview() {
     },
     {
       label: 'Pending Payouts',
-      value: `$${stats.total_pending_payouts_usd.toLocaleString()}`,
+      value: `$${stats.total_pending_payouts_usd.toLocaleString('en-US')}`,
       subValue: 'To be paid',
       icon: DollarSign,
       color: 'text-orange-400',
@@ -165,7 +165,7 @@ export default function AffiliateAdminOverview() {
     },
     {
       label: 'Est. Revenue',
-      value: `$${stats.total_revenue_usd.toLocaleString()}`,
+      value: `$${stats.total_revenue_usd.toLocaleString('en-US')}`,
       subValue: 'From affiliates',
       icon: TrendingUp,
       color: 'text-cyan-400',
@@ -300,7 +300,7 @@ export default function AffiliateAdminOverview() {
                       {app.status}
                     </span>
                     <span className="text-gray-500 text-xs">
-                      {new Date(app.created_at).toLocaleDateString()}
+                      {new Date(app.created_at).toLocaleDateString('en-US')}
                     </span>
                   </div>
                 </div>

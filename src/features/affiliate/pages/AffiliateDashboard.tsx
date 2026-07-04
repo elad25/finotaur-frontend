@@ -64,7 +64,6 @@ import type { AffiliateTier, AffiliateCommission } from '../types/affiliate.type
 const REFERRAL_STATUS_CONFIG = {
   pending: {
     label: 'Awaiting Payment',
-    labelHe: 'ממתין לתשלום',
     color: 'text-gray-400',
     bgColor: 'bg-gray-500/10',
     borderColor: 'border-gray-500/30',
@@ -72,7 +71,6 @@ const REFERRAL_STATUS_CONFIG = {
   },
   verification_pending: {
     label: 'In Verification',
-    labelHe: 'בתקופת אימות',
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-500/10',
     borderColor: 'border-yellow-500/30',
@@ -80,23 +78,20 @@ const REFERRAL_STATUS_CONFIG = {
   },
   verification_failed: {
     label: 'Verification Failed',
-    labelHe: 'נכשל באימות',
     color: 'text-red-400',
     bgColor: 'bg-red-500/10',
     borderColor: 'border-red-500/30',
     icon: XCircle,
   },
   qualified: {
-    label: 'Qualified',
-    labelHe: 'זכאי לעמלה',
+    label: 'Eligible for Commission',
     color: 'text-green-400',
     bgColor: 'bg-green-500/10',
     borderColor: 'border-green-500/30',
     icon: CheckCircle,
   },
   churned: {
-    label: 'Churned',
-    labelHe: 'בוטל',
+    label: 'Cancelled',
     color: 'text-red-400',
     bgColor: 'bg-red-500/10',
     borderColor: 'border-red-500/30',
@@ -104,7 +99,6 @@ const REFERRAL_STATUS_CONFIG = {
   },
   refunded: {
     label: 'Refunded',
-    labelHe: 'הוחזר',
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/10',
     borderColor: 'border-orange-500/30',
@@ -679,7 +673,7 @@ function ReferralsTab() {
                         {referral.referred_user_email?.replace(/(.{3}).*(@.*)/, '$1***$2')}
                       </p>
                       <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span>Signed up {new Date(referral.signup_date || referral.created_at).toLocaleDateString()}</span>
+                        <span>Signed up {new Date(referral.signup_date || referral.created_at).toLocaleDateString('en-US')}</span>
                         {referral.subscription_plan && (
                           <>
                             <span>•</span>
@@ -923,7 +917,7 @@ function PayoutsTab() {
                         <span>Ref: {payout.transaction_id}</span>
                       )}
                       {payout.completed_at && (
-                        <span>• Paid {new Date(payout.completed_at).toLocaleDateString()}</span>
+                        <span>• Paid {new Date(payout.completed_at).toLocaleDateString('en-US')}</span>
                       )}
                     </div>
                   </div>

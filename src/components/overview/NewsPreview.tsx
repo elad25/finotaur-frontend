@@ -136,7 +136,7 @@ export default function NewsPreview({ symbol }: { symbol: string }){
               <div className="flex items-center gap-2 text-sm text-zinc-500 mb-4">
                 <span>{active.source || '—'}</span>
                 <span>•</span>
-                <span>{active.publishedAt ? new Date(active.publishedAt).toLocaleString() : '—'}</span>
+                <span>{active.publishedAt ? new Date(active.publishedAt).toLocaleString('en-US') : '—'}</span>
                 {active.sentiment && (
                   <>
                     <span>•</span>

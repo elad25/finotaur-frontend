@@ -101,7 +101,7 @@ export default function CatalystDeckView({ data }: Props) {
         <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
         <div className="space-y-0.5">
           <div>
-            Scan: {fetchedDate.toLocaleString()} · {data.meta.eventCount} events ·
+            Scan: {fetchedDate.toLocaleString('en-US')} · {data.meta.eventCount} events ·
             {data.meta.fewShotCount > 0
               ? ` ${data.meta.fewShotCount} few-shot patterns`
               : ' no calibration patterns yet'}

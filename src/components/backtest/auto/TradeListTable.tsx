@@ -97,7 +97,7 @@ export function TradeListTable() {
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-ink-primary">Trades</h3>
         <span className="text-[12px] text-ink-tertiary">
-          {trades.length.toLocaleString()} executed · {detectionsWithoutTrades.toLocaleString()}{' '}
+          {trades.length.toLocaleString('en-US')} executed · {detectionsWithoutTrades.toLocaleString('en-US')}{' '}
           detections without a trade
         </span>
       </div>

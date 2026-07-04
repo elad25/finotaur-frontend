@@ -160,7 +160,7 @@ const FundamentalsTab = memo(function FundamentalsTab({ coin }: { coin: any }) {
         <SectionHeader title="Links & Community" />
         <div className="flex flex-wrap gap-2">{linkItems.map(l => <a key={l.u} href={l.u} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 rounded-lg bg-white/[0.05] text-white/50 text-[11px] hover:bg-white/[0.08] hover:text-white/70 transition-all">{l.l}</a>)}</div>
       </GlassCard>
-      {coin.developer_data && <GlassCard><SectionHeader title="Developer Activity" /><div className="grid grid-cols-3 gap-3">{[['⭐ Stars', coin.developer_data.stars], ['🔀 Forks', coin.developer_data.forks], ['📝 Commits/4w', coin.developer_data.commit_count_4_weeks]].map(([l, v]: any) => <div key={l} className="text-center"><p className="text-[10px] text-white/25">{l}</p><p className="text-sm font-bold text-white/60 font-mono">{v?.toLocaleString() || '—'}</p></div>)}</div></GlassCard>}
+      {coin.developer_data && <GlassCard><SectionHeader title="Developer Activity" /><div className="grid grid-cols-3 gap-3">{[['⭐ Stars', coin.developer_data.stars], ['🔀 Forks', coin.developer_data.forks], ['📝 Commits/4w', coin.developer_data.commit_count_4_weeks]].map(([l, v]: any) => <div key={l} className="text-center"><p className="text-[10px] text-white/25">{l}</p><p className="text-sm font-bold text-white/60 font-mono">{v?.toLocaleString('en-US') || '—'}</p></div>)}</div></GlassCard>}
     </div>
   );
 });

@@ -369,7 +369,7 @@ export default function MacroOverview() {
             <span className="text-sm text-slate-400">
               {dataSource === 'cache' && cachedAt 
                 ? `Last close ${formatCacheTime(cachedAt)}`
-                : `Updated ${lastUpdate ? lastUpdate.toLocaleTimeString() : '—'}`
+                : `Updated ${lastUpdate ? lastUpdate.toLocaleTimeString('en-US') : '—'}`
               }
             </span>
             

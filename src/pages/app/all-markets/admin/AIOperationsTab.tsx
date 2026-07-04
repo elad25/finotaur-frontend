@@ -244,7 +244,7 @@ export default function AIOperationsTab() {
           </div>
           {costData && (
             <span className="text-[11px] text-ink-tertiary font-mono">
-              Updated {new Date(costData.generatedAt).toLocaleTimeString()}
+              Updated {new Date(costData.generatedAt).toLocaleTimeString('en-US')}
             </span>
           )}
         </header>
@@ -266,7 +266,7 @@ export default function AIOperationsTab() {
               <div className="bg-surface-1 border-[0.5px] border-border-ds-subtle rounded-[12px] p-ds-4">
                 <div className="text-[11px] uppercase tracking-[1.5px] text-ink-tertiary mb-ds-2">Calls Today</div>
                 <div className="font-mono tabular-nums text-[28px] text-ink-primary leading-none">
-                  {costData.callsToday.toLocaleString()}
+                  {costData.callsToday.toLocaleString('en-US')}
                 </div>
               </div>
               <div className="bg-surface-1 border-[0.5px] border-border-ds-subtle rounded-[12px] p-ds-4">
@@ -459,7 +459,7 @@ export default function AIOperationsTab() {
                       {err.status}
                     </Badge>
                     <span className="text-ink-secondary text-[12px] font-mono truncate flex-1">{err.path}</span>
-                    <span className="text-ink-tertiary text-[11px] font-mono">{new Date(err.ts).toLocaleTimeString()}</span>
+                    <span className="text-ink-tertiary text-[11px] font-mono">{new Date(err.ts).toLocaleTimeString('en-US')}</span>
                   </div>
                   <div className="text-ink-secondary text-[12px] mb-ds-1">{err.message}</div>
                   {err.requestId && <div className="text-ink-tertiary text-[10px] font-mono">req: {err.requestId}</div>}

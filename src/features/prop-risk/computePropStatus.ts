@@ -135,9 +135,9 @@ function buildRecommendation(
   if (buffer <= 0) {
     rationale = 'Account is at or below its drawdown floor — do not add risk.';
   } else if (ctx.dailyRemaining != null && risk > 0 && risk === Math.floor(ctx.dailyRemaining / 3 / 10) * 10) {
-    rationale = `Capped by today's daily-loss room. Risking $${risk.toLocaleString()} keeps ~3 trades of daily buffer.`;
+    rationale = `Capped by today's daily-loss room. Risking $${risk.toLocaleString('en-US')} keeps ~3 trades of daily buffer.`;
   } else {
-    rationale = `Risking $${risk.toLocaleString()} per trade lets the drawdown buffer absorb ~${losersSurvivable} losers in a row.`;
+    rationale = `Risking $${risk.toLocaleString('en-US')} per trade lets the drawdown buffer absorb ~${losersSurvivable} losers in a row.`;
   }
 
   return { remainingToTarget, recommendedRiskPerTrade: risk, losersSurvivable, rationale };

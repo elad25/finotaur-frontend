@@ -980,7 +980,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
         </span>
         {hook.lastPrice !== null && (
           <span className="font-mono text-[#C9A646] text-sm font-semibold">
-            ${hook.lastPrice.toLocaleString(undefined, {
+            ${hook.lastPrice.toLocaleString('en-US', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}

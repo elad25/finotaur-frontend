@@ -825,7 +825,7 @@ const {
         
         st.setOpenAt(selectedDate.toISOString());
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        toast.success(`Date set to ${selectedDate.toLocaleDateString()}`);
+        toast.success(`Date set to ${selectedDate.toLocaleDateString('en-US')}`);
       } catch (error) {
         toast.error('Invalid date format');
       }
@@ -2753,7 +2753,7 @@ if (hasResult && directRiskUSD > 0) {
                           <div>
                             <Label className="text-xs text-zinc-400 mb-2 block">Est. Liquidation Price</Label>
                             <div className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 flex items-center justify-end px-3 text-zinc-200 text-sm tabular-nums">
-                              {liqPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                              {liqPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
                             </div>
                             <p className="text-xs text-zinc-500 mt-1">Estimate — excludes maintenance margin &amp; fees.</p>
                           </div>

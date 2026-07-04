@@ -715,10 +715,10 @@ export const GammaExposureChart = memo(({ chain, currentPrice, ticker }: GammaEx
 
                 {/* OI */}
                 <text x={ttX + 16} y={ttY + 100} fill="#3B82F6" fontSize="8" fontFamily="monospace">
-                  Call OI: {hoverData.callOI.toLocaleString()}
+                  Call OI: {hoverData.callOI.toLocaleString('en-US')}
                 </text>
                 <text x={ttX + 16} y={ttY + 113} fill="#EF4444" fontSize="8" fontFamily="monospace">
-                  Put OI: {hoverData.putOI.toLocaleString()}
+                  Put OI: {hoverData.putOI.toLocaleString('en-US')}
                 </text>
 
                 {/* Distance from price */}
