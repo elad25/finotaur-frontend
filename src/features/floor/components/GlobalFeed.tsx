@@ -8,7 +8,7 @@
 // fetchNextPage() when visible and hasNextPage is true.
 
 import { useEffect, useRef, useState } from 'react';
-import { UserCog } from 'lucide-react';
+import { UserCog, ShieldCheck } from 'lucide-react';
 import { DataState } from '@/components/ds/DataState';
 import { Skeleton } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
@@ -190,6 +190,31 @@ function LoadingMore() {
   );
 }
 
+// ── Verified-only notice ───────────────────────────────────────────────────────
+
+function VerifiedOnlyNotice() {
+  return (
+    <div
+      className="flex items-start gap-3 px-4 py-3 rounded-[12px]"
+      style={{
+        background: 'rgba(201,166,70,0.06)',
+        border: '1px solid rgba(201,166,70,0.22)',
+      }}
+    >
+      <ShieldCheck
+        className="h-[18px] w-[18px] flex-shrink-0 mt-[1px]"
+        style={{ color: '#C9A646' }}
+      />
+      <p className="font-sans text-[12.5px] leading-relaxed text-ink-secondary">
+        <span className="font-semibold text-ink-primary">Verified trades only.</span>{' '}
+        Everything on the feed is pulled straight from a connected broker — real
+        fills, real results. You can’t post screenshots or trades that weren’t
+        actually executed through your broker.
+      </p>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function GlobalFeed() {
@@ -281,6 +306,9 @@ export function GlobalFeed() {
             onOpenComposer={() => setComposerOpen(true)}
             onOpenProfile={() => setProfileOpen(true)}
           />
+
+          {/* Verified-only notice */}
+          <VerifiedOnlyNotice />
 
           {/* Feed list */}
           <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle overflow-hidden">
