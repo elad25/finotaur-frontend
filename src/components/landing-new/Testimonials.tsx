@@ -103,7 +103,7 @@ function TestimonialCard({ t }: { t: Testimonial }) {
   return (
     <div
       className={[
-        "flex-shrink-0 w-[380px] p-6 rounded-2xl relative group transition-all duration-300",
+        "flex-shrink-0 w-[calc(100vw-64px)] max-w-[380px] sm:w-[380px] p-6 rounded-2xl relative group transition-all duration-300",
         "bg-section-card-rest border border-gold-border",
         "shadow-card-rest hover:shadow-card-hover",
       ].join(" ")}
@@ -178,8 +178,26 @@ const Testimonials = () => {
     if (!scrollContainer) return;
 
     const scrollSpeed = 0.5;
-    const cardWidth = 400;
-    const totalWidth = cardWidth * testimonials.length;
+
+    // Measure the real rendered card width (incl. flex gap) at runtime —
+    // the card is responsive (calc(100vw-64px) below sm), so a hardcoded
+    // px value would desync the loop-reset point from the actual layout.
+    const getCardStep = () => {
+      const firstCard = scrollContainer.firstElementChild as HTMLElement | null;
+      const secondCard = scrollContainer.children[1] as HTMLElement | null;
+      if (!firstCard) return 400;
+      const gap = secondCard ? secondCard.offsetLeft - firstCard.offsetLeft - firstCard.offsetWidth : 0;
+      return firstCard.offsetWidth + gap;
+    };
+
+    let cardWidth = getCardStep();
+    let totalWidth = cardWidth * testimonials.length;
+
+    const handleResize = () => {
+      cardWidth = getCardStep();
+      totalWidth = cardWidth * testimonials.length;
+    };
+    window.addEventListener('resize', handleResize);
 
     let animationId: number;
 
@@ -193,7 +211,10 @@ const Testimonials = () => {
     };
 
     animationId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationId);
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', handleResize);
+    };
   }, [isPaused]);
 
   return (

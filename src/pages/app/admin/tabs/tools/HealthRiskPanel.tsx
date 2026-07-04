@@ -113,7 +113,7 @@ export function HealthRiskPanel() {
       )}
 
       {/* Distribution */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {distribution.map(({ bucket, count, percent }) => {
           const meta = BUCKET_META[bucket];
           return (
@@ -188,71 +188,73 @@ export function HealthRiskPanel() {
         )}
 
         {riskiest.length > 0 && (
-          <table className="w-full text-sm">
-            <thead className="bg-[#0A0A0A] text-gray-500 text-xs uppercase tracking-wide">
-              <tr>
-                <th className="text-left px-5 py-2 font-medium">User</th>
-                <th className="text-left px-5 py-2 font-medium">Plan</th>
-                <th className="text-right px-5 py-2 font-medium">Score</th>
-                <th className="text-left px-5 py-2 font-medium">Why</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {riskiest.map(({ user, health }) => {
-                const meta = BUCKET_META[health.bucket];
-                return (
-                  <tr
-                    key={user.id}
-                    className="border-t border-gray-800 hover:bg-white/[0.02]"
-                  >
-                    <td className="px-5 py-3">
-                      <p className="text-white text-sm font-medium truncate max-w-[200px]">
-                        {user.display_name || user.email}
-                      </p>
-                      {user.display_name && (
-                        <p className="text-[11px] text-gray-500 truncate max-w-[200px]">
-                          {user.email}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="bg-[#0A0A0A] text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-5 py-2 font-medium">User</th>
+                  <th className="text-left px-5 py-2 font-medium">Plan</th>
+                  <th className="text-right px-5 py-2 font-medium">Score</th>
+                  <th className="text-left px-5 py-2 font-medium">Why</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {riskiest.map(({ user, health }) => {
+                  const meta = BUCKET_META[health.bucket];
+                  return (
+                    <tr
+                      key={user.id}
+                      className="border-t border-gray-800 hover:bg-white/[0.02]"
+                    >
+                      <td className="px-5 py-3">
+                        <p className="text-white text-sm font-medium truncate max-w-[200px]">
+                          {user.display_name || user.email}
                         </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs text-gray-400">
-                        {user.account_type}
-                      </span>
-                      {user.subscription_interval && (
-                        <span className="text-[11px] text-gray-600 ml-1">
-                          ({user.subscription_interval})
+                        {user.display_name && (
+                          <p className="text-[11px] text-gray-500 truncate max-w-[200px]">
+                            {user.email}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="text-xs text-gray-400">
+                          {user.account_type}
                         </span>
-                      )}
-                    </td>
-                    <td className="text-right px-5 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-xs font-semibold ${meta.bg} ${meta.color}`}
-                      >
-                        {health.score}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <p className="text-xs text-gray-400 line-clamp-2">
-                        {health.negatives.slice(0, 2).join(' · ') ||
-                          '(no specific risk markers)'}
-                      </p>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <Link
-                        to={`/app/admin/users/${user.id}`}
-                        className="text-gray-500 hover:text-[#D4AF37] inline-flex"
-                        title="Open user profile"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        {user.subscription_interval && (
+                          <span className="text-[11px] text-gray-600 ml-1">
+                            ({user.subscription_interval})
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-right px-5 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-xs font-semibold ${meta.bg} ${meta.color}`}
+                        >
+                          {health.score}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <p className="text-xs text-gray-400 line-clamp-2">
+                          {health.negatives.slice(0, 2).join(' · ') ||
+                            '(no specific risk markers)'}
+                        </p>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <Link
+                          to={`/app/admin/users/${user.id}`}
+                          className="text-gray-500 hover:text-[#D4AF37] inline-flex"
+                          title="Open user profile"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 

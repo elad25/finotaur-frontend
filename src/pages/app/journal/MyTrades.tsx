@@ -1166,7 +1166,48 @@ const DaySummaryCard = memo(({
             <div className="text-xs font-semibold uppercase text-ink-secondary">Trades this {period}</div>
             <div className="text-xs text-ink-muted">{day.totalTrades} trades</div>
           </div>
-          <div className="overflow-x-auto rounded-[8px] border border-border-ds-subtle">
+          {/* Mobile card view (<md) — same data/formatters as the desktop grid below */}
+          <div className="space-y-ds-2 md:hidden">
+            {day.trades.map((trade) => {
+              const { pnl, actualR, outcome, isClosed } = getTradeData(trade, oneR, daySummaryRBasisMode);
+              const pnlClass = pnl >= 0 ? "text-emerald-400" : "text-num-negative";
+              const symbolLabel = trade.asset_class === 'options'
+                ? (trade.leg_count ?? 0) > 1
+                  ? `${getStrategyLabel(trade.strategy_type) ?? 'Spread'} · ${trade.leg_count} legs`
+                  : getOptionContractLabel(trade)
+                : trade.symbol;
+
+              return (
+                <button
+                  key={trade.id}
+                  type="button"
+                  onClick={() => onOpenTrade(trade)}
+                  className="w-full rounded-[8px] border border-border-ds-subtle px-ds-3 py-ds-2 text-left text-sm text-ink-primary transition-colors duration-base hover:bg-surface-1"
+                >
+                  <div className="flex items-center justify-between gap-ds-2">
+                    <div className="flex min-w-0 items-center gap-ds-2">
+                      <span className="truncate font-semibold text-ink-primary">{symbolLabel}</span>
+                      <span className={`text-xs font-medium ${trade.side === "LONG" ? "text-emerald-400" : "text-num-negative"}`}>{trade.side}</span>
+                    </div>
+                    <span className={`shrink-0 text-right font-semibold tabular-nums ${isClosed ? pnlClass : "text-ink-muted"}`}>
+                      {isClosed ? formatSignedCurrency(pnl, 2) : "-"}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-ds-2 text-xs text-ink-secondary">
+                    <span className="tabular-nums">
+                      {period === "week" ? formatTradeStamp(trade.open_at, timezone) : formatTradeTime(trade.open_at, timezone)}
+                    </span>
+                    <span className="tabular-nums">
+                      {actualR !== null && actualR !== undefined ? formatRValue(actualR) : outcome}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Desktop grid view (md and up) */}
+          <div className="hidden overflow-x-auto rounded-[8px] border border-border-ds-subtle md:block">
             <div className="min-w-[820px]">
               <div className="grid grid-cols-[112px_1fr_88px_110px_92px_92px_100px_72px] border-b border-border-ds-subtle bg-surface-base/80 px-ds-3 py-ds-2 text-xs font-medium text-ink-muted">
                 <span>{period === "week" ? "Opened" : "Time"}</span>
@@ -1944,8 +1985,8 @@ const stats = useMemo<Stats>(() => {
 
       {/* Search and Actions Bar */}
       <div className="border-b border-zinc-800 bg-zinc-950/30">
-        <div className="p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 flex-1 max-w-md">
+        <div className="p-4 flex flex-wrap items-center justify-between gap-3 md:gap-4 md:flex-nowrap">
+          <div className="flex items-center gap-3 w-full md:flex-1 md:max-w-md">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <Input
@@ -2182,7 +2223,7 @@ const stats = useMemo<Stats>(() => {
 
       {/* Trade Details Dialog */}
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DialogContent className="max-w-[96vw] w-[1450px] h-[92vh] p-0 border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
+        <DialogContent className="w-[calc(100vw-16px)] h-[92dvh] lg:max-w-[96vw] lg:w-[1450px] lg:h-[92vh] p-0 border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
           <DialogTitle className="sr-only">Trade Details</DialogTitle>
           {selectedTrade && (() => {
   const selStrategyCfg = strategyRConfigs?.get?.(selectedTrade.strategy_id ?? '') ?? null;
@@ -2201,9 +2242,9 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
     resolved1R.source === 'stop' ? 'stop' :
     resolved1R.source === 'global' ? 'global 1R' : '—';
             return (
-            <div className="flex h-full max-h-full overflow-hidden">
+            <div className="flex h-full max-h-full flex-col overflow-y-auto overflow-x-hidden lg:flex-row lg:overflow-hidden">
               {/* Left Side - Trade Information */}
-              <div className="w-[400px] border-r border-zinc-800 flex flex-col bg-zinc-900/30 shrink-0">
+              <div className="w-full border-b border-zinc-800 flex flex-col bg-zinc-900/30 shrink-0 lg:w-[400px] lg:border-b-0 lg:border-r">
                 <div className="px-5 py-3 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-900/80 shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
@@ -2242,7 +2283,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 min-h-0 custom-scrollbar">
+                <div className="p-4 space-y-3 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden lg:min-h-0 custom-scrollbar">
                   {/* Engineered Summary Card — replaces Trade Outcome + Price Details + Risk/Reward */}
                   <div className="rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-900/70 to-zinc-900/40 shadow-lg overflow-hidden">
                     {/* gold top accent */}
@@ -2829,7 +2870,7 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
               </div>
 
               {/* Right Side - Tabbed: Chart / Screenshots / Notes */}
-              <div className="flex-1 flex flex-col min-h-0 bg-zinc-950/30">
+              <div className="flex flex-col min-h-[70vh] bg-zinc-950/30 lg:min-h-0 lg:flex-1">
                 <Tabs value={tradeDetailTab} onValueChange={setTradeDetailTab} className="flex flex-1 flex-col min-h-0">
                   <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-3">
                   <TabsList className="h-auto w-fit justify-start gap-1 rounded-lg border border-zinc-800 bg-zinc-900/70 p-1">
