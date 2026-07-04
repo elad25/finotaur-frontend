@@ -1,63 +1,37 @@
 /**
  * AutoBacktest — THE central tab for automated ICT pattern-detection backtests.
  *
- * One cohesive page that consolidates everything:
- *   - Setup builder (all 5 ICT patterns + entry/stop/target/filters/risk)
- *   - Instrument + timeframe + date range
- *   - Run + live progress
- *   - Results: stats, equity curve, trade list, trade detail
- *   - Saved setups / runs library
+ * Two-section layout:
+ *   1) "Describe your strategy" — symbol/timeframe/session basics + a plain-
+ *      English strategy box. Submitting parses the setup via AI, merges it
+ *      onto the defaults (dropdowns win over anything the AI inferred for
+ *      instrument/session), and runs the backtest.
+ *   2) "The results" — headline, $-denominated equity curve, and stat cards,
+ *      all derived from the real trades the engine produced. Below that: the
+ *      full trade list/detail and an on-demand AI read of the run.
  *
- * Founder's requirement: "one central place / one tab with everything defined
- * here." All state lives in useAutoBacktestStore.
+ * The manual builder (SetupBuilderForm — pattern cards, entry/stop/target,
+ * tolerance sliders) is intentionally NOT rendered here anymore; the file is
+ * untouched so nothing is deleted (Forward-Only). Saved setups/runs remain
+ * available via SavedSetupsPanel ("Recent runs").
+ *
+ * All state lives in useAutoBacktestStore.
  */
 
 import { Card } from '@/components/ds/Card';
-import { Button } from '@/components/ds/Button';
-import {
-  POPULAR_CRYPTO_SYMBOLS,
-  SUPPORTED_TIMEFRAMES,
-} from '@/services/backtest/candleSource';
 import {
   useAutoBacktestStore,
   selectAutoSetup,
   selectAutoStatus,
   selectAutoResult,
 } from '@/store/useAutoBacktestStore';
-import { SetupBuilderForm, getSetupGeometryWarnings } from '@/components/backtest/auto/SetupBuilderForm';
 import { RunProgress } from '@/components/backtest/auto/RunProgress';
 import { TradeListTable } from '@/components/backtest/auto/TradeListTable';
 import { TradeDetailPanel } from '@/components/backtest/auto/TradeDetailPanel';
 import { SavedSetupsPanel } from '@/components/backtest/auto/SavedSetupsPanel';
-import { Field, SelectField } from '@/components/backtest/auto/formControls';
-import { NLSetupInput } from './components/NLSetupInput';
-import { PnlHeroChart } from './components/PnlHeroChart';
+import { SetupInputForm } from './components/SetupInputForm';
+import { ResultsSummary } from './components/ResultsSummary';
 import { AIResultAnalysis } from './components/AIResultAnalysis';
-
-// ---------------------------------------------------------------------------
-// Date helpers (ms epoch ↔ yyyy-mm-dd for <input type="date">)
-// ---------------------------------------------------------------------------
-
-function msToDateInput(ms: number): string {
-  // Guard against NaN / invalid epochs — new Date(NaN).toISOString() throws
-  // RangeError and would crash the whole page via the Error Boundary.
-  if (!Number.isFinite(ms)) return '';
-  const d = new Date(ms);
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
-}
-
-function dateInputToMs(value: string, endOfDay = false): number {
-  // Empty or unparseable input → NaN (the caller validates before running).
-  if (!value) return NaN;
-  const base = new Date(`${value}T00:00:00Z`).getTime();
-  if (Number.isNaN(base)) return NaN;
-  return endOfDay ? base + (24 * 60 * 60 * 1000 - 1) : base;
-}
-
-/** A from/to range is runnable only when both ends are finite and ordered. */
-function isValidDateRange(from: number, to: number): boolean {
-  return Number.isFinite(from) && Number.isFinite(to) && from < to;
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -78,20 +52,8 @@ export default function AutoBacktest() {
   const setup = useAutoBacktestStore(selectAutoSetup);
   const status = useAutoBacktestStore(selectAutoStatus);
   const result = useAutoBacktestStore(selectAutoResult);
-  const from = useAutoBacktestStore((s) => s.from);
-  const to = useAutoBacktestStore((s) => s.to);
-  const setInstrument = useAutoBacktestStore((s) => s.setInstrument);
-  const setDateRange = useAutoBacktestStore((s) => s.setDateRange);
-  const runBacktest = useAutoBacktestStore((s) => s.runBacktest);
 
-  const isBusy = status === 'loading-data' || status === 'running';
   const hasResult = status === 'done' && !!result;
-  const dateRangeValid = isValidDateRange(from, to);
-  const geometryWarnings = getSetupGeometryWarnings(setup);
-  const hasGeometryWarning = geometryWarnings.length > 0;
-  const canRun = setup.patterns.length > 0 && !isBusy && dateRangeValid && !hasGeometryWarning;
-
-  const { symbol, timeframe, source } = setup.instrument;
 
   const setupSummary = buildSetupSummary(setup);
 
@@ -102,91 +64,21 @@ export default function AutoBacktest() {
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-gold-primary sm:text-3xl">Automated Backtest</h1>
           <p className="mt-1 text-sm text-ink-tertiary">
-            Define an ICT setup, scan history, get results.
+            Describe an ICT setup in plain English, scan real history, get results.
           </p>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="flex flex-col gap-6">
-            {/* AI natural-language setup generation — above the manual builder */}
-            <NLSetupInput />
-
-            <SetupBuilderForm />
-
-            {/* Instrument + range + run */}
-            <Card padding="default">
-              <h3 className="mb-4 text-sm font-semibold text-ink-primary">Instrument & range</h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <SelectField
-                  label="Symbol"
-                  value={symbol}
-                  options={POPULAR_CRYPTO_SYMBOLS.map((s) => ({ value: s, label: s }))}
-                  onChange={(next) => setInstrument(next, timeframe, source)}
-                />
-                <SelectField
-                  label="Timeframe"
-                  value={timeframe}
-                  options={SUPPORTED_TIMEFRAMES.map((t) => ({ value: t, label: t }))}
-                  onChange={(next) => setInstrument(symbol, next, source)}
-                />
-                <Field label="From">
-                  <input
-                    type="date"
-                    value={msToDateInput(from)}
-                    max={msToDateInput(to)}
-                    onChange={(e) => setDateRange(dateInputToMs(e.target.value), to)}
-                    className="w-full rounded-lg border-[0.5px] border-border-ds-default bg-surface-1 px-3 py-2 text-sm text-ink-primary transition-colors focus:border-gold-primary focus:outline-none"
-                  />
-                </Field>
-                <Field label="To">
-                  <input
-                    type="date"
-                    value={msToDateInput(to)}
-                    min={msToDateInput(from)}
-                    onChange={(e) => setDateRange(from, dateInputToMs(e.target.value, true))}
-                    className="w-full rounded-lg border-[0.5px] border-border-ds-default bg-surface-1 px-3 py-2 text-sm text-ink-primary transition-colors focus:border-gold-primary focus:outline-none"
-                  />
-                </Field>
-              </div>
-
-              <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-                {setup.patterns.length === 0 && (
-                  <p className="text-[12px] text-ink-tertiary">
-                    Select a pattern above to enable the run.
-                  </p>
-                )}
-                {setup.patterns.length > 0 && !dateRangeValid && (
-                  <p className="text-[12px] text-red-400">
-                    Invalid date range — pick a valid From and To (From must be before To).
-                  </p>
-                )}
-                {setup.patterns.length > 0 && dateRangeValid && hasGeometryWarning && (
-                  <p className="text-[12px] text-red-400">
-                    Fix the stop/target settings above — the current values would reject every
-                    signal.
-                  </p>
-                )}
-                <div className="sm:ml-auto">
-                  <Button
-                    variant="gold"
-                    size="lg"
-                    onClick={() => void runBacktest()}
-                    disabled={!canRun}
-                    showArrow={false}
-                  >
-                    {isBusy ? 'Running…' : 'Run Backtest'}
-                  </Button>
-                </div>
-              </div>
-            </Card>
+            <SetupInputForm />
 
             <RunProgress />
 
             {/* ── Results ──────────────────────────────────────────── */}
             {hasResult ? (
               <div className="flex flex-col gap-6">
-                <PnlHeroChart />
+                <ResultsSummary />
                 <TradeListTable />
                 <TradeDetailPanel />
                 {/* AI analysis of the completed run — on-demand, after stats */}
@@ -202,10 +94,10 @@ export default function AutoBacktest() {
                     Backtest any ICT setup against real history
                   </h3>
                   <p className="mt-2 max-w-2xl text-sm text-ink-secondary">
-                    Choose one of the five ICT patterns, tune how it is detected, and set your
-                    entry, stop, and target rules. Pick an instrument and date range, then run the
-                    scan. You will get win rate, profit factor, expectancy, an equity curve, and a
-                    full trade-by-trade breakdown — no coding required.
+                    Describe your strategy in plain English above — instrument, session, and
+                    entry/stop/target logic. FINO parses it into a setup and runs it against real
+                    history. You will get net P&amp;L, win rate, profit factor, max drawdown, an
+                    equity curve, and a full trade-by-trade breakdown — no coding required.
                   </p>
                 </Card>
               )

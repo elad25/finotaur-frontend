@@ -13,7 +13,7 @@ import type { Candle } from '@/components/ReplayChart/types';
 import type { SetupDefinition, PatternParams, PatternType } from '@/core/auto/types';
 import { makeDefaultSetup, DEFAULT_PATTERN_PARAMS } from '@/core/auto/types';
 import type { AutoBacktestResult } from '@/core/auto/AutoBacktestEngine';
-import { getCandleSource } from '@/services/backtest/candleSource';
+import { getCandleSource, sourceForSymbol } from '@/services/backtest/candleSource';
 import { CandleFetchError } from '@/services/backtest/errors';
 import { runAutoBacktestInWorker } from '@/services/backtest/autoBacktestRunner';
 import {
@@ -266,7 +266,7 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
 
       async runBacktest() {
         const { currentSetup, from, to } = get();
-        const { symbol, timeframe, source } = currentSetup.instrument;
+        const { symbol, timeframe } = currentSetup.instrument;
 
         // 1. Load candles.
         set((state) => {
@@ -277,9 +277,15 @@ export const useAutoBacktestStore = create<AutoBacktestStore>()(
           state.selectedTradeIndex = null;
         });
 
+        // Route by symbol, not by the setup's stored `instrument.source`:
+        // futures symbols (MNQ, NQ, ES, ...) are served from Supabase/Databento;
+        // everything else (crypto pairs) keeps using Binance. This keeps the
+        // existing crypto path byte-for-byte unchanged.
+        const resolvedSource = sourceForSymbol(symbol);
+
         let candles: Candle[];
         try {
-          candles = await getCandleSource(source).getCandles(
+          candles = await getCandleSource(resolvedSource).getCandles(
             symbol,
             timeframe,
             from,
