@@ -1986,11 +1986,11 @@ if (hasResult && directRiskUSD > 0) {
                     <div className="flex flex-shrink-0 items-center gap-2">
                       {isFreeJournal ? (
                         <span
-                          title="Screenshot upload is available on Basic and above"
+                          title="Screenshot upload is available on any paid Journal plan"
                           className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#C9A646]/40 bg-[#C9A646]/15 px-3 text-xs font-semibold text-[#C9A646]"
                         >
                           <Lock className="w-3 h-3" />
-                          Upload on <span className="font-bold tracking-wide">Basic+</span>
+                          Upload with a <span className="font-bold tracking-wide">Journal plan</span>
                         </span>
                       ) : (
                         <button
