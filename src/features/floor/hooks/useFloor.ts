@@ -5,7 +5,7 @@
 //         participation state, and join mutation.
 // =====================================================
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 
 // =====================================================
@@ -133,6 +133,7 @@ export function useFloorLeaderboard(
 ) {
   return useQuery<FloorLeaderboardRow[]>({
     queryKey: KEYS.leaderboard(scope, competitionId),
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       if (scope === 'monthly') {
         if (!competitionId) return [];

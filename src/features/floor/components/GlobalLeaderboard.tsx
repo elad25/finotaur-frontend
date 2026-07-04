@@ -36,6 +36,7 @@ import type { FloorLeaderboardRow } from '@/features/floor/hooks/useFloor';
 import { FloorLeaderboardTable } from '@/features/floor/components/FloorLeaderboardTable';
 import { FloorPodium } from '@/features/floor/components/FloorPodium';
 import { FloorCountdown } from '@/features/floor/components/FloorCountdown';
+import { VerifiedTradesNotice } from './VerifiedTradesNotice';
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -838,15 +839,19 @@ export function GlobalLeaderboard() {
   const {
     data: rows,
     isLoading: leaderboardLoading,
+    isFetching: leaderboardFetching,
     isError,
     error,
     refetch,
   } = useFloorLeaderboard(leaderboardScope, competitionId);
 
-  const isLoading =
-    (period === 'monthly' && competitionLoading) || leaderboardLoading;
+  // Full-page skeleton only on the very first load (no rows yet). On period
+  // switches, keepPreviousData retains the prior rows so the header, tabs and
+  // right rail stay mounted and the list swaps in place — no blank flash.
+  const isInitialLoading =
+    ((period === 'monthly' && competitionLoading) || leaderboardLoading) && !rows;
 
-  if (isLoading) return <FloorSkeleton />;
+  if (isInitialLoading) return <FloorSkeleton />;
 
   const showComp = period === 'monthly' && !!competition;
   const phase = showComp
@@ -910,6 +915,14 @@ export function GlobalLeaderboard() {
         </div>
       </div>
 
+      {/* ── Integrity notice: leaderboard is broker-verified only ── */}
+      <VerifiedTradesNotice>
+        <span className="font-semibold text-ink-primary">Verified traders only.</span>{' '}
+        Every rank on this leaderboard is calculated from real broker-connected
+        trades — real fills, real results. No screenshots, no manual entries, no
+        inflated stats.
+      </VerifiedTradesNotice>
+
       {/* ── Current-user standing ── */}
       {myRow && <UserStandingStrip row={myRow} minTrades={minTrades} />}
 
@@ -932,7 +945,11 @@ export function GlobalLeaderboard() {
       {/* ── Two-column: main ranking | competition rail ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-ds-4 items-start">
         {/* Main column — podium + full ranking */}
-        <div className="flex flex-col gap-ds-4 min-w-0">
+        <div
+          className={`flex flex-col gap-ds-4 min-w-0 transition-opacity duration-200 ${
+            leaderboardFetching ? 'opacity-60' : ''
+          }`}
+        >
           {rows && rows.length > 0 && <FloorPodium rows={rows} />}
 
           <DataState
