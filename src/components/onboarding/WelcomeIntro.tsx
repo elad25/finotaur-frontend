@@ -117,7 +117,7 @@ export default function WelcomeIntro() {
       <div
         className="absolute top-0 left-0 w-[560px] h-[560px] rounded-full pointer-events-none"
         style={{
-          background: 'rgba(201,166,70,0.15)',
+          background: 'rgba(201,166,70,0.08)',
           filter: 'blur(180px)',
           transform: 'translate(-30%, -25%)',
         }}
@@ -125,7 +125,7 @@ export default function WelcomeIntro() {
       <div
         className="absolute bottom-0 right-0 w-[560px] h-[560px] rounded-full pointer-events-none"
         style={{
-          background: 'rgba(201,166,70,0.15)',
+          background: 'rgba(201,166,70,0.08)',
           filter: 'blur(180px)',
           transform: 'translate(30%, 25%)',
         }}
@@ -142,9 +142,10 @@ export default function WelcomeIntro() {
         <Card
           variant="featured"
           padding="spacious"
-          className="relative w-full shadow-glow-gold-resting overflow-hidden"
+          className="relative w-full overflow-hidden"
           style={{
             background: 'linear-gradient(180deg, #121212 0%, #0c0c0c 100%)',
+            boxShadow: '0 0 30px rgba(201,166,70,0.07)',
           }}
         >
           {/* Top gold accent line */}
@@ -152,7 +153,7 @@ export default function WelcomeIntro() {
             className="absolute top-0 left-0 right-0"
             style={{
               height: 2,
-              background: 'linear-gradient(90deg, transparent, #C9A646, #F4D97B, #C9A646, transparent)',
+              background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.45), rgba(201,166,70,0.6), rgba(201,166,70,0.45), transparent)',
             }}
           />
 
@@ -165,7 +166,7 @@ export default function WelcomeIntro() {
                 style={{
                   width: 220,
                   height: 80,
-                  background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.28) 0%, transparent 70%)',
+                  background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.14) 0%, transparent 70%)',
                   filter: 'blur(12px)',
                 }}
               />
