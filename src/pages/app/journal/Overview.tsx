@@ -31,6 +31,7 @@ import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useMentorView } from "@/contexts/MentorViewContext";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useJournalDemoMode } from "@/hooks/useJournalDemoMode";
 import {
   useDashboardStats,
   formatCurrency,
@@ -1481,6 +1482,9 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // Matches the pattern documented above (emptyStateDismissed, queryClient):
   // declaration order must match usage order to avoid TDZ after minification.
   const { limits, loading: subscriptionLoading, isPremium } = useSubscription();
+  // Demo mode (zero-trade preview): unlock the paid-gated charts so a new user
+  // sees the full journal value instead of a lock. Flips off with the first real trade.
+  const { isDemo: isJournalDemo } = useJournalDemoMode();
 
   const openAddBrokerPopup = useCallback(() => {
     // Engagement signal: ANY path that opens the AddBroker popup (header
@@ -1704,7 +1708,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // their broker was already connected. Misleading + dead-end UX. Now lock
   // is purely a tier gate (free → paid); empty-data paid users see the
   // unlocked chart with no points until trades close.
-  const isDurationChartLocked = isFreeUser;
+  const isDurationChartLocked = isFreeUser && !isJournalDemo;
   
   // ✅ Determine where to send user when clicking upgrade
   const handleDurationUpgrade = useCallback(() => {
