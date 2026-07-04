@@ -712,7 +712,7 @@ const Hero = () => {
 
       {/* ========== ENHANCED ANIMATED SPOTLIGHT (SVG) ========== */}
       <svg
-        className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[900px] pointer-events-none"
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[450px] md:w-[1200px] md:h-[900px] pointer-events-none"
         viewBox="0 0 1200 900"
         preserveAspectRatio="none"
         aria-hidden="true"
@@ -816,11 +816,11 @@ const Hero = () => {
         <CrossMarker delay={2} />
       </div>
 
-      {/* Faint vertical guide lines that frame the wordmark */}
-      <div className="absolute top-0 left-[18%] w-px h-[460px] bg-gradient-to-b from-transparent via-[#C9A646]/15 to-[#C9A646]/5 pointer-events-none" aria-hidden="true" />
-      <div className="absolute top-0 right-[18%] w-px h-[460px] bg-gradient-to-b from-transparent via-[#C9A646]/15 to-[#C9A646]/5 pointer-events-none" aria-hidden="true" />
-      <div className="absolute top-[180px] left-[18%] right-[18%] h-px bg-gradient-to-r from-transparent via-[#C9A646]/12 to-transparent pointer-events-none" aria-hidden="true" />
-      <div className="absolute top-[460px] left-[18%] right-[18%] h-px bg-gradient-to-r from-transparent via-[#C9A646]/12 to-transparent pointer-events-none" aria-hidden="true" />
+      {/* Faint vertical guide lines that frame the wordmark — hidden on mobile (they'd cut through the H1/CTA at 18%/82% viewport width on narrow screens) */}
+      <div className="hidden md:block absolute top-0 left-[18%] w-px h-[460px] bg-gradient-to-b from-transparent via-[#C9A646]/15 to-[#C9A646]/5 pointer-events-none" aria-hidden="true" />
+      <div className="hidden md:block absolute top-0 right-[18%] w-px h-[460px] bg-gradient-to-b from-transparent via-[#C9A646]/15 to-[#C9A646]/5 pointer-events-none" aria-hidden="true" />
+      <div className="hidden md:block absolute top-[180px] left-[18%] right-[18%] h-px bg-gradient-to-r from-transparent via-[#C9A646]/12 to-transparent pointer-events-none" aria-hidden="true" />
+      <div className="hidden md:block absolute top-[460px] left-[18%] right-[18%] h-px bg-gradient-to-r from-transparent via-[#C9A646]/12 to-transparent pointer-events-none" aria-hidden="true" />
 
       {/* ========== CONTENT ========== */}
       <div className="max-w-[1600px] mx-auto px-6 lg:px-8 relative z-10 w-full flex flex-col items-center">

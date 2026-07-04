@@ -280,9 +280,9 @@ const AISection = () => {
                   aria-hidden="true"
                 />
 
-                {/* Hover accent line at top */}
-                <div className="absolute top-0 left-0 right-0 h-[2px] scale-x-0 group-hover:scale-x-100
-                  transition-transform duration-500 origin-left
+                {/* Accent line at top — visible at reduced opacity on touch (no hover), full on hover */}
+                <div className="absolute top-0 left-0 right-0 h-[2px] scale-x-100 opacity-30 md:scale-x-0 md:opacity-100 group-hover:scale-x-100 group-hover:opacity-100
+                  transition-all duration-500 origin-left
                   bg-gold-primary"
                   aria-hidden="true"
                 />

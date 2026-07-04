@@ -263,7 +263,7 @@ const Pricing = () => {
               filter: "blur(36px)",
             }}
           />
-          <div className="relative grid md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {plans.map((plan, index) => {
             const displayPrice = getDisplayPrice(plan);
             return (
