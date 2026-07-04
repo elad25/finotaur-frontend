@@ -11,6 +11,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { useMentorView } from '@/contexts/MentorViewContext';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { MarketsSidebar } from '@/components/MarketsSidebar';  // נ”¥ NEW
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
@@ -597,17 +598,31 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   const { isMentorView } = useMentorView();
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
+  const isMobile = useIsMobile();
+
   const [isExpanded, setIsExpanded] = useState(() => {
     const saved = localStorage.getItem(storageKey);
     if (saved === null) return defaultExpanded; // first visit per surface
     return saved !== 'false';
   });
+  // Mobile-only overlay open/closed state. Never persisted — every mobile
+  // visit starts closed (off-screen rail), independent of the desktop
+  // isExpanded preference.
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Single source of truth for render-time branching (widths, labels,
+  // chevron direction, tooltips). On mobile it tracks mobileOpen; on
+  // desktop it tracks the persisted isExpanded preference.
+  const effectiveExpanded = isMobile ? mobileOpen : isExpanded;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   // Collapsed-rail hover tooltip. Rendered via a body portal with position:fixed
   // so it escapes the scrolling <nav> (overflow-y-auto), which would otherwise
   // clip an absolutely-positioned pill that sticks out to the right of the rail.
   const [hoverTip, setHoverTip] = useState<{ label: string; desc?: string; beta: boolean; top: number; left: number } | null>(null);
 
+  // CSS var --finotaur-sidebar-width is read by ProtectedAppLayout's <main>
+  // ONLY at md+ (`md:ml-[var(--finotaur-sidebar-width)]`), so it must keep
+  // following the DESKTOP isExpanded state, not effectiveExpanded — the
+  // mobile overlay must never push page content via this var.
   useEffect(() => {
     document.documentElement.style.setProperty(
       '--finotaur-sidebar-width',
@@ -620,6 +635,12 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   }, [isExpanded]);
 
   const handleToggle = () => {
+    if (isMobile) {
+      // Mobile: toggle the overlay only. Never persisted to localStorage —
+      // the desktop preference (storageKey) must stay untouched.
+      setMobileOpen(prev => !prev);
+      return;
+    }
     setIsExpanded(prev => {
       const newValue = !prev;
       localStorage.setItem(storageKey, String(newValue));
@@ -810,11 +831,20 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   };
 
   return (
-    <aside
+    <>
+      {/* Mobile-only backdrop: closes the overlay menu on tap. Never renders at md+. */}
+      {isMobile && mobileOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/50 transition-opacity duration-300 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      <aside
       className={cn(
         'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
-        isExpanded ? 'w-48' : 'w-[60px]'
+        isMobile && !mobileOpen ? '-translate-x-full' : 'translate-x-0',
+        effectiveExpanded ? 'w-48' : 'w-[60px]'
       )}
     >
       {/* נ”¥ Gold Toggle Tab */}
@@ -836,7 +866,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
             "hover:shadow-[0_0_12px_rgba(201,166,70,0.15)]"
           )}
         >
-          {isExpanded ? (
+          {effectiveExpanded ? (
             <ChevronLeft className="h-3.5 w-3.5 text-[#C9A646]/50 group-hover:text-[#C9A646] transition-colors duration-300" />
           ) : (
             <ChevronRight className="h-3.5 w-3.5 text-[#C9A646]/50 group-hover:text-[#C9A646] transition-colors duration-300" />
@@ -847,7 +877,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
         {/* Phase 1: Markets product uses its own asset-aware sidebar */}
         {currentEnvironment === 'markets' ? (
-          <MarketsSidebar isExpanded={isExpanded} />
+          <MarketsSidebar isExpanded={effectiveExpanded} />
         ) : sidebarItems.map((item, index) => {
           if (item.divider) {
             return <div key={`divider-${index}`} className="my-2 border-t border-gray-700" />;
@@ -866,7 +896,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           // Show a subtle lock indicator to beta/admin viewers for items gated from regular users
           const showAdminLockIndicator = hasBetaAccess && (item.locked === true || isBetaItem || isAdminOnlyItem);
           const hasChildren = Boolean(item.children?.length);
-          const childrenOpen = isExpanded && hasChildren && openGroups[item.path];
+          const childrenOpen = effectiveExpanded && hasChildren && openGroups[item.path];
           const parentActive = hasChildren
             ? location.pathname === item.path || item.children?.some(child => location.pathname === child.path)
             : active;
@@ -884,9 +914,13 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
               <button
               onClick={() => {
                 if (hasChildren) {
-                  if (!isExpanded) {
-                    setIsExpanded(true);
-                    localStorage.setItem(storageKey, 'true');
+                  if (!effectiveExpanded) {
+                    if (isMobile) {
+                      setMobileOpen(true);
+                    } else {
+                      setIsExpanded(true);
+                      localStorage.setItem(storageKey, 'true');
+                    }
                     setOpenGroups(prev => ({ ...prev, [item.path]: true }));
                     return;
                   }
@@ -900,13 +934,17 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                   if (!item.locked || hasBetaAccess) {
                     window.open(item.path, '_blank', 'noopener,noreferrer');
                   }
+                  if (isMobile) setMobileOpen(false);
                   return;
                 }
                 handleNavigation(item.path, item.locked);
+                // Close the mobile overlay on navigation so the menu doesn't
+                // stay open over the newly-navigated page.
+                if (isMobile) setMobileOpen(false);
               }}
               onMouseEnter={(e) => {
                 if (!isLocked) handlePrefetch(item.path);
-                if (!isExpanded) {
+                if (!effectiveExpanded) {
                   const r = e.currentTarget.getBoundingClientRect();
                   setHoverTip({
                     label: item.label,
@@ -919,10 +957,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
               }}
               onMouseLeave={() => setHoverTip(null)}
               disabled={isLocked}
-              title={hasChildren && isExpanded ? (childrenOpen ? 'Hide Copilot pages' : 'Show Copilot pages') : undefined}
+              title={hasChildren && effectiveExpanded ? (childrenOpen ? 'Hide Copilot pages' : 'Show Copilot pages') : undefined}
               className={cn(
                 sidebarItemBaseClass,
-                isExpanded ? sidebarItemExpandedClass : sidebarItemCollapsedClass,
+                effectiveExpanded ? sidebarItemExpandedClass : sidebarItemCollapsedClass,
                 isLocked
                   ? 'text-gray-500 cursor-not-allowed opacity-60'
                   : isBackButton
@@ -950,7 +988,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 />
               )}
               
-              {isExpanded && (
+              {effectiveExpanded && (
                 <>
                   <span className={item.label === 'FINOTAUR Copilot' ? sidebarBrandLabelClass : sidebarLabelClass}>
                     {item.label === 'FINOTAUR Copilot' ? (
@@ -1011,7 +1049,10 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                     return (
                       <button
                         key={child.path}
-                        onClick={() => handleNavigation(child.path)}
+                        onClick={() => {
+                          handleNavigation(child.path);
+                          if (isMobile) setMobileOpen(false);
+                        }}
                         onMouseEnter={() => handlePrefetch(child.path)}
                         className={cn(
                           sidebarItemBaseClass,
@@ -1032,7 +1073,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
           );
         })}
       </nav>
-      {!isExpanded && hoverTip && createPortal(
+      {!effectiveExpanded && hoverTip && createPortal(
         <div
           style={{ position: 'fixed', top: hoverTip.top, left: hoverTip.left, transform: 'translateY(-50%)' }}
           className="z-[9999] max-w-[240px] rounded-lg border border-white/15 bg-black px-3 py-2 text-white shadow-lg pointer-events-none"
@@ -1051,6 +1092,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
         </div>,
         document.body
       )}
-    </aside>
+      </aside>
+    </>
   );
 };
