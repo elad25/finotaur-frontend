@@ -76,7 +76,13 @@ export function useAutomationSettings() {
         );
 
       if (e) {
-        toast.error('Failed to save automation settings');
+        const isLockGuard =
+          /locked/i.test(e.message ?? '') || /automation cannot be turned off/i.test(e.message ?? '');
+        toast.error(
+          isLockGuard
+            ? 'Automation stays on while accounts are locked — the lock releases at 5:00 PM CT.'
+            : 'Failed to save automation settings',
+        );
         return { success: false, error: e.message };
       }
       invalidate();
