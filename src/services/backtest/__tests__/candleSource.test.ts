@@ -24,6 +24,13 @@ vi.mock('../binanceDataService', async () => {
   return { ...actual, BinanceDataService: MockBinanceDataService };
 });
 
+// Mock @/lib/supabase BEFORE importing candleSource (hoisted by vitest).
+// candleSource.ts imports the real supabase client at module load, which throws
+// in the vitest env (no VITE_SUPABASE_URL — supabase.ts fails fast by design,
+// ADL-040). The Binance path exercised here never calls supabase, so an empty
+// stub is enough to let the suite load.
+vi.mock('@/lib/supabase', () => ({ supabase: {} }));
+
 import { BinanceCandleSource } from '../candleSource';
 import { dataCacheService } from '../dataCache';
 
