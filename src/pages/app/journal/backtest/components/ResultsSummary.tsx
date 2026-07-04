@@ -261,7 +261,7 @@ function RSelector({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-[11px] font-medium uppercase tracking-[1px] text-ink-tertiary">
-        Reward : Risk
+        Risk : Reward
       </span>
       <div className="flex flex-wrap gap-1.5">
         {R_LADDER_LEVELS.map((r) => {
