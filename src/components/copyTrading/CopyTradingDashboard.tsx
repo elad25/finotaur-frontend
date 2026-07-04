@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertOctagon, AlertTriangle, Ban, ChevronDown, ChevronUp, Crown, Lock, LockOpen, Pencil, Plus, Search, Users, X } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Ban, ChevronDown, ChevronUp, Crown, Lock, Pencil, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { usePortfolios } from '@/hooks/usePortfolios';
@@ -917,18 +917,12 @@ export function CopyTradingDashboard() {
   // Flatten is handled by the local desktop agent — no cloud-engine endpoints.
 
   // ── Lock all / Unlock all ───────────────────────────────────────
-  const { lockAll, unlockAll, isLocking } = useLockAllAccounts();
+  const { lockAll, isLocking } = useLockAllAccounts();
   const [showLockAllConfirm, setShowLockAllConfirm] = useState(false);
-  const [showUnlockAllConfirm, setShowUnlockAllConfirm] = useState(false);
 
   const handleLockAllConfirm = async () => {
     setShowLockAllConfirm(false);
     await lockAll();
-  };
-
-  const handleUnlockAllConfirm = async () => {
-    setShowUnlockAllConfirm(false);
-    await unlockAll();
   };
 
   // ── Flatten All ───────────────────────────────────────────────
@@ -1256,19 +1250,6 @@ export function CopyTradingDashboard() {
             >
               <Lock className="h-4 w-4 flex-shrink-0" />
               {isLocking ? 'Sending…' : 'Lock all accounts'}
-            </button>
-
-            {/* Unlock all accounts */}
-            <button
-              type="button"
-              onClick={() => setShowUnlockAllConfirm(true)}
-              disabled={isLocking}
-              className="flex items-center gap-ds-2 rounded-lg border border-amber-600/60 bg-amber-600/10 px-ds-3 py-ds-2 text-sm font-semibold text-amber-400 shadow-[0_0_14px_rgba(217,119,6,0.08)] transition-colors hover:border-amber-500 hover:bg-amber-600/20 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Unlock all accounts"
-              title="Re-enables copying and manual trading on every account"
-            >
-              <LockOpen className="h-4 w-4 flex-shrink-0" />
-              {isLocking ? 'Sending…' : 'Unlock all accounts'}
             </button>
           </div>
         </div>
@@ -1822,40 +1803,6 @@ export function CopyTradingDashboard() {
             >
               <Lock className="h-4 w-4 flex-shrink-0" />
               Yes, Lock All Accounts
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Unlock All confirm modal ── */}
-      <Dialog open={showUnlockAllConfirm} onOpenChange={setShowUnlockAllConfirm}>
-        <DialogContent className="max-w-md border-amber-600/40 bg-[#0d0f14]">
-          <DialogTitle className="flex items-center gap-ds-2 text-amber-400">
-            <LockOpen className="h-5 w-5 flex-shrink-0" />
-            Unlock All Accounts
-          </DialogTitle>
-
-          <p className="text-sm text-ink-secondary leading-relaxed">
-            This re-enables <span className="font-semibold text-ink-primary">copying and manual trading</span> on
-            every account. Accounts still under a risk-breach lock will remain locked until their own condition
-            clears.
-          </p>
-
-          <div className="mt-ds-2 flex justify-end gap-ds-3">
-            <button
-              type="button"
-              onClick={() => setShowUnlockAllConfirm(false)}
-              className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink-primary"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleUnlockAllConfirm}
-              className="flex items-center gap-ds-2 rounded-md border border-amber-600/60 bg-amber-600/15 px-ds-4 py-ds-2 text-sm font-semibold text-amber-400 transition-colors hover:border-amber-500 hover:bg-amber-600/25 hover:text-amber-300"
-            >
-              <LockOpen className="h-4 w-4 flex-shrink-0" />
-              Yes, Unlock All Accounts
             </button>
           </div>
         </DialogContent>

@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
 import { toast } from 'sonner';
+import { nextSessionOpen } from '@/lib/futuresSession';
 
 /** Inline RPC params type — mirrors automation_upsert_risk_rule's signature
  * (same shape ManageRiskTab.tsx uses for callAgentRiskRpc). */
@@ -96,7 +97,11 @@ async function setKillSwitchForAllPortfolios(
       //    picks up the change).
       const { error } = await supabase
         .from('portfolios')
-        .update({ kill_switch_active: killSwitchActive, updated_at: new Date().toISOString() })
+        .update({
+          kill_switch_active: killSwitchActive,
+          kill_switch_locked_until: killSwitchActive ? nextSessionOpen(new Date()).toISOString() : null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', p.id);
 
       if (error) {
@@ -144,7 +149,6 @@ export function useLockAllAccounts() {
 
   return {
     lockAll:   () => mutation.mutateAsync(true),
-    unlockAll: () => mutation.mutateAsync(false),
     isLocking: mutation.isPending,
   };
 }
