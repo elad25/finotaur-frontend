@@ -31,7 +31,7 @@ const steps = [
     description:
       'AI engine cross-references signals, runs pattern matching, and weighs conviction across timeframes and asset classes.',
     sourcesLabel: 'Powered by',
-    sources: ['Claude Opus', 'Custom Finance Models'],
+    sources: ['Custom Finance Models'],
     Icon: Cpu,
   },
   {
