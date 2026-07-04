@@ -3,14 +3,23 @@
 // Master enable + kill switch toggles, wired to useAutomationSettings.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Power, AlertOctagon } from 'lucide-react';
+import { Power, AlertOctagon, Lock } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { useAutomationSettings } from '../hooks/useAutomationSettings';
+import { usePortfolios } from '@/hooks/usePortfolios';
 
 export function AutomationMasterSwitch() {
   const { settings, upsert, isLoading } = useAutomationSettings();
+  const { portfolios } = usePortfolios();
+  const now = new Date();
+  const anyLocked = portfolios.some(
+    (p) =>
+      (p.kill_switch_active ?? false) &&
+      p.kill_switch_locked_until != null &&
+      new Date(p.kill_switch_locked_until) > now,
+  );
 
   const handleMasterToggle = async (checked: boolean) => {
     await upsert({ master_enabled: checked });
@@ -22,13 +31,29 @@ export function AutomationMasterSwitch() {
 
   return (
     <div className="space-y-3">
+      {anyLocked && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          <span>
+            You have locked accounts. Automation stays on until the lock releases at 5:00 PM
+            CT — you can't turn it off or engage the kill switch until then.
+          </span>
+        </div>
+      )}
       {/* Master enabled */}
       <Card padding="compact">
-        <label className="flex items-start gap-4 cursor-pointer">
+        <label
+          className="flex items-start gap-4 cursor-pointer"
+          title={
+            anyLocked && settings.master_enabled
+              ? "You have locked accounts — automation stays on until the lock releases (5:00 PM CT)."
+              : undefined
+          }
+        >
           <Checkbox
             checked={settings.master_enabled}
             onCheckedChange={(v) => handleMasterToggle(Boolean(v))}
-            disabled={isLoading || settings.kill_switch_engaged}
+            disabled={isLoading || settings.kill_switch_engaged || (anyLocked && settings.master_enabled)}
             className="mt-0.5"
           />
           <div className="min-w-0 flex-1">
@@ -60,11 +85,18 @@ export function AutomationMasterSwitch() {
         padding="compact"
         className={cn(settings.kill_switch_engaged && 'border-red-500/40 bg-red-500/5')}
       >
-        <label className="flex items-start gap-4 cursor-pointer">
+        <label
+          className="flex items-start gap-4 cursor-pointer"
+          title={
+            anyLocked && !settings.kill_switch_engaged
+              ? "Can't engage the kill switch while accounts are locked — it would disable the lock. Releases at 5:00 PM CT."
+              : undefined
+          }
+        >
           <Checkbox
             checked={settings.kill_switch_engaged}
             onCheckedChange={(v) => handleKillSwitch(Boolean(v))}
-            disabled={isLoading}
+            disabled={isLoading || (anyLocked && !settings.kill_switch_engaged)}
             className="mt-0.5"
           />
           <div className="min-w-0 flex-1">
