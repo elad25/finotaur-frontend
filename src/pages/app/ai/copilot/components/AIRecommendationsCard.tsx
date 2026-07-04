@@ -11,6 +11,8 @@ import { CirclePlus, CircleMinus, Minus, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PremiumFrame } from '../brief/PremiumFrame';
 import { useSynthesisBrief } from '../hooks/useSynthesisBrief';
+import { useHoldingVerdicts } from '../hooks/useHoldingVerdicts';
+import { VerdictBadge } from './VerdictBadge';
 import type { SectorCall } from '@/services/copilotSynthesisBriefApi';
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
@@ -81,19 +83,21 @@ interface Props {
 
 export function AIRecommendationsCard({ className }: Props) {
   const { brief, loading } = useSynthesisBrief();
+  const { verdicts, loading: verdictsLoading } = useHoldingVerdicts();
 
   const calls = sortCalls(brief?.sector_calls ?? []).slice(0, 3);
+  const topVerdicts = verdicts.slice(0, 5);
 
   return (
     <PremiumFrame className={`flex flex-col min-h-[280px] ${className ?? ''}`}>
-      {/* pb-14 reserves space for footer */}
-      <div className="flex flex-col flex-1 p-5 pb-14">
+      {/* pb-14 reserves space for footer; overflow-y-auto keeps card height reasonable when both sections render */}
+      <div className="flex flex-col flex-1 overflow-y-auto p-5 pb-14">
         {/* Header */}
         <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
           AI RECOMMENDATIONS
         </p>
 
-        {/* Rows */}
+        {/* Rows — macro sector calls */}
         <div className="mt-4 flex flex-col gap-3">
           {loading ? (
             <p className="text-[11px] text-ink-tertiary py-4 text-center">Loading…</p>
@@ -120,6 +124,47 @@ export function AIRecommendationsCard({ className }: Props) {
                 </div>
               );
             })
+          )}
+        </div>
+
+        {/* Portfolio verdicts — per-holding BUY MORE / HOLD / TRIM / EXIT / HEDGE */}
+        <div className="mt-5 pt-4 border-t border-white/[0.06]">
+          <p className="text-[10px] uppercase tracking-[0.12em] text-gold-primary font-semibold">
+            PORTFOLIO VERDICTS
+          </p>
+          <div className="mt-3 flex flex-col gap-2.5">
+            {verdictsLoading ? (
+              <p className="text-[11px] text-ink-tertiary py-2 text-center">Loading…</p>
+            ) : topVerdicts.length === 0 ? (
+              <p className="text-[11px] text-ink-tertiary py-2 text-center">
+                Portfolio verdicts will appear after the next weekly analysis.
+              </p>
+            ) : (
+              topVerdicts.map((v) => (
+                <div
+                  key={v.symbol}
+                  className="flex items-start justify-between gap-3 rounded-[6px] px-2 py-1.5 hover:bg-gold-primary/[0.04]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-white leading-snug">{v.symbol}</p>
+                    {v.rationale && (
+                      <p className="text-[11px] text-ink-tertiary leading-snug truncate mt-0.5">
+                        {v.rationale}
+                      </p>
+                    )}
+                  </div>
+                  <VerdictBadge verdict={v.verdict} confidence={v.confidence} className="flex-none mt-0.5" />
+                </div>
+              ))
+            )}
+          </div>
+          {topVerdicts.length > 0 && (
+            <Link
+              to="/copilot/holdings"
+              className="mt-2 inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-gold-primary hover:text-gold-bright transition-colors"
+            >
+              View all <ArrowRight className="h-3 w-3" />
+            </Link>
           )}
         </div>
       </div>
