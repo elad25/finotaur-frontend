@@ -291,7 +291,7 @@ export default function AffiliateAdminList() {
                               className="fixed inset-0 z-10" 
                               onClick={() => setActionMenuOpen(null)}
                             />
-                            <div className="absolute right-0 mt-2 w-48 bg-[#1A1A1A] border border-gray-800 rounded-lg shadow-xl z-20 py-1">
+                            <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-[#1A1A1A] border border-gray-800 rounded-lg shadow-xl z-30 py-1">
                               <button
                                 onClick={() => {
                                   setSelectedAffiliate(affiliate);
