@@ -12,7 +12,7 @@
  * ===============================================
  */
 
-import { useEffect, useState, useMemo, memo } from "react";
+import { useEffect, useState, useMemo, useRef, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageTitle from "@/components/PageTitle";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,7 @@ import { toast } from "sonner";
 
 // 🔥 CRITICAL: Same imports as MyTrades!
 import { useTrades, Trade } from "@/hooks/useTradesData";
+import { useJournalDemoMode } from "@/hooks/useJournalDemoMode";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { usePortfolioContext } from "@/contexts/PortfolioContext";
 import { AccountFilterDropdown } from "@/components/journal/AccountFilterDropdown";
@@ -424,6 +425,21 @@ export default function JournalCalendar() {
   
   // Date navigation
   const [currentDate, setCurrentDate] = useState(new Date());
+
+  // Demo mode: open on the last FULL month. The current month is only partially
+  // elapsed so it looks sparse — a zero-trade user should land on a month that's
+  // fully populated with sample trades. Runs once, before any user navigation.
+  const { isDemo: isJournalDemo } = useJournalDemoMode();
+  const demoMonthInit = useRef(false);
+  useEffect(() => {
+    if (isJournalDemo && !demoMonthInit.current) {
+      demoMonthInit.current = true;
+      const prevMonth = new Date();
+      prevMonth.setDate(15); // avoid end-of-month overflow when stepping back
+      prevMonth.setMonth(prevMonth.getMonth() - 1);
+      setCurrentDate(prevMonth);
+    }
+  }, [isJournalDemo]);
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [dateRangeStart, setDateRangeStart] = useState<string>("");
