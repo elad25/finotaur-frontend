@@ -53,7 +53,7 @@ import { runStrategy } from '@/core/backtest/runStrategy';
 import { BacktestReplayChart, type ContextMenuPriceInfo } from './BacktestReplayChart';
 import { DateTimePicker } from './DateTimePicker';
 import { SymbolAutocomplete } from './SymbolAutocomplete';
-import { detectAssetClass, type AssetClass } from './symbolUniverse';
+import { detectAssetClass, sanitizeSourceSymbol, type AssetClass } from './symbolUniverse';
 
 
 // ─── Interval selector config ──────────────────────────────────
@@ -327,7 +327,7 @@ export function BacktestChart({
   theme = 'dark',
   initialCommissionConfig,
 }: BacktestChartProps) {
-  const [symbol, setSymbol] = useState(initialSymbol);
+  const [symbol, setSymbol] = useState(() => sanitizeSourceSymbol(initialSymbol));
   // Asset class is derived from the symbol — no separate user control.
   const assetClass = useMemo<AssetClass>(() => detectAssetClass(symbol), [symbol]);
   // Avoid shadowing the global setInterval — use barInterval / setBarInterval.
@@ -484,7 +484,7 @@ export function BacktestChart({
         const detail = await persistence.loadSession(sessionIdParam);
         if (cancelled) return;
         // 1. Restore chart context (asset/symbol/interval).
-        setSymbol(detail.session.symbol);
+        setSymbol(sanitizeSourceSymbol(detail.session.symbol));
         setBarInterval(detail.session.interval as Interval);
         // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
         const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
