@@ -854,6 +854,9 @@ export function GlobalLeaderboard() {
   if (isInitialLoading) return <FloorSkeleton />;
 
   const showComp = period === 'monthly' && !!competition;
+  // The "Disciplined Five" status card (countdown) shows on ALL period tabs
+  // whenever a competition is active; the detailed rules block stays This-Month.
+  const showCompCard = !!competition;
   const phase = showComp
     ? getPhase(
         competition!.registration_opens_at,
@@ -974,8 +977,8 @@ export function GlobalLeaderboard() {
           </DataState>
         </div>
 
-        {/* Right rail — status + rules (This Month with active competition only) */}
-        {showComp && (
+        {/* Right rail — competition status shows on all tabs; rules This-Month only */}
+        {showCompCard && (
           <div className="flex flex-col gap-ds-4 min-w-0 lg:sticky lg:top-4">
             <CompStatusBlock
               competitionId={competition!.id}
@@ -984,7 +987,7 @@ export function GlobalLeaderboard() {
               periodStart={competition!.period_start}
               periodEnd={competition!.period_end}
             />
-            <CompRulesBlock minTrades={minTrades} />
+            {showComp && <CompRulesBlock minTrades={minTrades} />}
           </div>
         )}
       </div>
