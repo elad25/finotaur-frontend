@@ -31,6 +31,7 @@ import { detectRevenge } from '@/lib/journal/revengeDetection';
 import { HelpCircle, Info, Sparkles } from 'lucide-react';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import RevengeCalendar from '@/components/journal/RevengeCalendar';
+import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -176,6 +177,14 @@ export default function RevengeRadar() {
         <div className="flex flex-col items-center text-center gap-1">
           <h1 className="text-3xl font-bold text-white">Revenge Radar</h1>
           <p className="text-[11px] text-white/62">What revenge trading really costs you.</p>
+        </div>
+        <div className="absolute right-0">
+          <FinoExplains title="What is Revenge Radar?" className="w-fit">
+            Revenge trades are the ones you take within minutes of a loss — usually
+            bigger and off-plan. Revenge Radar flags those sequences across your real
+            trades and tallies exactly what they cost you, so you can see the true
+            price of trading on tilt.
+          </FinoExplains>
         </div>
       </div>
 
