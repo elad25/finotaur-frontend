@@ -24,6 +24,10 @@ import { runDetectors } from './detectors/registry';
 import { buildSignal } from './SignalBuilder';
 import { signalToPosition, type AutoPosition } from './signalToPosition';
 import { candleTimeMs } from './MarketContext';
+import { computeRLadderAggregate, type RLadderAgg } from './rLadderAnalysis';
+
+/** Fixed reward:risk levels the honest-results R-ladder is simulated at. */
+export const R_LADDER_LEVELS = [1, 2, 3, 4, 5];
 
 // ----------------------------------------------------------------------------
 // Narrow structural views of the reused engines. We describe ONLY the methods
@@ -111,6 +115,8 @@ export interface AutoBacktestResult {
   rMultipleDistribution: RMultipleDistribution;
   /** True when raw detections exceeded MAX_DETECTIONS and were truncated. */
   detectionsCapped?: boolean;
+  /** Fill-anchored R-ladder aggregate (honest results, re-scored vs real candles). Optional for backward compatibility. */
+  rLadder?: { perR: RLadderAgg[] };
 }
 
 export function runAutoBacktest(
@@ -267,6 +273,17 @@ export function runAutoBacktest(
   // 6. R-multiple distribution (post-step; engine may omit it).
   const rMultipleDistribution = computeRDistribution(closed);
 
+  // 7. Fill-anchored R-ladder (honest results) — re-scores each real trade's
+  //    outcome against the real candles at fixed reward:risk levels, anchored
+  //    to the ACTUAL fill (entryPrice/stopLoss/entryTime), not the pre-fill
+  //    signal reference. Attach both the per-R aggregate and each trade's own
+  //    outcome map (mutating `closed` in place is safe -- these are the same
+  //    AutoPosition objects returned in `trades`).
+  const { perR, perTrade } = computeRLadderAggregate(closed, candles, R_LADDER_LEVELS);
+  closed.forEach((trade, i) => {
+    trade.rLadder = perTrade[i];
+  });
+
   return {
     detections,
     trades: closed,
@@ -274,6 +291,7 @@ export function runAutoBacktest(
     equityCurve: statistics.equityCurve ?? [],
     rMultipleDistribution,
     detectionsCapped,
+    rLadder: { perR },
   };
 }
 

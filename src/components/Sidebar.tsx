@@ -321,13 +321,13 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // surface lives inline on the Dashboard, and Market Replay is reachable via
   // the Chart page's Immersive Mode button.
   backtest: [
-    { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
-    { label: 'Chart', path: '/app/journal/backtest/chart', icon: PlusCircle },
+    { label: 'Automated Backtest', path: '/app/backtest/auto', icon: FlaskConical, locked: true },
+    { label: 'Dashboard', path: '/app/backtest/overview', icon: FlaskConical },
+    { label: 'Chart', path: '/app/backtest/chart', icon: PlusCircle },
     { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
-    { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
-    { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Layers },
-    { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
-    { label: 'Automated Backtest', path: '/app/journal/backtest/auto', icon: FlaskConical, locked: true },
+    { label: 'My Backtests', path: '/app/backtest/results', icon: FileText },
+    { label: 'Strategy Builder', path: '/app/backtest/builder', icon: Layers },
+    { label: 'Analytics', path: '/app/backtest/analytics', icon: TrendingUp },
   ],
 
   // Trade Copier is GA (open to all users, 2026-07-02).
@@ -655,7 +655,8 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
     if (path.startsWith('/app/journal/admin')) return 'admin';
     if (path.startsWith('/app/journal/affiliate')) return 'affiliate';
     if (path.startsWith('/app/journal/backtest')) return 'backtest';
-    
+    if (path.startsWith('/app/backtest')) return 'backtest';
+
     // Trading Arena (full-screen — sidebar hidden, but environment must resolve)
     if (path.startsWith('/app/trading-arena')) return 'trading-arena';
 
