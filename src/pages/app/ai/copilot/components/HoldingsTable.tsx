@@ -1,5 +1,5 @@
 // src/pages/app/ai/copilot/components/HoldingsTable.tsx
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ds/Card';
 import { Price } from '@/components/ds/NumberDisplay';
@@ -9,6 +9,9 @@ import { getCompanyLogo } from '../utils/companyLogo';
 import { fetchHoldingsFundamentals, type FundamentalsSnapshot } from '@/services/copilotFundamentalsApi';
 import { FundamentalsGradeBadge } from './FundamentalsGradeBadge';
 import { HoldingFundamentalsDrawer } from './HoldingFundamentalsDrawer';
+import { VerdictBadge } from './VerdictBadge';
+import { useHoldingVerdicts } from '../hooks/useHoldingVerdicts';
+import type { HoldingVerdict } from '@/services/copilotVerdictsApi';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface Props {
@@ -73,6 +76,13 @@ function fmtGrowthCell(v: number | null | undefined): string {
   return `${sign}${Math.abs(v).toFixed(1)}%`;
 }
 
+function VerdictCell({ verdict }: { verdict: HoldingVerdict | undefined }) {
+  if (!verdict) {
+    return <span className="text-xs text-ink-tertiary">—</span>;
+  }
+  return <VerdictBadge verdict={verdict.verdict} confidence={verdict.confidence} />;
+}
+
 function FundamentalsCell({
   loading,
   snapshot,
@@ -109,6 +119,7 @@ function FundamentalsCell({
 function HoldingsTableInner({ holdings }: Props) {
   const sorted = [...holdings].sort((a, b) => b.marketValue - a.marketValue);
   const [drilldownSymbol, setDrilldownSymbol] = useState<string | null>(null);
+  const [expandedVerdictSymbol, setExpandedVerdictSymbol] = useState<string | null>(null);
 
   const symbols = sorted.map((h) => h.symbol);
   const { data: fundamentalsMap = {}, isLoading: fundamentalsLoading } = useQuery({
@@ -118,6 +129,9 @@ function HoldingsTableInner({ holdings }: Props) {
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+
+  const { verdicts } = useHoldingVerdicts();
+  const verdictsBySymbol = new Map(verdicts.map((v) => [v.symbol.toUpperCase(), v]));
 
   const drilldownSnapshot = drilldownSymbol
     ? fundamentalsMap[drilldownSymbol.toUpperCase()] ?? null
@@ -145,49 +159,81 @@ function HoldingsTableInner({ holdings }: Props) {
               <th className="text-right font-medium pb-ds-3">Market value</th>
               <th className="text-right font-medium pb-ds-3">P&amp;L $</th>
               <th className="text-right font-medium pb-ds-3">P&amp;L %</th>
+              <th className="text-right font-medium pb-ds-3">Verdict</th>
               <th className="text-right font-medium pb-ds-3">Fundamentals</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map(h => (
-              <tr
-                key={h.symbol}
-                onClick={() => setDrilldownSymbol(h.symbol)}
-                className="cursor-pointer border-b border-gold-primary/10 hover:bg-gold-primary/[0.045] transition-colors"
-              >
-                <td className="py-ds-3">
-                  <div className="flex items-center gap-ds-2">
-                    <div className="shrink-0">
-                      <CompanyLogo symbol={h.symbol} colorClass={symbolBadgeClass(h.symbol)} />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-ink-primary">{h.symbol}</span>
-                      <span className="text-xs text-ink-tertiary">{h.name}</span>
-                    </div>
-                  </div>
-                </td>
-                <td className="text-right font-mono tabular-nums text-ink-secondary">{h.quantity}</td>
-                <td className="text-right"><Price value={h.avgCost} format="currency" /></td>
-                <td className="text-right"><Price value={h.marketPrice} format="currency" /></td>
-                <td className="text-right"><Price value={h.marketValue} format="currency" /></td>
-                <td className="text-right">
-                  <span className={cn('font-mono tabular-nums', changeColor(h.unrealizedPnl))}>
-                    {fmtCurrency(h.unrealizedPnl)}
-                  </span>
-                </td>
-                <td className="text-right">
-                  <span className={cn('font-mono tabular-nums', changeColor(h.unrealizedPnlPercent))}>
-                    {fmtPercent(h.unrealizedPnlPercent)}
-                  </span>
-                </td>
-                <td className="text-right">
-                  <FundamentalsCell
-                    loading={fundamentalsLoading}
-                    snapshot={fundamentalsMap[h.symbol.toUpperCase()]}
-                  />
-                </td>
-              </tr>
-            ))}
+            {sorted.map(h => {
+              const verdict = verdictsBySymbol.get(h.symbol.toUpperCase());
+              const isExpanded = expandedVerdictSymbol === h.symbol;
+              return (
+                <Fragment key={h.symbol}>
+                  <tr
+                    onClick={() => setDrilldownSymbol(h.symbol)}
+                    className="cursor-pointer border-b border-gold-primary/10 hover:bg-gold-primary/[0.045] transition-colors"
+                  >
+                    <td className="py-ds-3">
+                      <div className="flex items-center gap-ds-2">
+                        <div className="shrink-0">
+                          <CompanyLogo symbol={h.symbol} colorClass={symbolBadgeClass(h.symbol)} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-ink-primary">{h.symbol}</span>
+                          <span className="text-xs text-ink-tertiary">{h.name}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="text-right font-mono tabular-nums text-ink-secondary">{h.quantity}</td>
+                    <td className="text-right"><Price value={h.avgCost} format="currency" /></td>
+                    <td className="text-right"><Price value={h.marketPrice} format="currency" /></td>
+                    <td className="text-right"><Price value={h.marketValue} format="currency" /></td>
+                    <td className="text-right">
+                      <span className={cn('font-mono tabular-nums', changeColor(h.unrealizedPnl))}>
+                        {fmtCurrency(h.unrealizedPnl)}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <span className={cn('font-mono tabular-nums', changeColor(h.unrealizedPnlPercent))}>
+                        {fmtPercent(h.unrealizedPnlPercent)}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      {verdict ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedVerdictSymbol(isExpanded ? null : h.symbol);
+                          }}
+                          className="inline-flex"
+                          aria-label={`${isExpanded ? 'Hide' : 'Show'} verdict rationale for ${h.symbol}`}
+                        >
+                          <VerdictCell verdict={verdict} />
+                        </button>
+                      ) : (
+                        <VerdictCell verdict={verdict} />
+                      )}
+                    </td>
+                    <td className="text-right">
+                      <FundamentalsCell
+                        loading={fundamentalsLoading}
+                        snapshot={fundamentalsMap[h.symbol.toUpperCase()]}
+                      />
+                    </td>
+                  </tr>
+                  {isExpanded && verdict && (
+                    <tr className="border-b border-gold-primary/10 bg-white/[0.02]">
+                      <td colSpan={9} className="px-ds-3 py-ds-2" onClick={(e) => e.stopPropagation()}>
+                        <p className="text-xs text-ink-secondary leading-snug">
+                          {verdict.rationale ?? 'No rationale provided for this verdict.'}
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

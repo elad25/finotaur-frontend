@@ -13,9 +13,11 @@ import { X, Sparkles, ArrowRight, TrendingUp, AlertTriangle, Target, Calendar } 
 import { Link } from 'react-router-dom';
 import { PremiumFrame } from '../brief/PremiumFrame';
 import { useSynthesisBrief } from '../hooks/useSynthesisBrief';
+import { useHoldingVerdicts } from '../hooks/useHoldingVerdicts';
 import { TICKER_TO_NAME } from '../utils/opportunityMapper';
 import { computePortfolioHealth, computeRiskAnalysis } from '../utils/portfolioRisk';
 import type { PortfolioSnapshot } from '../hooks/usePortfolioData';
+import type { VerdictType } from '@/services/copilotVerdictsApi';
 
 // ─── Re-usable sub-components (shared with AiAdvicesRail) ────────────────────
 
@@ -53,6 +55,24 @@ function StatusDot({ tone }: { tone: StatusTone }) {
   return <span className={`inline-block h-2 w-2 rounded-full flex-none ${bg}`} />;
 }
 
+const VERDICT_SUMMARY_LABEL: Record<VerdictType, string> = {
+  BUY_MORE: 'BUY MORE',
+  HOLD: 'HOLD',
+  TRIM: 'TRIM',
+  EXIT: 'EXIT',
+  HEDGE: 'HEDGE',
+};
+
+/** Counts verdicts by type, e.g. "2 TRIM · 1 BUY MORE" — omits zero counts, highest count first. */
+function summarizeVerdictCounts(counts: Partial<Record<VerdictType, number>>): string {
+  const order: VerdictType[] = ['TRIM', 'EXIT', 'HEDGE', 'BUY_MORE', 'HOLD'];
+  return order
+    .filter((v) => (counts[v] ?? 0) > 0)
+    .sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0))
+    .map((v) => `${counts[v]} ${VERDICT_SUMMARY_LABEL[v]}`)
+    .join(' · ');
+}
+
 function relativeTime(isoTs: string): string {
   try {
     const diff = Date.now() - new Date(isoTs).getTime();
@@ -74,6 +94,7 @@ interface RailContentProps {
 
 function AiAdvicesRailContent({ snapshot }: RailContentProps) {
   const { brief, loading } = useSynthesisBrief();
+  const { verdicts } = useHoldingVerdicts();
 
   const health = computePortfolioHealth(snapshot.holdings, snapshot.totalValue);
   const risk   = computeRiskAnalysis(snapshot.holdings, snapshot.totalValue);
@@ -96,6 +117,12 @@ function AiAdvicesRailContent({ snapshot }: RailContentProps) {
     : null;
 
   const generatedAt = brief?.generated_at ?? null;
+
+  const verdictCounts = verdicts.reduce<Partial<Record<VerdictType, number>>>((acc, v) => {
+    acc[v.verdict] = (acc[v.verdict] ?? 0) + 1;
+    return acc;
+  }, {});
+  const verdictSummary = summarizeVerdictCounts(verdictCounts);
 
   return (
     /* pb-14 reserves space for the sticky footer inside PremiumFrame */
@@ -181,6 +208,21 @@ function AiAdvicesRailContent({ snapshot }: RailContentProps) {
           </div>
         ) : (
           <p className="text-[11px] text-ink-tertiary">No action required today.</p>
+        )}
+
+        {/* Portfolio verdicts summary — compact counts linking to holdings */}
+        {verdictSummary && (
+          <>
+            <Divider />
+            <Eyebrow label="PORTFOLIO VERDICTS" color="gray" />
+            <Link
+              to="/copilot/holdings"
+              className="flex items-center justify-between gap-2 text-[11px] text-ink-secondary hover:text-white transition-colors"
+            >
+              <span className="font-mono tabular-nums">{verdictSummary}</span>
+              <ArrowRight className="h-3 w-3 flex-none text-gold-primary" />
+            </Link>
+          </>
         )}
 
         {/* e. Events to Watch */}
