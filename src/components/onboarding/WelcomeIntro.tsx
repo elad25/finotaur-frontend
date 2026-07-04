@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
-import { Card, Eyebrow } from '@/components/ds/Card';
+import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Wordmark } from '@/components/ds/Wordmark';
 import { TOUR_ACTIVE_KEY, WELCOME_ACTIVE_KEY } from './onboardingFlags';
@@ -176,14 +176,12 @@ export default function WelcomeIntro() {
               src="/BULL%20ONLY.png"
               alt=""
               aria-hidden="true"
-              className="h-20 w-auto -mt-1"
+              className="h-36 w-auto -mt-1"
               style={{
                 maskImage: 'radial-gradient(ellipse at center, black 58%, transparent 82%)',
                 WebkitMaskImage: 'radial-gradient(ellipse at center, black 58%, transparent 82%)',
               }}
             />
-
-            <Eyebrow>WELCOME</Eyebrow>
 
             {/* Headline */}
             <h1 className="text-2xl md:text-4xl font-bold text-ink-primary tracking-tight leading-tight">
