@@ -1,4 +1,4 @@
-import { isCryptoSymbol } from '@/components/charting/dataSources';
+import { isCryptoSymbol, isForexPair } from '@/components/charting/dataSources';
 
 // ─── Asset class presets ────────────────────────────────────────
 // Each preset resolves to a source-native symbol. Yahoo handles futures
@@ -217,7 +217,28 @@ export function detectAssetClass(sym: string): AssetClass {
 export function normalizeRawSymbol(raw: string, assetClass: AssetClass): string {
   const t = raw.trim().toUpperCase();
   if (!t) return t;
-  if (assetClass === 'forex') return t.endsWith('=X') ? t : `${t}=X`;
+  if (assetClass === 'forex') {
+    // Only a bare forex pair gets the Yahoo "=X" suffix. NEVER append it to a
+    // symbol that already carries another class's native marker (=F futures,
+    // ^ index, <BASE>USDT crypto) or an existing =X. A cross-class commit —
+    // e.g. typing "NQ" (resolved to NQ=F) while the Forex tab is active — must
+    // not become the unresolvable "NQ=F=X".
+    const alreadyNative =
+      t.endsWith('=X') || t.endsWith('=F') || t.startsWith('^') || isCryptoSymbol(t);
+    return alreadyNative ? t : `${t}=X`;
+  }
+  return t;
+}
+
+// Repair a malformed source-native symbol. A cross-class commit could
+// historically double-suffix a symbol (e.g. "NQ=F=X", "AAPL=X", "BTCUSDT=X") —
+// a stray forex "=X" stacked on a non-forex base. Genuine forex pairs are two
+// fiat ISO-4217 codes; any other symbol carrying "=X" gets the stray suffix
+// stripped so it resolves again and legacy persisted sessions self-heal.
+export function sanitizeSourceSymbol(sym: string): string {
+  const t = (sym ?? '').trim();
+  if (!t) return t;
+  if (/=X$/i.test(t) && !isForexPair(t)) return t.replace(/=X$/i, '');
   return t;
 }
 
