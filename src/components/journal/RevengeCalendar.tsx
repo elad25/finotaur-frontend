@@ -1,7 +1,8 @@
 // ================================================
-// REVENGE CALENDAR — 12-week grid marking revenge-trading days in purple
+// REVENGE CALENDAR — small per-month calendars marking revenge-trading days.
 // File: src/components/journal/RevengeCalendar.tsx
-// Modeled 1:1 on CalendarHeatmap.tsx (same grid/month-label/sizing pattern).
+// Shows the last 3 months as separate mini month grids so a user can see, at a
+// glance, how many revenge days they had each month.
 // ================================================
 
 import React, { useMemo } from 'react';
@@ -30,14 +31,14 @@ interface RevengeCalendarProps {
 // Helpers
 // ------------------------------------------------
 
-const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const WEEKS = 12;
+const DOW_MINI = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTHS_TO_SHOW = 3;
 
 /** Purple for revenge days, faint white for traded-no-revenge, faintest for no trades. */
 function getCellColor(data: DayCell | undefined): string {
   if (!data || (!data.traded && data.revengeCount === 0)) return 'rgba(255, 255, 255, 0.03)';
   if (data.revengeCount > 0) {
-    const opacity = 0.25 + Math.min(data.revengeCount / 3, 1) * 0.55;
+    const opacity = 0.3 + Math.min(data.revengeCount / 3, 1) * 0.5;
     return `rgba(167, 139, 250, ${opacity})`;
   }
   return 'rgba(255, 255, 255, 0.06)';
@@ -86,44 +87,52 @@ const RevengeCalendar: React.FC<RevengeCalendarProps> = ({ revengeDays, trades }
     return map;
   }, [trades, revengeDays]);
 
-  // Build the grid: 12 columns (weeks), each column = 7 days (Sun→Sat)
-  const weeks = useMemo<string[][]>(() => {
+  // Build the last N months as calendar grids (weeks of Sun→Sat, padded to full weeks).
+  const months = useMemo(() => {
     const today = dayjs();
-    const startOfCurrentWeek = today.startOf('week');
-    const gridStart = startOfCurrentWeek.subtract(WEEKS - 1, 'week');
+    const out: {
+      key: string;
+      label: string;
+      monthIndex: number;
+      weeks: string[][];
+      revengeCount: number;
+    }[] = [];
 
-    const result: string[][] = [];
-    for (let w = 0; w < WEEKS; w++) {
-      const col: string[] = [];
-      for (let d = 0; d < 7; d++) {
-        col.push(gridStart.add(w * 7 + d, 'day').format('YYYY-MM-DD'));
+    for (let m = MONTHS_TO_SHOW - 1; m >= 0; m--) {
+      const monthStart = today.subtract(m, 'month').startOf('month');
+      const gridStart = monthStart.startOf('week'); // Sunday on/before the 1st
+      const gridEnd = monthStart.endOf('month').endOf('week'); // Saturday on/after the last
+
+      const days: string[] = [];
+      let cur = gridStart;
+      while (cur.isBefore(gridEnd) || cur.isSame(gridEnd, 'day')) {
+        days.push(cur.format('YYYY-MM-DD'));
+        cur = cur.add(1, 'day');
       }
-      result.push(col);
+
+      const weeks: string[][] = [];
+      for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+      let revengeCount = 0;
+      for (const d of days) {
+        if (dayjs(d).month() !== monthStart.month()) continue;
+        const cell = dayMap.get(d);
+        if (cell && cell.revengeCount > 0) revengeCount++;
+      }
+
+      out.push({
+        key: monthStart.format('YYYY-MM'),
+        label: monthStart.format('MMMM YYYY'),
+        monthIndex: monthStart.month(),
+        weeks,
+        revengeCount,
+      });
     }
-    return result;
-  }, []);
+    return out;
+  }, [dayMap]);
 
-  const monthLabels = useMemo<(string | null)[]>(() => {
-    return weeks.map((col) => {
-      const mondayDate = dayjs(col[1]);
-      if (mondayDate.date() <= 7) {
-        return mondayDate.format('MMM');
-      }
-      return null;
-    });
-  }, [weeks]);
-
-  // Count purple (revenge) days within the visible 12-week window.
-  const visibleRevengeDayCount = useMemo(() => {
-    let count = 0;
-    for (const col of weeks) {
-      for (const dateStr of col) {
-        const data = dayMap.get(dateStr);
-        if (data && data.revengeCount > 0) count++;
-      }
-    }
-    return count;
-  }, [weeks, dayMap]);
+  const totalRevenge = months.reduce((s, mo) => s + mo.revengeCount, 0);
+  const today = dayjs();
 
   return (
     <div
@@ -136,77 +145,76 @@ const RevengeCalendar: React.FC<RevengeCalendarProps> = ({ revengeDays, trades }
       {/* Header */}
       <div className="flex items-center gap-2 mb-5">
         <CalendarDays className="w-5 h-5 text-[#C9A646]" />
-        <h3 className="text-[#F4F4F4] text-lg font-semibold">
-          Revenge days (last {WEEKS} weeks): {visibleRevengeDayCount}
-        </h3>
+        <h3 className="text-[#F4F4F4] text-lg font-semibold">Revenge calendar</h3>
+        <span className="text-[11px] text-white/45 ml-1">
+          last {MONTHS_TO_SHOW} months · {totalRevenge} revenge day{totalRevenge !== 1 ? 's' : ''}
+        </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <div style={{ minWidth: `${WEEKS * 20}px` }}>
-          {/* Month labels row */}
-          <div className="flex mb-1">
-            <div style={{ width: 28, flexShrink: 0 }} />
-            {weeks.map((_, wi) => (
-              <div
-                key={wi}
-                className="text-[10px] text-[#666666] text-center"
-                style={{ flex: 1, minWidth: 14 }}
+      {/* Per-month mini calendars */}
+      <div className="flex flex-wrap gap-5">
+        {months.map((month) => (
+          <div key={month.key} className="flex-1" style={{ minWidth: 200 }}>
+            {/* Month header + per-month revenge count */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[13px] font-medium text-white/82">{month.label}</span>
+              <span
+                className="text-[11px] font-semibold"
+                style={{ color: month.revengeCount > 0 ? 'rgba(167,139,250,0.95)' : 'rgba(255,255,255,0.4)' }}
               >
-                {monthLabels[wi] ?? ''}
-              </div>
-            ))}
-          </div>
+                {month.revengeCount} revenge
+              </span>
+            </div>
 
-          {/* Grid: 7 rows (Sun–Sat), 12 columns (weeks) */}
-          {Array.from({ length: 7 }, (_, dayOfWeek) => (
-            <div key={dayOfWeek} className="flex items-center mb-[3px]">
-              <div
-                className="text-[10px] text-[#555555] text-right pr-1.5 select-none"
-                style={{ width: 28, flexShrink: 0 }}
-              >
-                {dayOfWeek % 2 !== 0 ? DOW_LABELS[dayOfWeek].slice(0, 1) : ''}
-              </div>
+            {/* Weekday headers */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {DOW_MINI.map((d, i) => (
+                <div key={i} className="text-[9px] text-[#555] text-center select-none">
+                  {d}
+                </div>
+              ))}
+            </div>
 
-              {weeks.map((col, wi) => {
-                const dateStr = col[dayOfWeek];
+            {/* Day cells */}
+            <div className="grid grid-cols-7 gap-1">
+              {month.weeks.flat().map((dateStr) => {
+                const dj = dayjs(dateStr);
+                const inMonth = dj.month() === month.monthIndex;
+                const isFuture = dj.isAfter(today, 'day');
                 const data = dayMap.get(dateStr);
-                const isFuture = dayjs(dateStr).isAfter(dayjs(), 'day');
-                const tooltip = formatTooltip(dateStr, data);
-
+                const showColor = inMonth && !isFuture;
+                const isRevenge = showColor && !!data && data.revengeCount > 0;
                 return (
                   <div
-                    key={wi}
-                    title={tooltip}
+                    key={dateStr}
+                    title={inMonth ? formatTooltip(dateStr, data) : ''}
+                    className="flex items-center justify-center rounded-md select-none"
                     style={{
-                      flex: 1,
-                      minWidth: 14,
-                      height: 14,
-                      margin: '0 1.5px',
-                      borderRadius: 3,
-                      backgroundColor: isFuture ? 'transparent' : getCellColor(data),
-                      opacity: isFuture ? 0 : 1,
+                      aspectRatio: '1 / 1',
+                      fontSize: 10,
+                      backgroundColor: showColor ? getCellColor(data) : 'transparent',
+                      color: !inMonth ? 'transparent' : isRevenge ? '#F4F4F4' : 'rgba(255,255,255,0.35)',
+                      border: isRevenge ? '1px solid rgba(167,139,250,0.5)' : '1px solid transparent',
                       transition: 'background-color 0.15s',
                     }}
-                  />
+                  >
+                    {inMonth ? dj.date() : ''}
+                  </div>
                 );
               })}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
 
       {/* Legend */}
-      <div className="mt-4 flex items-center gap-4 justify-end">
+      <div className="mt-5 flex items-center gap-4 justify-end">
         <div className="flex items-center gap-1.5">
-          <div
-            style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: 'rgba(167, 139, 250, 0.65)' }}
-          />
+          <div style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: 'rgba(167, 139, 250, 0.65)' }} />
           <span className="text-[10px] text-[#888888]">Revenge day</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div
-            style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: 'rgba(255, 255, 255, 0.06)' }}
-          />
+          <div style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.06)' }} />
           <span className="text-[10px] text-[#888888]">Traded, no revenge</span>
         </div>
       </div>
