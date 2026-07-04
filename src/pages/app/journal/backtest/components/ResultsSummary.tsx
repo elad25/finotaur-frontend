@@ -278,7 +278,7 @@ function RSelector({
                   : 'border-border-ds-subtle bg-surface-1 text-ink-secondary hover:border-gold-primary/40 hover:text-ink-primary',
               )}
             >
-              {r}:1
+              1:{r}
             </button>
           );
         })}
@@ -302,9 +302,9 @@ function RLadderTable({
 }) {
   return (
     <Card padding="default">
-      <h3 className="text-sm font-semibold text-ink-primary">Reward : Risk — what-if</h3>
+      <h3 className="text-sm font-semibold text-ink-primary">Risk : Reward — what-if</h3>
       <p className="mt-0.5 text-[12px] text-ink-tertiary">
-        Same real trades, re-scored at each fixed reward:risk target against real candles.
+        Same real trades, re-scored at each fixed risk:reward target against real candles.
       </p>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[480px] border-collapse text-sm">
@@ -332,7 +332,7 @@ function RLadderTable({
                 >
                   <td className="py-2.5 pr-4 font-semibold tabular-nums text-ink-primary">
                     {isSelected && <span className="mr-1.5 text-gold-primary">●</span>}
-                    {row.r}:1
+                    1:{row.r}
                   </td>
                   <td className="py-2.5 pr-4 tabular-nums text-ink-secondary">{row.trades}</td>
                   <td className="py-2.5 pr-4 tabular-nums text-ink-secondary">{row.winRate.toFixed(1)}%</td>
@@ -407,7 +407,7 @@ export function ResultsSummary() {
           <h2 className="text-xl font-bold text-gold-primary sm:text-2xl">The results</h2>
           <p className="mt-1 text-sm text-ink-secondary">
             $50,000 account, {dateRangeLabel}. {stats.resolvedCount.toLocaleString()}{' '}
-            {stats.resolvedCount === 1 ? 'trade' : 'trades'} at {selectedR}:1 reward:risk.
+            {stats.resolvedCount === 1 ? 'trade' : 'trades'} at 1:{selectedR} risk:reward.
           </p>
         </div>
         <RSelector selected={selectedR} onSelect={setSelectedR} />
@@ -473,7 +473,7 @@ export function ResultsSummary() {
         ) : (
           <div className="flex h-[200px] w-full items-center justify-center rounded-xl border-[0.5px] border-border-ds-subtle bg-surface-1">
             <p className="text-sm text-ink-tertiary">
-              No trades resolved for this setup and range at {selectedR}:1.
+              No trades resolved for this setup and range at 1:{selectedR}.
             </p>
           </div>
         )}
@@ -519,7 +519,7 @@ export function ResultsSummary() {
 
       {/* Disclosure */}
       <p className="text-[12px] text-ink-tertiary">
-        Simulated on a $50,000 account risking 1% per trade at {selectedR}:1 reward:risk —{' '}
+        Simulated on a $50,000 account risking 1% per trade at 1:{selectedR} risk:reward —{' '}
         {symbol} {timeframe}. {stats.openCount} trades never resolved (excluded).
       </p>
     </div>
