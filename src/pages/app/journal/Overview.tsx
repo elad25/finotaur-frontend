@@ -1290,14 +1290,14 @@ const DashboardDatePicker = React.memo(({
           </div>
 
           {/* Day labels */}
-          <div className="grid grid-cols-7 px-3 pb-1">
+          <div className="grid grid-cols-7 px-3 pb-1 gap-x-0.5 sm:gap-x-2">
             {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
               <div key={d} className="text-center text-[10px] font-medium text-[#6A6A6A]">{d}</div>
             ))}
           </div>
 
           {/* Days grid */}
-          <div className="grid grid-cols-7 px-3 pb-3 gap-y-0.5">
+          <div className="grid grid-cols-7 px-3 pb-3 gap-y-0.5 gap-x-0.5 sm:gap-x-2">
             {calDays.map((day, i) => {
               if (!day) return <div key={i} />;
               const sel = isSelected(day);
@@ -1311,7 +1311,7 @@ const DashboardDatePicker = React.memo(({
                   onClick={() => handleDayClick(day)}
                   onMouseEnter={() => selecting === 'end' && setHoverDate(day)}
                   onMouseLeave={() => setHoverDate(null)}
-                  className="h-8 flex items-center justify-center text-xs font-medium rounded-lg transition-all"
+                  className="h-7 sm:h-8 flex items-center justify-center text-[11px] sm:text-xs font-medium rounded-lg transition-all"
                   style={{
                     background: sel
                       ? 'linear-gradient(135deg, #C9A646, #B48C2C)'

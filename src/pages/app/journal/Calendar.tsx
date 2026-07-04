@@ -1453,21 +1453,22 @@ export default function JournalCalendar() {
           {/* Main Calendar */}
           <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 flex-1">
             {/* Day headers */}
-            <div className="grid grid-cols-7 gap-2 mb-3">
+            <div className="grid grid-cols-7 gap-0.5 sm:gap-2 mb-3">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                 <div key={day} className="text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                  {day}
+                  <span className="sm:hidden">{day.charAt(0)}</span>
+                  <span className="hidden sm:inline">{day}</span>
                 </div>
               ))}
             </div>
 
             {/* Calendar days */}
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-7 gap-0.5 sm:gap-2">
               {calendarDays.map((day, index) => {
                 if (!day) {
                   return (
-                    <div 
-                      key={`empty-${index}`} 
+                    <div
+                      key={`empty-${index}`}
                       className="aspect-square rounded-xl bg-zinc-950/50"
                     />
                   );
@@ -1492,7 +1493,7 @@ export default function JournalCalendar() {
                       }
                     }}
                     className={`
-                      aspect-square rounded-xl border p-2 transition-all duration-200
+                      aspect-square rounded-xl border p-1 sm:p-2 transition-all duration-200
                       ${getDayColor(dayData, displayMode)}
                       ${isToday ? 'ring-2 ring-yellow-500' : ''}
                       ${isHovered ? 'ring-2 ring-yellow-500 scale-105 shadow-[0_0_25px_rgba(201,166,70,0.5)]' : ''}
@@ -1502,7 +1503,7 @@ export default function JournalCalendar() {
                     `}
                   >
                     {/* Date */}
-                    <div className={`text-xs font-medium mb-1 ${
+                    <div className={`text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 ${
                       isToday ? 'text-yellow-500' : 'text-zinc-400'
                     }`}>
                       {day.getDate()}
@@ -1512,7 +1513,7 @@ export default function JournalCalendar() {
                     {dayData && dayData.tradeCount > 0 ? (
                       <>
                         {/* P&L — dollars or R-multiple per the calendar unit toggle */}
-                        <div className={`text-sm font-bold mb-1 ${
+                        <div className={`text-[10px] sm:text-sm font-bold mb-0.5 sm:mb-1 ${
                           dayData.netPnL > 0 ? 'text-emerald-400' :
                           dayData.netPnL < 0 ? 'text-red-400' :
                           'text-zinc-400'
@@ -1522,8 +1523,8 @@ export default function JournalCalendar() {
                             : `${dayData.sumR > 0 ? '+' : ''}${dayData.sumR.toFixed(1)}R`}
                         </div>
 
-                        {/* Trade count */}
-                        <div className="text-[10px] text-zinc-500">
+                        {/* Trade count — hidden on mobile to keep cells compact */}
+                        <div className="hidden sm:block text-[10px] text-zinc-500">
                           {dayData.tradeCount} {dayData.tradeCount === 1 ? 'trade' : 'trades'}
                         </div>
 
@@ -1710,7 +1711,7 @@ export default function JournalCalendar() {
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-zinc-900 border-zinc-800">
+        <DialogContent className="w-[calc(100vw-16px)] sm:w-auto max-w-4xl max-h-[85dvh] overflow-y-auto bg-zinc-900 border-zinc-800">
           {selectedDay && (
             <>
               <DialogHeader>
