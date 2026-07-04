@@ -5,9 +5,9 @@
 // Tabs: Automated Journal (Live), Backtesting / AI Insights / Trade Replay (Coming Soon)
 // ================================================
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import { BookOpen, LineChart, Brain, PlayCircle, Lock, TrendingUp, Coins } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SectionShell } from "./_shared/SectionShell";
@@ -224,8 +224,38 @@ const MeetFinoIntro = () => {
     /AppleWebKit/.test(navigator.userAgent) &&
     !/Chrome|Chromium|Android/.test(navigator.userAgent);
 
+  // 🔥 PERF FIX: this tab is active by default (JournalToolsTabs mounts with
+  // active="ai"), so the video used to start fetching its 4.1MB source the
+  // instant the landing page loaded even though this section is below the
+  // fold. Defer the `src` (and therefore the network request) until the
+  // container is actually near the viewport; the poster image still renders
+  // instantly so there is no visual change while off-screen or on-screen.
+  // (Safari's webp fallback below is left eager — it has no poster of its
+  // own, so deferring it would show a blank gap instead of an instant image,
+  // which would be a visible regression for Safari users.)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isNearViewport = useInView(containerRef, { once: true, margin: "200px" });
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!isNearViewport) return;
+    const video = videoRef.current;
+    if (!video) return;
+    // Setting src programmatically (rather than always rendering the attr)
+    // is what actually delays the network fetch; call play() to honor the
+    // original autoPlay behavior now that the source is attached.
+    video.src = "/fino/fino-home-natural-v4.webm";
+    video.play().catch(() => {
+      // Autoplay can be rejected by the browser (e.g. low-power mode) —
+      // the poster stays visible, matching prior best-effort autoplay UX.
+    });
+  }, [isNearViewport]);
+
   return (
-    <div className="relative flex flex-col items-center justify-center px-3 py-4 overflow-hidden">
+    <div
+      ref={containerRef}
+      className="relative flex flex-col items-center justify-center px-3 py-4 overflow-hidden"
+    >
       <div className="flex flex-col items-center w-full">
         {finoUsesWebpFallback ? (
           <img
@@ -237,14 +267,14 @@ const MeetFinoIntro = () => {
           />
         ) : (
           <video
+            ref={videoRef}
             className="w-full max-w-[320px] sm:max-w-[400px] md:max-w-[440px] h-auto mx-auto object-contain"
-            src="/fino/fino-home-natural-v4.webm"
             poster="/fino/fino-home-natural-v4-poster.png"
             autoPlay
             muted
             loop
             playsInline
-            preload="metadata"
+            preload="none"
             aria-label="FINO — the FINOTAUR AI assistant"
           />
         )}

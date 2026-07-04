@@ -4,7 +4,7 @@
 // Inter Black (900) · volumetric gold light beam · star field · construction marks
 // ================================================
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ds/Button";
 import { LogIn, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -475,6 +475,35 @@ const Hero = () => {
   const [isPaused, setIsPaused] = useState(false);
   const cardCount = 5;
 
+  // 🔥 PERF FIX: the auto-advance interval used to run forever regardless of
+  // whether the carousel was actually visible, causing recurring long tasks
+  // long after load (scrolled past, or tab backgrounded). Track viewport
+  // visibility + tab visibility and fold them into the existing pause gate —
+  // behavior while genuinely visible is unchanged (still hover-pausable,
+  // still advances every 6s).
+  const carouselStageRef = useRef<HTMLDivElement>(null);
+  const [isCarouselOnScreen, setIsCarouselOnScreen] = useState(true);
+  const [isTabVisible, setIsTabVisible] = useState(
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden"
+  );
+
+  useEffect(() => {
+    const node = carouselStageRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsCarouselOnScreen(entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => setIsTabVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   const cards = [
     {
       key: 'platform',
@@ -516,12 +545,12 @@ const Hero = () => {
   ];
 
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || !isCarouselOnScreen || !isTabVisible) return;
     const interval = setInterval(() => {
       setCenterIndex(prev => (prev + 1) % cardCount);
     }, 6000);
     return () => clearInterval(interval);
-  }, [isPaused]);
+  }, [isPaused, isCarouselOnScreen, isTabVisible]);
 
   const getPosition = (idx: number): 'center' | 'left-1' | 'right-1' | 'left-2' | 'right-2' | 'hidden' => {
     const offset = ((idx - centerIndex) + cardCount) % cardCount;
@@ -908,6 +937,7 @@ const Hero = () => {
 
         {/* ========== 5-CARD CAROUSEL STAGE ========== */}
         <div
+          ref={carouselStageRef}
           className="relative w-full mb-12 md:mb-16 hidden md:block"
           style={{ perspective: '2000px' }}
           onMouseEnter={() => setIsPaused(true)}

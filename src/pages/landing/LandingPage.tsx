@@ -94,6 +94,16 @@ const LandingPage = () => {
           animation: glow-pulse 3s ease-in-out infinite;
         }
 
+        /* Accessibility: disable the above decorative loops for users who
+           request reduced motion. No visual change for anyone else. */
+        @media (prefers-reduced-motion: reduce) {
+          .hero-background-orb,
+          .animate-float,
+          .animate-glow-pulse {
+            animation: none;
+          }
+        }
+
         html { scroll-behavior: smooth; }
 
         ::selection {
