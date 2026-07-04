@@ -26,6 +26,15 @@ export function initSentry(): void {
     // dropped. tracesSampleRate:0 keeps us on the free tier regardless (no
     // performance spans are sent), so restoring defaults adds no quota cost.
     integrations: (defaults) => defaults,
+    // Noise from Android in-app browsers (Instagram/Facebook WebView): the host
+    // app injects a Java bridge into our page; when the WebView navigates, the
+    // bridge is destroyed and THEIR injected script throws. Not our code, not
+    // actionable (Sentry issues MZ-3W "enableButtonsClickedMetaDataLogging" and
+    // MZ-3Y "postMessage" — both "Java object is gone", 2026-07-04).
+    ignoreErrors: [
+      /Java object is gone/i,
+      /Java bridge method invocation error/i,
+    ],
     beforeSend(event) {
       if (event.user) {
         event.user.email = undefined;
