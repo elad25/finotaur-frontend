@@ -37,7 +37,7 @@ import { analyzeWhatIf, fixedTargetAtR, breakEvenAtR, estimateBreakEvenAtR, reco
 import type { WhatIfScenario, WhatIfResult, PriceBar, WhatIfTrade } from '@/lib/journal/whatIfEngine';
 import { useTradeReconcile, useTradeBars, useAllTradeBars } from '@/hooks/useTradeBars';
 import { buildAggregate } from '@/lib/journal/plannedScenarios';
-import type { PlannedScenario } from '@/lib/journal/plannedScenarios';
+import type { PlannedScenario, PlannedResult } from '@/lib/journal/plannedScenarios';
 import { useShadowTrade, useShadowAggregate } from '@/hooks/useShadow';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { FinoExplains } from '@/components/fino/FinoExplains';
@@ -56,6 +56,8 @@ import {
 } from 'lucide-react';
 import { buildShadowInsights } from '@/lib/journal/shadowInsight';
 import type { ShadowInsight } from '@/lib/journal/shadowInsight';
+import { buildTradeDebrief } from '@/lib/journal/tradeDebrief';
+import type { DebriefTone } from '@/lib/journal/tradeDebrief';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import {
   Dialog,
@@ -2104,6 +2106,79 @@ function SingleTradeScenarioChart({
   );
 }
 
+// ─── Trade Debrief card ─────────────────────────────────────────────────────────
+// Deterministic, rule-based per-trade summary (see tradeDebrief.ts). Independent
+// of the Stop/Target toggle — shows a single, stable read of this one trade.
+
+const DEBRIEF_TONE_DOT: Record<DebriefTone, string> = {
+  bad:     '#F87171',
+  warn:    '#C9A646',
+  good:    '#4AD295',
+  neutral: 'rgba(255,255,255,0.4)',
+};
+
+const DEBRIEF_TONE_TEXT: Record<DebriefTone, string> = {
+  bad:     'text-[#F87171]',
+  warn:    'text-[#E8C766]',
+  good:    'text-[#4AD295]',
+  neutral: 'text-white/85',
+};
+
+interface TradeDebriefCardProps {
+  trade: Trade;
+  planned: PlannedResult;
+  extras?: { stopMoves?: number; mfeUsd?: number | null };
+}
+
+function TradeDebriefCard({ trade, planned, extras }: TradeDebriefCardProps) {
+  const debrief = useMemo(
+    () => buildTradeDebrief(trade, planned, extras),
+    [trade, planned, extras],
+  );
+
+  return (
+    <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_50%,rgba(201,166,70,0.05),transparent_40%)]" />
+
+      <div className="relative flex flex-col gap-ds-3">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[14px] font-semibold text-white">Trade Debrief</span>
+          <span className="rounded-[6px] bg-[#C9A646]/15 px-2 py-0.5 text-[11px] font-semibold text-[#E8C766]">
+            {debrief.verdict}
+          </span>
+        </div>
+
+        {/* Report — compact rows, one per line */}
+        <div className="flex flex-col">
+          {debrief.reportLines.map((line, idx) => (
+            <div
+              key={`${line.label}-${idx}`}
+              className="flex items-baseline gap-2.5 py-[3px]"
+            >
+              <span
+                className="mt-[2px] h-[5px] w-[5px] shrink-0 rounded-full"
+                style={{ backgroundColor: DEBRIEF_TONE_DOT[line.tone] }}
+              />
+              <span className="w-[68px] shrink-0 text-[10px] font-semibold uppercase tracking-[0.6px] text-[#C9A646]/80">
+                {line.label}
+              </span>
+              <p className={`text-[12px] leading-snug ${DEBRIEF_TONE_TEXT[line.tone]}`}>
+                {line.text}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <p className="text-[10px] text-white/28 leading-relaxed">
+          Based on your recorded stop, target and exits for this trade.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Trade tab — engine view (beta) ────────────────────────────────────────────
 
 interface TradeEngineViewProps {
@@ -2319,6 +2394,13 @@ function TradeEngineView({
           />
         </div>
       )}
+
+      {/* ── Trade Debrief (independent of Stop/Target toggle) ────────────── */}
+      <TradeDebriefCard
+        trade={trade}
+        planned={planned}
+        extras={{ mfeUsd: mfePnl }}
+      />
     </div>
   );
 }
