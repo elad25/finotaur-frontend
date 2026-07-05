@@ -28,6 +28,19 @@ export interface DebriefReportLine {
   tone: DebriefTone;
 }
 
+/** One cell of the numbers scorecard (Result, Planned risk, Actual R, Planned R:R, Left on table). */
+export interface DebriefStat {
+  label: string;
+  value: string;
+  tone: DebriefTone;
+}
+
+/** One row of the discipline checklist. */
+export interface DebriefCheck {
+  label: string;
+  status: 'pass' | 'fail' | 'na';
+}
+
 export interface TradeDebrief {
   verdict: string;
   headline: string;
@@ -35,6 +48,14 @@ export interface TradeDebrief {
   nextTime: string[];
   /** 4-7 short report lines: Result, Stop, Target, [Behavior], [Risk], Verdict, Next time. */
   reportLines: DebriefReportLine[];
+  /** The single most important "do this next" action — never empty. */
+  primaryAction: string;
+  /** One short sentence tying primaryAction to the dominant finding; '' when there's nothing to explain. */
+  actionWhy: string;
+  /** 3-5 scorecard cells (Result, Planned risk, Actual R, Planned R:R, [Left on table]). */
+  stats: DebriefStat[];
+  /** 4 discipline checks (stop set, stop respected, target defined, held to target). */
+  checklist: DebriefCheck[];
 }
 
 export interface TradeDebriefExtras {
@@ -457,11 +478,118 @@ export function buildTradeDebrief(
     reportLines.push({ label: 'Next time', tone: 'neutral', text: capLine(topNextTime) });
   }
 
+  // ── STATS (numbers scorecard) ───────────────────────────────────────────────
+  const stats: DebriefStat[] = [];
+
+  // Result — always computable.
+  stats.push({
+    label: 'Result',
+    value: money(pnl),
+    tone: isWin ? 'good' : isLoss ? 'bad' : 'neutral',
+  });
+
+  // Planned risk — '—' (and bad tone) when no stop is recorded.
+  stats.push({
+    label: 'Planned risk',
+    value: plannedRiskUsd != null && plannedRiskUsd > 0 ? absMoney(plannedRiskUsd) : '—',
+    tone: hasStop ? 'neutral' : 'bad',
+  });
+
+  // Actual R — prefer the trade's own recorded actual_r, else derive from pnl/plannedRiskUsd.
+  {
+    const derivedActualR =
+      trade.actual_r != null
+        ? trade.actual_r
+        : plannedRiskUsd != null && plannedRiskUsd > 0
+          ? pnl / plannedRiskUsd
+          : null;
+    stats.push({
+      label: 'Actual R',
+      value: derivedActualR != null ? fmtR(derivedActualR) : '—',
+      tone: derivedActualR == null ? 'neutral' : derivedActualR > 0 ? 'good' : derivedActualR < 0 ? 'bad' : 'neutral',
+    });
+  }
+
+  // Planned R:R — only when both stop and target are present.
+  stats.push({
+    label: 'Planned R:R',
+    value: plannedRR != null ? `${plannedRR.toFixed(1)}:1` : '—',
+    tone: plannedRR != null && plannedRR < 1 ? 'warn' : 'neutral',
+  });
+
+  // Left on table — only for a winner who exited before target (estimate, phrased as such).
+  if (isWin && earlyExitWinner && targetScenario?.pnl != null) {
+    const gapAbs = targetScenario.pnl - pnl;
+    stats.push({
+      label: 'Left on table (est.)',
+      value: absMoney(gapAbs),
+      tone: 'warn',
+    });
+  }
+
+  // ── CHECKLIST (discipline) ──────────────────────────────────────────────────
+  const checklist: DebriefCheck[] = [];
+
+  // 1) Stop set before entry
+  checklist.push({ label: 'Stop set before entry', status: hasStop ? 'pass' : 'fail' });
+
+  // 2) Stop respected
+  if (!hasStop) {
+    checklist.push({ label: 'Stop respected', status: 'na' });
+  } else if (isLoss && !isScratch) {
+    checklist.push({ label: 'Stop respected', status: lossBeyondPlan ? 'fail' : 'pass' });
+  } else {
+    // Winner (or scratch) with a stop on record — never breached it.
+    checklist.push({ label: 'Stop respected', status: 'pass' });
+  }
+
+  // 3) Target defined
+  checklist.push({ label: 'Target defined', status: hasTarget ? 'pass' : 'fail' });
+
+  // 4) Held to target
+  if (!hasTarget || targetScenario?.pnl == null) {
+    checklist.push({ label: 'Held to target', status: 'na' });
+  } else {
+    checklist.push({ label: 'Held to target', status: pnl >= targetScenario.pnl ? 'pass' : 'fail' });
+  }
+
+  // ── PRIMARY ACTION + WHY ─────────────────────────────────────────────────────
+  const GENERIC_FALLBACK_ACTION =
+    'Keep logging stop, target and reason on every trade so Shadow can grade the next one.';
+
+  let primaryAction: string;
+  if (trade.next_time && trade.next_time.trim().length > 0) {
+    primaryAction = trade.next_time.trim();
+  } else if (nextTime.length > 0) {
+    primaryAction = nextTime[0];
+  } else {
+    primaryAction = GENERIC_FALLBACK_ACTION;
+  }
+
+  let actionWhy = '';
+  if (isScratch) {
+    actionWhy = '';
+  } else if (!hasStop) {
+    actionWhy = 'No stop was on record, so risk on this trade was undefined.';
+  } else if (lossBeyondPlan) {
+    actionWhy = 'The loss ran past your planned risk — the stop was moved or ignored.';
+  } else if (earlyExitWinner) {
+    actionWhy = 'You exited before your target, capping a winner early.';
+  } else if (!hasTarget) {
+    actionWhy = 'No target was on record, so the exit was improvised.';
+  } else if (lossCutEarly) {
+    actionWhy = 'You cut the loss before the stop was hit, second-guessing the plan.';
+  }
+
   return {
     verdict,
     headline,
     points: cappedPoints,
     nextTime: nextTime.slice(0, 3),
     reportLines,
+    primaryAction,
+    actionWhy,
+    stats,
+    checklist,
   };
 }
