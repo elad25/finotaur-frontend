@@ -20,6 +20,7 @@
 // (dev/trial use only, not customer-facing).
 
 import { authFetch } from '@/utils/authFetch';
+import { FUTURES_ROOTS } from './futuresContracts';
 import type { FlowTrade, TradeSource, TradeSourceStatus } from './types';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -29,6 +30,13 @@ const BACKFILL_ENDPOINT = '/api/orderflow/backfill';
 const POLL_INTERVAL_MS = 15_000;
 const POLL_RECONNECT_DELAYS = [15_000, 30_000, 60_000]; // backoff on transient poll failure
 const MAX_CONSECUTIVE_FAILURES = 5;
+// Never fire a poll window narrower than this — avoids the degenerate/inverted
+// windows seen live (e.g. fromMs=…693&toMs=…692) when the poll cursor catches
+// up to "now" with no new trades landing (e.g. CME closed on a weekend).
+const MIN_POLL_WINDOW_MS = 5_000;
+// Small safety margin behind "now" so a window is never requested for trades
+// that haven't landed/settled yet.
+const POLL_NOW_MARGIN_MS = 1_000;
 
 // Backfill request budget — chunk into <=2h windows, newest-window-first so
 // partial coverage (rate limit / budget exhaustion) stays contiguous with
@@ -44,10 +52,23 @@ interface BackfillResponse {
   cached?: boolean;
 }
 
-/** Extract the bare futures root (e.g. "NQU6" → "NQ") — the backfill proxy is keyed by root. */
+// Longest-root-first so 3-char roots (MNQ, MES) are checked before their
+// 2-char siblings would otherwise be mistaken as a prefix match.
+const ROOTS_BY_LENGTH_DESC = [...FUTURES_ROOTS].sort((a, b) => b.length - a.length);
+
+/**
+ * Extract the bare futures root (e.g. "NQU6" → "NQ") — the backfill proxy
+ * only accepts roots (NQ/ES/MNQ/MES), never the full contract code.
+ *
+ * A naive `/^([A-Z]{1,4})/` greedy-match is WRONG here: the CME month code
+ * (H/M/U/Z) immediately follows the root and is itself an uppercase letter,
+ * so it gets swallowed into the match (e.g. "NQU6" → "NQU" instead of "NQ")
+ * — this was the live 400 bug. Matching against the known root list avoids
+ * that trap entirely.
+ */
 function extractRoot(symbol: string): string {
-  const match = symbol.match(/^([A-Z]{1,4})/);
-  return match ? match[1] : symbol;
+  const found = ROOTS_BY_LENGTH_DESC.find((root) => symbol.startsWith(root));
+  return found ?? symbol;
 }
 
 async function fetchBackfillWindow(
@@ -55,7 +76,7 @@ async function fetchBackfillWindow(
   fromMs: number,
   toMs: number,
   signal?: AbortSignal,
-): Promise<{ page: FlowTrade[]; ok: boolean; rateLimited: boolean }> {
+): Promise<{ page: FlowTrade[]; ok: boolean; rateLimited: boolean; badRequest: boolean }> {
   const root = extractRoot(symbol);
   const url = `${BACKFILL_ENDPOINT}?symbol=${encodeURIComponent(root)}&fromMs=${fromMs}&toMs=${toMs}`;
 
@@ -63,20 +84,21 @@ async function fetchBackfillWindow(
   try {
     res = await authFetch(url, { signal });
   } catch {
-    return { page: [], ok: false, rateLimited: false };
+    return { page: [], ok: false, rateLimited: false, badRequest: false };
   }
 
-  if (res.status === 429) return { page: [], ok: false, rateLimited: true };
-  if (!res.ok) return { page: [], ok: false, rateLimited: false };
+  if (res.status === 429) return { page: [], ok: false, rateLimited: true, badRequest: false };
+  if (res.status === 400) return { page: [], ok: false, rateLimited: false, badRequest: true };
+  if (!res.ok) return { page: [], ok: false, rateLimited: false, badRequest: false };
 
   let body: BackfillResponse;
   try {
     body = (await res.json()) as BackfillResponse;
   } catch {
-    return { page: [], ok: false, rateLimited: false };
+    return { page: [], ok: false, rateLimited: false, badRequest: false };
   }
 
-  if (!Array.isArray(body.trades)) return { page: [], ok: false, rateLimited: false };
+  if (!Array.isArray(body.trades)) return { page: [], ok: false, rateLimited: false, badRequest: false };
 
   const page: FlowTrade[] = [];
   for (const trade of body.trades) {
@@ -90,7 +112,7 @@ async function fetchBackfillWindow(
     }
     page.push(trade);
   }
-  return { page, ok: true, rateLimited: false };
+  return { page, ok: true, rateLimited: false, badRequest: false };
 }
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -104,6 +126,10 @@ class DatabentoTradeSourceImpl implements TradeSource {
     let unmounted = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
     let consecutiveFailures = 0;
+    // Warn about a non-retryable 400 (bad symbol/params) exactly once per
+    // mount — repeated 400s are a config/logic error, not a transient
+    // failure, and must never trigger a tight retry loop.
+    let badRequestWarned = false;
     // Dedupe key set for the trailing edge of the poll window — bounded since
     // we only ever re-check the most recent poll's worth of trades.
     let lastSeenTime = Date.now();
@@ -118,10 +144,44 @@ class DatabentoTradeSourceImpl implements TradeSource {
 
     const poll = async () => {
       if (unmounted) return;
-      const now = Date.now();
-      const { page, ok, rateLimited } = await fetchBackfillWindow(symbol, lastSeenTime + 1, now);
+
+      // Clamp the poll window so it never runs ahead of itself: when no new
+      // trades have landed (e.g. CME closed on a weekend), `lastSeenTime`
+      // sits at mount-time "now" while wall-clock "now" barely moves between
+      // polls, producing a near-zero or inverted window (`toMs <= fromMs`).
+      // Requiring a minimum width and skipping short/degenerate cycles fixes
+      // both the inverted-window and the tight-loop symptoms.
+      const nowMs = Date.now() - POLL_NOW_MARGIN_MS;
+      const fromMs = Math.min(lastSeenTime + 1, nowMs);
+      const toMs = nowMs;
+
+      if (toMs - fromMs < MIN_POLL_WINDOW_MS) {
+        // Window too narrow (or inverted) — skip this cycle silently, keep
+        // the normal 15s cadence, and don't touch consecutiveFailures/status.
+        schedule(POLL_INTERVAL_MS);
+        return;
+      }
+
+      const { page, ok, rateLimited, badRequest } = await fetchBackfillWindow(symbol, fromMs, toMs);
 
       if (unmounted) return;
+
+      if (badRequest) {
+        // Non-retryable config/logic error (e.g. malformed symbol/root) —
+        // never tight-loop on this. Log once, surface 'error' status, and
+        // keep polling at the normal cadence in case the condition clears
+        // (e.g. a root computed from a stale contract on a rollover day).
+        if (!badRequestWarned) {
+          badRequestWarned = true;
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[DatabentoTradeSource] backfill request rejected (400) for symbol "${symbol}" — check the symbol/root mapping.`,
+          );
+        }
+        onStatus?.('error');
+        schedule(POLL_INTERVAL_MS);
+        return;
+      }
 
       if (!ok) {
         consecutiveFailures += 1;
