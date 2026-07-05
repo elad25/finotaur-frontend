@@ -20,7 +20,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Gift, Copy, Check, Clock, Ticket, Crown, ShieldCheck } from 'lucide-react';
+import { X, Gift, Copy, Check, Clock, Ticket, Crown, ShieldCheck, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -63,7 +63,7 @@ const OFFER: Offer = {
   ctaText: 'Unlock Premium',
   ctaHref: '/app/upgrade',
   fineprint: 'Cancel anytime • 7-day money-back guarantee',
-  chipLabel: 'Premium for $10',
+  chipLabel: 'July 4th Special — $10',
 };
 
 const DEADLINE_MS = new Date(OFFER.deadline).getTime();
@@ -228,7 +228,7 @@ export default function PromoOfferChip({ className }: { className?: string }) {
                 </button>
 
                 <div className="px-6 pb-6 pt-8">
-                  {/* Early-access badge */}
+                  {/* Independence Day badge */}
                   <div className="mb-4 flex justify-center">
                     <span
                       className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
@@ -238,8 +238,8 @@ export default function PromoOfferChip({ className }: { className?: string }) {
                         border: '1px solid rgba(201,166,70,0.35)',
                       }}
                     >
-                      <Gift className="h-3.5 w-3.5" />
-                      Early Access
+                      <Star className="h-3.5 w-3.5" fill="currentColor" />
+                      Independence Day Special
                     </span>
                   </div>
 
