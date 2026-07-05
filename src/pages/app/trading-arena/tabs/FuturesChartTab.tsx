@@ -129,9 +129,12 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
   // ── Order Flow controls state ────────────────────────────────────────────
   const [controls, setControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
 
-  // ── Row size: auto-suggested from the loaded window's high/low range,
-  // same approach as ChartTab (FinotaurChart's onBarsLoad only exposes the
-  // window's {high, low} extremes).
+  // ── Row size: auto-suggested from the loaded window's average PER-BAR
+  // high/low range, same approach as ChartTab. FinotaurChart's onBarsLoad
+  // reports avgBarRange (average high-low across the individual loaded
+  // bars) separately from the window-spanning {high, low} extremes — feeding
+  // suggestRowSize the latter as a single synthetic bar produced price bins
+  // orders of magnitude too coarse (1-3 bins per bar).
   const [suggestedRowSize, setSuggestedRowSize] = useState<number>(spec.tickSize);
 
   // Reset the suggestion when the contract root changes (different tick/price scale).
@@ -156,16 +159,23 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
   //      entirely if it doesn't actually change the current row size — floating
   //      point re-derivation from a `next` that happens to differ by epsilon
   //      is otherwise enough to keep the cycle alive indefinitely.
-  const handleBarsLoad = useCallback((range: { high: number; low: number } | null) => {
-    if (!range) return;
-    if (hasSuggestedRef.current) return;
-    const avgRange = range.high - range.low;
-    const proxyTick = avgRange > 0 ? Math.max(avgRange / 500, spec.tickSize) : spec.tickSize;
-    const next = FlowBinStore.suggestRowSize([range], proxyTick);
-    hasSuggestedRef.current = true;
-    setSuggestedRowSize((prev) => (next === prev ? prev : next));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.tickSize]);
+  const handleBarsLoad = useCallback(
+    (range: { high: number; low: number; avgBarRange: number } | null) => {
+      if (!range) return;
+      if (hasSuggestedRef.current) return;
+      // suggestRowSize averages (high - low) across a bars array. Feeding it
+      // a single {high: avgBarRange, low: 0} bar reproduces avgRange =
+      // avgBarRange without changing suggestRowSize's own contract.
+      const next = FlowBinStore.suggestRowSize(
+        [{ high: range.avgBarRange, low: 0 }],
+        spec.tickSize,
+      );
+      hasSuggestedRef.current = true;
+      setSuggestedRowSize((prev) => (next === prev ? prev : next));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [spec.tickSize],
+  );
 
   const rowSize = Math.max(suggestedRowSize, spec.tickSize) * densityMultiplier(controls.rowDensity);
   const intervalSec = intervalToSec(interval);

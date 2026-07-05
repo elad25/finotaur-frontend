@@ -30,6 +30,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { FlowBinStore } from './flowBinStore';
 import type { FootprintConfig, FlowCandleView } from './types';
+import type { Bar } from '@/components/charting/types';
 import {
   computeDetailLevel,
   computeRowMergeFactor,
@@ -46,6 +47,7 @@ import {
   type FootprintDetailLevel,
   type PreparedCandleDraw,
 } from './footprintRender';
+import { FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH } from './footprintTheme';
 import { MagnifierPopup } from './MagnifierPopup';
 
 /** Dwell time (ms) the cursor must stay over a candle before the Magnifier popup appears. */
@@ -80,6 +82,16 @@ export interface FootprintLayerProps {
    * called on every frame — only on an actual stage transition.
    */
   onStageChange?: (stage: FootprintDetailLevel) => void;
+  /**
+   * The underlying candlestick series' own OHLC bars (FinotaurChart's
+   * `barsRef.current`) — source of the actual open/high/low/close used to
+   * draw the per-candle skeleton strip (see drawCandleFootprint's `ohlc`
+   * extra). FlowBinStore has no OHLC concept of its own (it only aggregates
+   * buy/sell volume per price bin), so this is threaded in from the
+   * candlestick series data FinotaurChart already holds. Optional — omitting
+   * it simply skips the skeleton (no behavior change for other callers).
+   */
+  bars?: Bar[];
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -93,6 +105,7 @@ export function FootprintLayer({
   width,
   height,
   onStageChange,
+  bars,
 }: FootprintLayerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -107,6 +120,7 @@ export function FootprintLayer({
   const heightRef = useRef<number>(height);
   const storeRef = useRef<FlowBinStore>(store);
   const onStageChangeRef = useRef<((stage: FootprintDetailLevel) => void) | undefined>(onStageChange);
+  const barsRef = useRef<Bar[] | undefined>(bars);
 
   configRef.current = config;
   visibleRef.current = visible;
@@ -114,6 +128,7 @@ export function FootprintLayer({
   heightRef.current = height;
   storeRef.current = store;
   onStageChangeRef.current = onStageChange;
+  barsRef.current = bars;
 
   // ── Magnifier hover state ────────────────────────────────────────────────
   // React state (NOT rAF-driven) — the popup only repaints when the hovered
@@ -128,9 +143,19 @@ export function FootprintLayer({
   // micro-move within the SAME candle (cheap early-exit instead).
   const pendingHoverKeyRef = useRef<number | null>(null);
 
-  // Prepared per-candle draw cache, rebuilt only on data/config dirty.
-  // Keyed by candle time (seconds).
+  // Prepared per-candle draw cache, rebuilt on data/config dirty OR when the
+  // Auto row-merge factor for that candle changes (see mergeFactorCacheRef
+  // below) — merging/imbalance-detection is O(bins), cheap enough to redo
+  // for the handful of visible candles when zoom crosses a merge-factor
+  // boundary, and this is what makes Auto density actually track zoom (a
+  // frozen mergeFactor from first-cache-time would never re-tighten rows
+  // after zooming in). Keyed by candle time (seconds).
   const preparedCacheRef = useRef<Map<number, PreparedCandleDraw>>(new Map());
+  // Last computeRowMergeFactor() result per candle time — feeds hysteresis
+  // (previousFactor) so a per-row height hovering at a band edge across
+  // consecutive frames doesn't oscillate the factor (and thus rebuild
+  // `prepared`) every frame. Cleared alongside preparedCacheRef.
+  const mergeFactorCacheRef = useRef<Map<number, 1 | 2 | 4>>(new Map());
   // Cluster-Statistics per-candle cache (Volume/Delta/Max Δ/Min Δ) — depends
   // only on the candle's own data (never on cellMode/imbalance thresholds),
   // so it's invalidated by the same data-dirty path as preparedCacheRef but
@@ -152,6 +177,7 @@ export function FootprintLayer({
     });
     dirtyRef.current = true; // store identity changed (symbol/interval swap) — force rebuild
     preparedCacheRef.current.clear();
+    mergeFactorCacheRef.current.clear();
     statsCacheRef.current.clear();
     return unsubscribe;
   }, [store]);
@@ -172,6 +198,7 @@ export function FootprintLayer({
   useEffect(() => {
     dirtyRef.current = true;
     preparedCacheRef.current.clear();
+    mergeFactorCacheRef.current.clear();
   }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly]);
 
   // ── Mark dirty on size/visibility change ─────────────────────────────────
@@ -371,6 +398,7 @@ export function FootprintLayer({
         if (cachedRowSizeRef.current !== rowSize) {
           cachedRowSizeRef.current = rowSize;
           preparedCacheRef.current.clear();
+          mergeFactorCacheRef.current.clear();
           statsCacheRef.current.clear();
         }
 
@@ -447,6 +475,18 @@ export function FootprintLayer({
           for (const point of cvdSeries) cvdByTime.set(point.time, point.cvd);
         }
 
+        // OHLC lookup for the candle skeleton strip (task: FootprintLayer has
+        // no OHLC of its own — FlowBinStore only tracks buy/sell volume per
+        // price bin — so this reads from the candlestick series' own bars,
+        // threaded in via the `bars` prop). Built once per dirty frame, same
+        // cost class as cvdByTime above, never per pan/zoom frame.
+        const ohlcByTime = new Map<number, { open: number; high: number; low: number; close: number }>();
+        if (detail === 'full' && barsRef.current) {
+          for (const bar of barsRef.current) {
+            ohlcByTime.set(bar.time as unknown as number, { open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+          }
+        }
+
         // Bar columns collected for a single batched stats-band draw call
         // after the per-candle footprint loop (drawStatsBandAt computes
         // heat-shading row maxima once across all visible bars).
@@ -457,13 +497,26 @@ export function FootprintLayer({
           const x = timeToX(candle.time);
           if (x + candleWidthPx / 2 < 0 || x - candleWidthPx / 2 > paneW) continue; // cull
 
+          // Auto row-merge factor is recomputed EVERY frame (cheap — O(1) per
+          // candle, just a threshold comparison against the zoom-derived
+          // rowHeightPx) so it actually tracks zoom, with hysteresis against
+          // this candle's own last factor to avoid flicker at a band edge.
+          // The expensive part (merging bins + imbalance detection) only
+          // reruns when the factor actually changes or the candle isn't
+          // cached yet — data/config dirty already clears both caches above.
+          // undefined (not a default of 1) for a candle seen for the first
+          // time — computeRowMergeFactor treats "no held factor" as a cold
+          // start using the plain threshold, distinct from "held at 1".
+          const previousFactor = mergeFactorCacheRef.current.get(candle.time);
+          const mergeFactor: 1 | 2 | 4 = detail === 'full'
+            ? computeRowMergeFactor(rowHeightPx, candle.bins.length, previousFactor)
+            : 1;
+
           let prepared = preparedCacheRef.current.get(candle.time);
-          if (!prepared) {
-            const mergeFactor = detail === 'full'
-              ? computeRowMergeFactor(estimateCandleHeightPx(candle, rowSize, rowHeightPx), candle.bins.length)
-              : 1;
+          if (!prepared || mergeFactorCacheRef.current.get(candle.time) !== mergeFactor) {
             prepared = prepareCandleDraw(candle, rowSize, mergeFactor, config);
             preparedCacheRef.current.set(candle.time, prepared);
+            mergeFactorCacheRef.current.set(candle.time, mergeFactor);
           }
 
           const priceToY = (price: number): number | null => {
@@ -487,6 +540,7 @@ export function FootprintLayer({
               liveEdgeX,
               latestCandleRange: latestRange,
               clipRightX: paneW,
+              ohlc: ohlcByTime.get(candle.time),
             },
           );
 
@@ -532,7 +586,7 @@ export function FootprintLayer({
           }
           drawStatsBandAt(ctx, statsBars, {
             top: cssH - FOOTPRINT_STATS_BAND_HEIGHT,
-            labelGutterWidth: 0,
+            labelGutterWidth: FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
             rowMaxima,
           });
         } else if (totalsBars.length > 0) {
@@ -658,12 +712,6 @@ function computeCandleRange(candle: FlowCandleView, rowSize: number): { low: num
     if (bin.binPrice + rowSize > high) high = bin.binPrice + rowSize;
   }
   return isFinite(low) && isFinite(high) ? { low, high } : null;
-}
-
-/** Rough px-height estimate for a candle's full bin range, for row-merge factor decisions. */
-function estimateCandleHeightPx(candle: FlowCandleView, rowSize: number, rowHeightPx: number): number {
-  if (candle.bins.length === 0 || rowHeightPx <= 0) return 0;
-  return candle.bins.length * rowHeightPx;
 }
 
 export default FootprintLayer;

@@ -135,21 +135,31 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
   // ── Order Flow controls state ────────────────────────────────────────────
   const [controls, setControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
 
-  // ── Row size: auto-suggested from the loaded window's high/low range,
-  // refined on each bar load (onBarsLoad below), adjusted by the density
-  // multiplier. FinotaurChart's onBarsLoad only exposes the whole window's
-  // {high, low} extremes (not the raw per-bar array), so suggestRowSize is
-  // fed a single synthetic "bar" spanning that range — a reasonable proxy
-  // since the goal is just a sensible starting tick, not exact TradingView parity.
+  // ── Row size: auto-suggested from the loaded window's average PER-BAR
+  // high/low range, refined on each bar load (onBarsLoad below), adjusted by
+  // the density multiplier. FinotaurChart's onBarsLoad reports avgBarRange —
+  // the average (high - low) across the individual loaded bars — separately
+  // from the window-spanning high/low extremes, so suggestRowSize (which
+  // expects a PER-BAR range, per its TradingView-convention doc comment)
+  // isn't fed one giant synthetic bar spanning the whole window (that
+  // produced price bins orders of magnitude too coarse — 1-3 bins per bar).
   const [suggestedRowSize, setSuggestedRowSize] = useState<number>(FALLBACK_TICK_SIZE);
 
-  const handleBarsLoad = useCallback((range: { high: number; low: number } | null) => {
-    if (!range) return;
-    const avgRange = range.high - range.low;
-    const proxyTick = avgRange > 0 ? Math.max(avgRange / 500, FALLBACK_TICK_SIZE) : FALLBACK_TICK_SIZE;
-    const next = FlowBinStore.suggestRowSize([range], proxyTick);
-    setSuggestedRowSize(next);
-  }, []);
+  const handleBarsLoad = useCallback(
+    (range: { high: number; low: number; avgBarRange: number } | null) => {
+      if (!range) return;
+      // suggestRowSize takes a bars array and averages (high - low) across
+      // it. Feeding it a single {high: avgBarRange, low: 0} bar reproduces
+      // exactly avgRange = avgBarRange without changing suggestRowSize's
+      // contract (which real bar arrays elsewhere still rely on).
+      const next = FlowBinStore.suggestRowSize(
+        [{ high: range.avgBarRange, low: 0 }],
+        FALLBACK_TICK_SIZE,
+      );
+      setSuggestedRowSize(next);
+    },
+    [],
+  );
 
   const rowSize = Math.max(suggestedRowSize, FALLBACK_TICK_SIZE) * densityMultiplier(controls.rowDensity);
   const intervalSec = intervalToSec(interval);

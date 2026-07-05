@@ -23,6 +23,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   computeDetailLevel,
+  computeRowMergeFactor,
+  computeCellFontSize,
   prepareCandleDraw,
   drawCandleFootprint,
   formatCellValue,
@@ -32,6 +34,20 @@ import {
 import type { FlowCandleView, FlowTrade, FootprintConfig } from '../types';
 import { DEFAULT_FOOTPRINT_CONFIG } from '../types';
 import { FlowBinStore } from '../flowBinStore';
+import {
+  FOOTPRINT_AUTO_ROW_HEIGHT_MAX,
+  FOOTPRINT_AUTO_ROW_HEIGHT_MIN,
+  FOOTPRINT_BUY_COLOR,
+  FOOTPRINT_BUY_COLOR_BRIGHT,
+  FOOTPRINT_SELL_COLOR,
+  FOOTPRINT_SELL_COLOR_BRIGHT,
+  FOOTPRINT_NEUTRAL_TEXT,
+  FOOTPRINT_CELL_GUTTER_PX,
+  FOOTPRINT_CELL_FONT_MIN,
+  FOOTPRINT_CELL_FONT_MAX,
+  FOOTPRINT_STACKED_BUY_BAND_BORDER,
+  FOOTPRINT_STACKED_SELL_BAND_BORDER,
+} from '../footprintTheme';
 
 // ─── computeDetailLevel ──────────────────────────────────────────────────────
 
@@ -373,5 +389,820 @@ describe('drawCandleFootprint — "volumeDelta" cell mode', () => {
     // delta = 5-2 = +3 → formatCellValue(3) = "3.0" (sub-100, 1-decimal rule); volume = 5+2 = 7 → "7.0"
     expect(ctx.fillTextCalls.some((c) => c.text === '+3.0')).toBe(true);
     expect(ctx.fillTextCalls.some((c) => c.text === '7.0')).toBe(true);
+  });
+});
+
+// ─── computeRowMergeFactor — Auto row-density targeting (Step 1: Ladder foundation) ──
+//
+// Regression coverage for the giant-rows defect: an earlier version derived
+// "available height" as `binCount * rowHeightPx`, which made the function's
+// internal naive-row-height calculation cancel back out to exactly
+// `rowHeightPx` regardless of `binCount` — merging could never actually
+// react to the store's real per-row pixel height. These tests exercise the
+// fixed contract directly: `baseRowHeightPx` is the ACTUAL single-row height
+// at the current zoom, and the function must pick the smallest factor whose
+// resulting merged-row height clears FOOTPRINT_AUTO_ROW_HEIGHT_MIN.
+
+describe('computeRowMergeFactor — Auto row-density targeting', () => {
+  it('factor=1 when the base row height already clears the target band minimum', () => {
+    // Representative "healthy" projection: 18px/row at rowSize=1x — no merge needed.
+    expect(computeRowMergeFactor(18, 20)).toBe(1);
+    expect(computeRowMergeFactor(FOOTPRINT_AUTO_ROW_HEIGHT_MIN, 20)).toBe(1);
+  });
+
+  it('factor=2 when the base row is too short for 1x but 2x lands in the target band', () => {
+    // 8px/row * 2 = 16px — inside [14, 22].
+    expect(computeRowMergeFactor(8, 25)).toBe(2);
+  });
+
+  it('factor=4 when even 2x would stay below the minimum', () => {
+    // 3px/row * 2 = 6px (still short) → escalate to 4x = 12px... still short of
+    // 14, but 4 is the maximum coarsening factor (matches the existing 1/2/4
+    // system) — proves the function never returns anything outside {1,2,4}.
+    const factor = computeRowMergeFactor(3, 40);
+    expect(factor).toBe(4);
+  });
+
+  it('degenerate inputs (no bins / zero row height) default to factor 1, never throw', () => {
+    expect(computeRowMergeFactor(18, 0)).toBe(1);
+    expect(computeRowMergeFactor(0, 20)).toBe(1);
+    expect(computeRowMergeFactor(-5, 20)).toBe(1);
+  });
+
+  it('representative BTC 15m @ barSpacing≈70px projections land inside the 14-22px target band', () => {
+    // These are the kind of base-row-heights a coarse rowSize would produce
+    // BEFORE any merging is applied at various zoom levels — proves that for
+    // realistic inputs, the CHOSEN factor's resulting row height is inside
+    // (or as close as the discrete 1/2/4 stepping allows to) the target band.
+    const representativeBaseHeights = [4, 6, 7.5, 9, 11, 13, 15, 18, 21];
+    for (const base of representativeBaseHeights) {
+      const factor = computeRowMergeFactor(base, 20);
+      const resultHeight = base * factor;
+      // The function's contract: never pick a LARGER factor than necessary —
+      // resultHeight must be the smallest of {base*1, base*2, base*4} that
+      // clears the minimum (or base*4 if none clear it, per the discrete
+      // stepping). It must always clear the minimum once achievable at all.
+      if (base * 4 >= FOOTPRINT_AUTO_ROW_HEIGHT_MIN) {
+        expect(resultHeight).toBeGreaterThanOrEqual(FOOTPRINT_AUTO_ROW_HEIGHT_MIN);
+      }
+      // No factor is ever chosen needlessly large: halving factor (if >1)
+      // must NOT also have cleared the minimum (else that smaller factor
+      // should have been picked instead).
+      if (factor > 1) {
+        expect(base * (factor / 2)).toBeLessThan(FOOTPRINT_AUTO_ROW_HEIGHT_MIN);
+      }
+    }
+    // Sanity: at least one of these representative heights actually lands
+    // WITHIN the [MIN, MAX] band after merging (proves the band is reachable
+    // for realistic inputs, not just theoretically satisfiable).
+    const landedInBand = representativeBaseHeights.some((base) => {
+      const factor = computeRowMergeFactor(base, 20);
+      const h = base * factor;
+      return h >= FOOTPRINT_AUTO_ROW_HEIGHT_MIN && h <= FOOTPRINT_AUTO_ROW_HEIGHT_MAX;
+    });
+    expect(landedInBand).toBe(true);
+  });
+
+  it('hysteresis: holds the previous factor while its merged height stays within the hysteresis margin, even if a cold-start call would pick differently', () => {
+    // Cold start at base=8 → factor 2 (16px, in-band).
+    const coldFactor = computeRowMergeFactor(8, 20);
+    expect(coldFactor).toBe(2);
+
+    // Zoom drifts slightly: base drops to 6px. A cold-start call at 6px would
+    // pick factor 4 (6*2=12 < 14 → escalate). But WITH hysteresis and the
+    // previous factor of 2, held height = 6*2 = 12, which is still within
+    // [MIN - hysteresis, ∞) = [11, ∞) — so it must HOLD at 2, not flicker to 4.
+    const heldFactor = computeRowMergeFactor(6, 20, coldFactor);
+    expect(heldFactor).toBe(2);
+
+    // But once base drops far enough that even the hysteresis margin can't
+    // save the held factor (base=4 → held height 4*2=8, well below 11), it
+    // must escalate.
+    const escalatedFactor = computeRowMergeFactor(4, 20, coldFactor);
+    expect(escalatedFactor).toBe(4);
+  });
+});
+
+// ─── Empty (zero-volume) rows paint NO fill in ANY cell mode ────────────────
+//
+// ATAS parity: a price level with no prints at all shows the chart
+// background through it, not a neutral/red/green wash. Regression coverage
+// for the "whole column washed with color" defect (bidAsk mode previously
+// painted a fixed-alpha red/green half for every row, including empty ones).
+
+describe('drawCandleFootprint — empty rows produce zero fill calls', () => {
+  const rowSize = 10;
+
+  /** A single-bin candle (one real trade) merged so an ADJACENT empty price level exists as its own row. */
+  function buildCandleWithGap(): FlowCandleView {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize });
+    store.applyTrades([
+      { time: 0, price: 100, qty: 5, buyerAggressor: true },
+      { time: 1000, price: 130, qty: 3, buyerAggressor: false },
+    ]);
+    const candle = store.getCandle(0);
+    if (!candle) throw new Error('test setup error');
+    return candle;
+  }
+
+  function drawWithSyntheticEmptyRow(cellMode: FootprintConfig['cellMode']) {
+    const candle = buildCandleWithGap();
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+
+    // Inject a synthetic zero-volume row into the merged set — the real
+    // store never emits a bin for a price level with no prints, but a wide
+    // merge group CAN span an empty sub-range (sparse tape), so the
+    // draw-time contract must hold regardless of how the empty row arose.
+    prepared.merged.push({ binPrice: 999_999, buyVol: 0, sellVol: 0, trades: 0 });
+    // Keep imbalances array in sync (drawCandleFootprint indexes it by row position).
+    prepared.imbalances.push({ side: null, highlighted: false });
+
+    const ctx = createMockCtx();
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => {
+      if (price === 999_999 + rowSize) return 40; // top of the synthetic empty row
+      if (price === 999_999) return 40 + rowHeightPx; // bottom of the synthetic empty row
+      const minBinPrice = 100;
+      const rowsFromBottom = (price - minBinPrice) / rowSize;
+      return 400 - rowsFromBottom * rowHeightPx;
+    };
+    const projection: CandleProjection = {
+      centerX: 400,
+      candleWidthPx: 60,
+      priceToY,
+      rowHeightPx,
+      rowSize,
+    };
+    const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+    return ctx;
+  }
+
+  it('bidAsk mode: the synthetic empty row contributes zero fillRect calls at its own coordinates', () => {
+    const ctx = drawWithSyntheticEmptyRow('bidAsk');
+    // The empty row's cell spans y in [40, 58]. No fillRect call should ever
+    // target that exact top (its background half-fills would start at y=40).
+    const fillsAtEmptyRow = ctx.fillRectCalls.filter((c) => c.y === 40);
+    expect(fillsAtEmptyRow.length).toBe(0);
+  });
+
+  it('delta mode: the synthetic empty row contributes zero fillRect calls', () => {
+    const ctx = drawWithSyntheticEmptyRow('delta');
+    const fillsAtEmptyRow = ctx.fillRectCalls.filter((c) => c.y === 40);
+    expect(fillsAtEmptyRow.length).toBe(0);
+  });
+
+  it('volume mode: the synthetic empty row contributes zero fillRect calls', () => {
+    const ctx = drawWithSyntheticEmptyRow('volume');
+    const fillsAtEmptyRow = ctx.fillRectCalls.filter((c) => c.y === 40);
+    expect(fillsAtEmptyRow.length).toBe(0);
+  });
+
+  it('trades mode: the synthetic empty row contributes zero fillRect calls', () => {
+    const ctx = drawWithSyntheticEmptyRow('trades');
+    const fillsAtEmptyRow = ctx.fillRectCalls.filter((c) => c.y === 40);
+    expect(fillsAtEmptyRow.length).toBe(0);
+  });
+
+  it('volumeDelta mode: the synthetic empty row contributes zero fillRect calls', () => {
+    const ctx = drawWithSyntheticEmptyRow('volumeDelta');
+    const fillsAtEmptyRow = ctx.fillRectCalls.filter((c) => c.y === 40);
+    expect(fillsAtEmptyRow.length).toBe(0);
+  });
+
+  it('non-empty rows in the same draw call DO still paint (proves the guard is row-scoped, not a global "cellMode broken" regression)', () => {
+    const ctx = drawWithSyntheticEmptyRow('bidAsk');
+    expect(ctx.fillRectCalls.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── bidAsk mode: volume-keyed alpha replaces the old fixed 0.16 halves ─────
+
+describe('drawCandleFootprint — bidAsk mode alpha scales with row volume', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  it('a heavier row (more total volume) renders a higher-alpha fill than a lighter row', () => {
+    // Two distinct bins with deliberately different total volume, so
+    // maxRowVol > 0 and the two rows land at different points on the
+    // volume-magnitude curve.
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 1, buyerAggressor: true }, // light row: vol=1
+      { time: 1000, price: 110, qty: 20, buyerAggressor: true }, // heavy row: vol=20
+    ];
+    const store = new FlowBinStore({ intervalSec, rowSize });
+    store.applyTrades(trades);
+    const candle = store.getCandle(0);
+    if (!candle) throw new Error('test setup error');
+
+    // showPoc disabled — otherwise the busiest row (heavy, vol=20) also
+    // draws the gold POC band fillRect at the SAME (x, y) as its bidAsk
+    // half-fill, which would confound the alpha this test is isolating.
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'bidAsk', showPoc: false };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    expect(prepared.merged.length).toBe(2);
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => {
+      const rowsFromBottom = (price - 100) / rowSize;
+      return 400 - rowsFromBottom * rowHeightPx;
+    };
+    const projection: CandleProjection = {
+      centerX: 400,
+      candleWidthPx: 60,
+      priceToY,
+      rowHeightPx,
+      rowSize,
+    };
+    const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+
+    // fillStyle-aware mock: real Canvas2D reads fillStyle AT fillRect() call
+    // time, so a plain call-log mock (createMockCtx) can't recover which
+    // alpha was used per row — createStyledMockCtx() snapshots it.
+    const styledCtx = createStyledMockCtx();
+    drawCandleFootprint(styledCtx, prepared, projection, 'full', config, extras);
+
+    // Match the BUY-side half-fill specifically (x === midX, i.e. width
+    // equal to half the candle width) — with showPoc off, this is the only
+    // fillRect issued at each row's top.
+    const rowAlphas = prepared.merged.map((row) => {
+      const yTop = priceToY(row.binPrice + rowSize)!;
+      const yBot = priceToY(row.binPrice)!;
+      const top = Math.min(yTop, yBot);
+      const call = styledCtx.styledFillRectCalls.find(
+        (c) => Math.abs(c.y - top) < 0.01 && c.w < 60, // half-width fill, not a full-width one
+      );
+      expect(call).toBeDefined();
+      const alphaMatch = call!.fillStyle.match(/rgba\([^)]+,\s*([\d.]+)\)/);
+      expect(alphaMatch).not.toBeNull();
+      return { rowVol: row.buyVol + row.sellVol, alpha: parseFloat(alphaMatch![1]) };
+    });
+
+    const light = rowAlphas.find((r) => r.rowVol === 1)!;
+    const heavy = rowAlphas.find((r) => r.rowVol === 20)!;
+    expect(heavy.alpha).toBeGreaterThan(light.alpha);
+    // Both must fall within the theme's weak/strong endpoints (0.16-0.32).
+    expect(light.alpha).toBeGreaterThanOrEqual(0.16);
+    expect(heavy.alpha).toBeLessThanOrEqual(0.32);
+  });
+
+  it('the busiest row in the candle (rowVol === maxRowVol) renders at exactly the strong (0.32) endpoint', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 1, buyerAggressor: true },
+      { time: 1000, price: 110, qty: 10, buyerAggressor: true }, // this bin is maxRowVol
+    ];
+    const store = new FlowBinStore({ intervalSec, rowSize });
+    store.applyTrades(trades);
+    const candle = store.getCandle(0)!;
+    // showPoc disabled — see note in the previous test: the busiest row is
+    // also the POC row, whose gold-band fillRect would land at the same
+    // (x, y) as the bidAsk half-fill this test is isolating.
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'bidAsk', showPoc: false };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+
+    const styledCtx = createStyledMockCtx();
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 400, candleWidthPx: 60, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+
+    drawCandleFootprint(styledCtx, prepared, projection, 'full', config, extras);
+
+    const maxRow = prepared.merged.reduce((a, b) => (a.buyVol + a.sellVol > b.buyVol + b.sellVol ? a : b));
+    const yTop = priceToY(maxRow.binPrice + rowSize)!;
+    const yBot = priceToY(maxRow.binPrice)!;
+    const top = Math.min(yTop, yBot);
+    const call = styledCtx.styledFillRectCalls.find(
+      (c) => Math.abs(c.y - top) < 0.01 && c.w < 60, // half-width buy/sell fill, not a full-width one
+    );
+    expect(call).toBeDefined();
+    const alphaMatch = call!.fillStyle.match(/rgba\([^)]+,\s*([\d.]+)\)/);
+    expect(parseFloat(alphaMatch![1])).toBeCloseTo(0.32, 5);
+  });
+});
+
+/**
+ * fillStyle-aware canvas mock — snapshots ctx.fillStyle AT THE MOMENT
+ * fillRect is called (mirrors real Canvas2D semantics: fillStyle is read at
+ * draw time, not bound to the call). Needed for the bidAsk alpha tests above
+ * since the plain createMockCtx() only records geometry, not style.
+ */
+function createStyledMockCtx() {
+  const styledFillRectCalls: { x: number; y: number; w: number; h: number; fillStyle: string }[] = [];
+  const state = { fillStyle: '' as string };
+  const ctx = {
+    styledFillRectCalls,
+    get fillStyle() { return state.fillStyle; },
+    set fillStyle(v: string) { state.fillStyle = v; },
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textAlign: 'left' as CanvasTextAlign,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
+    fillRect: vi.fn((x: number, y: number, w: number, h: number) => {
+      styledFillRectCalls.push({ x, y, w, h, fillStyle: state.fillStyle });
+    }),
+    fillText: vi.fn(),
+    strokeRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+  } as unknown as CanvasRenderingContext2D & {
+    styledFillRectCalls: typeof styledFillRectCalls;
+  };
+  return ctx;
+}
+
+// ─── Text & emphasis pass (Step 2): neutral bidAsk text, imbalance bold+bright,
+// removed gold outline, gutter inset, auto font size ─────────────────────────
+
+/**
+ * Full-fidelity canvas mock — snapshots fillStyle/font/textAlign AT EACH
+ * fillText call, and records every strokeRect call with its strokeStyle at
+ * call time. Needed to prove (a) which color/weight rendered for a given
+ * cell's text, and (b) that no gold imbalance-outline stroke is ever issued.
+ */
+function createFullMockCtx() {
+  const fillTextCalls: { text: string; x: number; y: number; fillStyle: string; font: string; textAlign: CanvasTextAlign }[] = [];
+  const strokeRectCalls: { x: number; y: number; w: number; h: number; strokeStyle: string }[] = [];
+  const fillRectCalls: { x: number; y: number; w: number; h: number; fillStyle: string }[] = [];
+  const state = { fillStyle: '' as string, strokeStyle: '' as string, font: '', textAlign: 'left' as CanvasTextAlign };
+  const ctx = {
+    fillTextCalls,
+    strokeRectCalls,
+    fillRectCalls,
+    get fillStyle() { return state.fillStyle; },
+    set fillStyle(v: string) { state.fillStyle = v; },
+    get strokeStyle() { return state.strokeStyle; },
+    set strokeStyle(v: string) { state.strokeStyle = v; },
+    get font() { return state.font; },
+    set font(v: string) { state.font = v; },
+    get textAlign() { return state.textAlign; },
+    set textAlign(v: CanvasTextAlign) { state.textAlign = v; },
+    lineWidth: 1,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
+    fillRect: vi.fn((x: number, y: number, w: number, h: number) => {
+      fillRectCalls.push({ x, y, w, h, fillStyle: state.fillStyle });
+    }),
+    fillText: vi.fn((text: string, x: number, y: number) => {
+      fillTextCalls.push({ text, x, y, fillStyle: state.fillStyle, font: state.font, textAlign: state.textAlign });
+    }),
+    strokeRect: vi.fn((x: number, y: number, w: number, h: number) => {
+      strokeRectCalls.push({ x, y, w, h, strokeStyle: state.strokeStyle });
+    }),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+  } as unknown as CanvasRenderingContext2D & {
+    fillTextCalls: typeof fillTextCalls;
+    strokeRectCalls: typeof strokeRectCalls;
+    fillRectCalls: typeof fillRectCalls;
+  };
+  return ctx;
+}
+
+/** Build a single-candle bidAsk projection at a given rowHeightPx — shared by the tests below. */
+function buildBidAskFixture(rowHeightPx: number, trades: FlowTrade[]) {
+  const intervalSec = 60;
+  const rowSize = 10;
+  const store = new FlowBinStore({ intervalSec, rowSize });
+  store.applyTrades(trades);
+  const candle = store.getCandle(0);
+  if (!candle) throw new Error('test setup error: expected a candle at time 0');
+
+  const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'bidAsk', showPoc: false };
+  const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+
+  const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+  const projection: CandleProjection = {
+    centerX: 400,
+    candleWidthPx: 60,
+    priceToY,
+    rowHeightPx,
+    rowSize,
+  };
+  const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+
+  return { prepared, projection, config, extras };
+}
+
+describe('drawCandleFootprint — bidAsk regular numbers use neutral text', () => {
+  it('a non-imbalanced row renders both bid and ask numbers in FOOTPRINT_NEUTRAL_TEXT, not directional green/red', () => {
+    // Two mild, roughly balanced levels — ratio well under the imbalance
+    // threshold, so neither row should ever be flagged imbalanced.
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 5, buyerAggressor: true },
+      { time: 100, price: 100, qty: 5, buyerAggressor: false },
+      { time: 200, price: 110, qty: 5, buyerAggressor: true },
+      { time: 300, price: 110, qty: 5, buyerAggressor: false },
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+    expect(prepared.imbalances.every((i) => !i.highlighted)).toBe(true);
+
+    const ctx = createFullMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    expect(ctx.fillTextCalls.length).toBeGreaterThan(0);
+    for (const call of ctx.fillTextCalls) {
+      expect(call.fillStyle).toBe(FOOTPRINT_NEUTRAL_TEXT);
+      // Non-imbalanced text must never be bold.
+      expect(call.font.startsWith('bold ')).toBe(false);
+    }
+  });
+});
+
+describe('drawCandleFootprint — imbalanced row: bold + bright winning-side number, no gold stroke', () => {
+  it('buy-side imbalance: the ask (buy) number is bold + FOOTPRINT_BUY_COLOR_BRIGHT; no strokeRect calls occur', () => {
+    // Row at price=110 has buyVol=100 vs the row below (price=100) sellVol=1
+    // — comfortably clears STANDARD_IMBALANCE_RATIO (1.5x) and the dust filter.
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 1, buyerAggressor: false }, // sellVol=1 at level 0
+      { time: 100, price: 110, qty: 100, buyerAggressor: true }, // buyVol=100 at level 1
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+    const imbalancedBuy = prepared.imbalances.some((i) => i.highlighted && i.side === 'buy');
+    expect(imbalancedBuy).toBe(true);
+
+    const ctx = createFullMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    // No gold imbalance outline should ever be drawn — outline removal is unconditional.
+    expect(ctx.strokeRectCalls.length).toBe(0);
+
+    // The buy-side (ask) number for the imbalanced row is bold + bright green.
+    const buyText = formatCellValue(100);
+    const buyCall = ctx.fillTextCalls.find((c) => c.text === buyText);
+    expect(buyCall).toBeDefined();
+    expect(buyCall!.fillStyle).toBe(FOOTPRINT_BUY_COLOR_BRIGHT);
+    expect(buyCall!.font.startsWith('bold ')).toBe(true);
+
+    // The opposite (sell) side of the SAME imbalanced row stays neutral, not bright red.
+    const sellText = formatCellValue(1);
+    const sellCall = ctx.fillTextCalls.find((c) => c.text === sellText);
+    expect(sellCall).toBeDefined();
+    expect(sellCall!.fillStyle).toBe(FOOTPRINT_NEUTRAL_TEXT);
+  });
+
+  it('sell-side imbalance: the bid (sell) number is bold + FOOTPRINT_SELL_COLOR_BRIGHT; no strokeRect calls occur', () => {
+    // Row at price=100 has sellVol=100 vs the row above (price=110) buyVol=1
+    // — comfortably clears the imbalance ratio for a sell-side flag.
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 100, buyerAggressor: false }, // sellVol=100 at level 0
+      { time: 100, price: 110, qty: 1, buyerAggressor: true }, // buyVol=1 at level 1
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+    const imbalancedSell = prepared.imbalances.some((i) => i.highlighted && i.side === 'sell');
+    expect(imbalancedSell).toBe(true);
+
+    const ctx = createFullMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    expect(ctx.strokeRectCalls.length).toBe(0);
+
+    const sellText = formatCellValue(100);
+    const sellCall = ctx.fillTextCalls.find((c) => c.text === sellText);
+    expect(sellCall).toBeDefined();
+    expect(sellCall!.fillStyle).toBe(FOOTPRINT_SELL_COLOR_BRIGHT);
+    expect(sellCall!.font.startsWith('bold ')).toBe(true);
+  });
+});
+
+describe('drawCandleFootprint — bidAsk center gutter', () => {
+  it('bid text right-anchors at (midX - halfGutter - padding) and ask text left-anchors at (midX + halfGutter + padding)', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 3, buyerAggressor: true },
+      { time: 100, price: 100, qty: 2, buyerAggressor: false },
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+    const ctx = createFullMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const centerX = projection.centerX;
+    const halfGutter = FOOTPRINT_CELL_GUTTER_PX / 2;
+
+    const sellCall = ctx.fillTextCalls.find((c) => c.textAlign === 'right');
+    const buyCall = ctx.fillTextCalls.find((c) => c.textAlign === 'left');
+    expect(sellCall).toBeDefined();
+    expect(buyCall).toBeDefined();
+
+    // Sell (bid) anchor sits strictly left of the midline by at least halfGutter.
+    expect(centerX - sellCall!.x).toBeGreaterThanOrEqual(halfGutter);
+    // Buy (ask) anchor sits strictly right of the midline by at least halfGutter.
+    expect(buyCall!.x - centerX).toBeGreaterThanOrEqual(halfGutter);
+  });
+
+  it('bidAsk background half-fills stop short of the midline by halfGutter on each side (visual seam)', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 3, buyerAggressor: true },
+      { time: 100, price: 100, qty: 2, buyerAggressor: false },
+    ];
+    const { prepared, projection, config, extras } = buildBidAskFixture(18, trades);
+    const ctx = createFullMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const centerX = projection.centerX;
+    const halfGutter = FOOTPRINT_CELL_GUTTER_PX / 2;
+
+    // Left (sell) half-fill: x + w must not cross past (centerX - halfGutter).
+    const leftFill = ctx.fillRectCalls.find((c) => c.x < centerX && c.w < 60);
+    expect(leftFill).toBeDefined();
+    expect(leftFill!.x + leftFill!.w).toBeLessThanOrEqual(centerX - halfGutter + 0.01);
+
+    // Right (buy) half-fill: x must start at/after (centerX + halfGutter).
+    const rightFill = ctx.fillRectCalls.find((c) => c.x >= centerX && c.w < 60);
+    expect(rightFill).toBeDefined();
+    expect(rightFill!.x).toBeGreaterThanOrEqual(centerX + halfGutter - 0.01);
+  });
+});
+
+describe('computeCellFontSize — auto font size by row height', () => {
+  it('scales roughly linearly with rowHeightPx inside the clamp range', () => {
+    // ratio=0.55: 20px row -> round(11) = 11px (within [9,13]).
+    expect(computeCellFontSize(20)).toBe(11);
+    // 16px row -> round(8.8) = 9px.
+    expect(computeCellFontSize(16)).toBe(9);
+  });
+
+  it('clamps at FOOTPRINT_CELL_FONT_MIN for very short rows', () => {
+    expect(computeCellFontSize(5)).toBe(FOOTPRINT_CELL_FONT_MIN);
+    expect(computeCellFontSize(0)).toBe(FOOTPRINT_CELL_FONT_MIN);
+  });
+
+  it('clamps at FOOTPRINT_CELL_FONT_MAX for very tall rows', () => {
+    expect(computeCellFontSize(40)).toBe(FOOTPRINT_CELL_FONT_MAX);
+    expect(computeCellFontSize(100)).toBe(FOOTPRINT_CELL_FONT_MAX);
+  });
+
+  it('drawCandleFootprint actually applies the scaled font size to cell text', () => {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 3, buyerAggressor: true },
+      { time: 100, price: 100, qty: 2, buyerAggressor: false },
+    ];
+    const rowHeightPx = 24; // round(24*0.55) = round(13.2) = 13 -> clamps to FONT_MAX anyway
+    const { prepared, projection, config, extras } = buildBidAskFixture(rowHeightPx, trades);
+    const ctx = createFullMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const expectedSize = computeCellFontSize(rowHeightPx);
+    expect(ctx.fillTextCalls.length).toBeGreaterThan(0);
+    for (const call of ctx.fillTextCalls) {
+      expect(call.font).toContain(`${expectedSize}px`);
+    }
+  });
+});
+
+// ─── 'volume' cell mode: neutral text regardless of delta sign (pro convention) ──
+
+describe("drawCandleFootprint — 'volume' cell mode renders neutral text (no directional color)", () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  it('a positive-delta row still renders FOOTPRINT_NEUTRAL_TEXT, not FOOTPRINT_BUY_COLOR', () => {
+    const trades: FlowTrade[] = [{ time: 0, price: 100, qty: 10, buyerAggressor: true }]; // delta=+10
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'volume' };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    const ctx = createFullMockCtx();
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 400, candleWidthPx: 60, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    expect(ctx.fillTextCalls.length).toBeGreaterThan(0);
+    for (const call of ctx.fillTextCalls) {
+      expect(call.fillStyle).toBe(FOOTPRINT_NEUTRAL_TEXT);
+      expect(call.fillStyle).not.toBe(FOOTPRINT_BUY_COLOR);
+    }
+  });
+
+  it('a negative-delta row still renders FOOTPRINT_NEUTRAL_TEXT, not FOOTPRINT_SELL_COLOR', () => {
+    const trades: FlowTrade[] = [{ time: 0, price: 100, qty: 10, buyerAggressor: false }]; // delta=-10
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'volume' };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    const ctx = createFullMockCtx();
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 400, candleWidthPx: 60, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    expect(ctx.fillTextCalls.length).toBeGreaterThan(0);
+    for (const call of ctx.fillTextCalls) {
+      expect(call.fillStyle).toBe(FOOTPRINT_NEUTRAL_TEXT);
+      expect(call.fillStyle).not.toBe(FOOTPRINT_SELL_COLOR);
+    }
+  });
+});
+
+// ─── Candle skeleton strip (task 3): drawn BENEATH cell fills, correct color ──
+
+/** Call-order-aware mock: every draw call is appended (in order) to `log`, tagged by kind. */
+function createOrderedMockCtx() {
+  type LogEntry =
+    | { kind: 'fillRect'; x: number; y: number; w: number; h: number; fillStyle: string }
+    | { kind: 'strokeLine'; strokeStyle: string; lineWidth: number };
+  const log: LogEntry[] = [];
+  const state = { fillStyle: '' as string, strokeStyle: '' as string, lineWidth: 1 };
+  // A stroke() call is preceded by beginPath/moveTo/lineTo — we log at stroke()
+  // time (mirrors real Canvas2D: the path is only "committed" on stroke()).
+  const ctx = {
+    get fillStyle() { return state.fillStyle; },
+    set fillStyle(v: string) { state.fillStyle = v; },
+    get strokeStyle() { return state.strokeStyle; },
+    set strokeStyle(v: string) { state.strokeStyle = v; },
+    get lineWidth() { return state.lineWidth; },
+    set lineWidth(v: number) { state.lineWidth = v; },
+    font: '',
+    textAlign: 'left' as CanvasTextAlign,
+    textBaseline: 'alphabetic' as CanvasTextBaseline,
+    fillRect: vi.fn((x: number, y: number, w: number, h: number) => {
+      log.push({ kind: 'fillRect', x, y, w, h, fillStyle: state.fillStyle });
+    }),
+    fillText: vi.fn(),
+    strokeRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(() => {
+      log.push({ kind: 'strokeLine', strokeStyle: state.strokeStyle, lineWidth: state.lineWidth });
+    }),
+  } as unknown as CanvasRenderingContext2D & { log: LogEntry[] };
+  (ctx as unknown as { log: LogEntry[] }).log = log;
+  return ctx as CanvasRenderingContext2D & { log: LogEntry[] };
+}
+
+describe('drawCandleFootprint — candle skeleton strip', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  function buildFixtureWithOhlc(ohlc: { open: number; high: number; low: number; close: number }) {
+    const trades: FlowTrade[] = [
+      { time: 0, price: 100, qty: 5, buyerAggressor: true },
+      { time: 100, price: 110, qty: 3, buyerAggressor: false },
+    ];
+    const candle = buildCandleFromTrades(trades, intervalSec, rowSize);
+    // showPoc disabled — the POC band also issues a stroke() (gold top/bottom
+    // rule), which would confound a plain 'strokeLine' filter in the ordering
+    // test below. Isolating the skeleton's own buy/sell-styled stroke/fill
+    // events is the point of this fixture.
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: 'bidAsk', showPoc: false };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 400, candleWidthPx: 60, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = {
+      liveEdgeX: 800,
+      latestCandleRange: null,
+      clipRightX: 800,
+      ohlc,
+    };
+    return { prepared, projection, config, extras };
+  }
+
+  it('the skeleton wick+body draw BEFORE any cell fillRect (i.e. beneath, per canvas paint order)', () => {
+    const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 100, high: 115, low: 95, close: 110 });
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const skeletonEvents = ctx.log.filter((e) => e.kind === 'strokeLine' || (e.kind === 'fillRect' && (e.fillStyle === FOOTPRINT_BUY_COLOR || e.fillStyle === FOOTPRINT_SELL_COLOR)));
+    expect(skeletonEvents.length).toBeGreaterThan(0);
+
+    const firstSkeletonIdx = ctx.log.indexOf(skeletonEvents[0]);
+    const firstCellFillIdx = ctx.log.findIndex(
+      (e) => e.kind === 'fillRect' && e.fillStyle !== FOOTPRINT_BUY_COLOR && e.fillStyle !== FOOTPRINT_SELL_COLOR,
+    );
+    expect(firstCellFillIdx).toBeGreaterThan(-1);
+    expect(firstSkeletonIdx).toBeLessThan(firstCellFillIdx);
+  });
+
+  it('close >= open renders the body strip in FOOTPRINT_BUY_COLOR (green)', () => {
+    const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 100, high: 115, low: 95, close: 110 });
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const bodyFill = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_BUY_COLOR);
+    expect(bodyFill).toBeDefined();
+  });
+
+  it('close < open renders the body strip in FOOTPRINT_SELL_COLOR (red)', () => {
+    const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 110, high: 115, low: 95, close: 100 });
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const bodyFill = ctx.log.find((e) => e.kind === 'fillRect' && e.fillStyle === FOOTPRINT_SELL_COLOR);
+    expect(bodyFill).toBeDefined();
+  });
+
+  it('omitting extras.ohlc draws no skeleton (backward compatible — existing callers unaffected)', () => {
+    const { prepared, projection, config } = buildFixtureWithOhlc({ open: 100, high: 115, low: 95, close: 110 });
+    const extrasNoOhlc: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extrasNoOhlc);
+
+    const skeletonFills = ctx.log.filter(
+      (e) => e.kind === 'fillRect' && (e.fillStyle === FOOTPRINT_BUY_COLOR || e.fillStyle === FOOTPRINT_SELL_COLOR),
+    );
+    expect(skeletonFills.length).toBe(0);
+    // Skeleton wick strokes are tagged by their own buy/sell strokeStyle —
+    // distinct from the (unrelated) POC-band top/bottom stroke, which uses
+    // FOOTPRINT_POC_COLOR and still fires independently (showPoc defaults on).
+    const skeletonStrokes = ctx.log.filter(
+      (e) => e.kind === 'strokeLine' && (e.strokeStyle === FOOTPRINT_BUY_COLOR || e.strokeStyle === FOOTPRINT_SELL_COLOR),
+    );
+    expect(skeletonStrokes.length).toBe(0);
+  });
+
+  it('the skeleton does not draw at non-full detail stages (shaded/hidden), even if ohlc is provided', () => {
+    const { prepared, projection, config, extras } = buildFixtureWithOhlc({ open: 100, high: 115, low: 95, close: 110 });
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'shaded', config, extras);
+
+    // 'shaded' never reaches drawCell/drawCandleSkeleton at all (drawCandleFootprint
+    // returns after the merged-length guard only for 'hidden'; 'shaded' still loops
+    // but showText=false gates the skeleton call) — assert on buy/sell-styled events only,
+    // same reasoning as the previous test.
+    const skeletonEvents = ctx.log.filter(
+      (e) =>
+        (e.kind === 'strokeLine' && (e.strokeStyle === FOOTPRINT_BUY_COLOR || e.strokeStyle === FOOTPRINT_SELL_COLOR)) ||
+        (e.kind === 'fillRect' && (e.fillStyle === FOOTPRINT_BUY_COLOR || e.fillStyle === FOOTPRINT_SELL_COLOR)),
+    );
+    expect(skeletonEvents.length).toBe(0);
+  });
+});
+
+// ─── Stacked-imbalance zone: hairline border strokes (task 4) ───────────────
+
+describe('drawCandleFootprint — stacked zone bands render a hairline border', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  /** Build a candle with a qualifying stacked-buy run (>= stackedMin consecutive buy-imbalanced rows). */
+  function buildStackedBuyCandle(): FlowCandleView {
+    const trades: FlowTrade[] = [];
+    // 4 ascending price levels, each row's buyVol >>> the row below's sellVol
+    // (clears STANDARD_IMBALANCE_RATIO with margin), forming a stacked run.
+    for (let level = 0; level < 4; level++) {
+      trades.push({ time: level * 10, price: 100 + level * rowSize, qty: 1, buyerAggressor: false }); // thin sell base
+      trades.push({ time: level * 10 + 1, price: 100 + level * rowSize, qty: 50, buyerAggressor: true }); // heavy buy
+    }
+    const store = new FlowBinStore({ intervalSec, rowSize });
+    store.applyTrades(trades);
+    const candle = store.getCandle(0);
+    if (!candle) throw new Error('test setup error');
+    return candle;
+  }
+
+  function buildStackedFixture() {
+    const candle = buildStackedBuyCandle();
+    const config: FootprintConfig = {
+      ...DEFAULT_FOOTPRINT_CONFIG,
+      imbalancePreset: 'stacked',
+      imbalanceStackedOnly: true,
+    };
+    const prepared = prepareCandleDraw(candle, rowSize, 1, config);
+    expect(prepared.stackedZones.length).toBeGreaterThan(0); // sanity: a zone actually formed
+
+    const rowHeightPx = 18;
+    const priceToY = (price: number): number | null => 400 - ((price - 100) / rowSize) * rowHeightPx;
+    const projection: CandleProjection = { centerX: 100, candleWidthPx: 40, priceToY, rowHeightPx, rowSize };
+    const extras: FootprintDrawExtras = { liveEdgeX: 400, latestCandleRange: null, clipRightX: 400 };
+    return { prepared, projection, config, extras };
+  }
+
+  it('draws a hairline stroke in FOOTPRINT_STACKED_BUY_BAND_BORDER for a buy-side zone (one stroke() call paints both the top and bottom edge in a single path)', () => {
+    const { prepared, projection, config, extras } = buildStackedFixture();
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const borderStrokes = ctx.log.filter(
+      (e) => e.kind === 'strokeLine' && e.strokeStyle === FOOTPRINT_STACKED_BUY_BAND_BORDER,
+    );
+    // One stroke() call per zone — the top+bottom edges are two moveTo/lineTo
+    // segments in the SAME path, committed by a single stroke() (see
+    // drawStackedZones), so the mock (which logs once per stroke() call, not
+    // per line segment) records exactly 1 entry per qualifying zone.
+    expect(borderStrokes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('never uses the sell-band border color for a buy-side zone', () => {
+    const { prepared, projection, config, extras } = buildStackedFixture();
+    const ctx = createOrderedMockCtx();
+    drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
+
+    const sellBorderStrokes = ctx.log.filter(
+      (e) => e.kind === 'strokeLine' && e.strokeStyle === FOOTPRINT_STACKED_SELL_BAND_BORDER,
+    );
+    expect(sellBorderStrokes.length).toBe(0);
   });
 });

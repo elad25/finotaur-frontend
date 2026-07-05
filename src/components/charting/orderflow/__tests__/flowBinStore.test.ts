@@ -173,6 +173,62 @@ describe('FlowBinStore — per-bin trade (print) count', () => {
   });
 });
 
+describe('FlowBinStore — suggestRowSize uses PER-BAR range, not window-spanning range', () => {
+  // Regression for the giant-price-bin defect (fixed alongside the render
+  // merging fix): ChartTab.tsx/FuturesChartTab.tsx used to feed
+  // suggestRowSize ONE synthetic bar spanning the entire loaded window's
+  // {high, low} — e.g. a 15m BTC window can easily span $2,000+ even though
+  // each individual 15m bar only ranges a few dollars. 0.2 * that window
+  // range produced a rowSize hundreds of times too coarse (1-3 giant bins
+  // per bar instead of a proper footprint ladder).
+  it('returns ≈0.2× avg PER-BAR range for N bars with realistic per-bar ranges, not 0.2× the window range', () => {
+    // 20 bars, each with a realistic $10 per-bar range, walking the price up
+    // so the WINDOW range (first bar's low to last bar's high) is much wider
+    // than any single bar's range.
+    const bars = Array.from({ length: 20 }, (_, i) => ({
+      high: 60_000 + i * 50 + 10,
+      low: 60_000 + i * 50,
+    }));
+    const avgPerBarRange = 10; // every bar is exactly a $10 range
+    const windowRange = bars[bars.length - 1].high - bars[0].low; // >> 10
+
+    const tickSize = 0.01;
+    const suggested = FlowBinStore.suggestRowSize(bars, tickSize);
+    const expected = Math.floor((avgPerBarRange * 0.2) / tickSize) * tickSize;
+
+    expect(suggested).toBeCloseTo(expected, 5);
+
+    // Sanity: the buggy window-spanning computation would have been wildly
+    // larger — assert the fixed suggestion is nowhere near it.
+    const buggyWindowSuggestion = Math.floor((windowRange * 0.2) / tickSize) * tickSize;
+    expect(suggested).toBeLessThan(buggyWindowSuggestion / 10);
+  });
+
+  it('a single synthetic bar shaped {high: avgBarRange, low: 0} reproduces the caller-side average-range feed exactly', () => {
+    // This mirrors ChartTab.tsx / FuturesChartTab.tsx's handleBarsLoad: since
+    // FinotaurChart only reports one avgBarRange number per bar-load event
+    // (not the raw bars array), the caller feeds suggestRowSize a single bar
+    // shaped this way. Confirms that shape produces the same result as
+    // passing the real multi-bar array with the same average range.
+    const avgBarRange = 37.5;
+    const tickSize = 0.25;
+
+    const viaSyntheticBar = FlowBinStore.suggestRowSize(
+      [{ high: avgBarRange, low: 0 }],
+      tickSize,
+    );
+    const viaRealBars = FlowBinStore.suggestRowSize(
+      [
+        { high: 100, low: 100 - avgBarRange + 10 },
+        { high: 200, low: 200 - avgBarRange - 10 },
+      ],
+      tickSize,
+    );
+
+    expect(viaSyntheticBar).toBe(viaRealBars);
+  });
+});
+
 describe('FlowBinStore — render-loop fixed-point simulation', () => {
   // Simulates the exact cycle described in the incident: getBars (reads raw
   // trades) → suggestRowSize → setConfig → (would-be) notify → getBars again.

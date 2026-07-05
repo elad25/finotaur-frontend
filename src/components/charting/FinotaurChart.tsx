@@ -39,6 +39,7 @@ import { VolumeProfileLayer } from '@/components/charting/orderflow/VolumeProfil
 import type { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import type { FootprintConfig } from '@/components/charting/orderflow/types';
 import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
+import { computeFootprintBandHeightPx } from '@/components/charting/orderflow/footprintRender';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import {
   createChart,
@@ -680,8 +681,14 @@ export interface FinotaurChartProps {
    * Called once after each bar fetch completes with the high/low extremes of
    * the loaded candles. The scanner uses this to merge the candle range into
    * the liquidity band so price action is always visible in the auto-fit view.
+   *
+   * `avgBarRange` is the average PER-BAR (high - low) across the same
+   * reported bars — distinct from `high - low`, which is the window-spanning
+   * extreme. Order-flow row-size suggestion (FlowBinStore.suggestRowSize)
+   * needs the former; feeding it the latter produces bins orders of
+   * magnitude too coarse (see ChartTab.tsx / FuturesChartTab.tsx callers).
    */
-  onBarsLoad?: (range: { high: number; low: number } | null) => void;
+  onBarsLoad?: (range: { high: number; low: number; avgBarRange: number } | null) => void;
   /**
    * Optional footprint overlay (ATAS-style bid/ask clusters). When provided,
    * mounts a FootprintLayer canvas on top of candles, fed by `store`.
@@ -768,6 +775,16 @@ export function FinotaurChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   // Active theme tokens — derived once, used by both JSX and effects.
   const themeTokens = pickTheme(theme);
+  /**
+   * Mirrors the footprint's zoom-driven detail stage (see FootprintLayer's
+   * onStageChange) purely so WallHeatLayer can be told how tall the
+   * bottom-pinned totals/stats band currently is (computeFootprintBandHeightPx)
+   * and clip its own heat-dot drawing above that rectangle — see the
+   * WallHeatLayer bottomClipPx prop below. Not used for anything else;
+   * `footprint.onStageChange` (the caller's own callback) still fires
+   * unchanged via the wrapper in the FootprintLayer mount below.
+   */
+  const [footprintDetailStage, setFootprintDetailStage] = useState<FootprintDetailLevel>('hidden');
   /** Latest bars fetched, kept so the indicators effect can recompute on toggle. */
   const barsRef = useRef<Bar[]>([]);
   /**
@@ -1275,19 +1292,28 @@ export function FinotaurChart({
               : -Infinity;
             let hi = -Infinity;
             let lo = Infinity;
+            let rangeSum = 0;
+            let rangeCount = 0;
             for (const b of bars) {
               if ((b.time as unknown as number) < winFrom) continue;
               if (b.high > hi) hi = b.high;
               if (b.low  < lo) lo = b.low;
+              rangeSum += b.high - b.low;
+              rangeCount += 1;
             }
             // Fallback: if the window filtered everything out, use all bars.
             if (hi === -Infinity) {
+              rangeSum = 0;
+              rangeCount = 0;
               for (const b of bars) {
                 if (b.high > hi) hi = b.high;
                 if (b.low  < lo) lo = b.low;
+                rangeSum += b.high - b.low;
+                rangeCount += 1;
               }
             }
-            onBarsLoad({ high: hi, low: lo });
+            const avgBarRange = rangeCount > 0 ? rangeSum / rangeCount : 0;
+            onBarsLoad({ high: hi, low: lo, avgBarRange });
           } else {
             onBarsLoad(null);
           }
@@ -1722,6 +1748,9 @@ export function FinotaurChart({
           segments={wallSegments ?? []}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+          bottomClipPx={
+            footprint ? computeFootprintBandHeightPx(footprint.config, footprintDetailStage) : 0
+          }
         />
       )}
 
@@ -1761,7 +1790,14 @@ export function FinotaurChart({
           visible={footprint.visible}
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
-          onStageChange={footprint.onStageChange}
+          bars={barsRef.current}
+          onStageChange={(stage) => {
+            // Mirror the stage locally (drives WallHeatLayer's bottomClipPx
+            // below) in addition to forwarding to the caller's own callback —
+            // see footprintDetailStage's doc comment.
+            setFootprintDetailStage(stage);
+            footprint.onStageChange?.(stage);
+          }}
         />
       )}
 

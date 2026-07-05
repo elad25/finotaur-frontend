@@ -37,6 +37,16 @@ export interface WallHeatLayerProps {
   width: number;
   /** Container CSS height in px (from ResizeObserver in FinotaurChart). */
   height: number;
+  /**
+   * Reserved height (px) at the BOTTOM of the pane that belongs to the
+   * footprint overlay's totals/stats band (see
+   * `computeFootprintBandHeightPx` in footprintRender.ts) — this layer must
+   * not paint into that rectangle, or the heat-dot stripes visually collide
+   * with the band's text (verified in prod: heat dots painted over the
+   * stats-band numbers). 0/undefined = no reservation, full-height drawing
+   * (unchanged behavior for callers without a footprint overlay mounted).
+   */
+  bottomClipPx?: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -47,6 +57,7 @@ export function WallHeatLayer({
   segments,
   width,
   height,
+  bottomClipPx,
 }: WallHeatLayerProps) {
   const canvasRef            = useRef<HTMLCanvasElement>(null);
   const rafRef               = useRef<number | null>(null);
@@ -61,11 +72,13 @@ export function WallHeatLayer({
   const segmentsRef = useRef<WallSegment[]>(segments);
   const widthRef    = useRef<number>(width);
   const heightRef   = useRef<number>(height);
+  const bottomClipPxRef = useRef<number>(bottomClipPx ?? 0);
 
   // Update refs on every render (no subscription re-registration needed).
   segmentsRef.current = segments;
   widthRef.current    = width;
   heightRef.current   = height;
+  bottomClipPxRef.current = bottomClipPx ?? 0;
 
   // ── RAF draw loop ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -137,6 +150,13 @@ export function WallHeatLayer({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
+      // Reserved height (px) at the bottom for the footprint's totals/stats
+      // band (see WallHeatLayerProps.bottomClipPx doc comment) — heat dots
+      // must not paint into that rectangle. save()/clip() below is undone by
+      // restore() in the finally block regardless of an early return/throw.
+      const bottomClip = Math.max(0, Math.min(cssH, bottomClipPxRef.current));
+      const drawableH = cssH - bottomClip;
+
       try {
         // Always set an absolute DPR transform so the stack never accumulates
         // across frames (safe even if a previous render threw without reaching finally).
@@ -144,6 +164,13 @@ export function WallHeatLayer({
 
         // Clear to transparent — lw-charts canvas is behind us.
         ctx.clearRect(0, 0, cssW, cssH);
+
+        ctx.save();
+        if (bottomClip > 0) {
+          ctx.beginPath();
+          ctx.rect(0, 0, cssW, drawableH);
+          ctx.clip();
+        }
 
         const segs = segmentsRef.current;
         if (segs.length === 0) return;
@@ -266,6 +293,10 @@ export function WallHeatLayer({
           ctx.stroke();
         }
       } finally {
+        // Undo the save()/clip() pair above regardless of an early return or
+        // a throw mid-loop — restore() is a no-op-safe call even if save()
+        // somehow never ran (canvas state stack just stays balanced).
+        ctx.restore();
         // Reset the transform to identity so any throw above cannot leave the
         // context in a broken state that would corrupt the next frame.
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -317,10 +348,13 @@ export function WallHeatLayer({
     };
   }, [chart]);
 
-  // Mark dirty whenever segments or container dimensions change.
+  // Mark dirty whenever segments, container dimensions, or the reserved
+  // bottom-band height change (the footprint's stats/totals band toggling
+  // on/off, or switching between the 2-row totals band and the 6-row stats
+  // strip, both change bottomClipPx without touching width/height/segments).
   useEffect(() => {
     dirtyRef.current = true;
-  }, [segments, width, height]);
+  }, [segments, width, height, bottomClipPx]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

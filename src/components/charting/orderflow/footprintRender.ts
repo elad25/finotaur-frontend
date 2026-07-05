@@ -20,16 +20,22 @@ import {
   STRICT_IMBALANCE_RATIO,
 } from './types';
 import {
+  FOOTPRINT_AUTO_ROW_HEIGHT_HYSTERESIS,
+  FOOTPRINT_AUTO_ROW_HEIGHT_MAX,
+  FOOTPRINT_AUTO_ROW_HEIGHT_MIN,
+  FOOTPRINT_BIDASK_BG_STRONG_ALPHA,
+  FOOTPRINT_BIDASK_BG_WEAK_ALPHA,
   FOOTPRINT_BUY_BG,
   FOOTPRINT_BUY_BG_STRONG,
   FOOTPRINT_BUY_COLOR,
   FOOTPRINT_BUY_COLOR_BRIGHT,
-  FOOTPRINT_CELL_FONT_SIZE,
+  FOOTPRINT_CELL_FONT_HEIGHT_RATIO,
+  FOOTPRINT_CELL_FONT_MAX,
+  FOOTPRINT_CELL_FONT_MIN,
+  FOOTPRINT_CELL_GUTTER_PX,
   FOOTPRINT_CELL_PADDING_X,
   FOOTPRINT_DELTA_NEUTRAL_DARK,
   FOOTPRINT_FONT_FAMILY,
-  FOOTPRINT_IMBALANCE_ACCENT,
-  FOOTPRINT_IMBALANCE_OUTLINE_WIDTH,
   FOOTPRINT_MIN_CANDLE_WIDTH_FOR_SHADING,
   FOOTPRINT_MIN_CANDLE_WIDTH_FOR_SHADING_EXIT,
   FOOTPRINT_MIN_CANDLE_WIDTH_FOR_TEXT,
@@ -44,8 +50,16 @@ import {
   FOOTPRINT_SELL_BG_STRONG,
   FOOTPRINT_SELL_COLOR,
   FOOTPRINT_SELL_COLOR_BRIGHT,
+  FOOTPRINT_SKELETON_BODY_WIDTH_PX,
+  FOOTPRINT_SKELETON_WICK_WIDTH_PX,
+  FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX,
   FOOTPRINT_STACKED_BUY_BAND,
+  FOOTPRINT_STACKED_BUY_BAND_BORDER,
   FOOTPRINT_STACKED_SELL_BAND,
+  FOOTPRINT_STACKED_SELL_BAND_BORDER,
+  FOOTPRINT_STATS_CHIP_STRONG_ALPHA,
+  FOOTPRINT_STATS_CHIP_WEAK_ALPHA,
+  FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
   FOOTPRINT_TOTALS_BG,
   FOOTPRINT_TOTALS_FONT_SIZE,
 } from './footprintTheme';
@@ -121,16 +135,79 @@ export function computeDetailLevel(
 }
 
 /**
- * Row-merge factor (1, 2, or 4) so rows stay readable when zoomed out.
- * `availableHeightPx` is the candle's total footprint height (all bins);
- * `binCount` is the number of distinct price bins in that candle.
+ * Row-merge factor (1, 2, or 4) targeting a legible on-screen row height —
+ * ATAS/Exocharts parity is ~14-25 rows/bar at typical zoom, each row a
+ * 14-20px cell (see FOOTPRINT_AUTO_ROW_HEIGHT_MIN/MAX in footprintTheme.ts).
+ *
+ * `baseRowHeightPx` is the store's OWN single-row pixel height at the
+ * current zoom — `priceToCoordinate(rowSize)` distance, i.e. the height ONE
+ * un-merged price bin occupies on screen. This must be measured
+ * independently of bin count: an earlier version derived "available height"
+ * as `binCount * rowHeightPx`, which made the naive-row-height calculation
+ * cancel back out to exactly `rowHeightPx` regardless of `binCount` — the
+ * function could never detect "too many giant rows," because it was
+ * comparing `rowHeightPx` against itself. Root cause was upstream (the
+ * store's suggested rowSize was too coarse — see ChartTab.tsx/
+ * FuturesChartTab.tsx's suggestRowSize feed), but the merge-factor formula
+ * itself was ALSO a no-op and needed fixing independently: it must react to
+ * the store's actual per-row px height, not a quantity that always equals it.
+ *
+ * Picks the SMALLEST factor (1, 2, then 4) whose resulting merged-row height
+ * (`baseRowHeightPx * factor`) clears FOOTPRINT_AUTO_ROW_HEIGHT_MIN (cold
+ * start / no held factor). `previousFactor` (optional) applies per-boundary
+ * hysteresis — mirrors computeDetailLevel's enter/exit asymmetry: a
+ * candidate factor is only ESCALATED away from once its held height drops
+ * below the exit threshold (min - hysteresis), and only DE-ESCALATED once a
+ * smaller factor's height would exceed the enter threshold (min +
+ * hysteresis) with margin to spare — so a per-row height hovering exactly at
+ * a boundary across frames doesn't flicker the factor every frame. Cold
+ * start (previousFactor omitted) always uses the plain (non-relaxed)
+ * threshold — hysteresis only applies once a factor is already held.
  */
-export function computeRowMergeFactor(availableHeightPx: number, binCount: number): 1 | 2 | 4 {
-  if (binCount <= 0) return 1;
-  const naiveRowHeight = availableHeightPx / binCount;
-  if (naiveRowHeight >= FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT) return 1;
-  if (naiveRowHeight * 2 >= FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT) return 2;
-  return 4;
+export function computeRowMergeFactor(
+  baseRowHeightPx: number,
+  binCount: number,
+  previousFactor?: 1 | 2 | 4,
+): 1 | 2 | 4 {
+  if (binCount <= 0 || baseRowHeightPx <= 0) return 1;
+
+  const min = FOOTPRINT_AUTO_ROW_HEIGHT_MIN;
+  const hysteresis = FOOTPRINT_AUTO_ROW_HEIGHT_HYSTERESIS;
+
+  const coldPick = (): 1 | 2 | 4 => {
+    if (baseRowHeightPx >= min) return 1;
+    if (baseRowHeightPx * 2 >= min) return 2;
+    return 4;
+  };
+
+  if (previousFactor === undefined) return coldPick();
+
+  // Hysteresis: stay on the previously-held factor as long as its merged
+  // height hasn't dropped below the (relaxed) exit threshold. This can only
+  // ever EXTEND how long a factor is held, never invent a hold for a factor
+  // that wasn't already active — so a factor that never legitimately applied
+  // (e.g. the default entry point for a value needing escalation) can't be
+  // wrongly sticky.
+  const heldHeight = baseRowHeightPx * previousFactor;
+  if (heldHeight >= min - hysteresis) return previousFactor;
+
+  // Held factor no longer clears even the relaxed threshold — recompute
+  // fresh from the un-relaxed thresholds.
+  return coldPick();
+}
+
+// ─── Cell font sizing ────────────────────────────────────────────────────────
+
+/**
+ * Auto font size (px) for cell text, scaled by the current on-screen row
+ * height (ATAS/Exocharts parity) instead of a fixed size — cramped rows get
+ * smaller text, roomy rows get larger text, both clamped to a legible range.
+ * Pure function of `rowHeightPx`; cheap enough to call once per draw (not
+ * per-cell — row height is uniform across a candle's cells at a given zoom).
+ */
+export function computeCellFontSize(rowHeightPx: number): number {
+  const raw = Math.round(rowHeightPx * FOOTPRINT_CELL_FONT_HEIGHT_RATIO);
+  return Math.min(FOOTPRINT_CELL_FONT_MAX, Math.max(FOOTPRINT_CELL_FONT_MIN, raw));
 }
 
 // ─── Number formatting ──────────────────────────────────────────────────────
@@ -445,6 +522,14 @@ export interface FootprintDrawExtras {
   latestCandleRange: { low: number; high: number } | null;
   /** Clip boundary — nothing should paint past this x (the price axis). */
   clipRightX: number;
+  /**
+   * This candle's actual OHLC prices (from the underlying candlestick series,
+   * NOT derived from footprint bins) — draws the NT/MW-style skeleton strip
+   * (hairline high/low wick + 2px open/close body) at the column's left edge
+   * when present. Optional: omitting it (existing callers, magnifier popup)
+   * simply skips the skeleton — no behavior change for those call sites.
+   */
+  ohlc?: { open: number; high: number; low: number; close: number };
 }
 
 /**
@@ -471,10 +556,19 @@ export function drawCandleFootprint(
 
   const showText = detail === 'full';
   const groupSize = rowSize * prepared.mergeFactor;
+  // Auto font size by row height (ATAS/Exocharts parity) — computed once per
+  // candle draw, not per-cell, since rowHeightPx is uniform across a
+  // candle's rows at a given zoom (see computeCellFontSize).
+  const cellFontSize = computeCellFontSize(rowHeightPx);
 
-  if (showText) {
-    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
-    ctx.textBaseline = 'middle';
+  // Candle skeleton strip (NT/MW convention) — drawn FIRST, beneath the cell
+  // fills/text below, so the footprint clusters remain the visually dominant
+  // layer and the skeleton reads as a thin structural reference at the
+  // column's left edge. Only at 'full' detail (showText) — same gating as
+  // the numbers themselves, since the skeleton exists to orient the trader
+  // once individual bid/ask cells are legible.
+  if (showText && extras.ohlc) {
+    drawCandleSkeleton(ctx, extras.ohlc, { leftX, priceToY });
   }
 
   for (let i = 0; i < prepared.merged.length; i++) {
@@ -507,10 +601,49 @@ export function drawCandleFootprint(
       showText,
       isPoc,
       imbalanceSide: imbalance,
+      fontSize: cellFontSize,
     });
   }
 
   drawStackedZones(ctx, prepared, projection, extras);
+}
+
+/**
+ * Draw one candle's skeleton: a hairline high→low wick plus a 2px open/close
+ * body strip, both anchored at the column's LEFT edge (NT/MW convention —
+ * distinct from the footprint's own bid/ask columns, which occupy the rest
+ * of the width). Green (#22c55e) when close >= open, red (#dc2626) otherwise
+ * — reuses the existing buy/sell theme tokens, no new hexes.
+ */
+function drawCandleSkeleton(
+  ctx: CanvasRenderingContext2D,
+  ohlc: { open: number; high: number; low: number; close: number },
+  geo: { leftX: number; priceToY: (price: number) => number | null },
+): void {
+  const { leftX, priceToY } = geo;
+  const yHigh = priceToY(ohlc.high);
+  const yLow = priceToY(ohlc.low);
+  const yOpen = priceToY(ohlc.open);
+  const yClose = priceToY(ohlc.close);
+  if (yHigh === null || yLow === null || yOpen === null || yClose === null) return;
+
+  const isUp = ohlc.close >= ohlc.open;
+  const color = isUp ? FOOTPRINT_BUY_COLOR : FOOTPRINT_SELL_COLOR;
+  const wickX = leftX + FOOTPRINT_SKELETON_WICK_WIDTH_PX / 2;
+
+  // Hairline wick spanning the full high→low range.
+  ctx.strokeStyle = color;
+  ctx.lineWidth = FOOTPRINT_SKELETON_WICK_WIDTH_PX;
+  ctx.beginPath();
+  ctx.moveTo(wickX, Math.min(yHigh, yLow));
+  ctx.lineTo(wickX, Math.max(yHigh, yLow));
+  ctx.stroke();
+
+  // 2px open/close body strip, same left edge.
+  const bodyTop = Math.min(yOpen, yClose);
+  const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+  ctx.fillStyle = color;
+  ctx.fillRect(leftX, bodyTop, FOOTPRINT_SKELETON_BODY_WIDTH_PX, bodyHeight);
 }
 
 interface DrawCellArgs {
@@ -524,21 +657,36 @@ interface DrawCellArgs {
   showText: boolean;
   isPoc: boolean;
   imbalanceSide: ImbalanceSide;
+  /** Auto font size (px) for this draw pass — see computeCellFontSize. */
+  fontSize: number;
 }
 
 function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
-  const { leftX, rightX, top, height, row, cellMode, maxRowVol, showText, isPoc, imbalanceSide } = args;
+  const { leftX, rightX, top, height, row, cellMode, maxRowVol, showText, isPoc, imbalanceSide, fontSize } = args;
   const width = rightX - leftX;
   const midX = leftX + width / 2;
+  // Half the bidAsk center gutter — background fills and text anchors inset
+  // symmetrically from the midline by this amount (see FOOTPRINT_CELL_GUTTER_PX).
+  const halfGutter = FOOTPRINT_CELL_GUTTER_PX / 2;
   const delta = row.buyVol - row.sellVol;
   const rowVol = row.buyVol + row.sellVol;
+  const isEmpty = rowVol <= 0;
   const magnitude = maxRowVol > 0 ? Math.min(1, Math.abs(delta) / maxRowVol) : 0;
+  // Volume-keyed magnitude for bidAsk mode's half-fills — total row volume
+  // relative to the bar's busiest row (NOT |delta|, since bidAsk shows both
+  // sides independently rather than a net figure). Same normalization shape
+  // as the delta-mode `magnitude` above, reused via mixAlpha below.
+  const volMagnitude = maxRowVol > 0 ? Math.min(1, rowVol / maxRowVol) : 0;
 
   // ── POC band (drawn first, behind everything else in the cell) ───────────
   // Solid gold top/bottom rule (FOOTPRINT_POC_COLOR) over the tinted fill
   // (FOOTPRINT_POC_BG) so the Point-of-Control row reads as a distinct gold
-  // band even when the cell's own delta/volume shading is faint.
-  if (isPoc) {
+  // band even when the cell's own delta/volume shading is faint. A
+  // zero-volume row can never BE the POC (prepareCandleDraw only assigns
+  // pocBinPrice from rows with positive volume), but the guard is kept
+  // explicit here so this function's "no fill for empty rows" contract
+  // holds even if that upstream invariant ever changes.
+  if (isPoc && !isEmpty) {
     ctx.fillStyle = FOOTPRINT_POC_BG;
     ctx.fillRect(leftX, top, width, height);
     ctx.strokeStyle = FOOTPRINT_POC_COLOR;
@@ -558,33 +706,48 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   // shading here (the 'full' stage) still varies by cellMode as before;
   // 'trades' and 'volumeDelta' use the same neutral background as 'volume'
   // since neither is a delta-magnitude-driven mode.
-  if (cellMode === 'delta') {
-    const bg = delta === 0
-      ? FOOTPRINT_DELTA_NEUTRAL_DARK
-      : delta > 0
-        ? mixAlpha(FOOTPRINT_BUY_BG, FOOTPRINT_BUY_BG_STRONG, magnitude)
-        : mixAlpha(FOOTPRINT_SELL_BG, FOOTPRINT_SELL_BG_STRONG, magnitude);
-    ctx.fillStyle = bg;
-    ctx.fillRect(leftX, top, width, height);
-  } else if (cellMode === 'volume' || cellMode === 'trades' || cellMode === 'volumeDelta') {
-    ctx.fillStyle = FOOTPRINT_NEUTRAL_BG;
-    ctx.fillRect(leftX, top, width, height);
-  } else {
-    // 'bidAsk' — split background: sell tint left half, buy tint right half.
-    ctx.fillStyle = FOOTPRINT_SELL_BG;
-    ctx.fillRect(leftX, top, width / 2, height);
-    ctx.fillStyle = FOOTPRINT_BUY_BG;
-    ctx.fillRect(midX, top, width / 2, height);
+  //
+  // Zero-volume rows get NO fill in ANY mode (ATAS parity) — the chart
+  // background shows through instead of a wash of neutral/red/green tint.
+  // Real footprint data rarely produces a truly empty MERGED row (each row
+  // groups >=1 source bin that had a trade), but a merge group spanning a
+  // price band with no prints at all (sparse tape, wide rowSize) can still
+  // be empty — this guard is what stops those rows from painting.
+  if (!isEmpty) {
+    if (cellMode === 'delta') {
+      const bg = delta === 0
+        ? FOOTPRINT_DELTA_NEUTRAL_DARK
+        : delta > 0
+          ? mixAlpha(FOOTPRINT_BUY_BG, FOOTPRINT_BUY_BG_STRONG, magnitude)
+          : mixAlpha(FOOTPRINT_SELL_BG, FOOTPRINT_SELL_BG_STRONG, magnitude);
+      ctx.fillStyle = bg;
+      ctx.fillRect(leftX, top, width, height);
+    } else if (cellMode === 'volume' || cellMode === 'trades' || cellMode === 'volumeDelta') {
+      ctx.fillStyle = FOOTPRINT_NEUTRAL_BG;
+      ctx.fillRect(leftX, top, width, height);
+    } else {
+      // 'bidAsk' — split background: sell tint left half, buy tint right
+      // half. Alpha is keyed by this row's total volume relative to the
+      // bar's busiest row (volMagnitude) instead of a fixed alpha, so heavy
+      // rows read as visually "hotter" than thin ones — same mixAlpha
+      // interpolation approach as delta mode, weak→strong endpoints from
+      // the theme (FOOTPRINT_BIDASK_BG_WEAK_ALPHA/STRONG_ALPHA).
+      // Each half is inset from the midline by halfGutter so a small visual
+      // gutter separates the bid and ask columns (FOOTPRINT_CELL_GUTTER_PX).
+      const sellBg = mixAlphaValue(FOOTPRINT_SELL_COLOR, FOOTPRINT_BIDASK_BG_WEAK_ALPHA, FOOTPRINT_BIDASK_BG_STRONG_ALPHA, volMagnitude);
+      const buyBg = mixAlphaValue(FOOTPRINT_BUY_COLOR, FOOTPRINT_BIDASK_BG_WEAK_ALPHA, FOOTPRINT_BIDASK_BG_STRONG_ALPHA, volMagnitude);
+      const halfCellWidth = Math.max(0, width / 2 - halfGutter);
+      ctx.fillStyle = sellBg;
+      ctx.fillRect(leftX, top, halfCellWidth, height);
+      ctx.fillStyle = buyBg;
+      ctx.fillRect(midX + halfGutter, top, halfCellWidth, height);
+    }
   }
 
-  // ── Imbalance accent: bold text handled below; outline here ───────────
-  if (imbalanceSide) {
-    ctx.strokeStyle = FOOTPRINT_IMBALANCE_ACCENT;
-    ctx.lineWidth = FOOTPRINT_IMBALANCE_OUTLINE_WIDTH;
-    const outlineX = imbalanceSide === 'buy' ? midX : leftX;
-    const outlineW = width / 2;
-    ctx.strokeRect(outlineX + 0.5, top + 0.5, outlineW - 1, Math.max(1, height - 1));
-  }
+  // ── Imbalance accent ───────────────────────────────────────────────────
+  // No outline draw here (removed — the old gold outline collided with the
+  // FINOTAUR gold POC identity). Imbalance is communicated purely via bold +
+  // recolored NUMBER text on the winning side, handled in the text block below.
 
   if (!showText || height < FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT) return;
 
@@ -592,30 +755,36 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   const boldSuffix = imbalanceSide ? 'bold ' : '';
 
   if (cellMode === 'bidAsk') {
-    ctx.font = `${boldSuffix}${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
-    ctx.fillStyle = imbalanceSide === 'sell' ? FOOTPRINT_SELL_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR;
+    // Professional convention (ATAS/Exocharts/NinjaTrader): regular numbers
+    // render in NEUTRAL text; color+bold is reserved strictly for the
+    // imbalanced winning side. Sell (bid) text is only recolored bright-red
+    // when THIS row's imbalance side is 'sell'; buy (ask) text only
+    // recolored bright-green when the side is 'buy'. Text anchors inset from
+    // the midline by halfGutter to match the background gutter.
+    ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.fillStyle = imbalanceSide === 'sell' ? FOOTPRINT_SELL_COLOR_BRIGHT : FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCellValue(row.sellVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.sellVol), midX - halfGutter - FOOTPRINT_CELL_PADDING_X, textY);
 
-    ctx.fillStyle = imbalanceSide === 'buy' ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_BUY_COLOR;
+    ctx.fillStyle = imbalanceSide === 'buy' ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'left';
-    ctx.fillText(formatCellValue(row.buyVol), midX + FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.buyVol), midX + halfGutter + FOOTPRINT_CELL_PADDING_X, textY);
   } else if (cellMode === 'delta') {
-    ctx.font = `${boldSuffix}${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.font = `${boldSuffix}${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'center';
     ctx.fillText(formatCellValue(delta), midX, textY);
   } else if (cellMode === 'trades') {
     // ATAS-style "number of trades" mode — count of prints per level, neutral
     // shading + neutral text (no directional color; a print count has no sign).
-    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'center';
     ctx.fillText(formatCellValue(row.trades), midX, textY);
   } else if (cellMode === 'volumeDelta') {
     // Two values per cell: total volume (neutral) on the left half, signed
     // delta (red/green by sign) on the right half — e.g. "153.2  +12.4".
-    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'right';
     ctx.fillText(formatCellValue(rowVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
@@ -625,9 +794,11 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     ctx.textAlign = 'left';
     ctx.fillText(`${deltaSign}${formatCellValue(delta)}`, midX + FOOTPRINT_CELL_PADDING_X, textY);
   } else {
-    // 'volume' — neutral shading, delta only via text color.
-    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
-    ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR : FOOTPRINT_SELL_COLOR;
+    // 'volume' — neutral shading AND neutral text (pro convention: a plain
+    // volume footprint carries no directional signal; delta belongs to the
+    // delta-bearing modes above, not to the raw volume count).
+    ctx.font = `${fontSize}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
     ctx.textAlign = 'center';
     ctx.fillText(formatCellValue(rowVol), midX, textY);
   }
@@ -651,6 +822,22 @@ function mixAlpha(colorLo: string, colorHi: string, t: number): string {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
+/**
+ * Build an rgba() fill from a `#rrggbb` hex color and two alpha endpoints,
+ * linearly interpolated by `t` in [0,1] — the bidAsk-mode counterpart to
+ * mixAlpha above, used when the base color is a theme hex constant
+ * (FOOTPRINT_BUY_COLOR/FOOTPRINT_SELL_COLOR) rather than an existing
+ * rgba() pair with only alpha differing.
+ */
+function mixAlphaValue(hexColor: string, alphaLo: number, alphaHi: number, t: number): string {
+  const m = hexColor.match(/^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/);
+  const r = m ? parseInt(m[1], 16) : 0;
+  const g = m ? parseInt(m[2], 16) : 0;
+  const b = m ? parseInt(m[3], 16) : 0;
+  const a = alphaLo + (alphaHi - alphaLo) * t;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
 // Totals band: two stacked mini-rows (Volume, Delta) pinned above the time
 // axis. Kept as a standalone function (`drawTotalsRowAt`) rather than folded
 // into `drawCandleFootprint` because it needs an explicit `top` y computed
@@ -658,6 +845,24 @@ function mixAlpha(colorLo: string, colorHi: string, t: number): string {
 // see FootprintLayer.tsx for how the two calls are sequenced per candle.
 const TOTALS_ROW_HEIGHT = 12;
 export const FOOTPRINT_TOTALS_BAND_HEIGHT = TOTALS_ROW_HEIGHT * 2;
+
+/**
+ * Shared geometry helper: how tall is the bottom-pinned totals/stats band for
+ * a given config + current detail stage, in px — 0 when neither band is
+ * rendered this frame. Single source of truth for "how much of the pane's
+ * bottom edge is reserved for the band rectangle" so callers that need to
+ * avoid painting into it (e.g. WallHeatLayer's heat-dot clip, see FinotaurChart.tsx)
+ * never have to re-derive or duplicate FootprintLayer's own show/hide logic.
+ */
+export function computeFootprintBandHeightPx(
+  config: Pick<FootprintConfig, 'showStats' | 'showTotals'>,
+  detail: FootprintDetailLevel,
+): number {
+  if (detail !== 'full') return 0;
+  if (config.showStats) return FOOTPRINT_STATS_BAND_HEIGHT;
+  if (config.showTotals) return FOOTPRINT_TOTALS_BAND_HEIGHT;
+  return 0;
+}
 
 /**
  * Draw the pinned totals band (Volume + Delta mini-rows) for one candle at an
@@ -790,6 +995,17 @@ export interface StatsBarColumn {
  * function never scans other bars' data itself, keeping it a pure
  * per-frame-cheap render step (no per-frame data scans, per the task's
  * hard constraint).
+ *
+ * Per-cell heat chips (NT parity — "same gradient strength as the bars"):
+ * each bar/row cell gets a background chip tinted green (positive) or red
+ * (negative), alpha interpolated between the weak/strong theme endpoints by
+ * |value| relative to that row's visible-range max. The unsigned Volume row
+ * uses a neutral (zinc) tint scaled the same way, since volume carries no
+ * direction. Row labels draw in a fixed-width legend gutter
+ * (`bounds.labelGutterWidth`, typically FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH)
+ * whose own opaque backdrop is painted LAST, after every bar's chips — the
+ * simplest way to guarantee labels never collide with the first bar's cells
+ * without having to reflow each bar's leftX/rightX around the gutter.
  */
 export function drawStatsBandAt(
   ctx: CanvasRenderingContext2D,
@@ -812,23 +1028,29 @@ export function drawStatsBandAt(
     const rowMid = rowTop + STATS_ROW_HEIGHT / 2;
     const rowMax = rowMaxima[def.key];
 
-    // Row label, left-aligned in the gutter.
-    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
-    ctx.textAlign = 'left';
-    ctx.fillText(def.label, FOOTPRINT_CELL_PADDING_X, rowMid);
-
     for (const bar of bars) {
       const width = bar.rightX - bar.leftX;
       if (width <= 0) continue;
       const value = bar.stats[def.key];
       const magnitude = rowMax > 0 ? Math.min(1, Math.abs(value) / rowMax) : 0;
 
-      // Subtle heat-shading background, proportional to |value| relative to
-      // the visible-range max for this row — cheap: rowMax passed in, not
-      // recomputed here.
+      // Per-cell heat chip: green/red tint for signed rows (Delta/Delta%/
+      // Max Δ/Min Δ/Session Δ), neutral zinc tint for the unsigned Volume
+      // row — alpha always interpolated by this row's relative magnitude
+      // via the shared weak/strong endpoints (mirrors the bidAsk cell
+      // pattern in drawCell above).
       if (magnitude > 0) {
-        ctx.fillStyle = mixAlpha('rgba(201, 166, 70, 0)', 'rgba(201, 166, 70, 0.22)', magnitude);
-        ctx.fillRect(bar.leftX, rowTop, width, STATS_ROW_HEIGHT);
+        const chipHex = !def.colorBySign
+          ? FOOTPRINT_NEUTRAL_TEXT
+          : value > 0
+            ? FOOTPRINT_BUY_COLOR
+            : value < 0
+              ? FOOTPRINT_SELL_COLOR
+              : null;
+        if (chipHex) {
+          ctx.fillStyle = mixAlphaValue(chipHex, FOOTPRINT_STATS_CHIP_WEAK_ALPHA, FOOTPRINT_STATS_CHIP_STRONG_ALPHA, magnitude);
+          ctx.fillRect(bar.leftX, rowTop, width, STATS_ROW_HEIGHT);
+        }
       }
 
       const midX = bar.leftX + width / 2;
@@ -843,6 +1065,23 @@ export function drawStatsBandAt(
       ctx.fillText(def.formatValue(bar.stats), midX, rowMid);
     }
   }
+
+  // Legend gutter — opaque backdrop drawn LAST (on top of every bar's heat
+  // chips painted above) so row labels stay legible regardless of how hot
+  // the first visible bar's cells are, then the labels themselves.
+  if (labelGutterWidth > 0) {
+    ctx.fillStyle = FOOTPRINT_TOTALS_BG;
+    ctx.fillRect(0, top, labelGutterWidth, FOOTPRINT_STATS_BAND_HEIGHT);
+  }
+  for (let rowIdx = 0; rowIdx < STATS_ROW_DEFS.length; rowIdx++) {
+    const def = STATS_ROW_DEFS[rowIdx];
+    const rowTop = top + rowIdx * STATS_ROW_HEIGHT;
+    const rowMid = rowTop + STATS_ROW_HEIGHT / 2;
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'left';
+    ctx.fillText(def.label, FOOTPRINT_CELL_PADDING_X, rowMid);
+  }
+
   ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }
 
@@ -888,6 +1127,19 @@ function drawStackedZones(
 
     ctx.fillStyle = zone.side === 'buy' ? FOOTPRINT_STACKED_BUY_BAND : FOOTPRINT_STACKED_SELL_BAND;
     ctx.fillRect(zoneStartX, bandTop, zoneEndX - zoneStartX, bandHeight);
+
+    // Hairline top/bottom border, same hue at higher alpha, so the extending
+    // band reads as a deliberate zone rather than a soft background wash —
+    // no other behavior change (band fill/kill logic above is untouched).
+    ctx.strokeStyle = zone.side === 'buy' ? FOOTPRINT_STACKED_BUY_BAND_BORDER : FOOTPRINT_STACKED_SELL_BAND_BORDER;
+    ctx.lineWidth = FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX;
+    const borderInset = FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX / 2;
+    ctx.beginPath();
+    ctx.moveTo(zoneStartX, bandTop + borderInset);
+    ctx.lineTo(zoneEndX, bandTop + borderInset);
+    ctx.moveTo(zoneStartX, bandTop + bandHeight - borderInset);
+    ctx.lineTo(zoneEndX, bandTop + bandHeight - borderInset);
+    ctx.stroke();
   }
 }
 
