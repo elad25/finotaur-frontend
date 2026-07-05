@@ -253,8 +253,8 @@ export default function HomePage() {
             const Icon = meta?.icon ?? TrendingUp;
             const blurb = meta?.blurb ?? '';
 
-            // Copilot — non-navigable, shows "Coming Soon" badge
-            if (id === 'copilot') {
+            // Copilot + Markets — non-navigable, show "Coming Soon" badge
+            if (id === 'copilot' || id === 'markets') {
               return (
                 <div
                   key={id}
