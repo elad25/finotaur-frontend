@@ -135,16 +135,35 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
   const [suggestedRowSize, setSuggestedRowSize] = useState<number>(spec.tickSize);
 
   // Reset the suggestion when the contract root changes (different tick/price scale).
+  // Also re-arms the one-shot guard below so a NEW root gets exactly one
+  // auto-suggestion again.
+  const hasSuggestedRef = useRef(false);
   useEffect(() => {
     setSuggestedRowSize(spec.tickSize);
+    hasSuggestedRef.current = false;
   }, [spec.tickSize]);
 
+  // Render-loop fix (2026-07-05): onBarsLoad fires on EVERY bar fetch,
+  // including fetches caused by this very state update (bars change →
+  // setSuggestedRowSize → rowSize changes → store.setConfig replay → notify →
+  // barsRefreshToken bump → bar fetch → onBarsLoad again). Two guards close
+  // the loop at its source:
+  //   1. Only accept the suggestion ONCE per root/interval change (root reset
+  //      above re-arms it) — later onBarsLoad calls (backfill landing,
+  //      periodic refresh) must not re-trigger a re-bin from data that may
+  //      itself already reflect the pending suggestion.
+  //   2. Snap the result to a stable tick-grid step and skip the state update
+  //      entirely if it doesn't actually change the current row size — floating
+  //      point re-derivation from a `next` that happens to differ by epsilon
+  //      is otherwise enough to keep the cycle alive indefinitely.
   const handleBarsLoad = useCallback((range: { high: number; low: number } | null) => {
     if (!range) return;
+    if (hasSuggestedRef.current) return;
     const avgRange = range.high - range.low;
     const proxyTick = avgRange > 0 ? Math.max(avgRange / 500, spec.tickSize) : spec.tickSize;
     const next = FlowBinStore.suggestRowSize([range], proxyTick);
-    setSuggestedRowSize(next);
+    hasSuggestedRef.current = true;
+    setSuggestedRowSize((prev) => (next === prev ? prev : next));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec.tickSize]);
 
@@ -182,11 +201,21 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
   useEffect(() => {
     let lastBump = 0;
     let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+    // Belt-and-braces render-loop guard (2026-07-05): store.notify() fires for
+    // ANY mutation, including setConfig()'s re-bin replay — which carries no
+    // new data. Bumping the refresh token on a replay-only notify would cause
+    // FinotaurChart to re-fetch bars, re-derive a row-size suggestion, and
+    // potentially setConfig again (see handleBarsLoad's one-shot guard for the
+    // other half of this fix). Only bump when the store's ingested-trade count
+    // actually grew since the last bump.
+    let lastTradesIngested = store.getTradesIngested();
     const bump = () => {
       lastBump = Date.now();
+      lastTradesIngested = store.getTradesIngested();
       setBarsRefreshToken((n) => n + 1);
     };
     const unsubscribe = store.onChange(() => {
+      if (store.getTradesIngested() <= lastTradesIngested) return;
       const elapsed = Date.now() - lastBump;
       if (elapsed >= 2000) {
         bump();
