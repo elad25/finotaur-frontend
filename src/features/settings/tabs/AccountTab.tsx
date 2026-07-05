@@ -3,7 +3,6 @@
 // Pure move: no logic or UI changes.
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,7 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import {
-  Settings, Save, Crown, Zap, ArrowRight,
+  Settings, Save, Crown, Zap,
   Pencil, X, Globe, User, Mail,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,7 +40,6 @@ import {
 
 export const AccountTab = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { profile, setProfile, saving, setSaving } = useSettings();
 
   // ── Change 1: Split edit modes ──────────────────────────────────────────
@@ -427,30 +425,6 @@ export const AccountTab = () => {
           <p className="text-xs text-zinc-500">Used for trade timestamps</p>
         </div>
       </Card>
-
-      {/* Upgrade CTA (for free users) */}
-      {platformPlan === 'free' && (
-        <Card className="p-5 border-[#C9A646]/30 bg-gradient-to-r from-[#C9A646]/10 via-[#C9A646]/5 to-transparent">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#C9A646]/30 to-[#C9A646]/10 flex items-center justify-center">
-                <Crown className="w-5 h-5 text-[#C9A646]" />
-              </div>
-              <div>
-                <p className="font-semibold text-white">Upgrade to Pro</p>
-                <p className="text-sm text-zinc-400">Unlimited trades & premium features</p>
-              </div>
-            </div>
-<Button
-  size="sm"
-  onClick={() => navigate('/app/upgrade')}
-  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
->
-  Upgrade <ArrowRight className="w-4 h-4 ml-1" />
-</Button>
-          </div>
-        </Card>
-      )}
 
       {/* ── Change 2: Email Change Dialog ──────────────────────────────────── */}
       <Dialog open={emailDialogOpen} onOpenChange={(open) => {
