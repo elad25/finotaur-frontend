@@ -35,6 +35,7 @@ import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
 import { FootprintLayer } from '@/components/charting/orderflow/FootprintLayer';
+import { VolumeProfileLayer } from '@/components/charting/orderflow/VolumeProfileLayer';
 import type { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import type { FootprintConfig } from '@/components/charting/orderflow/types';
 import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
@@ -710,6 +711,17 @@ export interface FinotaurChartProps {
    * array would ever re-run the fetch after the cache populates.
    */
   refreshToken?: number;
+  /**
+   * Optional Volume Profile overlay (ATAS-style visible-range volume-by-price
+   * with POC + Value Area). When provided, mounts a VolumeProfileLayer canvas
+   * fed by `store` (the same FlowBinStore the footprint overlay reads from —
+   * pass the same store instance to keep both overlays in sync).
+   * Undefined (the default for every existing caller) is a complete no-op.
+   */
+  volumeProfile?: {
+    store: FlowBinStore;
+    visible: boolean;
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -743,6 +755,7 @@ export function FinotaurChart({
   footprint,
   mutedCandles,
   refreshToken,
+  volumeProfile,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -910,8 +923,9 @@ export function FinotaurChart({
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: Math.floor(w), height: Math.floor(h) });
         // Also track size for WallHeatLayer (heatmap), DepthMatrixLayer (matrix),
-        // and FootprintLayer (when the footprint prop is provided).
-        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint) {
+        // FootprintLayer, and VolumeProfileLayer (when their respective props
+        // are provided).
+        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile) {
           setContainerSize({ w: Math.floor(w), h: Math.floor(h) });
         }
       }
@@ -920,18 +934,19 @@ export function FinotaurChart({
 
     // Seed initial size synchronously — ResizeObserver only fires on *changes*,
     // so if bars load before the first resize the layer would get 0×0 forever.
-    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint) {
+    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint || volumeProfile) {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (w > 0 && h > 0) setContainerSize({ w, h });
     }
 
     return () => ro.disconnect();
-    // footprint is an object prop (new identity every render from most callers);
-    // gating on truthiness only (via the `!!footprint` cast) avoids re-running
-    // this effect (and re-observing the ResizeObserver) on every parent render.
+    // footprint/volumeProfile are object props (new identity every render from
+    // most callers); gating on truthiness only (via the `!!` cast) avoids
+    // re-running this effect (and re-observing the ResizeObserver) on every
+    // parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallRenderMode, !!footprint]);
+  }, [wallRenderMode, !!footprint, !!volumeProfile]);
 
   // ─── Overlay reposition: subscribe to pan/zoom + resize ────
   // Fires setOverlayTick (bumping counter) whenever the visible time range
@@ -1741,6 +1756,23 @@ export function FinotaurChart({
           width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
           height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
           onStageChange={footprint.onStageChange}
+        />
+      )}
+
+      {/* Volume Profile overlay (ATAS-style visible-range histogram + POC/VA)
+          — only when the `volumeProfile` prop is provided. Painted above
+          candles but below marker icons, same register as the footprint
+          overlay. Undefined `volumeProfile` = zero mount, zero cost. */}
+      {volumeProfile &&
+       chartRef.current && seriesRef.current &&
+       barCount > 0 && (
+        <VolumeProfileLayer
+          chart={chartRef.current}
+          series={seriesRef.current}
+          store={volumeProfile.store}
+          visible={volumeProfile.visible}
+          width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
+          height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
         />
       )}
 

@@ -17,6 +17,21 @@
  * hook per mount; rowSize auto-suggested from recently loaded bars and
  * adjustable via the row-density control (×2/×4 widen the suggested rowSize).
  * See src/components/charting/orderflow/ for the underlying engine.
+ *
+ * Heatmap toggle (Bookmap-style liquidity heatmap, Phase 4): reuses
+ * DepthMatrixLayer + useDepthSlices EXACTLY as wired in MarketScanner.tsx —
+ * not rebuilt. The Arena hardcodes the scanner's floor/size-filter defaults
+ * (no floor/size-filter UI here; the scanner owns that control surface) and
+ * does NOT seed 72h wall history (fetchWallsHistory) — that seeds the
+ * WallHeatLayer wall-stripe feature, which the Arena doesn't use. See the
+ * TODOs below for what was intentionally left out.
+ *
+ * Layer z-order (heatmap + footprint + volume profile can all be on at once):
+ *   DepthMatrixLayer (heatmap)   z-index  5  — BELOW candles (as in the scanner)
+ *   candlestick series           (base chart canvas, paints above z-index 5)
+ *   VolumeProfileLayer           z-index 14  — above candles
+ *   FootprintLayer               z-index 15  — above candles, above the profile
+ *   marker icons                 z-index 20  — topmost
  */
 
 import { useCallback, useMemo, useState } from 'react';
@@ -24,6 +39,7 @@ import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { BinanceSource } from '@/components/charting/dataSources';
 import type { Indicator, Interval } from '@/components/charting/types';
 import { useBinanceOrderBook } from '@/pages/app/crypto/scanner/useBinanceOrderBook';
+import { useDepthSlices } from '@/pages/app/crypto/scanner/useDepthSlices';
 import { BinanceTradeSource } from '@/components/charting/orderflow/BinanceTradeSource';
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
@@ -76,6 +92,24 @@ const INTERVAL_SECONDS: Partial<Record<Interval, number>> = {
 function intervalToSec(interval: Interval): number {
   return INTERVAL_SECONDS[interval] ?? 60;
 }
+
+function intervalToMs(interval: Interval): number {
+  return intervalToSec(interval) * 1000;
+}
+
+// ── Heatmap defaults (Task 2) ────────────────────────────────────────────
+// MarketScanner exposes floor/size-filter as user-adjustable controls (its
+// own dedicated toolbar). The Arena's Chart tab does NOT rebuild that UI —
+// per the task scope, these are hardcoded to the scanner's own defaults.
+// TODO(heatmap-controls): if traders ask for floor/size-filter adjustment
+// in the Arena, add a compact control here rather than porting the
+// scanner's full toolbar.
+const HEATMAP_FLOOR_USD = 1_000;
+const HEATMAP_SIZE_FILTER_PCT = 5 as const;
+// Conservative default bar-spacing estimate — DepthMatrixLayer/useDepthSlices
+// only uses this to pick the 5s vs 1m resolution tier; the scanner passes the
+// same conservative constant (see MarketScanner.tsx APPROX_BAR_SPACING_PX).
+const HEATMAP_APPROX_BAR_SPACING_PX = 8;
 
 /** Row-density multiplier applied on top of FlowBinStore.suggestRowSize(). */
 function densityMultiplier(density: RowDensity): number {
@@ -130,6 +164,26 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
   });
 
   const orderFlowActive = isCrypto && controls.enabled;
+  const volumeProfileActive = isCrypto && controls.showVolumeProfile;
+  const heatmapActive = isCrypto && controls.showHeatmap;
+
+  // ── Heatmap data feed (Task 2) — reuses useDepthSlices exactly as
+  // MarketScanner.tsx wires it: same hook, same getBook accessor, same
+  // conservative bar-spacing constant. Only fetches/decodes when the toggle
+  // is on (isLive gates the 5s live-edge sampler; the fetch effect still
+  // runs whenever this hook is mounted, which is unconditional per hooks
+  // rules — cost is bounded by the same debounce/fetch-window-cache logic
+  // useDepthSlices already has for the scanner).
+  const depthMatrix = useDepthSlices({
+    symbol,
+    fromMs: from * 1000,
+    toMs: to * 1000,
+    barSpacingPx: HEATMAP_APPROX_BAR_SPACING_PX,
+    candleIntervalMs: intervalToMs(interval),
+    getBook: book.getBook,
+    floorUsd: HEATMAP_FLOOR_USD,
+    isLive: heatmapActive && book.status === 'live',
+  });
 
   // ── Candle dimming: mirror the footprint's zoom-driven stage ────────────
   const [footprintStage, setFootprintStage] = useState<FootprintDetailLevel>('hidden');
@@ -186,6 +240,13 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
                 onStageChange: handleStageChange,
               }}
               mutedCandles={mutedCandles}
+              volumeProfile={{ store, visible: volumeProfileActive }}
+              wallRenderMode={heatmapActive ? 'matrix' : 'series'}
+              depthMatrixColumns={heatmapActive ? depthMatrix.columns : undefined}
+              depthMatrixBinSize={depthMatrix.binSize}
+              depthMatrixSizeFilterPct={HEATMAP_SIZE_FILTER_PCT}
+              depthMatrixFloorUsd={HEATMAP_FLOOR_USD}
+              depthMatrixCandleIntervalMs={intervalToMs(interval)}
             />
           ) : (
             <div className="flex h-full items-center justify-center">

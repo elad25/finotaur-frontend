@@ -85,3 +85,28 @@ export const FOOTPRINT_TOTALS_FONT_SIZE = 10;
 
 /** Imbalance highlight outline width (px). */
 export const FOOTPRINT_IMBALANCE_OUTLINE_WIDTH = 1;
+
+// ─── Volume Profile overlay tokens ──────────────────────────────────────────
+// Shares the buy/sell/gold palette above so the profile reads as part of the
+// same order-flow family as the footprint clusters, not a separate visual.
+
+/** Max width of the profile histogram as a fraction of the pane width. */
+export const VOLUME_PROFILE_MAX_WIDTH_FRAC = 0.18;
+
+/** Row fill alpha (subtle — the profile sits behind/beside candles, not over them). */
+export const VOLUME_PROFILE_BUY_FILL = 'rgba(34, 197, 94, 0.30)';
+export const VOLUME_PROFILE_SELL_FILL = 'rgba(220, 38, 38, 0.30)';
+
+/** Value Area shading — low-alpha gold band behind VAH/VAL boundary rows. */
+export const VOLUME_PROFILE_VA_BG = 'rgba(201, 166, 70, 0.08)';
+
+/** POC line — full-pane-width dashed gold line, matches FOOTPRINT_POC_COLOR. */
+export const VOLUME_PROFILE_POC_LINE_WIDTH = 1.5;
+export const VOLUME_PROFILE_POC_DASH: [number, number] = [4, 3];
+
+/** VAH/VAL boundary line — thinner, dimmer gold than POC. */
+export const VOLUME_PROFILE_VA_BOUNDARY_COLOR = 'rgba(201, 166, 70, 0.55)';
+export const VOLUME_PROFILE_VA_BOUNDARY_DASH: [number, number] = [2, 2];
+
+/** Debounce window (ms) for recomputing the profile on visible-range change. */
+export const VOLUME_PROFILE_RECOMPUTE_DEBOUNCE_MS = 150;
