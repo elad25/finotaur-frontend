@@ -325,30 +325,17 @@ export const ChatInterface = memo(function ChatInterface({
                 onKeyDown={handleKeyDown}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                aria-label={placeholder}
+                placeholder={placeholder}
                 disabled={isLoading}
                 rows={1}
                 className={cn(
-                  "min-h-[56px] max-h-[200px] w-full resize-none bg-transparent py-4 text-ink-primary focus:outline-none",
+                  // Taller resting height so the multi-line placeholder fits fully
+                  // on narrow widths (the drawer) without the 2nd line being clipped.
+                  "min-h-[84px] max-h-[200px] w-full resize-none bg-transparent py-4 text-ink-primary placeholder:text-ink-muted focus:outline-none",
                   onImageSelected ? "pl-14 pr-14" : "pl-5 pr-14",
                 )}
                 style={{ scrollbarWidth: 'thin' }}
               />
-
-              {/* Single-line placeholder overlay — a native textarea placeholder wraps
-                  and gets clipped by the fixed 56px composer height on narrow widths,
-                  so we render it as a truncating span instead. */}
-              {input === '' && (
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "pointer-events-none absolute top-4 right-14 truncate text-ink-muted",
-                    onImageSelected ? "left-14" : "left-5",
-                  )}
-                >
-                  {placeholder}
-                </span>
-              )}
 
               {/* Hidden file input for image upload */}
               {onImageSelected && (
