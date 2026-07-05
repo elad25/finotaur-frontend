@@ -638,7 +638,7 @@ async function handleCheckUpgrade(
         success: true,
         allowed: false,
         blocked: true,
-        blockReason: "לא ניתן לעבור ממנוי שנתי לחודשי. אפשרויות: המתן לסיום המנוי השנתי או שדרג לתוכנית שנתית אחרת.",
+        blockReason: "You can't switch from a yearly plan to monthly. Options: wait until your yearly plan ends, or upgrade to a different yearly plan.",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -684,7 +684,7 @@ async function handleCheckUpgrade(
         allowed: true,
         requiresNoRefundConfirmation: true,
         noRefundInfo,
-        message: `⚠️ שים לב: יש לך מנוי שנתי פעיל עד ${expiresAt.toLocaleDateString('he-IL')}. מעבר עכשיו לא יזכה אותך על התקופה שנותרה.`,
+        message: `⚠️ Note: you have an active yearly plan until ${expiresAt.toLocaleDateString('en-US')}. Switching now will not refund you for the remaining time.`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
