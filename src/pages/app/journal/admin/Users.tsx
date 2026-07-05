@@ -212,7 +212,7 @@ export default function AdminUsers() {
   return (
     <AdminLayout
       title="Subscribers"
-      description="Manage subscribers across Platform, Journal &amp; Newsletter"
+      description="Manage subscribers across Platform, Trader &amp; Investor"
     >
       {/* 🔥 Realtime Status Bar */}
       <div className="flex items-center justify-between mb-4">
@@ -247,7 +247,7 @@ export default function AdminUsers() {
         <div className="flex items-center gap-3">
           <UsersIcon className="w-5 h-5 text-blue-400" />
           <div>
-            <p className="text-blue-400 font-medium">Showing all subscribers across Platform, Journal &amp; Newsletter products</p>
+            <p className="text-blue-400 font-medium">Showing all subscribers across Platform, Trader &amp; Investor products</p>
             <p className="text-blue-400/70 text-sm">
               Use the filter tabs to drill into a specific product. A user can appear in multiple categories.
             </p>
@@ -261,7 +261,6 @@ export default function AdminUsers() {
           </span>
           <JoinChip label="Platform" value={joins24h?.platform} color="gold" />
           <JoinChip label="Trader (Journal)" value={joins24h?.journal} color="emerald" />
-          <JoinChip label="Newsletter" value={joins24h?.newsletter} color="blue" />
           <JoinChip label="Investor" value={joins24h?.top_secret} color="purple" />
           <JoinChip label="Free" value={joins24h?.free} color="gray" />
         </div>
@@ -306,8 +305,9 @@ export default function AdminUsers() {
               onClick={() => handleFilterChange({ product_filter: 'journal' as ProductFilter })}
               color="emerald"
             />
+            {/* 'newsletter' filter value = the combined Investor set (top_secret OR legacy warzone) */}
             <FilterButton
-              label="Investor (Newsletter)"
+              label="Investor"
               isActive={filters.product_filter === 'newsletter'}
               onClick={() => handleFilterChange({ product_filter: 'newsletter' as ProductFilter })}
               color="blue"

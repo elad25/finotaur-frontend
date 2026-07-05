@@ -120,7 +120,7 @@ export function softwareApplication(): Record<string, unknown> {
       {
         '@type': 'Offer',
         name: 'Investor',
-        price: '50',
+        price: '49',
         priceCurrency: 'USD',
         description: 'Daily TOP SECRET institutional report, research hub, AI Stock/Sector/Macro analysis',
       },

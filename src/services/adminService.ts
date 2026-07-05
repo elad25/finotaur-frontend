@@ -331,7 +331,7 @@ interface AdminListUsersRow {
  *   undefined / omitted → all active subscribers across any product
  *   'platform'          → platform_subscription_status = 'active'
  *   'journal'           → account_type IN ('basic','premium')
- *   'newsletter'        → newsletter_status = 'active' OR top_secret_status = 'active'
+ *   'newsletter'        → the Investor set: newsletter_status = 'active' OR top_secret_status = 'active'
  *   'free'              → account_type = 'free' or null (legacy)
  *
  * account_type (legacy, still honoured when product_filter is absent):

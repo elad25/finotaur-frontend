@@ -27,10 +27,10 @@ const TermsModal = lazy(() => import('../all-markets/WarzoneComponents/modals/Te
 // =====================================================
 // CONFIGURATION
 // =====================================================
-const WHOP_MONTHLY_PLAN_ID = 'plan_U6lF2eO5y9469'; // WAR ZONE Monthly
-const WHOP_YEARLY_PLAN_ID = 'plan_bp2QTGuwfpj0A'; // WAR ZONE Yearly
-const MONTHLY_PRICE = 69.99;
-const YEARLY_PRICE = 699;
+const WHOP_MONTHLY_PLAN_ID = 'plan_icd76C8REp0LQ'; // Investor (Top Secret) Monthly
+const WHOP_YEARLY_PLAN_ID = 'plan_7Lf31ygMAMmK8'; // Investor (Top Secret) Yearly
+const MONTHLY_PRICE = 49;
+const YEARLY_PRICE = 499;
 const YEARLY_SAVINGS = Math.round((MONTHLY_PRICE * 12) - YEARLY_PRICE);
 const YEARLY_MONTHLY_EQUIVALENT = Math.round(YEARLY_PRICE / 12);
 
@@ -276,7 +276,7 @@ export default function WarZonePricingSelection() {
     
     // Bundle prices
     const bundlePrice = isMonthly ? BUNDLE_MONTHLY_PRICE : BUNDLE_YEARLY_PRICE;
-    const bundleSavings = isMonthly ? 30.99 : 178; // Monthly: $119.99 (WAR ZONE $69.99 + Top Secret $50) - $89 = $30.99, Yearly: $1,068 (12x monthly) - $890 = $178
+    const bundleSavings = isMonthly ? 4.99 : 18; // Monthly: $93.99 (Trader $44.99 + Investor $49) - $89 = $4.99, Yearly: $908 ($409 + $499) - $890 = $18
     const bundleMonthlyEquivalent = isMonthly ? null : Math.round(BUNDLE_YEARLY_PRICE / 12);
     
     // Handler for single product checkout
@@ -495,7 +495,7 @@ export default function WarZonePricingSelection() {
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm text-slate-500 line-through">
-                        {isMonthly ? '$119.99' : '$1,068'}
+                        {isMonthly ? '$93.99' : '$908'}
                       </span>
                       <span 
                         className="text-3xl font-bold"

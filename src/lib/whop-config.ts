@@ -2,7 +2,7 @@
 // FINOTAUR WHOP CONFIGURATION - v9.0.0
 // =====================================================
 // 🔥 v9.0.0 CHANGES (2026-07): PERSONA LADDER
-// - Top Secret product REBRANDED as "Investor" tier ($50/mo / $499/yr — SAME Whop plans/products).
+// - Top Secret product REBRANDED as "Investor" tier ($49/mo / $499/yr — SAME Whop plans/products).
 //   Investor = TOP SECRET intelligence + research hub access + limited platform AI
 //   (Stock Analyzer 10/day, Sector & Macro Analyzer with monthly caps).
 // - Journal Premium is positioned as the "Trader" tier ($44.99/mo — unchanged).
@@ -106,7 +106,7 @@ export const WHOP_PLAN_IDS = {
   newsletter_monthly: 'plan_U6lF2eO5y9469',
   newsletter_yearly: 'plan_bp2QTGuwfpj0A',
 
-  // Top Secret (merged WAR ZONE + TOP SECRET product) — LIVE Whop plans @ $50/mo, $499/yr
+  // Top Secret (merged WAR ZONE + TOP SECRET product) — LIVE Whop plans @ $49/mo, $499/yr
   top_secret_monthly: 'plan_icd76C8REp0LQ',
   top_secret_yearly: 'plan_7Lf31ygMAMmK8',
 } as const;
@@ -196,7 +196,7 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
 
-  // Top Secret (Intelligence Envelope) — LIVE Whop plans @ $50/mo, $499/yr
+  // Top Secret (Intelligence Envelope) — LIVE Whop plans @ $49/mo, $499/yr
   'plan_icd76C8REp0LQ': 'top_secret_monthly',
   'plan_7Lf31ygMAMmK8': 'top_secret_yearly',
 };
@@ -465,7 +465,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 
   // ═══════════════════════════════════════════
   // INVESTOR (Top Secret product) — 14-day free trial (no intro discount)
-  // $50/mo | $499/yr ($41.58/mo)
+  // $49/mo | $499/yr ($41.58/mo)
   // v9.0.0: Rebranded "Top Secret" → "Investor" tier. SAME Whop plans/products —
   // existing Top Secret subscribers are grandfathered into Investor automatically.
   // Adds: research hub access + limited platform AI (Stock 10/day, Sector & Macro capped)
@@ -473,11 +473,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_icd76C8REp0LQ — $50/month, 14-day free trial
+    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_icd76C8REp0LQ — $49/month, 14-day free trial
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Investor',
-    price: 50,
+    price: 49,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
@@ -488,7 +488,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
-      '💰 Then $50/month — cancel anytime',
+      '💰 Then $49/month — cancel anytime',
       '🕵️ TOP SECRET: daily institutional-grade report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -518,11 +518,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 Save $101/year vs monthly',
+    badge: '🔥 Save $89/year vs monthly',
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
-      '💰 $41.58/month — save $101/year vs monthly',
+      '💰 $41.58/month — save $89/year vs monthly',
       '🕵️ TOP SECRET: daily institutional-grade report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',

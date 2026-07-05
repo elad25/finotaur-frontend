@@ -45,12 +45,12 @@ interface PlanTier {
   features: string[];
 }
 
-// v3.0.0 ladder: Investor ($50) → Finotaur ($89) → Ultimate ($200)
+// v3.0.0 ladder: Investor ($49) → Finotaur ($89) → Ultimate ($200)
 const PLAN_TIERS: PlanTier[] = [
   {
     key: 'investor',
     name: 'Investor',
-    price: '$50',
+    price: '$49',
     description: 'Intel, research & AI analysis',
     icon: Eye,
     accentFrom: '#C9A646',

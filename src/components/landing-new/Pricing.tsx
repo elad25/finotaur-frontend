@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
 // PRICING — COMPACT — 5 Plans (persona ladder, 2026-07)
-// Free | Trader ($44.99) | Investor ($50) | Finotaur ($89 FEATURED) | Ultimate ($200)
+// Free | Trader ($44.99) | Investor ($49) | Finotaur ($89 FEATURED) | Ultimate ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -80,7 +80,7 @@ const plans: Plan[] = [
   {
     id: "top_secret",
     name: "Investor",
-    monthlyPrice: "$50",
+    monthlyPrice: "$49",
     yearlyPrice: "$499",
     yearlyMonthlyEquivalent: "$42",
     description: "The investor's desk — daily intel, research & AI analysis",
@@ -98,7 +98,7 @@ const plans: Plan[] = [
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
-    savings: "Save 17%",
+    savings: "Save 15%",
   },
   {
     id: "finotaur",

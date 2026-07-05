@@ -14,7 +14,7 @@ const valueItems = [
   { name: "AI Sector Analyzer (unlimited)", value: "$79" },
   { name: "Options Intelligence AI + Dark Pool flow", value: "$149" },
   { name: "AI Scanner — daily Top 5", value: "$59" },
-  { name: "Investor — TOP SECRET intel + research hub", value: "$50" },
+  { name: "Investor — TOP SECRET intel + research hub", value: "$49" },
   { name: "Trader — journal, copier & analytics", value: "$45" },
   { name: "Macro Analyzer", value: "$49" },
   { name: "Priority 24h Support", value: "$29" },

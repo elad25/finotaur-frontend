@@ -180,17 +180,17 @@ export default function AdminSubscribers() {
           subtitle={`${stats.activeSubscribers} active`}
         />
         <StatsCard
-          title="Journal"
+          title="Trader (Journal)"
           value={stats.journalSubscribers}
-          change={`${stats.basicSubscribers} Basic · ${stats.premiumSubscribers} Premium`}
+          change={`${stats.basicSubscribers} Basic · ${stats.premiumSubscribers} Trader`}
           changeType="neutral"
           icon={DollarSign}
           subtitle={`$${(stats.basicMRR + stats.premiumMRR).toLocaleString('en-US')} MRR`}
         />
         <StatsCard
-          title="Newsletter"
+          title="Investor"
           value={(stats.newsletterSubscribers ?? 0) + (stats.topSecretSubscribers ?? 0)}
-          change={`${stats.newsletterSubscribers ?? 0} Legacy · ${stats.topSecretSubscribers ?? 0} Investor`}
+          change={`${stats.topSecretSubscribers ?? 0} Investor · ${stats.newsletterSubscribers ?? 0} legacy`}
           changeType="neutral"
           icon={TrendingUp}
           subtitle={`$${((stats.newsletterMRR ?? 0) + (stats.topSecretMRR ?? 0)).toLocaleString('en-US')} MRR`}
@@ -210,12 +210,11 @@ export default function AdminSubscribers() {
         <div className="bg-[#111111] border border-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-bold text-white mb-4">Plan Distribution</h2>
           <div className="space-y-4">
-            <PlanBar label="Journal · Basic Monthly"   count={stats.basicMonthly}   total={stats.totalSubscribers} color="bg-emerald-600" />
-            <PlanBar label="Journal · Basic Yearly"    count={stats.basicYearly}    total={stats.totalSubscribers} color="bg-emerald-500" />
-            <PlanBar label="Journal · Premium Monthly" count={stats.premiumMonthly} total={stats.totalSubscribers} color="bg-[#D4AF37]" />
-            <PlanBar label="Journal · Premium Yearly"  count={stats.premiumYearly}  total={stats.totalSubscribers} color="bg-[#FFD700]" />
-            <PlanBar label="Investor · Legacy (WAR ZONE)"     count={stats.newsletterSubscribers ?? 0} total={stats.totalSubscribers} color="bg-purple-500" />
-            <PlanBar label="Investor (Top Secret)"   count={stats.topSecretSubscribers ?? 0}  total={stats.totalSubscribers} color="bg-red-500" />
+            <PlanBar label="Trader · Basic Monthly"   count={stats.basicMonthly}   total={stats.totalSubscribers} color="bg-emerald-600" />
+            <PlanBar label="Trader · Basic Yearly"    count={stats.basicYearly}    total={stats.totalSubscribers} color="bg-emerald-500" />
+            <PlanBar label="Trader Monthly" count={stats.premiumMonthly} total={stats.totalSubscribers} color="bg-[#D4AF37]" />
+            <PlanBar label="Trader Yearly"  count={stats.premiumYearly}  total={stats.totalSubscribers} color="bg-[#FFD700]" />
+            <PlanBar label="Investor"   count={(stats.topSecretSubscribers ?? 0) + (stats.newsletterSubscribers ?? 0)}  total={stats.totalSubscribers} color="bg-purple-500" />
           </div>
         </div>
 
@@ -223,7 +222,7 @@ export default function AdminSubscribers() {
           <h2 className="text-xl font-bold text-white mb-4">Revenue Breakdown</h2>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Journal · Basic MRR</span>
+              <span className="text-gray-400">Trader · Basic MRR</span>
               <span className="text-white font-semibold">${stats.basicMRR.toLocaleString('en-US')}</span>
             </div>
             <div className="flex justify-between items-center">
@@ -231,12 +230,8 @@ export default function AdminSubscribers() {
               <span className="text-white font-semibold">${stats.premiumMRR.toLocaleString('en-US')}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Investor · Legacy MRR</span>
-              <span className="text-white font-semibold">${(stats.newsletterMRR ?? 0).toLocaleString('en-US')}</span>
-            </div>
-            <div className="flex justify-between items-center">
               <span className="text-gray-400">Investor MRR</span>
-              <span className="text-white font-semibold">${(stats.topSecretMRR ?? 0).toLocaleString('en-US')}</span>
+              <span className="text-white font-semibold">${((stats.topSecretMRR ?? 0) + (stats.newsletterMRR ?? 0)).toLocaleString('en-US')}</span>
             </div>
             <div className="border-t border-gray-800 pt-4">
               <div className="flex justify-between items-center">
@@ -274,9 +269,8 @@ export default function AdminSubscribers() {
             >
               <option value="all">All Plans</option>
               <option value="platform">Platform</option>
-              <option value="basic">Journal · Basic</option>
-              <option value="premium">Journal · Premium</option>
-              <option value="newsletter">Investor · Legacy</option>
+              <option value="basic">Trader · Basic</option>
+              <option value="premium">Trader</option>
               <option value="top_secret">Investor</option>
             </select>
           </div>

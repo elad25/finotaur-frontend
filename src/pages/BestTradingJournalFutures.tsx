@@ -376,7 +376,7 @@ export default function BestTradingJournalFutures() {
           </Card>
 
           <Card variant="default" padding="default">
-            <h3 className="font-wordmark font-medium text-xl text-ink-primary">Premium</h3>
+            <h3 className="font-wordmark font-medium text-xl text-ink-primary">Trader</h3>
             <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$44.99/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
               <li>Everything in Free, plus:</li>

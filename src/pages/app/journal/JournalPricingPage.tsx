@@ -71,7 +71,7 @@ const plans: Plan[] = [
   },
   {
     id: 'premium',
-    name: 'Premium',
+    name: 'Trader',
     monthlyPrice: '$44.99',
     yearlyPrice: '$409',
     yearlyMonthlyEquivalent: '$34.08',

@@ -33,7 +33,7 @@ futures-first with native Tradovate integration.
 - Behavioral & risk alerts, custom AI reports
 - Priority support
 
-## Investor — $50/month, or $499/year ($41.58/month billed annually)
+## Investor — $49/month, or $499/year ($41.58/month billed annually)
 
 The investor's desk: institutional intelligence, research, and AI analysis.
 
