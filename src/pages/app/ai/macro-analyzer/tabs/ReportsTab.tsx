@@ -1752,7 +1752,7 @@ const CPIDeepIntelligence = memo(({ data }: { data: CPIIntelligenceData | null }
             </span>
           )}
         </div>
-        <p className="text-[10px] text-[#6B6B6B] mb-3 pl-6">AI-generated analysis powered by GPT-4o — 1 shared call per 2 hours</p>
+        <p className="text-[10px] text-[#6B6B6B] mb-3 pl-6">AI-generated analysis — 1 shared call per 2 hours</p>
 
         <div className="space-y-2">
           {aiSections.map((section, idx) => {
@@ -1877,7 +1877,7 @@ const PPIDeepIntelligence = memo(({ data }: { data: PPIIntelligenceData | null }
             </span>
           )}
         </div>
-        <p className="text-[10px] text-[#6B6B6B] mb-3 pl-6">AI-generated analysis powered by GPT-4o — 1 shared call per 2 hours</p>
+        <p className="text-[10px] text-[#6B6B6B] mb-3 pl-6">AI-generated analysis — 1 shared call per 2 hours</p>
 
         <div className="space-y-2">
           {aiSections.map((section, idx) => {

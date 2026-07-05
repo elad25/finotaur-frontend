@@ -739,7 +739,7 @@ function AITab() {
             <div>
               <h2 className="text-xl font-bold text-white">AI Macro Strategist</h2>
               <p className="text-xs text-[#8B8B8B]">
-                GPT-4o analysis of {overview.indicators.length} live indicators from FRED & Yahoo Finance
+                AI analysis of {overview.indicators.length} live indicators from FRED & Yahoo Finance
               </p>
             </div>
           </div>
@@ -817,7 +817,7 @@ function AITab() {
       {/* Footer */}
       <div className="flex items-center justify-center gap-2 text-xs text-[#6B6B6B]">
         <Sparkles className="w-3 h-3 text-[#C9A646]" />
-        AI analysis by GPT-4o · Data from FRED & Yahoo Finance · Not financial advice
+        AI analysis · Data from FRED & Yahoo Finance · Not financial advice
         <button
           onClick={refreshOverview}
           className="text-[#C9A646] hover:text-[#F4D97B] ml-2 flex items-center gap-1"

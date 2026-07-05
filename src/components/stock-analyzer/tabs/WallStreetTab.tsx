@@ -953,7 +953,7 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
                       FINOTAUR AI
                     </span>
                   </div>
-                  <p className="text-xs text-[#6B6B6B]">Powered by Anthropic · AI-generated thesis</p>
+                  <p className="text-xs text-[#6B6B6B]">Powered by FINOTAUR AI · AI-generated thesis</p>
                 </div>
               </div>
 
