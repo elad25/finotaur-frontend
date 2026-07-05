@@ -34,6 +34,10 @@ export function initSentry(): void {
     ignoreErrors: [
       /Java object is gone/i,
       /Java bridge method invocation error/i,
+      // iOS sibling of the above (Sentry issue MZ-3Z, 2026-07-05): scripts
+      // injected by iOS in-app browsers reference window.webkit.messageHandlers,
+      // which doesn't exist outside their own WebView. Not our code.
+      /window\.webkit\.messageHandlers/,
     ],
     beforeSend(event) {
       if (event.user) {
