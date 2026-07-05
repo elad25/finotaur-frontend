@@ -701,6 +701,15 @@ export interface FinotaurChartProps {
    * candle colors, zero behavior change for every existing caller.
    */
   mutedCandles?: boolean;
+  /**
+   * Optional bumping token that forces a bar refetch (re-runs `dataSource.getBars`)
+   * without changing symbol/interval/from/to. Undefined (every existing caller) is
+   * a complete no-op. Added for FuturesChartTab: DatabentoBarsSource's trade cache
+   * fills asynchronously (backfill lands 5-15s after mount) and `from`/`to` are a
+   * fixed wall-clock window computed once on mount, so nothing else in the deps
+   * array would ever re-run the fetch after the cache populates.
+   */
+  refreshToken?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -733,6 +742,7 @@ export function FinotaurChart({
   onBarsLoad,
   footprint,
   mutedCandles,
+  refreshToken,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1295,7 +1305,9 @@ export function FinotaurChart({
     return () => {
       cancelled = true;
     };
-  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad]);
+    // refreshToken: deliberate extra dep (undefined for every caller except
+    // FuturesChartTab) — see the prop doc comment on FinotaurChartProps.
+  }, [symbol, interval, from, to, dataSource, onError, focusRange, onBarsLoad, refreshToken]);
 
   // ─── Apply markers ──────────────────────────────────────────
   useEffect(() => {

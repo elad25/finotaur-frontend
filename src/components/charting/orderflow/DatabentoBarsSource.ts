@@ -96,7 +96,26 @@ export class DatabentoBarsSource implements ChartDataSource {
     const fromMs = Number(from) * 1000;
     const toMs = Number(to) * 1000;
     const windowed = cache.trades.filter((t) => t.time >= fromMs && t.time <= toMs);
-    return tradesToBars(windowed, intervalSec);
+
+    if (windowed.length > 0 || cache.trades.length === 0) {
+      return tradesToBars(windowed, intervalSec);
+    }
+
+    // Anchored-window fallback (deliberate, dev/trial surface only): the caller
+    // (FuturesChartTab) anchors [from, to] to wall-clock "now", but on a closed
+    // market (weekend/holiday) the only trades available are from the last
+    // session, which can be hours or days older than `from`. Rather than show
+    // an empty chart while the trade cache is actually full, fall back to the
+    // most recent bars covering the SAME window width, taken from wherever the
+    // cache's data actually lives. This is "show the last available session"
+    // behavior — acceptable here because this tab is explicitly labeled
+    // "Delayed data — development preview" and is never customer-facing.
+    const windowSec = Math.max(toMs - fromMs, intervalSec * 1000) / 1000;
+    const barsNeeded = Math.max(Math.ceil(windowSec / intervalSec), 1);
+    const newestTradeTime = cache.trades[cache.trades.length - 1].time;
+    const fallbackFromMs = newestTradeTime - barsNeeded * intervalSec * 1000;
+    const fallback = cache.trades.filter((t) => t.time >= fallbackFromMs && t.time <= newestTradeTime);
+    return tradesToBars(fallback, intervalSec);
   }
 
   /** Tear down the background poll subscription for a symbol. Call on contract switch/unmount. */
