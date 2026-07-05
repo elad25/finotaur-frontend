@@ -56,7 +56,7 @@ export function CopilotChatBubble() {
                 limitReached={copilot.usage?.limit_reached}
                 questionsRemaining={copilot.usage?.questions_remaining}
                 questionsUsed={copilot.usage?.questions_today}
-                dailyLimit={copilot.usage?.daily_limit}
+                dailyLimit={copilot.usage?.unlimited ? undefined : (copilot.usage?.daily_limit ?? undefined)}
               />
             </div>
           </motion.div>

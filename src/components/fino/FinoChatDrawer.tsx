@@ -149,12 +149,13 @@ function FinoChatPanel({
 
   // Remaining-questions pill: prefer the server-reported daily_limit (finite,
   // positive number); otherwise fall back to the client-side quota map.
-  // null → tier is unlimited, pill renders nothing.
+  // null → tier is unlimited, pill renders nothing. `usage.unlimited` is the
+  // authoritative signal from the server and always wins over FINO_TIER_QUOTAS.
   const serverLimit =
-    usage && Number.isFinite(usage.daily_limit) && usage.daily_limit > 0
+    usage && Number.isFinite(usage.daily_limit) && (usage.daily_limit as number) > 0
       ? usage.daily_limit
       : null;
-  const quotaLimit = serverLimit ?? FINO_TIER_QUOTAS[finoTierKey];
+  const quotaLimit = usage?.unlimited ? null : (serverLimit ?? FINO_TIER_QUOTAS[finoTierKey]);
   const questionsUsedDisplay = usage?.questions_today ?? 0;
   // The existing loud banner already renders "N of M" + a progress bar +
   // upgrade CTA for the legacy FREE/BASIC server tiers — don't duplicate it
@@ -387,11 +388,11 @@ function FinoChatPanel({
                 await sendMessage(message, buildFinoContext(getPageData));
               }}
               onClearError={clearError}
-              limitReached={usage?.limit_reached || false}
-              questionsRemaining={usage?.questions_remaining ?? 999}
+              limitReached={(!usage?.unlimited && usage?.limit_reached) || false}
+              questionsRemaining={usage?.unlimited ? 999 : (usage?.questions_remaining ?? 999)}
               userTier={(usage?.user_tier as 'FREE' | 'BASIC' | 'PREMIUM') ?? 'FREE'}
               questionsUsed={usage?.questions_today}
-              dailyLimit={usage?.daily_limit}
+              dailyLimit={usage?.unlimited ? undefined : (usage?.daily_limit ?? undefined)}
               promptRows={finoTier.promptRows}
               promptPlacement="aboveInput"
               onImageSelected={FINO_DETECTIVE_ENABLED ? handleImageSelected : undefined}
