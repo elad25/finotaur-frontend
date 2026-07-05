@@ -118,8 +118,8 @@ GoldCard.displayName = 'GoldCard';
 // ─────────────────────────────────────────────────────
 
 const earningsExamples = [
-  { referrals: 10, plan: 'Monthly plan', monthly: '$109', yearly: '$1,308' },
-  { referrals: 25, plan: 'Mixed plans', monthly: '$272', yearly: '$3,270' },
+  { referrals: 10, plan: 'Monthly plan', monthly: '$89', yearly: '$1,068' },
+  { referrals: 25, plan: 'Mixed plans', monthly: '$222', yearly: '$2,670' },
   { referrals: 50, plan: 'Mixed plans', monthly: '$450+', yearly: '$5,400+' },
   { referrals: 100, plan: 'Mixed plans', monthly: '$900+', yearly: '$10,800+' },
 ];

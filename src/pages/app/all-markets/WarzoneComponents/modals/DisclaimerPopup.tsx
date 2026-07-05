@@ -152,7 +152,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   {/* Price */}
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-[#C9A646]">$109</span>
+                      <span className="text-3xl font-bold text-[#C9A646]">$89</span>
                       <span className="text-slate-500">/month</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
@@ -245,11 +245,11 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   {/* Price */}
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-white">$1090</span>
+                      <span className="text-3xl font-bold text-white">$890</span>
                       <span className="text-slate-500">/year</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Just $90.83/mo — Save $218/year!
+                      Just $74.17/mo — Save $178/year!
                     </p>
                   </div>
 
@@ -588,7 +588,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                           WebkitTextFillColor: 'transparent' 
                         }}
                       >
-                        $109
+                        $89
                       </span>
                       <span className="text-slate-500 text-sm">/mo</span>
                     </div>
@@ -643,7 +643,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                     ) : (
                       <Crown className="w-4 h-4" />
                     )}
-                    {isProcessing && selectedOption === 'bundle' ? 'Processing...' : 'Get Finotaur for $109/mo'}
+                    {isProcessing && selectedOption === 'bundle' ? 'Processing...' : 'Get Finotaur for $89/mo'}
                   </button>
                 </div>
               )}

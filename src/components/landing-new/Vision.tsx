@@ -29,7 +29,7 @@ const Vision = () => {
           <SectionEyebrow className="mb-3">Value Stack</SectionEyebrow>
           <SectionTitle size="default" gradient="split" className="text-2xl md:text-3xl mb-1.5">
             What you get for{" "}
-            <span className="text-gold-primary">$109/month</span>
+            <span className="text-gold-primary">$89/month</span>
           </SectionTitle>
           <p className="text-sm text-ink-secondary">
             Everything you need to trade like an institution — in one subscription.
@@ -75,7 +75,7 @@ const Vision = () => {
               <div className="flex items-center justify-between">
                 <span className="text-ink-primary font-bold text-base">You pay:</span>
                 <div className="flex items-end gap-1">
-                  <span className="text-3xl font-bold text-gold-primary">$109</span>
+                  <span className="text-3xl font-bold text-gold-primary">$89</span>
                   <span className="text-ink-secondary text-sm mb-0.5">/month</span>
                 </div>
               </div>

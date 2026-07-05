@@ -2,7 +2,7 @@
  * "Choose Your Access" — dual-card pricing layout.
  *
  * Card 1: WAR ZONE standalone ($69.99/mo with 7-day free trial)
- * Card 2: FINOTAUR PLATFORM bundle ($109/mo, BEST VALUE)
+ * Card 2: FINOTAUR PLATFORM bundle ($89/mo, BEST VALUE)
  *
  * Both cards use existing checkout handlers — no business logic changes here.
  */
@@ -26,9 +26,9 @@ interface Props {
 }
 
 // FINOTAUR Platform Bundle prices (source: TopSecretLanding.tsx FINOTAUR_PRICES)
-const FINOTAUR_MONTHLY = 109;
-const FINOTAUR_YEARLY = 1090;
-const FINOTAUR_YEARLY_PER_MONTH = Math.round(FINOTAUR_YEARLY / 12); // = 91
+const FINOTAUR_MONTHLY = 89;
+const FINOTAUR_YEARLY = 890;
+const FINOTAUR_YEARLY_PER_MONTH = Math.round(FINOTAUR_YEARLY / 12); // = 74
 
 const WAR_ZONE_FEATURES = [
   "Daily briefing before the market opens",

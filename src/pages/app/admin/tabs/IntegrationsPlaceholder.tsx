@@ -62,7 +62,7 @@ const INTEGRATIONS: Integration[] = [
   },
   {
     name: 'Slack',
-    purpose: 'Admin alerts (new $109 signup, churn risk spike, deploy)',
+    purpose: 'Admin alerts (new $89 signup, churn risk spike, deploy)',
     status: 'planned',
     note: 'Webhook in Slack workspace -> server-side proxy -> channel.',
   },

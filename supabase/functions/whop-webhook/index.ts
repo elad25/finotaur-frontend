@@ -44,8 +44,8 @@ const TOP_SECRET_PRODUCT_IDS = new Set([
 const PLATFORM_PRODUCT_IDS = new Set([
   'prod_HDYzeNp6WOJwh',  // Platform Core Monthly - $59/month with 14-day trial
   'prod_YAdXQrHtt72Gd',  // Platform Core Yearly - $590/year
-  'prod_LtP5GbpPfp9bn',  // Finotaur Monthly - $109/month with 14-day trial
-  'prod_CbWpZrn5P7wc9',  // Finotaur Yearly - $1090/year
+  'prod_LtP5GbpPfp9bn',  // Finotaur Monthly - $89/month with 14-day trial
+  'prod_CbWpZrn5P7wc9',  // Finotaur Yearly - $890/year
   'prod_CIKv0J5Rq6aFk',  // Copilot Monthly - $200/month
   'prod_9e5E84XpsrhWE',  // Copilot Yearly ($2,000/year)
 ]);
@@ -95,7 +95,8 @@ const PRODUCT_ID_TO_PLAN_JOURNAL: Record<string, { plan: string; interval: strin
 const YEARLY_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699/year)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year)
-  'plan_M2zS1EoNXJF10',  // Finotaur Platform Yearly ($1090/year)
+  'plan_0uYhhF6fX5IKh',  // Finotaur Platform Yearly — $890/yr plan (2026-07)
+  'plan_M2zS1EoNXJF10',  // Finotaur Platform Yearly — legacy $1,090/yr plan — active members remain until migrated
   'plan_6w5KTZsSGp7Ss',  // Platform Core Yearly ($590/year)
   'plan_dfy2uADNyEExg',  // Copilot Yearly ($2,000/year)
 ]);
@@ -428,8 +429,8 @@ async function getPlanInfo(
     // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
     // 🔥 v7.0.0: Finotaur Platform
-    "prod_LtP5GbpPfp9bn": { plan: "platform_finotaur", interval: "monthly", price: 109.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false, isPlatform: true },
-    "prod_CbWpZrn5P7wc9": { plan: "platform_finotaur", interval: "yearly", price: 1090.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false, isPlatform: true },
+    "prod_LtP5GbpPfp9bn": { plan: "platform_finotaur", interval: "monthly", price: 89.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false, isPlatform: true },
+    "prod_CbWpZrn5P7wc9": { plan: "platform_finotaur", interval: "yearly", price: 890.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false, isPlatform: true },
   };
 
   return fallbackMapping[productId] || null;

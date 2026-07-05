@@ -736,10 +736,10 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
           top_secret_mrr:
             users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.top_secret_interval === 'monthly').length * 50 +
             users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active' && u.top_secret_interval === 'yearly').length * 41.58,
-          // Platform MRR - Core: $59/mo, Finotaur: $109/mo, Copilot: $200/mo
+          // Platform MRR - Core: $59/mo, Finotaur: $89/mo, Copilot: $200/mo
           platform_mrr:
             users.filter(u => u.platform_plan === 'platform_core' && u.platform_subscription_status === 'active').length * 59 +
-            users.filter(u => u.platform_plan === 'platform_finotaur' && u.platform_subscription_status === 'active').length * 109 +
+            users.filter(u => u.platform_plan === 'platform_finotaur' && u.platform_subscription_status === 'active').length * 89 +
             users.filter(u => u.platform_plan === 'platform_enterprise' && u.platform_subscription_status === 'active').length * 200,
         },
         trials: {
@@ -1986,7 +1986,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
         },
         platform: {
           core: 59.00,
-          pro: 109.00,
+          pro: 89.00,
           enterprise: 200.00,
         },
       };
@@ -4388,7 +4388,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Pro</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.pro} × $109.00</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.platform_subscribers.pro} × $89.00</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Enterprise</span>
@@ -4783,7 +4783,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       <p className="text-cyan-400 font-medium mb-2">Platform</p>
                       <div className="space-y-1 text-[#808080]">
                         <p>Core: $59.00/mo</p>
-                        <p>Finotaur: $109.00/mo</p>
+                        <p>Finotaur: $89.00/mo</p>
                         <p>Copilot: $200.00/mo</p>
                       </div>
                     </div>
@@ -5120,7 +5120,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           {/* Pro Breakdown */}
           {stats && (
             <SubscriptionBreakdownCard
-              title="Finotaur Plan ($109/mo)"
+              title="Finotaur Plan ($89/mo)"
               icon={Crown}
               monthly={stats.platform.finotaur.monthly}
               yearly={stats.platform.finotaur.yearly}

@@ -713,7 +713,7 @@ const PricingSection = memo(function PricingSection({
                 {/* Bundle Price */}
                 <div className="mb-4">
                   <div className="flex items-baseline justify-start gap-2 mb-1">
-                    <span className="text-5xl font-bold text-white">$109</span>
+                    <span className="text-5xl font-bold text-white">$89</span>
                     <span className="text-xl text-slate-400">/month</span>
                   </div>
                   <p className="text-emerald-400 text-base font-semibold">
@@ -742,7 +742,7 @@ const PricingSection = memo(function PricingSection({
                   }}
                 >
                   <Crown className="w-5 h-5" />
-                  GET BUNDLE — $109/mo
+                  GET BUNDLE — $89/mo
                 </button>
 
                 <p className="text-xs text-center text-slate-500 mb-4">
@@ -815,18 +815,18 @@ const PricingSection = memo(function PricingSection({
                 <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Monthly Bundle × 12</span>
-                    <span className="text-slate-200 line-through">$1,308</span>
+                    <span className="text-slate-200 line-through">$1,068</span>
                   </div>
                 </div>
 
                 {/* Bundle Yearly Price */}
                 <div className="mb-4">
                   <div className="flex items-baseline justify-start gap-2 mb-1">
-                    <span className="text-5xl font-bold text-white">$1,090</span>
+                    <span className="text-5xl font-bold text-white">$890</span>
                     <span className="text-xl text-slate-400">/year</span>
                   </div>
                   <p className="text-emerald-400 text-base font-semibold">
-                    Just $90.83/month — Save $218!
+                    Just $74.17/month — Save $178!
                   </p>
                 </div>
 
@@ -1514,8 +1514,8 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
       
-// Finotaur Platform plan ID - $109/month with 14-day trial
-const finotaurPlanId = 'plan_ICooR8aqtdXad';
+// Finotaur Platform plan ID - $89/month with 14-day trial (repriced 2026-07, new Whop plan)
+const finotaurPlanId = 'plan_AgWVNrqc0eSMK';
       
       // Try Edge Function first
       if (accessToken) {
@@ -1588,8 +1588,8 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
       
-      // Finotaur Platform Yearly plan ID - $1090/year (no trial)
-      const finotaurYearlyPlanId = 'plan_M2zS1EoNXJF10';
+      // Finotaur Platform Yearly plan ID - $890/year (no trial) (repriced 2026-07, new Whop plan)
+      const finotaurYearlyPlanId = 'plan_0uYhhF6fX5IKh';
       
       // Try Edge Function first
       if (accessToken) {
@@ -1921,9 +1921,9 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
                   <div className="flex items-center justify-center gap-3 mb-2">
                     <span className="text-slate-500 line-through text-sm">$69.99</span>
                     <span className="text-slate-600">+</span>
-                    <span className="text-slate-500 line-through text-sm">$89.99</span>
+                    <span className="text-slate-500 line-through text-sm">$50</span>
                     <span className="text-slate-600">=</span>
-                    <span className="text-slate-500 line-through text-sm">$159.98/mo</span>
+                    <span className="text-slate-500 line-through text-sm">$119.99/mo</span>
                   </div>
                   <div className="flex items-baseline justify-center gap-2">
                     <span className="text-4xl font-bold"
@@ -1932,11 +1932,11 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent'
                       }}
-                    >$109</span>
+                    >$89</span>
                     <span className="text-slate-400">/month</span>
                   </div>
                   <p className="text-emerald-400 text-sm font-semibold mt-1">
-                    Save $50.98/month!
+                    Save $30.99/month!
                   </p>
                 </div>
               </>
@@ -1965,7 +1965,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
                   <div className="flex items-center justify-center gap-3 mb-2">
                     <span className="text-slate-500 text-sm">Monthly Bundle × 12</span>
                     <span className="text-slate-600">=</span>
-                    <span className="text-slate-500 line-through text-sm">$1,308/yr</span>
+                    <span className="text-slate-500 line-through text-sm">$1,068/yr</span>
                   </div>
                   <div className="flex items-baseline justify-center gap-2">
                     <span className="text-4xl font-bold"
@@ -1974,11 +1974,11 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent'
                       }}
-                    >$1,090</span>
+                    >$890</span>
                     <span className="text-slate-400">/year</span>
                   </div>
                   <p className="text-emerald-400 text-sm font-semibold mt-1">
-                    Just $90.83/mo — Save $218/year!
+                    Just $74.17/mo — Save $178/year!
                   </p>
                 </div>
               </>
@@ -2044,7 +2044,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
               ) : (
                 <>
                   <Crown className="w-5 h-5" />
-                  {bundleTab === 'monthly' ? 'Start 14-Day Free Trial — $109/mo' : 'Get Finotaur Yearly — $1,090/yr'}
+                  {bundleTab === 'monthly' ? 'Start 14-Day Free Trial — $89/mo' : 'Get Finotaur Yearly — $890/yr'}
                 </>
               )}
             </button>

@@ -118,9 +118,9 @@ const plans: PlanConfig[] = [
   {
     id: 'finotaur',
     name: 'FINOTAUR',
-    monthlyPrice: '$109',
-    yearlyPrice: '$1,090',
-    yearlyMonthlyEquivalent: '$91',
+    monthlyPrice: '$89',
+    yearlyPrice: '$890',
+    yearlyMonthlyEquivalent: '$74',
     description: 'The Bloomberg of retail — everything in Journal + TOP SECRET + the full market engine',
     trialDays: 14,
     trialOnceOnly: false,
@@ -416,7 +416,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   const FinotaurValueBanner = () => {
     if (!hasExpensiveStandalones) return null;
 
-    const delta = standaloneMonthlyTotal - 109;
+    const delta = standaloneMonthlyTotal - 89;
     const headline =
       delta >= 0
         ? `Save $${Math.round(delta)}/mo — go FINOTAUR`
@@ -438,7 +438,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               You pay{' '}
               <span className="text-white font-medium">${Math.round(standaloneMonthlyTotal)}/mo</span>{' '}
               for separate products. FINOTAUR bundles them all{' '}
-              <span className="text-white">+ the full market engine</span> for $109.
+              <span className="text-white">+ the full market engine</span> for $89.
             </p>
           </div>
         </div>

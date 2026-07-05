@@ -18,7 +18,7 @@ const faqs: FAQItem[] = [
   {
     question: "What's the difference between Core and Finotaur?",
     answer:
-      "Core ($59/mo) gives you the full AI platform — Stock Analyzer, Sector Analyzer, Flow Scanner, AI Assistant, and real-time market data. Finotaur ($109/mo) includes everything in Core plus Top Secret reports, Options Intelligence AI, Macro Analyzer, AI Scanner, and Journal Premium — all included. It's the complete trading ecosystem.",
+      "Core ($59/mo) gives you the full AI platform — Stock Analyzer, Sector Analyzer, Flow Scanner, AI Assistant, and real-time market data. Finotaur ($89/mo) includes everything in Core plus Top Secret reports, Options Intelligence AI, Macro Analyzer, AI Scanner, and Journal Premium — all included. It's the complete trading ecosystem.",
   },
   {
     question: "Do I need prior trading experience?",

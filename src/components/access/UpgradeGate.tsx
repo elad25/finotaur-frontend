@@ -51,7 +51,7 @@ const PLAN_TIERS: PlanTier[] = [
   {
     key: 'finotaur',
     name: 'Finotaur',
-    price: '$109',
+    price: '$89',
     description: 'Complete trading ecosystem',
     icon: Crown,
     accentFrom: '#C9A646',
@@ -356,12 +356,12 @@ export function UpgradeGate({
                           WebkitTextFillColor: 'transparent',
                         }}
                       >
-                        {billingInterval === 'monthly' ? tier.price : '$91'}
+                        {billingInterval === 'monthly' ? tier.price : '$74'}
                       </span>
                       <span className="text-sm text-[#6B6B6B]">/month</span>
                     </div>
                     {billingInterval === 'yearly' && (
-                      <span className="text-xs text-green-400">Billed $1,090/yr</span>
+                      <span className="text-xs text-green-400">Billed $890/yr</span>
                     )}
                     <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
                   </div>
