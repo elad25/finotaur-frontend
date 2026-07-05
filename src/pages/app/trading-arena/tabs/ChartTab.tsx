@@ -241,6 +241,7 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
                   imbalancePreset: controls.imbalancePreset,
                   ...resolveImbalancePreset(controls.imbalancePreset),
                   showStats: controls.showStats,
+                  magnifierEnabled: controls.magnifierEnabled,
                 },
                 visible: orderFlowActive,
                 onStageChange: handleStageChange,

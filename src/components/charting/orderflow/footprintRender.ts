@@ -890,3 +890,82 @@ function drawStackedZones(
     ctx.fillRect(zoneStartX, bandTop, zoneEndX - zoneStartX, bandHeight);
   }
 }
+
+// ─── Magnifier (ATAS-style hover popup) ─────────────────────────────────────
+// At the 'hidden'/'shaded' detail stages (see computeDetailLevel), hovering a
+// candle for a short dwell time shows a small floating popup rendering that
+// ONE candle's full footprint at a fixed, comfortable cell size — without
+// changing chart zoom. This section is pure layout math only; the popup's
+// canvas painting reuses prepareCandleDraw + drawCandleFootprint exactly as
+// the main chart does (see MagnifierPopup.tsx), never reimplementing cell
+// drawing.
+
+/** Fixed row height (px) used inside the magnifier popup — independent of the host chart's zoom. */
+export const MAGNIFIER_ROW_HEIGHT = 18;
+/** Totals band height (px) reserved at the bottom of the popup for Volume/Delta. */
+export const MAGNIFIER_TOTALS_BAND_HEIGHT = FOOTPRINT_TOTALS_BAND_HEIGHT;
+/** Hard cap on popup canvas height — beyond this, rows are merged (2x, then 4x) to fit. */
+export const MAGNIFIER_MAX_HEIGHT = 480;
+/** Minimum popup canvas width — wide enough for two formatted bid×ask numbers side by side. */
+export const MAGNIFIER_MIN_WIDTH = 96;
+/** Per-character width estimate (px) used to widen the popup for wider formatted numbers. */
+const MAGNIFIER_CHAR_WIDTH_PX = 7;
+
+export interface MagnifierLayout {
+  /** Number of rows actually rendered (after any row-merging needed to fit MAGNIFIER_MAX_HEIGHT). */
+  rowCount: number;
+  /** Row-merge factor applied ON TOP OF the candle's existing prepared mergeFactor, to fit the height cap. */
+  mergeFactor: 1 | 2 | 4;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+/**
+ * Pure layout computation for the magnifier popup: given a candle's already-
+ * prepared draw structure (raw/mergeFactor=1 bins are fine — this decides its
+ * OWN additional merge on top, same pattern as FootprintLayer's computeRowMergeFactor
+ * for the main chart), return the popup canvas dimensions and effective row count.
+ *
+ * - rowCount = prepared.merged.length when no further merging is needed.
+ * - height = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT, clamped
+ *   at MAGNIFIER_MAX_HEIGHT — clamping is achieved by merging rows (2x, then 4x)
+ *   rather than shrinking row height, so text stays legible even for candles
+ *   with a large number of price levels (>40).
+ */
+export function computeMagnifierLayout(prepared: PreparedCandleDraw): MagnifierLayout {
+  const rawRowCount = Math.max(1, prepared.merged.length);
+
+  let mergeFactor: 1 | 2 | 4 = 1;
+  let rowCount = rawRowCount;
+  let canvasHeight = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT;
+
+  if (canvasHeight > MAGNIFIER_MAX_HEIGHT) {
+    mergeFactor = 2;
+    rowCount = Math.ceil(rawRowCount / 2);
+    canvasHeight = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT;
+  }
+  if (canvasHeight > MAGNIFIER_MAX_HEIGHT) {
+    mergeFactor = 4;
+    rowCount = Math.ceil(rawRowCount / 4);
+    canvasHeight = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT;
+  }
+  // Still over the cap even at 4x (extremely dense candle) — clamp height and
+  // let the popup scroll/clip rather than growing further; row count reflects
+  // what's actually drawable, canvasHeight is the hard visual cap.
+  canvasHeight = Math.min(canvasHeight, MAGNIFIER_MAX_HEIGHT);
+
+  // Width: wide enough for the longest formatted bid/ask value in this candle,
+  // doubled (bid + ask columns) plus padding, floored at MAGNIFIER_MIN_WIDTH.
+  let maxLabelLen = 0;
+  for (const row of prepared.merged) {
+    maxLabelLen = Math.max(
+      maxLabelLen,
+      formatCellValue(row.buyVol).length,
+      formatCellValue(row.sellVol).length,
+    );
+  }
+  const estimatedWidth = maxLabelLen * MAGNIFIER_CHAR_WIDTH_PX * 2 + FOOTPRINT_CELL_PADDING_X * 6;
+  const canvasWidth = Math.max(MAGNIFIER_MIN_WIDTH, estimatedWidth);
+
+  return { rowCount, mergeFactor, canvasWidth, canvasHeight };
+}

@@ -35,6 +35,8 @@ export interface OrderFlowControlsState {
   imbalancePreset: ImbalancePreset;
   /** Cluster Statistics 6-row strip (Volume/Delta/Delta%/Max Δ/Min Δ/Session Δ). Default ON; OFF falls back to the compact totals row. */
   showStats: boolean;
+  /** ATAS-style Magnifier — hover-a-candle popup showing full footprint detail at normal/semi-zoomed chart levels. Default ON. */
+  magnifierEnabled: boolean;
 }
 
 export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
@@ -47,6 +49,7 @@ export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   showHeatmap: false,
   imbalancePreset: 'standard',
   showStats: true,
+  magnifierEnabled: true,
 };
 
 interface OrderFlowControlsProps {
@@ -228,6 +231,16 @@ export function OrderFlowControls({
           title="Cluster Statistics — per-bar Volume/Delta/Delta%/Max Δ/Min Δ/Session Δ strip"
         >
           Stats
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !state.enabled}
+          onClick={() => onChange({ ...state, magnifierEnabled: !state.magnifierEnabled })}
+          className={pillClass(state.magnifierEnabled, disabled || !state.enabled)}
+          aria-pressed={state.magnifierEnabled}
+          title="Magnifier — hover a candle at normal zoom to see its full footprint detail"
+        >
+          Magnifier
         </button>
       </div>
 

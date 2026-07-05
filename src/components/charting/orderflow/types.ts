@@ -168,6 +168,14 @@ export interface FootprintConfig {
    * ON — when false, falls back to the original compact totals row.
    */
   showStats: boolean;
+  /**
+   * ATAS-style Magnifier: hovering a candle for a short dwell (~150ms) while
+   * the footprint is at the 'hidden' or 'shaded' detail stage (i.e. numbers
+   * aren't already visible on the chart) shows a floating popup with that
+   * candle's full bid×ask detail, without changing chart zoom. Disabled at
+   * the 'full' stage (numbers are already on-screen). Default ON.
+   */
+  magnifierEnabled: boolean;
 }
 
 /** Standard preset: ratio 1.5x (150%), 0.5% dust filter, singles highlighted. */
@@ -189,4 +197,5 @@ export const DEFAULT_FOOTPRINT_CONFIG: FootprintConfig = {
   showTotals: true,
   showPoc: true,
   showStats: true,
+  magnifierEnabled: true,
 };
