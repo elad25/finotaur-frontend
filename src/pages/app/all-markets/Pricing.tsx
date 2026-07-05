@@ -49,7 +49,7 @@ interface PlanConfig {
 // ============================================
 // PLAN CONFIGURATIONS — PERSONA LADDER (v3.0.0, 2026-07)
 // Free → Trader ($45, journal) → Investor ($50, intel + research + AI)
-// → FINOTAUR ($89, everything + exclusives) → Copilot ($200)
+// → FINOTAUR ($89, everything + exclusives) → Ultimate ($200)
 // "Investor" is the rebranded Top Secret product — same Whop plans.
 // ============================================
 
@@ -150,7 +150,7 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'enterprise',
-    name: 'COPILOT',
+    name: 'ULTIMATE',
     monthlyPrice: '$200',
     yearlyPrice: '$2,000',
     yearlyMonthlyEquivalent: '$167',
@@ -167,7 +167,7 @@ const plans: PlanConfig[] = [
       'Daily AI portfolio brief with actionable guidance',
       'Priority support',
     ],
-    cta: 'Get COPILOT',
+    cta: 'Get ULTIMATE',
     featured: false,
     savings: 'Save 17%',
   },
@@ -975,7 +975,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  Keep My {currentPlatformPlan === 'journal' ? 'Trader' : currentPlatformPlan === 'top_secret' ? 'Investor' : currentPlatformPlan === 'finotaur' ? 'FINOTAUR' : 'COPILOT'} Plan
+                  Keep My {currentPlatformPlan === 'journal' ? 'Trader' : currentPlatformPlan === 'top_secret' ? 'Investor' : currentPlatformPlan === 'finotaur' ? 'FINOTAUR' : 'ULTIMATE'} Plan
                 </button>
                 
                 <button
@@ -1190,7 +1190,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             </div>
             <p className="text-zinc-400 text-sm leading-relaxed mb-4">
               You're currently on a <span className="text-white font-medium capitalize">{currentPlatformPlan} Yearly</span> plan.
-              Subscribing to Copilot will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
+              Subscribing to Ultimate will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
             </p>
             <div className="p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 mb-5">
               <p className="text-xs text-zinc-400">
@@ -1217,7 +1217,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                 className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
                 style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
               >
-                Continue to Copilot
+                Continue to Ultimate
               </button>
             </div>
           </div>

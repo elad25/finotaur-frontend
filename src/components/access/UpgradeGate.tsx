@@ -3,7 +3,7 @@
 // 🔒 UPGRADE GATE v2.3 - Unified Plan Comparison
 // =====================================================
 // Header lock + plan name = ALWAYS gold gradient
-// Copilot = AI Portfolio Manager card
+// Ultimate = Copilot AI Portfolio Manager card
 // Finotaur = always "Best Value" (recommended)
 // No purple anywhere
 // =====================================================
@@ -45,7 +45,7 @@ interface PlanTier {
   features: string[];
 }
 
-// v3.0.0 ladder: Investor ($50) → Finotaur ($89) → Copilot ($200)
+// v3.0.0 ladder: Investor ($50) → Finotaur ($89) → Ultimate ($200)
 const PLAN_TIERS: PlanTier[] = [
   {
     key: 'investor',
@@ -89,7 +89,7 @@ const PLAN_TIERS: PlanTier[] = [
   },
   {
     key: 'enterprise',
-    name: 'Copilot',
+    name: 'Ultimate',
     price: '$200',
     description: 'Your AI portfolio manager — invests and trades alongside you, instead of flying blind or paying a human advisor.',
     icon: Sparkles,
@@ -158,7 +158,7 @@ export function UpgradeGate({
   const handleJoinWaitlist = () => {
     setWaitlistJoined(true);
     toast.success("You're on the list", {
-      description: "We'll notify you when Copilot is available.",
+      description: "We'll notify you when Ultimate is available.",
     });
   };
 
@@ -529,7 +529,7 @@ export function UpgradeGate({
               <div className="text-center mb-4">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <Sparkles className="w-4 h-4" style={{ color: '#D4AF37' }} />
-                  <span className="text-lg font-bold text-white">Copilot</span>
+                  <span className="text-lg font-bold text-white">Ultimate</span>
                 </div>
                 <div className="flex items-baseline justify-center gap-1 mb-1">
                   <span className="text-4xl font-bold text-white">{billingInterval === 'yearly' ? '$167' : '$200'}</span>

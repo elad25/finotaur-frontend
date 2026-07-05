@@ -62,9 +62,9 @@ tools sold elsewhere for $400+/month combined.
 - Unlimited alerts, screeners & exports, API access, 10 years of historical data
 - Priority support (24h response)
 
-## Copilot — $200/month, or $2,000/year ($166.67/month billed annually)
+## Ultimate — $200/month, or $2,000/year ($166.67/month billed annually)
 
-Everything in FINOTAUR, plus your AI portfolio manager.
+Everything in FINOTAUR, plus Copilot — your AI portfolio manager.
 
 - AI Portfolio Manager that invests & trades alongside you
 - My Portfolio — live mark-to-market tracking of your real book

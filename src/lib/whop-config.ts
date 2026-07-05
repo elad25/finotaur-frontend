@@ -339,14 +339,15 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // 🔥 PLATFORM - COPILOT (AI Portfolio Manager)
+  // 🔥 PLATFORM - ULTIMATE (Copilot AI Portfolio Manager)
+  // Tier renamed Copilot → Ultimate 2026-07; "Copilot" remains the feature name
   // ═══════════════════════════════════════════
   platform_enterprise_monthly: {
     id: 'platform_enterprise_monthly',
     whopPlanId: WHOP_PLAN_IDS.platform_enterprise_monthly,
     whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_monthly,
     name: 'platform_enterprise',
-    displayName: 'Copilot',
+    displayName: 'Ultimate',
     price: 200,
     period: 'monthly',
     periodLabel: '/month',
@@ -374,7 +375,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopPlanId: WHOP_PLAN_IDS.platform_enterprise_yearly,
     whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_yearly,
     name: 'platform_enterprise',
-    displayName: 'Copilot',
+    displayName: 'Ultimate',
     price: 2000,
     period: 'yearly',
     periodLabel: '/year',

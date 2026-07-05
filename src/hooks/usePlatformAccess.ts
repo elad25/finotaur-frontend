@@ -143,7 +143,7 @@ const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
   // 'core' entry removed 2026-06 (Core tier eliminated, zero subscribers)
   investor: { displayName: 'Investor', price: '$50/mo' },
   finotaur: { displayName: 'Finotaur', price: '$89/mo' },
-  enterprise: { displayName: 'Copilot', price: '$200/mo' },
+  enterprise: { displayName: 'Ultimate', price: '$200/mo' },
 };
 
 // ============================================
