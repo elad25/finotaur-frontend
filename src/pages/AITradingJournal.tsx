@@ -63,12 +63,12 @@ const FAQS = [
   {
     question: "Is the AI coach included in every plan?",
     answer:
-      "The AI trading coach (FINO) is part of the Premium plan ($44.99/month). The Basic plan ($24.99/month, 14-day free trial) includes the full journal and analytics.",
+      "The AI trading coach (FINO) is part of the Trader plan ($44.99/month, 14-day free trial). The free tier includes a 15-trade demo portfolio and 3 AI stock analyses a day.",
   },
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. The Basic plan includes a 14-day free trial so you can connect your broker and see your journal first.",
+      "Yes. The Trader plan includes a 14-day free trial so you can connect your broker and see your journal first — and the free tier needs no card at all.",
   },
 ];
 
@@ -363,12 +363,12 @@ export default function AITradingJournal() {
 
         <div className="grid md:grid-cols-2 gap-ds-5 mt-ds-7 max-w-3xl mx-auto">
           <Card variant="default" padding="default">
-            <h3 className="font-wordmark font-medium text-xl text-ink-primary">Basic</h3>
-            <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$24.99/month</p>
+            <h3 className="font-wordmark font-medium text-xl text-ink-primary">Free</h3>
+            <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$0/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
-              <li>14-day free trial</li>
-              <li>25 trades/month</li>
-              <li>1 broker connection</li>
+              <li>No card required</li>
+              <li>Demo portfolio — 15 trades</li>
+              <li>AI Stock Analyzer — 3 analyses/day</li>
               <li>Full analytics, strategies & Academy</li>
             </ul>
           </Card>
@@ -386,7 +386,7 @@ export default function AITradingJournal() {
         </div>
 
         <p className="text-ink-secondary text-[14px] text-center mt-ds-5">
-          The AI trading coach (FINO) is included with Premium.
+          The AI trading coach (FINO) is included with Trader.
         </p>
 
         <div className="flex flex-col items-center gap-ds-5 mt-ds-5">
