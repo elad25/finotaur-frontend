@@ -654,14 +654,14 @@ async function handleCheckUpgrade(
     const yearlyPrices: Record<string, number> = {
       newsletter: 699,
       top_secret: 899,
-      platform: 1090,
+      platform: 890,
     };
     
     const currentYearlyPrice = yearlyPrices[currentProduct] || 699;
     const estimatedValue = Math.round((daysRemaining / 365) * currentYearlyPrice);
     
     const targetPrices: Record<string, Record<string, number>> = {
-      platform: { yearly: 1090 },
+      platform: { yearly: 890 },
       newsletter: { yearly: 699 },
       top_secret: { yearly: 899 },
     };

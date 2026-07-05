@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
 // PRICING — COMPACT — 5 Plans
-// Free | Journal ($44.99) | TOP SECRET ($50) | Finotaur ($109 FEATURED) | Copilot ($200)
+// Free | Journal ($44.99) | TOP SECRET ($50) | Finotaur ($89 FEATURED) | Copilot ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -101,9 +101,9 @@ const plans: Plan[] = [
   {
     id: "finotaur",
     name: "FINOTAUR",
-    monthlyPrice: "$109",
-    yearlyPrice: "$1,090",
-    yearlyMonthlyEquivalent: "$91",
+    monthlyPrice: "$89",
+    yearlyPrice: "$890",
+    yearlyMonthlyEquivalent: "$74",
     description: "The entire platform — every tool, one price",
     trialDays: 14,
     badge: "Most Popular",

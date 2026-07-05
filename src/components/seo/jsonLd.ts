@@ -120,7 +120,7 @@ export function softwareApplication(): Record<string, unknown> {
       {
         '@type': 'Offer',
         name: 'Finotaur',
-        price: '109',
+        price: '89',
         priceCurrency: 'USD',
         description: 'Everything in Pro plus TOP SECRET Newsletter, AI Top 5, AI Options Intelligence, AI Copilot, Block Trades, Trade Copier',
       },

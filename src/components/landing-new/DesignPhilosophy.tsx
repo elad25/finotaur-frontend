@@ -34,7 +34,7 @@ const comparisons = [
   },
   {
     before: "Pay $2,000+/month for separate tools",
-    after: "Everything for $109/month — one place",
+    after: "Everything for $89/month — one place",
   },
 ];
 

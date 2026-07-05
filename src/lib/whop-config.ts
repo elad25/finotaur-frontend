@@ -6,7 +6,7 @@
 // - REMOVED: Platform Core tier (was $59/mo — zero active subscribers)
 // - MERGED: WAR ZONE + TOP SECRET → single "Top Secret" product at $50/mo / $499/yr
 //   WAR ZONE plan IDs (newsletter_monthly/yearly) KEPT for existing-subscriber resolution
-// - Platform tiers remaining: Finotaur ($109/mo), Copilot ($200/mo) + Free
+// - Platform tiers remaining: Finotaur ($89/mo), Copilot ($200/mo) + Free
 // =====================================================
 
 // ============================================
@@ -84,9 +84,9 @@ export const WHOP_PLAN_IDS = {
   premium_monthly: 'plan_N33S1p5Y3dHrK', // $44.99/mo (was plan_v7QKxkvKIZooe)
   premium_yearly: 'plan_WrjUcvrRhwWPL',  // $409/yr (was plan_gBG436aeJxaHU)
 
-  // Platform - Finotaur ($109/month, 14-day trial)
-  platform_finotaur_monthly: 'plan_ICooR8aqtdXad',
-  platform_finotaur_yearly: 'plan_M2zS1EoNXJF10',
+  // Platform - Finotaur ($89/month, 14-day trial). Repriced 2026-07: new Whop plans, new IDs.
+  platform_finotaur_monthly: 'plan_AgWVNrqc0eSMK',
+  platform_finotaur_yearly: 'plan_0uYhhF6fX5IKh',
 
   // Platform - Copilot ($200/month, no trial)
   platform_enterprise_monthly: 'plan_LG6ODA91iOCzQ', // $200/mo (was plan_nHveClWPmjJNT @ $499)
@@ -171,8 +171,10 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_gBG436aeJxaHU': 'premium_yearly',  // legacy — kept for in-flight refs
 
   // Platform - Finotaur
-  'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',
-  'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',
+  'plan_AgWVNrqc0eSMK': 'platform_finotaur_monthly', // $89/mo plan (2026-07)
+  'plan_0uYhhF6fX5IKh': 'platform_finotaur_yearly',  // $890/yr plan (2026-07)
+  'plan_ICooR8aqtdXad': 'platform_finotaur_monthly', // legacy $109/mo — active members remain until migrated
+  'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',  // legacy $1,090/yr — active members remain until migrated
 
   // Platform - Copilot
   'plan_LG6ODA91iOCzQ': 'platform_enterprise_monthly', // current $200/mo (2026-06-17)
@@ -254,10 +256,10 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // Core removed 2026-06 (zero active subscribers). Platform tiers: Finotaur ($109/mo), Copilot ($200/mo).
+  // Core removed 2026-06 (zero active subscribers). Platform tiers: Finotaur ($89/mo), Copilot ($200/mo).
 
   // ═══════════════════════════════════════════
-  // PLATFORM - FINOTAUR ($109/month, 14-day trial)
+  // PLATFORM - FINOTAUR ($89/month, 14-day trial)
   // ═══════════════════════════════════════════
   platform_finotaur_monthly: {
     id: 'platform_finotaur_monthly',
@@ -265,7 +267,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.platform_finotaur_monthly,
     name: 'platform_finotaur',
     displayName: 'Finotaur',
-    price: 109,
+    price: 89,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
@@ -298,10 +300,10 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.platform_finotaur_yearly,
     name: 'platform_finotaur',
     displayName: 'Finotaur',
-    price: 1090,
+    price: 890,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 90.83,
+    monthlyEquivalent: 74.17,
     maxTrades: 0,
     trialDays: 0,
     trialOnceOnly: false,
@@ -629,6 +631,7 @@ export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
   const yearlyPlanIds = [
     WHOP_PLAN_IDS.premium_yearly,
     WHOP_PLAN_IDS.platform_finotaur_yearly,
+    'plan_M2zS1EoNXJF10', // legacy $1,090/yr Finotaur — active members remain until migrated
     WHOP_PLAN_IDS.platform_enterprise_yearly,
     WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A — legacy WAR ZONE
     WHOP_PLAN_IDS.top_secret_yearly,

@@ -35,10 +35,10 @@ const YEARLY_SAVINGS = Math.round((MONTHLY_PRICE * 12) - YEARLY_PRICE);
 const YEARLY_MONTHLY_EQUIVALENT = Math.round(YEARLY_PRICE / 12);
 
 // 🔥 v5.0.0: Bundle Configuration
-const WHOP_BUNDLE_MONTHLY_PLAN_ID = 'plan_ICooR8aqtdXad'; // Bundle Monthly
-const WHOP_BUNDLE_YEARLY_PLAN_ID = 'plan_M2zS1EoNXJF10';  // Bundle Yearly
-const BUNDLE_MONTHLY_PRICE = 109;
-const BUNDLE_YEARLY_PRICE = 1090;
+const WHOP_BUNDLE_MONTHLY_PLAN_ID = 'plan_AgWVNrqc0eSMK'; // Bundle Monthly (repriced 2026-07)
+const WHOP_BUNDLE_YEARLY_PLAN_ID = 'plan_0uYhhF6fX5IKh';  // Bundle Yearly (repriced 2026-07)
+const BUNDLE_MONTHLY_PRICE = 89;
+const BUNDLE_YEARLY_PRICE = 890;
 
 // =====================================================
 // ICONS
@@ -276,7 +276,7 @@ export default function WarZonePricingSelection() {
     
     // Bundle prices
     const bundlePrice = isMonthly ? BUNDLE_MONTHLY_PRICE : BUNDLE_YEARLY_PRICE;
-    const bundleSavings = isMonthly ? 50.98 : 218; // Monthly: $159.98 - $109 = $50.98, Yearly: $1308 - $1090 = $218
+    const bundleSavings = isMonthly ? 30.99 : 178; // Monthly: $119.99 (WAR ZONE $69.99 + Top Secret $50) - $89 = $30.99, Yearly: $1,068 (12x monthly) - $890 = $178
     const bundleMonthlyEquivalent = isMonthly ? null : Math.round(BUNDLE_YEARLY_PRICE / 12);
     
     // Handler for single product checkout
@@ -495,7 +495,7 @@ export default function WarZonePricingSelection() {
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm text-slate-500 line-through">
-                        {isMonthly ? '$159.98' : '$1,308'}
+                        {isMonthly ? '$119.99' : '$1,068'}
                       </span>
                       <span 
                         className="text-3xl font-bold"

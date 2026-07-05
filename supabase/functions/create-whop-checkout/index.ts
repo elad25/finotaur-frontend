@@ -49,10 +49,10 @@ const INTRO_DISCOUNT_PLAN_IDS = new Set([
   // 🔥 v5.0.0: Bundle does NOT get intro discount (already best value)
 ]);
 
-// 🔥 v5.0.0: Bundle Plan IDs
+// 🔥 v5.0.0: Bundle Plan IDs (repriced 2026-07 — new Whop plans, $109→$89)
 const BUNDLE_PLAN_IDS = new Set([
-  'plan_ICooR8aqtdXad',   // Bundle Monthly - $109/month
-  'plan_M2zS1EoNXJF10',   // Bundle Yearly - $1090/year
+  'plan_AgWVNrqc0eSMK',   // Bundle Monthly - $89/month
+  'plan_0uYhhF6fX5IKh',   // Bundle Yearly - $890/year
 ]);
 
 // ============================================
@@ -117,9 +117,12 @@ interface WhopCheckoutResponse {
   
   // ═══════════════════════════════════════════
   // 🔥 v5.0.0: Bundle - War Zone + Top Secret
+  // Repriced 2026-07: $109→$89 plans — new IDs replace old for checkout creation.
   // ═══════════════════════════════════════════
-  'plan_ICooR8aqtdXad': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Monthly ($109)
-  'plan_M2zS1EoNXJF10': '/app/settings?tab=billing&upgrade=bundle_yearly_success',  // Bundle Yearly ($1090) - upgrade redirect
+  'plan_AgWVNrqc0eSMK': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // $89 plan (2026-07) — Bundle Monthly
+  'plan_0uYhhF6fX5IKh': '/app/settings?tab=billing&upgrade=bundle_yearly_success',  // $89 plan (2026-07) — Bundle Yearly - upgrade redirect
+  'plan_ICooR8aqtdXad': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // legacy $109 plan — kept for in-flight checkouts
+  'plan_M2zS1EoNXJF10': '/app/settings?tab=billing&upgrade=bundle_yearly_success',  // legacy $109 plan — kept for in-flight checkouts
 };
 
 // ============================================
@@ -393,8 +396,10 @@ const whopRequestBody: Record<string, any> = {
         const isPlatformPlan = [
           'plan_M4ig2ZhYd2RUE',  // Core Monthly
           'plan_6w5KTZsSGp7Ss',  // Core Yearly
-          'plan_ICooR8aqtdXad',  // Finotaur/Bundle Monthly
-          'plan_M2zS1EoNXJF10',  // Finotaur/Bundle Yearly
+          'plan_AgWVNrqc0eSMK',  // Finotaur/Bundle Monthly — $89 plan (2026-07)
+          'plan_0uYhhF6fX5IKh',  // Finotaur/Bundle Yearly — $89 plan (2026-07)
+          'plan_ICooR8aqtdXad',  // Finotaur/Bundle Monthly — legacy $109 plan, active members remain until migrated
+          'plan_M2zS1EoNXJF10',  // Finotaur/Bundle Yearly — legacy $109 plan, active members remain until migrated
           'plan_nHveClWPmjJNT',  // Enterprise Monthly
         ].includes(plan_id);
         

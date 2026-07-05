@@ -55,7 +55,7 @@ export interface AccessResult {
   limit?: number;
   upgradeTarget?: 'finotaur' | 'enterprise';
   upgradeDisplayName?: string;   // "Core" | "Finotaur" | "Enterprise"
-  upgradePrice?: string;         // "$59" | "$109" | "$500"
+  upgradePrice?: string;         // "$59" | "$89" | "$500"
   message?: string;              // Full human-readable message
 }
 
@@ -123,7 +123,7 @@ const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
 
 const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
   // 'core' entry removed 2026-06 (Core tier eliminated, zero subscribers)
-  finotaur: { displayName: 'Finotaur', price: '$109/mo' },
+  finotaur: { displayName: 'Finotaur', price: '$89/mo' },
   enterprise: { displayName: 'Enterprise', price: '$500/mo' },
 };
 

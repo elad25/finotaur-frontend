@@ -497,7 +497,7 @@ const PricingSection = () => {
 };
 
 // =====================================================
-// FINOTAUR VALUE STACK — Push users to $109 full platform
+// FINOTAUR VALUE STACK — Push users to $89 full platform
 // =====================================================
 const finotaurValueItems = [
   { name: "AI Stock Analyzer (7/day)", value: "$99" },
@@ -530,7 +530,7 @@ const FinotaurValueStack = () => {
             <span className="text-[#C9A646]">Finotaur</span>
           </h2>
           <p className="text-sm text-slate-400">
-            For $109/month you get the Trading Journal <span className="text-white font-medium">+ everything below</span> — one platform, zero compromise.
+            For $89/month you get the Trading Journal <span className="text-white font-medium">+ everything below</span> — one platform, zero compromise.
           </p>
         </motion.div>
 
@@ -561,7 +561,7 @@ const FinotaurValueStack = () => {
               <div className="flex items-center justify-between">
                 <span className="text-white font-bold text-base">You pay:</span>
                 <div className="flex items-end gap-1">
-                  <span className="text-3xl font-bold text-[#C9A646]">$109</span>
+                  <span className="text-3xl font-bold text-[#C9A646]">$89</span>
                   <span className="text-slate-400 text-sm mb-0.5">/month</span>
                 </div>
               </div>

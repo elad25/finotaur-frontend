@@ -34,7 +34,7 @@ interface NotifyBody {
   user_id:         string;
   finotaur_email?: string | null;
   product_name?:   string | null;  // e.g. "Finotaur Monthly" — for body copy
-  amount_cents?:   number | null;  // e.g. 10900 for $109.00
+  amount_cents?:   number | null;  // e.g. 8900 for $89.00
   currency?:       string | null;  // ISO 4217, default 'USD'
   whop_membership_id?: string | null;  // for logs only
 }

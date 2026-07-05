@@ -234,7 +234,7 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
   const plans: Record<string, { name: string; price: string; color: string }> = {
     free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
     core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
+    finotaur: { name: 'Finotaur', price: '$89/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
     enterprise: { name: 'Enterprise', price: '$500/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
   };
   return plans[normalizedPlan] || plans.free;
