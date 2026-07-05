@@ -78,3 +78,19 @@ export function trackMetaSignup(): void {
 
   if (import.meta.env.DEV) console.debug('[metaPixel] signup tracked');
 }
+
+/**
+ * Fires a PageView event for the given SPA route.
+ * No-op if VITE_META_PIXEL_ID is unset, or if the pixel has not been
+ * initialized (e.g. consent not yet granted). initMetaPixel() already fires
+ * one PageView at boot — call this on every subsequent route change so
+ * retargeting audiences ("Website visitors") pick up navigation within the SPA.
+ */
+export function trackMetaPageView(path?: string): void {
+  if (!metaPixelId()) return;
+  if (!window.fbq) return;
+
+  window.fbq('track', 'PageView');
+
+  if (import.meta.env.DEV) console.debug('[metaPixel] pageview tracked', path);
+}
