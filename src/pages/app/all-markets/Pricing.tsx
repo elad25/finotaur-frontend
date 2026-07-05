@@ -64,12 +64,12 @@ const plans: PlanConfig[] = [
     trialDays: 0,
     checkoutCategory: 'none',
     features: [
-      'Stock Analyzer AI — 3 analyses/day',
-      'Market Pulse & market news',
-      'Demo portfolio — journal with 15 trades',
-      'Market screener (basic)',
-      '1 watchlist + 3 price alerts',
-      'Community access',
+      'AI Stock Analyzer — 3/day',
+      'Demo journal — 15 trades',
+      'Market Pulse & news',
+      'P&L calendar & core stats',
+      '1 watchlist + basic screener',
+      'FINO assistant + Community',
     ],
     cta: 'Free Plan',
     featured: false,
@@ -86,13 +86,13 @@ const plans: PlanConfig[] = [
     checkoutCategory: 'journal',
     features: [
       'Everything in Free, plus:',
-      'Unlimited trades — no caps',
-      'Trade copier — auto-sync from broker',
-      'Mentor & community rooms',
+      'Unlimited trades — auto-synced',
+      'Trade Copier — Tradovate & NinjaTrader',
       'Full performance analytics',
-      'Strategy builder & playbooks',
-      'AI trade insights & coach',
-      'Priority support',
+      'Strategy builder & Playbooks',
+      'Shadow — what-if analysis',
+      'Revenge Radar + AI coach',
+      'Prop-firm risk dashboard',
     ],
     cta: 'Start 14-Day Trial',
     featured: false,
@@ -110,12 +110,12 @@ const plans: PlanConfig[] = [
     checkoutCategory: 'top_secret',
     features: [
       'TOP SECRET — daily institutional report',
-      'Monthly deep-dives — ISM, company, crypto',
-      'AI Stock Analyzer — 10 analyses/day',
-      'AI Sector & Macro Analyzer',
-      'Research hub — sectors, valuation, insiders & 13F, ETFs',
-      'Expanded watchlists & alerts',
-      'Exclusive Discord community',
+      'WAR ZONE — live market room',
+      'The Weekly Report — Sundays',
+      'Monthly deep-dive research',
+      'AI Stock Analyzer — 10/day',
+      'Research hub — insiders, 13F, ETFs',
+      'Private Discord trade room',
     ],
     cta: 'Start 14-Day Trial',
     featured: false,
@@ -127,7 +127,7 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$89',
     yearlyPrice: '$890',
     yearlyMonthlyEquivalent: '$74',
-    description: 'The Bloomberg of retail — Trader + Investor + the tools sold elsewhere for $400+/mo',
+    description: 'The entire platform — every tool, one price',
     trialDays: 14,
     trialOnceOnly: false,
     includesJournal: true,
@@ -135,14 +135,13 @@ const plans: PlanConfig[] = [
     checkoutCategory: 'platform',
     features: [
       'Everything in Trader & Investor, plus:',
-      'Options Intelligence AI — exclusive',
-      'Flow Scanner — Dark Pool & institutional flow',
-      'AI Scanner — daily Top 5 picks',
-      'Unlimited AI analyses + FINO assistant',
-      'Backtest engine',
-      'Insider / 13F tracker',
-      'Market Scanner (Bookmap)',
-      'Unlimited alerts, screeners & exports',
+      'FINO — unlimited, on every page',
+      'Options Intelligence AI',
+      'Flow Scanner — Dark Pool',
+      'Real-time Market Scanner',
+      'AI Scanner — daily Top 5',
+      'Strategy Backtesting engine',
+      'Unlimited AI, alerts & screeners',
     ],
     cta: 'Start 14-Day Trial',
     featured: true,
@@ -160,12 +159,11 @@ const plans: PlanConfig[] = [
     checkoutCategory: 'platform',
     features: [
       'Everything in FINOTAUR, plus:',
-      'AI Portfolio Manager — invests & trades alongside you',
-      '24/7 AI oversight of every position you hold',
-      'My Portfolio — live mark-to-market of your real book',
-      'Proactive AI risk detection & alerts',
-      'Daily AI portfolio brief with actionable guidance',
-      'Priority support',
+      'Copilot — AI Portfolio Manager',
+      '24/7 AI position oversight',
+      'Live mark-to-market',
+      'Proactive AI risk alerts',
+      'Daily AI portfolio brief',
     ],
     cta: 'Get ULTIMATE',
     featured: false,
@@ -508,10 +506,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
               </div>
               <div className="text-left flex-1">
                 <h4 className="text-xl font-semibold text-white mb-2">
-                  FINOTAUR — The Bloomberg of Retail
+                  FINOTAUR — The Complete Trading Platform
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  Trader desk + Investor intel + Options Intelligence, Dark Pool flow & unlimited AI — tools sold elsewhere for $400+/mo.
+                  Trader desk + Investor intel + Options Intelligence, Dark Pool flow & unlimited AI — the complete FINOTAUR arsenal, one price.
                   {proTrialUsed ? ' Start your subscription today!' : ' Try free for 14 days!'}
                 </p>
               </div>
