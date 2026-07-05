@@ -223,7 +223,7 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
     const plans: Record<string, { name: string; price: string; color: string }> = {
       free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
       basic: { name: 'Basic', price: '$30/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-      premium: { name: 'Premium', price: '$39.99/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
+      premium: { name: 'Trader', price: '$44.99/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
     };
     return plans[plan || 'free'] || plans.free;
   }
@@ -235,7 +235,7 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
     free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
     core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
     finotaur: { name: 'Finotaur', price: '$89/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
-    enterprise: { name: 'Enterprise', price: '$500/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
+    enterprise: { name: 'Ultimate', price: '$200/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
   };
   return plans[normalizedPlan] || plans.free;
 }
@@ -816,17 +816,17 @@ const BillingTab = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || "Failed to cancel Top Secret");
+        throw new Error(data.error || "Failed to cancel Investor subscription");
       }
       
       // Refresh profile to get updated state from DB
       await refreshProfile();
       
       setShowTopSecretCancelDialog(false);
-      toast.success(data.message || 'Top Secret subscription will be cancelled at period end');
+      toast.success(data.message || 'Investor subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling Top Secret:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to cancel Top Secret');
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel Investor subscription');
     } finally {
       setCancellingTopSecret(false);
     }
@@ -839,16 +839,16 @@ const BillingTab = () => {
       const result = await manageProductSubscription("reactivate", "top_secret");
       
       if (!result.success) {
-        throw new Error(result.error || "Failed to reactivate Top Secret");
+        throw new Error(result.error || "Failed to reactivate Investor subscription");
       }
       
       // Refresh profile to get updated state from DB
       await refreshProfile();
       
-      toast.success(result.message || 'Top Secret subscription reactivated');
+      toast.success(result.message || 'Investor subscription reactivated');
     } catch (error) {
       console.error('Error reactivating Top Secret:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to reactivate Top Secret');
+      toast.error(error instanceof Error ? error.message : 'Failed to reactivate Investor subscription');
     } finally {
       setReactivatingTopSecret(false);
     }
@@ -1401,7 +1401,7 @@ const BillingTab = () => {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <span className="text-xl font-bold text-white">
-                  {newsletterIsActive ? 'Premium Access' : 'Not Subscribed'}
+                  {newsletterIsActive ? 'Investor Access' : 'Not Subscribed'}
                 </span>
                 {newsletterIsActive && newsletterInterval === 'yearly' && (
                   <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
@@ -1664,12 +1664,12 @@ const BillingTab = () => {
               </div>
               <div>
                 <h2 className="font-semibold text-white text-lg flex items-center gap-2">
-                  Top Secret
+                  Investor
                   <Badge className="bg-red-500/20 text-red-300 border-red-500/40 text-[10px] px-2 py-0.5 uppercase tracking-wider">
                     Classified
                   </Badge>
                 </h2>
-                <p className="text-xs text-zinc-400">Exclusive Insider Access</p>
+                <p className="text-xs text-zinc-400">Intel, Research & AI — The Investor Desk</p>
               </div>
             </div>
             {topSecretIsActive && (
@@ -1695,7 +1695,7 @@ const BillingTab = () => {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <span className="text-xl font-bold text-white">
-                  {topSecretIsActive ? 'Premium Access' : 'Not Subscribed'}
+                  {topSecretIsActive ? 'Investor Access' : 'Not Subscribed'}
                 </span>
                 {topSecretIsActive && topSecretInterval === 'yearly' && (
                   <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
@@ -2039,7 +2039,7 @@ const BillingTab = () => {
         </div>
         
         <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel Top Secret?
+          Cancel Investor?
         </DialogTitle>
         <DialogDescription className="text-zinc-400 text-sm">
           You'll stop receiving our daily market intelligence reports and exclusive insights.
@@ -2132,7 +2132,7 @@ const BillingTab = () => {
         </div>
         
         <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel Top Secret Access?
+          Cancel Investor Access?
         </DialogTitle>
         <DialogDescription className="text-zinc-400 text-sm">
           You'll lose access to exclusive intelligence and private community.

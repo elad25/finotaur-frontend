@@ -101,10 +101,10 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     useGoldClass: false,
   },
   elite: {
-    label: 'CO-PILOT',
+    label: 'ULTIMATE',
     color: '#34D399',
     icon: Gem,
-    description: 'Fly with FINO — the inner circle, full access to everything',
+    description: 'Copilot AI portfolio manager — the inner circle, full access to everything',
     group: 'Platform',
     tag: 'INNER CIRCLE',
     edge: '#10B981',
@@ -117,7 +117,7 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     label: 'FINOTAUR',
     color: '#C9A646',
     icon: Crown,
-    description: 'Advanced platform plan with AI scanner & macro',
+    description: 'Everything — Options Intelligence, Dark Pool flow & unlimited AI',
     group: 'Platform',
     tag: 'ADVANCED',
     edge: '#C9A646',
@@ -139,15 +139,14 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     labelColor: '#C084FC',
     useGoldClass: false,
   },
-  // TOP SECRET — Intelligence add-on. Reuses the PRO visual identity 1:1
-  // (purple glossy chip + Sparkles) with a 'PRO' tag, per Elad's request.
+  // INVESTOR (rebranded Top Secret, 2026-07) — keeps the purple visual identity.
   topsecret: {
-    label: 'TOP SECRET',
+    label: 'INVESTOR',
     color: '#A855F7',
     icon: Sparkles,
-    description: 'Intelligence envelope — daily War Zone & premium reports',
+    description: 'Daily TOP SECRET intel, research hub & AI analysis',
     group: 'Platform',
-    tag: 'PRO',
+    tag: 'INTEL & AI',
     edge: '#7C3AED',
     peak: '#C4A2FC',
     onColor: '#FFFFFF',
@@ -155,10 +154,10 @@ export const TIER_CONFIG: Record<TierKey, TierConfig> = {
     useGoldClass: false,
   },
   premium: {
-    label: 'JOURNAL',
+    label: 'TRADER',
     color: '#D4D4D8',
     icon: Gem,
-    description: 'Unlimited Trade Journal access',
+    description: 'Unlimited journal, trade copier & analytics',
     group: 'Journal',
     tag: 'UNLIMITED ACCESS',
     edge: '#94A3B8',
@@ -209,6 +208,7 @@ const TIER_DISPLAY_ORDER: TierKey[] = [
 export function resolveTier(
   platformPlan: string | null,
   accountType: string | null,
+  hasTopSecret = false,
 ): TierKey {
   // Internal staff / complimentary accounts take precedence over everything
   if (accountType === 'admin') return 'admin';
@@ -221,6 +221,9 @@ export function resolveTier(
   if (normalized === 'enterprise') return 'elite';
   if (normalized === 'finotaur') return 'finotaur';
   if (normalized === 'core') return 'pro';
+
+  // Investor tier (2026-07): an active Top Secret sub outranks the journal tier
+  if (normalized === 'investor' || hasTopSecret) return 'topsecret';
 
   // Journal tier
   if (accountType === 'premium') return 'premium';
@@ -248,7 +251,7 @@ export function SubscriptionBadge({
   hasTopSecret = false,
 }: SubscriptionBadgeProps) {
   const navigate = useNavigate();
-  const currentTier = resolveTier(platformPlan, accountType);
+  const currentTier = resolveTier(platformPlan, accountType, hasTopSecret);
   const { label, icon: Icon, onColor } = TIER_CONFIG[currentTier];
   const triggerGlossy = glossyStyle(currentTier);
 

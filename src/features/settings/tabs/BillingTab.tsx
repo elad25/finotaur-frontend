@@ -144,16 +144,6 @@ export const BillingTab = () => {
   const journalIsActive = ['active', 'trial'].includes(journalStatus);
   const journalIsFree = journalPlan === 'free' || !journalPlan;
 
-  // Resolve the user's unified membership tier (same logic as the TopNav badge)
-  // and derive accent colors for the tier-themed subscriptions card.
-  const currentTier = resolveTier(profile?.platform_plan ?? null, profile?.account_type ?? null);
-  const tierConfig = TIER_CONFIG[currentTier];
-  const TierIcon = tierConfig.icon;
-  const isFreeTier = currentTier === 'free';
-  // FREE's edge is near-black (invisible on the dark card) -> fall back to neutral zinc.
-  const tierAccent = isFreeTier ? '#3F3F46' : tierConfig.edge;
-  const tierGlow = isFreeTier ? '#52525B' : tierConfig.peak;
-
   // Newsletter subscription (War Zone)
   const newsletterEnabled = profile?.newsletter_enabled ?? false;
   const newsletterPaid = profile?.newsletter_paid ?? false;
@@ -172,6 +162,21 @@ export const BillingTab = () => {
   // 🔥 v6.1 FIX: Check enabled flag AND valid status for active state (including 'canceling')
   const topSecretIsActive = topSecretEnabled && ['active', 'trial', 'trialing', 'canceling'].includes(topSecretStatus);
   const topSecretInterval = profile?.top_secret_interval || 'monthly';
+
+  // Resolve the user's unified membership tier (same logic as the TopNav badge)
+  // and derive accent colors for the tier-themed subscriptions card.
+  // v2026-07: an active Top Secret sub resolves to the INVESTOR tier.
+  const currentTier = resolveTier(
+    profile?.platform_plan ?? null,
+    profile?.account_type ?? null,
+    topSecretIsActive || newsletterIsActive,
+  );
+  const tierConfig = TIER_CONFIG[currentTier];
+  const TierIcon = tierConfig.icon;
+  const isFreeTier = currentTier === 'free';
+  // FREE's edge is near-black (invisible on the dark card) -> fall back to neutral zinc.
+  const tierAccent = isFreeTier ? '#3F3F46' : tierConfig.edge;
+  const tierGlow = isFreeTier ? '#52525B' : tierConfig.peak;
 
   // Top Secret — flat pricing, 14-day free trial only (no intro discount)
   const getTopSecretPricingInfo = () => {
@@ -359,7 +364,7 @@ export const BillingTab = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to cancel Top Secret");
+        throw new Error(data.error || "Failed to cancel Investor subscription");
       }
 
       // Refresh profile to get updated state from DB
@@ -369,10 +374,10 @@ export const BillingTab = () => {
       setCancelReasonId('');
       setCancelFeedbackText('');
       setShowTopSecretCancelDialog(false);
-      toast.success(data.message || 'Top Secret subscription will be cancelled at period end');
+      toast.success(data.message || 'Investor subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling Top Secret:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to cancel Top Secret');
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel Investor subscription');
     } finally {
       setCancellingTopSecret(false);
     }
@@ -385,16 +390,16 @@ export const BillingTab = () => {
       const result = await manageProductSubscription("reactivate", "top_secret");
 
       if (!result.success) {
-        throw new Error(result.error || "Failed to reactivate Top Secret");
+        throw new Error(result.error || "Failed to reactivate Investor subscription");
       }
 
       // Refresh profile to get updated state from DB
       await refreshProfile();
 
-      toast.success(result.message || 'Top Secret subscription reactivated');
+      toast.success(result.message || 'Investor subscription reactivated');
     } catch (error) {
       console.error('Error reactivating Top Secret:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to reactivate Top Secret');
+      toast.error(error instanceof Error ? error.message : 'Failed to reactivate Investor subscription');
     } finally {
       setReactivatingTopSecret(false);
     }
@@ -818,8 +823,8 @@ export const BillingTab = () => {
           <span className="text-xs text-zinc-300">
             {(() => {
               const active: string[] = [];
-              if (newsletterStatus === 'active' || newsletterStatus === 'trial') active.push('Top Secret');
-              if (topSecretStatus === 'active' || topSecretStatus === 'trial') active.push('Top Secret');
+              if (newsletterStatus === 'active' || newsletterStatus === 'trial') active.push('Investor');
+              if (topSecretStatus === 'active' || topSecretStatus === 'trial') active.push('Investor');
               return active.length > 0 ? active.join(', ') : 'None';
             })()}
           </span>
@@ -944,7 +949,7 @@ export const BillingTab = () => {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <span className="text-xl font-bold text-white">
-                  {newsletterIsActive ? 'Premium Access' : 'Not Subscribed'}
+                  {newsletterIsActive ? 'Investor Access' : 'Not Subscribed'}
                 </span>
                 {newsletterIsActive && newsletterInterval === 'yearly' && (
                   <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
@@ -1207,12 +1212,12 @@ export const BillingTab = () => {
               </div>
               <div>
                 <h2 className="font-semibold text-white text-lg flex items-center gap-2">
-                  Top Secret
+                  Investor
                   <Badge className="bg-red-500/20 text-red-300 border-red-500/40 text-[10px] px-2 py-0.5 uppercase tracking-wider">
                     Classified
                   </Badge>
                 </h2>
-                <p className="text-xs text-zinc-400">Exclusive Insider Access</p>
+                <p className="text-xs text-zinc-400">Intel, Research &amp; AI — The Investor Desk</p>
               </div>
             </div>
             {topSecretIsActive && (
@@ -1238,7 +1243,7 @@ export const BillingTab = () => {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <span className="text-xl font-bold text-white">
-                  {topSecretIsActive ? 'Premium Access' : 'Not Subscribed'}
+                  {topSecretIsActive ? 'Investor Access' : 'Not Subscribed'}
                 </span>
                 {topSecretIsActive && topSecretInterval === 'yearly' && (
                   <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
@@ -1512,7 +1517,7 @@ export const BillingTab = () => {
                     <>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium mt-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        <span>⚠️ Top Secret access</span>
+                        <span>⚠️ Investor (Top Secret) access</span>
                       </div>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -1520,7 +1525,7 @@ export const BillingTab = () => {
                       </div>
                       <div className="flex items-center gap-2.5 text-sm text-amber-300 font-medium">
                         <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        <span>⚠️ Journal Premium access</span>
+                        <span>⚠️ Trader (Journal) access</span>
                       </div>
                     </>
                   )}
@@ -1660,7 +1665,7 @@ export const BillingTab = () => {
         </div>
 
         <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel Top Secret?
+          Cancel Investor?
         </DialogTitle>
         <DialogDescription className="text-zinc-400 text-sm">
           You'll stop receiving our daily market intelligence reports and exclusive insights.
@@ -1754,7 +1759,7 @@ export const BillingTab = () => {
         </div>
 
         <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel Top Secret Access?
+          Cancel Investor Access?
         </DialogTitle>
         <DialogDescription className="text-zinc-400 text-sm">
           You'll lose access to exclusive intelligence and private community.

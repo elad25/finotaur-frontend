@@ -76,7 +76,7 @@ const plans: Plan[] = [
   },
   {
     id: "premium",
-    name: "Premium",
+    name: "Trader",
     monthlyPrice: "$44.99",
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34.08",
@@ -90,11 +90,11 @@ const plans: Plan[] = [
       "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
       "Leak Finder — AI names the exact mistake costing you money",
       "Behavioral & risk alerts before you tilt",
-      "Custom AI reports & backtesting",
+      "Custom AI reports",
       "Priority support",
       "Early access to new features"
     ],
-    cta: "Upgrade to Premium",
+    cta: "Upgrade to Trader",
     featured: true,
     savings: "Yearly — save ~3 months"
   }

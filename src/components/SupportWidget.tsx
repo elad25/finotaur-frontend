@@ -1214,7 +1214,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
   function getTargetGroupLabel(targetGroup?: string): string {
     switch (targetGroup) {
       case 'top_secret':
-        return '🔒 TOP SECRET';
+        return '🔒 INVESTOR';
       case 'newsletter':
         return '📧 Newsletter';
       case 'all':
