@@ -16,9 +16,9 @@ interface FAQItem {
 
 const faqs: FAQItem[] = [
   {
-    question: "What's the difference between Core and Finotaur?",
+    question: "What's the difference between Trader, Investor and FINOTAUR?",
     answer:
-      "Core ($59/mo) gives you the full AI platform — Stock Analyzer, Sector Analyzer, Flow Scanner, AI Assistant, and real-time market data. Finotaur ($89/mo) includes everything in Core plus Top Secret reports, Options Intelligence AI, Macro Analyzer, AI Scanner, and Journal Premium — all included. It's the complete trading ecosystem.",
+      "Trader ($44.99/mo) is the trading desk — unlimited journal, broker auto-sync, trade copier and performance analytics. Investor ($50/mo) is the research desk — the daily TOP SECRET institutional report, the full research hub, and AI Stock/Sector/Macro analysis. FINOTAUR ($89/mo) includes both desks plus the exclusives: Options Intelligence, Dark Pool & institutional flow, the daily AI Scanner, and unlimited AI. Tools sold separately elsewhere for $400+/mo.",
   },
   {
     question: "Do I need prior trading experience?",
@@ -43,7 +43,7 @@ const faqs: FAQItem[] = [
   {
     question: "What about the Trading Journal?",
     answer:
-      "Journal Premium syncs with leading brokers to auto-import your trades. The AI analyzes your patterns, identifies costly mistakes, tracks strategy performance, and provides Bloomberg-level analytics. It's included free with the Finotaur plan ($40/mo value) — you'd normally pay separately for this.",
+      "The Trader plan syncs with leading brokers to auto-import your trades. The AI analyzes your patterns, identifies costly mistakes, tracks strategy performance, and provides Bloomberg-level analytics. It's included free with the FINOTAUR plan ($44.99/mo value) — you'd normally pay separately for this.",
   },
   {
     question: "Is my data safe?",

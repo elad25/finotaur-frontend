@@ -10,12 +10,12 @@ import { Button } from "@/components/ds/Button";
 import { SectionShell, SectionEyebrow, SectionTitle } from "./_shared";
 
 const valueItems = [
-  { name: "AI Stock Analyzer (7/day)", value: "$99" },
+  { name: "AI Stock Analyzer (unlimited)", value: "$99" },
   { name: "AI Sector Analyzer (unlimited)", value: "$79" },
-  { name: "Options Intelligence AI", value: "$149" },
-  { name: "AI Scanner", value: "$59" },
-  { name: "Top Secret Reports (daily + research)", value: "$50" },
-  { name: "Trading Journal Premium", value: "$49" },
+  { name: "Options Intelligence AI + Dark Pool flow", value: "$149" },
+  { name: "AI Scanner — daily Top 5", value: "$59" },
+  { name: "Investor — TOP SECRET intel + research hub", value: "$50" },
+  { name: "Trader — journal, copier & analytics", value: "$45" },
   { name: "Macro Analyzer", value: "$49" },
   { name: "Priority 24h Support", value: "$29" },
 ];

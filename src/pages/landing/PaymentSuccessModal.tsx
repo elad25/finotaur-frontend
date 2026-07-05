@@ -60,7 +60,7 @@ export const PaymentSuccessModal = ({ isOpen, onClose }: PaymentSuccessModalProp
           </div>
           
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            Welcome to Top Secret! 🔒
+            Welcome to the Investor Desk! 🔒
           </h2>
           <p className="text-gray-400">
             Your subscription is now active

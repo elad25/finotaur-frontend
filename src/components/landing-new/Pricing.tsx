@@ -1,7 +1,7 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
-// PRICING — COMPACT — 5 Plans
-// Free | Journal ($44.99) | TOP SECRET ($50) | Finotaur ($89 FEATURED) | Copilot ($200)
+// PRICING — COMPACT — 5 Plans (persona ladder, 2026-07)
+// Free | Trader ($44.99) | Investor ($50) | Finotaur ($89 FEATURED) | Ultimate ($200)
 // Monthly/Yearly toggle with savings
 // ================================================
 
@@ -44,11 +44,11 @@ const plans: Plan[] = [
     description: "Start free — no card required",
     isFree: true,
     features: [
-      "Trade journal — up to 15 trades",
-      "Unlimited AI Stock Analyzer — no credit caps",
+      "AI Stock Analyzer — 3 full analyses every day",
+      "Demo portfolio — trade journal with 15 trades",
+      "Market Pulse & market news",
       "P&L calendar & core performance stats",
-      "1 watchlist",
-      "Basic market screener",
+      "1 watchlist + basic market screener",
       "Community access",
     ],
     cta: "Get Started Free",
@@ -56,20 +56,20 @@ const plans: Plan[] = [
   },
   {
     id: "journal",
-    name: "Journal",
+    name: "Trader",
     monthlyPrice: "$44.99",
     yearlyPrice: "$409",
     yearlyMonthlyEquivalent: "$34",
-    description: "Your complete trading journal & analytics desk",
+    description: "The trader's desk — journal, copier & analytics",
     trialDays: 14,
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — every account, auto-synced",
       "Broker auto-sync + Trade Copier (Tradovate & NinjaTrader)",
       "Win rate, profit factor, expectancy, R-multiples & MFE/MAE",
-      "Strategy Backtesting engine",
       "Strategy builder & Playbooks with adherence tracking",
       "Shadow — what-if analysis on every closed trade",
+      "AI trade insights & coach",
       "Mentor & community rooms · Priority support",
     ],
     cta: "Start 14-Day Free Trial",
@@ -79,20 +79,22 @@ const plans: Plan[] = [
   },
   {
     id: "top_secret",
-    name: "TOP SECRET",
+    name: "Investor",
     monthlyPrice: "$50",
     yearlyPrice: "$499",
     yearlyMonthlyEquivalent: "$42",
-    description: "Institutional-grade market intel — daily, weekly & deep-dive",
+    description: "The investor's desk — daily intel, research & AI analysis",
     trialDays: 14,
     badge: "14-Day Free Trial",
-    includesExtras: "Daily + Weekly Report + monthly deep-dives — institutional desks charge $300+",
+    includesExtras: "TOP SECRET intel + research hub + AI analysis — more than TipRanks Ultimate, same price",
     features: [
-      "Daily institutional market report",
+      "TOP SECRET — daily institutional market report",
       "The Weekly Report — every Sunday, your edge for the week ahead",
       "Monthly deep-dive research (ISM, single-name & crypto)",
+      "AI Stock Analyzer — 10 analyses/day",
+      "AI Sector & Macro Analyzers",
+      "Research hub — sectors, valuation, insiders & 13F, ETFs",
       "Private Discord trade room + live commentary",
-      "Early access to new research & calls",
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
@@ -107,14 +109,15 @@ const plans: Plan[] = [
     description: "The entire platform — every tool, one price",
     trialDays: 14,
     badge: "Most Popular",
-    includesExtras: "Journal + TOP SECRET (daily + weekly) + full market engine — over $200 of value",
+    includesExtras: "Trader + Investor + the exclusive toolset — sold elsewhere for $400+/mo",
     features: [
-      "Everything in Journal & TOP SECRET, plus:",
-      "Unlimited AI analyses, alerts & screeners",
-      "Sector & Macro Analyzers",
+      "Everything in Trader & Investor, plus:",
       "Options Intelligence AI — institutional options flow",
+      "Flow Scanner — Dark Pool & institutional order flow",
+      "AI Scanner — daily Top 5 picks + Insider / 13F tracking",
+      "Unlimited AI analyses, alerts & screeners",
+      "Strategy Backtesting engine",
       "Real-time Market Scanner — live wall & sweep detection",
-      "AI Scanner + Insider / 13F tracking",
       "FINO — your AI assistant, on every page",
     ],
     cta: "Start 14-Day Free Trial",
@@ -123,7 +126,7 @@ const plans: Plan[] = [
   },
   {
     id: "enterprise",
-    name: "COPILOT",
+    name: "ULTIMATE",
     monthlyPrice: "$200",
     yearlyPrice: "$2,000",
     yearlyMonthlyEquivalent: "$167",
@@ -133,7 +136,7 @@ const plans: Plan[] = [
     savings: "Save 17%",
     features: [
       "Everything in FINOTAUR, plus:",
-      "AI Portfolio Manager — invests & trades with you",
+      "Copilot — AI Portfolio Manager that invests & trades with you",
       "24/7 AI oversight of every position",
       "Live mark-to-market of your real book",
       "Proactive AI risk detection & alerts",

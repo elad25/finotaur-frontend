@@ -28,7 +28,7 @@ export default function PromoCodePopup({
   onClose,
   onContinue,
   promoCode = 'FINOTAUR50',
-  productName = 'Top Secret',
+  productName = 'Investor',
   originalPrice = 70,
   discountedPrice = 35,
   trialDays = 14,

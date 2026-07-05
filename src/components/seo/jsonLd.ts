@@ -101,28 +101,35 @@ export function softwareApplication(): Record<string, unknown> {
     operatingSystem: 'Web',
     url: SITE_URL,
     description:
-      'AI trading intelligence platform with free unlimited AI stock analysis, options flow scanner, dark pool data, and institutional-grade research.',
+      'AI trading intelligence platform with free AI stock analysis, options flow scanner, dark pool data, and institutional-grade research.',
     offers: [
       {
         '@type': 'Offer',
         name: 'Free',
         price: '0',
         priceCurrency: 'USD',
-        description: 'Free AI Stock Analyzer, Top Movers, Earnings Calendar, Watchlists, Crypto, News',
+        description: 'Free AI Stock Analyzer (3/day), Market Pulse, News, Demo Portfolio, Watchlists, Screener',
       },
       {
         '@type': 'Offer',
-        name: 'Pro',
-        price: '59',
+        name: 'Trader',
+        price: '44.99',
         priceCurrency: 'USD',
-        description: 'AI Sector, Macro, Earnings analysis, Options Suite, Flow Scanner, Dark Pool Scanner, Trading Journal',
+        description: 'Unlimited trading journal with broker auto-sync, trade copier, analytics and AI coach',
+      },
+      {
+        '@type': 'Offer',
+        name: 'Investor',
+        price: '50',
+        priceCurrency: 'USD',
+        description: 'Daily TOP SECRET institutional report, research hub, AI Stock/Sector/Macro analysis',
       },
       {
         '@type': 'Offer',
         name: 'Finotaur',
         price: '89',
         priceCurrency: 'USD',
-        description: 'Everything in Pro plus TOP SECRET Newsletter, AI Top 5, AI Options Intelligence, AI Copilot, Block Trades, Trade Copier',
+        description: 'Everything in Trader & Investor plus Options Intelligence AI, Dark Pool flow, AI Scanner, unlimited AI, backtesting',
       },
     ],
   };

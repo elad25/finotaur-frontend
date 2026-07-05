@@ -79,7 +79,7 @@ const plans: Plan[] = [
   },
   {
     id: "premium",
-    name: "Premium",
+    name: "Trader",
     monthlyPrice: 44.99,
     yearlyPrice: 409,
     yearlyMonthlyEquivalent: 34.08,
@@ -97,7 +97,7 @@ const plans: Plan[] = [
       "Priority support",
       "Early access to new features",
     ],
-    cta: "Upgrade to Premium",
+    cta: "Upgrade to Trader",
     featured: true,
     savings: "Yearly — save ~3 months",
     tier: 2,
@@ -441,7 +441,7 @@ const UpgradePlanModal = ({
           <div className="p-6 space-y-4">
             <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
               <p className="text-blue-200 text-sm leading-relaxed">
-                Downgrading mid-cycle isn't supported. You've already paid for your current {currentPlan === 'premium' ? 'Premium' : 'Basic'} plan through <strong>{expiresDate}</strong>.
+                Downgrading mid-cycle isn't supported. You've already paid for your current {currentPlan === 'premium' ? 'Trader' : 'Basic'} plan through <strong>{expiresDate}</strong>.
               </p>
             </div>
 
@@ -484,7 +484,7 @@ const UpgradePlanModal = ({
             </h3>
             <p className="text-sm text-zinc-400 mt-1">
               {needsPlanSelection 
-                ? 'Start with a 14-day free trial on Basic, or go Premium for unlimited access'
+                ? 'Start with a 14-day free trial on Basic, or go Trader for unlimited access'
                 : 'Choose the best plan for your trading journey'
               }
             </p>

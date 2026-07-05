@@ -1,6 +1,16 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v8.0.0
+// FINOTAUR WHOP CONFIGURATION - v9.0.0
 // =====================================================
+// 🔥 v9.0.0 CHANGES (2026-07): PERSONA LADDER
+// - Top Secret product REBRANDED as "Investor" tier ($50/mo / $499/yr — SAME Whop plans/products).
+//   Investor = TOP SECRET intelligence + research hub access + limited platform AI
+//   (Stock Analyzer 10/day, Sector & Macro Analyzer with monthly caps).
+// - Journal Premium is positioned as the "Trader" tier ($44.99/mo — unchanged).
+// - Finotaur ($89/mo) = everything + EXCLUSIVES: Options Intelligence, Flow Scanner
+//   (Dark Pool / institutional), AI Scanner (Top 5), unlimited AI, backtest, max limits.
+// - New effective platform tier 'platform_investor' (granted by active Top Secret sub,
+//   not a separate Whop product). See PLAN_FEATURES.platform_investor / PLATFORM_LIMITS.
+//
 // 🔥 v8.0.0 CHANGES (2026-06):
 // - REMOVED: Journal Basic tier (was $24.99/mo — zero active subscribers)
 // - REMOVED: Platform Core tier (was $59/mo — zero active subscribers)
@@ -205,7 +215,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopPlanId: WHOP_PLAN_IDS.premium_monthly,
     whopProductId: WHOP_PRODUCT_IDS.premium_monthly,
     name: 'premium',
-    displayName: 'Premium',
+    displayName: 'Trader',
     price: 44.99,
     period: 'monthly',
     periodLabel: '/month',
@@ -222,7 +232,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Pattern recognition',
       'Custom AI reports',
       'Behavioral risk alerts',
-      'Backtesting system',
       'Priority support',
       'Early access to new features',
     ],
@@ -232,7 +241,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopPlanId: WHOP_PLAN_IDS.premium_yearly,
     whopProductId: WHOP_PRODUCT_IDS.premium_yearly,
     name: 'premium',
-    displayName: 'Premium',
+    displayName: 'Trader',
     price: 409,
     period: 'yearly',
     periodLabel: '/year',
@@ -250,7 +259,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Pattern recognition',
       'Custom AI reports',
       'Behavioral risk alerts',
-      'Backtesting system',
       'Priority support',
       'Early access to new features',
     ],
@@ -331,14 +339,15 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // 🔥 PLATFORM - COPILOT (AI Portfolio Manager)
+  // 🔥 PLATFORM - ULTIMATE (Copilot AI Portfolio Manager)
+  // Tier renamed Copilot → Ultimate 2026-07; "Copilot" remains the feature name
   // ═══════════════════════════════════════════
   platform_enterprise_monthly: {
     id: 'platform_enterprise_monthly',
     whopPlanId: WHOP_PLAN_IDS.platform_enterprise_monthly,
     whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_monthly,
     name: 'platform_enterprise',
-    displayName: 'Copilot',
+    displayName: 'Ultimate',
     price: 200,
     period: 'monthly',
     periodLabel: '/month',
@@ -366,7 +375,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopPlanId: WHOP_PLAN_IDS.platform_enterprise_yearly,
     whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_yearly,
     name: 'platform_enterprise',
-    displayName: 'Copilot',
+    displayName: 'Ultimate',
     price: 2000,
     period: 'yearly',
     periodLabel: '/year',
@@ -455,16 +464,19 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // TOP SECRET — Intelligence Envelope, 14-day free trial (no intro discount)
+  // INVESTOR (Top Secret product) — 14-day free trial (no intro discount)
   // $50/mo | $499/yr ($41.58/mo)
-  // Includes daily report + monthly deep-dives (WAR ZONE merged in)
+  // v9.0.0: Rebranded "Top Secret" → "Investor" tier. SAME Whop plans/products —
+  // existing Top Secret subscribers are grandfathered into Investor automatically.
+  // Adds: research hub access + limited platform AI (Stock 10/day, Sector & Macro capped)
+  // on top of the full TOP SECRET intelligence envelope.
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
     whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,  // plan_icd76C8REp0LQ — $50/month, 14-day free trial
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
-    displayName: 'Top Secret',
+    displayName: 'Investor',
     price: 50,
     period: 'monthly',
     periodLabel: '/month',
@@ -477,15 +489,16 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: [
       '🎁 14 days FREE trial',
       '💰 Then $50/month — cancel anytime',
-      'Daily institutional-grade market report (8-14 pages)',
+      '🕵️ TOP SECRET: daily institutional-grade report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
-      'Technical outlook (24-72h)',
-      'Earnings & corporate intel',
-      'Monthly ISM Manufacturing Report',
-      '2x Company Deep Dive Reports',
-      '2x Crypto Market Reports',
+      'Earnings & corporate intel + monthly ISM report',
+      '2x Company Deep Dives + 2x Crypto Reports monthly',
       'PDF Downloads & Archive Access',
+      'AI Stock Analyzer — 10 analyses/day',
+      'AI Sector Analyzer & Macro Analyzer',
+      'Full research hub: sectors, valuation, insiders & 13F, ETFs, macro',
+      'Expanded watchlists & alerts',
       'Private Discord community',
       'Real-time alerts',
     ],
@@ -496,7 +509,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,  // plan_7Lf31ygMAMmK8 — $499/year
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
-    displayName: 'Top Secret',
+    displayName: 'Investor',
     price: 499,
     period: 'yearly',
     periodLabel: '/year',
@@ -510,15 +523,16 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: [
       '🎁 14 days FREE trial',
       '💰 $41.58/month — save $101/year vs monthly',
-      'Daily institutional-grade market report (8-14 pages)',
+      '🕵️ TOP SECRET: daily institutional-grade report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
-      'Technical outlook (24-72h)',
-      'Earnings & corporate intel',
-      'Monthly ISM Manufacturing Report',
-      '2x Company Deep Dive Reports',
-      '2x Crypto Market Reports',
+      'Earnings & corporate intel + monthly ISM report',
+      '2x Company Deep Dives + 2x Crypto Reports monthly',
       'PDF Downloads & Archive Access',
+      'AI Stock Analyzer — 10 analyses/day',
+      'AI Sector Analyzer & Macro Analyzer',
+      'Full research hub: sectors, valuation, insiders & 13F, ETFs, macro',
+      'Expanded watchlists & alerts',
       'Private Discord community',
       'Real-time alerts',
     ],
@@ -776,6 +790,40 @@ export const PLAN_FEATURES = {
     journalMaxPortfolios: 1,
     journalBacktest: false,
   },
+  // v9.0.0: Investor — effective platform tier granted by an active Top Secret ("Investor")
+  // subscription. NOT a separate Whop product. Research + limited AI; NO Finotaur exclusives
+  // (Options Intelligence, Flow Scanner, AI Scanner, unlimited AI, backtest).
+  platform_investor: {
+    dashboardAccess: true,
+    marketData: true,
+    advancedCharts: true,
+    customWatchlists: true,
+    priceAlerts: 20,
+    aiInsights: true,
+    advancedScreeners: false,
+    apiAccess: false,
+    prioritySupport: false,
+    customReports: false,
+    newsletter: true,
+    topSecret: true,
+    // Page access
+    stockAnalyzer: true,
+    sectorAnalyzer: true,
+    flowScanner: false,       // ❌ Finotaur exclusive
+    optionsIntelligence: false, // ❌ Finotaur exclusive
+    aiAssistant: false,       // ❌ Finotaur exclusive
+    macroAnalyzer: true,
+    myPortfolio: false,
+    aiScanner: false,         // ❌ Finotaur exclusive
+    stockAnalysisPerDay: 10,
+    sectorAnalysisPerMonth: 10,
+    // Journal access same as free (Investor is not a journal tier)
+    journalAccess: true,
+    journalMaxTrades: 15,
+    journalTradesLifetime: true,
+    journalMaxPortfolios: 1,
+    journalBacktest: false,
+  },
   platform_finotaur: {
     dashboardAccess: true,
     marketData: true,
@@ -798,7 +846,7 @@ export const PLAN_FEATURES = {
     macroAnalyzer: true,
     myPortfolio: false,       // Enterprise only
     aiScanner: true,
-    stockAnalysisPerDay: 7,
+    stockAnalysisPerDay: 999999,  // v9.0.0: unlimited AI is a core Finotaur selling point (was 7)
     sectorAnalysisPerMonth: 999999,
     // Journal access for Finotaur tier
     journalAccess: true,
@@ -851,13 +899,15 @@ export const PLAN_FEATURES = {
     newsletter: true,
     topSecret: false,
   },
+  // v9.0.0: an active top_secret subscription now grants the platform_investor tier
+  // (see PLAN_FEATURES.platform_investor above for the platform-side access it unlocks).
   top_secret: {
     maxTrades: 0,
     autoSync: false,
-    aiInsights: false,
+    aiInsights: true,
     advancedAnalytics: false,
     prioritySupport: false,
-    newsletter: false,
+    newsletter: true,
     topSecret: true,
   },
 };
@@ -877,13 +927,23 @@ export const PLATFORM_LIMITS = {
     stockAnalysisPerDay: 3,
     sectorAnalysisPerMonth: 0,
   },
+  // v9.0.0: Investor tier (active Top Secret subscription)
+  platform_investor: {
+    apiCallsPerDay: 0,
+    watchlistItems: 50,
+    savedScreeners: 10,
+    alertsActive: 20,
+    exportsPerMonth: 0,
+    stockAnalysisPerDay: 10,
+    sectorAnalysisPerMonth: 10,
+  },
   platform_finotaur: {
     apiCallsPerDay: 5000,
     watchlistItems: 500,
     savedScreeners: 50,
     alertsActive: 999999,
     exportsPerMonth: 100,
-    stockAnalysisPerDay: 7,
+    stockAnalysisPerDay: 999999,  // v9.0.0: unlimited (was 7) — Finotaur = unlimited AI
     sectorAnalysisPerMonth: 999999,
   },
   platform_enterprise: {

@@ -1,9 +1,13 @@
 // src/hooks/usePlatformAccess.ts
 // =====================================================
-// 🔒 PLATFORM ACCESS CONTROL HOOK - v2.0.0
+// 🔒 PLATFORM ACCESS CONTROL HOOK - v3.0.0
 // =====================================================
 // Page-level access + daily/monthly usage limits
 // Determines correct upgrade target per feature
+// v3.0.0 (2026-07): Investor tier — an active Top Secret ("Investor") subscription
+// grants platform_investor: Sector & Macro Analyzer + Stock Analyzer 10/day.
+// Finotaur exclusives stay locked: Options Intelligence, Flow Scanner, AI Scanner,
+// AI Assistant, unlimited AI.
 // =====================================================
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -14,7 +18,7 @@ import { supabase } from '@/lib/supabase';
 // TYPES
 // ============================================
 
-export type PlatformPlan = 'free' | 'platform_finotaur' | 'platform_enterprise';
+export type PlatformPlan = 'free' | 'platform_investor' | 'platform_finotaur' | 'platform_enterprise';
 
 /**
  * Canonical platform_plan in the DB / RPCs is the BARE form ('core' | 'finotaur' | 'enterprise').
@@ -25,6 +29,7 @@ function normalizePlatformPlan(raw: string | null | undefined): PlatformPlan {
   const v = (raw || 'free').toString().toLowerCase();
   // 'core' / 'platform_core': Core tier removed 2026-06 (zero subscribers) — treat as free
   if (v === 'platform_core' || v === 'core') return 'free';
+  if (v === 'platform_investor' || v === 'investor') return 'platform_investor';
   if (v === 'platform_finotaur' || v === 'finotaur') return 'platform_finotaur';
   if (v === 'platform_enterprise' || v === 'enterprise') return 'platform_enterprise';
   return 'free';
@@ -53,9 +58,9 @@ export interface AccessResult {
   reason?: 'plan_too_low' | 'daily_limit' | 'monthly_limit';
   currentUsage?: number;
   limit?: number;
-  upgradeTarget?: 'finotaur' | 'enterprise';
-  upgradeDisplayName?: string;   // "Core" | "Finotaur" | "Enterprise"
-  upgradePrice?: string;         // "$59" | "$89" | "$500"
+  upgradeTarget?: 'investor' | 'finotaur' | 'enterprise';
+  upgradeDisplayName?: string;   // "Investor" | "Finotaur" | "Copilot"
+  upgradePrice?: string;         // "$50" | "$89" | "$200"
   message?: string;              // Full human-readable message
 }
 
@@ -75,8 +80,20 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
     my_portfolio: false,
     ai_scanner: false,
   },
+  // v3.0.0: Investor — research + limited AI. Finotaur exclusives stay locked.
+  platform_investor: {
+    stock_analyzer: true,         // limited 10/day
+    sector_analyzer: true,        // limited 10/month
+    macro_analyzer: true,
+    options_tab: false,           // ❌ Finotaur exclusive
+    flow_scanner: false,          // ❌ Finotaur exclusive (Dark Pool / institutional)
+    options_intelligence: false,  // ❌ Finotaur exclusive
+    ai_assistant: false,          // ❌ Finotaur exclusive
+    ai_scanner: false,            // ❌ Finotaur exclusive (Top 5 / Catalyst Deck)
+    my_portfolio: false,          // ❌ Enterprise only
+  },
   platform_finotaur: {
-    stock_analyzer: true,         // limited 7/day
+    stock_analyzer: true,         // unlimited (v3.0.0 — was 7/day)
     sector_analyzer: true,        // unlimited
     flow_scanner: true,
     options_intelligence: true,
@@ -106,13 +123,14 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
 
 const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
   stock_analyzer: 'free',
-  // The four features below moved from Core → Finotaur (Core tier removed 2026-06)
+  // v3.0.0: Sector & Macro Analyzer unlock at Investor ($50)
+  sector_analyzer: 'platform_investor',
+  macro_analyzer: 'platform_investor',
+  // Finotaur exclusives ($89)
   options_tab: 'platform_finotaur',
-  sector_analyzer: 'platform_finotaur',
   flow_scanner: 'platform_finotaur',
   ai_assistant: 'platform_finotaur',
   options_intelligence: 'platform_finotaur',
-  macro_analyzer: 'platform_finotaur',
   ai_scanner: 'platform_finotaur',
   my_portfolio: 'platform_enterprise',
 };
@@ -123,8 +141,9 @@ const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
 
 const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
   // 'core' entry removed 2026-06 (Core tier eliminated, zero subscribers)
+  investor: { displayName: 'Investor', price: '$50/mo' },
   finotaur: { displayName: 'Finotaur', price: '$89/mo' },
-  enterprise: { displayName: 'Enterprise', price: '$500/mo' },
+  enterprise: { displayName: 'Ultimate', price: '$200/mo' },
 };
 
 // ============================================
@@ -133,17 +152,21 @@ const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
 
 const PLAN_HIERARCHY: PlatformPlan[] = [
   'free',
+  'platform_investor',
   'platform_finotaur',
   'platform_enterprise',
 ];
 
+type UpgradeTargetKey = 'investor' | 'finotaur' | 'enterprise';
+
 function getUpgradeTarget(
   currentPlan: PlatformPlan,
   requiredPlan: PlatformPlan
-): { target: 'finotaur' | 'enterprise'; displayName: string; price: string } | null {
-  // Core tier removed 2026-06; upgrade ladder is free → finotaur → enterprise
-  const requiredMap: Record<PlatformPlan, 'finotaur' | 'enterprise' | null> = {
+): { target: UpgradeTargetKey; displayName: string; price: string } | null {
+  // Upgrade ladder: free → investor → finotaur → enterprise
+  const requiredMap: Record<PlatformPlan, UpgradeTargetKey | null> = {
     'free': null,
+    'platform_investor': 'investor',
     'platform_finotaur': 'finotaur',
     'platform_enterprise': 'enterprise',
   };
@@ -155,10 +178,12 @@ function getUpgradeTarget(
   return { target, displayName: info.displayName, price: info.price };
 }
 
-function getNextTierForLimit(currentPlan: PlatformPlan): { target: 'finotaur' | 'enterprise'; displayName: string; price: string } | null {
-  // Core tier removed 2026-06; next tier from free is finotaur
-  const nextMap: Record<PlatformPlan, 'finotaur' | 'enterprise' | null> = {
-    'free': 'finotaur',
+function getNextTierForLimit(currentPlan: PlatformPlan): { target: UpgradeTargetKey; displayName: string; price: string } | null {
+  // v3.0.0: when an Investor hits an AI limit, the fix is Finotaur (unlimited AI).
+  // Free users hitting the Stock Analyzer cap are steered to Investor (10/day).
+  const nextMap: Record<PlatformPlan, UpgradeTargetKey | null> = {
+    'free': 'investor',
+    'platform_investor': 'finotaur',
     'platform_finotaur': 'enterprise',
     'platform_enterprise': null,
   };
@@ -210,18 +235,50 @@ export function usePlatformAccess() {
     }
 
     try {
-      const { data, error } = await supabase.rpc('get_usage_status', {
-        p_user_id: user.id,
-      });
+      // v3.0.0: fetch usage status + Top Secret ("Investor") subscription in parallel.
+      // An active Top Secret sub elevates a free user to the Investor platform tier.
+      const [usageRes, profileRes] = await Promise.all([
+        supabase.rpc('get_usage_status', { p_user_id: user.id }),
+        supabase
+          .from('profiles')
+          .select('top_secret_enabled, top_secret_status, newsletter_status')
+          .eq('id', user.id)
+          .maybeSingle(),
+      ]);
+
+      const { data, error } = usageRes;
 
       if (!error && data && data.length > 0) {
         const row = data[0];
-        setPlan(normalizePlatformPlan(row.platform_plan));
+        let resolvedPlan = normalizePlatformPlan(row.platform_plan);
+        let stockLimit = row.stock_analysis_limit;
+        let sectorLimit = row.sector_analysis_limit;
+
+        if (resolvedPlan === 'free') {
+          const p = profileRes.data;
+          // WAR ZONE (newsletter) subscribers were merged into Top Secret 2026-06 —
+          // both grant the Investor tier.
+          const topSecretActive =
+            (p?.top_secret_enabled === true &&
+              (p?.top_secret_status === 'active' || p?.top_secret_status === 'trial')) ||
+            p?.newsletter_status === 'active' ||
+            p?.newsletter_status === 'trial' ||
+            p?.newsletter_status === 'trialing';
+
+          if (topSecretActive) {
+            resolvedPlan = 'platform_investor';
+            // Client-side fallback until get_usage_status returns investor limits natively
+            stockLimit = Math.max(stockLimit, 10);
+            sectorLimit = Math.max(sectorLimit, 10);
+          }
+        }
+
+        setPlan(resolvedPlan);
         setUsage({
           stockAnalysisToday: row.stock_analysis_today,
-          stockAnalysisLimit: row.stock_analysis_limit,
+          stockAnalysisLimit: stockLimit,
           sectorAnalysisMonth: row.sector_analysis_month,
-          sectorAnalysisLimit: row.sector_analysis_limit,
+          sectorAnalysisLimit: sectorLimit,
         });
       }
     } catch (err) {
@@ -287,8 +344,25 @@ export function usePlatformAccess() {
       }
     }
 
-    // 3. Sector Analyzer monthly limit check — Core tier removed 2026-06;
-    // Finotaur and above get unlimited sector analysis (no monthly cap).
+    // 3. Sector Analyzer monthly limit check — Investor tier is capped (10/month);
+    // Finotaur and above get unlimited sector analysis.
+    if (page === 'sector_analyzer' && plan === 'platform_investor') {
+      if (usage.sectorAnalysisMonth >= usage.sectorAnalysisLimit) {
+        const nextTier = getNextTierForLimit(plan);
+        return {
+          hasAccess: false,
+          reason: 'monthly_limit',
+          currentUsage: usage.sectorAnalysisMonth,
+          limit: usage.sectorAnalysisLimit,
+          upgradeTarget: nextTier?.target,
+          upgradeDisplayName: nextTier?.displayName,
+          upgradePrice: nextTier?.price,
+          message: nextTier
+            ? `You've used all ${usage.sectorAnalysisLimit} monthly sector analyses. Upgrade to ${nextTier.displayName} (${nextTier.price}) for unlimited.`
+            : `You've used all ${usage.sectorAnalysisLimit} monthly sector analyses. Resets on the 1st.`,
+        };
+      }
+    }
 
     return { hasAccess: true };
   }, [plan, usage]);
@@ -348,6 +422,7 @@ export function usePlatformAccess() {
     refetch: fetchAccessStatus,
     isFreePlan: plan === 'free',
     isCorePlan: false, // Core tier removed 2026-06; always false (no subscribers)
+    isInvestorPlan: plan === 'platform_investor',
     isFinotaurPlan: plan === 'platform_finotaur',
     isEnterprisePlan: plan === 'platform_enterprise',
   };

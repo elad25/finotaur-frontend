@@ -260,9 +260,9 @@ export default function AdminUsers() {
             Joined last 24h
           </span>
           <JoinChip label="Platform" value={joins24h?.platform} color="gold" />
-          <JoinChip label="Journal" value={joins24h?.journal} color="emerald" />
+          <JoinChip label="Trader (Journal)" value={joins24h?.journal} color="emerald" />
           <JoinChip label="Newsletter" value={joins24h?.newsletter} color="blue" />
-          <JoinChip label="Top Secret" value={joins24h?.top_secret} color="purple" />
+          <JoinChip label="Investor" value={joins24h?.top_secret} color="purple" />
           <JoinChip label="Free" value={joins24h?.free} color="gray" />
         </div>
       </div>
@@ -301,13 +301,13 @@ export default function AdminUsers() {
               color="gold"
             />
             <FilterButton
-              label="Journal"
+              label="Trader (Journal)"
               isActive={filters.product_filter === 'journal'}
               onClick={() => handleFilterChange({ product_filter: 'journal' as ProductFilter })}
               color="emerald"
             />
             <FilterButton
-              label="Newsletter"
+              label="Investor (Newsletter)"
               isActive={filters.product_filter === 'newsletter'}
               onClick={() => handleFilterChange({ product_filter: 'newsletter' as ProductFilter })}
               color="blue"
@@ -526,9 +526,9 @@ const UserRow = React.memo<{
     const names: Record<string, string> = {
       free: 'Free',
       basic: 'Basic',
-      premium: 'Premium',
+      premium: 'Trader',
       newsletter: 'Newsletter',
-      top_secret: 'Top Secret',
+      top_secret: 'Investor',
     };
     return names[user.account_type] || user.account_type;
   }, [user.account_type, isInTrial]);
@@ -543,7 +543,7 @@ const UserRow = React.memo<{
       core: 'Core',
       pro: 'Pro',
       finotaur: 'FINOTAUR',
-      enterprise: 'Enterprise',
+      enterprise: 'Ultimate',
     };
     return platformPlan ? labels[platformPlan] ?? null : null;
   }, [platformPlan]);
@@ -618,17 +618,17 @@ const UserRow = React.memo<{
           )}
           {user.products?.includes('journal') && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              {isInTrial ? 'Journal · Trial' : user.account_type === 'premium' ? 'Journal · Premium' : 'Journal · Basic'}
+              {isInTrial ? 'Trader · Trial' : user.account_type === 'premium' ? 'Trader (Journal)' : 'Trader · Basic'}
             </span>
           )}
           {user.products?.includes('warzone') && !platformIncludesNewsletters && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              Top Secret
+              Investor · Legacy
             </span>
           )}
           {user.products?.includes('top_secret') && !platformIncludesNewsletters && (
             <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-              Top Secret
+              Investor
             </span>
           )}
           {(!user.products || user.products.length === 0) && (

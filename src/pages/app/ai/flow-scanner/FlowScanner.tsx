@@ -256,7 +256,8 @@ export default function FlowScanner() {
         upgradePrice={access.upgradePrice}
         currentPlan={
           plan === 'platform_finotaur'   ? 'finotaur'   :
-          plan === 'platform_enterprise' ? 'enterprise' : 'free'
+          plan === 'platform_enterprise' ? 'enterprise' :
+          plan === 'platform_investor'   ? 'investor'   : 'free'
         }
       />
     );

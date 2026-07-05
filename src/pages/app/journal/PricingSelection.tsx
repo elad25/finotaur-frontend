@@ -136,7 +136,7 @@ export default function WarZonePricingSelection() {
 
           await createWelcomeNotification(user.id);
 
-          toast.success('Welcome to Top Secret!', {
+          toast.success('Welcome to the Investor Desk!', {
             description: 'Your subscription is being activated...'
           });
 
@@ -170,7 +170,7 @@ export default function WarZonePricingSelection() {
       await supabase
         .from('system_updates')
         .insert({
-          title: 'Welcome to Top Secret!',
+          title: 'Welcome to the Investor Desk!',
           content: 'Your 7-day free trial has started. Check your email for upcoming daily briefing alerts.',
           type: 'success',
           target_group: 'newsletter',
@@ -385,12 +385,12 @@ export default function WarZonePricingSelection() {
                   <div className="mb-3">
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-800/80 text-slate-300 border border-slate-700/50">
                       <FileText className="w-3 h-3" />
-                      TOP SECRET ONLY
+                      INVESTOR ONLY
                     </span>
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-lg font-bold text-white mb-3">Top Secret Newsletter</h3>
+                  <h3 className="text-lg font-bold text-white mb-3">Investor — Intel, Research & AI</h3>
 
                   {/* Price */}
                   <div className="mb-4">
@@ -484,12 +484,12 @@ export default function WarZonePricingSelection() {
                       }}
                     >
                       <Gift className="w-3 h-3" />
-                      ULTIMATE BUNDLE
+                      FINOTAUR BUNDLE
                     </span>
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-lg font-bold text-white mb-3">Top Secret + Platform</h3>
+                  <h3 className="text-lg font-bold text-white mb-3">FINOTAUR — Investor + Platform</h3>
 
                   {/* Price */}
                   <div className="mb-4">
@@ -899,7 +899,7 @@ export default function WarZonePricingSelection() {
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>
-                Unlock TOP SECRET
+                Unlock the Investor Desk
               </h3>
               <h3 className="text-2xl font-bold text-white mb-2">
                 Annual Access
