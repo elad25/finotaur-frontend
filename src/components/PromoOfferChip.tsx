@@ -5,7 +5,9 @@
 // Compact green pill that lives in the TopNav (between the FINOTAUR logo
 // and the search omnibox). Gently animated (shine sweep + pulsing gift)
 // to draw clicks. Click → gold-on-black popup with the JOIN2026 code, a
-// live countdown, claim-progress bar, and an Unlock Premium CTA.
+// live countdown, claim-progress bar, and an Unlock Premium CTA that opens
+// Whop checkout for the Trader (premium monthly) plan directly, with the
+// promo code applied — no intermediate /app/upgrade page.
 //
 // The whole offer (green chip + popup) automatically disappears once the
 // countdown deadline passes — see `expired` below.
@@ -18,11 +20,11 @@
 // =====================================================
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Gift, Copy, Check, Clock, Ticket, Crown, ShieldCheck, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 
 type Offer = {
   /** Promo code revealed in the popup + copied to clipboard. */
@@ -42,8 +44,6 @@ type Offer = {
   claimed: number;
   totalSpots: number;
   ctaText: string;
-  /** Route the CTA sends the user to (code is copied first). */
-  ctaHref: string;
   fineprint: string;
   /** Short label shown inside the green chip (hidden on very small screens). */
   chipLabel: string;
@@ -61,7 +61,6 @@ const OFFER: Offer = {
   claimed: 247,
   totalSpots: 300,
   ctaText: 'Unlock Premium',
-  ctaHref: '/app/upgrade',
   fineprint: 'Cancel anytime • 7-day money-back guarantee',
   chipLabel: 'July 4th Special — $10',
 };
@@ -85,7 +84,7 @@ function splitRemaining(ms: number) {
 const pad = (n: number) => String(n).padStart(2, '0');
 
 export default function PromoOfferChip({ className }: { className?: string }) {
-  const navigate = useNavigate();
+  const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [remaining, setRemaining] = useState<number>(getRemaining);
@@ -115,9 +114,8 @@ export default function PromoOfferChip({ className }: { className?: string }) {
   };
 
   const handleUnlock = async () => {
-    await handleCopyCode();
-    setOpen(false);
-    navigate(OFFER.ctaHref);
+    await handleCopyCode(); // keep copying the code as a safety net
+    void initiateCheckout({ planName: 'premium', billingInterval: 'monthly', discountCode: OFFER.code });
   };
 
   // Once the deadline passes, nothing renders — chip and popup both disappear.
@@ -371,7 +369,8 @@ export default function PromoOfferChip({ className }: { className?: string }) {
                   <button
                     type="button"
                     onClick={handleUnlock}
-                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-bold transition-transform hover:scale-[1.01]"
+                    disabled={checkoutLoading}
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-bold transition-transform hover:scale-[1.01] disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{
                       color: '#0a0a0a',
                       backgroundImage: 'linear-gradient(135deg, #F4D97B 0%, #C9A646 50%, #A88838 100%)',
@@ -379,7 +378,7 @@ export default function PromoOfferChip({ className }: { className?: string }) {
                     }}
                   >
                     <Crown className="h-5 w-5" />
-                    {OFFER.ctaText}
+                    {checkoutLoading ? 'Opening secure checkout…' : OFFER.ctaText}
                   </button>
 
                   {/* Fineprint */}
