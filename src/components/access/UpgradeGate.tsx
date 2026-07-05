@@ -20,13 +20,13 @@ interface UpgradeGateProps {
   feature: string;
   reason?: 'plan_too_low' | 'daily_limit' | 'monthly_limit';
   message?: string;
-  // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
-  upgradeTarget?: 'finotaur' | 'enterprise';
+  // v3.0.0 (2026-07): 'investor' tier added — active Top Secret ("Investor") subscription
+  upgradeTarget?: 'investor' | 'finotaur' | 'enterprise';
   upgradeDisplayName?: string;
   upgradePrice?: string;
   currentUsage?: number;
   limit?: number;
-  currentPlan?: 'free' | 'finotaur' | 'enterprise';
+  currentPlan?: 'free' | 'investor' | 'finotaur' | 'enterprise';
 }
 
 // ============================================
@@ -34,8 +34,7 @@ interface UpgradeGateProps {
 // ============================================
 
 interface PlanTier {
-  // 'core' removed 2026-06 (Core tier eliminated)
-  key: 'finotaur' | 'enterprise';
+  key: 'investor' | 'finotaur' | 'enterprise';
   name: string;
   price: string;
   description: string;
@@ -46,8 +45,27 @@ interface PlanTier {
   features: string[];
 }
 
-// Core tier removed 2026-06 (zero subscribers) — only Finotaur and Enterprise remain
+// v3.0.0 ladder: Investor ($50) → Finotaur ($89) → Copilot ($200)
 const PLAN_TIERS: PlanTier[] = [
+  {
+    key: 'investor',
+    name: 'Investor',
+    price: '$50',
+    description: 'Intel, research & AI analysis',
+    icon: Eye,
+    accentFrom: '#C9A646',
+    accentTo: '#F4D97B',
+    glow: 'rgba(201,166,70,0.2)',
+    features: [
+      'TOP SECRET — daily institutional report',
+      'Monthly deep-dives — ISM, company, crypto',
+      'Stock Analyzer — 10 AI analyses/day',
+      'Sector & Macro Analyzer',
+      'Research hub — valuation, insiders & 13F, ETFs',
+      'Expanded watchlists & alerts',
+      'Exclusive Discord community',
+    ],
+  },
   {
     key: 'finotaur',
     name: 'Finotaur',
@@ -58,15 +76,14 @@ const PLAN_TIERS: PlanTier[] = [
     accentTo: '#F4D97B',
     glow: 'rgba(201,166,70,0.3)',
     features: [
-      'Stock Analyzer (unlimited)',
-      'Sector Analyzer (unlimited)',
-      'Options Intelligence AI',
-      'Macro Analyzer',
-      'AI Scanner + Insider/13F',
-      '🎁 Journal Premium INCLUDED',
+      'Everything in Investor, plus:',
+      'Options Intelligence AI — exclusive',
+      'Flow Scanner — Dark Pool & institutional',
+      'AI Scanner — daily Top 5 picks',
+      'Unlimited AI analyses + FINO assistant',
+      '🎁 Trader Journal INCLUDED',
       'Unlimited trades + Backtesting',
-      'Up to 40 portfolios',
-      '🎁 TOP SECRET Reports',
+      'Unlimited alerts, screeners & exports',
       'Priority 24h support',
     ],
   },
@@ -111,23 +128,27 @@ export function UpgradeGate({
   const [waitlistJoined, setWaitlistJoined] = useState(false);
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const isLimitReached = reason === 'daily_limit' || reason === 'monthly_limit';
-  const requiredTier = PLAN_TIERS.find(t => t.key === upgradeTarget) || PLAN_TIERS[1];
+  const requiredTier = PLAN_TIERS.find(t => t.key === upgradeTarget)
+    || PLAN_TIERS.find(t => t.key === 'finotaur')!;
 
   const {
     checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
     checkoutPlatformEnterpriseMonthly, checkoutPlatformEnterpriseYearly,
+    initiateCheckout,
     isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message }),
   });
 
-  // 'core' removed 2026-06 (Core tier eliminated, zero subscribers)
-  const handleCheckout = (planKey: 'finotaur' | 'enterprise') => {
+  const handleCheckout = (planKey: 'investor' | 'finotaur' | 'enterprise') => {
     if (!user) {
       navigate('/app/upgrade');
       return;
     }
-    if (planKey === 'finotaur') {
+    if (planKey === 'investor') {
+      // Investor is the rebranded Top Secret product — same Whop plans
+      initiateCheckout({ planName: 'top_secret', billingInterval });
+    } else if (planKey === 'finotaur') {
       billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
     } else if (planKey === 'enterprise') {
       billingInterval === 'yearly' ? checkoutPlatformEnterpriseYearly() : checkoutPlatformEnterpriseMonthly();
@@ -229,7 +250,7 @@ export function UpgradeGate({
         </div>
 
         {/* ── Plan Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 
           {/* ─── FREE CARD ─── */}
           <motion.div
@@ -302,10 +323,97 @@ export function UpgradeGate({
             </div>
           </motion.div>
 
-          {/* ─── FINOTAUR CARD (RECOMMENDED) ─── */}
-          {/* Core tier removed 2026-06 (zero subscribers) — PLAN_TIERS[0] is now finotaur */}
+          {/* ─── INVESTOR CARD ─── */}
           {(() => {
-            const tier = PLAN_TIERS[0];
+            const tier = PLAN_TIERS.find(t => t.key === 'investor')!;
+            const TierIcon = tier.icon;
+            const isRequired = upgradeTarget === 'investor';
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12 }}
+                className="relative rounded-2xl flex flex-col mt-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.15) 100%)',
+                  backdropFilter: 'blur(20px)',
+                  border: currentPlan === 'investor' || isRequired
+                    ? '2px solid rgba(201,166,70,0.5)'
+                    : '1px solid rgba(201,166,70,0.2)',
+                  boxShadow: isRequired
+                    ? '0 6px 30px rgba(201,166,70,0.18), inset 0 1px 0 rgba(255,255,255,0.05)'
+                    : '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)',
+                }}
+              >
+                {(currentPlan === 'investor' || isRequired) && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <div className="px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
+                      style={{
+                        background: 'linear-gradient(135deg, #C9A646, #F4D97B, #C9A646)',
+                        color: '#000',
+                        boxShadow: '0 4px 12px rgba(201,166,70,0.4)',
+                      }}
+                    >
+                      {currentPlan === 'investor' ? 'Your Plan' : 'Unlocks this feature'}
+                    </div>
+                  </div>
+                )}
+                {/* Subtle Shine Effect */}
+                <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
+                     style={{ background: 'linear-gradient(180deg, rgba(244,217,123,0.08) 0%, transparent 100%)' }} />
+
+                <div className="p-6 pt-7 flex flex-col flex-1 relative">
+                  <div className="text-center mb-4">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <TierIcon className="w-4 h-4" style={{ color: '#C9A646' }} />
+                      <span className="text-lg font-bold text-white">{tier.name}</span>
+                    </div>
+                    <div className="flex items-baseline justify-center gap-1 mb-1">
+                      <span className="text-4xl font-bold text-white">
+                        {billingInterval === 'monthly' ? tier.price : '$42'}
+                      </span>
+                      <span className="text-sm text-[#6B6B6B]">/month</span>
+                    </div>
+                    {billingInterval === 'yearly' && (
+                      <span className="text-xs text-green-400">Billed $499/yr</span>
+                    )}
+                    <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
+                  </div>
+
+                  <ul className="space-y-2.5 flex-1">
+                    {tier.features.map((feat, fi) => (
+                      <li key={fi} className="flex items-start gap-2.5">
+                        <div className="w-4 h-4 rounded-full bg-[#C9A646]/15 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.3)' }}>
+                          <Check className="h-2.5 w-2.5 text-[#C9A646]" />
+                        </div>
+                        <span className="text-sm text-[#A8A090] leading-tight">{feat}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {currentPlan !== 'investor' && (
+                    <button
+                      onClick={() => handleCheckout('investor')}
+                      disabled={checkoutLoading}
+                      className="mt-4 w-full py-2.5 rounded-xl text-sm font-semibold transition-all border-2 border-[#C9A646]/40 hover:border-[#C9A646] hover:bg-[#C9A646]/10 text-white"
+                    >
+                      {checkoutLoading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Processing...
+                        </span>
+                      ) : (
+                        'Start 14-day free trial'
+                      )}
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })()}
+
+          {/* ─── FINOTAUR CARD (RECOMMENDED) ─── */}
+          {(() => {
+            const tier = PLAN_TIERS.find(t => t.key === 'finotaur')!;
             const TierIcon = tier.icon;
             return (
               <motion.div

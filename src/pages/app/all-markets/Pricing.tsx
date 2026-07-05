@@ -47,7 +47,10 @@ interface PlanConfig {
 }
 
 // ============================================
-// PLAN CONFIGURATIONS — 5-RUNG LADDER
+// PLAN CONFIGURATIONS — PERSONA LADDER (v3.0.0, 2026-07)
+// Free → Trader ($45, journal) → Investor ($50, intel + research + AI)
+// → FINOTAUR ($89, everything + exclusives) → Copilot ($200)
+// "Investor" is the rebranded Top Secret product — same Whop plans.
 // ============================================
 
 const plans: PlanConfig[] = [
@@ -61,10 +64,11 @@ const plans: PlanConfig[] = [
     trialDays: 0,
     checkoutCategory: 'none',
     features: [
-      'Trading Journal — 15 trades',
-      'Stock Analyzer (3 analyses/day)',
-      '1 watchlist',
+      'Stock Analyzer AI — 3 analyses/day',
+      'Market Pulse & market news',
+      'Demo portfolio — journal with 15 trades',
       'Market screener (basic)',
+      '1 watchlist + 3 price alerts',
       'Community access',
     ],
     cta: 'Free Plan',
@@ -72,11 +76,11 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'journal',
-    name: 'Journal',
+    name: 'Trader',
     monthlyPrice: '$44.99',
     yearlyPrice: '$409',
     yearlyMonthlyEquivalent: '$34',
-    description: "The trader's desk",
+    description: "The trader's desk — journal & execution",
     trialDays: 14,
     trialOnceOnly: false,
     checkoutCategory: 'journal',
@@ -84,10 +88,10 @@ const plans: PlanConfig[] = [
       'Everything in Free, plus:',
       'Unlimited trades — no caps',
       'Trade copier — auto-sync from broker',
-      'Backtest engine',
       'Mentor & community rooms',
       'Full performance analytics',
       'Strategy builder & playbooks',
+      'AI trade insights & coach',
       'Priority support',
     ],
     cta: 'Start 14-Day Trial',
@@ -96,20 +100,22 @@ const plans: PlanConfig[] = [
   },
   {
     id: 'top_secret',
-    name: 'TOP SECRET',
+    name: 'Investor',
     monthlyPrice: '$50',
     yearlyPrice: '$499',
     yearlyMonthlyEquivalent: '$42',
-    description: 'The intel',
+    description: "The investor's desk — intel, research & AI",
     trialDays: 14,
     trialOnceOnly: false,
     checkoutCategory: 'top_secret',
     features: [
-      'Daily institutional market report',
+      'TOP SECRET — daily institutional report',
       'Monthly deep-dives — ISM, company, crypto',
+      'AI Stock Analyzer — 10 analyses/day',
+      'AI Sector & Macro Analyzer',
+      'Research hub — sectors, valuation, insiders & 13F, ETFs',
+      'Expanded watchlists & alerts',
       'Exclusive Discord community',
-      'Trade-room commentary',
-      'Early access to research',
     ],
     cta: 'Start 14-Day Trial',
     featured: false,
@@ -121,22 +127,22 @@ const plans: PlanConfig[] = [
     monthlyPrice: '$89',
     yearlyPrice: '$890',
     yearlyMonthlyEquivalent: '$74',
-    description: 'The Bloomberg of retail — everything in Journal + TOP SECRET + the full market engine',
+    description: 'The Bloomberg of retail — Trader + Investor + the tools sold elsewhere for $400+/mo',
     trialDays: 14,
     trialOnceOnly: false,
     includesJournal: true,
     includesNewsletter: true,
     checkoutCategory: 'platform',
     features: [
-      'Everything in Journal & TOP SECRET, plus:',
-      'Unlimited analyses, alerts & screeners',
-      'Sector Analyzer',
-      'Options Intelligence AI',
-      'Macro Analyzer',
-      'AI Scanner',
+      'Everything in Trader & Investor, plus:',
+      'Options Intelligence AI — exclusive',
+      'Flow Scanner — Dark Pool & institutional flow',
+      'AI Scanner — daily Top 5 picks',
+      'Unlimited AI analyses + FINO assistant',
+      'Backtest engine',
       'Insider / 13F tracker',
       'Market Scanner (Bookmap)',
-      'FINO AI assistant',
+      'Unlimited alerts, screeners & exports',
     ],
     cta: 'Start 14-Day Trial',
     featured: true,
@@ -477,7 +483,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
             <span className="text-[#C9A646]">Plan</span>
           </h1>
           <p className="text-base text-slate-400 max-w-2xl mx-auto">
-            From a free journal to institutional-grade intelligence. One platform, five rungs.
+            Built for who you are: a free start, a Trader desk, an Investor desk — or the full FINOTAUR engine.
           </p>
         </div>
 
@@ -505,7 +511,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   FINOTAUR — The Bloomberg of Retail
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  Full market access + Journal Premium + TOP SECRET + the complete AI engine.
+                  Trader desk + Investor intel + Options Intelligence, Dark Pool flow & unlimited AI — tools sold elsewhere for $400+/mo.
                   {proTrialUsed ? ' Start your subscription today!' : ' Try free for 14 days!'}
                 </p>
               </div>
@@ -746,11 +752,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   <div className="flex flex-wrap justify-center gap-2 mb-4">
                     <span className="flex items-center gap-1.5 bg-[#C9A646]/20 border border-[#C9A646]/50 px-3 py-1.5 rounded-full text-xs font-medium text-[#C9A646]">
                       <Gift className="w-3.5 h-3.5" />
-                      +Journal Premium
+                      +Trader (Journal)
                     </span>
                     <span className="flex items-center gap-1.5 bg-[#C9A646]/20 border border-[#C9A646]/50 px-3 py-1.5 rounded-full text-xs font-medium text-[#C9A646]">
                       <Gift className="w-3.5 h-3.5" />
-                      +TOP SECRET
+                      +Investor (TOP SECRET)
                     </span>
                   </div>
                 )}
@@ -928,7 +934,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                       <>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                          <span>Stock Analyzer ({currentPlatformPlan === 'enterprise' ? 'unlimited' : '7/day'} → 3)</span>
+                          <span>Stock Analyzer (unlimited → 3/day)</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
@@ -969,7 +975,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  Keep My {currentPlatformPlan === 'journal' ? 'Journal' : currentPlatformPlan === 'top_secret' ? 'TOP SECRET' : currentPlatformPlan === 'finotaur' ? 'FINOTAUR' : 'COPILOT'} Plan
+                  Keep My {currentPlatformPlan === 'journal' ? 'Trader' : currentPlatformPlan === 'top_secret' ? 'Investor' : currentPlatformPlan === 'finotaur' ? 'FINOTAUR' : 'COPILOT'} Plan
                 </button>
                 
                 <button
