@@ -91,7 +91,7 @@ export const domains: Record<string, Domain> = {
   'markets': {
     id: 'markets',
     label: 'Markets',
-    locked: false,   // Research Lab — free ($0/user: SEC/FRED/Polygon-flat/cache). Open to all.
+    locked: true,    // 🔒 Locked (Coming Soon) — tab locked in SIDE BAR + HOME like Copilot; admin/beta bypass. (Was: open to all.)
     beta: false,
     defaultPath: '/app/all-markets/screener',   // Overview is Early-Access-gated; land on the open Screener instead.
     subNav: [
