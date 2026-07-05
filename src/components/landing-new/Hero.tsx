@@ -12,7 +12,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/providers/AuthProvider";
 
 // ===========================================
-// 5 Preview components — show, don't tell
+// 4 Preview components — show, don't tell
 // ===========================================
 
 // ============ 1. PlatformPreview — Mini-dashboard ============
@@ -120,46 +120,7 @@ function CopilotPreview() {
   );
 }
 
-// ============ 3. AIPreview — Chat exchange ============
-function AIPreview() {
-  return (
-    <div className="w-full h-full flex flex-col gap-2.5">
-      {/* User bubble */}
-      <div className="self-end max-w-[80%] rounded-[14px] rounded-tr-[2px] bg-[#C9A646]/12 border border-[#C9A646]/20 px-3 py-2">
-        <p className="text-[10.5px] text-white/90 leading-[1.4]">
-          What's driving the semiconductor rally today?
-        </p>
-      </div>
-
-      {/* AI bubble */}
-      <div className="self-start max-w-[92%] rounded-[14px] rounded-tl-[2px] bg-black/45 border border-[#C9A646]/12 px-3 py-2.5 flex flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[#C9A646] text-[10px]">◆</span>
-          <span className="font-sans text-[8.5px] uppercase tracking-[0.22em] text-[#C9A646]/85 font-semibold">FINOTAUR AI</span>
-        </div>
-        <p className="text-[10px] text-white/80 leading-[1.45]">
-          Strong sector rotation — SOXX <span className="text-emerald-400/90 font-mono">+2.1%</span> vs SPY <span className="text-emerald-400/90 font-mono">+0.4%</span>. <strong className="text-white/95">Three drivers:</strong> AVGO AI capex, NVDA holding 200DMA, TSMC orderbook surprise. Watch <span className="text-[#E5C875] font-mono font-semibold">SOXX 215</span> for breakout.
-        </p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="font-sans text-[8px] uppercase tracking-[0.2em] text-white/45 px-1.5 py-0.5 rounded border border-white/10 bg-white/5">Sector Analysis</span>
-          <span className="font-sans text-[8px] uppercase tracking-[0.2em] text-white/45 px-1.5 py-0.5 rounded border border-white/10 bg-white/5">3 sources</span>
-        </div>
-      </div>
-
-      {/* Input prompt */}
-      <div className="mt-auto flex items-center gap-2 px-3 py-2 rounded border border-white/10 bg-black/45">
-        <span className="text-white/35 text-[10px]">Ask about any ticker, sector, or theme...</span>
-        <span className="ml-auto w-px h-3.5 bg-[#C9A646]/85" style={{ animation: 'blink 1s step-end infinite' }} />
-      </div>
-
-      <style>{`
-        @keyframes blink { 50% { opacity: 0; } }
-      `}</style>
-    </div>
-  );
-}
-
-// ============ 4. TopSecretPreview — Classified report cover ============
+// ============ 3. TopSecretPreview — Classified report cover ============
 function TopSecretPreview() {
   return (
     <div className="w-full h-full flex flex-col gap-2 relative">
@@ -200,7 +161,7 @@ function TopSecretPreview() {
   );
 }
 
-// ============ 5. JournalPreview — Trade entry ============
+// ============ 4. JournalPreview — Trade entry ============
 function JournalPreview() {
   return (
     <div className="w-full h-full flex flex-col gap-2">
@@ -473,7 +434,7 @@ const Hero = () => {
   // Carousel state
   const [centerIndex, setCenterIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const cardCount = 5;
+  const cardCount = 4;
 
   // 🔥 PERF FIX: the auto-advance interval used to run forever regardless of
   // whether the carousel was actually visible, causing recurring long tasks
@@ -515,32 +476,27 @@ const Hero = () => {
       stats: ['5 Modules', '24/7 Intelligence', 'Real-time Flow'],
     },
     {
+      key: 'trader',
+      eyebrow: 'THE TRADER',
+      title: 'Trader',
+      tagline: 'The full envelope for the active trader. The journal. The copier. The backtests. The discipline.',
+      Preview: JournalPreview,
+      stats: ['The Journal', 'Trade Copier', 'Backtesting'],
+    },
+    {
+      key: 'investor',
+      eyebrow: 'THE INVESTOR',
+      title: 'Investor',
+      tagline: 'The research desk you were never given. Deep dives. Insider flow. Real SEC filings.',
+      Preview: TopSecretPreview,
+      stats: ['Top Secret Reports', 'Insiders & 13F', 'Company Research'],
+    },
+    {
       key: 'copilot',
       eyebrow: 'AI PORTFOLIO MANAGER',
       title: 'Copilot',
       tagline: 'Your AI portfolio manager — invests and trades alongside you, 24/7. Coming soon.',
       Preview: CopilotPreview,
-    },
-    {
-      key: 'ai',
-      eyebrow: 'AI CO-PILOT',
-      title: 'Ask Anything About the Market',
-      tagline: 'Your personal AI analyst. Trained on flow data, macro signals, and institutional research. Available 24/7.',
-      Preview: AIPreview,
-    },
-    {
-      key: 'topsecret',
-      eyebrow: 'COMPANY ANALYSIS',
-      title: 'Top Secret Reports',
-      tagline: 'Institutional-grade deep-dives on individual names. The thesis. The numbers. The conviction.',
-      Preview: TopSecretPreview,
-    },
-    {
-      key: 'journal',
-      eyebrow: 'TRADE JOURNAL',
-      title: 'The Journal',
-      tagline: 'Track every trade. Backtest every idea. Refine every edge.',
-      Preview: JournalPreview,
     },
   ];
 
@@ -553,12 +509,17 @@ const Hero = () => {
   }, [isPaused, isCarouselOnScreen, isTabVisible]);
 
   const getPosition = (idx: number): 'center' | 'left-1' | 'right-1' | 'left-2' | 'right-2' | 'hidden' => {
+    // Generic over cards.length. Fills right-1, right-2 first (matching the
+    // original 5-card bias), then left-1, left-2 with whatever remains.
+    // 5 cards → center + right-1 + right-2 + left-2 + left-1 (unchanged).
+    // 4 cards → center + right-1 + right-2 + left-1 (no card hidden).
     const offset = ((idx - centerIndex) + cardCount) % cardCount;
     if (offset === 0) return 'center';
-    if (offset === 1) return 'right-1';
-    if (offset === 2) return 'right-2';
-    if (offset === cardCount - 1) return 'left-1';
-    if (offset === cardCount - 2) return 'left-2';
+    const rightSlots = Math.min(2, cardCount - 1);
+    if (offset <= rightSlots) return offset === 1 ? 'right-1' : 'right-2';
+    const leftOffset = cardCount - offset;
+    const leftSlots = cardCount - 1 - rightSlots;
+    if (leftOffset <= leftSlots) return leftOffset === 1 ? 'left-1' : 'left-2';
     return 'hidden';
   };
 
@@ -935,7 +896,7 @@ const Hero = () => {
           </Button>
         </motion.div>
 
-        {/* ========== 5-CARD CAROUSEL STAGE ========== */}
+        {/* ========== 4-CARD CAROUSEL STAGE ========== */}
         <div
           ref={carouselStageRef}
           className="relative w-full mb-12 md:mb-16 hidden md:block"
