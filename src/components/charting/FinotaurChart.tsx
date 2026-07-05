@@ -34,6 +34,10 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 import { WallHeatLayer } from '@/components/charting/WallHeatLayer';
 import { DepthMatrixLayer } from '@/components/charting/DepthMatrixLayer';
+import { FootprintLayer } from '@/components/charting/orderflow/FootprintLayer';
+import type { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
+import type { FootprintConfig } from '@/components/charting/orderflow/types';
+import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import type { DecodedColumn } from '@/pages/app/crypto/scanner/depthTypes';
 import {
   createChart,
@@ -388,6 +392,20 @@ function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
       textColor: t.text,
       fontFamily: t.fontFamily,
       fontSize: t.fontSizeAxis,
+      // Removes the TradingView wordmark from the bottom-left corner — this
+      // is our own branded chart primitive, not an embedded TV widget.
+      attributionLogo: false,
+    },
+    // Faint centered brand mark. Kept at 5% alpha so it never competes with
+    // candles/overlays — "we know the grid exists" territory, same spirit
+    // as the dotted grid below. Site-wide: every FinotaurChart gets one.
+    watermark: {
+      visible: true,
+      text: 'FINOTAUR',
+      color: 'rgba(201, 166, 70, 0.05)',
+      fontSize: 48,
+      horzAlign: 'center',
+      vertAlign: 'center',
     },
     grid: {
       // Dotted, very subtle — "we know the grid exists but it doesn't shout"
@@ -657,6 +675,32 @@ export interface FinotaurChartProps {
    * the liquidity band so price action is always visible in the auto-fit view.
    */
   onBarsLoad?: (range: { high: number; low: number } | null) => void;
+  /**
+   * Optional footprint overlay (ATAS-style bid/ask clusters). When provided,
+   * mounts a FootprintLayer canvas on top of candles, fed by `store`.
+   * Undefined (the default for every existing caller) is a complete no-op —
+   * zero render cost, zero mount.
+   */
+  footprint?: {
+    store: FlowBinStore;
+    config: FootprintConfig;
+    visible: boolean;
+    /**
+     * Fired whenever the zoom-driven detail stage changes (hidden/shaded/full).
+     * Threaded straight through to FootprintLayer's `onStageChange` — see that
+     * component's doc comment for the hysteresis contract. Callers use this to
+     * dim the candlestick series (see `mutedCandles`) while clusters are showing.
+     */
+    onStageChange?: (stage: FootprintDetailLevel) => void;
+  };
+  /**
+   * When true, renders the candlestick series as a thin, semi-transparent
+   * skeleton (dxFeed-style) instead of the normal solid palette — used while
+   * the footprint overlay is showing shaded/full clusters so the candles don't
+   * visually compete with the cluster numbers. Default/undefined = normal
+   * candle colors, zero behavior change for every existing caller.
+   */
+  mutedCandles?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -687,6 +731,8 @@ export function FinotaurChart({
   liquidityBand = null,
   onManualPriceScale,
   onBarsLoad,
+  footprint,
+  mutedCandles,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -853,8 +899,9 @@ export function FinotaurChart({
       const { width: w, height: h } = entry.contentRect;
       if (w > 0 && h > 0) {
         chartRef.current.applyOptions({ width: Math.floor(w), height: Math.floor(h) });
-        // Also track size for WallHeatLayer (heatmap) and DepthMatrixLayer (matrix).
-        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix') {
+        // Also track size for WallHeatLayer (heatmap), DepthMatrixLayer (matrix),
+        // and FootprintLayer (when the footprint prop is provided).
+        if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint) {
           setContainerSize({ w: Math.floor(w), h: Math.floor(h) });
         }
       }
@@ -863,14 +910,18 @@ export function FinotaurChart({
 
     // Seed initial size synchronously — ResizeObserver only fires on *changes*,
     // so if bars load before the first resize the layer would get 0×0 forever.
-    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix') {
+    if (wallRenderMode === 'heatmap' || wallRenderMode === 'matrix' || footprint) {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (w > 0 && h > 0) setContainerSize({ w, h });
     }
 
     return () => ro.disconnect();
-  }, [wallRenderMode]);
+    // footprint is an object prop (new identity every render from most callers);
+    // gating on truthiness only (via the `!!footprint` cast) avoids re-running
+    // this effect (and re-observing the ResizeObserver) on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallRenderMode, !!footprint]);
 
   // ─── Overlay reposition: subscribe to pan/zoom + resize ────
   // Fires setOverlayTick (bumping counter) whenever the visible time range
@@ -1074,6 +1125,40 @@ export function FinotaurChart({
       // Series or price scale may have been removed mid-flight — ignore.
     }
   }, [liquidityBand]);
+
+  // ─── Muted candles (footprint overlay dimming) ──────────────
+  // When `mutedCandles` toggles on, applyOptions() the candle series colors
+  // down to a thin semi-transparent skeleton so the footprint clusters read
+  // clearly on top (dxFeed-reference look). Toggling off restores the normal
+  // theme palette. Undefined/false (every existing caller) never runs this —
+  // additive, zero behavior change.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    try {
+      if (mutedCandles) {
+        series.applyOptions({
+          upColor: 'rgba(34, 197, 94, 0.25)',
+          downColor: 'rgba(220, 38, 38, 0.25)',
+          borderUpColor: 'rgba(34, 197, 94, 0.35)',
+          borderDownColor: 'rgba(220, 38, 38, 0.35)',
+          wickUpColor: 'rgba(22, 163, 74, 0.25)',
+          wickDownColor: 'rgba(185, 28, 28, 0.25)',
+        });
+      } else {
+        series.applyOptions({
+          upColor: themeTokens.candleUp,
+          downColor: themeTokens.candleDown,
+          borderUpColor: themeTokens.candleBorderUp,
+          borderDownColor: themeTokens.candleBorderDown,
+          wickUpColor: themeTokens.candleWickUp,
+          wickDownColor: themeTokens.candleWickDown,
+        });
+      }
+    } catch {
+      // Series may have been removed mid-flight — ignore.
+    }
+  }, [mutedCandles, themeTokens]);
 
   // ─── Imperative time-window re-focus (Fit button) ──────────
   // When `timeFitToken` is bumped by the caller (e.g. scanner "Fit" click),
@@ -1624,6 +1709,26 @@ export function FinotaurChart({
           sizeFilterPct={depthMatrixSizeFilterPct}
           floorUsd={depthMatrixFloorUsd}
           candleIntervalMs={depthMatrixCandleIntervalMs}
+        />
+      )}
+
+      {/* Footprint overlay (ATAS-style bid/ask clusters) — only when the
+          `footprint` prop is provided. Painted above candles (z-index 15,
+          see FootprintLayer.tsx) so clusters read clearly over bars.
+          Mounted once chart + series are ready, same gating as the other
+          canvas overlays above. Undefined `footprint` = zero mount, zero cost. */}
+      {footprint &&
+       chartRef.current && seriesRef.current &&
+       barCount > 0 && (
+        <FootprintLayer
+          chart={chartRef.current}
+          series={seriesRef.current}
+          store={footprint.store}
+          config={footprint.config}
+          visible={footprint.visible}
+          width={containerSize.w || (containerRef.current?.clientWidth ?? 0)}
+          height={containerSize.h || (containerRef.current?.clientHeight ?? 0)}
+          onStageChange={footprint.onStageChange}
         />
       )}
 

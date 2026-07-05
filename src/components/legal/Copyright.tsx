@@ -38,6 +38,20 @@ const Copyright = () => {
             "Finotaur" and its logo are trademarks of Finotaur. Unauthorized use may result in legal action.
           </p>
 
+          <h2 className="text-2xl font-bold mt-12 mb-4">Third-Party Attribution</h2>
+          <p className="mt-6">
+            Charts powered by{' '}
+            <a
+              href="https://www.tradingview.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground"
+            >
+              TradingView Lightweight Charts™
+            </a>
+            .
+          </p>
+
           <p className="mt-16 text-muted-foreground">
             © 2025 Finotaur. All Rights Reserved.
           </p>
