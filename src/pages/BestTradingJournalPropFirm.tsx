@@ -63,12 +63,12 @@ const FAQS = [
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. The Basic plan includes a 14-day free trial so you can connect your accounts and see your journal before paying.",
+      "Yes. The Trader plan includes a 14-day free trial so you can connect your accounts and see your journal before paying — and the free tier lets you try the journal with 15 trades, no card required.",
   },
   {
     question: "How much does it cost?",
     answer:
-      "The journal starts at $24.99/month (Basic) with a 14-day free trial. Premium is $44.99/month and adds unlimited trades, multiple broker connections, the AI trading coach, and the Finotaur Score.",
+      "You can start free with a 15-trade demo portfolio. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, the AI trading coach, and the Finotaur Score.",
   },
 ];
 
@@ -369,12 +369,12 @@ export default function BestTradingJournalPropFirm() {
 
         <div className="grid md:grid-cols-2 gap-ds-5 mt-ds-7 max-w-3xl mx-auto">
           <Card variant="default" padding="default">
-            <h3 className="font-wordmark font-medium text-xl text-ink-primary">Basic</h3>
-            <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$24.99/month</p>
+            <h3 className="font-wordmark font-medium text-xl text-ink-primary">Free</h3>
+            <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$0/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
-              <li>14-day free trial</li>
-              <li>25 trades/month</li>
-              <li>1 broker connection</li>
+              <li>No card required</li>
+              <li>Demo portfolio — 15 trades</li>
+              <li>AI Stock Analyzer — 3 analyses/day</li>
               <li>Full analytics, strategies & Academy</li>
             </ul>
           </Card>
