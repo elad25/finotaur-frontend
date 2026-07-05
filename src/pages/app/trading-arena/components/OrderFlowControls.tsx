@@ -8,6 +8,9 @@
  *   (b) cell-mode segmented control (Bid×Ask | Delta | Volume)
  *   (c) CVD / Delta sub-pane toggles
  *   (d) row-density segmented control (Auto | ×2 | ×4)
+ *   (e) VP (Volume Profile) toggle — ATAS-style visible-range profile overlay
+ *   (f) Heatmap toggle — Bookmap-style liquidity heatmap (DepthMatrixLayer,
+ *       reused as-is from the Market Scanner)
  *
  * Disabled (dimmed, non-interactive) as a single unit when the active symbol
  * is not crypto — order flow only has a Binance trade source today.
@@ -24,6 +27,10 @@ export interface OrderFlowControlsState {
   showCvd: boolean;
   showDelta: boolean;
   rowDensity: RowDensity;
+  /** Volume Profile overlay (ATAS-style visible-range histogram + POC/VA). Default OFF. */
+  showVolumeProfile: boolean;
+  /** Bookmap-style liquidity heatmap (DepthMatrixLayer, reused from the Market Scanner). Default OFF. */
+  showHeatmap: boolean;
 }
 
 export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
@@ -32,6 +39,8 @@ export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   showCvd: false,
   showDelta: false,
   rowDensity: 'auto',
+  showVolumeProfile: false,
+  showHeatmap: false,
 };
 
 interface OrderFlowControlsProps {
@@ -149,6 +158,33 @@ export function OrderFlowControls({
             {opt.label}
           </button>
         ))}
+      </div>
+
+      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+      {/* Volume Profile / Heatmap toggles — independent of the footprint
+          on/off switch above (each is its own overlay layer). */}
+      <div className="flex items-center gap-1" role="group" aria-label="Volume profile and heatmap overlays">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange({ ...state, showVolumeProfile: !state.showVolumeProfile })}
+          className={pillClass(state.showVolumeProfile, disabled)}
+          aria-pressed={state.showVolumeProfile}
+          title="Volume Profile — visible-range volume-by-price with POC/Value Area"
+        >
+          VP
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange({ ...state, showHeatmap: !state.showHeatmap })}
+          className={pillClass(state.showHeatmap, disabled)}
+          aria-pressed={state.showHeatmap}
+          title="Liquidity heatmap — Bookmap-style resting order-book depth"
+        >
+          Heatmap
+        </button>
       </div>
 
       {statusNote && (
