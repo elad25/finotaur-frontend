@@ -16,18 +16,20 @@
 import { useCallback, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
-import { 
-  buildWhopCheckoutUrl, 
-  getPlanId, 
+import {
+  buildWhopCheckoutUrl,
+  getPlanId,
   PLANS,
   WHOP_PLAN_IDS,
-  type PlanName, 
+  type PlanName,
   type BillingInterval,
   type PlanId,
   type SubscriptionCategory,
 } from '@/lib/whop-config';
 import { toast } from 'sonner';
 import { confirmPlanChange } from '@/components/billing/PlanChangeConfirm';
+import { track } from '@/lib/analytics';
+import { getFirstTouch } from '@/lib/analytics/attribution';
 
 // ============================================
 // STORAGE KEYS - Must match useAffiliateDiscount!
@@ -206,7 +208,17 @@ const createCheckoutSession = useCallback(async (params: {
    */
   const initiateCheckout = useCallback(async (params: CheckoutParams) => {
     const { planName, billingInterval, discountCode } = params;
-    
+
+    // 📊 Funnel start — fire before any async work so we capture every attempt,
+    // even ones that fail plan resolution below.
+    track('checkout_click', {
+      plan_name: planName,
+      billing_interval: billingInterval,
+      discount_code: discountCode,
+      page_path: window.location.pathname,
+      ...getFirstTouch(),
+    });
+
     setIsLoading(true);
     setError(null);
 
@@ -215,11 +227,11 @@ const createCheckoutSession = useCallback(async (params: {
       const planId = getPlanId(planName, billingInterval);
       const plan = PLANS[planId];
       const whopPlanId = getWhopPlanId(planName, billingInterval);
-      
+
       if (!plan || !whopPlanId) {
         throw new Error(`Invalid plan: ${planName} ${billingInterval}`);
       }
-      
+
       // 🔥 v4.0: Check for coming soon plans
       if (plan.comingSoon) {
         toast.info(`${plan.displayName} is coming soon!`, {
@@ -293,6 +305,12 @@ const checkoutSession = await createCheckoutSession({
       // user their current plan stays active until renewal, and STOP here —
       // do not fall through to the direct-URL fallback below.
       if (checkoutSession && 'blocked' in checkoutSession && checkoutSession.blocked) {
+        track('checkout_error', {
+          plan_name: planName,
+          billing_interval: billingInterval,
+          reason: (checkoutSession.message || 'blocked').slice(0, 120),
+          page_path: window.location.pathname,
+        });
         setIsLoading(false);
         void confirmPlanChange({
           title: 'Keep your current plan',
@@ -341,6 +359,13 @@ const checkoutSession = await createCheckoutSession({
 
       console.log('🔗 Final checkout URL:', checkoutUrl);
 
+      // 📊 Funnel end — about to hand off to Whop's hosted checkout.
+      track('checkout_redirect', {
+        plan_name: planName,
+        billing_interval: billingInterval,
+        ...getFirstTouch(),
+      });
+
       // Redirect to Whop checkout
       setTimeout(() => {
         window.location.href = checkoutUrl;
@@ -351,6 +376,12 @@ const checkoutSession = await createCheckoutSession({
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Checkout failed';
       console.error('❌ Checkout error:', err);
+      track('checkout_error', {
+        plan_name: planName,
+        billing_interval: billingInterval,
+        reason: errorMessage.slice(0, 120),
+        page_path: window.location.pathname,
+      });
       setError(errorMessage);
       toast.error('Checkout failed', { description: errorMessage });
       options.onError?.(err instanceof Error ? err : new Error(errorMessage));
