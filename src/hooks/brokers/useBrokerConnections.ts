@@ -369,6 +369,11 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
         },
         () => {
           qc.invalidateQueries({ queryKey: ['broker_connections', userId] });
+          // usePortfolios builds the account rows from broker_connections too,
+          // but has no realtime subscription of its own — without this, a fresh
+          // OAuth reconnect updates the status badge instantly while the account
+          // list stays stale until a manual page refresh (2026-07-05).
+          qc.invalidateQueries({ queryKey: ['portfolios', userId] });
         },
       )
       .subscribe();
