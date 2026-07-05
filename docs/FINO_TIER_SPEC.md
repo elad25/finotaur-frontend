@@ -116,15 +116,97 @@ as free ⇒ 3/day) and does not scope tools/data per tier.
 - Ask-Fino entry points to align with tiers: TopSecret dashboard (done),
   research pages (Investor+ framing), journal pages (coach framing).
 
-## 6. Open decisions for the session
+## 6. Decisions (closed 2026-07-05, Elad)
 
-1. Investor daily quota — 25? 15? Unlimited-with-cooldown?
-2. Free teaser frequency — once per conversation? once per day?
-3. Does Trader (journal-only, platform-free) deserve a FINO persona of its own
-   (journal coach), or is the journal-chip composition enough?
-4. Model tiering vs single model — cost table needed.
-5. Naming on screen: FREE / INVESTOR / PRO / ULTIMATE badges — keep "PRO" for
-   the FINOTAUR tier badge or spell "FINOTAUR"?
+1. **Investor daily quota: 25/day.** Feels unlimited for real usage (median
+   3–5/day) while keeping a clear differential vs FINOTAUR's unlimited.
+2. **Free teaser frequency: once per conversation**, and only when
+   contextually relevant. With a 3/day quota this self-limits to ~1–2/day.
+3. **Trader persona: YES — "Journal Coach".** A journal-Premium user with
+   platform=free resolves to the `trader` FINO tier: badge TRADER, coach
+   tagline, journal-first prompts, teasers point to FINOTAUR. Quota 10/day.
+4. **Model tiering: YES.** FREE + TRADER → Haiku-class. INVESTOR+ →
+   Sonnet-class with prompt caching (system + daily report cached).
+   FINOTAUR's differentiation is live data & tools, NOT a bigger model.
+5. **Badge naming: spell "FINOTAUR"** (replaces "PRO") — the user bought a
+   plan called FINOTAUR; a fifth name adds confusion.
+
+## 7. FINO Economy (cost model — decided 2026-07-05)
+
+Per-question API cost estimates (avg question; caching applied where noted):
+
+| Tier | Model | Quota/day | ~cost/question | Typical $/mo | Worst-case $/mo | vs price |
+|---|---|---|---|---|---|---|
+| FREE | Haiku | 3 | $0.006 | ~$0.20 | ~$0.55 | acquisition cost |
+| TRADER | Haiku + journal ctx | 10 | $0.008 | ~$0.70 | ~$2.40 | ≤5% of $44.99 |
+| INVESTOR | Sonnet + report RAG (cached) | 25 | ~$0.023 | ~$3 | ~$17 | typ. 6% of $49 |
+| FINOTAUR | Sonnet + tools (cached) | unlimited (silent cap 100) | ~$0.03 | ~$4.50 | ~$90 | typ. 5% of $89 |
+
+**Economy levers (mandatory in server implementation):**
+1. **Prompt caching** on system prompt + daily TOP SECRET report — the single
+   biggest lever (~70–80% input-cost cut on Sonnet tiers).
+2. **Model routing by tier** (see §6.4). Never expose model names to users.
+3. **max_tokens per tier:** 700 / 900 / 1200 / 1500 (free/trader/investor/finotaur).
+4. **Teaser is metadata, not a second LLM call** — rule-based
+   `teaser_available` flag computed server-side (compute first, LLM last).
+5. **Silent abuse cap** for FINOTAUR at 100/day — caps worst-case cost near
+   break-even; no real user hits it; polite "heavy usage" copy if ever hit.
+6. **Per-call cost logging** to the existing AI cost-logging tables.
+
+Quota reset: UTC midnight, same counter mechanism as today's free 3/day.
+
+## 8. Server implementation spec (`finotaur-server`, Railway)
+
+### 8.1 Tier resolution (middleware, per request)
+```
+resolveFinoTier(userId):
+  plan = supabase.rpc('get_effective_platform_plan', { user_id }) // exists
+  if plan in ('finotaur','enterprise') → 'finotaur' | 'ultimate'
+  if plan == 'investor'                → 'investor'
+  // platform-free: check journal Premium (same source BillingTab uses)
+  if journalPremiumActive(userId)      → 'trader'
+  else                                 → 'free'
+```
+Cache the resolution per user for 5 min (in-memory LRU) — quota checks hit
+every message.
+
+### 8.2 Quotas
+`FINO_QUOTAS = { free: 3, trader: 10, investor: 25, finotaur: 100, ultimate: 100 }`
+(finotaur/ultimate cap is silent — never advertised).
+- Extend the existing daily counter (currently free-only) to all tiers.
+- 429 body when exceeded (English): quota info + upgrade hint for
+  free/trader/investor; generic "heavy usage, resets at midnight UTC" for
+  finotaur+.
+
+### 8.3 `GET /api/ai/usage` response (extended)
+```json
+{ "tier": "trader", "used": 4, "limit": 10, "resetAt": "<iso>",
+  "unlimited": false }
+```
+`unlimited: true` (and `limit: null`) for finotaur/ultimate — the client
+renders quota UI only when `unlimited` is false.
+
+### 8.4 Model routing + max_tokens
+free/trader → haiku-class; investor+ → sonnet-class (current model id per
+server config — do NOT hardcode EOL ids). max_tokens per §7.3. Prompt caching
+headers on system + report blocks.
+
+### 8.5 Tool/data scoping per tier
+| Capability | free | trader | investor | finotaur+ |
+|---|---|---|---|---|
+| Market education / page context | ✅ | ✅ | ✅ | ✅ |
+| Journal context + coaching | ❌ | ✅ | ✅* | ✅ |
+| Report RAG (TOP SECRET) | ❌ | ❌ | ✅ | ✅ |
+| Flow / Dark Pool / Scanner tools | ❌ | ❌ | ❌ | ✅ |
+| FINO actions (auto-tag, screenshot→trade) | ❌ | ❌ | ❌ | ✅ |
+*investor gets journal context only if they ALSO have journal Premium.
+
+### 8.6 Teaser metadata
+Rule-based classifier (keyword/route based, no LLM): if a free/trader
+question touches report content → `teaser_available: "investor"`; if an
+investor question touches flow/options/scanner → `teaser_available:
+"finotaur"`. Max once per conversation (server tracks per-conversation flag).
+Frontend renders the upsell line natively from this flag.
 
 ---
 

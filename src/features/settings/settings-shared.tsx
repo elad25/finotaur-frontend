@@ -231,7 +231,6 @@ export function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 
   if (type === 'journal') {
     const plans: Record<string, { name: string; price: string; color: string }> = {
       free: { name: 'Free', price: '$0', color: 'bg-black/60 text-zinc-300 border-zinc-600/50' },
-      basic: { name: 'Basic', price: '$24.99/mo', color: 'bg-[#CD7F32]/15 text-[#CD7F32] border-[#CD7F32]/40' },
       premium: { name: 'Trader', price: '$44.99/mo', color: 'bg-[#D4D4D8]/15 text-[#D4D4D8] border-[#D4D4D8]/40' },
     };
     return plans[plan || 'free'] || plans.free;
@@ -242,7 +241,6 @@ export function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 
 
   const plans: Record<string, { name: string; price: string; color: string }> = {
     free: { name: 'Free', price: '$0', color: 'bg-black/60 text-zinc-300 border-zinc-600/50' },
-    core: { name: 'Core', price: '$59/mo', color: 'bg-[#A855F7]/15 text-[#A855F7] border-[#A855F7]/40' },
     investor: { name: 'Investor', price: '$49/mo', color: 'bg-[#A855F7]/15 text-[#A855F7] border-[#A855F7]/40' },
     finotaur: { name: 'Finotaur', price: '$89/mo', color: 'bg-[#C9A646]/15 text-[#C9A646] border-[#C9A646]/40' },
     enterprise: { name: 'Ultimate', price: '$200/mo', color: 'bg-[#34D399]/15 text-[#34D399] border-[#34D399]/40' },

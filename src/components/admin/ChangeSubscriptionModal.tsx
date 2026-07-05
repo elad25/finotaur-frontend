@@ -18,9 +18,9 @@ export default function ChangeSubscriptionModal({
   onClose,
   onSuccess,
 }: ChangeSubscriptionModalProps) {
-  // 🔥 v2.0: Default to 'basic' if user was on 'free'
+  // 🔥 v2.0: Default to 'premium' if user was on 'free'
   const [accountType, setAccountType] = useState<AccountType>(
-    user.account_type === 'free' ? 'basic' : user.account_type
+    user.account_type === 'free' ? 'premium' : user.account_type
   );
   const [interval, setInterval] = useState<SubscriptionInterval>(user.subscription_interval || 'monthly');
   const [status, setStatus] = useState(user.subscription_status);
@@ -61,19 +61,8 @@ export default function ChangeSubscriptionModal({
         console.log('📊 [MODAL] Current profile:', currentProfile);
 
         if (currentProfile?.role === 'admin' || currentProfile?.role === 'super_admin') {
-          // 🔥 v2.0: Check if downgrading from premium to basic (no free anymore)
-          const isDowngrade = 
-            currentProfile.account_type === 'premium' &&
-            accountType === 'basic';
-
-          console.log('🔍 [MODAL] Is downgrade?', isDowngrade);
-
-          if (isDowngrade) {
-            console.log('🛑 [MODAL] Downgrade blocked!');
-            setError('⛔ Admins cannot downgrade their own subscription. Please contact another admin.');
-            setLoading(false);
-            return;
-          }
+          // 🔥 v2.0: Only 'premium' remains — no downgrade path to check within this modal.
+          console.log('🔍 [MODAL] Is downgrade?', false);
         }
       }
 
@@ -140,8 +129,8 @@ export default function ChangeSubscriptionModal({
           <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
             <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <p className="text-sm text-amber-400">
-              This user is on the legacy Free plan. The Free tier has been discontinued. 
-              Please upgrade them to Basic or Premium.
+              This user is on the legacy Free plan. The Free tier has been discontinued.
+              Please upgrade them to Premium.
             </p>
           </div>
         )}
@@ -154,7 +143,7 @@ export default function ChangeSubscriptionModal({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Account Type - 🔥 v2.0: Only Basic & Premium */}
+          {/* Account Type - 🔥 v2.0: Only Premium remains (Basic tier removed) */}
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">
               Account Type
@@ -165,19 +154,18 @@ export default function ChangeSubscriptionModal({
               className="w-full bg-[#0A0A0A] border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-[#D4AF37]"
             >
               {/* 🔥 v2.0: REMOVED 'free' option */}
-              <option value="basic">Basic ($24.99/mo - 14-day trial)</option>
               <option value="premium">Premium ($44.99/mo - No trial)</option>
               <option value="trial">Trial (Legacy)</option>
               <option value="admin">Admin</option>
               <option value="vip">VIP</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              Basic includes a 14-day free trial. Premium requires immediate payment.
+              Premium requires immediate payment.
             </p>
           </div>
 
           {/* Billing Interval */}
-          {(accountType === 'basic' || accountType === 'premium') && (
+          {accountType === 'premium' && (
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
                 Billing Interval
@@ -201,8 +189,8 @@ export default function ChangeSubscriptionModal({
                 }}
                 className="w-full bg-[#0A0A0A] border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-[#D4AF37]"
               >
-                <option value="monthly">Monthly - ${accountType === 'basic' ? '24.99' : '44.99'}/mo</option>
-                <option value="yearly">Yearly - ${accountType === 'basic' ? '19.08' : '34.08'}/mo (billed ${accountType === 'basic' ? '$229' : '$409'}/yr)</option>
+                <option value="monthly">Monthly - $44.99/mo</option>
+                <option value="yearly">Yearly - $34.08/mo (billed $409/yr)</option>
               </select>
             </div>
           )}
@@ -217,7 +205,7 @@ export default function ChangeSubscriptionModal({
               onChange={(e) => setStatus(e.target.value as any)}
               className="w-full bg-[#0A0A0A] border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-[#D4AF37]"
             >
-              <option value="trial">Trial (14-day for Basic)</option>
+              <option value="trial">Trial (Legacy)</option>
               <option value="active">Active</option>
               <option value="expired">Expired</option>
               <option value="cancelled">Cancelled</option>
@@ -225,7 +213,7 @@ export default function ChangeSubscriptionModal({
           </div>
 
           {/* Expiry Date */}
-          {(accountType === 'basic' || accountType === 'premium') && (
+          {accountType === 'premium' && (
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
                 Expires At
@@ -252,29 +240,20 @@ export default function ChangeSubscriptionModal({
           )}
 
           {/* Pricing Info */}
-          {(accountType === 'basic' || accountType === 'premium') && (
+          {accountType === 'premium' && (
             <div className="p-3 bg-[#D4AF37]/5 border border-[#D4AF37]/20 rounded-lg">
               <p className="text-sm text-gray-300">
-                <span className="font-semibold text-[#D4AF37]">
-                  {accountType === 'basic' ? 'Basic' : 'Premium'}
-                </span>
+                <span className="font-semibold text-[#D4AF37]">Premium</span>
                 {' - '}
                 {interval === 'monthly' ? (
-                  <>
-                    ${accountType === 'basic' ? '24.99' : '44.99'}/month
-                  </>
+                  <>$44.99/month</>
                 ) : (
                   <>
-                    ${accountType === 'basic' ? '19.08' : '34.08'}/month
-                    <span className="text-xs text-gray-500"> (billed ${accountType === 'basic' ? '$229' : '$409'} yearly)</span>
+                    $34.08/month
+                    <span className="text-xs text-gray-500"> (billed $409 yearly)</span>
                   </>
                 )}
               </p>
-              {accountType === 'basic' && (
-                <p className="text-xs text-blue-400 mt-1">
-                  ℹ️ Basic includes a 14-day free trial
-                </p>
-              )}
             </div>
           )}
 

@@ -17,7 +17,8 @@ import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
-import { FINO_TIERS, resolveFinoTier } from '@/lib/fino-tiers';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { FINO_TIERS, FINO_TIER_QUOTAS, resolveFinoTier } from '@/lib/fino-tiers';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
@@ -138,8 +139,27 @@ function FinoChatPanel({
   const navigate = useNavigate();
 
   // Tier-aware FINO persona: prompts, teasers and upgrade targets per plan.
+  // Journal-premium ("Trader") users on a free platform plan get the coach
+  // persona — same `hasActiveSubscription` signal used across the app
+  // (see useUserProfile.ts), not a separate fetch.
   const { plan } = usePlatformAccess();
-  const finoTier = FINO_TIERS[resolveFinoTier(plan)];
+  const { profile: journalProfile } = useUserProfile();
+  const finoTierKey = resolveFinoTier(plan, journalProfile);
+  const finoTier = FINO_TIERS[finoTierKey];
+
+  // Remaining-questions pill: prefer the server-reported daily_limit (finite,
+  // positive number); otherwise fall back to the client-side quota map.
+  // null → tier is unlimited, pill renders nothing.
+  const serverLimit =
+    usage && Number.isFinite(usage.daily_limit) && usage.daily_limit > 0
+      ? usage.daily_limit
+      : null;
+  const quotaLimit = serverLimit ?? FINO_TIER_QUOTAS[finoTierKey];
+  const questionsUsedDisplay = usage?.questions_today ?? 0;
+  // The existing loud banner already renders "N of M" + a progress bar +
+  // upgrade CTA for the legacy FREE/BASIC server tiers — don't duplicate it
+  // with the subtle pill below.
+  const usesLoudUsageBanner = !!usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC');
 
   // Screenshot → trade extraction state
   const [extractionState, setExtractionState] = useState<ExtractionState>({ phase: 'idle' });
@@ -247,8 +267,22 @@ function FinoChatPanel({
 
         {/* Body — open to all users; soft cap enforced server-side + UsageBanner */}
         <>
-          {usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC') && (
-            <UsageBanner usage={usage} upgrade={finoTier.upgrade} />
+          {usesLoudUsageBanner ? (
+            <UsageBanner usage={usage!} upgrade={finoTier.upgrade} />
+          ) : (
+            /* Remaining-questions pill — quota-capped tiers not already
+               covered by the loud UsageBanner above (trader/investor, or
+               free/basic before `usage` has loaded). Prefers the
+               server-reported limit; falls back to FINO_TIER_QUOTAS when the
+               server doesn't return one for this tier. Renders nothing when
+               the tier is unlimited. */
+            quotaLimit !== null && (
+              <div className="flex-shrink-0 border-b border-border-ds-subtle px-4 py-1.5">
+                <span className="inline-flex items-center rounded-full border border-border-ds-subtle bg-surface-1 px-2 py-0.5 text-[10px] font-medium text-ink-tertiary">
+                  {questionsUsedDisplay} of {quotaLimit} questions today
+                </span>
+              </div>
+            )
           )}
 
           {/* Tier teaser — what FINO can also do on higher plans. Only while the

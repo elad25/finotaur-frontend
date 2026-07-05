@@ -222,18 +222,17 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
   if (type === 'journal') {
     const plans: Record<string, { name: string; price: string; color: string }> = {
       free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-      basic: { name: 'Basic', price: '$30/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
       premium: { name: 'Trader', price: '$44.99/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
     };
     return plans[plan || 'free'] || plans.free;
   }
-  
+
   // Normalize: strip "platform_" prefix if present (DB stores "platform_core", UI uses "core")
   const normalizedPlan = (plan || 'free').replace('platform_', '');
-  
+
   const plans: Record<string, { name: string; price: string; color: string }> = {
     free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-    core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+    investor: { name: 'Investor', price: '$49/mo', color: 'bg-[#A855F7]/15 text-[#A855F7] border-[#A855F7]/40' },
     finotaur: { name: 'Finotaur', price: '$89/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
     enterprise: { name: 'Ultimate', price: '$200/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
   };

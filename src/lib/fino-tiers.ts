@@ -16,11 +16,14 @@
 import {
   Sun, TrendingUp, BarChart3, Bitcoin, Shield, Building2, LineChart,
   Newspaper, HelpCircle, Compass, FileText, Layers, Radar, Activity, Briefcase,
+  BookOpen,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PlatformPlan } from '@/hooks/usePlatformAccess';
+import type { UserProfile } from '@/hooks/useUserProfile';
+import { hasActiveSubscription } from '@/hooks/useUserProfile';
 
-export type FinoTierKey = 'free' | 'investor' | 'finotaur' | 'ultimate';
+export type FinoTierKey = 'free' | 'trader' | 'investor' | 'finotaur' | 'ultimate';
 
 export interface FinoPromptChip {
   icon: LucideIcon;
@@ -48,10 +51,21 @@ export interface FinoTierConfig {
   upgrade: { label: string; sublabel: string } | null;
 }
 
-export function resolveFinoTier(plan: PlatformPlan): FinoTierKey {
+/**
+ * Resolves the platform plan to a FINO tier. When the platform plan is free
+ * but the user has an active journal Premium ("Trader") subscription, they
+ * get the journal-coach FINO experience instead of the bare free tier —
+ * the journal signal comes from the SAME `hasActiveSubscription` check used
+ * elsewhere in the app (see useUserProfile.ts), never a separate fetch.
+ */
+export function resolveFinoTier(
+  plan: PlatformPlan,
+  journalProfile?: UserProfile | null,
+): FinoTierKey {
   if (plan === 'platform_enterprise') return 'ultimate';
   if (plan === 'platform_finotaur') return 'finotaur';
   if (plan === 'platform_investor') return 'investor';
+  if (hasActiveSubscription(journalProfile)) return 'trader';
   return 'free';
 }
 
@@ -80,6 +94,11 @@ const HOME_CHIPS_BY_TIER: Record<FinoTierKey, FinoHomeChip[]> = {
     { label: 'What moved the market today?', query: 'What moved the market today?' },
     { label: 'What events are coming this week?', query: 'What are the key economic events this week?' },
     { label: 'How do I get the most out of FINOTAUR?', query: 'How do I get the most out of FINOTAUR?' },
+  ],
+  trader: [
+    { label: 'Show my best setups', query: 'Show my best setups' },
+    { label: "Review yesterday's trades", query: "Review yesterday's trades" },
+    { label: 'What mistakes am I repeating?', query: 'What mistakes am I repeating?' },
   ],
   investor: [
     { label: "Summarize today's report", query: "Summarize today's TOP SECRET report" },
@@ -119,6 +138,20 @@ const FREE_PROMPTS: FinoPromptChip[][] = [
     { icon: TrendingUp, question: 'Explain what unusual options activity means' },
     { icon: Newspaper, question: 'What are the key economic events this week?' },
     { icon: Compass, question: 'How do I get the most out of FINOTAUR?' },
+  ],
+  [
+    { icon: LineChart, question: 'What is the macro outlook?' },
+    { icon: Bitcoin, question: 'What is the current crypto regime?' },
+    { icon: Shield, question: 'What risks should I watch right now?' },
+  ],
+];
+
+const TRADER_PROMPTS: FinoPromptChip[][] = [
+  [
+    { icon: BookOpen, question: 'Show my best setups' },
+    { icon: HelpCircle, question: "Review yesterday's trades" },
+    { icon: Compass, question: 'What mistakes am I repeating?' },
+    { icon: Newspaper, question: 'What moved the market today?' },
   ],
   [
     { icon: LineChart, question: 'What is the macro outlook?' },
@@ -189,6 +222,22 @@ export const FINO_TIERS: Record<FinoTierKey, FinoTierConfig> = {
       sublabel: 'More questions + report intelligence — $49/mo',
     },
   },
+  trader: {
+    key: 'trader',
+    badge: 'TRADER',
+    tagline: "Your trading coach — trained on your own journal",
+    promptRows: TRADER_PROMPTS,
+    locked: [
+      { icon: FileText, label: 'TOP SECRET report answers', unlockedAt: 'Investor' },
+      { icon: Layers, label: 'Research-aware analysis', unlockedAt: 'Investor' },
+      { icon: Activity, label: 'Options flow & Dark Pool context', unlockedAt: 'FINOTAUR' },
+      { icon: Radar, label: 'AI Scanner picks', unlockedAt: 'FINOTAUR' },
+    ],
+    upgrade: {
+      label: 'Upgrade to FINOTAUR',
+      sublabel: 'Unlimited FINO + the full data desk — $89/mo',
+    },
+  },
   investor: {
     key: 'investor',
     badge: 'INVESTOR',
@@ -206,7 +255,7 @@ export const FINO_TIERS: Record<FinoTierKey, FinoTierConfig> = {
   },
   finotaur: {
     key: 'finotaur',
-    badge: 'PRO',
+    badge: 'FINOTAUR',
     tagline: 'Your full trade desk — flow, scanner & reports',
     promptRows: FINOTAUR_PROMPTS,
     locked: [
@@ -222,4 +271,18 @@ export const FINO_TIERS: Record<FinoTierKey, FinoTierConfig> = {
     locked: [],
     upgrade: null,
   },
+};
+
+// ---------------------------------------------------------------------------
+// Client-side quota fallback (display only) — the server is the source of
+// truth for enforcement (finotaur-server /api/ai/usage); this map is used
+// when the usage response doesn't return a limit for the tier.
+// null = unlimited.
+// ---------------------------------------------------------------------------
+export const FINO_TIER_QUOTAS: Record<FinoTierKey, number | null> = {
+  free: 3,
+  trader: 10,
+  investor: 25,
+  finotaur: null,
+  ultimate: null,
 };

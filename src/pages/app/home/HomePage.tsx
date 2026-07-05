@@ -62,7 +62,7 @@ export default function HomePage() {
   const { plan } = usePlatformAccess();
   const hasActiveJournal =
     profile?.account_type === 'premium' || profile?.account_type === 'basic';
-  const promptChips = getFinoHomeChips(resolveFinoTier(plan), hasActiveJournal);
+  const promptChips = getFinoHomeChips(resolveFinoTier(plan, profile), hasActiveJournal);
 
   // Never fall back to the user's email for the greeting — showing it (even
   // momentarily, before the profile resolves) reads as a bug. While the
