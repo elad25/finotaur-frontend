@@ -29,7 +29,7 @@ import {
 import { toast } from 'sonner';
 import { confirmPlanChange } from '@/components/billing/PlanChangeConfirm';
 import { track } from '@/lib/analytics';
-import { getFirstTouch } from '@/lib/analytics/attribution';
+import { getFirstTouch, getTouches, getTouchSummary } from '@/lib/analytics/attribution';
 
 // ============================================
 // STORAGE KEYS - Must match useAffiliateDiscount!
@@ -217,6 +217,8 @@ const createCheckoutSession = useCallback(async (params: {
       discount_code: discountCode,
       page_path: window.location.pathname,
       ...getFirstTouch(),
+      touches: getTouches().slice(-10),
+      ...getTouchSummary(),
     });
 
     setIsLoading(true);
@@ -364,6 +366,8 @@ const checkoutSession = await createCheckoutSession({
         plan_name: planName,
         billing_interval: billingInterval,
         ...getFirstTouch(),
+        touches: getTouches().slice(-10),
+        ...getTouchSummary(),
       });
 
       // Redirect to Whop checkout

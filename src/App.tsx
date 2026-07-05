@@ -112,7 +112,7 @@ import NotFound from "./pages/NotFound";
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
-import { captureFirstTouch } from "@/lib/analytics/attribution";
+import { captureFirstTouch, captureTouch } from "@/lib/analytics/attribution";
 
 // LAZY LOADED PAGES
 
@@ -453,6 +453,10 @@ function AppContent() {
 
   // Capture first-touch attribution on first render (runs once, idempotent).
   useEffect(() => { captureFirstTouch(); }, []);
+
+  // Capture every ad click-through in the multi-touch chain (not idempotent —
+  // appends a new touch per qualifying page load, deduped/capped internally).
+  useEffect(() => { captureTouch(); }, []);
 
   return (
     <>
