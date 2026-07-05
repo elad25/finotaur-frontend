@@ -44,7 +44,7 @@ import { BinanceTradeSource } from '@/components/charting/orderflow/BinanceTrade
 import { useOrderFlow } from '@/components/charting/orderflow/useOrderFlow';
 import { FlowBinStore } from '@/components/charting/orderflow/flowBinStore';
 import { DEFAULT_FOOTPRINT_CONFIG } from '@/components/charting/orderflow/types';
-import type { FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
+import { resolveImbalancePreset, type FootprintDetailLevel } from '@/components/charting/orderflow/footprintRender';
 import { PaperTradeRail } from '../components/PaperTradeRail';
 import {
   OrderFlowControls,
@@ -235,7 +235,13 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
               onBarsLoad={handleBarsLoad}
               footprint={{
                 store,
-                config: { ...DEFAULT_FOOTPRINT_CONFIG, cellMode: controls.cellMode },
+                config: {
+                  ...DEFAULT_FOOTPRINT_CONFIG,
+                  cellMode: controls.cellMode,
+                  imbalancePreset: controls.imbalancePreset,
+                  ...resolveImbalancePreset(controls.imbalancePreset),
+                  showStats: controls.showStats,
+                },
                 visible: orderFlowActive,
                 onStageChange: handleStageChange,
               }}

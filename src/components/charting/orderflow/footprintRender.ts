@@ -6,7 +6,19 @@
 // merging) happens in `prepareCandleDraw`, which callers invoke ONLY when
 // data or config changes — never per pan/zoom frame (see FootprintLayer.tsx).
 
-import type { FlowBin, FlowCandleView, FootprintCellMode, FootprintConfig } from './types';
+import type {
+  FlowBin,
+  FlowCandleView,
+  FootprintCellMode,
+  FootprintConfig,
+  ImbalancePreset,
+} from './types';
+import {
+  DEFAULT_IMBALANCE_MIN_VOL_PCT,
+  DEFAULT_STACKED_MIN,
+  STANDARD_IMBALANCE_RATIO,
+  STRICT_IMBALANCE_RATIO,
+} from './types';
 import {
   FOOTPRINT_BUY_BG,
   FOOTPRINT_BUY_BG_STRONG,
@@ -186,6 +198,54 @@ function mergeBins(bins: FlowBin[], factor: 1 | 2 | 4, rowSize: number): MergedB
   return Array.from(groups.values()).sort((a, b) => a.binPrice - b.binPrice);
 }
 
+// ─── Imbalance presets ───────────────────────────────────────────────────────
+
+/** Resolved concrete thresholds for one of the 3 opinionated imbalance presets. */
+export interface ResolvedImbalanceConfig {
+  imbalanceRatio: number;
+  imbalanceMinVolPct: number;
+  stackedMin: number;
+  imbalanceStackedOnly: boolean;
+}
+
+/**
+ * Resolve an `ImbalancePreset` name to its concrete threshold tuple. Pure —
+ * no data dependency — so callers (OrderFlowControls) can spread the result
+ * straight into a `FootprintConfig` update.
+ *
+ * - 'standard': 1.5x ratio, 0.5% dust filter, singles highlighted.
+ * - 'strict': 3.0x ratio, same dust filter, singles highlighted.
+ * - 'stacked': same thresholds as 'standard', but only runs of >= stackedMin
+ *   consecutive same-side imbalances are highlighted per-cell (isolated
+ *   singles are suppressed — see `PreparedCandleDraw.imbalances[i].highlighted`).
+ */
+export function resolveImbalancePreset(preset: ImbalancePreset): ResolvedImbalanceConfig {
+  switch (preset) {
+    case 'strict':
+      return {
+        imbalanceRatio: STRICT_IMBALANCE_RATIO,
+        imbalanceMinVolPct: DEFAULT_IMBALANCE_MIN_VOL_PCT,
+        stackedMin: DEFAULT_STACKED_MIN,
+        imbalanceStackedOnly: false,
+      };
+    case 'stacked':
+      return {
+        imbalanceRatio: STANDARD_IMBALANCE_RATIO,
+        imbalanceMinVolPct: DEFAULT_IMBALANCE_MIN_VOL_PCT,
+        stackedMin: DEFAULT_STACKED_MIN,
+        imbalanceStackedOnly: true,
+      };
+    case 'standard':
+    default:
+      return {
+        imbalanceRatio: STANDARD_IMBALANCE_RATIO,
+        imbalanceMinVolPct: DEFAULT_IMBALANCE_MIN_VOL_PCT,
+        stackedMin: DEFAULT_STACKED_MIN,
+        imbalanceStackedOnly: false,
+      };
+  }
+}
+
 // ─── Imbalance detection ────────────────────────────────────────────────────
 
 export type ImbalanceSide = 'buy' | 'sell' | null;
@@ -193,6 +253,15 @@ export type ImbalanceSide = 'buy' | 'sell' | null;
 interface RowImbalance {
   /** 'buy' = ask at this level dominates bid one level down; 'sell' = inverse. */
   side: ImbalanceSide;
+  /**
+   * Whether this row's imbalance should actually be painted (per-cell
+   * outline/bold text). Equal to `side !== null` for Standard/Strict.
+   * For the Stacked preset (`config.imbalanceStackedOnly`), this is only
+   * true when the row belongs to a run of >= stackedMin consecutive
+   * same-side imbalances — set by `applyStackedOnlyFilter` after
+   * `detectStackedZones` runs.
+   */
+  highlighted: boolean;
 }
 
 /**
@@ -206,7 +275,7 @@ function detectImbalances(
   config: FootprintConfig,
 ): RowImbalance[] {
   const minVol = totalVol * (config.imbalanceMinVolPct / 100);
-  const out: RowImbalance[] = new Array(merged.length).fill(null).map(() => ({ side: null }));
+  const out: RowImbalance[] = new Array(merged.length).fill(null).map(() => ({ side: null, highlighted: false }));
 
   for (let i = 0; i < merged.length; i++) {
     const row = merged[i];
@@ -214,6 +283,9 @@ function detectImbalances(
     if (rowVol < minVol) continue;
 
     // Ask (buyVol) at level i vs bid (sellVol) at level i-1 → buy-side imbalance.
+    // The `below.sellVol > 0` check is the zero-opposite-side guard: without
+    // it, a reference row with zero volume would make ANY buyVol trivially
+    // "infinite ratio" and always flag — see imbalancePresets.test.ts.
     if (i > 0) {
       const below = merged[i - 1];
       if (below.sellVol > 0 && row.buyVol >= below.sellVol * config.imbalanceRatio) {
@@ -230,7 +302,31 @@ function detectImbalances(
       }
     }
   }
+
+  // Standard/Strict: every detected imbalance is highlighted (singles included).
+  // Stacked: highlighted is set later by applyStackedOnlyFilter, once the
+  // stacked-run membership is known — default false here for that preset.
+  if (!config.imbalanceStackedOnly) {
+    for (const entry of out) {
+      entry.highlighted = entry.side !== null;
+    }
+  }
   return out;
+}
+
+/**
+ * For the 'stacked' preset only: mark `highlighted = true` on exactly the
+ * rows that belong to a qualifying stacked run (>= stackedMin consecutive
+ * same-side imbalances). Isolated singles (runs shorter than stackedMin,
+ * including runs of 1) stay `highlighted = false` even though `side` is
+ * still set (side is retained for stacked-zone-band computation elsewhere).
+ */
+function applyStackedOnlyFilter(imbalances: RowImbalance[], zones: StackedZone[]): void {
+  for (const zone of zones) {
+    for (let i = zone.fromIdx; i <= zone.toIdx; i++) {
+      if (imbalances[i]) imbalances[i].highlighted = true;
+    }
+  }
 }
 
 /** A contiguous run of `stackedMin`+ same-side imbalanced rows. */
@@ -299,6 +395,9 @@ export function prepareCandleDraw(
   const merged = mergeBins(candle.bins, mergeFactor, rowSize);
   const imbalances = detectImbalances(merged, candle.totalVol, config);
   const stackedZones = detectStackedZones(imbalances, config.stackedMin);
+  if (config.imbalanceStackedOnly) {
+    applyStackedOnlyFilter(imbalances, stackedZones);
+  }
 
   let maxRowVol = 0;
   let pocBinPrice: number | null = null;
@@ -391,7 +490,11 @@ export function drawCandleFootprint(
     // enough to skip here without an extra viewport-height check).
 
     const isPoc = config.showPoc && prepared.pocBinPrice === row.binPrice;
-    const imbalance = prepared.imbalances[i]?.side ?? null;
+    // Only rows marked `highlighted` get the visual accent — for the Stacked
+    // preset this excludes isolated singles even though `side` is still set
+    // (side stays available for stacked-zone-band computation elsewhere).
+    const rowImbalance = prepared.imbalances[i];
+    const imbalance: ImbalanceSide = rowImbalance?.highlighted ? rowImbalance.side : null;
 
     drawCell(ctx, {
       leftX,
@@ -591,6 +694,156 @@ export function drawTotalsRowAt(
     midX,
     top + TOTALS_ROW_HEIGHT + TOTALS_ROW_HEIGHT / 2,
   );
+}
+
+// ─── Cluster Statistics strip (ATAS-style, 6 rows) ──────────────────────────
+// Extends the compact 2-row totals band above into a per-bar statistics
+// table: Volume, Delta, Delta%, Max Δ, Min Δ, Session Δ — one column per
+// visible bar, a left-edge label gutter naming each row. Gated behind
+// config.showStats; when false, callers keep using drawTotalsRowAt (the
+// original compact behavior is untouched — see FootprintLayer.tsx wiring).
+
+/** One bar's derived statistics row — computed once per candle (cached alongside PreparedCandleDraw), never per-frame. */
+export interface ClusterStatsRow {
+  volume: number;
+  delta: number;
+  /** delta / volume, as a fraction (e.g. -0.0769 for -7.7%) — 0 when volume is 0. */
+  deltaPct: number;
+  /** Pre-formatted "±N.N%" label (1 decimal), guarded against div-by-zero. */
+  deltaPctLabel: string;
+  maxDelta: number;
+  minDelta: number;
+  /** Running cumulative delta across all loaded candles up to and including this one (caller-supplied — see getCvdSeries). */
+  sessionDelta: number;
+}
+
+/**
+ * Derive one bar's 6-row statistics from its FlowCandleView plus a
+ * caller-supplied running session delta (from FlowBinStore.getCvdSeries —
+ * NOT recomputed here, so this stays a cheap per-candle O(1) derivation with
+ * no scan over other candles).
+ */
+export function buildClusterStatsRow(
+  candle: Pick<FlowCandleView, 'totalVol' | 'delta' | 'minDelta' | 'maxDelta'>,
+  sessionDelta: number,
+): ClusterStatsRow {
+  const volume = candle.totalVol;
+  const delta = candle.delta;
+  const deltaPct = volume > 0 ? delta / volume : 0;
+  const deltaPctLabel = `${(deltaPct * 100).toFixed(1)}%`;
+  return {
+    volume,
+    delta,
+    deltaPct,
+    deltaPctLabel,
+    maxDelta: candle.maxDelta,
+    minDelta: candle.minDelta,
+    sessionDelta,
+  };
+}
+
+/** Per-row maxima (computed once per draw over the visible bars) driving the heat-shading alpha — see drawStatsBandAt. */
+export interface ClusterStatsRowMaxima {
+  volume: number;
+  delta: number;
+  deltaPct: number;
+  maxDelta: number;
+  minDelta: number;
+  sessionDelta: number;
+}
+
+const STATS_ROW_HEIGHT = 12;
+const STATS_ROW_COUNT = 6;
+/** Extra label-gutter is handled by the caller's leftX offset — band height is just row-count * row-height. */
+export const FOOTPRINT_STATS_BAND_HEIGHT = STATS_ROW_HEIGHT * STATS_ROW_COUNT;
+
+interface StatsRowDef {
+  key: keyof ClusterStatsRow & keyof ClusterStatsRowMaxima;
+  label: string;
+  /** Pre-formatted label for this row's value, or undefined to use formatCellValue(value). */
+  formatValue: (stats: ClusterStatsRow) => string;
+  /** true = color the value text by sign (Delta/Delta%/Max Δ/Min Δ/Session Δ); false = neutral (Volume). */
+  colorBySign: boolean;
+}
+
+const STATS_ROW_DEFS: StatsRowDef[] = [
+  { key: 'volume', label: 'Volume', formatValue: (s) => formatCellValue(s.volume), colorBySign: false },
+  { key: 'delta', label: 'Delta', formatValue: (s) => formatCellValue(s.delta), colorBySign: true },
+  { key: 'deltaPct', label: 'Delta%', formatValue: (s) => s.deltaPctLabel, colorBySign: true },
+  { key: 'maxDelta', label: 'Max Δ', formatValue: (s) => formatCellValue(s.maxDelta), colorBySign: true },
+  { key: 'minDelta', label: 'Min Δ', formatValue: (s) => formatCellValue(s.minDelta), colorBySign: true },
+  { key: 'sessionDelta', label: 'Session Δ', formatValue: (s) => formatCellValue(s.sessionDelta), colorBySign: true },
+];
+
+/** One bar's column input to drawStatsBandAt. */
+export interface StatsBarColumn {
+  prepared: PreparedCandleDraw;
+  stats: ClusterStatsRow;
+  leftX: number;
+  rightX: number;
+}
+
+/**
+ * Draw the 6-row Cluster Statistics strip across all visible bars in one
+ * call. `bounds.rowMaxima` must be computed ONCE per draw by the caller
+ * (see computeRowMaxima in the test file / FootprintLayer.tsx) — this
+ * function never scans other bars' data itself, keeping it a pure
+ * per-frame-cheap render step (no per-frame data scans, per the task's
+ * hard constraint).
+ */
+export function drawStatsBandAt(
+  ctx: CanvasRenderingContext2D,
+  bars: StatsBarColumn[],
+  bounds: { top: number; labelGutterWidth: number; rowMaxima: ClusterStatsRowMaxima },
+): void {
+  const { top, labelGutterWidth, rowMaxima } = bounds;
+
+  ctx.font = `${FOOTPRINT_TOTALS_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+  ctx.textBaseline = 'middle';
+
+  // Backdrop across the whole strip (label gutter + all bar columns).
+  const rightmostX = bars.reduce((max, b) => Math.max(max, b.rightX), labelGutterWidth);
+  ctx.fillStyle = FOOTPRINT_TOTALS_BG;
+  ctx.fillRect(0, top, rightmostX, FOOTPRINT_STATS_BAND_HEIGHT);
+
+  for (let rowIdx = 0; rowIdx < STATS_ROW_DEFS.length; rowIdx++) {
+    const def = STATS_ROW_DEFS[rowIdx];
+    const rowTop = top + rowIdx * STATS_ROW_HEIGHT;
+    const rowMid = rowTop + STATS_ROW_HEIGHT / 2;
+    const rowMax = rowMaxima[def.key];
+
+    // Row label, left-aligned in the gutter.
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'left';
+    ctx.fillText(def.label, FOOTPRINT_CELL_PADDING_X, rowMid);
+
+    for (const bar of bars) {
+      const width = bar.rightX - bar.leftX;
+      if (width <= 0) continue;
+      const value = bar.stats[def.key];
+      const magnitude = rowMax > 0 ? Math.min(1, Math.abs(value) / rowMax) : 0;
+
+      // Subtle heat-shading background, proportional to |value| relative to
+      // the visible-range max for this row — cheap: rowMax passed in, not
+      // recomputed here.
+      if (magnitude > 0) {
+        ctx.fillStyle = mixAlpha('rgba(201, 166, 70, 0)', 'rgba(201, 166, 70, 0.22)', magnitude);
+        ctx.fillRect(bar.leftX, rowTop, width, STATS_ROW_HEIGHT);
+      }
+
+      const midX = bar.leftX + width / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = !def.colorBySign
+        ? FOOTPRINT_NEUTRAL_TEXT
+        : value === 0
+          ? FOOTPRINT_NEUTRAL_TEXT
+          : value > 0
+            ? FOOTPRINT_BUY_COLOR_BRIGHT
+            : FOOTPRINT_SELL_COLOR_BRIGHT;
+      ctx.fillText(def.formatValue(bar.stats), midX, rowMid);
+    }
+  }
+  ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }
 
 /**

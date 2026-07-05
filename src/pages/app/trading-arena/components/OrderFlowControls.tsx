@@ -17,7 +17,7 @@
  */
 
 import { cn } from '@/lib/utils';
-import type { FootprintCellMode } from '@/components/charting/orderflow/types';
+import type { FootprintCellMode, ImbalancePreset } from '@/components/charting/orderflow/types';
 
 export type RowDensity = 'auto' | 'x2' | 'x4';
 
@@ -31,6 +31,10 @@ export interface OrderFlowControlsState {
   showVolumeProfile: boolean;
   /** Bookmap-style liquidity heatmap (DepthMatrixLayer, reused from the Market Scanner). Default OFF. */
   showHeatmap: boolean;
+  /** Diagonal-imbalance highlighting preset — Standard/Strict/Stacked (see resolveImbalancePreset). Default 'standard'. */
+  imbalancePreset: ImbalancePreset;
+  /** Cluster Statistics 6-row strip (Volume/Delta/Delta%/Max Δ/Min Δ/Session Δ). Default ON; OFF falls back to the compact totals row. */
+  showStats: boolean;
 }
 
 export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
@@ -41,6 +45,8 @@ export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   rowDensity: 'auto',
   showVolumeProfile: false,
   showHeatmap: false,
+  imbalancePreset: 'standard',
+  showStats: true,
 };
 
 interface OrderFlowControlsProps {
@@ -66,6 +72,12 @@ const ROW_DENSITY_OPTIONS: { value: RowDensity; label: string }[] = [
   { value: 'auto', label: 'Auto' },
   { value: 'x2', label: '×2' },
   { value: 'x4', label: '×4' },
+];
+
+const IMBALANCE_PRESET_OPTIONS: { value: ImbalancePreset; label: string; title: string }[] = [
+  { value: 'standard', label: 'Standard', title: 'Standard — 150% diagonal ratio, singles highlighted' },
+  { value: 'strict', label: 'Strict', title: 'Strict — 300% diagonal ratio, singles highlighted' },
+  { value: 'stacked', label: 'Stacked', title: 'Stacked — 150% ratio, only runs of 3+ consecutive levels highlighted' },
 ];
 
 function pillClass(active: boolean, disabled: boolean): string {
@@ -164,9 +176,29 @@ export function OrderFlowControls({
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
 
-      {/* Volume Profile / Heatmap toggles — independent of the footprint
-          on/off switch above (each is its own overlay layer). */}
-      <div className="flex items-center gap-1" role="group" aria-label="Volume profile and heatmap overlays">
+      {/* Imbalance preset segmented control — opinionated presets over
+          ATAS's ~400-setting maze. See resolveImbalancePreset in
+          footprintRender.ts for the exact thresholds per preset. */}
+      <div className="flex items-center gap-1" role="group" aria-label="Imbalance preset">
+        {IMBALANCE_PRESET_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled || !state.enabled}
+            onClick={() => onChange({ ...state, imbalancePreset: opt.value })}
+            className={pillClass(state.imbalancePreset === opt.value, disabled || !state.enabled)}
+            title={opt.title}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+      {/* Volume Profile / Heatmap / Stats toggles — independent of the
+          footprint on/off switch above (each is its own overlay/render mode). */}
+      <div className="flex items-center gap-1" role="group" aria-label="Volume profile, heatmap and stats overlays">
         <button
           type="button"
           disabled={disabled}
@@ -186,6 +218,16 @@ export function OrderFlowControls({
           title="Liquidity heatmap — Bookmap-style resting order-book depth"
         >
           Heatmap
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !state.enabled}
+          onClick={() => onChange({ ...state, showStats: !state.showStats })}
+          className={pillClass(state.showStats, disabled || !state.enabled)}
+          aria-pressed={state.showStats}
+          title="Cluster Statistics — per-bar Volume/Delta/Delta%/Max Δ/Min Δ/Session Δ strip"
+        >
+          Stats
         </button>
       </div>
 

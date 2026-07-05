@@ -35,8 +35,14 @@ import {
   computeRowMergeFactor,
   drawCandleFootprint,
   drawTotalsRowAt,
+  drawStatsBandAt,
+  buildClusterStatsRow,
   prepareCandleDraw,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
+  FOOTPRINT_STATS_BAND_HEIGHT,
+  type ClusterStatsRow,
+  type ClusterStatsRowMaxima,
+  type StatsBarColumn,
   type FootprintDetailLevel,
   type PreparedCandleDraw,
 } from './footprintRender';
@@ -106,6 +112,14 @@ export function FootprintLayer({
   // Prepared per-candle draw cache, rebuilt only on data/config dirty.
   // Keyed by candle time (seconds).
   const preparedCacheRef = useRef<Map<number, PreparedCandleDraw>>(new Map());
+  // Cluster-Statistics per-candle cache (Volume/Delta/Max Δ/Min Δ) — depends
+  // only on the candle's own data (never on cellMode/imbalance thresholds),
+  // so it's invalidated by the same data-dirty path as preparedCacheRef but
+  // NOT by imbalance-config changes (see the two invalidation effects below).
+  // sessionDelta is intentionally NOT baked in here — it depends on the
+  // whole visible window's running CVD, recomputed once per dirty frame via
+  // store.getCvdSeries() (see the draw loop), not per-candle.
+  const statsCacheRef = useRef<Map<number, Omit<ClusterStatsRow, 'sessionDelta'>>>(new Map());
   // Row size the cache was built with — a rowSize change invalidates everything.
   const cachedRowSizeRef = useRef<number>(-1);
   // Current detail stage — feeds computeDetailLevel's hysteresis (previousStage)
@@ -119,25 +133,27 @@ export function FootprintLayer({
     });
     dirtyRef.current = true; // store identity changed (symbol/interval swap) — force rebuild
     preparedCacheRef.current.clear();
+    statsCacheRef.current.clear();
     return unsubscribe;
   }, [store]);
 
   // ── Mark dirty on config change ──────────────────────────────────────────
-  // cellMode/showTotals/showPoc are read fresh at draw time in
+  // cellMode/showTotals/showPoc/showStats are read fresh at draw time in
   // footprintRender.ts (never baked into PreparedCandleDraw), so switching
   // between them is render-only and does NOT require a cache rebuild — this
   // is what lets Phase 3's mode-strip UI flip cellMode without any store or
-  // prep-cache cost. Only imbalanceRatio/imbalanceMinVolPct/stackedMin are
-  // baked into the prepared structure (they drive detectImbalances /
-  // detectStackedZones at prep time) and require a rebuild when they change.
+  // prep-cache cost. Only imbalanceRatio/imbalanceMinVolPct/stackedMin/
+  // imbalanceStackedOnly are baked into the prepared structure (they drive
+  // detectImbalances/detectStackedZones/applyStackedOnlyFilter at prep time)
+  // and require a rebuild when they change.
   useEffect(() => {
     dirtyRef.current = true;
-  }, [config.cellMode, config.showTotals, config.showPoc]);
+  }, [config.cellMode, config.showTotals, config.showPoc, config.showStats]);
 
   useEffect(() => {
     dirtyRef.current = true;
     preparedCacheRef.current.clear();
-  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin]);
+  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly]);
 
   // ── Mark dirty on size/visibility change ─────────────────────────────────
   useEffect(() => {
@@ -254,6 +270,7 @@ export function FootprintLayer({
         if (cachedRowSizeRef.current !== rowSize) {
           cachedRowSizeRef.current = rowSize;
           preparedCacheRef.current.clear();
+          statsCacheRef.current.clear();
         }
 
         // ── Resolve bar-snapped anchors for time→x extrapolation ───────────
@@ -318,6 +335,23 @@ export function FootprintLayer({
         const latestCandle = candles[candles.length - 1];
         const latestRange = computeCandleRange(latestCandle, rowSize);
 
+        // Session Δ (running cumulative delta from the oldest LOADED candle,
+        // not a global CVD) — computed ONCE per dirty frame via
+        // getCvdSeries(), never per-candle/per-frame-scan. Only needed when
+        // the stats strip is actually going to render (showStats + 'full').
+        const needsStats = config.showStats && detail === 'full';
+        const cvdByTime = new Map<number, number>();
+        if (needsStats && candles.length > 0) {
+          const cvdSeries = activeStore.getCvdSeries(candles[0].time, candles[candles.length - 1].time);
+          for (const point of cvdSeries) cvdByTime.set(point.time, point.cvd);
+        }
+
+        // Bar columns collected for a single batched stats-band draw call
+        // after the per-candle footprint loop (drawStatsBandAt computes
+        // heat-shading row maxima once across all visible bars).
+        const statsBars: StatsBarColumn[] = [];
+        const totalsBars: { prepared: PreparedCandleDraw; leftX: number; rightX: number }[] = [];
+
         for (const candle of candles) {
           const x = timeToX(candle.time);
           if (x + candleWidthPx / 2 < 0 || x - candleWidthPx / 2 > paneW) continue; // cull
@@ -355,11 +389,57 @@ export function FootprintLayer({
             },
           );
 
-          if (config.showTotals && detail === 'full') {
-            const totalsTop = cssH - FOOTPRINT_TOTALS_BAND_HEIGHT;
-            drawTotalsRowAt(ctx, prepared, {
-              leftX: Math.max(0, x - candleWidthPx / 2),
-              rightX: Math.min(paneW, x + candleWidthPx / 2),
+          if (detail === 'full') {
+            const barLeftX = Math.max(0, x - candleWidthPx / 2);
+            const barRightX = Math.min(paneW, x + candleWidthPx / 2);
+            if (config.showStats) {
+              let cached = statsCacheRef.current.get(candle.time);
+              if (!cached) {
+                const built = buildClusterStatsRow(candle, 0);
+                cached = { volume: built.volume, delta: built.delta, deltaPct: built.deltaPct, deltaPctLabel: built.deltaPctLabel, maxDelta: built.maxDelta, minDelta: built.minDelta };
+                statsCacheRef.current.set(candle.time, cached);
+              }
+              const sessionDelta = cvdByTime.get(candle.time) ?? 0;
+              statsBars.push({
+                prepared,
+                stats: { ...cached, sessionDelta },
+                leftX: barLeftX,
+                rightX: barRightX,
+              });
+            } else if (config.showTotals) {
+              totalsBars.push({ prepared, leftX: barLeftX, rightX: barRightX });
+            }
+          }
+        }
+
+        if (statsBars.length > 0) {
+          const rowMaxima: ClusterStatsRowMaxima = {
+            volume: 0,
+            delta: 0,
+            deltaPct: 0,
+            maxDelta: 0,
+            minDelta: 0,
+            sessionDelta: 0,
+          };
+          for (const bar of statsBars) {
+            rowMaxima.volume = Math.max(rowMaxima.volume, Math.abs(bar.stats.volume));
+            rowMaxima.delta = Math.max(rowMaxima.delta, Math.abs(bar.stats.delta));
+            rowMaxima.deltaPct = Math.max(rowMaxima.deltaPct, Math.abs(bar.stats.deltaPct));
+            rowMaxima.maxDelta = Math.max(rowMaxima.maxDelta, Math.abs(bar.stats.maxDelta));
+            rowMaxima.minDelta = Math.max(rowMaxima.minDelta, Math.abs(bar.stats.minDelta));
+            rowMaxima.sessionDelta = Math.max(rowMaxima.sessionDelta, Math.abs(bar.stats.sessionDelta));
+          }
+          drawStatsBandAt(ctx, statsBars, {
+            top: cssH - FOOTPRINT_STATS_BAND_HEIGHT,
+            labelGutterWidth: 0,
+            rowMaxima,
+          });
+        } else if (totalsBars.length > 0) {
+          const totalsTop = cssH - FOOTPRINT_TOTALS_BAND_HEIGHT;
+          for (const bar of totalsBars) {
+            drawTotalsRowAt(ctx, bar.prepared, {
+              leftX: bar.leftX,
+              rightX: bar.rightX,
               top: totalsTop,
             });
           }
