@@ -134,6 +134,27 @@ export function formatCompact(n: number): string {
   return abs === 0 ? '0' : `${sign}${abs.toFixed(2)}`;
 }
 
+/**
+ * "Values divider" K-formatter used for footprint cell/totals text: numbers
+ * >= 1000 render as "1.2K" (one decimal, trailing ".0" stripped — 1000→"1K",
+ * 1234→"1.2K", 12345→"12.3K"); numbers < 1000 keep the existing formatCompact
+ * behavior (no K-suffix, one decimal below 100, integer at/above 100).
+ * Sign is preserved on the outside so negative deltas read "-1.2K".
+ */
+export function formatCellValue(n: number): string {
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1000) {
+    const k = (abs / 1000).toFixed(1);
+    const stripped = k.endsWith('.0') ? k.slice(0, -2) : k;
+    return `${sign}${stripped}K`;
+  }
+  if (abs >= 1) return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
+  return abs === 0 ? '0' : `${sign}${abs.toFixed(2)}`;
+}
+
 // ─── Merged bin (row-merge prep) ────────────────────────────────────────────
 
 interface MergedBin {
@@ -141,11 +162,13 @@ interface MergedBin {
   binPrice: number;
   buyVol: number;
   sellVol: number;
+  /** Sum of per-bin print counts across all bins merged into this row. */
+  trades: number;
 }
 
 function mergeBins(bins: FlowBin[], factor: 1 | 2 | 4, rowSize: number): MergedBin[] {
   if (factor === 1) {
-    return bins.map((b) => ({ binPrice: b.binPrice, buyVol: b.buyVol, sellVol: b.sellVol }));
+    return bins.map((b) => ({ binPrice: b.binPrice, buyVol: b.buyVol, sellVol: b.sellVol, trades: b.trades }));
   }
   const groupSize = rowSize * factor;
   const groups = new Map<number, MergedBin>();
@@ -153,11 +176,12 @@ function mergeBins(bins: FlowBin[], factor: 1 | 2 | 4, rowSize: number): MergedB
     const groupKey = Math.floor(bin.binPrice / groupSize) * groupSize;
     let group = groups.get(groupKey);
     if (!group) {
-      group = { binPrice: groupKey, buyVol: 0, sellVol: 0 };
+      group = { binPrice: groupKey, buyVol: 0, sellVol: 0, trades: 0 };
       groups.set(groupKey, group);
     }
     group.buyVol += bin.buyVol;
     group.sellVol += bin.sellVol;
+    group.trades += bin.trades;
   }
   return Array.from(groups.values()).sort((a, b) => a.binPrice - b.binPrice);
 }
@@ -425,6 +449,12 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   }
 
   // ── Cell background shading ────────────────────────────────────────────
+  // Note: the shaded (zoomed-out) stage never reaches this per-cell function
+  // with showText=true — it draws its own delta-shading independently of
+  // cellMode upstream in drawCandleFootprint/FootprintLayer. Background
+  // shading here (the 'full' stage) still varies by cellMode as before;
+  // 'trades' and 'volumeDelta' use the same neutral background as 'volume'
+  // since neither is a delta-magnitude-driven mode.
   if (cellMode === 'delta') {
     const bg = delta === 0
       ? FOOTPRINT_DELTA_NEUTRAL_DARK
@@ -433,7 +463,7 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
         : mixAlpha(FOOTPRINT_SELL_BG, FOOTPRINT_SELL_BG_STRONG, magnitude);
     ctx.fillStyle = bg;
     ctx.fillRect(leftX, top, width, height);
-  } else if (cellMode === 'volume') {
+  } else if (cellMode === 'volume' || cellMode === 'trades' || cellMode === 'volumeDelta') {
     ctx.fillStyle = FOOTPRINT_NEUTRAL_BG;
     ctx.fillRect(leftX, top, width, height);
   } else {
@@ -462,22 +492,41 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     ctx.font = `${boldSuffix}${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = imbalanceSide === 'sell' ? FOOTPRINT_SELL_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCompact(row.sellVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.sellVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
 
     ctx.fillStyle = imbalanceSide === 'buy' ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_BUY_COLOR;
     ctx.textAlign = 'left';
-    ctx.fillText(formatCompact(row.buyVol), midX + FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.buyVol), midX + FOOTPRINT_CELL_PADDING_X, textY);
   } else if (cellMode === 'delta') {
     ctx.font = `${boldSuffix}${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCompact(delta), midX, textY);
+    ctx.fillText(formatCellValue(delta), midX, textY);
+  } else if (cellMode === 'trades') {
+    // ATAS-style "number of trades" mode — count of prints per level, neutral
+    // shading + neutral text (no directional color; a print count has no sign).
+    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'center';
+    ctx.fillText(formatCellValue(row.trades), midX, textY);
+  } else if (cellMode === 'volumeDelta') {
+    // Two values per cell: total volume (neutral) on the left half, signed
+    // delta (red/green by sign) on the right half — e.g. "153.2  +12.4".
+    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'right';
+    ctx.fillText(formatCellValue(rowVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
+
+    const deltaSign = delta > 0 ? '+' : '';
+    ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
+    ctx.textAlign = 'left';
+    ctx.fillText(`${deltaSign}${formatCellValue(delta)}`, midX + FOOTPRINT_CELL_PADDING_X, textY);
   } else {
     // 'volume' — neutral shading, delta only via text color.
     ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR : FOOTPRINT_SELL_COLOR;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCompact(rowVol), midX, textY);
+    ctx.fillText(formatCellValue(rowVol), midX, textY);
   }
   ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }
@@ -529,7 +578,7 @@ export function drawTotalsRowAt(
   ctx.textBaseline = 'middle';
 
   ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
-  ctx.fillText(formatCompact(prepared.totalVol), midX, top + TOTALS_ROW_HEIGHT / 2);
+  ctx.fillText(formatCellValue(prepared.totalVol), midX, top + TOTALS_ROW_HEIGHT / 2);
 
   ctx.fillStyle =
     prepared.delta === 0
@@ -538,7 +587,7 @@ export function drawTotalsRowAt(
         ? FOOTPRINT_BUY_COLOR_BRIGHT
         : FOOTPRINT_SELL_COLOR_BRIGHT;
   ctx.fillText(
-    formatCompact(prepared.delta),
+    formatCellValue(prepared.delta),
     midX,
     top + TOTALS_ROW_HEIGHT + TOTALS_ROW_HEIGHT / 2,
   );

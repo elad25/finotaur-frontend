@@ -388,6 +388,12 @@ function createSeriesForType(
 function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
   const t = pickTheme(theme);
   return {
+    // Pin locale to en-US regardless of browser locale — verified bug: with a
+    // Hebrew-locale browser, the crosshair time tooltip renders Hebrew month
+    // names ("יולי") on a customer-facing surface. IRON RULE = English-only UI.
+    localization: {
+      locale: 'en-US',
+    },
     layout: {
       background: { type: ColorType.Solid, color: t.background },
       textColor: t.text,

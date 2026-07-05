@@ -58,6 +58,8 @@ const CELL_MODE_OPTIONS: { value: FootprintCellMode; label: string }[] = [
   { value: 'bidAsk', label: 'Bid×Ask' },
   { value: 'delta', label: 'Delta' },
   { value: 'volume', label: 'Volume' },
+  { value: 'trades', label: 'Trades' },
+  { value: 'volumeDelta', label: 'Vol+Δ' },
 ];
 
 const ROW_DENSITY_OPTIONS: { value: RowDensity; label: string }[] = [

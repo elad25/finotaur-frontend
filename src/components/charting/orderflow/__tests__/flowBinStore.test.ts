@@ -125,6 +125,54 @@ describe('FlowBinStore — tradesIngested excludes setConfig replay', () => {
   });
 });
 
+describe('FlowBinStore — per-bin trade (print) count', () => {
+  it('increments trades by 1 per aggTrade landing in a bin, independent of qty', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades([
+      { time: 0, price: 100.4, qty: 1, buyerAggressor: true },
+      { time: 1000, price: 100.4, qty: 25, buyerAggressor: true }, // large qty, still 1 print
+      { time: 2000, price: 100.4, qty: 1.5, buyerAggressor: false },
+    ]);
+
+    const candle = store.getCandle(0);
+    expect(candle).not.toBeNull();
+    expect(candle!.bins.length).toBe(1);
+    expect(candle!.bins[0].trades).toBe(3);
+    expect(candle!.bins[0].buyVol).toBe(26);
+    expect(candle!.bins[0].sellVol).toBe(1.5);
+  });
+
+  it('tracks trades separately per price bin', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades([
+      { time: 0, price: 100.4, qty: 1, buyerAggressor: true },
+      { time: 1000, price: 100.4, qty: 1, buyerAggressor: true },
+      { time: 2000, price: 105.9, qty: 1, buyerAggressor: false },
+    ]);
+    const candle = store.getCandle(0);
+    expect(candle).not.toBeNull();
+    expect(candle!.bins.length).toBe(2);
+    const binAt100 = candle!.bins.find((b) => b.binPrice === 100);
+    const binAt105 = candle!.bins.find((b) => b.binPrice === 105);
+    expect(binAt100?.trades).toBe(2);
+    expect(binAt105?.trades).toBe(1);
+  });
+
+  it('survives re-binning (setConfig replay) — trade counts merge correctly at a wider rowSize', () => {
+    const store = new FlowBinStore({ intervalSec: 60, rowSize: 1 });
+    store.applyTrades([
+      { time: 0, price: 100.4, qty: 1, buyerAggressor: true },
+      { time: 1000, price: 101.2, qty: 1, buyerAggressor: true },
+      { time: 2000, price: 102.9, qty: 1, buyerAggressor: false },
+    ]);
+    store.setConfig({ intervalSec: 60, rowSize: 10 }); // all 3 trades land in the same wider bin
+    const rebinned = store.getCandle(0);
+    expect(rebinned).not.toBeNull();
+    expect(rebinned!.bins.length).toBe(1);
+    expect(rebinned!.bins[0].trades).toBe(3);
+  });
+});
+
 describe('FlowBinStore — render-loop fixed-point simulation', () => {
   // Simulates the exact cycle described in the incident: getBars (reads raw
   // trades) → suggestRowSize → setConfig → (would-be) notify → getBars again.

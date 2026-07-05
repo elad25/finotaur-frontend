@@ -61,6 +61,8 @@ export interface FlowBin {
   binPrice: number;
   buyVol: number;
   sellVol: number;
+  /** Count of individual prints (aggTrades) that landed in this bin — one aggTrade = 1 print. */
+  trades: number;
 }
 
 /** Derived, per-candle aggregate. `bins` is a Map keyed by binPrice for O(1) updates. */
@@ -105,8 +107,12 @@ export interface CvdPoint {
  *   background shaded by |delta| magnitude.
  * - 'volume': one number per row (buyVol + sellVol), neutral shading; delta
  *   direction is conveyed only via text color, not background.
+ * - 'trades': one number per row — count of prints (aggTrades) in the bin,
+ *   neutral shading, neutral text (ATAS-style "number of trades" mode).
+ * - 'volumeDelta': two numbers per row — total volume (neutral text) and
+ *   signed delta (red/green by sign), e.g. "153.2  +12.4".
  */
-export type FootprintCellMode = 'bidAsk' | 'delta' | 'volume';
+export type FootprintCellMode = 'bidAsk' | 'delta' | 'volume' | 'trades' | 'volumeDelta';
 
 export interface FootprintConfig {
   cellMode: FootprintCellMode;
