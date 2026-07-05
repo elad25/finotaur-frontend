@@ -55,6 +55,64 @@ export function resolveFinoTier(plan: PlatformPlan): FinoTierKey {
   return 'free';
 }
 
+// ---------------------------------------------------------------------------
+// Home-page "Ask Fino" chips — tier-aware, plus journal-aware.
+// The journal is orthogonal to the platform tier (a Trader subscriber can be
+// platform-free), so chips compose from two dimensions:
+//   * platform tier   → market / research / flow questions
+//   * active journal  → personal coaching questions on the user's own trades
+// ---------------------------------------------------------------------------
+
+export interface FinoHomeChip {
+  label: string;
+  /** undefined → open the drawer with no preset query */
+  query?: string;
+}
+
+const JOURNAL_HOME_CHIPS: FinoHomeChip[] = [
+  { label: 'Show my best setups', query: 'Show my best setups' },
+  { label: "Review yesterday's trades", query: "Review yesterday's trades" },
+  { label: 'What mistakes am I repeating?', query: 'What mistakes am I repeating?' },
+];
+
+const HOME_CHIPS_BY_TIER: Record<FinoTierKey, FinoHomeChip[]> = {
+  free: [
+    { label: 'What moved the market today?', query: 'What moved the market today?' },
+    { label: 'What events are coming this week?', query: 'What are the key economic events this week?' },
+    { label: 'How do I get the most out of FINOTAUR?', query: 'How do I get the most out of FINOTAUR?' },
+  ],
+  investor: [
+    { label: "Summarize today's report", query: "Summarize today's TOP SECRET report" },
+    { label: 'Latest trade ideas', query: 'What are the latest trade ideas from the reports?' },
+    { label: 'Which sectors look strong?', query: 'Which sectors should I favor this week?' },
+  ],
+  finotaur: [
+    { label: "Today's Top 5 picks", query: "What are today's Top 5 AI Scanner picks?" },
+    { label: 'Any unusual flow today?', query: 'Any unusual options flow worth watching today?' },
+    { label: "Summarize today's report", query: "Summarize today's TOP SECRET report" },
+    { label: 'Build my game plan', query: 'Build my game plan' },
+  ],
+  ultimate: [
+    { label: 'How is my portfolio positioned?', query: 'How is my portfolio positioned for this week?' },
+    { label: "Today's Top 5 picks", query: "What are today's Top 5 AI Scanner picks?" },
+    { label: 'Any unusual flow today?', query: 'Any unusual options flow worth watching today?' },
+    { label: 'Build my game plan', query: 'Build my game plan' },
+  ],
+};
+
+/**
+ * Chips for the home-page Ask Fino input. Journal coaching chips lead when the
+ * user actually has a journal to coach on; tier chips follow; "Ask Fino
+ * anything" always closes the row.
+ */
+export function getFinoHomeChips(tier: FinoTierKey, hasActiveJournal: boolean): FinoHomeChip[] {
+  const tierChips = HOME_CHIPS_BY_TIER[tier];
+  const chips = hasActiveJournal
+    ? [...JOURNAL_HOME_CHIPS, ...tierChips]
+    : [...tierChips];
+  return [...chips.slice(0, 4), { label: 'Ask Fino anything' }];
+}
+
 const FREE_PROMPTS: FinoPromptChip[][] = [
   [
     { icon: HelpCircle, question: 'What moved the market today?' },

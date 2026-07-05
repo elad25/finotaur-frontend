@@ -24,6 +24,8 @@ import { Card, Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { usePlatformAccess } from '@/hooks/usePlatformAccess';
+import { getFinoHomeChips, resolveFinoTier } from '@/lib/fino-tiers';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { computeGreeting } from '@/pages/app/ai/copilot/hooks/useDailyBrief';
 import { domains, domainOrder, isDomainVisible } from '@/constants/nav';
@@ -42,20 +44,9 @@ const PRODUCT_CARD: Record<string, { icon: LucideIcon; blurb: string }> = {
 };
 
 // ---------------------------------------------------------------------------
-// Prompt chips shown below the Ask Fino input
+// Prompt chips shown below the Ask Fino input — tier-aware + journal-aware.
+// Composed per user in the component via getFinoHomeChips().
 // ---------------------------------------------------------------------------
-interface PromptChip {
-  label: string;
-  query?: string; // if undefined → open Fino with no preset query
-}
-
-const PROMPT_CHIPS: PromptChip[] = [
-  { label: 'Show my best setups',          query: 'Show my best setups' },
-  { label: "Review yesterday's trades",    query: "Review yesterday's trades" },
-  { label: 'What mistakes am I repeating?', query: 'What mistakes am I repeating?' },
-  { label: 'Build my game plan',           query: 'Build my game plan' },
-  { label: 'Ask Fino anything' },          // no query → open only
-];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -65,6 +56,13 @@ export default function HomePage() {
   const { hasBetaAccess } = useAdminAuth();
   const { open } = useFinoChat();
   const { profile, isLoading: profileLoading } = useUserProfile();
+
+  // Ask Fino chips: journal coaching chips for journal subscribers, market /
+  // research / flow chips per platform tier (see src/lib/fino-tiers.ts).
+  const { plan } = usePlatformAccess();
+  const hasActiveJournal =
+    profile?.account_type === 'premium' || profile?.account_type === 'basic';
+  const promptChips = getFinoHomeChips(resolveFinoTier(plan), hasActiveJournal);
 
   // Never fall back to the user's email for the greeting — showing it (even
   // momentarily, before the profile resolves) reads as a bug. While the
@@ -209,7 +207,7 @@ export default function HomePage() {
 
             {/* Prompt chips */}
             <div className="flex flex-wrap gap-2 mt-ds-3">
-              {PROMPT_CHIPS.map((chip) => (
+              {promptChips.map((chip) => (
                 <button
                   key={chip.label}
                   type="button"
