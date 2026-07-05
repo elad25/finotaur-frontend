@@ -18,7 +18,7 @@ const faqs: FAQItem[] = [
   {
     question: "What's the difference between Trader, Investor and FINOTAUR?",
     answer:
-      "Trader ($44.99/mo) is the trading desk — unlimited journal, broker auto-sync, trade copier and performance analytics. Investor ($50/mo) is the research desk — the daily TOP SECRET institutional report, the full research hub, and AI Stock/Sector/Macro analysis. FINOTAUR ($89/mo) includes both desks plus the exclusives: Options Intelligence, Dark Pool & institutional flow, the daily AI Scanner, and unlimited AI. Tools sold separately elsewhere for $400+/mo.",
+      "Trader ($44.99/mo) is the trading desk — unlimited journal, broker auto-sync, trade copier and performance analytics. Investor ($49/mo) is the research desk — the daily TOP SECRET institutional report, the full research hub, and AI Stock/Sector/Macro analysis. FINOTAUR ($89/mo) includes both desks plus the exclusives: Options Intelligence, Dark Pool & institutional flow, the daily AI Scanner, and unlimited AI. Tools sold separately elsewhere for $400+/mo.",
   },
   {
     question: "Do I need prior trading experience?",

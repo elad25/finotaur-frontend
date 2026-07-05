@@ -60,7 +60,7 @@ export interface AccessResult {
   limit?: number;
   upgradeTarget?: 'investor' | 'finotaur' | 'enterprise';
   upgradeDisplayName?: string;   // "Investor" | "Finotaur" | "Copilot"
-  upgradePrice?: string;         // "$50" | "$89" | "$200"
+  upgradePrice?: string;         // "$49" | "$89" | "$200"
   message?: string;              // Full human-readable message
 }
 
@@ -123,7 +123,7 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
 
 const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
   stock_analyzer: 'free',
-  // v3.0.0: Sector & Macro Analyzer unlock at Investor ($50)
+  // v3.0.0: Sector & Macro Analyzer unlock at Investor ($49)
   sector_analyzer: 'platform_investor',
   macro_analyzer: 'platform_investor',
   // Finotaur exclusives ($89)
@@ -141,7 +141,7 @@ const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
 
 const PLAN_INFO: Record<string, { displayName: string; price: string }> = {
   // 'core' entry removed 2026-06 (Core tier eliminated, zero subscribers)
-  investor: { displayName: 'Investor', price: '$50/mo' },
+  investor: { displayName: 'Investor', price: '$49/mo' },
   finotaur: { displayName: 'Finotaur', price: '$89/mo' },
   enterprise: { displayName: 'Ultimate', price: '$200/mo' },
 };

@@ -181,12 +181,12 @@ export const BillingTab = () => {
       };
     }
 
-    // Flat pricing — $50/mo, $499/yr, no intro discount
+    // Flat pricing — $49/mo, $499/yr, no intro discount
     return {
       isInTrial: false,
       isInIntro: false,
       introMonthsRemaining: 0,
-      currentPrice: topSecretInterval === 'yearly' ? 499 : 50,
+      currentPrice: topSecretInterval === 'yearly' ? 499 : 49,
       trialDaysRemaining: 0,
     };
   };
@@ -727,8 +727,12 @@ export const BillingTab = () => {
       </Card>
 
 
-      {/* 🔥 TOP SECRET CARD - Hide if user has Finotaur/Enterprise Platform */}
-      {!['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
+      {/* 🔥 INVESTOR (Top Secret) CARD — shown ONLY for users who actually hold the
+          subscription (active / trial / cancelling / cancelled-reactivatable).
+          Non-subscribers upgrade via the pricing page, not from Billing.
+          Also hidden when a Finotaur/Enterprise platform plan already includes it. */}
+      {(topSecretIsActive || topSecretStatus === 'cancelled') &&
+        !['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
       <Card className={cn(
         "p-6 relative overflow-hidden shadow-xl",
         topSecretIsActive && topSecretInterval === 'yearly'
@@ -840,14 +844,14 @@ export const BillingTab = () => {
                     </div>
                   ) : topSecretPricing.isInIntro ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">$50/mo</span>
+                      <span className="text-xl font-bold text-white">$49/mo</span>
                     </div>
                   ) : (
-                    <span className="text-xl font-bold text-white">$50/mo</span>
+                    <span className="text-xl font-bold text-white">$49/mo</span>
                   )
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="text-xl font-bold text-white">$50/mo</span>
+                    <span className="text-xl font-bold text-white">$49/mo</span>
                   </div>
                 )}
               </div>
@@ -910,12 +914,12 @@ export const BillingTab = () => {
                     {topSecretPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">14-Day Trial</Badge>
-                        <span className="text-zinc-400">→ Then $50/mo after trial</span>
+                        <span className="text-zinc-400">→ Then $49/mo after trial</span>
                       </div>
                     ) : topSecretPricing.isInIntro ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Intro Pricing</Badge>
-                        <span className="text-zinc-400">Then $50/mo</span>
+                        <span className="text-zinc-400">Then $49/mo</span>
                       </div>
                     ) : (
                       <p className="text-xs text-zinc-500">Regular pricing active</p>
@@ -1010,7 +1014,7 @@ export const BillingTab = () => {
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <p className="text-xs text-emerald-400 text-center font-medium">
-                    🔥 14-day FREE trial → then $50/mo
+                    🔥 14-day FREE trial → then $49/mo
                   </p>
                 </div>
                 <Button

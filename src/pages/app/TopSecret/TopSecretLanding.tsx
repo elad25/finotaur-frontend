@@ -47,15 +47,13 @@ interface ReportType {
 // CONSTANTS
 // ========================================
 
-// ⚠️ PRICING DISPLAY = $50/mo + $499/yr. These are NOT yet wired to Whop products.
-// The 'top_secret' planName currently maps to $89.99/$899 in whop-config.ts.
-// BEFORE PRODUCTION DEPLOY: Elad must create $50/$499 Whop products and their plan IDs
-// must replace top_secret's IDs in whop-config.ts, or the checkout will charge the wrong amount.
+// Investor (Top Secret) pricing — $49/mo, $499/yr. Matches the live Whop plans
+// mapped by whop-config.ts (top_secret_monthly / top_secret_yearly).
 const ENVELOPE_PRICES = {
-  monthly: 50,
+  monthly: 49,
   yearly: 499,
   monthlyEquivalent: 41.58,
-  savings: 101,
+  savings: 89,
 };
 
 const REPORT_TYPES: ReportType[] = [

@@ -48,7 +48,7 @@ interface PlanConfig {
 
 // ============================================
 // PLAN CONFIGURATIONS — PERSONA LADDER (v3.0.0, 2026-07)
-// Free → Trader ($45, journal) → Investor ($50, intel + research + AI)
+// Free → Trader ($45, journal) → Investor ($49, intel + research + AI)
 // → FINOTAUR ($89, everything + exclusives) → Ultimate ($200)
 // "Investor" is the rebranded Top Secret product — same Whop plans.
 // ============================================
@@ -101,7 +101,7 @@ const plans: PlanConfig[] = [
   {
     id: 'top_secret',
     name: 'Investor',
-    monthlyPrice: '$50',
+    monthlyPrice: '$49',
     yearlyPrice: '$499',
     yearlyMonthlyEquivalent: '$42',
     description: "The investor's desk — intel, research & AI",
@@ -119,7 +119,7 @@ const plans: PlanConfig[] = [
     ],
     cta: 'Start 14-Day Trial',
     featured: false,
-    savings: 'Save 17%',
+    savings: 'Save 15%',
   },
   {
     id: 'finotaur',
@@ -328,13 +328,13 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
   // 🔥 Calculate monthly spending on standalone products vs platform plans
   const standaloneMonthlyTotal = (() => {
     let total = 0;
-    // WAR ZONE merged into TOP SECRET — count the merged product once at $50
-    if (hasTopSecretMonthly || hasNewsletterMonthly) total += 50;
+    // WAR ZONE merged into TOP SECRET — count the merged product once at $49
+    if (hasTopSecretMonthly || hasNewsletterMonthly) total += 49;
     if (hasJournalPremiumMonthly) total += 44.99; // journal premium monthly price
     return total;
   })();
 
-  const hasExpensiveStandalones = standaloneMonthlyTotal >= 94 && currentPlatformPlan === 'free';
+  const hasExpensiveStandalones = standaloneMonthlyTotal >= 93 && currentPlatformPlan === 'free';
 
   const handlePlanClick = (planId: PlatformPlanId) => {
     // COPILOT (or any coming-soon plan) — checkout locked, no-op
