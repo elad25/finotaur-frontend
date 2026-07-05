@@ -350,9 +350,9 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'mentorship': [
-    { label: 'Feed', path: '/app/floor/feed', icon: Newspaper, beta: true },
-    { label: 'Leaderboard', path: '/app/floor/leaderboard', icon: Trophy, beta: true },
-    { label: 'DM', path: '/app/floor/dm', icon: MessageSquare, beta: true },
+    { label: 'Feed', path: '/app/floor/feed', icon: Newspaper },
+    { label: 'Leaderboard', path: '/app/floor/leaderboard', icon: Trophy },
+    { label: 'DM', path: '/app/floor/dm', icon: MessageSquare },
   ],
 
   'mentor': [
