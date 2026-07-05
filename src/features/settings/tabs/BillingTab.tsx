@@ -97,18 +97,11 @@ export const BillingTab = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Newsletter cancellation state
-  const [showNewsletterCancelDialog, setShowNewsletterCancelDialog] = useState(false);
+  // Investor (Top Secret) cancellation state
+  // (Daily Newsletter card removed 2026-07 — legacy WAR ZONE product retired, zero paying subs)
   const [showTopSecretCancelDialog, setShowTopSecretCancelDialog] = useState(false);
   const [cancellingTopSecret, setCancellingTopSecret] = useState(false);
-  const [cancellingNewsletter, setCancellingNewsletter] = useState(false);
-
-
-  // 🔥 NEW: Separate loading states for reactivation
-  const [reactivatingNewsletter, setReactivatingNewsletter] = useState(false);
   const [reactivatingTopSecret, setReactivatingTopSecret] = useState(false);
-  // 🔥 NEW: Upgrade states
-  const [upgradingNewsletter, setUpgradingNewsletter] = useState(false);
   const [upgradingTopSecret, setUpgradingTopSecret] = useState(false);
   // 🔥 Platform cancel states
   const [showPlatformCancelDialog, setShowPlatformCancelDialog] = useState(false);
@@ -144,16 +137,10 @@ export const BillingTab = () => {
   const journalIsActive = ['active', 'trial'].includes(journalStatus);
   const journalIsFree = journalPlan === 'free' || !journalPlan;
 
-  // Newsletter subscription (War Zone)
-  const newsletterEnabled = profile?.newsletter_enabled ?? false;
-  const newsletterPaid = profile?.newsletter_paid ?? false;
+  // Legacy WAR ZONE newsletter status — the product is retired (no card shown);
+  // an active legacy flag still resolves to the Investor tier for the badge.
   const newsletterStatus = profile?.newsletter_status || 'inactive';
   const newsletterIsActive = newsletterStatus === 'active' || newsletterStatus === 'trial';
-  const newsletterInterval = profile?.newsletter_interval || 'monthly';
-
-  // Suppress unused variable warnings — values used in JSX conditions
-  void newsletterEnabled;
-  void newsletterPaid;
 
   // 🔥 v6 FIXED: Top Secret subscription - proper active detection
   const topSecretEnabled = profile?.top_secret_enabled ?? false;
@@ -206,34 +193,6 @@ export const BillingTab = () => {
 
   const topSecretPricing = getTopSecretPricingInfo();
 
-  // 🔥 NEW: Newsletter (War Zone) Pricing Info
-  const getNewsletterPricingInfo = () => {
-    if (!profile?.newsletter_started_at) {
-      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: 0 };
-    }
-
-    const startedAt = new Date(profile.newsletter_started_at);
-    const now = new Date();
-
-    // Trial is 7 days, then intro pricing kicks in (50% off for 2 months = $34.99)
-    const trialEndDate = new Date(startedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const introEndDate = new Date(trialEndDate.getTime() + 2 * 30 * 24 * 60 * 60 * 1000); // ~2 months after trial
-
-    if (now < trialEndDate) {
-      // Still in trial
-      return { isInTrial: true, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: Math.ceil((trialEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) };
-    } else if (now < introEndDate) {
-      // In intro period ($34.99/mo - 50% off)
-      const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
-      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 44.99 };
-    } else {
-      // Regular pricing ($69.99/mo)
-      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 69.99 };
-    }
-  };
-
-  const newsletterPricing = getNewsletterPricingInfo();
-
   const isLifetime = profile?.is_lifetime ?? false;
 
   // ── Cancellation feedback wiring ──────────────────────────────
@@ -254,79 +213,6 @@ export const BillingTab = () => {
       });
     } catch (e) {
       console.error('Failed to submit cancellation feedback:', e);
-    }
-  };
-
-  const handleCancelNewsletter = async (cancelBothProducts?: boolean, confirmPriceIncrease?: boolean) => {
-    if (!user) return;
-
-    setCancellingNewsletter(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        throw new Error("Not authenticated");
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${session.access_token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "cancel",
-            product: "newsletter",
-            reason: "User requested cancellation",
-            cancelBothProducts,
-            confirmPriceIncrease,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to cancel newsletter");
-      }
-
-      // Refresh profile to get updated state from DB
-      await refreshProfile();
-
-      await submitCancelFeedbackSafe('Daily Newsletter', 'newsletter');
-      setCancelReasonId('');
-      setCancelFeedbackText('');
-      setShowNewsletterCancelDialog(false);
-      toast.success(data.message || 'Newsletter subscription will be cancelled at period end');
-    } catch (error) {
-      console.error('Error cancelling newsletter:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to cancel newsletter');
-    } finally {
-      setCancellingNewsletter(false);
-    }
-  };
-
-  // Handle newsletter reactivation
-  const handleReactivateNewsletter = async () => {
-    setReactivatingNewsletter(true);
-    try {
-      const result = await manageProductSubscription("reactivate", "newsletter");
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to reactivate newsletter");
-      }
-
-      // Refresh profile to get updated state from DB
-      await refreshProfile();
-
-      toast.success(result.message || 'Newsletter subscription reactivated');
-    } catch (error) {
-      console.error('Error reactivating newsletter:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to reactivate newsletter');
-    } finally {
-      setReactivatingNewsletter(false);
     }
   };
 
@@ -405,52 +291,6 @@ export const BillingTab = () => {
     }
   };
 
-  // 🔥 NEW: Handle Newsletter upgrade from Monthly to Yearly
-  const handleUpgradeNewsletterToYearly = async () => {
-    if (!user) return;
-
-    setUpgradingNewsletter(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        throw new Error("Not authenticated");
-      }
-
-      // Call create-whop-checkout edge function with yearly plan
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-whop-checkout`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${session.access_token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            plan_id: 'plan_bp2QTGuwfpj0A', // War Zone Yearly plan
-            subscription_category: 'newsletter',
-            email: user.email,
-            user_id: user.id,
-            redirect_url: `${window.location.origin}/app/settings?tab=billing&upgrade=newsletter_yearly_success`,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok || !data.checkout_url) {
-        throw new Error(data.error || "Failed to create checkout session");
-      }
-
-      // Redirect to Whop checkout
-      window.location.href = data.checkout_url;
-
-    } catch (error) {
-      console.error('Error upgrading newsletter:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to start upgrade');
-      setUpgradingNewsletter(false);
-    }
-  };
 
   // 🔥 NEW: Handle Top Secret upgrade from Monthly to Yearly
   const handleUpgradeTopSecretToYearly = async () => {
@@ -816,17 +656,14 @@ export const BillingTab = () => {
           </div>
         </div>
 
-        {/* Row 3 — Newsletters */}
+        {/* Row 3 — Investor (intel) */}
         <div className="flex items-center gap-2 py-2.5">
           <Mail className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-          <span className="text-xs text-zinc-500 w-20 shrink-0">Newsletters</span>
+          <span className="text-xs text-zinc-500 w-20 shrink-0">Investor</span>
           <span className="text-xs text-zinc-300">
-            {(() => {
-              const active: string[] = [];
-              if (newsletterStatus === 'active' || newsletterStatus === 'trial') active.push('Investor');
-              if (topSecretStatus === 'active' || topSecretStatus === 'trial') active.push('Investor');
-              return active.length > 0 ? active.join(', ') : 'None';
-            })()}
+            {newsletterIsActive || topSecretStatus === 'active' || topSecretStatus === 'trial'
+              ? 'Active'
+              : 'None'}
           </span>
         </div>
           </div>
@@ -889,287 +726,6 @@ export const BillingTab = () => {
         {/* /relative */}
       </Card>
 
-      {/* 🔥 WAR ZONE NEWSLETTER CARD - Show only for existing newsletter subscribers */}
-      {newsletterIsActive && !['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
-      <Card className={cn(
-        "p-6 relative overflow-hidden shadow-xl",
-        newsletterIsActive && newsletterInterval === 'yearly'
-          ? "bg-gradient-to-br from-yellow-950/40 via-amber-950/30 to-zinc-900/90 border-2 border-yellow-500/40 shadow-yellow-900/20"
-          : "bg-gradient-to-br from-purple-950/40 via-zinc-900/80 to-zinc-900/90 border-purple-600/30 shadow-purple-900/10"
-      )}>
-        {/* Subtle animated glow */}
-        <div className={cn(
-          "absolute inset-0 bg-gradient-to-r via-transparent",
-          newsletterIsActive && newsletterInterval === 'yearly'
-            ? "from-yellow-500/10 to-amber-500/10"
-            : "from-purple-600/5 to-purple-600/5"
-        )} />
-        <div className={cn(
-          "absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent",
-          newsletterIsActive && newsletterInterval === 'yearly'
-            ? "via-yellow-500/60"
-            : "via-purple-500/50"
-        )} />
-
-        <div className="relative">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg",
-                newsletterIsActive && newsletterInterval === 'yearly'
-                  ? "bg-gradient-to-br from-yellow-500/40 to-amber-500/30 border border-yellow-500/50 shadow-yellow-500/30"
-                  : "bg-gradient-to-br from-purple-500/30 to-pink-500/20 border border-purple-500/40 shadow-purple-500/20"
-              )}>
-                <Mail className={cn(
-                  "w-5 h-5",
-                  newsletterIsActive && newsletterInterval === 'yearly' ? "text-yellow-300" : "text-purple-300"
-                )} />
-              </div>
-              <div>
-                <h2 className="font-semibold text-white text-lg">Daily Newsletter</h2>
-                <p className="text-xs text-zinc-400">Daily Market Newsletter</p>
-              </div>
-            </div>
-            {newsletterIsActive && (
-              <a
-                href="https://whop.com/@me/settings/orders/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-zinc-500 hover:text-purple-300 flex items-center gap-1.5 transition-colors"
-              >
-                Manage on Whop <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-          </div>
-
-          {/* Main Content Box */}
-          <div className="p-5 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
-            {/* Plan & Price Row */}
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <span className="text-xl font-bold text-white">
-                  {newsletterIsActive ? 'Investor Access' : 'Not Subscribed'}
-                </span>
-                {newsletterIsActive && newsletterInterval === 'yearly' && (
-                  <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
-                    <Crown className="w-3.5 h-3.5 mr-1.5" />Annual Member
-                  </Badge>
-                )}
-                <Badge variant="outline" className={cn(
-                  "px-2.5 py-1",
-                  profile?.newsletter_cancel_at_period_end
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                    : newsletterIsActive
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                    : newsletterStatus === 'cancelled'
-                    ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                    : 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
-                )}>
-                  {profile?.newsletter_cancel_at_period_end ? (
-                    <><Clock className="w-3 h-3 mr-1" />Cancelling</>
-                  ) : newsletterIsActive ? (
-                    <><CheckCircle2 className="w-3 h-3 mr-1" />{newsletterStatus === 'trial' ? 'Trial' : 'Active'}</>
-                  ) : newsletterStatus === 'cancelled' ? (
-                    <><AlertCircle className="w-3 h-3 mr-1" />Cancelled</>
-                  ) : (
-                    <><AlertCircle className="w-3 h-3 mr-1" />Inactive</>
-                  )}
-                </Badge>
-              </div>
-              <div className="text-right">
-                {newsletterIsActive ? (
-                  newsletterInterval === 'yearly' ? (
-                    <span className="text-xl font-bold text-white">$699/yr</span>
-                  ) : newsletterPricing.isInTrial ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">Free Trial</span>
-                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs px-2 py-0.5">
-                        {newsletterPricing.trialDaysRemaining} days left
-                      </Badge>
-                    </div>
-                  ) : newsletterPricing.isInIntro ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">$44.99/mo</span>
-                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs px-2 py-0.5">
-                        50% OFF
-                      </Badge>
-                    </div>
-                  ) : (
-                    <span className="text-xl font-bold text-white">$69.99/mo</span>
-                  )
-                ) : (
-                  <span className="text-xl font-bold text-white">$69.99/mo</span>
-                )}
-              </div>
-            </div>
-
-            {/* Features Grid */}
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>Daily market intelligence</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>Private Discord access</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>Institutional-grade analysis</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>Exclusive market alerts</span>
-              </div>
-            </div>
-
-            {/* Billing Info for Active Subscribers */}
-            {newsletterIsActive && (
-              <div className={cn(
-                "mb-5 p-4 rounded-lg",
-                newsletterInterval === 'yearly'
-                  ? "bg-gradient-to-br from-yellow-900/20 to-amber-900/10 border border-yellow-500/30"
-                  : "bg-zinc-800/50 border border-zinc-700/40"
-              )}>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Billing cycle</p>
-                    <p className={cn(
-                      "capitalize font-medium",
-                      newsletterInterval === 'yearly' ? "text-yellow-300" : "text-zinc-200"
-                    )}>
-                      {newsletterInterval === 'yearly' ? '✨ Yearly' : 'Monthly'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
-                      {newsletterPricing.isInTrial ? 'First charge' : 'Next billing'}
-                    </p>
-                    <p className="text-zinc-200 font-medium flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                      {newsletterPricing.isInTrial && profile?.newsletter_started_at
-                        ? formatDate(new Date(new Date(profile.newsletter_started_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString())
-                        : formatDate(profile?.newsletter_expires_at ?? computeNextBilling(profile?.newsletter_paid_at ?? profile?.newsletter_started_at, profile?.newsletter_interval))
-                      }
-                    </p>
-                  </div>
-                </div>
-
-                {newsletterInterval === 'monthly' && (
-                  <div className="mt-3 pt-3 border-t border-zinc-700/30">
-                    {newsletterPricing.isInTrial ? (
-                      <div className="flex items-center gap-2 text-xs">
-                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">7-Day Trial</Badge>
-                        <span className="text-zinc-400">→ Then $69.99/mo after trial</span>
-                      </div>
-                    ) : newsletterPricing.isInIntro ? (
-                      <div className="flex items-center gap-2 text-xs">
-                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Intro Pricing</Badge>
-                        <span className="text-zinc-400">
-                          {newsletterPricing.introMonthsRemaining === 2
-                            ? '$44.99 → $44.99 → Then $69.99/mo'
-                            : '$44.99 → Then $69.99/mo'
-                          }
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-zinc-500">Regular pricing active</p>
-                    )}
-                  </div>
-                )}
-
-                {profile?.newsletter_started_at && (
-                  <div className="mt-2 pt-2 border-t border-zinc-700/30">
-                    <p className="text-xs text-zinc-500">Member since {formatDate(profile.newsletter_started_at)}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Status Footer */}
-            {newsletterIsActive ? (
-              <div className="pt-4 border-t border-zinc-700/50">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-zinc-400">
-                    {profile?.newsletter_cancel_at_period_end ? (
-                      <span>Access until {formatDate(
-                        newsletterPricing.isInTrial && profile?.newsletter_trial_ends_at
-                          ? profile.newsletter_trial_ends_at
-                          : profile?.newsletter_expires_at
-                      )}</span>
-                    ) : newsletterStatus === 'trial' ? (
-                      <span className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-purple-400" />
-                        Trial expires {formatDate(profile?.newsletter_trial_ends_at)}
-                      </span>
-                    ) : (
-                      <span>Full access active</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
-                    {newsletterInterval === 'monthly' && !profile?.newsletter_cancel_at_period_end && (
-<Button
-  size="sm"
-  onClick={handleUpgradeNewsletterToYearly}
-  disabled={upgradingNewsletter}
-  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
->
-  {upgradingNewsletter ? (
-    <><Spinner size="sm" color="inherit" className="mr-1.5" />Upgrading...</>
-  ) : (
-    <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $140)</>
-  )}
-</Button>
-                    )}
-                    {profile?.newsletter_cancel_at_period_end ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleReactivateNewsletter}
-                        disabled={reactivatingNewsletter}
-                        className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50"
-                      >
-                        {reactivatingNewsletter ? (
-                          <><Spinner size="sm" className="mr-1.5" />Restoring...</>
-                        ) : (
-                          <>Undo Cancellation</>
-                        )}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowNewsletterCancelDialog(true)}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
-                      >
-                        Unsubscribe
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : newsletterStatus === 'cancelled' ? (
-              <div className="pt-4 border-t border-zinc-700/50">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Subscription cancelled</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleReactivateNewsletter}
-                    disabled={_saving}
-                    className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
-                  >
-                    {_saving ? <><Spinner size="sm" className="mr-1.5" />Reactivating...</> : <>Reactivate</>}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </Card>
-      )}
 
       {/* 🔥 TOP SECRET CARD - Hide if user has Finotaur/Enterprise Platform */}
       {!['platform_finotaur', 'platform_enterprise'].includes(platformPlan) && (
@@ -1649,99 +1205,6 @@ export const BillingTab = () => {
         </p>
       </Card>
 
-      {/* Newsletter Cancel Confirmation Dialog - Premium Design */}
-<Dialog open={showNewsletterCancelDialog} onOpenChange={setShowNewsletterCancelDialog}>
-  <DialogContent className="sm:max-w-md p-0 gap-0 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 shadow-2xl shadow-black/50 overflow-hidden">
-    {/* Premium Header with Gradient */}
-    <div className="relative px-6 pt-6 pb-4">
-      {/* Decorative gradient orbs */}
-      <div className="absolute -top-20 -right-20 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl" />
-      <div className="absolute -top-10 -left-10 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl" />
-
-      <div className="relative">
-        {/* Icon badge */}
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center mb-4 shadow-lg shadow-purple-500/10">
-          <Mail className="w-6 h-6 text-purple-400" />
-        </div>
-
-        <DialogTitle className="text-xl font-semibold text-white mb-1">
-          Cancel Investor?
-        </DialogTitle>
-        <DialogDescription className="text-zinc-400 text-sm">
-          You'll stop receiving our daily market intelligence reports and exclusive insights.
-        </DialogDescription>
-      </div>
-    </div>
-
-    {/* What you'll miss section */}
-    <div className="mx-6 mb-4">
-      <div className="relative p-4 rounded-xl bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5 border border-amber-500/20">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent rounded-xl" />
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
-            <p className="text-sm font-medium text-amber-300">What you'll miss</p>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              <span>Daily institutional-grade market analysis</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              <span>Exclusive market alerts & signals</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              <span>Private Discord community access</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              <span>Early access to market-moving intel</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <CancellationFeedbackFields reasons={cancelReasons} reasonId={cancelReasonId} onReasonChange={setCancelReasonId} text={cancelFeedbackText} onTextChange={setCancelFeedbackText} />
-    {/* Action Buttons */}
-    <div className="p-6 pt-2 space-y-3">
-      {/* Keep Subscription - Primary CTA */}
-      <button
-        onClick={() => setShowNewsletterCancelDialog(false)}
-        disabled={cancellingNewsletter}
-        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <CheckCircle2 className="w-4 h-4" />
-        Keep My Subscription
-      </button>
-
-      {/* Cancel - Secondary/Destructive */}
-      <button
-        onClick={() => handleCancelNewsletter()}
-        disabled={cancellingNewsletter || !canSubmitCancelFeedback}
-        className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30 disabled:hover:text-zinc-400"
-      >
-        {cancellingNewsletter ? (
-          <>
-            <Spinner size="sm" />
-            <span>Cancelling...</span>
-          </>
-        ) : (
-          <>
-            <X className="w-4 h-4" />
-            <span>Yes, Cancel My Subscription</span>
-          </>
-        )}
-      </button>
-
-      <p className="text-center text-xs text-zinc-500">
-        You'll retain access until the end of your billing period
-      </p>
-    </div>
-  </DialogContent>
-</Dialog>
 
       {/* Top Secret Cancel Confirmation Dialog - Premium Design */}
 <Dialog open={showTopSecretCancelDialog} onOpenChange={setShowTopSecretCancelDialog}>
