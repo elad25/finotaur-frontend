@@ -28,7 +28,10 @@ export type AnalyticsEventName =
   | 'affiliate_click'
   | 'share_clicked'
   | 'pricing_view'
-  | 'cta_clicked';
+  | 'cta_clicked'
+  | 'checkout_click'
+  | 'checkout_redirect'
+  | 'checkout_error';
 
 // ─── Env var helpers ──────────────────────────────────────────────────────────
 
