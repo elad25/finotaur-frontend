@@ -28,8 +28,10 @@
  *     "Delayed data — development preview" badge below.
  *   - CVD/Delta sub-panes: SKIPPED — useKlineDelta is Binance-klines-only.
  *     TODO(futures-v2): build a Databento-native CVD/Delta hook.
- *   - Bars: derived client-side from the trade stream (DatabentoBarsSource),
- *     not a separate historical-bars API — see tradesToBars.ts.
+ *   - Bars: derived client-side from the SAME FlowBinStore useOrderFlow
+ *     fills for the footprint (DatabentoBarsSource reads the store's raw
+ *     trades — single source of truth, see DatabentoBarsSource.ts), not a
+ *     separate historical-bars API — see tradesToBars.ts.
  *
  * Feed availability: the server-side Databento data key may not be
  * configured yet. Never render a blank chart with no explanation — the
@@ -124,29 +126,6 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
 
   const { from, to } = useMemo(nowWindow, [contractSymbol]);
 
-  // One DatabentoBarsSource instance per tab mount — owns its own background
-  // trade-cache poll subscriptions (see DatabentoBarsSource.ts). Each
-  // subscription is per-symbol, so a contract switch (root pill click) must
-  // release the PREVIOUS contract's subscription explicitly — otherwise it
-  // leaks a poll loop for every root the user has ever selected in this session.
-  const barsSourceRef = useRef<DatabentoBarsSource | null>(null);
-  if (!barsSourceRef.current) {
-    barsSourceRef.current = new DatabentoBarsSource();
-  }
-  useEffect(() => {
-    const source = barsSourceRef.current;
-    return () => {
-      source?.release(contractSymbol);
-    };
-  }, [contractSymbol]);
-  // Full teardown (all symbols, incl. any orphaned from a race) on unmount.
-  useEffect(() => {
-    const source = barsSourceRef.current;
-    return () => {
-      source?.releaseAll();
-    };
-  }, []);
-
   // ── Order Flow controls state ────────────────────────────────────────────
   const [controls, setControls] = useState<OrderFlowControlsState>(DEFAULT_ORDER_FLOW_CONTROLS);
 
@@ -181,15 +160,24 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
     backfillBars: 40,
   });
 
-  // ── Bars refresh token — DatabentoBarsSource's trade cache fills
-  // asynchronously (the anchor backfill lands 5-15s after mount), but
-  // FinotaurChart's bar-fetch effect only re-runs on symbol/interval/from/to
-  // change, none of which change once mounted here (see `nowWindow` — a
-  // fixed wall-clock window computed once). Without an explicit nudge the
-  // chart would fetch bars once (before the cache has data) and never again.
-  // FlowBinStore already fires onChange on every store mutation (trade
-  // apply/rebin/clear) — reuse it, throttled to ≥2s so a burst of polled
-  // trades doesn't trigger a refetch per trade.
+  // Bars source reads raw trades straight off the SAME store the footprint
+  // uses — no separate trade cache/subscription (see DatabentoBarsSource.ts).
+  // `store` has a stable identity for the life of this component (useOrderFlow
+  // creates it once via useRef), so one DatabentoBarsSource instance per mount
+  // is correct — no per-symbol release/teardown needed anymore.
+  const barsSourceRef = useRef<DatabentoBarsSource | null>(null);
+  if (!barsSourceRef.current) {
+    barsSourceRef.current = new DatabentoBarsSource(store);
+  }
+
+  // ── Bars refresh token — the store fills asynchronously (the anchor
+  // backfill lands 5-15s after mount), but FinotaurChart's bar-fetch effect
+  // only re-runs on symbol/interval/from/to change, none of which change once
+  // mounted here (see `nowWindow` — a fixed wall-clock window computed once).
+  // Without an explicit nudge the chart would fetch bars once (before the
+  // store has data) and never again. FlowBinStore already fires onChange on
+  // every store mutation (trade apply/rebin/clear) — reuse it, throttled to
+  // ≥2s so a burst of polled trades doesn't trigger a refetch per trade.
   const [barsRefreshToken, setBarsRefreshToken] = useState(0);
   useEffect(() => {
     let lastBump = 0;
