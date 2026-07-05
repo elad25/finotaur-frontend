@@ -1027,6 +1027,30 @@ async function syncCredential(cred: {
         .map(a => a.id)
     : [];
 
+  // Discovery observability: record accounts the broker returned but reports
+  // NOT live (archived or inactive). Their exclusion from liveAccountIds hides
+  // them from the journal account lists, and without a trace the decision is
+  // undiagnosable from support ("my account is missing" — which side dropped
+  // it?). Logged as a structured event AND persisted via record_sync_completion
+  // p_log_details (broker_sync_logs.sync_details) on the no-fills path below.
+  const excludedAccounts = discoverySucceeded
+    ? discoveredAccounts
+        .filter(a => a.archived === true || a.active === false)
+        .map(a => ({
+          id: a.id,
+          active: a.active ?? null,
+          archived: a.archived ?? null,
+        }))
+    : [];
+  if (excludedAccounts.length > 0) {
+    console.log(JSON.stringify({
+      event: 'accounts_excluded_not_live',
+      connection_id: cred.id,
+      count: excludedAccounts.length,
+      excluded: excludedAccounts,
+    }));
+  }
+
   // Step L2: build orderId → accountId attribution map from /order/list.
   // A single call mirrors the single-call assumption of fetchFills — no
   // pagination. Tradovate returns all orders in the account's history.
@@ -1531,7 +1555,11 @@ async function syncCredential(cred: {
       p_fills_fetched:        0,
       p_sync_mode:            syncMode,
       p_sync_started_at:      syncStartedAt.toISOString(),
-      p_log_details:          { reason: 'no_new_fills', path: 'legacy_multi_account' },
+      p_log_details:          {
+        reason: 'no_new_fills',
+        path: 'legacy_multi_account',
+        ...(excludedAccounts.length > 0 ? { excluded_not_live: excludedAccounts } : {}),
+      },
     });
     if (rpcErr) {
       console.error('[tradovate-sync] record_sync_completion failed (legacy no-fills):', rpcErr);
