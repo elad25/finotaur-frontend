@@ -17,7 +17,7 @@ import { validatePassword, getPasswordStrength } from '@/lib/passwordValidation'
 import { SEO } from '@/components/seo/SEO';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { track } from '@/lib/analytics';
-import { getFirstTouch } from '@/lib/analytics/attribution';
+import { getFirstTouch, getTouches, getTouchSummary } from '@/lib/analytics/attribution';
 
 // Current terms version - update when terms change
 const CURRENT_TERMS_VERSION = '2025.11';
@@ -188,8 +188,14 @@ export default function Register() {
     try {
       await register(email, password, firstName.trim(), lastName.trim());
 
-      // Fire-and-forget: attribute this signup to its first-touch source.
-      track('signup', { method: 'email', ...getFirstTouch() });
+      // Fire-and-forget: attribute this signup to its first-touch source,
+      // plus the full multi-touch chain (bounded to last 10 touches).
+      track('signup', {
+        method: 'email',
+        ...getFirstTouch(),
+        touches: getTouches().slice(-10),
+        ...getTouchSummary(),
+      });
 
       // ✅ Save terms acceptance synchronously after successful registration
       const { data: { user: newUser } } = await supabase.auth.getUser();
