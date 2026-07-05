@@ -290,12 +290,12 @@ export default function WarZonePricingSelection() {
       });
     };
     
-    // Handler for bundle checkout
+    // Handler for bundle checkout (Bundle = Finotaur Platform plan, $89/mo | $890/yr)
     const handleBundleCheckout = () => {
       if (!disclaimerAgreed) return;
       setShowDisclaimer(false);
       initiateCheckout({
-        planName: 'bundle' as any,
+        planName: 'platform_finotaur',
         billingInterval: pendingBillingInterval!,
       });
     };
