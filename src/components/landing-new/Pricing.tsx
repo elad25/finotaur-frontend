@@ -45,11 +45,11 @@ const plans: Plan[] = [
     isFree: true,
     features: [
       "AI Stock Analyzer — 3/day",
+      "FINO assistant + Community",
       "Demo journal — 15 trades",
       "Market Pulse & news",
       "P&L calendar & core stats",
       "1 watchlist + basic screener",
-      "FINO assistant + Community",
     ],
     cta: "Get Started Free",
     featured: false,
@@ -89,9 +89,9 @@ const plans: Plan[] = [
     features: [
       "TOP SECRET",
       "WAR ZONE",
+      "AI Stock Analyzer — 10/day",
       "The Weekly Report — Sundays",
       "Monthly deep-dive research",
-      "AI Stock Analyzer — 10/day",
       "Research hub — insiders, 13F, ETFs",
       "Private Discord trade room",
     ],
@@ -396,7 +396,7 @@ const Pricing = () => {
                               <Check className="w-2.5 h-2.5 text-gold-primary" />
                             </div>
                             <span
-                              className={`text-ink-secondary text-xs leading-tight ${isFlagship(feature) ? "font-semibold text-white underline decoration-[#C9A646] decoration-2 underline-offset-4" : ""}`}
+                              className={`text-ink-secondary text-xs leading-tight ${isFlagship(feature) ? "font-semibold text-white" : ""}`}
                             >
                               {feature}
                             </span>
