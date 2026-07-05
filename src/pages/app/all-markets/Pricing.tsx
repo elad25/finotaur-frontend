@@ -254,10 +254,10 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
         }
 
         // 🔥 v8.9.0: Yearly fallback protection
-          setJournalYearlyExpiresAt(data.journal_yearly_expires_at || null);
-          setJournalYearlyPlan(data.journal_yearly_plan || null);
-          setPlatformYearlyExpiresAt(data.platform_yearly_expires_at || null);
-          setPlatformYearlyPlan(data.platform_yearly_plan || null);
+        setJournalYearlyExpiresAt(data?.journal_yearly_expires_at || null);
+        setJournalYearlyPlan(data?.journal_yearly_plan || null);
+        setPlatformYearlyExpiresAt(data?.platform_yearly_expires_at || null);
+        setPlatformYearlyPlan(data?.platform_yearly_plan || null);
 
         // 🔥 Check existing Journal subscription
         if (data?.whop_membership_id && 
