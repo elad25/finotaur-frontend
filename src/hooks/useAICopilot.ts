@@ -36,11 +36,12 @@ export interface Conversation {
 export interface UsageInfo {
   questions_today: number;
   tokens_today: number;
-  daily_limit: number;
+  daily_limit: number | null;
   remaining: number;
   questions_remaining: number;
   user_tier: string;
   limit_reached: boolean;
+  unlimited: boolean;
 }
 
 interface UseAICopilotReturn {
@@ -93,15 +94,19 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
     try {
       const data = await aiCopilotApi.getUsage();
       const raw = data.usage;
-      const remaining = raw.remaining ?? raw.remaining_questions ?? 0;
+      const unlimited = Boolean(raw.unlimited);
+      const remaining = unlimited
+        ? Number.POSITIVE_INFINITY
+        : (raw.remaining ?? raw.remaining_questions ?? 0);
       setUsage({
         questions_today: raw.questions_today ?? 0,
         tokens_today: raw.tokens_today ?? 0,
-        daily_limit: raw.daily_limit ?? 3,
+        daily_limit: unlimited ? null : (raw.daily_limit ?? 3),
         remaining: remaining,
         questions_remaining: remaining,
         user_tier: raw.tier ?? raw.user_tier ?? 'free',
-        limit_reached: raw.limit_reached ?? false,
+        limit_reached: unlimited ? false : (raw.limit_reached ?? false),
+        unlimited,
       });
     } catch (err) {
       console.error('Failed to load usage:', err);
@@ -164,8 +169,8 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   const sendMessage = useCallback(async (message: string, context?: unknown): Promise<string | null> => {
     if (!user || !message.trim()) return null;
     
-    // Check usage limit
-    if (usage?.limit_reached) {
+    // Check usage limit — never blocks unlimited tiers (finotaur/ultimate)
+    if (usage?.limit_reached && !usage?.unlimited) {
       setError('Daily limit reached. Upgrade for unlimited access.');
       return null;
     }
@@ -249,17 +254,24 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
           });
         },
         onComplete: (data) => {
-          // Update usage
+          // Update usage — unlimited tiers keep remaining at Infinity and
+          // never flip limit_reached, regardless of how many questions were asked.
           if (data.usage) {
-            setUsage(prev => prev ? {
-              ...prev,
-              questions_today: prev.questions_today + 1,
-              remaining: Math.max(0, prev.remaining - 1),
-              questions_remaining: Math.max(0, prev.remaining - 1),
-              limit_reached: prev.remaining <= 1,
-            } : null);
+            setUsage(prev => {
+              if (!prev) return null;
+              if (prev.unlimited) {
+                return { ...prev, questions_today: prev.questions_today + 1 };
+              }
+              return {
+                ...prev,
+                questions_today: prev.questions_today + 1,
+                remaining: Math.max(0, prev.remaining - 1),
+                questions_remaining: Math.max(0, prev.remaining - 1),
+                limit_reached: prev.remaining <= 1,
+              };
+            });
           }
-          
+
           setConversations([]);
         },
         onError: (errorMsg) => {

@@ -24,7 +24,10 @@ export const UsageBanner = memo(function UsageBanner({ usage, upgrade }: UsageBa
     limit_reached, 
     user_tier 
   } = usage;
-  
+
+  // Unlimited tiers carry daily_limit === null — this banner is only for capped tiers.
+  if (daily_limit == null) return null;
+
   const percentUsed = Math.min((questions_today / daily_limit) * 100, 100);
   const isWarning = percentUsed >= 80;
   

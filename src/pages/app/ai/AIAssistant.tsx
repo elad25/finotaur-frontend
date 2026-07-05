@@ -123,7 +123,7 @@ export default function AIAssistant() {
           questionsRemaining={usage?.questions_remaining ?? 999}
           userTier={(usage?.user_tier as 'FREE' | 'BASIC' | 'PREMIUM') ?? 'FREE'}
           questionsUsed={usage?.questions_today}
-          dailyLimit={usage?.daily_limit}
+          dailyLimit={usage?.unlimited ? undefined : (usage?.daily_limit ?? undefined)}
         />
       </div>
     </div>
