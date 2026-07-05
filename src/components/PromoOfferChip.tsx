@@ -5,7 +5,7 @@
 // Compact green pill that lives in the TopNav (between the FINOTAUR logo
 // and the search omnibox). Gently animated (shine sweep + pulsing gift)
 // to draw clicks. Click → gold-on-black popup with the JOIN2026 code, a
-// live countdown, claim-progress bar, and an Unlock Premium CTA that opens
+// live countdown, claim-progress bar, and an Unlock Trader CTA that opens
 // Whop checkout for the Trader (premium monthly) plan directly, with the
 // promo code applied — no intermediate /app/upgrade page.
 //
@@ -51,7 +51,7 @@ type Offer = {
 
 const OFFER: Offer = {
   code: 'JOIN2026',
-  title: 'Trade Journal Premium',
+  title: 'Trade Journal — Trader',
   subtitle: 'Unlock advanced analytics and elevate your trading.',
   originalPrice: '$44.99',
   price: '$10',
@@ -60,7 +60,7 @@ const OFFER: Offer = {
   deadline: '2026-07-08T09:00:00-04:00', // July 8, 9:00 AM America/New_York (EDT) — 3-day revival window
   claimed: 247,
   totalSpots: 300,
-  ctaText: 'Unlock Premium',
+  ctaText: 'Unlock Trader',
   fineprint: 'Cancel anytime • 7-day money-back guarantee',
   chipLabel: 'July 4th Special — $10',
 };
@@ -138,7 +138,7 @@ export default function PromoOfferChip({ className }: { className?: string }) {
       <motion.button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Trade Journal Premium offer — $10/month"
+        aria-label="Trader plan offer — $10/month"
         className={cn(
           'group relative inline-flex flex-shrink-0 items-center gap-1.5 overflow-hidden rounded-full px-3 py-1.5 text-xs font-semibold text-white',
           className,
