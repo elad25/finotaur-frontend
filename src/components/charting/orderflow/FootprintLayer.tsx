@@ -277,12 +277,25 @@ export function FootprintLayer({
 
         const ref1 = resolveBarX(midSec, -ivSec);
         if (ref1 === null) return;
-        const ref2 = resolveBarX(ref1.tSec + ivSec, ivSec);
+        // Prefer a bar AHEAD of ref1 to derive px-per-second. This fails
+        // whenever ref1 lands on (or near) the last real bar — e.g. the user
+        // is zoomed into the live edge, where no bar exists yet at
+        // ref1.tSec + ivSec. lw-charts' timeToCoordinate() returns null for
+        // any non-bar time (see resolveBarX's doc comment), so at the live
+        // edge every forward probe fails and the layer used to bail out here
+        // on every frame — the reason nothing ever painted while zoomed into
+        // the newest candles. Fall back to a bar BEHIND ref1 in that case;
+        // the resulting px-per-second is identical (same bar spacing), only
+        // the sign of the delta differs, which the slope math below handles.
+        let ref2 = resolveBarX(ref1.tSec + ivSec, ivSec);
+        if (ref2 === null) {
+          ref2 = resolveBarX(ref1.tSec - ivSec, -ivSec);
+        }
         if (ref2 === null) return;
 
         const actualPxPerBar = ref2.x - ref1.x;
         const actualTimeDelta = ref2.tSec - ref1.tSec;
-        const pxPerSec = actualTimeDelta > 0 ? actualPxPerBar / actualTimeDelta : 1;
+        const pxPerSec = actualTimeDelta !== 0 ? actualPxPerBar / actualTimeDelta : 1;
         const candleWidthPx = Math.abs(pxPerSec) * ivSec;
 
         const timeToX = (tSec: number): number => ref1.x + (tSec - ref1.tSec) * pxPerSec;
