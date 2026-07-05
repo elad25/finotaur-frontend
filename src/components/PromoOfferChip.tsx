@@ -57,7 +57,7 @@ const OFFER: Offer = {
   price: '$10',
   period: '/month',
   discountLabel: '$35.00 off your first 3 payments',
-  deadline: '2026-06-29T09:00:00-04:00', // June 29, 9:00 AM America/New_York (EDT)
+  deadline: '2026-07-08T09:00:00-04:00', // July 8, 9:00 AM America/New_York (EDT) — 3-day revival window
   claimed: 247,
   totalSpots: 300,
   ctaText: 'Unlock Premium',
