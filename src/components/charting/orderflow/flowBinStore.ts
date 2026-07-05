@@ -117,6 +117,17 @@ export class FlowBinStore {
   }
 
   /**
+   * Readonly snapshot of every raw trade currently held in the ring buffer,
+   * ascending by time. Lets a consumer (e.g. DatabentoBarsSource) derive bars
+   * from the SAME trades that fill the footprint, instead of maintaining a
+   * second independent trade cache — see DatabentoBarsSource.ts for why this
+   * matters (single source of truth for "does the store have any data yet").
+   */
+  getRawTrades(): readonly FlowTrade[] {
+    return this.drainRawInOrder();
+  }
+
+  /**
    * TradingView's auto row-size convention: 0.2 * average(high-low) of the
    * last 20 bars, snapped DOWN to a multiple of tickSize, minimum 1 tick.
    */
