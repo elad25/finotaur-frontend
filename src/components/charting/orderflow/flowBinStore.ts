@@ -33,6 +33,17 @@ export class FlowBinStore {
   // Per-candle sorted-bins view cache, invalidated by a dirty flag.
   private sortedViewCache = new Map<number, FlowBin[]>();
   private dirtyCandles = new Set<number>();
+  // Monotonic count of genuinely NEW trades ingested via the public
+  // applyTrades() API — deliberately NOT bumped by setConfig()'s internal
+  // re-bin replay (which re-feeds the same trades already counted once).
+  // Consumers (FuturesChartTab) use this to distinguish "the store got new
+  // data" from "the store just replayed/re-binned existing data" without
+  // inspecting notify() call sites — see the render-loop fix in
+  // FuturesChartTab.tsx for why this distinction matters.
+  private tradesIngested = 0;
+  // Set for the duration of setConfig()'s replay so applySingleTrade's
+  // caller (applyTrades) knows not to bump tradesIngested for replayed trades.
+  private isReplaying = false;
 
   constructor(config: FlowBinStoreConfig) {
     this.config = config;
@@ -50,14 +61,21 @@ export class FlowBinStore {
     this.config = config;
     if (!changed) return;
 
-    // Re-bin from the raw ring buffer with the new config.
+    // Re-bin from the raw ring buffer with the new config. isReplaying guards
+    // tradesIngested from being bumped for trades that were already counted
+    // once on their original ingestion — see the field doc comment above.
     const raw = this.drainRawInOrder();
     this.candles.clear();
     this.sortedViewCache.clear();
     this.dirtyCandles.clear();
     this.rawRing = [];
     this.rawRingHead = 0;
-    this.applyTrades(raw, /* recordRaw */ true);
+    this.isReplaying = true;
+    try {
+      this.applyTrades(raw, /* recordRaw */ true);
+    } finally {
+      this.isReplaying = false;
+    }
   }
 
   clear(): void {
@@ -77,7 +95,18 @@ export class FlowBinStore {
       if (recordRaw) this.pushRaw(trade);
       this.applySingleTrade(trade);
     }
+    if (!this.isReplaying) this.tradesIngested += trades.length;
     this.notify();
+  }
+
+  /**
+   * Monotonic count of genuinely new trades ingested (excludes setConfig's
+   * internal re-bin replay). Consumers can diff this across renders/effects
+   * to tell "new data arrived" apart from "the store merely re-binned" —
+   * see FuturesChartTab.tsx's barsRefreshToken guard.
+   */
+  getTradesIngested(): number {
+    return this.tradesIngested;
   }
 
   getCandle(timeSec: number): FlowCandleView | null {
