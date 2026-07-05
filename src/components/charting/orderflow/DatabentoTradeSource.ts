@@ -42,7 +42,15 @@ const POLL_NOW_MARGIN_MS = 1_000;
 // partial coverage (rate limit / budget exhaustion) stays contiguous with
 // the freshest edge, same contract as BinanceTradeSource.backfill.
 const BACKFILL_WINDOW_MS = 2 * 60 * 60 * 1000;
-const DEFAULT_MAX_BACKFILL_REQUESTS = 20;
+const DEFAULT_MAX_BACKFILL_REQUESTS = 60;
+
+// When the requested window has ZERO trades (e.g. CME closed since Friday
+// close over a weekend/holiday), keep walking backward past `fromMs` looking
+// for the last session that actually traded, capped at this many days before
+// the originally-requested `toMs`. Prevents an unbounded walk while still
+// reaching back over a long weekend (3-day) plus slack.
+const MAX_EMPTY_LOOKBACK_DAYS = 5;
+const MAX_EMPTY_LOOKBACK_MS = MAX_EMPTY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
 // ── Wire shape ───────────────────────────────────────────────────────────
 
@@ -50,6 +58,13 @@ interface BackfillResponse {
   trades: FlowTrade[];
   /** True when the response was served from a server-side cache, not a fresh Databento call. */
   cached?: boolean;
+  /**
+   * Optional: Databento's rolling available-data end, epoch ms. When present
+   * and < the requested `toMs`, the caller should clamp further chunk
+   * requests to it instead of repeatedly asking beyond what the server can
+   * ever serve.
+   */
+  availableEndMs?: number;
 }
 
 // Longest-root-first so 3-char roots (MNQ, MES) are checked before their
@@ -71,12 +86,21 @@ function extractRoot(symbol: string): string {
   return found ?? symbol;
 }
 
+interface FetchWindowResult {
+  page: FlowTrade[];
+  ok: boolean;
+  rateLimited: boolean;
+  badRequest: boolean;
+  /** Echoed from the response, if the server sent one (see BackfillResponse). */
+  availableEndMs?: number;
+}
+
 async function fetchBackfillWindow(
   symbol: string,
   fromMs: number,
   toMs: number,
   signal?: AbortSignal,
-): Promise<{ page: FlowTrade[]; ok: boolean; rateLimited: boolean; badRequest: boolean }> {
+): Promise<FetchWindowResult> {
   const root = extractRoot(symbol);
   const url = `${BACKFILL_ENDPOINT}?symbol=${encodeURIComponent(root)}&fromMs=${fromMs}&toMs=${toMs}`;
 
@@ -112,7 +136,9 @@ async function fetchBackfillWindow(
     }
     page.push(trade);
   }
-  return { page, ok: true, rateLimited: false, badRequest: false };
+
+  const availableEndMs = typeof body.availableEndMs === 'number' ? body.availableEndMs : undefined;
+  return { page, ok: true, rateLimited: false, badRequest: false, availableEndMs };
 }
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -134,6 +160,12 @@ class DatabentoTradeSourceImpl implements TradeSource {
     // we only ever re-check the most recent poll's worth of trades.
     let lastSeenTime = Date.now();
     let lastBatchKeys = new Set<string>();
+    // Databento's rolling available-data end, epoch ms — once the server
+    // reports one, the poll cursor chases IT instead of wall-clock "now" so
+    // we stop asking for a window beyond what Databento can ever serve
+    // (e.g. CME closed since Friday: "now" keeps advancing every poll, but
+    // there is nothing newer than Friday's close to fetch).
+    let availableEndMs: number | null = null;
 
     const dedupeKey = (t: FlowTrade) => `${t.time}:${t.price}:${t.qty}`;
 
@@ -151,7 +183,13 @@ class DatabentoTradeSourceImpl implements TradeSource {
       // polls, producing a near-zero or inverted window (`toMs <= fromMs`).
       // Requiring a minimum width and skipping short/degenerate cycles fixes
       // both the inverted-window and the tight-loop symptoms.
-      const nowMs = Date.now() - POLL_NOW_MARGIN_MS;
+      //
+      // Once the server has told us its rolling available-data end, chase
+      // THAT instead of wall-clock "now" — otherwise every poll keeps
+      // requesting a window beyond what Databento can ever serve (e.g. CME
+      // closed since Friday close), which is a pointless request every cycle.
+      const wallNowMs = Date.now() - POLL_NOW_MARGIN_MS;
+      const nowMs = availableEndMs !== null ? Math.min(availableEndMs, wallNowMs) : wallNowMs;
       const fromMs = Math.min(lastSeenTime + 1, nowMs);
       const toMs = nowMs;
 
@@ -162,9 +200,17 @@ class DatabentoTradeSourceImpl implements TradeSource {
         return;
       }
 
-      const { page, ok, rateLimited, badRequest } = await fetchBackfillWindow(symbol, fromMs, toMs);
+      const { page, ok, rateLimited, badRequest, availableEndMs: reportedEndMs } = await fetchBackfillWindow(
+        symbol,
+        fromMs,
+        toMs,
+      );
 
       if (unmounted) return;
+
+      if (typeof reportedEndMs === 'number') {
+        availableEndMs = reportedEndMs;
+      }
 
       if (badRequest) {
         // Non-retryable config/logic error (e.g. malformed symbol/root) —
@@ -239,10 +285,16 @@ class DatabentoTradeSourceImpl implements TradeSource {
     opts?: { maxRequests?: number; signal?: AbortSignal },
   ): Promise<{ trades: FlowTrade[]; coveredFromMs: number }> {
     const maxRequests = opts?.maxRequests ?? DEFAULT_MAX_BACKFILL_REQUESTS;
+    const requestedWindowMs = toMs - fromMs;
     const trades: FlowTrade[] = [];
     let cursor = toMs;
     let earliestFetchedTime = toMs;
     let requestCount = 0;
+    // Once the server reports its rolling available-data end, clamp the
+    // window ceiling to it so we don't keep re-asking beyond available data.
+    let availableEndMs: number | null = null;
+
+    const clampedCursor = () => (availableEndMs !== null ? Math.min(cursor, availableEndMs) : cursor);
 
     // Walk backward in <=2h windows, newest-first — a partial result (rate
     // limit / budget exhaustion) only ever drops the OLDEST bars, staying
@@ -250,9 +302,18 @@ class DatabentoTradeSourceImpl implements TradeSource {
     while (cursor > fromMs && requestCount < maxRequests) {
       if (opts?.signal?.aborted) break;
 
-      const windowStart = Math.max(cursor - BACKFILL_WINDOW_MS, fromMs);
-      const { page, ok, rateLimited } = await fetchBackfillWindow(symbol, windowStart, cursor, opts?.signal);
+      const chunkEnd = clampedCursor();
+      if (chunkEnd <= fromMs) break; // available end has receded to/behind fromMs — nothing left to ask for here
+
+      const windowStart = Math.max(chunkEnd - BACKFILL_WINDOW_MS, fromMs);
+      const { page, ok, rateLimited, availableEndMs: reportedEndMs } = await fetchBackfillWindow(
+        symbol,
+        windowStart,
+        chunkEnd,
+        opts?.signal,
+      );
       requestCount += 1;
+      if (typeof reportedEndMs === 'number') availableEndMs = reportedEndMs;
 
       if (rateLimited) break; // stop gracefully, report what we have
       if (!ok) break; // network/transport failure — stop gracefully
@@ -272,7 +333,69 @@ class DatabentoTradeSourceImpl implements TradeSource {
       cursor = windowStart - 1;
     }
 
-    const coveredFromMs = trades.length > 0 ? Math.max(earliestFetchedTime, fromMs) : toMs;
+    // Anchor-to-last-data: the requested window landed ZERO trades — most
+    // commonly a weekend/holiday backfill request (CME closed since Friday
+    // close) where "last N bars from now" has nothing to show even though
+    // Thursday/Friday's session is sitting right behind it. Keep walking
+    // backward past the original `fromMs`, bounded by
+    // MAX_EMPTY_LOOKBACK_DAYS before the original `toMs` and by the
+    // remaining request budget, until we find the last session that traded —
+    // then keep filling backward until we've covered roughly the originally
+    // requested window length or the budget/lookback runs out.
+    if (trades.length === 0) {
+      const lookbackFloorMs = toMs - MAX_EMPTY_LOOKBACK_MS;
+      let anchorCursor = fromMs; // continue immediately behind the already-empty requested window
+      let foundAnyData = false;
+      let anchorEarliest = fromMs;
+
+      while (anchorCursor > lookbackFloorMs && requestCount < maxRequests) {
+        if (opts?.signal?.aborted) break;
+
+        const chunkEnd = availableEndMs !== null ? Math.min(anchorCursor, availableEndMs) : anchorCursor;
+        if (chunkEnd <= lookbackFloorMs) break;
+
+        const windowStart = Math.max(chunkEnd - BACKFILL_WINDOW_MS, lookbackFloorMs);
+        const { page, ok, rateLimited, availableEndMs: reportedEndMs } = await fetchBackfillWindow(
+          symbol,
+          windowStart,
+          chunkEnd,
+          opts?.signal,
+        );
+        requestCount += 1;
+        if (typeof reportedEndMs === 'number') availableEndMs = reportedEndMs;
+
+        if (rateLimited || !ok) break; // stop gracefully, report what we have (possibly still empty)
+
+        if (page.length === 0) {
+          anchorCursor = windowStart - 1;
+          continue;
+        }
+
+        // Found data. Keep it all (it's already outside [fromMs, toMs), which
+        // is expected — we're anchoring to whatever session actually traded).
+        for (const trade of page) trades.push(trade);
+        anchorEarliest = Math.min(anchorEarliest, windowStart);
+        foundAnyData = true;
+
+        // Once we've found the last-traded session, keep filling backward
+        // until we've accumulated roughly the originally requested window
+        // length worth of trades (so the chart gets a comparable amount of
+        // history to what was asked for), or we run out of budget/lookback.
+        const coveredSoFarMs = toMs - anchorEarliest;
+        if (coveredSoFarMs >= requestedWindowMs) break;
+
+        anchorCursor = windowStart - 1;
+      }
+
+      if (foundAnyData) {
+        trades.sort((a, b) => a.time - b.time);
+        return { trades, coveredFromMs: anchorEarliest };
+      }
+      // No data anywhere in the lookback window either — report honestly.
+      return { trades: [], coveredFromMs: toMs };
+    }
+
+    const coveredFromMs = Math.max(earliestFetchedTime, fromMs);
 
     trades.sort((a, b) => a.time - b.time);
     return { trades, coveredFromMs };
