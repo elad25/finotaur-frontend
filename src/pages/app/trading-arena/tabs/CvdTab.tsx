@@ -9,7 +9,9 @@
  *
  * Taker-buy volume comes from Binance REST klines index 9
  * ("taker buy base asset volume"). The existing BinanceSource only reads
- * indices 0-5, so we issue our own fetch here to capture index 9.
+ * indices 0-5, so the fetch + computation live in the shared `useKlineDelta`
+ * hook (Phase 3 extraction — see hooks/useKlineDelta.ts), reused here and by
+ * ChartTab's compact CVD/Delta sub-panes.
  *
  * Host: https://api.binance.com/api/v3/klines
  *   — same public host BinanceSource already uses (CORS-friendly, no geo-block
@@ -24,7 +26,7 @@
  * clutter if tuned wrong. Left as a // TODO for a dedicated future session.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { Activity } from 'lucide-react';
 import {
   createChart,
@@ -33,39 +35,11 @@ import {
   LineStyle,
   type IChartApi,
   type ISeriesApi,
-  type UTCTimestamp,
   type DeepPartial,
   type ChartOptions,
 } from 'lightweight-charts';
 import type { Interval } from '@/components/charting/types';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Number of klines to request from Binance. 500 gives ~8h at 1m, ~3d at 15m. */
-const FETCH_LIMIT = 500;
-
-/** Auto-refresh cadence in milliseconds. 20 s is fast enough to stay current. */
-const REFRESH_MS = 20_000;
-
-/** Binance REST klines endpoint — same host BinanceSource uses (no CORS issues). */
-const BINANCE_KLINES_URL = 'https://api.binance.com/api/v3/klines';
-
-/** Map our internal interval names to Binance's accepted values. */
-const INTERVAL_MAP: Record<Interval, string | null> = {
-  '1m':  '1m',
-  '2m':  null,
-  '5m':  '5m',
-  '15m': '15m',
-  '30m': '30m',
-  '60m': '1h',
-  '1h':  '1h',
-  '4h':  '4h',
-  '1d':  '1d',
-  '1wk': '1w',
-  '1mo': '1M',
-};
+import { useKlineDelta } from '../hooks/useKlineDelta';
 
 // ---------------------------------------------------------------------------
 // Palette — FINOTAUR dark arena theme
@@ -89,111 +63,6 @@ const PALETTE = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Data types
-// ---------------------------------------------------------------------------
-
-interface KlineBar {
-  /** Bar open time in unix SECONDS (lightweight-charts wants seconds). */
-  time: UTCTimestamp;
-  totalVolume: number;
-  takerBuyVolume: number;
-}
-
-interface CvdPoint {
-  time:  UTCTimestamp;
-  value: number;
-}
-
-interface DeltaPoint {
-  time:  UTCTimestamp;
-  value: number;
-  color: string;
-}
-
-// ---------------------------------------------------------------------------
-// Fetch klines with taker-buy volume (index 9)
-// ---------------------------------------------------------------------------
-
-async function fetchKlines(symbol: string, interval: Interval): Promise<KlineBar[]> {
-  const binanceInterval = INTERVAL_MAP[interval];
-  if (!binanceInterval) {
-    throw new Error(`CvdTab: interval "${interval}" not supported by Binance`);
-  }
-
-  const url = new URL(BINANCE_KLINES_URL);
-  url.searchParams.set('symbol',   symbol.toUpperCase());
-  url.searchParams.set('interval', binanceInterval);
-  url.searchParams.set('limit',    String(FETCH_LIMIT));
-
-  const resp = await fetch(url.toString());
-  if (!resp.ok) {
-    throw new Error(`CvdTab: Binance HTTP ${resp.status} for ${symbol}`);
-  }
-
-  const raw = (await resp.json()) as unknown;
-  if (!Array.isArray(raw)) {
-    throw new Error('CvdTab: malformed Binance payload (not an array)');
-  }
-
-  const bars: KlineBar[] = [];
-  for (const k of raw) {
-    // Binance klines array layout (indices):
-    //   0  openTime_ms
-    //   1  open
-    //   2  high
-    //   3  low
-    //   4  close
-    //   5  baseVolume          ← total base asset volume
-    //   6  closeTime_ms
-    //   7  quoteVolume
-    //   8  numTrades
-    //   9  takerBuyBaseVolume  ← TAKER BUY base asset volume (what we need)
-    //  10  takerBuyQuoteVolume
-    //  11  ignored
-    if (!Array.isArray(k) || k.length < 10) continue;
-
-    const timeSec  = Math.floor(Number(k[0]) / 1000) as UTCTimestamp;
-    const total    = Number(k[5]);
-    const takerBuy = Number(k[9]);
-
-    if (!Number.isFinite(timeSec) || !Number.isFinite(total) || !Number.isFinite(takerBuy)) continue;
-
-    bars.push({ time: timeSec, totalVolume: total, takerBuyVolume: takerBuy });
-  }
-
-  bars.sort((a, b) => (a.time as number) - (b.time as number));
-  return bars;
-}
-
-// ---------------------------------------------------------------------------
-// CVD computation
-// ---------------------------------------------------------------------------
-
-function computeCvdSeries(bars: KlineBar[]): { cvd: CvdPoint[]; delta: DeltaPoint[] } {
-  const cvd:   CvdPoint[]   = [];
-  const delta: DeltaPoint[] = [];
-
-  let cumulative = 0;
-
-  for (const bar of bars) {
-    // per-bar delta = 2 × takerBuy − total
-    // Positive → more aggressive buying than selling (net buy pressure)
-    // Negative → more aggressive selling than buying (net sell pressure)
-    const d = 2 * bar.takerBuyVolume - bar.totalVolume;
-    cumulative += d;
-
-    cvd.push({ time: bar.time, value: cumulative });
-    delta.push({
-      time:  bar.time,
-      value: d,
-      color: d >= 0 ? PALETTE.deltaPos : PALETTE.deltaNeg,
-    });
-  }
-
-  return { cvd, delta };
-}
-
-// ---------------------------------------------------------------------------
 // Chart factory helpers
 // ---------------------------------------------------------------------------
 
@@ -204,6 +73,9 @@ function buildChartOptions(): DeepPartial<ChartOptions> {
       textColor:   PALETTE.text,
       fontFamily:  PALETTE.fontFamily,
       fontSize:    11,
+      // Removes the TradingView wordmark — this is our own branded chart
+      // primitive, not an embedded TV widget (matches FinotaurChart.tsx).
+      attributionLogo: false,
     },
     grid: {
       vertLines: { color: PALETTE.grid, style: LineStyle.Dotted, visible: true },
@@ -260,8 +132,6 @@ interface CvdTabProps {
   interval: Interval;
 }
 
-type LoadState = 'loading' | 'loaded' | 'error';
-
 export function CvdTab({ symbol, interval }: CvdTabProps) {
   // DOM containers for the two chart panes
   const cvdContainerRef   = useRef<HTMLDivElement | null>(null);
@@ -275,11 +145,8 @@ export function CvdTab({ symbol, interval }: CvdTabProps) {
   const cvdSeriesRef   = useRef<ISeriesApi<'Line'>      | null>(null);
   const deltaSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  // Summary stats shown in the control bar
-  const [latestCvd,   setLatestCvd]   = useState<number | null>(null);
-  const [latestDelta, setLatestDelta] = useState<number | null>(null);
-  const [loadState,   setLoadState]   = useState<LoadState>('loading');
-  const [errorMsg,    setErrorMsg]    = useState<string>('');
+  // Data + summary stats — shared fetch/compute hook (Phase 3 extraction).
+  const { cvd, delta, latestCvd, latestDelta, loadState, errorMsg } = useKlineDelta(symbol, interval);
 
   // ---------------------------------------------------------------------------
   // Mount / unmount the two chart instances
@@ -382,7 +249,7 @@ export function CvdTab({ symbol, interval }: CvdTabProps) {
       cvdSeriesRef.current   = null;
       deltaSeriesRef.current = null;
     };
-  }, []); // mount once — data is pushed via the fetch effect
+  }, []); // mount once — data is pushed via the hook-consuming effect below
 
   // ---------------------------------------------------------------------------
   // ResizeObserver — keep both charts fitting the outer container
@@ -412,60 +279,28 @@ export function CvdTab({ symbol, interval }: CvdTabProps) {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Data fetch + periodic refresh
+  // Push hook data into the series whenever it changes (initial load + 20s refresh)
   // ---------------------------------------------------------------------------
-  const loadData = useCallback(async (cancelled: { v: boolean }) => {
-    try {
-      const bars = await fetchKlines(symbol, interval);
-      if (cancelled.v) return;
-
-      const { cvd, delta } = computeCvdSeries(bars);
-
-      const cvdSeries   = cvdSeriesRef.current;
-      const deltaSeries = deltaSeriesRef.current;
-      const cvdChart    = cvdChartRef.current;
-
-      if (!cvdSeries || !deltaSeries || !cvdChart) return;
-
-      cvdSeries.setData(cvd);
-      deltaSeries.setData(
-        delta.map((d) => ({ time: d.time, value: d.value, color: d.color }))
-      );
-
-      // Fit content once so the full window is visible on first load
-      cvdChart.timeScale().fitContent();
-
-      // Update summary stats from last bar
-      if (cvd.length > 0)   setLatestCvd(cvd[cvd.length - 1].value);
-      if (delta.length > 0) setLatestDelta(delta[delta.length - 1].value);
-
-      setLoadState('loaded');
-    } catch (err: unknown) {
-      if (cancelled.v) return;
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMsg(msg);
-      setLoadState('error');
-    }
-  }, [symbol, interval]);
-
   useEffect(() => {
-    const cancelled = { v: false };
-    setLoadState('loading');
-    setErrorMsg('');
+    if (loadState !== 'loaded') return;
 
-    // Initial fetch
-    void loadData(cancelled);
+    const cvdSeries   = cvdSeriesRef.current;
+    const deltaSeries = deltaSeriesRef.current;
+    const cvdChart    = cvdChartRef.current;
+    if (!cvdSeries || !deltaSeries || !cvdChart) return;
 
-    // Periodic refresh — re-fetch every REFRESH_MS
-    const timer = setInterval(() => {
-      void loadData(cancelled);
-    }, REFRESH_MS);
+    cvdSeries.setData(cvd);
+    deltaSeries.setData(
+      delta.map((d) => ({
+        time: d.time,
+        value: d.value,
+        color: d.isPositive ? PALETTE.deltaPos : PALETTE.deltaNeg,
+      })),
+    );
 
-    return () => {
-      cancelled.v = true;
-      clearInterval(timer);
-    };
-  }, [loadData]);
+    // Fit content once so the full window is visible on first load
+    cvdChart.timeScale().fitContent();
+  }, [cvd, delta, loadState]);
 
   // ---------------------------------------------------------------------------
   // Derived display values
