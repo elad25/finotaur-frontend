@@ -16,7 +16,7 @@
  * Gating: wrapped in <AdminBetaGate> at the route level (App.tsx).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, ChevronLeft, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,17 +28,19 @@ import {
   detectAssetClass,
   type AssetClass,
 } from '@/components/backtest/symbolUniverse';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import {
   TRADING_ARENA_TABS,
   ARENA_INTERVALS,
   toTabId,
   type TabId,
 } from './types';
-import { ChartTab }     from './tabs/ChartTab';
-import { OrderFlowTab } from './tabs/OrderFlowTab';
-import { TapeTab }      from './tabs/TapeTab';
-import { CvdTab }       from './tabs/CvdTab';
-import { LockedTab }    from './tabs/LockedTab';
+import { ChartTab }        from './tabs/ChartTab';
+import { OrderFlowTab }    from './tabs/OrderFlowTab';
+import { TapeTab }         from './tabs/TapeTab';
+import { CvdTab }          from './tabs/CvdTab';
+import { LockedTab }       from './tabs/LockedTab';
+import { FuturesChartTab } from './tabs/FuturesChartTab';
 
 // ---------------------------------------------------------------------------
 // Default symbol and interval
@@ -76,12 +78,14 @@ function IntervalSelector({ value, onChange }: IntervalSelectorProps) {
 interface TabSwitcherProps {
   active: TabId;
   onSelect: (id: TabId) => void;
+  /** Tab definitions, pre-resolved per-viewer (e.g. futures unlocked for admins). */
+  tabs: typeof TRADING_ARENA_TABS;
 }
 
-function TabSwitcher({ active, onSelect }: TabSwitcherProps) {
+function TabSwitcher({ active, onSelect, tabs }: TabSwitcherProps) {
   return (
     <div className="flex items-center gap-0.5" role="tablist" aria-label="Arena tabs">
-      {TRADING_ARENA_TABS.map((tab) => (
+      {tabs.map((tab) => (
         <button
           key={tab.id}
           type="button"
@@ -121,6 +125,19 @@ export default function TradingArena() {
 
   const activeTab = toTabId(section);
 
+  // Futures is admin-only (the founder's own Tradovate feed) — everyone else
+  // sees the same "Coming soon" LockedTab as Options/Forex. Uses the SAME
+  // admin check as the Arena's own route-level AdminBetaGate (App.tsx),
+  // not a new roles system.
+  const { isAdmin } = useAdminAuth();
+  const tabs = useMemo(
+    () =>
+      TRADING_ARENA_TABS.map((tab) =>
+        tab.id === 'futures' ? { ...tab, locked: !isAdmin } : tab,
+      ),
+    [isAdmin],
+  );
+
   // Asset and interval are held in component state.
   // Using URL search params would be ideal for bookmarking, but keeping it
   // simple for Phase 0 (local state is sufficient for a workstation).
@@ -142,10 +159,16 @@ export default function TradingArena() {
 
   const handleTabSelect = useCallback(
     (id: TabId) => {
+      if (id === 'futures' && !isAdmin) return; // defense-in-depth — tab is already disabled in the UI
       navigate(`/app/trading-arena/${id}`, { replace: true });
     },
-    [navigate],
+    [navigate, isAdmin],
   );
+
+  // Defense-in-depth: a non-admin landing directly on /trading-arena/futures
+  // (deep link / stale bookmark) sees LockedTab, never FuturesChartTab —
+  // this mirrors the tab-content switch below, not just the tab button state.
+  const showFuturesTab = activeTab === 'futures' && isAdmin;
 
   const handleBack = useCallback(() => {
     navigate('/app/home');
@@ -223,7 +246,7 @@ export default function TradingArena() {
 
         {/* Right: tab switcher */}
         <div className="ml-auto flex-shrink-0">
-          <TabSwitcher active={activeTab} onSelect={handleTabSelect} />
+          <TabSwitcher active={activeTab} onSelect={handleTabSelect} tabs={tabs} />
         </div>
       </header>
 
@@ -242,7 +265,11 @@ export default function TradingArena() {
           <CvdTab symbol={symbol} interval={interval} />
         )}
         {activeTab === 'options' && <LockedTab label="Options" />}
-        {activeTab === 'futures'  && <LockedTab label="Futures" />}
+        {showFuturesTab ? (
+          <FuturesChartTab interval={interval} />
+        ) : (
+          activeTab === 'futures' && <LockedTab label="Futures" />
+        )}
         {activeTab === 'forex'    && <LockedTab label="Forex" />}
       </main>
     </div>
