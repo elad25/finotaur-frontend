@@ -12,9 +12,11 @@ import { cn } from '@/lib/utils';
 
 interface UsageBannerProps {
   usage: UsageInfo;
+  /** Tier-aware CTA (from FINO_TIERS). Falls back to the generic upgrade copy. */
+  upgrade?: { label: string; sublabel: string } | null;
 }
 
-export const UsageBanner = memo(function UsageBanner({ usage }: UsageBannerProps) {
+export const UsageBanner = memo(function UsageBanner({ usage, upgrade }: UsageBannerProps) {
   const { 
     questions_today, 
     daily_limit, 
@@ -103,9 +105,10 @@ export const UsageBanner = memo(function UsageBanner({ usage }: UsageBannerProps
         </div>
       </div>
       
-      {/* Upgrade Button */}
+      {/* Upgrade Button — tier-aware target when provided */}
       <Link
         to="/app/upgrade"
+        title={upgrade?.sublabel}
         className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105 flex-shrink-0"
         style={limit_reached ? {
           background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
@@ -118,7 +121,7 @@ export const UsageBanner = memo(function UsageBanner({ usage }: UsageBannerProps
         }}
       >
         <Crown className="h-4 w-4" />
-        {limit_reached ? "Upgrade Now" : "Get Unlimited"}
+        {upgrade?.label ?? (limit_reached ? 'Upgrade Now' : 'Get Unlimited')}
       </Link>
     </motion.div>
   );

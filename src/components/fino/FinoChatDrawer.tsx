@@ -4,13 +4,20 @@
 // Opened from the SubNav "FINO AI" button (via FinoChatContext).
 // This is SEPARATE from the Support widget. It reuses the same AI chat
 // engine the retired /app/ai/assistant page used (useAICopilot + ChatInterface).
+//
+// v2026-07: FINO is TIERED. Every tier can chat; the persona, suggested
+// prompts, locked-capability teasers and upgrade targets scale with the
+// user's plan (see src/lib/fino-tiers.ts). Quotas stay server-enforced.
 // =====================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Plus, Sparkles, Sun, TrendingUp, BarChart3, Bitcoin, Shield, Building2, LineChart, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Plus, Sparkles, Lock, Loader2 } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
+import { usePlatformAccess } from '@/hooks/usePlatformAccess';
+import { FINO_TIERS, resolveFinoTier } from '@/lib/fino-tiers';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AiToolErrorFallback } from '@/components/common/AiToolErrorFallback';
 import { useFinoChat } from '@/contexts/FinoChatContext';
@@ -22,30 +29,13 @@ import FinoTradeConfirmCard from '@/components/fino/FinoTradeConfirmCard';
 import { aiCopilotApi } from '@/services/aiCopilotApi';
 import type { TradeExtraction } from '@/services/aiCopilotApi';
 import { compressImageFile } from '@/lib/fino/screenshotTrade';
-import type { LucideIcon } from 'lucide-react';
 
 // Feature flag — gates the screenshot → trade extraction surface (📎 button,
 // paste-to-extract, spinner/error/review cards). Defaults OFF.
 // Set VITE_ENABLE_FINO_DETECTIVE=true in .env.local to enable locally.
 const FINO_DETECTIVE_ENABLED = import.meta.env.VITE_ENABLE_FINO_DETECTIVE === 'true';
 
-// Suggestion chips shown in the FINO drawer's empty state.
-// Morning briefing chip is prepended so it surfaces first.
-const FINO_PROMPT_ROWS: { icon: LucideIcon; question: string }[][] = [
-  [
-    { icon: Sun, question: 'Give me today\'s morning briefing' },
-    { icon: TrendingUp, question: 'What are the latest trade ideas?' },
-    { icon: BarChart3, question: 'Which sectors should I favor this week?' },
-    { icon: Bitcoin, question: 'What is the current crypto regime?' },
-    { icon: Shield, question: 'What risks should I watch right now?' },
-  ],
-  [
-    { icon: Building2, question: 'Summarize the latest company analysis' },
-    { icon: LineChart, question: 'What is the macro outlook?' },
-    { icon: TrendingUp, question: 'Where is momentum improving?' },
-    { icon: Shield, question: 'What could invalidate this setup?' },
-  ],
-];
+// Suggestion chips are tier-aware — see FINO_TIERS in src/lib/fino-tiers.ts.
 
 // Human-readable label for the current route, so FINO knows which screen the
 // user is on. First matching pattern wins; falls back to the title-cased path.
@@ -145,6 +135,11 @@ function FinoChatPanel({
     clearError,
   } = useAICopilot();
   const { getPageData } = useFinoChat();
+  const navigate = useNavigate();
+
+  // Tier-aware FINO persona: prompts, teasers and upgrade targets per plan.
+  const { plan } = usePlatformAccess();
+  const finoTier = FINO_TIERS[resolveFinoTier(plan)];
 
   // Screenshot → trade extraction state
   const [extractionState, setExtractionState] = useState<ExtractionState>({ phase: 'idle' });
@@ -230,8 +225,14 @@ function FinoChatPanel({
                 <span className="text-ink-primary">FINO</span>
                 <span className="text-gold-primary">AI</span>
                 <Sparkles className="h-3.5 w-3.5 text-gold-primary" />
+                <span
+                  className="ml-1 rounded-full border border-[#C9A646]/30 bg-[#C9A646]/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.08em] text-gold-primary"
+                  title={`FINO — ${finoTier.tagline}`}
+                >
+                  {finoTier.badge}
+                </span>
               </h2>
-              <p className="text-[11px] text-ink-tertiary">Your Finotaur AI assistant</p>
+              <p className="text-[11px] text-ink-tertiary">{finoTier.tagline}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -247,7 +248,41 @@ function FinoChatPanel({
         {/* Body — open to all users; soft cap enforced server-side + UsageBanner */}
         <>
           {usage && (usage.user_tier === 'FREE' || usage.user_tier === 'BASIC') && (
-            <UsageBanner usage={usage} />
+            <UsageBanner usage={usage} upgrade={finoTier.upgrade} />
+          )}
+
+          {/* Tier teaser — what FINO can also do on higher plans. Only while the
+              conversation is empty, so it never competes with answers. */}
+          {finoTier.locked.length > 0 && messages.length === 0 && (
+            <div className="flex-shrink-0 border-b border-border-ds-subtle px-4 py-2.5">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">
+                FINO can also…
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {finoTier.locked.map((cap) => {
+                  const CapIcon = cap.icon;
+                  return (
+                    <button
+                      key={cap.label}
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        navigate('/app/upgrade');
+                      }}
+                      title={`Unlocks with ${cap.unlockedAt}`}
+                      className="group flex items-center gap-1.5 rounded-full border border-border-ds-subtle bg-surface-1 px-2.5 py-1 text-[11px] text-ink-secondary transition-colors duration-base hover:border-[#C9A646]/40 hover:text-gold-primary"
+                    >
+                      <Lock className="h-3 w-3 text-ink-tertiary group-hover:text-gold-primary" />
+                      <CapIcon className="h-3 w-3" />
+                      <span>{cap.label}</span>
+                      <span className="rounded-full bg-[#C9A646]/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-gold-primary">
+                        {cap.unlockedAt}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
           {/* Session Review card — sits above the chat thread, never throws */}
           <FinoSessionReviewCard />
@@ -323,7 +358,7 @@ function FinoChatPanel({
               userTier={(usage?.user_tier as 'FREE' | 'BASIC' | 'PREMIUM') ?? 'FREE'}
               questionsUsed={usage?.questions_today}
               dailyLimit={usage?.daily_limit}
-              promptRows={FINO_PROMPT_ROWS}
+              promptRows={finoTier.promptRows}
               promptPlacement="aboveInput"
               onImageSelected={FINO_DETECTIVE_ENABLED ? handleImageSelected : undefined}
               openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
