@@ -109,8 +109,8 @@ const plans: PlanConfig[] = [
     trialOnceOnly: false,
     checkoutCategory: 'top_secret',
     features: [
-      'TOP SECRET — daily institutional report',
-      'WAR ZONE — live market room',
+      'TOP SECRET',
+      'WAR ZONE',
       'The Weekly Report — Sundays',
       'Monthly deep-dive research',
       'AI Stock Analyzer — 10/day',
@@ -170,6 +170,9 @@ const plans: PlanConfig[] = [
     savings: 'Save 17%',
   },
 ];
+
+const FLAGSHIP_PREFIXES = ['TOP SECRET', 'WAR ZONE', 'Trade Copier', 'Unlimited trades', 'FINO', 'Copilot', 'AI Stock Analyzer'];
+const isFlagship = (feature: string) => FLAGSHIP_PREFIXES.some((p) => feature.startsWith(p));
 
 // ============================================
 // COMPONENT
@@ -737,7 +740,11 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                            style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
                         <Check className="h-2.5 w-2.5 text-[#C9A646]" />
                       </div>
-                      <span className="text-sm text-slate-300 leading-tight">{feature}</span>
+                      <span
+                        className={`text-sm text-slate-300 leading-tight ${isFlagship(feature) ? 'font-semibold text-white underline decoration-[#C9A646] decoration-2 underline-offset-4' : ''}`}
+                      >
+                        {feature}
+                      </span>
                     </li>
                   ))}
                 </ul>

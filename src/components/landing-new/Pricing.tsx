@@ -86,10 +86,9 @@ const plans: Plan[] = [
     description: "The investor's desk — daily intel, research & AI analysis",
     trialDays: 14,
     badge: "14-Day Free Trial",
-    includesExtras: "TOP SECRET intel + research + AI — institutional-grade, one subscription",
     features: [
-      "TOP SECRET — daily institutional report",
-      "WAR ZONE — live market room",
+      "TOP SECRET",
+      "WAR ZONE",
       "The Weekly Report — Sundays",
       "Monthly deep-dive research",
       "AI Stock Analyzer — 10/day",
@@ -146,6 +145,9 @@ const plans: Plan[] = [
     featured: false,
   },
 ];
+
+const FLAGSHIP_PREFIXES = ["TOP SECRET", "WAR ZONE", "Trade Copier", "Unlimited trades", "FINO", "Copilot", "AI Stock Analyzer"];
+const isFlagship = (feature: string) => FLAGSHIP_PREFIXES.some((p) => feature.startsWith(p));
 
 const Pricing = () => {
   const navigate = useNavigate();
@@ -393,7 +395,9 @@ const Pricing = () => {
                             <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gold-border">
                               <Check className="w-2.5 h-2.5 text-gold-primary" />
                             </div>
-                            <span className="text-ink-secondary text-xs leading-tight">
+                            <span
+                              className={`text-ink-secondary text-xs leading-tight ${isFlagship(feature) ? "font-semibold text-white underline decoration-[#C9A646] decoration-2 underline-offset-4" : ""}`}
+                            >
                               {feature}
                             </span>
                           </div>
