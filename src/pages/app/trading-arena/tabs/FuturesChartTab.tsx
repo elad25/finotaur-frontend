@@ -181,6 +181,40 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
     backfillBars: 40,
   });
 
+  // ── Bars refresh token — DatabentoBarsSource's trade cache fills
+  // asynchronously (the anchor backfill lands 5-15s after mount), but
+  // FinotaurChart's bar-fetch effect only re-runs on symbol/interval/from/to
+  // change, none of which change once mounted here (see `nowWindow` — a
+  // fixed wall-clock window computed once). Without an explicit nudge the
+  // chart would fetch bars once (before the cache has data) and never again.
+  // FlowBinStore already fires onChange on every store mutation (trade
+  // apply/rebin/clear) — reuse it, throttled to ≥2s so a burst of polled
+  // trades doesn't trigger a refetch per trade.
+  const [barsRefreshToken, setBarsRefreshToken] = useState(0);
+  useEffect(() => {
+    let lastBump = 0;
+    let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+    const bump = () => {
+      lastBump = Date.now();
+      setBarsRefreshToken((n) => n + 1);
+    };
+    const unsubscribe = store.onChange(() => {
+      const elapsed = Date.now() - lastBump;
+      if (elapsed >= 2000) {
+        bump();
+      } else if (!pendingTimeout) {
+        pendingTimeout = setTimeout(() => {
+          pendingTimeout = null;
+          bump();
+        }, 2000 - elapsed);
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (pendingTimeout) clearTimeout(pendingTimeout);
+    };
+  }, [store]);
+
   // ── Latest trade price — fed to PaperTradeRail (ChartTab's rail hardwire
   // is a `livePrice` PROP, not an internal Binance dependency, so this is a
   // trivial substitution — no PaperTradeRail internals touched). ──────────
@@ -337,6 +371,7 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
               indicators={DEFAULT_INDICATORS}
               theme="dark"
               height="100%"
+              refreshToken={barsRefreshToken}
               onBarsLoad={handleBarsLoad}
               footprint={{
                 store,
