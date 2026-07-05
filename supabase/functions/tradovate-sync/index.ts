@@ -1191,10 +1191,11 @@ async function syncCredential(cred: {
   // transition where a new funded account appeared after initial connect), create
   // it now so fills can be attributed correctly without requiring a full re-auth.
   const portfolioMap = new Map<number, string>(); // tradovate_account_id → portfolios.id
+  const inactivePortfolioByAccountId = new Map<number, string>(); // tradovate_account_id → portfolios.id (is_active === false)
   if (discoveredAccountIds.length > 0) {
     const { data: portfolioRows, error: portfolioErr } = await supabaseAdmin
       .from('portfolios')
-      .select('id, tradovate_account_id')
+      .select('id, tradovate_account_id, is_active')
       .eq('user_id', cred.user_id)
       .eq('environment', resolvedEnvironment)
       .in('tradovate_account_id', discoveredAccountIds);
@@ -1204,9 +1205,12 @@ async function syncCredential(cred: {
         portfolioErr.message
       );
     } else {
-      for (const row of (portfolioRows ?? []) as Array<{ id: string; tradovate_account_id: number }>) {
+      for (const row of (portfolioRows ?? []) as Array<{ id: string; tradovate_account_id: number; is_active?: boolean }>) {
         if (row.tradovate_account_id !== null) {
           portfolioMap.set(Number(row.tradovate_account_id), row.id);
+          if (row.is_active === false) {
+            inactivePortfolioByAccountId.set(Number(row.tradovate_account_id), row.id);
+          }
         }
       }
     }
@@ -1260,6 +1264,43 @@ async function syncCredential(cred: {
           console.warn(
             `[tradovate-sync] self-heal: failed to create portfolio for account ${acc.id}:`,
             healErr
+          );
+        }
+      }
+    }
+
+    // Reactivation self-heal: a portfolio row may have been wrongly deactivated
+    // while this connection's token was expired (reconcile treated "can't see"
+    // as "doesn't exist"). Now that discovery succeeded and the broker reports
+    // the account live again, reactivate it so it reappears in the journal/
+    // copier account lists. Only reactivate accounts the broker currently
+    // reports live (not archived, not inactive) — never resurrect dead accounts.
+    // Gated on discoverySucceeded: the fallback-to-primary-account path sets
+    // discoveredAccounts=[{id: accountIdNum}] with no active/archived flags,
+    // which would otherwise pass the "live" filter unconditionally.
+    if (discoverySucceeded && inactivePortfolioByAccountId.size > 0) {
+      const accountsToReactivate = discoveredAccounts.filter(
+        a => a.archived !== true && a.active !== false && inactivePortfolioByAccountId.has(a.id)
+      );
+      if (accountsToReactivate.length > 0) {
+        const portfolioIdsToReactivate = accountsToReactivate.map(
+          a => inactivePortfolioByAccountId.get(a.id)!
+        );
+        try {
+          await supabaseAdmin
+            .from('portfolios')
+            .update({ is_active: true, updated_at: new Date().toISOString() })
+            .in('id', portfolioIdsToReactivate);
+          console.log(JSON.stringify({
+            event: 'portfolios_reactivated',
+            connection_id: cred.id,
+            count: portfolioIdsToReactivate.length,
+            account_ids: accountsToReactivate.map(a => a.id),
+          }));
+        } catch (reactivateErr) {
+          console.warn(
+            `[tradovate-sync] reactivation self-heal: failed to reactivate portfolios for connection ${cred.id}:`,
+            reactivateErr
           );
         }
       }
@@ -1916,13 +1957,17 @@ Deno.serve(async (req: Request) => {
     // discovery this run — so a connection skipped by the active-user filter or a
     // failed discovery never lets another connection wipe its accounts.
     //
-    // Degraded/expired connections are intentionally excluded: a connection whose
-    // token has expired cannot contribute account data, but should not prevent
-    // reconciliation from running and cleaning up orphaned portfolios (e.g. prop-firm
-    // evaluation accounts that graduated to live and no longer appear in demo).
+    // Degraded/expired connections are INCLUDED in the expected set on purpose
+    // (changed 2026-07-05): excluding them let the aggregate (credential_id=null)
+    // reconcile run with a live-set missing a temporarily-broken sibling's accounts,
+    // deactivating that sibling's portfolios (incident 2026-07-05: an expired APEX
+    // connection's account vanished from the journal account list seconds after the
+    // user re-authed). A broken connection now blocks the AGGREGATE reconcile for
+    // its (user, env) until it recovers or is deleted; genuine cleanup still happens
+    // via (a) the per-connection credential-scoped reconcile and (b) the legacy
+    // (credential_id IS NULL) reconcile, both of which run on partial coverage.
     const expectedByUserEnv = new Map<string, { userId: string; environment: string; connIds: Set<string> }>();
     for (const bc of allConnections as Array<{ id: string; user_id: string; environment: string; status?: string }>) {
-      if (bc.status === 'degraded' || bc.status === 'expired') continue;
       const key = `${bc.user_id}::${bc.environment}`;
       let entry = expectedByUserEnv.get(key);
       if (!entry) { entry = { userId: bc.user_id, environment: bc.environment, connIds: new Set<string>() }; expectedByUserEnv.set(key, entry); }

@@ -211,10 +211,9 @@ export function ManageConnectionsModal({
     >
       {/* Modal shell — mirrors TradovateConnectModal manage overlay styling */}
       <div
-        className="relative flex flex-col w-full max-w-sm rounded-[24px] overflow-hidden border border-[#C9A646]/15 shadow-[0_26px_90px_rgba(0,0,0,0.62)]"
+        className="relative flex flex-col w-full max-w-sm rounded-[24px] overflow-hidden border border-[#C9A646]/15 shadow-[0_26px_90px_rgba(0,0,0,0.62)] max-h-[65vh]"
         style={{
           background: 'linear-gradient(150deg, rgba(18,18,18,0.98) 0%, rgba(10,10,10,0.99) 100%)',
-          maxHeight: 'calc(100vh - 2rem)',
         }}
       >
         {/* Header */}
