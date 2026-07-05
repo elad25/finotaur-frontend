@@ -26,7 +26,7 @@
 //     mid-frame throw must never corrupt the transform stack.
 //   - Clipped at timeScale().width() so nothing paints over the price axis.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 import type { FlowBinStore } from './flowBinStore';
 import type { FootprintConfig, FlowCandleView } from './types';
@@ -35,11 +35,23 @@ import {
   computeRowMergeFactor,
   drawCandleFootprint,
   drawTotalsRowAt,
+  drawStatsBandAt,
+  buildClusterStatsRow,
   prepareCandleDraw,
   FOOTPRINT_TOTALS_BAND_HEIGHT,
+  FOOTPRINT_STATS_BAND_HEIGHT,
+  type ClusterStatsRow,
+  type ClusterStatsRowMaxima,
+  type StatsBarColumn,
   type FootprintDetailLevel,
   type PreparedCandleDraw,
 } from './footprintRender';
+import { MagnifierPopup } from './MagnifierPopup';
+
+/** Dwell time (ms) the cursor must stay over a candle before the Magnifier popup appears. */
+const MAGNIFIER_HOVER_DELAY_MS = 150;
+/** Horizontal offset (px) from the cursor so the popup never covers the hovered candle. */
+const MAGNIFIER_CURSOR_OFFSET_X = 16;
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -103,9 +115,30 @@ export function FootprintLayer({
   storeRef.current = store;
   onStageChangeRef.current = onStageChange;
 
+  // ── Magnifier hover state ────────────────────────────────────────────────
+  // React state (NOT rAF-driven) — the popup only repaints when the hovered
+  // candle actually changes, never per-frame. currentStageRef (below) is
+  // read at crosshair-move time to decide whether the magnifier should even
+  // be eligible (disabled entirely at 'full' — numbers are already visible).
+  const [hoveredCandle, setHoveredCandle] = useState<{ candle: FlowCandleView; x: number; y: number } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Last candle time the hover timer was armed for — lets the timeout callback
+  // bail out if the cursor moved to a different candle (or off it) before the
+  // dwell elapsed, without needing to clear/re-set a fresh timer on every
+  // micro-move within the SAME candle (cheap early-exit instead).
+  const pendingHoverKeyRef = useRef<number | null>(null);
+
   // Prepared per-candle draw cache, rebuilt only on data/config dirty.
   // Keyed by candle time (seconds).
   const preparedCacheRef = useRef<Map<number, PreparedCandleDraw>>(new Map());
+  // Cluster-Statistics per-candle cache (Volume/Delta/Max Δ/Min Δ) — depends
+  // only on the candle's own data (never on cellMode/imbalance thresholds),
+  // so it's invalidated by the same data-dirty path as preparedCacheRef but
+  // NOT by imbalance-config changes (see the two invalidation effects below).
+  // sessionDelta is intentionally NOT baked in here — it depends on the
+  // whole visible window's running CVD, recomputed once per dirty frame via
+  // store.getCvdSeries() (see the draw loop), not per-candle.
+  const statsCacheRef = useRef<Map<number, Omit<ClusterStatsRow, 'sessionDelta'>>>(new Map());
   // Row size the cache was built with — a rowSize change invalidates everything.
   const cachedRowSizeRef = useRef<number>(-1);
   // Current detail stage — feeds computeDetailLevel's hysteresis (previousStage)
@@ -119,25 +152,27 @@ export function FootprintLayer({
     });
     dirtyRef.current = true; // store identity changed (symbol/interval swap) — force rebuild
     preparedCacheRef.current.clear();
+    statsCacheRef.current.clear();
     return unsubscribe;
   }, [store]);
 
   // ── Mark dirty on config change ──────────────────────────────────────────
-  // cellMode/showTotals/showPoc are read fresh at draw time in
+  // cellMode/showTotals/showPoc/showStats are read fresh at draw time in
   // footprintRender.ts (never baked into PreparedCandleDraw), so switching
   // between them is render-only and does NOT require a cache rebuild — this
   // is what lets Phase 3's mode-strip UI flip cellMode without any store or
-  // prep-cache cost. Only imbalanceRatio/imbalanceMinVolPct/stackedMin are
-  // baked into the prepared structure (they drive detectImbalances /
-  // detectStackedZones at prep time) and require a rebuild when they change.
+  // prep-cache cost. Only imbalanceRatio/imbalanceMinVolPct/stackedMin/
+  // imbalanceStackedOnly are baked into the prepared structure (they drive
+  // detectImbalances/detectStackedZones/applyStackedOnlyFilter at prep time)
+  // and require a rebuild when they change.
   useEffect(() => {
     dirtyRef.current = true;
-  }, [config.cellMode, config.showTotals, config.showPoc]);
+  }, [config.cellMode, config.showTotals, config.showPoc, config.showStats]);
 
   useEffect(() => {
     dirtyRef.current = true;
     preparedCacheRef.current.clear();
-  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin]);
+  }, [config.imbalanceRatio, config.imbalanceMinVolPct, config.stackedMin, config.imbalanceStackedOnly]);
 
   // ── Mark dirty on size/visibility change ─────────────────────────────────
   useEffect(() => {
@@ -157,6 +192,88 @@ export function FootprintLayer({
       clearInterval(safetyInterval);
     };
   }, [chart]);
+
+  // ── Magnifier hover detection ────────────────────────────────────────────
+  // Maps the crosshair's bar time → the footprint candle at that time, shows
+  // the popup after a MAGNIFIER_HOVER_DELAY_MS dwell (debounced — hovering
+  // across several candles in quick succession never flashes the popup),
+  // and hides it IMMEDIATELY on move-away (no debounce on hide). Only
+  // eligible when the config toggle is on AND the current zoom stage is NOT
+  // 'full' (numbers already visible on-chart at 'full' — magnifier would be
+  // redundant there). Runs on every crosshair move — no per-frame data scans,
+  // no rAF: this is purely event-driven.
+  useEffect(() => {
+    const clearHoverTimer = () => {
+      if (hoverTimerRef.current !== null) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+      pendingHoverKeyRef.current = null;
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = (param: { point?: { x: number; y: number }; time?: any }) => {
+      const cfg = configRef.current;
+      const stage = currentStageRef.current;
+
+      // Disabled entirely: toggle off, chart hidden, or already at 'full'
+      // (numbers are already legible on the candles themselves).
+      if (!cfg.magnifierEnabled || !visibleRef.current || stage === 'full') {
+        clearHoverTimer();
+        if (hoveredCandle !== null) setHoveredCandle(null);
+        return;
+      }
+
+      if (!param.point || param.time === undefined) {
+        // Crosshair left the chart area (or a non-bar time) — hide immediately.
+        clearHoverTimer();
+        if (hoveredCandle !== null) setHoveredCandle(null);
+        return;
+      }
+
+      const timeSec = param.time as number;
+      const candle = storeRef.current.getCandle(timeSec);
+      if (!candle || candle.bins.length === 0) {
+        clearHoverTimer();
+        if (hoveredCandle !== null) setHoveredCandle(null);
+        return;
+      }
+
+      const point = param.point;
+
+      // Already hovering (or already timing) the SAME candle — just refresh
+      // the cursor-anchored position, no need to re-arm the dwell timer.
+      if (pendingHoverKeyRef.current === timeSec) {
+        if (hoveredCandle !== null && hoveredCandle.candle.time === timeSec) {
+          setHoveredCandle({ candle, x: point.x, y: point.y });
+        }
+        return;
+      }
+
+      // Moved to a different candle — reset dwell timer, hide any existing popup.
+      clearHoverTimer();
+      if (hoveredCandle !== null) setHoveredCandle(null);
+      pendingHoverKeyRef.current = timeSec;
+      hoverTimerRef.current = setTimeout(() => {
+        // Re-validate eligibility at fire time — zoom/toggle may have changed
+        // during the dwell window.
+        if (
+          pendingHoverKeyRef.current === timeSec &&
+          configRef.current.magnifierEnabled &&
+          currentStageRef.current !== 'full'
+        ) {
+          setHoveredCandle({ candle, x: point.x, y: point.y });
+        }
+      }, MAGNIFIER_HOVER_DELAY_MS);
+    };
+
+    chart.subscribeCrosshairMove(handler);
+    return () => {
+      try { chart.unsubscribeCrosshairMove(handler); } catch { /* chart may be gone */ }
+      clearHoverTimer();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chart, hoveredCandle]);
 
   // ── rAF draw loop ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -254,6 +371,7 @@ export function FootprintLayer({
         if (cachedRowSizeRef.current !== rowSize) {
           cachedRowSizeRef.current = rowSize;
           preparedCacheRef.current.clear();
+          statsCacheRef.current.clear();
         }
 
         // ── Resolve bar-snapped anchors for time→x extrapolation ───────────
@@ -318,6 +436,23 @@ export function FootprintLayer({
         const latestCandle = candles[candles.length - 1];
         const latestRange = computeCandleRange(latestCandle, rowSize);
 
+        // Session Δ (running cumulative delta from the oldest LOADED candle,
+        // not a global CVD) — computed ONCE per dirty frame via
+        // getCvdSeries(), never per-candle/per-frame-scan. Only needed when
+        // the stats strip is actually going to render (showStats + 'full').
+        const needsStats = config.showStats && detail === 'full';
+        const cvdByTime = new Map<number, number>();
+        if (needsStats && candles.length > 0) {
+          const cvdSeries = activeStore.getCvdSeries(candles[0].time, candles[candles.length - 1].time);
+          for (const point of cvdSeries) cvdByTime.set(point.time, point.cvd);
+        }
+
+        // Bar columns collected for a single batched stats-band draw call
+        // after the per-candle footprint loop (drawStatsBandAt computes
+        // heat-shading row maxima once across all visible bars).
+        const statsBars: StatsBarColumn[] = [];
+        const totalsBars: { prepared: PreparedCandleDraw; leftX: number; rightX: number }[] = [];
+
         for (const candle of candles) {
           const x = timeToX(candle.time);
           if (x + candleWidthPx / 2 < 0 || x - candleWidthPx / 2 > paneW) continue; // cull
@@ -355,11 +490,57 @@ export function FootprintLayer({
             },
           );
 
-          if (config.showTotals && detail === 'full') {
-            const totalsTop = cssH - FOOTPRINT_TOTALS_BAND_HEIGHT;
-            drawTotalsRowAt(ctx, prepared, {
-              leftX: Math.max(0, x - candleWidthPx / 2),
-              rightX: Math.min(paneW, x + candleWidthPx / 2),
+          if (detail === 'full') {
+            const barLeftX = Math.max(0, x - candleWidthPx / 2);
+            const barRightX = Math.min(paneW, x + candleWidthPx / 2);
+            if (config.showStats) {
+              let cached = statsCacheRef.current.get(candle.time);
+              if (!cached) {
+                const built = buildClusterStatsRow(candle, 0);
+                cached = { volume: built.volume, delta: built.delta, deltaPct: built.deltaPct, deltaPctLabel: built.deltaPctLabel, maxDelta: built.maxDelta, minDelta: built.minDelta };
+                statsCacheRef.current.set(candle.time, cached);
+              }
+              const sessionDelta = cvdByTime.get(candle.time) ?? 0;
+              statsBars.push({
+                prepared,
+                stats: { ...cached, sessionDelta },
+                leftX: barLeftX,
+                rightX: barRightX,
+              });
+            } else if (config.showTotals) {
+              totalsBars.push({ prepared, leftX: barLeftX, rightX: barRightX });
+            }
+          }
+        }
+
+        if (statsBars.length > 0) {
+          const rowMaxima: ClusterStatsRowMaxima = {
+            volume: 0,
+            delta: 0,
+            deltaPct: 0,
+            maxDelta: 0,
+            minDelta: 0,
+            sessionDelta: 0,
+          };
+          for (const bar of statsBars) {
+            rowMaxima.volume = Math.max(rowMaxima.volume, Math.abs(bar.stats.volume));
+            rowMaxima.delta = Math.max(rowMaxima.delta, Math.abs(bar.stats.delta));
+            rowMaxima.deltaPct = Math.max(rowMaxima.deltaPct, Math.abs(bar.stats.deltaPct));
+            rowMaxima.maxDelta = Math.max(rowMaxima.maxDelta, Math.abs(bar.stats.maxDelta));
+            rowMaxima.minDelta = Math.max(rowMaxima.minDelta, Math.abs(bar.stats.minDelta));
+            rowMaxima.sessionDelta = Math.max(rowMaxima.sessionDelta, Math.abs(bar.stats.sessionDelta));
+          }
+          drawStatsBandAt(ctx, statsBars, {
+            top: cssH - FOOTPRINT_STATS_BAND_HEIGHT,
+            labelGutterWidth: 0,
+            rowMaxima,
+          });
+        } else if (totalsBars.length > 0) {
+          const totalsTop = cssH - FOOTPRINT_TOTALS_BAND_HEIGHT;
+          for (const bar of totalsBars) {
+            drawTotalsRowAt(ctx, bar.prepared, {
+              leftX: bar.leftX,
+              rightX: bar.rightX,
               top: totalsTop,
             });
           }
@@ -382,22 +563,58 @@ export function FootprintLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart, series]);
 
+  // Row size for the magnifier popup — same source-of-truth as the draw loop
+  // (store's own config, falling back to the row-size of the hovered
+  // candle's own bins is not needed here since the store always has a valid
+  // config by the time a candle can be hovered).
+  const magnifierRowSize = store.getConfig().rowSize;
+
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: `${width}px`,
-        height: `${height}px`,
-        pointerEvents: 'none',
-        // Above candles (which paint on the base lw-charts canvas) so the
-        // footprint clusters are legible; below marker-icons (z-index 20).
-        zIndex: 15,
-      }}
-      aria-hidden="true"
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: `${width}px`,
+          height: `${height}px`,
+          pointerEvents: 'none',
+          // Above candles (which paint on the base lw-charts canvas) so the
+          // footprint clusters are legible; below marker-icons (z-index 20).
+          zIndex: 15,
+        }}
+        aria-hidden="true"
+      />
+      {hoveredCandle && magnifierRowSize > 0 && (() => {
+        // Clamp the popup within [0, width] / [0, height] and offset from the
+        // cursor so it never covers the hovered candle. Actual popup size is
+        // computed inside MagnifierPopup via computeMagnifierLayout — we use
+        // a conservative estimate here purely for the clamp (the popup itself
+        // measures its own canvas after mount; a few px of slack is harmless
+        // for a floating overlay).
+        const ESTIMATED_POPUP_W = 180;
+        const ESTIMATED_POPUP_H = 220;
+        let left = hoveredCandle.x + MAGNIFIER_CURSOR_OFFSET_X;
+        if (left + ESTIMATED_POPUP_W > width) {
+          left = hoveredCandle.x - MAGNIFIER_CURSOR_OFFSET_X - ESTIMATED_POPUP_W;
+        }
+        left = Math.max(0, Math.min(left, Math.max(0, width - ESTIMATED_POPUP_W)));
+
+        let top = hoveredCandle.y - ESTIMATED_POPUP_H / 2;
+        top = Math.max(0, Math.min(top, Math.max(0, height - ESTIMATED_POPUP_H)));
+
+        return (
+          <MagnifierPopup
+            candle={hoveredCandle.candle}
+            rowSize={magnifierRowSize}
+            config={config}
+            left={left}
+            top={top}
+          />
+        );
+      })()}
+    </>
   );
 }
 

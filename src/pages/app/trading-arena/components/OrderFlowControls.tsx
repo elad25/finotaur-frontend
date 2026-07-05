@@ -17,9 +17,18 @@
  */
 
 import { cn } from '@/lib/utils';
-import type { FootprintCellMode } from '@/components/charting/orderflow/types';
+import type { FootprintCellMode, ImbalancePreset } from '@/components/charting/orderflow/types';
 
 export type RowDensity = 'auto' | 'x2' | 'x4';
+
+/**
+ * Bar-type aggregation for the underlying candle series — see
+ * charting/orderflow/barBuilder.ts. FOUNDATION STAGE ONLY: only 'time' is
+ * wired into the chart today (ChartTab still renders Binance klines
+ * regardless of this field); 'tick'/'volume' render as disabled options
+ * until the follow-up integration phase.
+ */
+export type BarKind = 'time' | 'tick' | 'volume';
 
 export interface OrderFlowControlsState {
   enabled: boolean;
@@ -31,6 +40,14 @@ export interface OrderFlowControlsState {
   showVolumeProfile: boolean;
   /** Bookmap-style liquidity heatmap (DepthMatrixLayer, reused from the Market Scanner). Default OFF. */
   showHeatmap: boolean;
+  /** Diagonal-imbalance highlighting preset — Standard/Strict/Stacked (see resolveImbalancePreset). Default 'standard'. */
+  imbalancePreset: ImbalancePreset;
+  /** Cluster Statistics 6-row strip (Volume/Delta/Delta%/Max Δ/Min Δ/Session Δ). Default ON; OFF falls back to the compact totals row. */
+  showStats: boolean;
+  /** ATAS-style Magnifier — hover-a-candle popup showing full footprint detail at normal/semi-zoomed chart levels. Default ON. */
+  magnifierEnabled: boolean;
+  /** Bar-type aggregation (foundation stage — see BarKind doc comment). Default 'time'. */
+  barAggregation: BarKind;
 }
 
 export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
@@ -41,6 +58,10 @@ export const DEFAULT_ORDER_FLOW_CONTROLS: OrderFlowControlsState = {
   rowDensity: 'auto',
   showVolumeProfile: false,
   showHeatmap: false,
+  imbalancePreset: 'standard',
+  showStats: true,
+  magnifierEnabled: true,
+  barAggregation: 'time',
 };
 
 interface OrderFlowControlsProps {
@@ -58,12 +79,28 @@ const CELL_MODE_OPTIONS: { value: FootprintCellMode; label: string }[] = [
   { value: 'bidAsk', label: 'Bid×Ask' },
   { value: 'delta', label: 'Delta' },
   { value: 'volume', label: 'Volume' },
+  { value: 'trades', label: 'Trades' },
+  { value: 'volumeDelta', label: 'Vol+Δ' },
 ];
 
 const ROW_DENSITY_OPTIONS: { value: RowDensity; label: string }[] = [
   { value: 'auto', label: 'Auto' },
   { value: 'x2', label: '×2' },
   { value: 'x4', label: '×4' },
+];
+
+const IMBALANCE_PRESET_OPTIONS: { value: ImbalancePreset; label: string; title: string }[] = [
+  { value: 'standard', label: 'Standard', title: 'Standard — 150% diagonal ratio, singles highlighted' },
+  { value: 'strict', label: 'Strict', title: 'Strict — 300% diagonal ratio, singles highlighted' },
+  { value: 'stacked', label: 'Stacked', title: 'Stacked — 150% ratio, only runs of 3+ consecutive levels highlighted' },
+];
+
+// Foundation stage — only 'time' is wired into the chart (see BarKind doc
+// comment). 'tick'/'volume' are visible but disabled until integration.
+const BAR_KIND_OPTIONS: { value: BarKind; label: string; comingSoon: boolean }[] = [
+  { value: 'time', label: 'Time', comingSoon: false },
+  { value: 'tick', label: 'Tick', comingSoon: true },
+  { value: 'volume', label: 'Volume', comingSoon: true },
 ];
 
 function pillClass(active: boolean, disabled: boolean): string {
@@ -162,9 +199,49 @@ export function OrderFlowControls({
 
       <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
 
-      {/* Volume Profile / Heatmap toggles — independent of the footprint
-          on/off switch above (each is its own overlay layer). */}
-      <div className="flex items-center gap-1" role="group" aria-label="Volume profile and heatmap overlays">
+      {/* Bar-type segmented control — foundation stage (see BarKind doc
+          comment): Tick/Volume are visually present but disabled, "Coming
+          soon". barAggregation is NOT yet threaded into the chart. */}
+      <div className="flex items-center gap-1" role="group" aria-label="Bar type">
+        {BAR_KIND_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled || !state.enabled || opt.comingSoon}
+            onClick={() => onChange({ ...state, barAggregation: opt.value })}
+            className={pillClass(state.barAggregation === opt.value, disabled || !state.enabled || opt.comingSoon)}
+            title={opt.comingSoon ? 'Coming soon' : undefined}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+      {/* Imbalance preset segmented control — opinionated presets over
+          ATAS's ~400-setting maze. See resolveImbalancePreset in
+          footprintRender.ts for the exact thresholds per preset. */}
+      <div className="flex items-center gap-1" role="group" aria-label="Imbalance preset">
+        {IMBALANCE_PRESET_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            disabled={disabled || !state.enabled}
+            onClick={() => onChange({ ...state, imbalancePreset: opt.value })}
+            className={pillClass(state.imbalancePreset === opt.value, disabled || !state.enabled)}
+            title={opt.title}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <span className="w-px h-4 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.12)' }} aria-hidden="true" />
+
+      {/* Volume Profile / Heatmap / Stats toggles — independent of the
+          footprint on/off switch above (each is its own overlay/render mode). */}
+      <div className="flex items-center gap-1" role="group" aria-label="Volume profile, heatmap and stats overlays">
         <button
           type="button"
           disabled={disabled}
@@ -184,6 +261,26 @@ export function OrderFlowControls({
           title="Liquidity heatmap — Bookmap-style resting order-book depth"
         >
           Heatmap
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !state.enabled}
+          onClick={() => onChange({ ...state, showStats: !state.showStats })}
+          className={pillClass(state.showStats, disabled || !state.enabled)}
+          aria-pressed={state.showStats}
+          title="Cluster Statistics — per-bar Volume/Delta/Delta%/Max Δ/Min Δ/Session Δ strip"
+        >
+          Stats
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !state.enabled}
+          onClick={() => onChange({ ...state, magnifierEnabled: !state.magnifierEnabled })}
+          className={pillClass(state.magnifierEnabled, disabled || !state.enabled)}
+          aria-pressed={state.magnifierEnabled}
+          title="Magnifier — hover a candle at normal zoom to see its full footprint detail"
+        >
+          Magnifier
         </button>
       </div>
 

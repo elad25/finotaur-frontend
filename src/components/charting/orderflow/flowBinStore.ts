@@ -211,7 +211,7 @@ export class FlowBinStore {
 
     let bin = candle.bins.get(binPrice);
     if (!bin) {
-      bin = { binPrice, buyVol: 0, sellVol: 0 };
+      bin = { binPrice, buyVol: 0, sellVol: 0, trades: 0 };
       candle.bins.set(binPrice, bin);
     }
 
@@ -220,6 +220,7 @@ export class FlowBinStore {
     } else {
       bin.sellVol += trade.qty;
     }
+    bin.trades += 1; // one aggTrade = 1 print
 
     candle.totalVol += trade.qty;
     candle.delta += trade.buyerAggressor ? trade.qty : -trade.qty;

@@ -6,7 +6,19 @@
 // merging) happens in `prepareCandleDraw`, which callers invoke ONLY when
 // data or config changes — never per pan/zoom frame (see FootprintLayer.tsx).
 
-import type { FlowBin, FlowCandleView, FootprintCellMode, FootprintConfig } from './types';
+import type {
+  FlowBin,
+  FlowCandleView,
+  FootprintCellMode,
+  FootprintConfig,
+  ImbalancePreset,
+} from './types';
+import {
+  DEFAULT_IMBALANCE_MIN_VOL_PCT,
+  DEFAULT_STACKED_MIN,
+  STANDARD_IMBALANCE_RATIO,
+  STRICT_IMBALANCE_RATIO,
+} from './types';
 import {
   FOOTPRINT_BUY_BG,
   FOOTPRINT_BUY_BG_STRONG,
@@ -134,6 +146,27 @@ export function formatCompact(n: number): string {
   return abs === 0 ? '0' : `${sign}${abs.toFixed(2)}`;
 }
 
+/**
+ * "Values divider" K-formatter used for footprint cell/totals text: numbers
+ * >= 1000 render as "1.2K" (one decimal, trailing ".0" stripped — 1000→"1K",
+ * 1234→"1.2K", 12345→"12.3K"); numbers < 1000 keep the existing formatCompact
+ * behavior (no K-suffix, one decimal below 100, integer at/above 100).
+ * Sign is preserved on the outside so negative deltas read "-1.2K".
+ */
+export function formatCellValue(n: number): string {
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1000) {
+    const k = (abs / 1000).toFixed(1);
+    const stripped = k.endsWith('.0') ? k.slice(0, -2) : k;
+    return `${sign}${stripped}K`;
+  }
+  if (abs >= 1) return `${sign}${abs.toFixed(abs >= 100 ? 0 : 1)}`;
+  return abs === 0 ? '0' : `${sign}${abs.toFixed(2)}`;
+}
+
 // ─── Merged bin (row-merge prep) ────────────────────────────────────────────
 
 interface MergedBin {
@@ -141,11 +174,13 @@ interface MergedBin {
   binPrice: number;
   buyVol: number;
   sellVol: number;
+  /** Sum of per-bin print counts across all bins merged into this row. */
+  trades: number;
 }
 
 function mergeBins(bins: FlowBin[], factor: 1 | 2 | 4, rowSize: number): MergedBin[] {
   if (factor === 1) {
-    return bins.map((b) => ({ binPrice: b.binPrice, buyVol: b.buyVol, sellVol: b.sellVol }));
+    return bins.map((b) => ({ binPrice: b.binPrice, buyVol: b.buyVol, sellVol: b.sellVol, trades: b.trades }));
   }
   const groupSize = rowSize * factor;
   const groups = new Map<number, MergedBin>();
@@ -153,13 +188,62 @@ function mergeBins(bins: FlowBin[], factor: 1 | 2 | 4, rowSize: number): MergedB
     const groupKey = Math.floor(bin.binPrice / groupSize) * groupSize;
     let group = groups.get(groupKey);
     if (!group) {
-      group = { binPrice: groupKey, buyVol: 0, sellVol: 0 };
+      group = { binPrice: groupKey, buyVol: 0, sellVol: 0, trades: 0 };
       groups.set(groupKey, group);
     }
     group.buyVol += bin.buyVol;
     group.sellVol += bin.sellVol;
+    group.trades += bin.trades;
   }
   return Array.from(groups.values()).sort((a, b) => a.binPrice - b.binPrice);
+}
+
+// ─── Imbalance presets ───────────────────────────────────────────────────────
+
+/** Resolved concrete thresholds for one of the 3 opinionated imbalance presets. */
+export interface ResolvedImbalanceConfig {
+  imbalanceRatio: number;
+  imbalanceMinVolPct: number;
+  stackedMin: number;
+  imbalanceStackedOnly: boolean;
+}
+
+/**
+ * Resolve an `ImbalancePreset` name to its concrete threshold tuple. Pure —
+ * no data dependency — so callers (OrderFlowControls) can spread the result
+ * straight into a `FootprintConfig` update.
+ *
+ * - 'standard': 1.5x ratio, 0.5% dust filter, singles highlighted.
+ * - 'strict': 3.0x ratio, same dust filter, singles highlighted.
+ * - 'stacked': same thresholds as 'standard', but only runs of >= stackedMin
+ *   consecutive same-side imbalances are highlighted per-cell (isolated
+ *   singles are suppressed — see `PreparedCandleDraw.imbalances[i].highlighted`).
+ */
+export function resolveImbalancePreset(preset: ImbalancePreset): ResolvedImbalanceConfig {
+  switch (preset) {
+    case 'strict':
+      return {
+        imbalanceRatio: STRICT_IMBALANCE_RATIO,
+        imbalanceMinVolPct: DEFAULT_IMBALANCE_MIN_VOL_PCT,
+        stackedMin: DEFAULT_STACKED_MIN,
+        imbalanceStackedOnly: false,
+      };
+    case 'stacked':
+      return {
+        imbalanceRatio: STANDARD_IMBALANCE_RATIO,
+        imbalanceMinVolPct: DEFAULT_IMBALANCE_MIN_VOL_PCT,
+        stackedMin: DEFAULT_STACKED_MIN,
+        imbalanceStackedOnly: true,
+      };
+    case 'standard':
+    default:
+      return {
+        imbalanceRatio: STANDARD_IMBALANCE_RATIO,
+        imbalanceMinVolPct: DEFAULT_IMBALANCE_MIN_VOL_PCT,
+        stackedMin: DEFAULT_STACKED_MIN,
+        imbalanceStackedOnly: false,
+      };
+  }
 }
 
 // ─── Imbalance detection ────────────────────────────────────────────────────
@@ -169,6 +253,15 @@ export type ImbalanceSide = 'buy' | 'sell' | null;
 interface RowImbalance {
   /** 'buy' = ask at this level dominates bid one level down; 'sell' = inverse. */
   side: ImbalanceSide;
+  /**
+   * Whether this row's imbalance should actually be painted (per-cell
+   * outline/bold text). Equal to `side !== null` for Standard/Strict.
+   * For the Stacked preset (`config.imbalanceStackedOnly`), this is only
+   * true when the row belongs to a run of >= stackedMin consecutive
+   * same-side imbalances — set by `applyStackedOnlyFilter` after
+   * `detectStackedZones` runs.
+   */
+  highlighted: boolean;
 }
 
 /**
@@ -182,7 +275,7 @@ function detectImbalances(
   config: FootprintConfig,
 ): RowImbalance[] {
   const minVol = totalVol * (config.imbalanceMinVolPct / 100);
-  const out: RowImbalance[] = new Array(merged.length).fill(null).map(() => ({ side: null }));
+  const out: RowImbalance[] = new Array(merged.length).fill(null).map(() => ({ side: null, highlighted: false }));
 
   for (let i = 0; i < merged.length; i++) {
     const row = merged[i];
@@ -190,6 +283,9 @@ function detectImbalances(
     if (rowVol < minVol) continue;
 
     // Ask (buyVol) at level i vs bid (sellVol) at level i-1 → buy-side imbalance.
+    // The `below.sellVol > 0` check is the zero-opposite-side guard: without
+    // it, a reference row with zero volume would make ANY buyVol trivially
+    // "infinite ratio" and always flag — see imbalancePresets.test.ts.
     if (i > 0) {
       const below = merged[i - 1];
       if (below.sellVol > 0 && row.buyVol >= below.sellVol * config.imbalanceRatio) {
@@ -206,7 +302,31 @@ function detectImbalances(
       }
     }
   }
+
+  // Standard/Strict: every detected imbalance is highlighted (singles included).
+  // Stacked: highlighted is set later by applyStackedOnlyFilter, once the
+  // stacked-run membership is known — default false here for that preset.
+  if (!config.imbalanceStackedOnly) {
+    for (const entry of out) {
+      entry.highlighted = entry.side !== null;
+    }
+  }
   return out;
+}
+
+/**
+ * For the 'stacked' preset only: mark `highlighted = true` on exactly the
+ * rows that belong to a qualifying stacked run (>= stackedMin consecutive
+ * same-side imbalances). Isolated singles (runs shorter than stackedMin,
+ * including runs of 1) stay `highlighted = false` even though `side` is
+ * still set (side is retained for stacked-zone-band computation elsewhere).
+ */
+function applyStackedOnlyFilter(imbalances: RowImbalance[], zones: StackedZone[]): void {
+  for (const zone of zones) {
+    for (let i = zone.fromIdx; i <= zone.toIdx; i++) {
+      if (imbalances[i]) imbalances[i].highlighted = true;
+    }
+  }
 }
 
 /** A contiguous run of `stackedMin`+ same-side imbalanced rows. */
@@ -275,6 +395,9 @@ export function prepareCandleDraw(
   const merged = mergeBins(candle.bins, mergeFactor, rowSize);
   const imbalances = detectImbalances(merged, candle.totalVol, config);
   const stackedZones = detectStackedZones(imbalances, config.stackedMin);
+  if (config.imbalanceStackedOnly) {
+    applyStackedOnlyFilter(imbalances, stackedZones);
+  }
 
   let maxRowVol = 0;
   let pocBinPrice: number | null = null;
@@ -367,7 +490,11 @@ export function drawCandleFootprint(
     // enough to skip here without an extra viewport-height check).
 
     const isPoc = config.showPoc && prepared.pocBinPrice === row.binPrice;
-    const imbalance = prepared.imbalances[i]?.side ?? null;
+    // Only rows marked `highlighted` get the visual accent — for the Stacked
+    // preset this excludes isolated singles even though `side` is still set
+    // (side stays available for stacked-zone-band computation elsewhere).
+    const rowImbalance = prepared.imbalances[i];
+    const imbalance: ImbalanceSide = rowImbalance?.highlighted ? rowImbalance.side : null;
 
     drawCell(ctx, {
       leftX,
@@ -425,6 +552,12 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
   }
 
   // ── Cell background shading ────────────────────────────────────────────
+  // Note: the shaded (zoomed-out) stage never reaches this per-cell function
+  // with showText=true — it draws its own delta-shading independently of
+  // cellMode upstream in drawCandleFootprint/FootprintLayer. Background
+  // shading here (the 'full' stage) still varies by cellMode as before;
+  // 'trades' and 'volumeDelta' use the same neutral background as 'volume'
+  // since neither is a delta-magnitude-driven mode.
   if (cellMode === 'delta') {
     const bg = delta === 0
       ? FOOTPRINT_DELTA_NEUTRAL_DARK
@@ -433,7 +566,7 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
         : mixAlpha(FOOTPRINT_SELL_BG, FOOTPRINT_SELL_BG_STRONG, magnitude);
     ctx.fillStyle = bg;
     ctx.fillRect(leftX, top, width, height);
-  } else if (cellMode === 'volume') {
+  } else if (cellMode === 'volume' || cellMode === 'trades' || cellMode === 'volumeDelta') {
     ctx.fillStyle = FOOTPRINT_NEUTRAL_BG;
     ctx.fillRect(leftX, top, width, height);
   } else {
@@ -462,22 +595,41 @@ function drawCell(ctx: CanvasRenderingContext2D, args: DrawCellArgs): void {
     ctx.font = `${boldSuffix}${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = imbalanceSide === 'sell' ? FOOTPRINT_SELL_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR;
     ctx.textAlign = 'right';
-    ctx.fillText(formatCompact(row.sellVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.sellVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
 
     ctx.fillStyle = imbalanceSide === 'buy' ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_BUY_COLOR;
     ctx.textAlign = 'left';
-    ctx.fillText(formatCompact(row.buyVol), midX + FOOTPRINT_CELL_PADDING_X, textY);
+    ctx.fillText(formatCellValue(row.buyVol), midX + FOOTPRINT_CELL_PADDING_X, textY);
   } else if (cellMode === 'delta') {
     ctx.font = `${boldSuffix}${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCompact(delta), midX, textY);
+    ctx.fillText(formatCellValue(delta), midX, textY);
+  } else if (cellMode === 'trades') {
+    // ATAS-style "number of trades" mode — count of prints per level, neutral
+    // shading + neutral text (no directional color; a print count has no sign).
+    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'center';
+    ctx.fillText(formatCellValue(row.trades), midX, textY);
+  } else if (cellMode === 'volumeDelta') {
+    // Two values per cell: total volume (neutral) on the left half, signed
+    // delta (red/green by sign) on the right half — e.g. "153.2  +12.4".
+    ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'right';
+    ctx.fillText(formatCellValue(rowVol), midX - FOOTPRINT_CELL_PADDING_X, textY);
+
+    const deltaSign = delta > 0 ? '+' : '';
+    ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR_BRIGHT : FOOTPRINT_SELL_COLOR_BRIGHT;
+    ctx.textAlign = 'left';
+    ctx.fillText(`${deltaSign}${formatCellValue(delta)}`, midX + FOOTPRINT_CELL_PADDING_X, textY);
   } else {
     // 'volume' — neutral shading, delta only via text color.
     ctx.font = `${FOOTPRINT_CELL_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
     ctx.fillStyle = delta === 0 ? FOOTPRINT_NEUTRAL_TEXT : delta > 0 ? FOOTPRINT_BUY_COLOR : FOOTPRINT_SELL_COLOR;
     ctx.textAlign = 'center';
-    ctx.fillText(formatCompact(rowVol), midX, textY);
+    ctx.fillText(formatCellValue(rowVol), midX, textY);
   }
   ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }
@@ -529,7 +681,7 @@ export function drawTotalsRowAt(
   ctx.textBaseline = 'middle';
 
   ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
-  ctx.fillText(formatCompact(prepared.totalVol), midX, top + TOTALS_ROW_HEIGHT / 2);
+  ctx.fillText(formatCellValue(prepared.totalVol), midX, top + TOTALS_ROW_HEIGHT / 2);
 
   ctx.fillStyle =
     prepared.delta === 0
@@ -538,10 +690,160 @@ export function drawTotalsRowAt(
         ? FOOTPRINT_BUY_COLOR_BRIGHT
         : FOOTPRINT_SELL_COLOR_BRIGHT;
   ctx.fillText(
-    formatCompact(prepared.delta),
+    formatCellValue(prepared.delta),
     midX,
     top + TOTALS_ROW_HEIGHT + TOTALS_ROW_HEIGHT / 2,
   );
+}
+
+// ─── Cluster Statistics strip (ATAS-style, 6 rows) ──────────────────────────
+// Extends the compact 2-row totals band above into a per-bar statistics
+// table: Volume, Delta, Delta%, Max Δ, Min Δ, Session Δ — one column per
+// visible bar, a left-edge label gutter naming each row. Gated behind
+// config.showStats; when false, callers keep using drawTotalsRowAt (the
+// original compact behavior is untouched — see FootprintLayer.tsx wiring).
+
+/** One bar's derived statistics row — computed once per candle (cached alongside PreparedCandleDraw), never per-frame. */
+export interface ClusterStatsRow {
+  volume: number;
+  delta: number;
+  /** delta / volume, as a fraction (e.g. -0.0769 for -7.7%) — 0 when volume is 0. */
+  deltaPct: number;
+  /** Pre-formatted "±N.N%" label (1 decimal), guarded against div-by-zero. */
+  deltaPctLabel: string;
+  maxDelta: number;
+  minDelta: number;
+  /** Running cumulative delta across all loaded candles up to and including this one (caller-supplied — see getCvdSeries). */
+  sessionDelta: number;
+}
+
+/**
+ * Derive one bar's 6-row statistics from its FlowCandleView plus a
+ * caller-supplied running session delta (from FlowBinStore.getCvdSeries —
+ * NOT recomputed here, so this stays a cheap per-candle O(1) derivation with
+ * no scan over other candles).
+ */
+export function buildClusterStatsRow(
+  candle: Pick<FlowCandleView, 'totalVol' | 'delta' | 'minDelta' | 'maxDelta'>,
+  sessionDelta: number,
+): ClusterStatsRow {
+  const volume = candle.totalVol;
+  const delta = candle.delta;
+  const deltaPct = volume > 0 ? delta / volume : 0;
+  const deltaPctLabel = `${(deltaPct * 100).toFixed(1)}%`;
+  return {
+    volume,
+    delta,
+    deltaPct,
+    deltaPctLabel,
+    maxDelta: candle.maxDelta,
+    minDelta: candle.minDelta,
+    sessionDelta,
+  };
+}
+
+/** Per-row maxima (computed once per draw over the visible bars) driving the heat-shading alpha — see drawStatsBandAt. */
+export interface ClusterStatsRowMaxima {
+  volume: number;
+  delta: number;
+  deltaPct: number;
+  maxDelta: number;
+  minDelta: number;
+  sessionDelta: number;
+}
+
+const STATS_ROW_HEIGHT = 12;
+const STATS_ROW_COUNT = 6;
+/** Extra label-gutter is handled by the caller's leftX offset — band height is just row-count * row-height. */
+export const FOOTPRINT_STATS_BAND_HEIGHT = STATS_ROW_HEIGHT * STATS_ROW_COUNT;
+
+interface StatsRowDef {
+  key: keyof ClusterStatsRow & keyof ClusterStatsRowMaxima;
+  label: string;
+  /** Pre-formatted label for this row's value, or undefined to use formatCellValue(value). */
+  formatValue: (stats: ClusterStatsRow) => string;
+  /** true = color the value text by sign (Delta/Delta%/Max Δ/Min Δ/Session Δ); false = neutral (Volume). */
+  colorBySign: boolean;
+}
+
+const STATS_ROW_DEFS: StatsRowDef[] = [
+  { key: 'volume', label: 'Volume', formatValue: (s) => formatCellValue(s.volume), colorBySign: false },
+  { key: 'delta', label: 'Delta', formatValue: (s) => formatCellValue(s.delta), colorBySign: true },
+  { key: 'deltaPct', label: 'Delta%', formatValue: (s) => s.deltaPctLabel, colorBySign: true },
+  { key: 'maxDelta', label: 'Max Δ', formatValue: (s) => formatCellValue(s.maxDelta), colorBySign: true },
+  { key: 'minDelta', label: 'Min Δ', formatValue: (s) => formatCellValue(s.minDelta), colorBySign: true },
+  { key: 'sessionDelta', label: 'Session Δ', formatValue: (s) => formatCellValue(s.sessionDelta), colorBySign: true },
+];
+
+/** One bar's column input to drawStatsBandAt. */
+export interface StatsBarColumn {
+  prepared: PreparedCandleDraw;
+  stats: ClusterStatsRow;
+  leftX: number;
+  rightX: number;
+}
+
+/**
+ * Draw the 6-row Cluster Statistics strip across all visible bars in one
+ * call. `bounds.rowMaxima` must be computed ONCE per draw by the caller
+ * (see computeRowMaxima in the test file / FootprintLayer.tsx) — this
+ * function never scans other bars' data itself, keeping it a pure
+ * per-frame-cheap render step (no per-frame data scans, per the task's
+ * hard constraint).
+ */
+export function drawStatsBandAt(
+  ctx: CanvasRenderingContext2D,
+  bars: StatsBarColumn[],
+  bounds: { top: number; labelGutterWidth: number; rowMaxima: ClusterStatsRowMaxima },
+): void {
+  const { top, labelGutterWidth, rowMaxima } = bounds;
+
+  ctx.font = `${FOOTPRINT_TOTALS_FONT_SIZE}px ${FOOTPRINT_FONT_FAMILY}`;
+  ctx.textBaseline = 'middle';
+
+  // Backdrop across the whole strip (label gutter + all bar columns).
+  const rightmostX = bars.reduce((max, b) => Math.max(max, b.rightX), labelGutterWidth);
+  ctx.fillStyle = FOOTPRINT_TOTALS_BG;
+  ctx.fillRect(0, top, rightmostX, FOOTPRINT_STATS_BAND_HEIGHT);
+
+  for (let rowIdx = 0; rowIdx < STATS_ROW_DEFS.length; rowIdx++) {
+    const def = STATS_ROW_DEFS[rowIdx];
+    const rowTop = top + rowIdx * STATS_ROW_HEIGHT;
+    const rowMid = rowTop + STATS_ROW_HEIGHT / 2;
+    const rowMax = rowMaxima[def.key];
+
+    // Row label, left-aligned in the gutter.
+    ctx.fillStyle = FOOTPRINT_NEUTRAL_TEXT;
+    ctx.textAlign = 'left';
+    ctx.fillText(def.label, FOOTPRINT_CELL_PADDING_X, rowMid);
+
+    for (const bar of bars) {
+      const width = bar.rightX - bar.leftX;
+      if (width <= 0) continue;
+      const value = bar.stats[def.key];
+      const magnitude = rowMax > 0 ? Math.min(1, Math.abs(value) / rowMax) : 0;
+
+      // Subtle heat-shading background, proportional to |value| relative to
+      // the visible-range max for this row — cheap: rowMax passed in, not
+      // recomputed here.
+      if (magnitude > 0) {
+        ctx.fillStyle = mixAlpha('rgba(201, 166, 70, 0)', 'rgba(201, 166, 70, 0.22)', magnitude);
+        ctx.fillRect(bar.leftX, rowTop, width, STATS_ROW_HEIGHT);
+      }
+
+      const midX = bar.leftX + width / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = !def.colorBySign
+        ? FOOTPRINT_NEUTRAL_TEXT
+        : value === 0
+          ? FOOTPRINT_NEUTRAL_TEXT
+          : value > 0
+            ? FOOTPRINT_BUY_COLOR_BRIGHT
+            : FOOTPRINT_SELL_COLOR_BRIGHT;
+      ctx.fillText(def.formatValue(bar.stats), midX, rowMid);
+    }
+  }
+  ctx.textAlign = 'left'; // restore canvas default so callers aren't surprised
 }
 
 /**
@@ -587,4 +889,83 @@ function drawStackedZones(
     ctx.fillStyle = zone.side === 'buy' ? FOOTPRINT_STACKED_BUY_BAND : FOOTPRINT_STACKED_SELL_BAND;
     ctx.fillRect(zoneStartX, bandTop, zoneEndX - zoneStartX, bandHeight);
   }
+}
+
+// ─── Magnifier (ATAS-style hover popup) ─────────────────────────────────────
+// At the 'hidden'/'shaded' detail stages (see computeDetailLevel), hovering a
+// candle for a short dwell time shows a small floating popup rendering that
+// ONE candle's full footprint at a fixed, comfortable cell size — without
+// changing chart zoom. This section is pure layout math only; the popup's
+// canvas painting reuses prepareCandleDraw + drawCandleFootprint exactly as
+// the main chart does (see MagnifierPopup.tsx), never reimplementing cell
+// drawing.
+
+/** Fixed row height (px) used inside the magnifier popup — independent of the host chart's zoom. */
+export const MAGNIFIER_ROW_HEIGHT = 18;
+/** Totals band height (px) reserved at the bottom of the popup for Volume/Delta. */
+export const MAGNIFIER_TOTALS_BAND_HEIGHT = FOOTPRINT_TOTALS_BAND_HEIGHT;
+/** Hard cap on popup canvas height — beyond this, rows are merged (2x, then 4x) to fit. */
+export const MAGNIFIER_MAX_HEIGHT = 480;
+/** Minimum popup canvas width — wide enough for two formatted bid×ask numbers side by side. */
+export const MAGNIFIER_MIN_WIDTH = 96;
+/** Per-character width estimate (px) used to widen the popup for wider formatted numbers. */
+const MAGNIFIER_CHAR_WIDTH_PX = 7;
+
+export interface MagnifierLayout {
+  /** Number of rows actually rendered (after any row-merging needed to fit MAGNIFIER_MAX_HEIGHT). */
+  rowCount: number;
+  /** Row-merge factor applied ON TOP OF the candle's existing prepared mergeFactor, to fit the height cap. */
+  mergeFactor: 1 | 2 | 4;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+/**
+ * Pure layout computation for the magnifier popup: given a candle's already-
+ * prepared draw structure (raw/mergeFactor=1 bins are fine — this decides its
+ * OWN additional merge on top, same pattern as FootprintLayer's computeRowMergeFactor
+ * for the main chart), return the popup canvas dimensions and effective row count.
+ *
+ * - rowCount = prepared.merged.length when no further merging is needed.
+ * - height = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT, clamped
+ *   at MAGNIFIER_MAX_HEIGHT — clamping is achieved by merging rows (2x, then 4x)
+ *   rather than shrinking row height, so text stays legible even for candles
+ *   with a large number of price levels (>40).
+ */
+export function computeMagnifierLayout(prepared: PreparedCandleDraw): MagnifierLayout {
+  const rawRowCount = Math.max(1, prepared.merged.length);
+
+  let mergeFactor: 1 | 2 | 4 = 1;
+  let rowCount = rawRowCount;
+  let canvasHeight = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT;
+
+  if (canvasHeight > MAGNIFIER_MAX_HEIGHT) {
+    mergeFactor = 2;
+    rowCount = Math.ceil(rawRowCount / 2);
+    canvasHeight = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT;
+  }
+  if (canvasHeight > MAGNIFIER_MAX_HEIGHT) {
+    mergeFactor = 4;
+    rowCount = Math.ceil(rawRowCount / 4);
+    canvasHeight = rowCount * MAGNIFIER_ROW_HEIGHT + MAGNIFIER_TOTALS_BAND_HEIGHT;
+  }
+  // Still over the cap even at 4x (extremely dense candle) — clamp height and
+  // let the popup scroll/clip rather than growing further; row count reflects
+  // what's actually drawable, canvasHeight is the hard visual cap.
+  canvasHeight = Math.min(canvasHeight, MAGNIFIER_MAX_HEIGHT);
+
+  // Width: wide enough for the longest formatted bid/ask value in this candle,
+  // doubled (bid + ask columns) plus padding, floored at MAGNIFIER_MIN_WIDTH.
+  let maxLabelLen = 0;
+  for (const row of prepared.merged) {
+    maxLabelLen = Math.max(
+      maxLabelLen,
+      formatCellValue(row.buyVol).length,
+      formatCellValue(row.sellVol).length,
+    );
+  }
+  const estimatedWidth = maxLabelLen * MAGNIFIER_CHAR_WIDTH_PX * 2 + FOOTPRINT_CELL_PADDING_X * 6;
+  const canvasWidth = Math.max(MAGNIFIER_MIN_WIDTH, estimatedWidth);
+
+  return { rowCount, mergeFactor, canvasWidth, canvasHeight };
 }
