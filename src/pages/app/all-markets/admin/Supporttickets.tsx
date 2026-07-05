@@ -131,7 +131,7 @@ const TARGET_GROUPS: { key: TargetGroup; label: string; icon: any; color: string
   { key: 'all', label: 'Everyone', icon: Users, color: 'blue' },
   { key: 'trading_journal', label: 'Trading Journal', icon: Target, color: 'green' },
   { key: 'war_zone', label: 'Top Secret', icon: Sword, color: 'orange' },
-  { key: 'top_secret', label: 'TOP SECRET', icon: Crown, color: 'purple' },
+  { key: 'top_secret', label: 'INVESTOR', icon: Crown, color: 'purple' },
 ];
 
 type UpdatesSubTab = 'manual' | 'reports';
@@ -902,7 +902,7 @@ toast.success('Update deleted');
       all: { bg: 'bg-blue-500/10', text: 'text-blue-400', label: 'Everyone', icon: Users },
       trading_journal: { bg: 'bg-green-500/10', text: 'text-green-400', label: 'Trading Journal', icon: Target },
       war_zone: { bg: 'bg-orange-500/10', text: 'text-orange-400', label: 'Top Secret', icon: Sword },
-      top_secret: { bg: 'bg-purple-500/10', text: 'text-purple-400', label: 'TOP SECRET', icon: Crown },
+      top_secret: { bg: 'bg-purple-500/10', text: 'text-purple-400', label: 'INVESTOR', icon: Crown },
     };
     return configs[group] || configs.all;
   }

@@ -1905,7 +1905,7 @@ if (hasResult && directRiskUSD > 0) {
             </div>
             <div className="mt-3 pt-3 border-t border-blue-500/20">
               <p className="text-xs text-zinc-400">
-                🚀 <span className="text-blue-300">Premium</span> gives you <span className="text-white font-medium">unlimited trades</span>, advanced analytics, and priority support
+                🚀 <span className="text-blue-300">Trader</span> gives you <span className="text-white font-medium">unlimited trades</span>, advanced analytics, and priority support
               </p>
             </div>
           </div>

@@ -578,7 +578,7 @@ useEffect(() => {
       return { name: `Basic (${intervalText})`, badge: 'basic' };
     } else if (account_type === 'premium') {
       const intervalText = subscription_interval === 'yearly' ? 'Yearly' : 'Monthly';
-      return { name: `Premium (${intervalText})`, badge: 'premium' };
+      return { name: `Trader (${intervalText})`, badge: 'premium' };
     }
     
     return { name: 'Free', badge: 'free' };

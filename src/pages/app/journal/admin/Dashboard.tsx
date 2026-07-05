@@ -155,7 +155,7 @@ export default function AdminDashboard() {
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Premium</span>
+              <span className="text-gray-400">Trader</span>
               <span className="text-white font-semibold">
                 {stats.premiumUsers} ({((stats.premiumUsers / stats.totalUsers) * 100).toFixed(1)}%)
               </span>

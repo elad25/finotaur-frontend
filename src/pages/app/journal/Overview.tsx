@@ -869,7 +869,7 @@ const FreeUserBrokerTooltip = React.memo(({
         </h3>
         
         <p className="text-center text-zinc-400 text-sm mb-6 leading-relaxed">
-          This feature is available for <span className="text-[#C9A646] font-semibold">Basic</span> and <span className="text-[#C9A646] font-semibold">Premium</span> users
+          This feature is available for <span className="text-[#C9A646] font-semibold">Basic</span> and <span className="text-[#C9A646] font-semibold">Trader</span> users
         </p>
 
         <div className="bg-[#0A0A0A] border border-zinc-800 rounded-xl p-4 mb-6">

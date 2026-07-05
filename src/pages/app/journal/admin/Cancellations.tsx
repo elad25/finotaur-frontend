@@ -648,10 +648,10 @@ export default function AdminChurnPage() {
               className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:border-[#D4AF37] focus:outline-none"
             >
               <option value="">All Plans</option>
-              <option value="premium">Premium</option>
+              <option value="premium">Trader</option>
               <option value="basic">Basic</option>
               <option value="newsletter">Newsletter</option>
-              <option value="top_secret">Top Secret</option>
+              <option value="top_secret">Investor</option>
             </select>
             
             {/* Unprocessed toggle */}

@@ -270,7 +270,7 @@ export default function BacktestLanding() {
                     <th className="text-center p-6 text-zinc-400 font-medium">Basic</th>
                     <th className="text-center p-6">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-[#C9A646] font-bold">Premium</span>
+                        <span className="text-[#C9A646] font-bold">Trader</span>
                         <Crown className="w-5 h-5 text-[#C9A646]" />
                       </div>
                     </th>
