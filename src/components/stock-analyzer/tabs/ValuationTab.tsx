@@ -1016,6 +1016,15 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
     return () => { abortRef.current?.abort(); };
   }, [data.ticker, generate]);
 
+  // Whether the "Quick Valuation Context" card has ANY row to show.
+  // Without this guard the card renders an empty body when proprietary
+  // data is off AND ROIC/FCF are unavailable (e.g. AAPL in production).
+  const hasQuickContext =
+    (PROPRIETARY_DATA_ENABLED && isValid(data.pe) && isValid(data.forwardPe)) ||
+    isValid(data.roic) ||
+    (PROPRIETARY_DATA_ENABLED && isValid(data.pegRatio)) ||
+    isValid(data.fcfYield);
+
   return (
     <div className="space-y-4">
 
@@ -1076,7 +1085,10 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
 
       {/* ============================================= */}
       {/* 2. Valuation Context (client-side) */}
+      {/* Rendered only when at least one row has data — otherwise */}
+      {/* the card would show an empty body (proprietary off + N/A ROIC/FCF). */}
       {/* ============================================= */}
+      {hasQuickContext && (
       <Card highlight>
         <div className="relative p-6">
           <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[#C9A646] to-transparent" />
@@ -1128,6 +1140,7 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
           </div>
         </div>
       </Card>
+      )}
 
       {/* ============================================= */}
       {/* AI-POWERED DEEP VALUATION */}
