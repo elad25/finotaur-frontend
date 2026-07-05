@@ -41,8 +41,20 @@ BEGIN
     RETURN 'platform_enterprise';
   END IF;
 
-  -- Core tier removed 2026-06 — normalize to free before the Investor check
-  IF v_plan IN ('platform_core', 'core') OR v_plan IS NULL THEN
+  -- Normalize bare + legacy forms to the prefixed canonical form.
+  -- profiles.platform_plan holds MIXED forms in production ('finotaur' vs
+  -- 'platform_finotaur') — bare-form users previously fell into the ELSE
+  -- branch of the limit CASEs and got free-tier caps.
+  v_plan := lower(COALESCE(v_plan, 'free'));
+  IF v_plan IN ('platform_core', 'core') THEN
+    v_plan := 'free';  -- Core tier removed 2026-06
+  ELSIF v_plan = 'finotaur' THEN
+    v_plan := 'platform_finotaur';
+  ELSIF v_plan = 'enterprise' THEN
+    v_plan := 'platform_enterprise';
+  ELSIF v_plan = 'investor' THEN
+    v_plan := 'platform_investor';
+  ELSIF v_plan NOT IN ('platform_finotaur', 'platform_enterprise', 'platform_investor') THEN
     v_plan := 'free';
   END IF;
 
