@@ -52,6 +52,31 @@ const DEFAULT_MAX_BACKFILL_REQUESTS = 60;
 const MAX_EMPTY_LOOKBACK_DAYS = 5;
 const MAX_EMPTY_LOOKBACK_MS = MAX_EMPTY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
 
+// ── Empty-window anchor walk: exponential-step probing ─────────────────────
+//
+// Crawling backward in fixed 2h chunks through a closed market (a 3-day
+// weekend = ~36 chunks) burns most of the request budget on windows that are
+// GUARANTEED empty before ever reaching the last traded session. Two
+// speedups, applied in order:
+//
+// 1. Jump straight to the server-reported availability boundary
+//    (`availableEndMs`) instead of crawling to it 2h at a time — the server
+//    already told us nothing newer exists, so every chunk between "now" and
+//    that boundary is a wasted round trip.
+// 2. Below the boundary, DOUBLE the step on every empty chunk (2h → 4h → 8h
+//    → 16h, capped at 24h) and PROBE — not fully cover — each doubled span.
+//    A probe is still a normal <=2h window (the server enforces that ceiling
+//    anyway); when stepping wider than 2h we only fetch the 2h slice
+//    immediately behind the new cursor and SKIP the rest of the gap. This is
+//    sound because CME regular/overnight sessions run for many hours at a
+//    stretch — any session that has started will have trades in ANY 2h
+//    sub-window of it, so a 2h probe every 4h/8h/16h can never step clean
+//    over an active session; it can only ever skip through provably-closed
+//    time. The moment a probe lands inside a session, trades come back and
+//    the "found anchor" fallback below fills backward normally.
+const ANCHOR_PROBE_WINDOW_MS = BACKFILL_WINDOW_MS; // 2h — same as normal chunking, server-capped
+const ANCHOR_MAX_STEP_MS = 24 * 60 * 60 * 1000; // cap growth at 24h/probe
+
 // ── Wire shape ───────────────────────────────────────────────────────────
 
 interface BackfillResponse {
@@ -336,28 +361,62 @@ class DatabentoTradeSourceImpl implements TradeSource {
     // Anchor-to-last-data: the requested window landed ZERO trades — most
     // commonly a weekend/holiday backfill request (CME closed since Friday
     // close) where "last N bars from now" has nothing to show even though
-    // Thursday/Friday's session is sitting right behind it. Keep walking
-    // backward past the original `fromMs`, bounded by
-    // MAX_EMPTY_LOOKBACK_DAYS before the original `toMs` and by the
-    // remaining request budget, until we find the last session that traded —
-    // then keep filling backward until we've covered roughly the originally
-    // requested window length or the budget/lookback runs out.
+    // Thursday/Friday's session is sitting right behind it.
+    //
+    // Two-phase walk, bounded by MAX_EMPTY_LOOKBACK_DAYS before the original
+    // `toMs` and by the remaining request budget:
+    //
+    //   Phase 1 (search) — find the anchor FAST:
+    //     a) if the server has reported an availability boundary
+    //        (`availableEndMs`) above `lookbackFloorMs`, jump the cursor
+    //        straight there in one step — no point crawling through a span
+    //        the server has already told us is empty.
+    //     b) below the boundary, probe with an EXPONENTIALLY GROWING step
+    //        (2h → 4h → 8h → 16h, capped at 24h). Each probe is still only a
+    //        <=2h window (server-enforced ceiling) taken from the END of the
+    //        current step — the span BETWEEN probes is skipped entirely, not
+    //        fetched. This is safe because a CME session (regular or
+    //        overnight) runs far longer than the largest gap between two
+    //        consecutive probes, so a probe can never step clean over a
+    //        session that has started; it can only skip through time that is
+    //        provably still closed. A 3-day weekend is then crossed in ~5
+    //        requests (2h,4h,8h,16h,24h ≈ 54h) instead of ~35.
+    //   Phase 2 (fill) — once a probe lands inside a session, that session IS
+    //     the anchor: switch back to normal <=2h chunks and fill backward
+    //     from the probe's window-start until roughly the originally
+    //     requested window length is covered (or budget/lookback runs out).
     if (trades.length === 0) {
       const lookbackFloorMs = toMs - MAX_EMPTY_LOOKBACK_MS;
-      let anchorCursor = fromMs; // continue immediately behind the already-empty requested window
       let foundAnyData = false;
       let anchorEarliest = fromMs;
 
-      while (anchorCursor > lookbackFloorMs && requestCount < maxRequests) {
+      // Phase 1a — jump straight to the reported availability boundary
+      // instead of crawling to it. Only meaningful if it's strictly below
+      // the already-empty requested window (otherwise there's nothing to
+      // skip) and still above the lookback floor.
+      let probeCursor = fromMs;
+      if (availableEndMs !== null && availableEndMs < probeCursor && availableEndMs > lookbackFloorMs) {
+        probeCursor = availableEndMs;
+      }
+
+      // Phase 1b — exponential-step probing for the last-traded session.
+      let stepMs = ANCHOR_PROBE_WINDOW_MS;
+      let anchorWindowStart: number | null = null;
+      let anchorPage: FlowTrade[] = [];
+
+      while (probeCursor > lookbackFloorMs && requestCount < maxRequests) {
         if (opts?.signal?.aborted) break;
 
-        const chunkEnd = availableEndMs !== null ? Math.min(anchorCursor, availableEndMs) : anchorCursor;
+        const chunkEnd = availableEndMs !== null ? Math.min(probeCursor, availableEndMs) : probeCursor;
         if (chunkEnd <= lookbackFloorMs) break;
 
-        const windowStart = Math.max(chunkEnd - BACKFILL_WINDOW_MS, lookbackFloorMs);
+        // Probe a <=2h window taken from the END of the current step — the
+        // gap between chunkEnd - stepMs and the probe's own start is
+        // deliberately skipped (see reasoning above).
+        const probeStart = Math.max(chunkEnd - ANCHOR_PROBE_WINDOW_MS, lookbackFloorMs);
         const { page, ok, rateLimited, availableEndMs: reportedEndMs } = await fetchBackfillWindow(
           symbol,
-          windowStart,
+          probeStart,
           chunkEnd,
           opts?.signal,
         );
@@ -367,28 +426,71 @@ class DatabentoTradeSourceImpl implements TradeSource {
         if (rateLimited || !ok) break; // stop gracefully, report what we have (possibly still empty)
 
         if (page.length === 0) {
-          anchorCursor = windowStart - 1;
+          // Nothing here — grow the step (exponential backoff through closed
+          // market) and keep probing further back.
+          probeCursor = chunkEnd - stepMs;
+          stepMs = Math.min(stepMs * 2, ANCHOR_MAX_STEP_MS);
           continue;
         }
 
-        // Found data. Keep it all (it's already outside [fromMs, toMs), which
-        // is expected — we're anchoring to whatever session actually traded).
-        for (const trade of page) trades.push(trade);
-        anchorEarliest = Math.min(anchorEarliest, windowStart);
+        // Found the anchor session.
+        anchorWindowStart = probeStart;
+        anchorPage = page;
+        break;
+      }
+
+      if (anchorWindowStart !== null) {
+        for (const trade of anchorPage) trades.push(trade);
+        anchorEarliest = anchorWindowStart;
         foundAnyData = true;
 
-        // Once we've found the last-traded session, keep filling backward
+        // Phase 2 — fill backward with normal <=2h chunks from the anchor
         // until we've accumulated roughly the originally requested window
-        // length worth of trades (so the chart gets a comparable amount of
-        // history to what was asked for), or we run out of budget/lookback.
-        const coveredSoFarMs = toMs - anchorEarliest;
-        if (coveredSoFarMs >= requestedWindowMs) break;
+        // length worth of trades, or budget/lookback runs out.
+        let fillCursor = anchorWindowStart - 1;
+        while (fillCursor > lookbackFloorMs && requestCount < maxRequests) {
+          if (opts?.signal?.aborted) break;
 
-        anchorCursor = windowStart - 1;
+          const coveredSoFarMs = toMs - anchorEarliest;
+          if (coveredSoFarMs >= requestedWindowMs) break;
+
+          const chunkEnd = availableEndMs !== null ? Math.min(fillCursor, availableEndMs) : fillCursor;
+          if (chunkEnd <= lookbackFloorMs) break;
+
+          const windowStart = Math.max(chunkEnd - BACKFILL_WINDOW_MS, lookbackFloorMs);
+          const { page, ok, rateLimited, availableEndMs: reportedEndMs } = await fetchBackfillWindow(
+            symbol,
+            windowStart,
+            chunkEnd,
+            opts?.signal,
+          );
+          requestCount += 1;
+          if (typeof reportedEndMs === 'number') availableEndMs = reportedEndMs;
+
+          if (rateLimited || !ok) break;
+
+          if (page.length === 0) {
+            // A gap inside the fill range (e.g. the daily CME maintenance
+            // break) — keep walking backward past it, don't stop the fill.
+            fillCursor = windowStart - 1;
+            continue;
+          }
+
+          for (const trade of page) trades.push(trade);
+          anchorEarliest = Math.min(anchorEarliest, windowStart);
+          fillCursor = windowStart - 1;
+        }
       }
 
       if (foundAnyData) {
         trades.sort((a, b) => a.time - b.time);
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.info(
+            `[DatabentoTradeSource] empty-window anchor resolved: ${requestCount} requests, ` +
+              `anchor=${new Date(anchorEarliest).toISOString()}, trades=${trades.length}`,
+          );
+        }
         return { trades, coveredFromMs: anchorEarliest };
       }
       // No data anywhere in the lookback window either — report honestly.
