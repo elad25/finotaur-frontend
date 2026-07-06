@@ -149,6 +149,10 @@ interface Trade {
   // Origin of the trade: 'manual' (Add Trade form), 'api' (AI screenshot),
   // 'tradovate' / 'ibrit' / 'tradingview' / 'csv' (broker-synced / imported).
   import_source?: string | null;
+  // Real broker name (e.g. 'tradovate') when broker-synced; 'manual' (or
+  // missing) for hand-typed and AI-screenshot trades. Gates Global Feed
+  // sharing — see isBrokerVerifiedTrade.
+  broker?: string | null;
   // Options (single-leg) — populated only when asset_class === 'options'
   option_type?: "CALL" | "PUT";
   strike_price?: number;
@@ -2892,18 +2896,26 @@ const { pnl, outcome, actualR, riskUSD, isClosed } = getTradeData(selectedTrade,
                       Notes
                     </TabsTrigger>
                   </TabsList>
-                    {tradeDetailTab === 'chart' && !isManualTrade(selectedTrade) && (
+                    {tradeDetailTab === 'chart' && (
                       <div className="flex items-center gap-2">
+                        {/* Share is allowed for manual trades too (rooms only —
+                            Global Feed is gated inside TradeShareMenu itself). */}
                         <TradeShareMenu trade={selectedTrade} />
-                        <button
-                          type="button"
-                          onClick={() => setDetailChartFullscreen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-                          aria-label="Expand chart"
-                        >
-                          <Maximize2 className="h-3.5 w-3.5" />
-                          Fullscreen
-                        </button>
+                        {/* Fullscreen only makes sense when a real TradeChart is
+                            rendered below — manual trades show a placeholder
+                            instead (see the isManualTrade check in the CHART TAB
+                            just below), so this stays gated. */}
+                        {!isManualTrade(selectedTrade) && (
+                          <button
+                            type="button"
+                            onClick={() => setDetailChartFullscreen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+                            aria-label="Expand chart"
+                          >
+                            <Maximize2 className="h-3.5 w-3.5" />
+                            Fullscreen
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

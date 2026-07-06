@@ -73,6 +73,10 @@ interface Trade {
   // Origin of the trade: 'manual' (Add Trade form), 'api' (AI screenshot),
   // or a broker/import source ('tradovate' / 'ibrit' / 'tradingview' / 'csv').
   import_source?: string | null;
+  // Real broker name (e.g. 'tradovate') when broker-synced; 'manual' (or
+  // missing) for hand-typed and AI-screenshot trades. Gates Global Feed
+  // sharing — see isBrokerVerifiedTrade.
+  broker?: string | null;
   // Options (single-leg) — populated only when asset_class === 'options'
   asset_class?: string;
   option_type?: 'CALL' | 'PUT';
@@ -592,15 +596,16 @@ export default function JournalTradeDetail() {
         {/* Edit / Share / Save / Cancel buttons */}
         {!isEditing ? (
           <div className="flex items-center gap-2">
-            {!isManualTrade(trade) && (
-              <button
-                onClick={() => setShareDialogOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
-              >
-                <Share2 className="w-4 h-4" style={{ color: '#C9A646' }} />
-                Share
-              </button>
-            )}
+            {/* Share is available for manual trades too — ShareTradeDialog
+                gates the Global destination internally (broker-verified only)
+                but community rooms and mentor review remain open to all trades. */}
+            <button
+              onClick={() => setShareDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
+            >
+              <Share2 className="w-4 h-4" style={{ color: '#C9A646' }} />
+              Share
+            </button>
             <button
               onClick={handleEditClick}
               className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-zinc-300 text-sm font-medium transition-colors"
@@ -1329,6 +1334,7 @@ export default function JournalTradeDetail() {
             quantity: trade.quantity,
             close_at: trade.close_at,
             setup: trade.setup,
+            broker: trade.broker,
           }}
           open={shareDialogOpen}
           onOpenChange={setShareDialogOpen}

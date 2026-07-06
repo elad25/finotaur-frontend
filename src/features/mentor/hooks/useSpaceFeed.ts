@@ -31,6 +31,10 @@ export interface FeedPost {
   trade_side: string | null;
   trade_pnl: number | null;
   trade_close_at: string | null;
+  /** True when the attached trade is NOT broker-verified (broker = 'manual'
+   * or no broker recorded). Null when no trade is attached. Drives the
+   * "Manual trade" badge in RoomFeed. */
+  trade_is_manual: boolean | null;
   pinned: boolean;
   created_at: string;
   comment_count: number;
@@ -96,6 +100,7 @@ export function useSpaceFeed(spaceId?: string): {
         ...row,
         reactions: (row.reactions as ReactionAggregate[]) ?? [],
         my_reaction: (row.my_reaction as string | null) ?? null,
+        trade_is_manual: (row.trade_is_manual as boolean | null) ?? null,
       })) as FeedPost[];
     },
   });

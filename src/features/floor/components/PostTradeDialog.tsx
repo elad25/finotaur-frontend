@@ -1,8 +1,10 @@
 // src/components/community/PostTradeDialog.tsx
 // Two-step dialog to share a broker-synced trade to the Global Feed.
 //
-// Step 1 — Pick a trade: shows only closed trades imported from a broker
-//           (import_source IS NULL [legacy] or != 'manual').
+// Step 1 — Pick a trade: shows only closed, broker-verified trades
+//           (broker != 'manual'). Manual (import_source='manual') and
+//           AI-screenshot (import_source='api') trades both carry
+//           broker='manual' and are excluded here.
 // Step 2 — Compose: write a caption + basic privacy options, then post.
 
 import { useState, useEffect } from 'react';
@@ -95,11 +97,11 @@ function TradePicker({
     if (!user) return;
     supabase
       .from('trades')
-      .select('id, symbol, side, pnl, close_at, setup, entry_price, exit_price, quantity, import_source, open_at, created_at')
+      .select('id, symbol, side, pnl, close_at, setup, entry_price, exit_price, quantity, import_source, broker, open_at, created_at')
       .eq('user_id', user.id)
       .not('close_at', 'is', null)
       .is('deleted_at', null)
-      .neq('import_source', 'manual')
+      .neq('broker', 'manual')
       .order('close_at', { ascending: false })
       .limit(200)
       .then(({ data }) => {
