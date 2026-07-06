@@ -32,6 +32,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, X, TrendingUp, ArrowRight, Command, Globe } from 'lucide-react';
 import { classifyIntent, matchRoutes, type RouteTarget } from '@/lib/omniboxIntent';
 import { useFinoChat } from '@/contexts/FinoChatContext';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import { classifyEquity } from '@/lib/symbolCategories';
 import { routeForSuggest } from '@/lib/tickerRouting';
@@ -333,6 +334,7 @@ export function GlobalOmnibox() {
   const navigate = useNavigate();
   const location = useLocation();
   const { open: openFino } = useFinoChat();
+  const { hasBetaAccess } = useAdminAuth();
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -601,7 +603,7 @@ export function GlobalOmnibox() {
     } else {
       const sym = item.data.symbol;
       saveRecentTicker(sym);
-      navigate(routeForSuggest(sym, item.data.assetType, item.data.coinId));
+      navigate(routeForSuggest(sym, item.data.assetType, item.data.coinId, hasBetaAccess));
       close_();
     }
   }

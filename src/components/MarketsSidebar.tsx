@@ -56,7 +56,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
         const route = fn.routes[selectedAsset]!; // always defined — getMarketsItemsForAsset filters these
 
         const itemLocked = fn.locked === true || (fn.lockedAssets?.includes(selectedAsset) ?? false); // closed to the public (paywall)
-        const blocked = itemLocked && !hasBetaAccess;   // regular users cannot open it
+        const blocked = !hasBetaAccess;   // whole Markets research area is beta-only (admin/beta bypass)
         // priceGated badge: applies to all assets unless restricted to a specific set.
         // Crypto/forex/macro overview are non-Polygon → not price-gated → no lock badge.
         const itemPriceGated = fn.priceGated === true && (fn.priceGatedAssets ? fn.priceGatedAssets.includes(selectedAsset) : true);
