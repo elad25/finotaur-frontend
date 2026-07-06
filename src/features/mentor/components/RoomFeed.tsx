@@ -104,9 +104,11 @@ interface TradeChipProps {
   pnl: number | null;
   closeAt: string;
   tradeId: string;
+  /** True when the trade is NOT broker-verified (broker = 'manual' or unset). */
+  isManual?: boolean | null;
 }
 
-function AttachedTradeCard({ symbol, side, pnl, closeAt, tradeId }: TradeChipProps) {
+function AttachedTradeCard({ symbol, side, pnl, closeAt, tradeId, isManual }: TradeChipProps) {
   const isNegative = pnl !== null && pnl < 0;
   return (
     <div
@@ -123,6 +125,17 @@ function AttachedTradeCard({ symbol, side, pnl, closeAt, tradeId }: TradeChipPro
         <span className="font-sans text-[11px] font-medium uppercase tracking-[0.5px] text-ink-tertiary shrink-0">
           {side}
         </span>
+        {isManual && (
+          <span
+            className={cn(
+              'font-sans text-[10px] font-medium uppercase tracking-[0.5px] shrink-0',
+              'rounded-full border-[0.5px] border-gold-border bg-[rgba(201,166,70,0.08)]',
+              'px-[7px] py-[1px] text-gold-muted',
+            )}
+          >
+            Manual trade
+          </span>
+        )}
         {pnl !== null && (
           <span
             className={cn(
@@ -457,6 +470,7 @@ function PostCard({ post, spaceId, currentUserId, isManager }: PostCardProps) {
           side={post.trade_side ?? ''}
           pnl={post.trade_pnl}
           closeAt={post.trade_close_at ?? post.created_at}
+          isManual={post.trade_is_manual}
         />
       )}
 

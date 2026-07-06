@@ -33,5 +33,7 @@ export function mapSpaceError(error: unknown): string {
   if (message.includes('empty_message')) return 'Message cannot be empty.';
   if (message.includes('not_connected')) return "You're not connected to this member.";
   if (message.includes('invalid_role')) return 'Invalid role specified.';
+  if (message.includes('trade_not_broker_verified'))
+    return 'Only broker-verified trades can be shared to the Global Feed. Connect a broker to share real fills.';
   return 'Something went wrong. Please try again.';
 }

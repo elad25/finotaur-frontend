@@ -9,8 +9,9 @@
 // ShareTradeDialog defaults. For richer control (hide P&L, setup-only, reveal
 // size, caption, preview) the full ShareTradeDialog still exists.
 //
-// Manual trades cannot be shared (see isManualTrade) — the menu renders nothing
-// for them as a defensive guard; callers also avoid mounting it for manual trades.
+// Manual and AI-screenshot trades (broker='manual') CAN be shared to rooms —
+// only the Global Feed destination is broker-verification-gated (server-
+// enforced in share_trade()). See isBrokerVerifiedTrade.
 
 import { useState } from 'react';
 import { Send, Globe, Users, Loader2 } from 'lucide-react';
@@ -19,7 +20,7 @@ import { toast } from '@/hooks/use-toast';
 import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
 import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
-import { isManualTrade } from '@/lib/trades/isManualTrade';
+import { isBrokerVerifiedTrade } from '@/lib/trades/isBrokerVerifiedTrade';
 import type { ShareDestination, SharePrivacy } from '@/features/floor/types/community';
 
 const DEFAULT_PRIVACY: SharePrivacy = {
@@ -31,6 +32,7 @@ const DEFAULT_PRIVACY: SharePrivacy = {
 export interface TradeShareMenuTrade {
   id: string;
   import_source?: string | null;
+  broker?: string | null;
 }
 
 export function TradeShareMenu({ trade }: { trade: TradeShareMenuTrade }) {
@@ -41,8 +43,9 @@ export function TradeShareMenu({ trade }: { trade: TradeShareMenuTrade }) {
   const { spaces } = useMySpaces();
   const { shareTrade } = useShareTrade();
 
-  // Defensive: manual trades are not shareable.
-  if (isManualTrade(trade)) return null;
+  // Only broker-verified trades (broker !== 'manual') can post to the Global
+  // Feed. Rooms (community) remain open to all trades.
+  const verified = isBrokerVerifiedTrade(trade);
 
   const handleShare = async (
     key: string,
@@ -91,20 +94,26 @@ export function TradeShareMenu({ trade }: { trade: TradeShareMenuTrade }) {
         <button
           type="button"
           onClick={() => setGlobalPicking((v) => !v)}
-          disabled={!!pending}
+          disabled={!verified || !!pending}
           aria-expanded={globalPicking}
-          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+          title={verified ? undefined : 'Broker-verified trades only'}
+          className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           {pending === 'global' ? (
             <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />
           ) : (
-            <Globe className="h-4 w-4 text-yellow-400" />
+            <Globe className={`h-4 w-4 ${verified ? 'text-yellow-400' : 'text-zinc-500'}`} />
           )}
-          <span>Global Feed</span>
+          <span className={verified ? undefined : 'text-zinc-500'}>Global Feed</span>
         </button>
+        {!verified && (
+          <p className="px-2 pb-1.5 text-[10px] text-zinc-500">
+            Broker-verified trades only
+          </p>
+        )}
 
         {/* Strategy category picker — required before a global share */}
-        {globalPicking && (
+        {verified && globalPicking && (
           <div className="px-2 pb-1.5 pt-0.5">
             <p className="px-0.5 pb-1 text-[10px] text-zinc-500">Pick a strategy to share</p>
             <div className="flex flex-wrap gap-1">

@@ -24,6 +24,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
 import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
+import { isBrokerVerifiedTrade } from '@/lib/trades/isBrokerVerifiedTrade';
 import { cn } from '@/lib/utils';
 import type { GlobalFeedItem, ShareDestination, SharePrivacy } from '@/features/floor/types/community';
 
@@ -40,6 +41,9 @@ export interface ShareableTrade {
   quantity?: number | null;
   close_at?: string | null;
   setup?: string | null;
+  /** Real broker (e.g. 'tradovate') = broker-verified; 'manual' or missing = not
+   * verified. Gates the Global destination — see isBrokerVerifiedTrade. */
+  broker?: string | null;
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -108,15 +112,22 @@ interface ToggleRowProps {
   onChange: (checked: boolean) => void;
   label: string;
   description: string;
+  disabled?: boolean;
 }
 
-function ToggleRow({ checked, onChange, label, description }: ToggleRowProps) {
+function ToggleRow({ checked, onChange, label, description, disabled }: ToggleRowProps) {
   return (
-    <label className="flex items-start gap-ds-3 cursor-pointer group">
+    <label
+      className={cn(
+        'flex items-start gap-ds-3 group',
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+      )}
+    >
       <div className="relative mt-[2px] shrink-0">
         <input
           type="checkbox"
           checked={checked}
+          disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
           className="sr-only"
         />
@@ -165,6 +176,11 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
 
   const { spaces, isLoading: spacesLoading } = useMySpaces();
   const { shareTrade, isSharing } = useShareTrade();
+
+  // Only broker-verified trades (broker !== 'manual') can be posted to the
+  // Global Feed — server-enforced in share_trade(). Manual and AI-screenshot
+  // trades can still go to community rooms and mentor review.
+  const verified = isBrokerVerifiedTrade(trade);
 
   // ── Destination selection state ──────────────────────────────────────────────
   const [globalSelected, setGlobalSelected] = useState(false);
@@ -216,7 +232,10 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
   async function handleSubmit() {
     const destinations: ShareDestination[] = [];
 
-    if (globalSelected) {
+    // Defensive: never send a global destination for an unverified trade,
+    // even if globalSelected state somehow got set (the toggle is disabled
+    // and force-reset below, but this guards against any state drift).
+    if (globalSelected && verified) {
       destinations.push({ scope: 'global' });
     }
 
@@ -232,7 +251,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
 
     if (destinations.length === 0) return;
 
-    if (globalSelected && !strategyCategory) {
+    if (globalSelected && verified && !strategyCategory) {
       toast({ title: 'Pick a strategy category for the global share.' });
       return;
     }
@@ -309,16 +328,22 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
             <div className="flex flex-col gap-ds-3">
               <SectionLabel>Destinations</SectionLabel>
 
-              {/* Global */}
+              {/* Global — disabled for unverified (non broker-synced) trades */}
               <ToggleRow
-                checked={globalSelected}
-                onChange={setGlobalSelected}
+                checked={verified && globalSelected}
+                onChange={verified ? setGlobalSelected : () => {}}
+                disabled={!verified}
                 label="FINOTAUR Global (public community)"
                 description="Visible to all members of the FINOTAUR community."
               />
+              {!verified && (
+                <p className="font-sans text-[11px] text-ink-tertiary pl-ds-1 -mt-ds-1">
+                  Only broker-verified trades can be posted to the Global Feed.
+                </p>
+              )}
 
               {/* Strategy category — required for global shares */}
-              {globalSelected && (
+              {verified && globalSelected && (
                 <div className="flex flex-col gap-ds-2 pl-ds-1">
                   <span className="font-sans text-[11px] text-ink-tertiary">
                     Strategy category <span className="text-gold-primary">(required)</span>
@@ -449,7 +474,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
             variant="gold"
             size="compact"
             showArrow={false}
-            disabled={!hasAnyDestination || isSharing || (globalSelected && !strategyCategory)}
+            disabled={!hasAnyDestination || isSharing || (globalSelected && verified && !strategyCategory)}
             onClick={handleSubmit}
           >
             {isSharing ? 'Sharing…' : 'Share trade'}
