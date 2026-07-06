@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, createSearchParams } from 'react-router-dom';
 import { useTickerSuggest } from '@/hooks/useTickerSuggest';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { fetchETFList } from '@/services/etf-analyzer.api';
 import { routeForSuggest } from '@/lib/tickerRouting';
 
@@ -18,6 +19,7 @@ export default function GlobalTickerSearch({ placeholder = 'Search tickers... (C
   const { suggestions, isLoading } = useTickerSuggest(open ? q : '');
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { hasBetaAccess } = useAdminAuth();
 
   // Keyboard nav
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function GlobalTickerSearch({ placeholder = 'Search tickers... (C
     } catch {
       // fall through — resolvedAssetType stays undefined → stock-analyzer
     }
-    navigate(routeForSuggest(upper, resolvedAssetType));
+    navigate(routeForSuggest(upper, resolvedAssetType, undefined, hasBetaAccess));
   }
 
   function goChart(sym: string) {

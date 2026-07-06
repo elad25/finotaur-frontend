@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createSearchParams, useNavigate } from 'react-router-dom';
 import { useTickerSuggest } from '@/hooks/useTickerSuggest';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { fetchETFList } from '@/services/etf-analyzer.api';
 import { routeForSuggest } from '@/lib/tickerRouting';
 
@@ -15,6 +16,7 @@ export default function CommandPalette({ open, onClose }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { suggestions, isLoading } = useTickerSuggest(open ? q : '');
+  const { hasBetaAccess } = useAdminAuth();
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +50,7 @@ export default function CommandPalette({ open, onClose }: Props) {
     } catch {
       // fall through — resolvedAssetType stays undefined → stock-analyzer
     }
-    navigate(routeForSuggest(upper, resolvedAssetType));
+    navigate(routeForSuggest(upper, resolvedAssetType, undefined, hasBetaAccess));
   }
   function goChart(sym: string) {
     const search = createSearchParams({ symbol: sym.toUpperCase() }).toString();
