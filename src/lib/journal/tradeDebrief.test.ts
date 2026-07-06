@@ -390,3 +390,328 @@ describe('buildTradeDebrief — reportLines', () => {
     expect(verdictLine!.text.length).toBeGreaterThan(0);
   });
 });
+
+// ─── Stats (numbers scorecard) ─────────────────────────────────────────────────
+
+describe('buildTradeDebrief — stats scorecard', () => {
+  it('Result stat reflects sign and tone for a winner', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    const resultStat = result.stats.find((s) => s.label === 'Result');
+    expect(resultStat).toBeDefined();
+    expect(resultStat!.value).toBe('+$100.00');
+    expect(resultStat!.tone).toBe('good');
+  });
+
+  it('Result stat reflects sign and tone for a loser', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 4970, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: -150,
+    });
+    const result = debrief(trade);
+    const resultStat = result.stats.find((s) => s.label === 'Result');
+    expect(resultStat).toBeDefined();
+    expect(resultStat!.value).toBe('-$150.00');
+    expect(resultStat!.tone).toBe('bad');
+  });
+
+  it('Planned risk reads "—" with bad tone when no stop is recorded', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 0, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    const riskStat = result.stats.find((s) => s.label === 'Planned risk');
+    expect(riskStat).toBeDefined();
+    expect(riskStat!.value).toBe('—');
+    expect(riskStat!.tone).toBe('bad');
+  });
+
+  it('Planned risk shows a $ value with neutral tone when a stop is recorded', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    const riskStat = result.stats.find((s) => s.label === 'Planned risk');
+    expect(riskStat).toBeDefined();
+    expect(riskStat!.value).toBe('$50.00');
+    expect(riskStat!.tone).toBe('neutral');
+  });
+
+  it('Planned R:R reads "—" when target is missing', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: undefined,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    const rrStat = result.stats.find((s) => s.label === 'Planned R:R');
+    expect(rrStat).toBeDefined();
+    expect(rrStat!.value).toBe('—');
+  });
+
+  it('Planned R:R shows the ratio when both stop and target are recorded', () => {
+    // entry=5000, stop=4990 (risk=50), target=5020 (reward=100) → RR = 2.0
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    const rrStat = result.stats.find((s) => s.label === 'Planned R:R');
+    expect(rrStat).toBeDefined();
+    expect(rrStat!.value).toBe('2.0:1');
+  });
+
+  it('includes "Left on table" only for an early-exit winner, phrased as an estimate', () => {
+    // Early-exit winner: entry=5000, stop=4990 (risk=50), target=5020 (target pnl=100), exit=5010, pnl=50
+    const earlyExit = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const earlyResult = debrief(earlyExit);
+    const leftOnTable = earlyResult.stats.find((s) => s.label.includes('Left on table'));
+    expect(leftOnTable).toBeDefined();
+    expect(leftOnTable!.label).toMatch(/est\.?/i);
+    expect(leftOnTable!.value).toBe('$50.00');
+
+    // Disciplined win — met target — must NOT include "Left on table".
+    const disciplinedWin = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const disciplinedResult = debrief(disciplinedWin);
+    expect(disciplinedResult.stats.find((s) => s.label.includes('Left on table'))).toBeUndefined();
+
+    // Loss — must NOT include "Left on table".
+    const loss = makeTrade({
+      entry_price: 5000, exit_price: 4970, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: -150,
+    });
+    const lossResult = debrief(loss);
+    expect(lossResult.stats.find((s) => s.label.includes('Left on table'))).toBeUndefined();
+  });
+
+  it('Actual R stat prefers trade.actual_r when present', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+      actual_r: 3.33,
+    });
+    const result = debrief(trade);
+    const rStat = result.stats.find((s) => s.label === 'Actual R');
+    expect(rStat).toBeDefined();
+    expect(rStat!.value).toBe('+3.33R');
+  });
+
+  it('Actual R falls back to pnl/plannedRisk when actual_r is absent, and reads "—" when not computable', () => {
+    const withStop = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const withStopResult = debrief(withStop);
+    const rStatDerived = withStopResult.stats.find((s) => s.label === 'Actual R');
+    expect(rStatDerived).toBeDefined();
+    expect(rStatDerived!.value).toBe('+2.00R');
+
+    const noStop = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 0, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const noStopResult = debrief(noStop);
+    const rStatMissing = noStopResult.stats.find((s) => s.label === 'Actual R');
+    expect(rStatMissing).toBeDefined();
+    expect(rStatMissing!.value).toBe('—');
+  });
+
+  it('stats array has between 3 and 5 entries', () => {
+    const cases: Trade[] = [
+      makeTrade({ entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: 100 }),
+      makeTrade({ entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: 50 }),
+      makeTrade({ entry_price: 5000, exit_price: 4970, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: -150 }),
+      makeTrade({ entry_price: 5000, exit_price: 5010, stop_price: 0, take_profit_price: undefined, quantity: 1, multiplier: 5, pnl: 50 }),
+    ];
+    for (const trade of cases) {
+      const result = debrief(trade);
+      expect(result.stats.length).toBeGreaterThanOrEqual(3);
+      expect(result.stats.length).toBeLessThanOrEqual(5);
+    }
+  });
+});
+
+// ─── Checklist (discipline) ────────────────────────────────────────────────────
+
+describe('buildTradeDebrief — discipline checklist', () => {
+  it('has exactly 4 rows in the fixed order', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    expect(result.checklist.map((c) => c.label)).toEqual([
+      'Stop set before entry',
+      'Stop respected',
+      'Target defined',
+      'Held to target',
+    ]);
+  });
+
+  it('"Stop set before entry" fails when no stop is recorded', () => {
+    const trade = makeTrade({ stop_price: 0 });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Stop set before entry');
+    expect(check!.status).toBe('fail');
+  });
+
+  it('"Stop respected" is na when no stop is recorded', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 0, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Stop respected');
+    expect(check!.status).toBe('na');
+  });
+
+  it('"Stop respected" passes for a loss within 1.1x planned risk', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 4990, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: -50,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Stop respected');
+    expect(check!.status).toBe('pass');
+  });
+
+  it('"Stop respected" fails for a loss beyond 1.1x planned risk', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 4970, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: -150,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Stop respected');
+    expect(check!.status).toBe('fail');
+  });
+
+  it('"Stop respected" passes for a winner with a stop on record', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Stop respected');
+    expect(check!.status).toBe('pass');
+  });
+
+  it('"Target defined" fails when no target is recorded', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: undefined,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Target defined');
+    expect(check!.status).toBe('fail');
+  });
+
+  it('"Held to target" is na when no target is recorded', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: undefined,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Held to target');
+    expect(check!.status).toBe('na');
+  });
+
+  it('"Held to target" passes when actual pnl meets/exceeds the target', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Held to target');
+    expect(check!.status).toBe('pass');
+  });
+
+  it('"Held to target" fails when exited early (below target)', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    const check = result.checklist.find((c) => c.label === 'Held to target');
+    expect(check!.status).toBe('fail');
+  });
+});
+
+// ─── Primary action ─────────────────────────────────────────────────────────────
+
+describe('buildTradeDebrief — primaryAction / actionWhy', () => {
+  it('uses the trader\'s own next_time note verbatim when present', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+      next_time: 'Wait for the retest before entering.',
+    });
+    const result = debrief(trade);
+    expect(result.primaryAction).toBe('Wait for the retest before entering.');
+  });
+
+  it('falls back to the top rule-generated nextTime item when next_time is empty', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5010, stop_price: 0, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 50,
+    });
+    const result = debrief(trade);
+    expect(result.primaryAction).toMatch(/set a hard stop/i);
+  });
+
+  it('falls back to the generic message when there is nothing else to say', () => {
+    const trade = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    const result = debrief(trade);
+    expect(result.primaryAction).toBe(
+      'Keep logging stop, target and reason on every trade so Shadow can grade the next one.',
+    );
+  });
+
+  it('primaryAction is never empty across a range of trade shapes', () => {
+    const cases: Trade[] = [
+      makeTrade({ entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: 100 }),
+      makeTrade({ entry_price: 5000, exit_price: 5010, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: 50 }),
+      makeTrade({ entry_price: 5000, exit_price: 4970, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: -150 }),
+      makeTrade({ entry_price: 5000, exit_price: 5010, stop_price: 0, take_profit_price: undefined, quantity: 1, multiplier: 5, pnl: 50 }),
+      makeTrade({ entry_price: 5000, exit_price: 5000.4, stop_price: 4990, take_profit_price: 5020, quantity: 1, multiplier: 5, pnl: 2 }),
+    ];
+    for (const trade of cases) {
+      const result = debrief(trade);
+      expect(result.primaryAction.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('actionWhy is empty for a clean disciplined win, and non-empty for a loss beyond plan', () => {
+    const clean = makeTrade({
+      entry_price: 5000, exit_price: 5020, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 100,
+    });
+    expect(debrief(clean).actionWhy).toBe('');
+
+    const badLoss = makeTrade({
+      entry_price: 5000, exit_price: 4970, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: -150,
+    });
+    expect(debrief(badLoss).actionWhy.length).toBeGreaterThan(0);
+  });
+
+  it('actionWhy is empty for a scratch trade', () => {
+    const scratch = makeTrade({
+      entry_price: 5000, exit_price: 5000.4, stop_price: 4990, take_profit_price: 5020,
+      quantity: 1, multiplier: 5, pnl: 2,
+    });
+    expect(debrief(scratch).actionWhy).toBe('');
+  });
+});

@@ -53,6 +53,8 @@ import {
   BarChart2,
   Sparkles,
   EyeOff,
+  Check,
+  X,
 } from 'lucide-react';
 import { buildShadowInsights } from '@/lib/journal/shadowInsight';
 import type { ShadowInsight } from '@/lib/journal/shadowInsight';
@@ -2110,18 +2112,17 @@ function SingleTradeScenarioChart({
 // Deterministic, rule-based per-trade summary (see tradeDebrief.ts). Independent
 // of the Stop/Target toggle — shows a single, stable read of this one trade.
 
-const DEBRIEF_TONE_DOT: Record<DebriefTone, string> = {
-  bad:     '#F87171',
-  warn:    '#C9A646',
-  good:    '#4AD295',
-  neutral: 'rgba(255,255,255,0.4)',
-};
-
-const DEBRIEF_TONE_TEXT: Record<DebriefTone, string> = {
+const DEBRIEF_STAT_TONE_TEXT: Record<DebriefTone, string> = {
   bad:     'text-[#F87171]',
   warn:    'text-[#E8C766]',
   good:    'text-[#4AD295]',
-  neutral: 'text-white/85',
+  neutral: 'text-white',
+};
+
+const DEBRIEF_CHECK_ICON: Record<'pass' | 'fail' | 'na', { icon: typeof Check | typeof X | null; className: string }> = {
+  pass: { icon: Check, className: 'text-[#4AD295]' },
+  fail: { icon: X,     className: 'text-[#F87171]' },
+  na:   { icon: null,  className: 'text-white/30' },
 };
 
 interface TradeDebriefCardProps {
@@ -2137,37 +2138,66 @@ function TradeDebriefCard({ trade, planned, extras }: TradeDebriefCardProps) {
   );
 
   return (
-    <div className={`${JOURNAL_PANEL} px-ds-5 py-ds-4`}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_50%,rgba(201,166,70,0.05),transparent_40%)]" />
+    <div className="relative overflow-hidden rounded-[12px] border border-[#C9A646]/40 bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] px-ds-5 py-ds-4">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_0%,rgba(201,166,70,0.10),transparent_45%)]" />
+      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(201,166,70,0.6),transparent)]" />
 
-      <div className="relative flex flex-col gap-ds-3">
+      <div className="relative flex flex-col gap-ds-4">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[14px] font-semibold text-white">Trade Debrief</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.8px] text-[#C9A646]/80">
+            Trade Debrief
+          </span>
           <span className="rounded-[6px] bg-[#C9A646]/15 px-2 py-0.5 text-[11px] font-semibold text-[#E8C766]">
             {debrief.verdict}
           </span>
         </div>
 
-        {/* Report — compact rows, one per line */}
-        <div className="flex flex-col">
-          {debrief.reportLines.map((line, idx) => (
+        {/* Hero — one action forward */}
+        <div className="rounded-[10px] border border-[#C9A646]/25 bg-[#C9A646]/[0.06] px-ds-4 py-ds-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.8px] text-[#C9A646]">
+            Do this next
+          </span>
+          <p className="mt-1 text-[15px] font-semibold leading-snug text-white">
+            {debrief.primaryAction}
+          </p>
+          {debrief.actionWhy && (
+            <p className="mt-1 text-[12px] leading-snug text-white/45">
+              {debrief.actionWhy}
+            </p>
+          )}
+        </div>
+
+        {/* Scorecard */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {debrief.stats.map((stat, idx) => (
             <div
-              key={`${line.label}-${idx}`}
-              className="flex items-baseline gap-2.5 py-[3px]"
+              key={`${stat.label}-${idx}`}
+              className="rounded-[8px] border border-white/[0.06] bg-white/[0.02] px-3 py-2"
             >
-              <span
-                className="mt-[2px] h-[5px] w-[5px] shrink-0 rounded-full"
-                style={{ backgroundColor: DEBRIEF_TONE_DOT[line.tone] }}
-              />
-              <span className="w-[68px] shrink-0 text-[10px] font-semibold uppercase tracking-[0.6px] text-[#C9A646]/80">
-                {line.label}
+              <span className="block text-[9px] font-semibold uppercase tracking-[0.5px] text-white/40">
+                {stat.label}
               </span>
-              <p className={`text-[12px] leading-snug ${DEBRIEF_TONE_TEXT[line.tone]}`}>
-                {line.text}
-              </p>
+              <span className={`mt-0.5 block font-mono text-[15px] font-semibold tabular-nums ${DEBRIEF_STAT_TONE_TEXT[stat.tone]}`}>
+                {stat.value}
+              </span>
             </div>
           ))}
+        </div>
+
+        {/* Discipline checklist */}
+        <div className="flex flex-col gap-1">
+          {debrief.checklist.map((check, idx) => {
+            const { icon: Icon, className } = DEBRIEF_CHECK_ICON[check.status];
+            return (
+              <div key={`${check.label}-${idx}`} className="flex items-center gap-2 py-[2px]">
+                <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center ${className}`}>
+                  {Icon ? <Icon className="h-3.5 w-3.5" strokeWidth={2.5} /> : <span className="text-[12px] leading-none">–</span>}
+                </span>
+                <span className="text-[12px] leading-snug text-white/70">{check.label}</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Footer */}
