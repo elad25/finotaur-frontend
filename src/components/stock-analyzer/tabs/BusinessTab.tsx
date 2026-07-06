@@ -14,7 +14,7 @@ import {
   Briefcase, TrendingUp, DollarSign, Zap, Shield,
   Target, Crown, Building2, Users, Globe,
   ChevronRight, Sparkles, BarChart2, Award,
-  Layers, ArrowUpRight, ArrowDownRight, Minus
+  Layers, ArrowUpRight, ArrowDownRight, Minus, RefreshCw
 } from 'lucide-react';
 import { SkeletonText } from '@/components/ds/Skeleton';
 import { cn } from '@/lib/utils';
@@ -679,6 +679,14 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
     const controller = new AbortController();
     setCompetitorsLoading(true);
 
+    // Client-side timeout: a hung / very-slow AI generation aborts the
+    // in-flight competitor call instead of leaving the skeleton stuck
+    // forever (the underlying endpoints run a web-search AI call that is
+    // normally ~30-60s). Both fetchBusinessAnalysisAI and fetchCompetitorsAI
+    // already catch their own errors and resolve to null/[] on abort, so
+    // no new error state is needed here.
+    const timeoutId = setTimeout(() => { controller.abort(); }, 90000);
+
     (async () => {
       try {
         // Try Anthropic pipeline first when feature flag is on
@@ -693,11 +701,12 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
         const fallback = await fetchCompetitorsAI(data, controller.signal);
         setCompetitors(filterOutSelfCompetitors(fallback, data));
       } finally {
+        clearTimeout(timeoutId);
         setCompetitorsLoading(false);
       }
     })();
 
-    return () => controller.abort();
+    return () => { clearTimeout(timeoutId); controller.abort(); };
   }, [data.ticker]);
 
   const differentiators = useMemo(() => {
@@ -822,6 +831,13 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
           <div className="space-y-3">
             {competitorsLoading ? (
               <div className="py-4">
+                <div className="flex items-center gap-3 px-1 pb-2">
+                  <RefreshCw className="w-4 h-4 text-[#C9A646] animate-spin shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-white">Generating business analysis…</p>
+                    <p className="text-xs text-[#8B8B8B]">This can take up to a minute for a new ticker.</p>
+                  </div>
+                </div>
                 <SkeletonText lines={3} />
               </div>
             ) : competitors.length > 0 ? (

@@ -1030,6 +1030,12 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Client-side timeout: a hung / very-slow AI generation surfaces a
+    // Retry instead of an indefinite skeleton (the endpoint runs a
+    // web-search AI call that is normally ~30-60s).
+    let timedOut = false;
+    const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, 90000);
+
     setIsLoading(true);
     setError(null);
 
@@ -1040,11 +1046,14 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
       setEarningsData(earnings);
       earningsCacheMap.set(data.ticker, { data: earnings, generatedAt: new Date().toISOString() });
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
+      if (timedOut) {
+        setError('Analysis is taking longer than usual. Please try again.');
+      } else if (err.name !== 'AbortError') {
         console.error('Earnings fetch error:', err);
         setError(err.message || 'Failed to load earnings data');
       }
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, [data, prefetchedData]);
@@ -1091,6 +1100,13 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
   if (isLoading && !earningsData) {
     return (
       <div className="space-y-4">
+        <div className="flex items-center gap-3 px-1 py-2">
+          <RefreshCw className="w-4 h-4 text-[#C9A646] animate-spin shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-white">Generating earnings analysis…</p>
+            <p className="text-xs text-[#8B8B8B]">Pulling the latest reported quarter — this can take up to a minute for a new ticker.</p>
+          </div>
+        </div>
         <SkeletonText lines={2} className="py-3" />
         <EarningsLoadingSkeleton />
       </div>
