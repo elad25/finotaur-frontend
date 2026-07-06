@@ -14,7 +14,7 @@ import { hasConsent, onConsentChange } from '@/lib/consent';
 import { initGA4, destroyGA4, trackPageView as ga4PageView, trackEvent as ga4Event } from './ga4';
 import { initPostHog, destroyPostHog, trackPageView as phPageView, trackEvent as phEvent } from './posthog';
 import { initXPixel, trackXSignup } from './xPixel';
-import { initMetaPixel, trackMetaSignup } from './metaPixel';
+import { initMetaPixel, trackMetaSignup, trackMetaPageView } from './metaPixel';
 import { sendServerEvent } from './serverEvents';
 
 // ─── Allowed event names (enforced at compile time) ──────────────────────────
@@ -116,6 +116,8 @@ export function useAnalytics(): void {
         bootAnalytics();
         // Fire initial pageview now — the [location] useEffect below won't refire
         // because the user is still on the same route when they accept consent.
+        // Note: initMetaPixel() (inside bootAnalytics) already fires one Meta
+        // PageView on init, so we skip trackMetaPageView here to avoid a duplicate.
         const path = window.location.pathname + window.location.search;
         ga4PageView(path);
         phPageView(path);
@@ -133,6 +135,7 @@ export function useAnalytics(): void {
     const path = location.pathname + location.search;
     ga4PageView(path);
     phPageView(path);
+    trackMetaPageView(path);
     sendServerEvent('page_view', { path }, location.pathname);
   }, [location]);
 }
