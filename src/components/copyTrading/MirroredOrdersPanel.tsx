@@ -23,6 +23,8 @@ import {
   useAutomationEvents,
   type AutomationEvent,
 } from '@/features/automation/hooks/useAutomationEvents';
+import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
+import { getDemoMirroredOrders } from '@/utils/demoCopierData';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -146,10 +148,15 @@ export interface MirroredOrdersPanelProps {
 }
 
 export function MirroredOrdersPanel({ className }: MirroredOrdersPanelProps) {
-  const { events, isLoading, isError, refetch } = useAutomationEvents({
+  const { isDemo } = useCopierDemoMode();
+  const real = useAutomationEvents({
     eventTypes: ['order_copy_executed', 'order_copy_modified', 'order_copy_cancelled'],
     limit: 50,
   });
+  const events = isDemo ? getDemoMirroredOrders() : real.events;
+  const isLoading = isDemo ? false : real.isLoading;
+  const isError = isDemo ? false : real.isError;
+  const refetch = real.refetch;
 
   const liveOrders = useMemo(() => deriveLiveOrders(events), [events]);
 
