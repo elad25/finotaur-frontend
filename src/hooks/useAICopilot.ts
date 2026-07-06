@@ -78,12 +78,13 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   // Refs for streaming
   const abortControllerRef = useRef<AbortController | null>(null);
   // Inactivity timeout — aborts the stream if no bytes arrive for this long,
-  // so the loading dot can't spin forever on a genuine silent hang. Kept high
-  // enough to outlast a cold FINO SEC-filings answer: the SSE is buffered at the
-  // Railway edge (delivered near the end, ~60-90s), so a shorter window
-  // false-aborts a request that is still legitimately in flight. (Follow-up:
-  // fix Railway edge SSE buffering so we can stream in real time and lower this.)
-  const INACTIVITY_TIMEOUT_MS = 150_000;
+  // so the loading dot can't spin forever on a genuine silent hang. The FINO SSE
+  // now streams in real time (the server sets Content-Encoding: identity +
+  // Cache-Control: no-store,no-transform so Railway's edge no longer buffers the
+  // response), and it emits a heartbeat ping every 15s during the cold tool
+  // phase — so 90s comfortably outlasts any real gap between bytes while still
+  // catching a genuine silent hang far sooner than the old buffered-era 150s.
+  const INACTIVITY_TIMEOUT_MS = 90_000;
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timedOutRef = useRef(false);
   
