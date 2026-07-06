@@ -1,6 +1,6 @@
 // src/layouts/ProtectedAppLayout.tsx
 import { useState, type CSSProperties } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import { TopNav } from '@/components/TopNav';
 import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
@@ -21,6 +21,8 @@ import { useOAuthReturnRedirect } from '@/hooks/useOAuthReturnRedirect';
 import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
 import { DemoBanner } from '@/components/journal/DemoBanner';
 import { DemoSyncOverlay } from '@/components/journal/DemoSyncOverlay';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { isMarketsBlocked, isMarketsResearchPath } from '@/lib/marketsAccess';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -65,6 +67,7 @@ export const ProtectedAppLayout = () => {
   const location = useLocation();
   const { isImpersonating } = useImpersonation();
   const { isMentorView } = useMentorView();
+  const { hasBetaAccess, isLoading: isAdminLoading } = useAdminAuth();
 
   // Redirect after OAuth if the flow was started from a non-journal page
   // (e.g. the Trade Copier). When no key is set in sessionStorage this is a no-op.
@@ -111,6 +114,15 @@ export const ProtectedAppLayout = () => {
   // Journal pages manage their own page container (max-w + px) — adding the
   // global sidebar gap there would double-pad them.
   const isJournalRoute = location.pathname.startsWith('/app/journal');
+
+  // Markets research area is beta-only (single switch: MARKETS_BETA_ONLY in
+  // src/lib/marketsAccess.ts). A non-beta user hitting any Markets URL directly
+  // is redirected to Upgrade. Guard on !isAdminLoading so a beta user is never
+  // wrongly bounced while their access status is still resolving. Flipping the
+  // switch off makes isMarketsBlocked() return false → this becomes a no-op.
+  if (!isAdminLoading && isMarketsResearchPath(location.pathname) && isMarketsBlocked(hasBetaAccess)) {
+    return <Navigate to="/app/upgrade" replace />;
+  }
 
   if (hideChrome) {
     // Standalone surface — only the impersonation banner is preserved so an

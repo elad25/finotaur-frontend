@@ -3,6 +3,7 @@
 // Single source of truth used by GlobalOmnibox, GlobalTickerSearch, CommandPalette.
 
 import type { SuggestItem } from '@/components/Search/useSymbolSuggest';
+import { isMarketsBlocked } from '@/lib/marketsAccess';
 
 /**
  * Returns the navigation path for a given ticker symbol and its asset type.
@@ -28,7 +29,7 @@ export function routeForSuggest(
     assetType === 'fx' ||
     assetType === 'futures' ||
     assetType === 'bond';
-  if (marketsLockedAsset && !hasBetaAccess) return '/app/upgrade';
+  if (marketsLockedAsset && isMarketsBlocked(hasBetaAccess)) return '/app/upgrade';
 
   if (assetType === 'etf')     return `/app/etfs/${sym}/overview`;
   if (assetType === 'crypto')  return coinId ? `/app/crypto/coin/${coinId}` : '/app/crypto/overview';

@@ -11,9 +11,11 @@
 // =====================================================
 
 import { memo, ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
+import { isMarketsBlocked, isMarketsResearchPath } from '@/lib/marketsAccess';
 
 interface AdminBetaGateProps {
   children: ReactNode;
@@ -74,12 +76,20 @@ EarlyAccessLockedPage.displayName = 'EarlyAccessLockedPage';
 // 🔒 ADMIN/BETA GATE COMPONENT
 export const AdminBetaGate = memo(({ children, fallback }: AdminBetaGateProps) => {
   const { hasBetaAccess, isLoading } = useAdminAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return <>{fallback ?? <RouteSkeleton />}</>;
   }
 
-  if (hasBetaAccess) {
+  // Markets research routes follow the single Markets switch (MARKETS_BETA_ONLY),
+  // so flipping it to false opens them here too. Non-Markets AdminBetaGate routes
+  // (e.g. Trading Arena) keep the standalone beta gate.
+  const gated = isMarketsResearchPath(location.pathname)
+    ? isMarketsBlocked(hasBetaAccess)
+    : !hasBetaAccess;
+
+  if (!gated) {
     return <>{children}</>;
   }
 
