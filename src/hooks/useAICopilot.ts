@@ -77,6 +77,12 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   
   // Refs for streaming
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Inactivity timeout — aborts the stream if no chunk arrives for a while,
+  // so the loading dot can't spin forever if the server holds the SSE open
+  // without ever completing (silent hang).
+  const INACTIVITY_TIMEOUT_MS = 90_000;
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timedOutRef = useRef(false);
   
   // Load usage on mount. Conversation history is intentionally not loaded in
   // AI Assistant; the screen should open as a clean workspace.
@@ -196,9 +202,20 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
     
     // Create abort controller for cancellation
     abortControllerRef.current = new AbortController();
-    
+    timedOutRef.current = false;
+
+    // Start the inactivity watchdog — reset on every chunk in onChunk below.
+    const resetInactivityTimer = () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(() => {
+        timedOutRef.current = true;
+        abortControllerRef.current?.abort();
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+    resetInactivityTimer();
+
     let conversationId = currentConversation?.id || null;
-    
+
     try {
       // Use streaming endpoint
       await aiCopilotApi.chatStream({
@@ -217,6 +234,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
           });
         },
         onChunk: (chunk) => {
+          resetInactivityTimer();
           setMessages(prev => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
@@ -291,14 +309,30 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
       return conversationId;
       
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
+      if (err.name === 'AbortError' && timedOutRef.current) {
+        // Inactivity watchdog fired — surface it as a real error, not a
+        // silent user-cancel, and drop the empty pending assistant message
+        // the same way onError does.
+        const errorMsg = 'FINO took too long to respond. Please try again.';
+        setError(errorMsg);
+        toast.error(errorMsg);
+        setMessages(prev => {
+          const updated = [...prev];
+          if (updated[updated.length - 1]?.role === 'assistant' && !updated[updated.length - 1]?.content) {
+            updated.pop();
+          }
+          return updated;
+        });
+      } else if (err.name !== 'AbortError') {
         const errorMsg = err.message || 'Failed to send message';
         setError(errorMsg);
         toast.error(errorMsg);
       }
       return null;
-      
+
     } finally {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
       setIsLoading(false);
       setIsStreaming(false);
       abortControllerRef.current = null;
