@@ -26,6 +26,13 @@ type ChangeListener = () => void;
 export class FlowBinStore {
   private config: FlowBinStoreConfig;
   private candles = new Map<number, FlowCandle>();
+  // Ascending-sorted candle times, incrementally maintained (binary-insert on
+  // first-seen candle time in applySingleTrade; reset alongside `candles` on
+  // clear()/setConfig() re-bin). Lets getRange() binary-search a window
+  // instead of doing `Array.from(candles.keys()).filter().sort()` on every
+  // call — that was O(all candles) per call and getRange() feeds every
+  // footprint render frame, so it scaled with total loaded history.
+  private sortedTimes: number[] = [];
   // Raw trades kept for re-binning. Fixed-capacity ring: oldest dropped first.
   private rawRing: FlowTrade[] = [];
   private rawRingHead = 0; // write cursor when the ring is full
@@ -66,6 +73,7 @@ export class FlowBinStore {
     // once on their original ingestion — see the field doc comment above.
     const raw = this.drainRawInOrder();
     this.candles.clear();
+    this.sortedTimes = [];
     this.sortedViewCache.clear();
     this.dirtyCandles.clear();
     this.rawRing = [];
@@ -80,6 +88,7 @@ export class FlowBinStore {
 
   clear(): void {
     this.candles.clear();
+    this.sortedTimes = [];
     this.sortedViewCache.clear();
     this.dirtyCandles.clear();
     this.rawRing = [];
@@ -117,13 +126,16 @@ export class FlowBinStore {
 
   getRange(fromSec: number, toSec: number): FlowCandleView[] {
     const out: FlowCandleView[] = [];
-    // Candle count in a window is small (chart viewport), so a full scan of
-    // this.candles (also bounded — one entry per visible interval bucket)
-    // is cheap; avoids maintaining a separate sorted-time index.
-    const times = Array.from(this.candles.keys())
-      .filter((t) => t >= fromSec && t <= toSec)
-      .sort((a, b) => a - b);
-    for (const t of times) {
+    // sortedTimes is ascending and incrementally maintained (binary-insert in
+    // applySingleTrade — see the field doc comment), so the window
+    // [fromSec, toSec] is two binary searches + a linear walk over just the
+    // matching slice, instead of a filter+sort over ALL candle times on every
+    // call (this used to be O(all candles) and getRange() feeds every
+    // footprint render frame, so cost scaled with total loaded history).
+    const startIdx = lowerBound(this.sortedTimes, fromSec);
+    for (let i = startIdx; i < this.sortedTimes.length; i++) {
+      const t = this.sortedTimes[i];
+      if (t > toSec) break;
       const candle = this.candles.get(t);
       if (candle) out.push(this.toView(candle));
     }
@@ -207,6 +219,11 @@ export class FlowBinStore {
         poc: null,
       };
       this.candles.set(candleTime, candle);
+      // Binary-insert into the ascending sortedTimes index — trades can
+      // arrive out of time order (backfill pages, late live ticks), so this
+      // is NOT always a push-to-end; lowerBound finds the correct insertion
+      // point regardless of arrival order.
+      insertSorted(this.sortedTimes, candleTime);
     }
 
     let bin = candle.bins.get(binPrice);
@@ -259,6 +276,33 @@ export class FlowBinStore {
   private notify(): void {
     for (const cb of this.listeners) cb();
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sorted-index helpers (module-level, no `this` — trivial to unit test in
+// isolation). Used by FlowBinStore.getRange()/applySingleTrade() to maintain
+// `sortedTimes` incrementally instead of re-sorting all candle times per call.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Index of the first element >= target (standard binary lower-bound). Returns arr.length if none qualify. */
+function lowerBound(arr: number[], target: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid] < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/** Insert `value` into an ascending-sorted array at its correct position. Assumes `value` is not already present (caller only inserts on first-seen candle times). */
+function insertSorted(arr: number[], value: number): void {
+  const idx = lowerBound(arr, value);
+  arr.splice(idx, 0, value);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

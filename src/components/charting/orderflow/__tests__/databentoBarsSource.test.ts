@@ -7,7 +7,7 @@
 // chart never painted. This test proves getBars() now reads straight off a
 // shared FlowBinStore — no network, no second cache.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { DatabentoBarsSource } from '../DatabentoBarsSource';
 import { FlowBinStore } from '../flowBinStore';
@@ -139,6 +139,110 @@ describe('DatabentoBarsSource — shared FlowBinStore, weekend anchor fallback',
       toSec as UTCTimestamp,
     );
 
+    expect(bars).toEqual([]);
+  });
+});
+
+describe('DatabentoBarsSource — memoized getBars() derivation (perf fix 2026-07-06)', () => {
+  // getBars() used to call store.getRawTrades() (a full drainRawInOrder()
+  // copy of up to 250k raw trades) + re-bin via tradesToBars() on EVERY
+  // call, even when the window and the store's trade data were unchanged
+  // since the previous call — and it's invoked on every barsRefreshToken
+  // bump. These tests assert the memo: a second getBars() with the same
+  // (fromMs, toMs, intervalSec, tradesIngested) key returns WITHOUT
+  // re-deriving, and any change to those inputs correctly invalidates it.
+
+  it('a second getBars() with the same window and no new trades does NOT re-derive — getRawTrades() called once, same array reference returned', async () => {
+    const store = new FlowBinStore({ intervalSec: 15 * 60, rowSize: 0.25 });
+    store.applyTrades(buildFridayTrades());
+
+    const getRawTradesSpy = vi.spyOn(store, 'getRawTrades');
+    const source = new DatabentoBarsSource(store);
+
+    const fromSec = Math.floor(Date.UTC(2026, 6, 3, 15, 35, 0) / 1000);
+    const toSec = Math.floor(Date.UTC(2026, 6, 3, 17, 35, 0) / 1000);
+
+    const first = await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(1);
+    expect(first.length).toBeGreaterThan(0);
+
+    // Identical call — same symbol/interval/window, store untouched in between.
+    const second = await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(1); // still 1 — no re-derivation
+    expect(second).toBe(first); // same array reference, not just equal content
+
+    getRawTradesSpy.mockRestore();
+  });
+
+  it('re-derives when new trades are ingested (getTradesIngested() changed) even with the same window', async () => {
+    const store = new FlowBinStore({ intervalSec: 15 * 60, rowSize: 0.25 });
+    store.applyTrades(buildFridayTrades());
+
+    const getRawTradesSpy = vi.spyOn(store, 'getRawTrades');
+    const source = new DatabentoBarsSource(store);
+
+    const fromSec = Math.floor(Date.UTC(2026, 6, 3, 15, 35, 0) / 1000);
+    const toSec = Math.floor(Date.UTC(2026, 6, 3, 17, 35, 0) / 1000);
+
+    const first = await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(1);
+
+    // Ingest one more trade inside the window — bumps getTradesIngested(),
+    // which must invalidate the memo even though from/to/interval match.
+    store.applyTrades([
+      { time: Date.UTC(2026, 6, 3, 16, 0, 0), price: NQ_BASE_PRICE, qty: 1, buyerAggressor: true },
+    ]);
+
+    const second = await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(2); // re-derived
+    expect(second).not.toBe(first); // new array — content may also differ
+  });
+
+  it('re-derives when the window (from/to) changes, same trades', async () => {
+    const store = new FlowBinStore({ intervalSec: 15 * 60, rowSize: 0.25 });
+    store.applyTrades(buildFridayTrades());
+
+    const getRawTradesSpy = vi.spyOn(store, 'getRawTrades');
+    const source = new DatabentoBarsSource(store);
+
+    const fromSec = Math.floor(Date.UTC(2026, 6, 3, 15, 35, 0) / 1000);
+    const toSec = Math.floor(Date.UTC(2026, 6, 3, 17, 35, 0) / 1000);
+
+    await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(1);
+
+    // Same trades, but a different `to` — must invalidate.
+    await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, (toSec - 60) as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-derives when the interval changes, same window and trades', async () => {
+    const store = new FlowBinStore({ intervalSec: 15 * 60, rowSize: 0.25 });
+    store.applyTrades(buildFridayTrades());
+
+    const getRawTradesSpy = vi.spyOn(store, 'getRawTrades');
+    const source = new DatabentoBarsSource(store);
+
+    const fromSec = Math.floor(Date.UTC(2026, 6, 3, 15, 35, 0) / 1000);
+    const toSec = Math.floor(Date.UTC(2026, 6, 3, 17, 35, 0) / 1000);
+
+    await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(1);
+
+    await source.getBars('NQU6', '5m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('first call always derives (no stale-cache false-positive on an empty store)', async () => {
+    const store = new FlowBinStore({ intervalSec: 15 * 60, rowSize: 0.25 });
+    const getRawTradesSpy = vi.spyOn(store, 'getRawTrades');
+    const source = new DatabentoBarsSource(store);
+
+    const fromSec = Math.floor(Date.UTC(2026, 6, 5, 15, 0, 0) / 1000);
+    const toSec = Math.floor(Date.UTC(2026, 6, 5, 17, 0, 0) / 1000);
+
+    const bars = await source.getBars('NQU6', '15m', fromSec as UTCTimestamp, toSec as UTCTimestamp);
+    expect(getRawTradesSpy).toHaveBeenCalledTimes(1);
     expect(bars).toEqual([]);
   });
 });

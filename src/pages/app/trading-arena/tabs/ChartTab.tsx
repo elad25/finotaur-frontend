@@ -156,7 +156,18 @@ export function ChartTab({ symbol, interval, assetClass }: ChartTabProps) {
         [{ high: range.avgBarRange, low: 0 }],
         FALLBACK_TICK_SIZE,
       );
-      setSuggestedRowSize(next);
+      // Render-loop stability guard: onBarsLoad fires on every bar fetch
+      // (backfill landing, periodic refresh, refetches this very state update
+      // can itself trigger downstream via rowSize → useOrderFlow →
+      // store.setConfig()), and `next` is re-derived from freshly loaded bars
+      // each time — tiny float noise between calls is otherwise enough to
+      // keep re-triggering a FULL raw-ring re-bin on every load (setConfig
+      // replays the whole raw trade ring on ANY rowSize change, however
+      // small). Skip the state update entirely when `next` doesn't differ
+      // from the current suggestion by at least one tick — this still lets
+      // the very first real suggestion through (FALLBACK_TICK_SIZE seed vs. a
+      // genuinely different first `next` always exceeds the one-tick floor).
+      setSuggestedRowSize((prev) => (Math.abs(next - prev) < FALLBACK_TICK_SIZE ? prev : next));
     },
     [],
   );

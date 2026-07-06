@@ -156,9 +156,14 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
   //      periodic refresh) must not re-trigger a re-bin from data that may
   //      itself already reflect the pending suggestion.
   //   2. Snap the result to a stable tick-grid step and skip the state update
-  //      entirely if it doesn't actually change the current row size — floating
-  //      point re-derivation from a `next` that happens to differ by epsilon
-  //      is otherwise enough to keep the cycle alive indefinitely.
+  //      entirely if it doesn't differ from the current row size by at least
+  //      one tick — floating point re-derivation from a `next` that happens
+  //      to differ by epsilon is otherwise enough to keep the cycle alive
+  //      indefinitely. (Widened from an exact `next === prev` check to a
+  //      one-tick tolerance for defense-in-depth/consistency with ChartTab's
+  //      matching guard — guard #1 above already limits this to a single
+  //      call per root/interval change, so this tolerance mainly protects
+  //      against any future change that re-arms hasSuggestedRef more often.)
   const handleBarsLoad = useCallback(
     (range: { high: number; low: number; avgBarRange: number } | null) => {
       if (!range) return;
@@ -171,7 +176,7 @@ export function FuturesChartTab({ interval }: FuturesChartTabProps) {
         spec.tickSize,
       );
       hasSuggestedRef.current = true;
-      setSuggestedRowSize((prev) => (next === prev ? prev : next));
+      setSuggestedRowSize((prev) => (Math.abs(next - prev) < spec.tickSize ? prev : next));
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     [spec.tickSize],
