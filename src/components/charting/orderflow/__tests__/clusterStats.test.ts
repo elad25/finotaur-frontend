@@ -16,6 +16,11 @@ import {
 import type { FlowTrade, FootprintConfig } from '../types';
 import { DEFAULT_FOOTPRINT_CONFIG } from '../types';
 import { FlowBinStore } from '../flowBinStore';
+import {
+  FOOTPRINT_STATS_CHIP_STRONG_ALPHA,
+  FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
+  FOOTPRINT_TOTALS_BG,
+} from '../footprintTheme';
 
 // ─── FlowCandle.maxDelta/minDelta sequencing (engine-level, already tracked
 // per-trade in flowBinStore's applySingleTrade — proving the exact sequence
@@ -278,3 +283,177 @@ function computeRowMaxima(allStats: ReturnType<typeof buildClusterStatsRow>[]) {
   }
   return { volume, delta, deltaPct, maxDelta, minDelta, sessionDelta };
 }
+
+// ─── Stats-band per-cell heat chips + legend gutter (visual-parity punch-list) ──
+
+describe('drawStatsBandAt — per-cell heat chips scale by relative magnitude', () => {
+  const intervalSec = 60;
+  const rowSize = 10;
+
+  it('the row at exactly rowMax renders its heat chip at the STRONG alpha endpoint', () => {
+    const bigTrades: FlowTrade[] = [{ time: 0, price: 100, qty: 100, buyerAggressor: true }];
+    const smallTrades: FlowTrade[] = [{ time: 0, price: 100, qty: 1, buyerAggressor: true }];
+    const bigCandle = buildCandle(bigTrades, intervalSec, rowSize);
+    const smallCandle = buildCandle(smallTrades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG };
+
+    const bigPrepared = prepareCandleDraw(bigCandle, rowSize, 1, config);
+    const smallPrepared = prepareCandleDraw(smallCandle, rowSize, 1, config);
+    const bigStats = buildClusterStatsRow(bigCandle, bigCandle.delta);
+    const smallStats = buildClusterStatsRow(smallCandle, smallCandle.delta);
+    const rowMaxima = computeRowMaxima([bigStats, smallStats]);
+
+    const ctx = createMockCtx();
+    drawStatsBandAt(
+      ctx,
+      [
+        { prepared: bigPrepared, stats: bigStats, leftX: 100, rightX: 180 },
+        { prepared: smallPrepared, stats: smallStats, leftX: 180, rightX: 260 },
+      ],
+      { top: 400, labelGutterWidth: FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH, rowMaxima },
+    );
+
+    // Delta row specifically (rowIdx=1, NOT Volume/rowIdx=0 — both rows
+    // happen to share the same 100-vs-1 magnitude ratio in this all-buy
+    // fixture, so pinning by y avoids accidentally asserting on the wrong
+    // row's chip). Big bar's chip (delta=100, rowMax=100) must land at
+    // exactly the strong endpoint.
+    const DELTA_ROW_TOP = 400 + 12; // top(400) + rowIdx(1) * STATS_ROW_HEIGHT(12)
+    const bigChip = ctx.fillRectCalls.find(
+      (c) => c.x === 100 && c.y === DELTA_ROW_TOP && c.fillStyle.includes('rgba'),
+    );
+    expect(bigChip).toBeDefined();
+    const alphaMatch = bigChip!.fillStyle.match(/rgba\([^)]+,\s*([\d.]+)\)/);
+    expect(alphaMatch).not.toBeNull();
+    expect(parseFloat(alphaMatch![1])).toBeCloseTo(FOOTPRINT_STATS_CHIP_STRONG_ALPHA, 5);
+  });
+
+  it('a lighter row renders a lower-alpha chip than a heavier row for the same signed stat', () => {
+    const bigTrades: FlowTrade[] = [{ time: 0, price: 100, qty: 100, buyerAggressor: true }];
+    const smallTrades: FlowTrade[] = [{ time: 0, price: 100, qty: 5, buyerAggressor: true }];
+    const bigCandle = buildCandle(bigTrades, intervalSec, rowSize);
+    const smallCandle = buildCandle(smallTrades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG };
+
+    const bigPrepared = prepareCandleDraw(bigCandle, rowSize, 1, config);
+    const smallPrepared = prepareCandleDraw(smallCandle, rowSize, 1, config);
+    const bigStats = buildClusterStatsRow(bigCandle, bigCandle.delta);
+    const smallStats = buildClusterStatsRow(smallCandle, smallCandle.delta);
+    const rowMaxima = computeRowMaxima([bigStats, smallStats]);
+
+    const ctx = createMockCtx();
+    drawStatsBandAt(
+      ctx,
+      [
+        { prepared: bigPrepared, stats: bigStats, leftX: 100, rightX: 180 },
+        { prepared: smallPrepared, stats: smallStats, leftX: 180, rightX: 260 },
+      ],
+      { top: 400, labelGutterWidth: FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH, rowMaxima },
+    );
+
+    // Pin to the Delta row specifically (rowIdx=1) — same reasoning as the
+    // strong-endpoint test above.
+    const DELTA_ROW_TOP = 400 + 12;
+    const alphaOfChipAt = (x: number): number => {
+      const chip = ctx.fillRectCalls.find((c) => c.x === x && c.y === DELTA_ROW_TOP && c.fillStyle.includes('rgba'));
+      expect(chip).toBeDefined();
+      const m = chip!.fillStyle.match(/rgba\([^)]+,\s*([\d.]+)\)/);
+      return m ? parseFloat(m[1]) : 0;
+    };
+
+    // Delta row: big bar's chip (delta=100=rowMax) must be strictly hotter
+    // than the small bar's chip (delta=5).
+    expect(alphaOfChipAt(100)).toBeGreaterThan(alphaOfChipAt(180));
+  });
+
+  it('a negative-signed row (e.g. Delta) renders its chip at x < 180 with sell-family fillStyle, distinct from the positive row', () => {
+    const posTrades: FlowTrade[] = [{ time: 0, price: 100, qty: 20, buyerAggressor: true }];
+    const negTrades: FlowTrade[] = [{ time: 0, price: 100, qty: 20, buyerAggressor: false }];
+    const posCandle = buildCandle(posTrades, intervalSec, rowSize);
+    const negCandle = buildCandle(negTrades, intervalSec, rowSize);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG };
+
+    const posPrepared = prepareCandleDraw(posCandle, rowSize, 1, config);
+    const negPrepared = prepareCandleDraw(negCandle, rowSize, 1, config);
+    const posStats = buildClusterStatsRow(posCandle, posCandle.delta);
+    const negStats = buildClusterStatsRow(negCandle, negCandle.delta);
+    const rowMaxima = computeRowMaxima([posStats, negStats]);
+
+    const ctx = createMockCtx();
+    drawStatsBandAt(
+      ctx,
+      [
+        { prepared: posPrepared, stats: posStats, leftX: 100, rightX: 180 },
+        { prepared: negPrepared, stats: negStats, leftX: 180, rightX: 260 },
+      ],
+      { top: 400, labelGutterWidth: FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH, rowMaxima },
+    );
+
+    // Target the Delta row specifically (STATS_ROW_HEIGHT=12, row index 1 —
+    // NOT row 0/Volume, which uses the same neutral tint for both bars since
+    // volume is unsigned). A plain x-only lookup would otherwise match
+    // Volume's chip first (drawn in the same row loop, row index 0) and both
+    // bars share that neutral color — which was the bug in an earlier
+    // version of this test (both chips resolved to FOOTPRINT_NEUTRAL_TEXT's
+    // rgb triple, "not.toBe" failed because they legitimately WERE the same
+    // row's neutral chip, not the signed Delta row this test intends to check).
+    const DELTA_ROW_TOP = 400 + 12; // top(400) + rowIdx(1) * STATS_ROW_HEIGHT(12)
+    const posChip = ctx.fillRectCalls.find((c) => c.x === 100 && c.y === DELTA_ROW_TOP && c.fillStyle.includes('rgba'));
+    const negChip = ctx.fillRectCalls.find((c) => c.x === 180 && c.y === DELTA_ROW_TOP && c.fillStyle.includes('rgba'));
+    expect(posChip).toBeDefined();
+    expect(negChip).toBeDefined();
+    // Different base color (buy-green vs sell-red rgb triple), not just alpha.
+    const rgbOf = (rgba: string) => rgba.match(/rgba\(([^,]+),\s*([^,]+),\s*([^,]+),/)!.slice(1, 4).join(',');
+    expect(rgbOf(posChip!.fillStyle)).not.toBe(rgbOf(negChip!.fillStyle));
+  });
+});
+
+describe('drawStatsBandAt — legend gutter opaque background drawn on top of bar chips', () => {
+  it('draws an opaque FOOTPRINT_TOTALS_BG rect spanning [0, labelGutterWidth] AFTER the per-bar chip fills (last-write-wins for that region)', () => {
+    const trades: FlowTrade[] = [{ time: 0, price: 100, qty: 50, buyerAggressor: true }];
+    const candle = buildCandle(trades, 60, 10);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG };
+    const prepared = prepareCandleDraw(candle, 10, 1, config);
+    const stats = buildClusterStatsRow(candle, candle.delta);
+
+    const ctx = createMockCtx();
+    // Bar column deliberately overlaps where the gutter would be reserved
+    // (leftX=0) — proves the gutter backdrop still wins visually because it
+    // is drawn LAST, per the "simpler approach" the task explicitly permits.
+    drawStatsBandAt(ctx, [{ prepared, stats, leftX: 0, rightX: 80 }], {
+      top: 400,
+      labelGutterWidth: FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH,
+      rowMaxima: computeRowMaxima([stats]),
+    });
+
+    const gutterBgCalls = ctx.fillRectCalls.filter(
+      (c) => c.x === 0 && c.w === FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH && c.fillStyle === FOOTPRINT_TOTALS_BG,
+    );
+    expect(gutterBgCalls.length).toBeGreaterThan(0);
+
+    // The gutter backdrop fillRect call must be the LAST fillRect issued
+    // that targets x=0 — i.e. it comes after any bar-chip fill at that x.
+    const allFillsAtX0 = ctx.fillRectCalls.filter((c) => c.x === 0);
+    const lastFillAtX0 = allFillsAtX0[allFillsAtX0.length - 1];
+    expect(lastFillAtX0.fillStyle).toBe(FOOTPRINT_TOTALS_BG);
+    expect(lastFillAtX0.w).toBe(FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH);
+  });
+
+  it('labelGutterWidth=0 (legacy call shape) draws no dedicated gutter backdrop rect', () => {
+    const trades: FlowTrade[] = [{ time: 0, price: 100, qty: 10, buyerAggressor: true }];
+    const candle = buildCandle(trades, 60, 10);
+    const config: FootprintConfig = { ...DEFAULT_FOOTPRINT_CONFIG };
+    const prepared = prepareCandleDraw(candle, 10, 1, config);
+    const stats = buildClusterStatsRow(candle, candle.delta);
+
+    const ctx = createMockCtx();
+    drawStatsBandAt(ctx, [{ prepared, stats, leftX: 0, rightX: 80 }], {
+      top: 400,
+      labelGutterWidth: 0,
+      rowMaxima: computeRowMaxima([stats]),
+    });
+
+    const zeroWidthGutterCalls = ctx.fillRectCalls.filter((c) => c.w === 0);
+    expect(zeroWidthGutterCalls.length).toBe(0);
+  });
+});

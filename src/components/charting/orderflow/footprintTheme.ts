@@ -27,19 +27,34 @@ export const FOOTPRINT_NEUTRAL_TEXT = '#a1a1aa'; // zinc-400, matches chart text
 /** Diverging delta cell shading: red <-> neutral-dark <-> green, by |delta| magnitude. */
 export const FOOTPRINT_DELTA_NEUTRAL_DARK = 'rgba(24, 24, 27, 0.6)'; // zinc-900 @ 60%
 
+/**
+ * Stats-band per-cell heat-chip alpha endpoints (NT: "same gradient strength
+ * as the bars") — weak/strong alpha interpolated by |value| relative to the
+ * visible-row max, mirroring the bidAsk weak/strong pattern below. Used by
+ * drawStatsBandAt via mixAlphaValue for the Volume/Delta/Delta%/Max Δ/Min Δ/
+ * Session Δ row cells.
+ */
+export const FOOTPRINT_STATS_CHIP_WEAK_ALPHA = 0.10;
+export const FOOTPRINT_STATS_CHIP_STRONG_ALPHA = 0.30;
+
 /** POC (Point of Control) highlight band — FINOTAUR gold, matches brandGold. */
 export const FOOTPRINT_POC_COLOR = '#C9A646';
 export const FOOTPRINT_POC_BG = 'rgba(201, 166, 70, 0.18)';
 
-/** Imbalance accent — brighter gold outline/text, distinct from POC's fill-only band. */
-export const FOOTPRINT_IMBALANCE_ACCENT = '#F4D97B';
-
-/** Stacked-imbalance zone bands — same hue family as the imbalance accent, low alpha. */
+/** Stacked-imbalance zone bands — same buy/sell hue family, low alpha. */
 export const FOOTPRINT_STACKED_BUY_BAND = 'rgba(34, 197, 94, 0.10)';
 export const FOOTPRINT_STACKED_SELL_BAND = 'rgba(220, 38, 38, 0.10)';
 
 /** Totals-row backdrop, pinned above the time axis. */
 export const FOOTPRINT_TOTALS_BG = 'rgba(8, 8, 10, 0.85)'; // near-black, matches chart bg
+
+/**
+ * Stats-band legend gutter — fixed-width column at the pane's left edge
+ * reserved for row labels (Volume/Delta/.../Session Δ), so labels never
+ * collide with the first bar's per-cell heat chips (Exocharts convention:
+ * legend column with its own opaque background, not overlapping chart data).
+ */
+export const FOOTPRINT_STATS_LEGEND_GUTTER_WIDTH = 64;
 
 /**
  * Cell font — tabular-nums so buy/sell columns and totals stay aligned,
@@ -79,12 +94,69 @@ export const FOOTPRINT_MIN_CANDLE_WIDTH_FOR_SHADING_EXIT = 11;
 /** Cell padding (px) reserved on each side when measuring text fit. */
 export const FOOTPRINT_CELL_PADDING_X = 3;
 
-/** Base cell font size (px) — scaled down slightly for merged/dense rows. */
-export const FOOTPRINT_CELL_FONT_SIZE = 10;
+/** Totals/stats-band font size (px) — untouched by the per-cell auto-scaling below. */
 export const FOOTPRINT_TOTALS_FONT_SIZE = 10;
 
-/** Imbalance highlight outline width (px). */
-export const FOOTPRINT_IMBALANCE_OUTLINE_WIDTH = 1;
+/**
+ * Auto font-size-by-row-height (ATAS/Exocharts parity): cell text scales
+ * with the rendered row height instead of a fixed 10px, so dense
+ * (small-row) footprints stay legible-but-compact and roomy rows use the
+ * extra space. Clamped to [MIN, MAX]; ratio applied to rowHeightPx and
+ * rounded — see computeCellFontSize in footprintRender.ts.
+ */
+export const FOOTPRINT_CELL_FONT_MIN = 9;
+export const FOOTPRINT_CELL_FONT_MAX = 13;
+export const FOOTPRINT_CELL_FONT_HEIGHT_RATIO = 0.55;
+
+// ─── Auto row-density target band (ATAS/Exocharts parity) ──────────────────
+// At the 'full' detail stage, Auto row density should merge price bins so
+// each rendered row lands inside this px-height band — professional
+// footprint platforms show ~14-25 rows/bar at typical zoom, each row a
+// legible 14-20px tall. Below MIN, rows are too cramped for text (already
+// enforced by FOOTPRINT_MIN_ROW_HEIGHT_FOR_TEXT); above MAX, rows waste
+// vertical space and the POC band reads as an oversized slab instead of a
+// single price level — see computeRowMergeFactor in footprintRender.ts.
+
+/** Lower bound (px) of the target auto row-height band. */
+export const FOOTPRINT_AUTO_ROW_HEIGHT_MIN = 14;
+/** Upper bound (px) of the target auto row-height band. */
+export const FOOTPRINT_AUTO_ROW_HEIGHT_MAX = 22;
+/**
+ * Hysteresis margin (px) applied around the band edges when a previous merge
+ * factor is already active — mirrors computeDetailLevel's enter/exit
+ * asymmetry so a per-row height hovering exactly at a band edge across
+ * consecutive frames (zoom/pan jitter) doesn't oscillate the merge factor
+ * every frame.
+ */
+export const FOOTPRINT_AUTO_ROW_HEIGHT_HYSTERESIS = 3;
+
+/** bidAsk mode: weak/strong alpha endpoints for volume-keyed half-fills — replaces the old fixed 0.16 alpha. */
+export const FOOTPRINT_BIDASK_BG_WEAK_ALPHA = 0.16;
+export const FOOTPRINT_BIDASK_BG_STRONG_ALPHA = 0.32;
+
+/**
+ * Candle skeleton strip (NT/MW convention) — at 'full' detail, a thin
+ * open/close body + a hairline high/low wick draw at the LEFT edge of each
+ * footprint column, beneath the cell fills/text. Widths only — colors reuse
+ * the existing FOOTPRINT_BUY_COLOR/FOOTPRINT_SELL_COLOR tokens above (no new
+ * hexes), matching the buy/sell family used everywhere else in this theme.
+ */
+export const FOOTPRINT_SKELETON_WICK_WIDTH_PX = 1;
+export const FOOTPRINT_SKELETON_BODY_WIDTH_PX = 2;
+
+/** Stacked-imbalance zone band border — hairline outline at higher alpha than the band fill, same hue. */
+export const FOOTPRINT_STACKED_BAND_BORDER_WIDTH_PX = 1;
+export const FOOTPRINT_STACKED_BUY_BAND_BORDER = 'rgba(34, 197, 94, 0.45)';
+export const FOOTPRINT_STACKED_SELL_BAND_BORDER = 'rgba(220, 38, 38, 0.45)';
+
+/**
+ * bidAsk mode: gutter (px) separating the bid (sell) and ask (buy) half-cells
+ * at the cell midline — ATAS/Exocharts-style visual seam between the two
+ * columns instead of a flush edge-to-edge split. Applied symmetrically: each
+ * half's background fill and text anchor inset by half the gutter from the
+ * midline.
+ */
+export const FOOTPRINT_CELL_GUTTER_PX = 4;
 
 // ─── Volume Profile overlay tokens ──────────────────────────────────────────
 // Shares the buy/sell/gold palette above so the profile reads as part of the

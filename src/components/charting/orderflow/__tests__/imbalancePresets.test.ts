@@ -221,8 +221,13 @@ describe('stacked-run detection (imbalanceStackedOnly)', () => {
     const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
 
-    // No stroke outlines should be drawn for a run of 2 under the Stacked preset.
+    // No stroke outlines are drawn for imbalance in ANY preset anymore (Step
+    // 2 — text&emphasis pass: the gold outline was removed in favor of
+    // bold+bright NUMBER text). The stacked-run suppression itself is proven
+    // via the `highlighted` flag, which drawCandleFootprint reads to decide
+    // whether to bold/recolor a row's text.
     expect(ctx.strokeRectCalls.length).toBe(0);
+    expect(prepared.imbalances.filter((i) => i.highlighted).length).toBe(0);
   });
 
   it('run of 3 consecutive same-direction imbalanced levels → ALL 3 highlighted in Stacked preset', () => {
@@ -239,11 +244,14 @@ describe('stacked-run detection (imbalanceStackedOnly)', () => {
     const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
 
-    // All 3 rows in the run get a stroke outline.
-    expect(ctx.strokeRectCalls.length).toBe(3);
+    // No gold outline is drawn (removed unconditionally — see Step 2). The
+    // actual visual accent (bold + bright text) is proven directly via the
+    // `highlighted` flag: all 3 rows in the run must be highlighted.
+    expect(ctx.strokeRectCalls.length).toBe(0);
+    expect(prepared.imbalances.filter((i) => i.highlighted).length).toBe(3);
   });
 
-  it('Standard/Strict presets (imbalanceStackedOnly=false) highlight singles — a lone imbalanced row still outlines', () => {
+  it('Standard/Strict presets (imbalanceStackedOnly=false) highlight singles — a lone imbalanced row is still highlighted', () => {
     const candle = buildRunOfBuyImbalances(1);
     const config: FootprintConfig = {
       ...DEFAULT_FOOTPRINT_CONFIG,
@@ -257,7 +265,8 @@ describe('stacked-run detection (imbalanceStackedOnly)', () => {
     const extras: FootprintDrawExtras = { liveEdgeX: 800, latestCandleRange: null, clipRightX: 800 };
     drawCandleFootprint(ctx, prepared, projection, 'full', config, extras);
 
-    expect(ctx.strokeRectCalls.length).toBe(1);
+    expect(ctx.strokeRectCalls.length).toBe(0);
+    expect(prepared.imbalances.filter((i) => i.highlighted).length).toBe(1);
   });
 });
 

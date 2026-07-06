@@ -508,7 +508,7 @@ function WorkstationInner({ symbol, interval, from, to, onStatusChange }: Workst
   // ── Candle range tracking ───────────────────────────────────────────────
   // Stable ref + accessor so useLiquidityBand can merge candle hi/low into the
   // auto-fit band without needing an additional fetch or re-render cycle.
-  const candleRangeRef = useRef<{ high: number; low: number } | null>(null);
+  const candleRangeRef = useRef<{ high: number; low: number; avgBarRange: number } | null>(null);
   const getCandleRange = useCallback(() => candleRangeRef.current, []);
 
   // ── Time-window focus token ─────────────────────────────────────────────
