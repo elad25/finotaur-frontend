@@ -1479,6 +1479,8 @@ async function syncCredential(cred: {
       attribution,
       prevFillsProcessed:    cursor.fills_processed,
       stopOrders,
+      discoveredCount:       discoveredAccountIds.length,
+      discoveryOk:           discoverySucceeded,
     });
     legacyInserted += result.inserted;
     legacyErrors   += result.errors;
@@ -1558,6 +1560,8 @@ async function syncCredential(cred: {
       p_log_details:          {
         reason: 'no_new_fills',
         path: 'legacy_multi_account',
+        discovered_count: discoveredAccountIds.length,
+        discovery_ok: discoverySucceeded,
         ...(excludedAccounts.length > 0 ? { excluded_not_live: excludedAccounts } : {}),
       },
     });
@@ -1611,11 +1615,15 @@ async function processAccountFills(args: {
   attribution:           { userId: string; connectionId: string };
   prevFillsProcessed:    number;
   stopOrders?:           StopOrder[];
+  // Discovery-health observability (threaded from syncCredential's single
+  // discovery pass so record_sync_completion can persist it here too).
+  discoveredCount:       number;
+  discoveryOk:           boolean;
 }): Promise<{ inserted: number; errors: number }> {
   const {
     connectionId, userId, accountIdNum, accountName, environment, portfolioId,
     base, accessToken, fills, syncMode, syncStartedAt, attribution,
-    prevFillsProcessed, stopOrders = [],
+    prevFillsProcessed, stopOrders = [], discoveredCount, discoveryOk,
   } = args;
 
   // ─── Cash balance snapshot (once per account, using THIS account's own id) ──
@@ -1724,7 +1732,11 @@ async function processAccountFills(args: {
       p_fills_fetched:        0,
       p_sync_mode:            syncMode,
       p_sync_started_at:      syncStartedAt.toISOString(),
-      p_log_details:          { reason: 'no_new_fills' },
+      p_log_details:          {
+        reason: 'no_new_fills',
+        discovered_count: discoveredCount,
+        discovery_ok: discoveryOk,
+      },
     });
     if (rpcErr) {
       console.error('[tradovate-sync] record_sync_completion failed (no-fills path):', rpcErr);
@@ -1871,7 +1883,12 @@ async function processAccountFills(args: {
     p_fills_fetched:        fills.length,
     p_sync_mode:            syncMode,
     p_sync_started_at:      syncStartedAt.toISOString(),
-    p_log_details:          { fills_fetched: fills.length, max_fill_id: maxFillId },
+    p_log_details:          {
+      fills_fetched: fills.length,
+      max_fill_id: maxFillId,
+      discovered_count: discoveredCount,
+      discovery_ok: discoveryOk,
+    },
   });
   if (rpcErr) {
     console.error('[tradovate-sync] record_sync_completion failed (fills path):', rpcErr);
