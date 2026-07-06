@@ -6,7 +6,7 @@
  *   right → sticky AI Report Summary rail (placeholder metrics)
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ChevronDown,
@@ -24,7 +24,7 @@ import { buildFilingUrl } from '@/lib/filingUrl';
 import { getJsonSmart } from '@/lib/http';
 import { Button } from '@/components/ds/Button';
 import { SectionSpinner } from '@/components/ds/Spinner';
-import { useFinoChat } from '@/contexts/FinoChatContext';
+import { useFinoChat, useRegisterFinoContext } from '@/contexts/FinoChatContext';
 import StockLogo from './StockLogo';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 
@@ -290,6 +290,29 @@ export function CompanyResearchCenter() {
 
   const abortRef = useRef<AbortController | null>(null);
   const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // FINO page context — so FINO can ground its answers in the filings actually
+  // shown on screen instead of generic knowledge.
+  // ---------------------------------------------------------------------------
+
+  const finoPageData = useMemo(() => {
+    if (!ticker || filings.length === 0) return null;
+    return {
+      surface: 'Company Research Center (SEC filings)',
+      ticker,
+      companyName,
+      cik,
+      filings: filings.slice(0, 12).map((f) => ({
+        form: f.form,
+        filingDate: f.filingDate,
+        reportDate: f.reportDate,
+        accessionNumber: f.accessionNumber,
+        filingUrl: f.filingUrl,
+      })),
+    };
+  }, [ticker, companyName, cik, filings]);
+  useRegisterFinoContext(finoPageData);
 
   // ---------------------------------------------------------------------------
   // Load filings
