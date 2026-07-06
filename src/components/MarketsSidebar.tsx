@@ -17,6 +17,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { getMarketsItemsForAsset } from '@/constants/markets';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { isMarketsBlocked } from '@/lib/marketsAccess';
 import { cn } from '@/lib/utils';
 import { Lock } from 'lucide-react';
 import { GatedLockBadge } from '@/components/compliance/PriceGate';
@@ -56,7 +57,7 @@ export function MarketsSidebar({ isExpanded }: MarketsSidebarProps) {
         const route = fn.routes[selectedAsset]!; // always defined — getMarketsItemsForAsset filters these
 
         const itemLocked = fn.locked === true || (fn.lockedAssets?.includes(selectedAsset) ?? false); // closed to the public (paywall)
-        const blocked = !hasBetaAccess;   // whole Markets research area is beta-only (admin/beta bypass)
+        const blocked = isMarketsBlocked(hasBetaAccess);   // whole Markets research area is beta-only (single switch)
         // priceGated badge: applies to all assets unless restricted to a specific set.
         // Crypto/forex/macro overview are non-Polygon → not price-gated → no lock badge.
         const itemPriceGated = fn.priceGated === true && (fn.priceGatedAssets ? fn.priceGatedAssets.includes(selectedAsset) : true);

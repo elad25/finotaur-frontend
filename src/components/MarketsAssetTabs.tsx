@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { ASSET_CLASSES, getMarketsItemsForAsset } from '@/constants/markets';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { isMarketsBlocked } from '@/lib/marketsAccess';
 import { cn } from '@/lib/utils';
 import { Lock } from 'lucide-react';
 
@@ -51,7 +52,7 @@ export function MarketsAssetTabs() {
         const isActive = asset.id === selectedAsset;
         // Whole Markets research area is beta-only. comingSoon assets (Options/Futures)
         // stay sealed even for beta. Everything else: open to beta, locked for the public.
-        const blocked = asset.comingSoon || !hasBetaAccess;
+        const blocked = asset.comingSoon || isMarketsBlocked(hasBetaAccess);
 
         return (
           <button
