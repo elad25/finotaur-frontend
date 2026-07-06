@@ -10,9 +10,21 @@ import { cn } from '@/lib/utils';
 import { useAutomationSettings } from '../hooks/useAutomationSettings';
 import { usePortfolios } from '@/hooks/usePortfolios';
 
-export function AutomationMasterSwitch() {
-  const { settings, upsert, isLoading } = useAutomationSettings();
+interface AutomationMasterSwitchProps {
+  /** Demo mode: display as an active/enabled switch, but every write is inert. */
+  demo?: boolean;
+}
+
+export function AutomationMasterSwitch({ demo = false }: AutomationMasterSwitchProps) {
+  // Hooks are called unconditionally per React rules — their values are just
+  // not read (and their writes never fire) when `demo` is true.
+  const { settings: realSettings, upsert, isLoading } = useAutomationSettings();
   const { portfolios } = usePortfolios();
+
+  // Demo: show a static "running" visual (enabled, kill switch not engaged)
+  // instead of the real hook's value.
+  const settings = demo ? { ...realSettings, master_enabled: true, kill_switch_engaged: false } : realSettings;
+
   const now = new Date();
   const anyLocked = portfolios.some(
     (p) =>
@@ -22,10 +34,12 @@ export function AutomationMasterSwitch() {
   );
 
   const handleMasterToggle = async (checked: boolean) => {
+    if (demo) return; // demo: no network, no DB write
     await upsert({ master_enabled: checked });
   };
 
   const handleKillSwitch = async (checked: boolean) => {
+    if (demo) return; // demo: no network, no DB write
     await upsert({ kill_switch_engaged: checked });
   };
 

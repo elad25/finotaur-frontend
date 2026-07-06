@@ -25,6 +25,14 @@ import { useLockAllAccounts } from '@/features/automation/hooks/useLockAllAccoun
 import { useAccountRiskSummaries } from '@/features/automation/hooks/useAccountRiskSummaries';
 import { EnforcementFeed } from '@/components/copyTrading/EnforcementFeed';
 import { MirroredOrdersPanel } from '@/components/copyTrading/MirroredOrdersPanel';
+import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
+import {
+  getDemoBrokerConnections,
+  getDemoPortfolios,
+  getDemoCopierRoutes,
+  demoSnapshotByAccountName,
+  getDemoAccountRiskSummaries,
+} from '@/utils/demoCopierData';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -134,6 +142,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
   rule,
   isCreating,
   isUpdating,
+  demo,
   onFollowToggle,
   onRequestUnfollowWithExposure,
   onUpdateRule,
@@ -145,6 +154,8 @@ const CopyAccountRow = memo(function CopyAccountRow({
   rule: RouteRule | null;
   isCreating: boolean;
   isUpdating: boolean;
+  /** True in Copier demo mode — controls render read-only sample state, no optimistic flip, no writes. */
+  demo: boolean;
   onFollowToggle: (currentRatioDraft: number) => Promise<void>;
   /**
    * Called instead of `onFollowToggle` when the user clicks unfollow on an
@@ -195,16 +206,20 @@ const CopyAccountRow = memo(function CopyAccountRow({
   // Derive disabled / title for the Follow toggle. Note: we intentionally do
   // NOT disable on the global isCreating/isUpdating — that froze every row while
   // one saved. Per-row double-fire is guarded via the optimistic overlay below.
-  const followDisabled = !hasLeader || isLeader;
-  const followTitle = isLeader
-    ? 'This account is the leader — it cannot follow itself'
-    : !hasLeader
-      ? 'Select a leader first (use the radio button)'
-      : isCreating || isUpdating
-        ? 'Saving…'
-        : isFollowing
-          ? 'Click to unfollow this leader'
-          : 'Click to follow this leader';
+  // In demo mode the toggle is always inert — it only displays the seeded
+  // following-state and never flips (no optimistic change, no write).
+  const followDisabled = demo || !hasLeader || isLeader;
+  const followTitle = demo
+    ? 'Demo mode — connect a broker to follow a leader'
+    : isLeader
+      ? 'This account is the leader — it cannot follow itself'
+      : !hasLeader
+        ? 'Select a leader first (use the radio button)'
+        : isCreating || isUpdating
+          ? 'Saving…'
+          : isFollowing
+            ? 'Click to unfollow this leader'
+            : 'Click to follow this leader';
 
   return (
     <div
@@ -236,6 +251,8 @@ const CopyAccountRow = memo(function CopyAccountRow({
           <button
             disabled={followDisabled}
             onClick={() => {
+              if (demo) return; // demo: no optimistic flip, no write — display only
+
               if (optFollowing !== null) return; // a write for this row is in flight
 
               // Unfollowing an account that still has open exposure would
@@ -330,8 +347,13 @@ const CopyAccountRow = memo(function CopyAccountRow({
               type="text"
               inputMode="decimal"
               value={ratioDraft}
-              onChange={(e) => setRatioDraft(e.target.value)}
+              disabled={demo}
+              onChange={(e) => {
+                if (demo) return; // demo: display the seeded ratio, no draft edits
+                setRatioDraft(e.target.value);
+              }}
               onBlur={async (e) => {
+                if (demo) return; // demo: no write, no draft normalization
                 const newRatio = parsePositiveNumber(e.target.value, 1);
                 // Normalize display value even if not following yet.
                 setRatioDraft(String(newRatio));
@@ -340,7 +362,10 @@ const CopyAccountRow = memo(function CopyAccountRow({
                 }
               }}
               aria-label={`Copy ratio for ${row.accountName}`}
-              className="w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
+              title={demo ? 'Demo mode — connect a broker to edit the copy ratio' : undefined}
+              className={`w-11 px-1 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none ${
+                demo ? 'opacity-40 cursor-not-allowed' : ''
+              }`}
             />
           </div>
         )}
@@ -352,8 +377,10 @@ const CopyAccountRow = memo(function CopyAccountRow({
           <span className="text-sm text-ink-tertiary">—</span>
         ) : (
           <button
-            disabled={!isFollowing}
+            disabled={demo || !isFollowing}
             onClick={() => {
+              if (demo) return; // demo: no optimistic flip, no write — display only
+
               if (!rule || optCross !== null) return; // need a saved rule; guard double-fire
               setOptCross(!crossOn);                  // move instantly (optimistic)
               void onUpdateRule({ cross_to_micro: !crossOn });
@@ -362,10 +389,12 @@ const CopyAccountRow = memo(function CopyAccountRow({
               crossOn
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
-            } ${!isFollowing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+            } ${demo || !isFollowing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
             aria-label="Cross-to-micro toggle"
             title={
-              !isFollowing
+              demo
+                ? 'Demo mode — connect a broker to edit cross-to-micro'
+                : !isFollowing
                 ? 'Follow this leader first to enable cross-to-micro (e.g. NQ→MNQ)'
                 : crossOn
                   ? 'Cross-to-micro ON — copies the leader\'s instrument as its micro contract (e.g. NQ→MNQ). Click to disable.'
@@ -445,14 +474,31 @@ const CopyAccountRow = memo(function CopyAccountRow({
 // ─── Main Component ───────────────────────────────────────────
 
 export function CopyTradingDashboard() {
+  // Demo mode = viewing the Copier with zero active broker connections — every
+  // data input below is swapped for deterministic sample data (demoCopierData.ts)
+  // and every mutation handler becomes a no-op. Real hooks are still called
+  // unconditionally (React hook rules); only their RESULTS are swapped.
+  const { isDemo } = useCopierDemoMode();
+
   // Show all journal broker connections — used for live status enrichment only.
-  const { connections } = useBrokerConnections({ active: true });
+  const realConnections = useBrokerConnections({ active: true });
+  const connections = isDemo ? getDemoBrokerConnections() : realConnections.connections;
   // liveCredentialIds: always empty — cloud engine session polling removed.
   const liveCredentialIds = useMemo(() => new Set<string>(), []);
   // Desktop agent snapshots — hydrates live balance/PnL/position columns.
-  const { snapshotByAccountName } = useAgentAccountSnapshots();
-  const { tradovatePortfolios, brokerPortfolios, portfolios } = usePortfolios();
-  const { summaryByAccountId } = useAccountRiskSummaries();
+  const realAgentSnapshots = useAgentAccountSnapshots();
+  const snapshotByAccountName = isDemo ? demoSnapshotByAccountName : realAgentSnapshots.snapshotByAccountName;
+  const realPortfolios = usePortfolios();
+  const demoPortfolios = useMemo(() => (isDemo ? getDemoPortfolios() : null), [isDemo]);
+  const portfolios = isDemo ? demoPortfolios! : realPortfolios.portfolios;
+  const tradovatePortfolios = isDemo
+    ? demoPortfolios!.filter((p) => p.source === 'tradovate')
+    : realPortfolios.tradovatePortfolios;
+  const brokerPortfolios = isDemo
+    ? demoPortfolios!.filter((p) => p.source === 'broker')
+    : realPortfolios.brokerPortfolios;
+  const realRiskSummaries = useAccountRiskSummaries();
+  const summaryByAccountId = isDemo ? getDemoAccountRiskSummaries() : realRiskSummaries.summaryByAccountId;
   // Lookup: portfolio id -> kill_switch_active, sourced from the full
   // portfolios list (accountGroups only carries a subset of fields downstream).
   const killSwitchByPortfolioId = useMemo(
@@ -460,7 +506,8 @@ export function CopyTradingDashboard() {
     [portfolios],
   );
   // ── Routes (= groups) — one route per tab, source of truth for tabs ──────
-  const { routes, upsertRoute, deleteRoute } = useCopierRoutes();
+  const { routes: realRoutesList, upsertRoute, deleteRoute } = useCopierRoutes();
+  const routes = isDemo ? getDemoCopierRoutes() : realRoutesList;
   const [isSavingRoute, setIsSavingRoute] = useState(false);
 
   // Tabs are DERIVED from routes (ordered by created_at) — not stored in
@@ -631,6 +678,7 @@ export function CopyTradingDashboard() {
 
   /** Persists a patched target list for the ACTIVE route via upsertRoute. */
   async function saveActiveRouteTargets(targets: CopierRouteTargetInput[]) {
+    if (isDemo) return; // demo: no network, no DB write, no real toast
     if (!activeRoute) return;
     setIsSavingRoute(true);
     try {
@@ -807,6 +855,7 @@ export function CopyTradingDashboard() {
 
   // Sets the ACTIVE GROUP's symbol — persists symbol_filter=[symbol] on its route.
   const setActiveTabInstrument = async (symbol: string) => {
+    if (isDemo) return; // demo: no network, no DB write, no real toast
     const nextSymbol = symbol.trim().toUpperCase();
     if (!nextSymbol || !activeRoute) return;
     if (nextSymbol === instrument) {
@@ -922,6 +971,7 @@ export function CopyTradingDashboard() {
 
   const handleLockAllConfirm = async () => {
     setShowLockAllConfirm(false);
+    if (isDemo) return; // demo: no agent command
     await lockAll();
   };
 
@@ -931,6 +981,7 @@ export function CopyTradingDashboard() {
 
   const handleFlattenConfirm = async () => {
     setShowFlattenConfirm(false);
+    if (isDemo) return; // demo: no agent command
     const result = await flattenAll();
     if (result.status === 'sent') {
       toast.success('Flatten command sent to your agent.');
@@ -948,6 +999,7 @@ export function CopyTradingDashboard() {
 
   const handleCancelOrdersConfirm = async () => {
     setShowCancelConfirm(false);
+    if (isDemo) return; // demo: no agent command
     const result = await cancelOrders();
     if (result.status === 'sent') {
       toast.success('Cancel orders command sent to your agent.');
@@ -984,6 +1036,7 @@ export function CopyTradingDashboard() {
     if (!sym) return;
     setShowFlattenSymbolDialog(false);
     setFlattenSymbolDraft('');
+    if (isDemo) return; // demo: no agent command
     const result = await flattenSymbol(sym);
     if (result.status === 'sent') {
       toast.success(`Flatten ${sym} command sent to your agent.`);
@@ -998,6 +1051,7 @@ export function CopyTradingDashboard() {
 
   const handleRenameCommit = async (tab: GroupTab) => {
     setIsRenamingGroup(false);
+    if (isDemo) return; // demo: no network, no DB write
     const nextLabel = renameDraft.trim();
     if (!nextLabel || nextLabel === tab.label) return;
     setIsSavingRoute(true);
@@ -1041,6 +1095,7 @@ export function CopyTradingDashboard() {
 
   const handleDeleteGroupConfirmed = async (tab: GroupTab) => {
     setDeleteGroupConfirm(null);
+    if (isDemo) return; // demo: no network, no DB write
     setIsSavingRoute(true);
     try {
       const result = await deleteRoute(tab.route.id);
@@ -1067,6 +1122,7 @@ export function CopyTradingDashboard() {
   const isCreatingGroupRef = useRef(false);
 
   const handleCreateGroup = async () => {
+    if (isDemo) return; // demo: no network, no DB write
     if (isSavingRoute || isCreatingGroupRef.current) return;
     if (!canCreateNewGroup || !newGroupLeaderId) return;
     const leaderAccount = toJournalAccount(newGroupLeaderId);
@@ -1253,7 +1309,7 @@ export function CopyTradingDashboard() {
             </button>
           </div>
         </div>
-        <AutomationMasterSwitch />
+        <AutomationMasterSwitch demo={isDemo} />
       </div>
 
       {/* ── 1. Asset selector + action bar ── */}
@@ -1485,7 +1541,9 @@ export function CopyTradingDashboard() {
               rule={rule}
               isCreating={isSavingRoute}
               isUpdating={isSavingRoute}
+              demo={isDemo}
               onSelectLeader={async () => {
+                if (isDemo) return; // demo: no network, no DB write
                 if (isSavingRoute) return; // a route write is already in flight
                 if (!activeRoute || row.portfolioId === leaderId) return;
                 const nextLeader = toJournalAccount(row.portfolioId ?? '');
@@ -1550,6 +1608,7 @@ export function CopyTradingDashboard() {
                 setUnfollowConfirm({ accountName: row.accountName, reason: 'unfollow', resolve: resolveOptimistic });
               }}
               onFollowToggle={async (currentRatioDraft) => {
+                if (isDemo) return; // demo: no network, no DB write
                 if (!activeRoute || !row.portfolioId || isLeader) return;
                 const targetAccount = toJournalAccount(row.portfolioId);
                 if (!targetAccount) {
@@ -1591,6 +1650,7 @@ export function CopyTradingDashboard() {
                 }
               }}
               onUpdateRule={async (patch) => {
+                if (isDemo) return; // demo: no network, no DB write
                 if (!activeRoute || !rule) return;
                 const existingTargets = activeRoute.automation_copier_route_targets ?? [];
                 const nextTargets = existingTargets.map((t) =>

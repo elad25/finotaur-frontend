@@ -14,6 +14,8 @@ import {
   parseEnforcementEvent,
   type AutomationEvent,
 } from '@/features/automation/hooks/useAutomationEvents';
+import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
+import { getDemoEnforcementEvents } from '@/utils/demoCopierData';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -103,7 +105,8 @@ function getBadgeConfig(eventType: string): EventBadgeConfig {
 // ---------------------------------------------------------------------------
 
 export function EnforcementFeed({ accountId, className }: EnforcementFeedProps) {
-  const { events, isLoading, isError, refetch } = useAutomationEvents({
+  const { isDemo } = useCopierDemoMode();
+  const real = useAutomationEvents({
     eventTypes: [
       'risk_enforced',
       'copy_failed',
@@ -114,6 +117,10 @@ export function EnforcementFeed({ accountId, className }: EnforcementFeedProps) 
     ],
     limit: 30,
   });
+  const events = isDemo ? getDemoEnforcementEvents() : real.events;
+  const isLoading = isDemo ? false : real.isLoading;
+  const isError = isDemo ? false : real.isError;
+  const refetch = real.refetch;
 
   // Only copy_failed and order_copy_* events carry account references to match
   // against (order_copy_* via per_target[], possibly multiple); risk_enforced

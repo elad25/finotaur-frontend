@@ -7,7 +7,7 @@
 // Premium-only page. Consistent glassmorphism design.
 // ═══════════════════════════════════════════════════════════════
 
-import { useState, useCallback, memo, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, memo, useMemo, useRef, useEffect, Fragment } from 'react';
 import {
   Link2, RefreshCw,
   History, Zap, Shield, WifiOff,
@@ -28,6 +28,10 @@ import { JournalAccountsOverview } from '@/features/automation/components/Journa
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useCopierDemoMode } from '@/hooks/useCopierDemoMode';
+import { useSubscription } from '@/hooks/useSubscription';
+import { CopierDemoBanner } from '@/components/copyTrading/CopierDemoBanner';
+import { CopierDemoOverlay } from '@/components/copyTrading/CopierDemoOverlay';
 
 // ─── Premium Guard ────────────────────────────────────────────
 function PremiumGate() {
@@ -554,6 +558,14 @@ export default function TradeCopier() {
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
 
+  // Demo mode = zero active broker connections on this route — everyone
+  // (incl. non-Premium) sees a full mock of the copier dashboard, gated by
+  // an adaptive CTA instead of the normal Premium/empty-state blocks below.
+  const { isDemo } = useCopierDemoMode();
+  // Same subscription hook CopierPremiumGate uses, so the adaptive CTA
+  // matches its real tier check exactly.
+  const { isPremium } = useSubscription();
+
   const activeTab: 'connections' | 'copy-trading' | 'manage-risk' | 'install' =
     location.pathname.endsWith('/manage-risk')
       ? 'manage-risk'
@@ -573,8 +585,13 @@ export default function TradeCopier() {
     [portfolios, portfoliosLoading],
   );
 
+  // Demo mode bypasses <CopierPremiumGate> entirely — the copier mock is
+  // open to everyone (incl. non-Premium) while the user has no broker
+  // connection. Real (non-demo) behavior keeps the gate exactly as before.
+  const GateOrFragment = isDemo ? Fragment : CopierPremiumGate;
+
   return (
-    <CopierPremiumGate>
+    <GateOrFragment>
     <div className="relative min-h-screen overflow-hidden bg-surface-base text-ink-primary">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,rgba(201,166,70,0.08),transparent_70%)]" />
 
@@ -641,7 +658,23 @@ export default function TradeCopier() {
         {/* ── Tab 2: Trade Copier ── */}
         {activeTab === 'copy-trading' && (
           <>
-            {hasAnyConnection ? (
+            {isDemo ? (
+              <>
+                <CopierDemoBanner className="rounded-lg" />
+                <SectionCard>
+                  <CopyTradingDashboard />
+                </SectionCard>
+                <SectionCard>
+                  <CopierActivitySection />
+                </SectionCard>
+                <CopierDemoOverlay
+                  ctaLabel={isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                  onCta={() =>
+                    isPremium ? setShowAddBroker(true) : navigate('/app/upgrade')
+                  }
+                />
+              </>
+            ) : hasAnyConnection ? (
               <>
                 <SectionCard>
                   <CopyTradingDashboard />
@@ -670,10 +703,64 @@ export default function TradeCopier() {
         {/* No SectionCard here: the global "All Accounts" panel and the
             per-account cards render frameless and full-width (no gold frame,
             no p-ds-6 inset) so they spread wider across the page. */}
-        {activeTab === 'manage-risk' && <ManageRiskTab />}
+        {activeTab === 'manage-risk' && (
+          isDemo ? (
+            <>
+              <CopierDemoBanner className="rounded-lg" />
+              <SectionCard>
+                <div className="text-center py-16 space-y-4">
+                  <Shield className="w-12 h-12 text-zinc-700 mx-auto" />
+                  <div>
+                    <h2 className="text-base font-semibold text-ink-primary">Risk management</h2>
+                    <p className="text-ink-secondary text-sm mt-1 max-w-md mx-auto">
+                      Set daily loss limits, max contracts, and auto-lock rules for each account.
+                      Connect a broker account to configure your live risk rules.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => (isPremium ? setShowAddBroker(true) : navigate('/app/upgrade'))}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gold-primary/10 px-4 py-2 text-xs font-semibold text-gold-primary transition-all hover:bg-gold-primary/20 hover:border-gold-primary/50"
+                  >
+                    {isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                  </button>
+                </div>
+              </SectionCard>
+            </>
+          ) : (
+            <ManageRiskTab />
+          )
+        )}
 
         {/* ── Tab 4: FINOTAUR Agent (install + device pairing) ── */}
-        {activeTab === 'install' && <InstallAgentTab />}
+        {activeTab === 'install' && (
+          isDemo ? (
+            <>
+              <CopierDemoBanner className="rounded-lg" />
+              <SectionCard>
+                <div className="text-center py-16 space-y-4">
+                  <Download className="w-12 h-12 text-zinc-700 mx-auto" />
+                  <div>
+                    <h2 className="text-base font-semibold text-ink-primary">Desktop agent</h2>
+                    <p className="text-ink-secondary text-sm mt-1 max-w-md mx-auto">
+                      Install the FINOTAUR desktop agent to mirror a leader account to your
+                      followers in real time. Connect a broker account to get started.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => (isPremium ? setShowAddBroker(true) : navigate('/app/upgrade'))}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gold-primary/10 px-4 py-2 text-xs font-semibold text-gold-primary transition-all hover:bg-gold-primary/20 hover:border-gold-primary/50"
+                  >
+                    {isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                  </button>
+                </div>
+              </SectionCard>
+            </>
+          ) : (
+            <InstallAgentTab />
+          )
+        )}
 
       </div>
 
@@ -685,6 +772,6 @@ export default function TradeCopier() {
         />
       )}
     </div>
-    </CopierPremiumGate>
+    </GateOrFragment>
   );
 }
