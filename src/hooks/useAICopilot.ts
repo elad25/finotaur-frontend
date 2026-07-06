@@ -223,6 +223,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
         context,
         tier: usage?.user_tier,
         conversationId,
+        onActivity: () => resetInactivityTimer(),
         onConversation: (id) => {
           conversationId = id;
           // Update current conversation
