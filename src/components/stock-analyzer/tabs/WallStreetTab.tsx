@@ -823,6 +823,12 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Client-side timeout: a hung / very-slow AI generation surfaces a
+    // Retry instead of an indefinite skeleton (the endpoint runs a
+    // web-search AI call that is normally ~30-60s).
+    let timedOut = false;
+    const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, 90000);
+
     setIsLoading(true);
     setError(null);
 
@@ -857,13 +863,18 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
         setAiData(result);
       }
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
+      if (timedOut) {
+        if (tickerRef.current === ticker) {
+          setError('Analysis is taking longer than usual. Please try again.');
+        }
+      } else if (err.name !== 'AbortError') {
         console.error('[WallStreetTab] AI fetch error:', err);
         if (tickerRef.current === ticker) {
           setError(err.message || 'Failed to load analyst data');
         }
       }
     } finally {
+      clearTimeout(timeoutId);
       if (tickerRef.current === ticker) {
         setIsLoading(false);
       }
@@ -914,6 +925,13 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
         {/* Loading state */}
         {isLoading && !aiData && (
           <div className="space-y-4">
+            <div className="flex items-center gap-3 px-1 py-2">
+              <RefreshCw className="w-4 h-4 text-[#C9A646] animate-spin shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-white">Generating Wall Street analysis…</p>
+                <p className="text-xs text-[#8B8B8B]">This can take up to a minute for a new ticker.</p>
+              </div>
+            </div>
             <SkeletonText lines={2} className="py-3" />
             <WallStreetLoadingSkeleton />
           </div>
@@ -1120,6 +1138,13 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
       {/* Loading state */}
       {isLoading && !aiData && (
         <div className="space-y-4">
+          <div className="flex items-center gap-3 px-1 py-2">
+            <RefreshCw className="w-4 h-4 text-[#C9A646] animate-spin shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-white">Generating Wall Street analysis…</p>
+              <p className="text-xs text-[#8B8B8B]">This can take up to a minute for a new ticker.</p>
+            </div>
+          </div>
           <SkeletonText lines={2} className="py-3" />
           <WallStreetLoadingSkeleton />
         </div>

@@ -995,6 +995,13 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Client-side timeout: a hung / very-slow AI generation aborts the
+    // in-flight calls instead of leaving the brief stuck loading forever
+    // (each section is a web-search AI call normally ~30-60s; they run
+    // in parallel, so 90s covers a slow outlier without over-waiting).
+    let timedOut = false;
+    const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, 90000);
+
     setIsGenerating(true);
     setGeneratedAt(null);
     setGeneratedTicker(data.ticker);
@@ -1062,6 +1069,8 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
       })
     );
 
+    clearTimeout(timeoutId);
+
     if (!controller.signal.aborted) {
       const genAt = new Date().toISOString();
       setIsGenerating(false);
@@ -1075,6 +1084,9 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
         }
         return final;
       });
+    } else if (timedOut) {
+      setIsGenerating(false);
+      setStoryLoading(false);
     }
   }, [data, prefetchedBrief]);
 
@@ -1180,6 +1192,13 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
           {/* Loading state */}
           {storyLoading && (
             <div className="mb-ds-5 space-y-ds-3">
+              <div className="flex items-center gap-3 px-1 py-2">
+                <RefreshCw className="w-4 h-4 text-[#C9A646] animate-spin shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-white">Generating analysis…</p>
+                  <p className="text-xs text-[#8B8B8B]">This can take up to a minute for a new ticker.</p>
+                </div>
+              </div>
               <Skeleton className="h-3 w-3/4 mb-ds-2" />
               {[...Array(4)].map((_, i) => (
                 <div key={i} className="h-3 animate-pulse rounded-[4px]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.035), rgba(255,255,255,0.075), rgba(255,255,255,0.035))', width: `${95 - i * 12}%`, animationDelay: `${i * 150}ms` }} />
