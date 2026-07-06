@@ -87,6 +87,13 @@ interface StreamCallbacks {
   onError?: (error: string) => void;
   /** Called when the server emits a type:'action' SSE event. */
   onAction?: (action: { action: string; label?: string; count?: number }) => void;
+  /**
+   * Called on ANY bytes received from the SSE stream — including keepalive
+   * `: ping` comment lines that aren't parsed as `data:` events. Lets callers
+   * reset an inactivity watchdog during long tool-execution phases where no
+   * text chunk arrives but the server is still alive.
+   */
+  onActivity?: () => void;
   signal?: AbortSignal;
 }
 
@@ -158,6 +165,7 @@ export const aiCopilotApi = {
       onComplete,
       onError,
       onAction,
+      onActivity,
       signal,
     } = options;
 
@@ -193,9 +201,14 @@ export const aiCopilotApi = {
     try {
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) break;
-        
+
+        // Any bytes received — including keepalive `: ping` comment lines —
+        // count as stream activity. Fire before line-parsing so callers can
+        // reset an inactivity watchdog even during phases with no text chunk.
+        onActivity?.();
+
         buffer += decoder.decode(value, { stream: true });
         
         // Process complete SSE messages
