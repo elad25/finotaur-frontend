@@ -78,6 +78,7 @@ import { ManageConnectionsModal } from '@/components/broker/ManageConnectionsMod
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
+import type { BrokerConnection } from '@/lib/brokers/types';
 import { supabase } from '@/lib/supabase';
 import { JournalEmptyState } from '@/components/journal/JournalEmptyState';
 import { Button } from '@/components/ds/Button';
@@ -1580,40 +1581,77 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
 
     // Strip the OAuth params up-front so a manual refresh never re-triggers.
     window.history.replaceState(null, '', window.location.pathname);
-    toast.success(`${brokerLabel} connected — syncing your accounts…`);
+    // Captured so the "connected" toast can be updated in place once the fresh
+    // sync lands, instead of stacking a second toast.
+    const toastId = toast.success(`${brokerLabel} connected — syncing your accounts…`);
 
     // The server writes the broker_connections row asynchronously AFTER this
-    // redirect (hence the "syncing…" copy). A single invalidate is a race: the
-    // row may not exist yet, the popover may be closed, and with
+    // redirect (hence the "syncing…" copy), then fires tradovate-sync
+    // fire-and-forget to re-discover accounts. A single invalidate is a race:
+    // the row may not exist yet, the popover may be closed, and with
     // refetchOnMount:false a stale cache would not refetch on open — so the new
     // connection would not appear until a manual page refresh. Instead we poll:
-    // force a real refetch every few seconds until an active journal connection
-    // lands (or we hit the cap). refetchQueries refreshes inactive queries too,
-    // and combined with the useTimedQuery timeout it also recovers from a
-    // request that hung during the post-OAuth token settle.
+    // force a real refetch every few seconds.
+    //
+    // On a fresh connect there is no pre-existing row, so "is_active appeared"
+    // used to be a fine stop signal. On a RECONNECT the row is ALREADY
+    // is_active=true from before — that stop signal fires on the very first
+    // tick, before the fresh tradovate-sync has actually re-synced anything,
+    // so the account list looked stuck/unchanged. We now wait for a FRESH sync
+    // timestamp (last_successful_sync_at, falling back to last_sync_at) newer
+    // than the moment this effect started, so reconnects wait for real data
+    // instead of stopping on "already active".
+    const connectStartedAt = Date.now();
     let cancelled = false;
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const MAX_ATTEMPTS = 10;   // ~25s ceiling
+    const MAX_ATTEMPTS = 22;   // ~50s ceiling (matches the fresh-sync wait window)
     const INTERVAL_MS = 2500;
 
-    const hasActiveConnection = () =>
+    const rawBrokerName = rawBroker.toLowerCase();
+
+    /** True once the target broker's connection shows a sync newer than connectStartedAt. */
+    const hasFreshSync = () =>
       queryClient
         .getQueriesData<unknown>({ queryKey: ['broker_connections', userId] })
-        .some(([, data]) => Array.isArray(data) && data.some((c: any) => c?.is_active));
+        .some(([, data]) => {
+          if (!Array.isArray(data)) return false;
+          return data.some((c: BrokerConnection) => {
+            if (rawBrokerName && c?.broker !== rawBrokerName) return false;
+            const syncedAt = c?.last_successful_sync_at ?? c?.last_sync_at;
+            if (!syncedAt) return false;
+            const syncedAtMs = new Date(syncedAt).getTime();
+            return Number.isFinite(syncedAtMs) && syncedAtMs > connectStartedAt;
+          });
+        });
 
-    const tick = async () => {
-      if (cancelled) return;
-      attempts += 1;
-      await Promise.allSettled([
+    const refreshAll = () =>
+      Promise.allSettled([
         queryClient.refetchQueries({ queryKey: ['broker_connections', userId] }),
         queryClient.refetchQueries({ queryKey: ['portfolios', userId] }),
         queryClient.invalidateQueries({ queryKey: ['tradovate_credentials', userId] }),
         queryClient.invalidateQueries({ queryKey: ['trades'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]);
+
+    const finish = async () => {
+      // Final refetch so the UI reflects the latest state before we stop polling.
+      await Promise.allSettled([
+        queryClient.refetchQueries({ queryKey: ['broker_connections', userId] }),
+        queryClient.refetchQueries({ queryKey: ['portfolios', userId] }),
+      ]);
+      toast.success(`${brokerLabel} connected — accounts updated`, { id: toastId });
+    };
+
+    const tick = async () => {
       if (cancelled) return;
-      if (hasActiveConnection() || attempts >= MAX_ATTEMPTS) return;
+      attempts += 1;
+      await refreshAll();
+      if (cancelled) return;
+      if (hasFreshSync() || attempts >= MAX_ATTEMPTS) {
+        await finish();
+        return;
+      }
       timer = setTimeout(tick, INTERVAL_MS);
     };
     timer = setTimeout(tick, 0);
