@@ -75,7 +75,7 @@ export function TradeShareMenu({ trade }: { trade: TradeShareMenuTrade }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+          className="inline-flex items-center gap-1.5 rounded-md border border-transparent bg-[#0284c7] px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#0ea5e9]"
           aria-label="Share trade"
           title="Share trade"
         >
