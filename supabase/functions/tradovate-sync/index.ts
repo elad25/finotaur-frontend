@@ -1051,6 +1051,35 @@ async function syncCredential(cred: {
     }));
   }
 
+  // Orphan attribution (root fix, 2026-07-07): every account THIS connection's
+  // discovery returns as live belongs to THIS connection. Claim any live
+  // account whose portfolio is currently unowned (credential_id IS NULL) and
+  // link it to this connection. Closes the gap where a pre-existing portfolio
+  // (an account that predates the current connection, or that the broker
+  // re-lists under the same token after a renumber/reallocation) stays NULL
+  // forever — the re-attribution step's env/uniqueness gating silently skips
+  // it, so it lingers is_active with no owner and surfaces as a duplicate
+  // "orphan" account group in the journal/copier UI. Scoped to
+  // `credential_id IS NULL` ONLY: it never steals an account already owned by
+  // another connection, so there is no cross-connection flip-flop. No
+  // environment filter — tradovate_account_id is globally unique and we only
+  // touch this token's own discovered live set.
+  if (discoverySucceeded && liveAccountIds.length > 0) {
+    const { data: claimedRows, error: claimErr } = await supabaseAdmin
+      .from('portfolios')
+      .update({ credential_id: cred.id, updated_at: new Date().toISOString() })
+      .eq('user_id', cred.user_id)
+      .eq('source', 'tradovate')
+      .is('credential_id', null)
+      .in('tradovate_account_id', liveAccountIds)
+      .select('id');
+    if (claimErr) {
+      console.error('[tradovate-sync] orphan_claim_failed:', cred.id, String(claimErr.message ?? claimErr).slice(0, 300));
+    } else if ((claimedRows ?? []).length > 0) {
+      console.log(JSON.stringify({ event: 'orphan_portfolios_claimed', connection_id: cred.id, claimed: (claimedRows ?? []).length }));
+    }
+  }
+
   // Step L2: build orderId → accountId attribution map from /order/list.
   // A single call mirrors the single-call assumption of fetchFills — no
   // pagination. Tradovate returns all orders in the account's history.
