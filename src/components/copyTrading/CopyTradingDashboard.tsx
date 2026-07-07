@@ -740,16 +740,15 @@ export function CopyTradingDashboard() {
         // (keeps the amber dot for stale-token warnings from the broker connection).
         const issue = !live && conn != null && conn.is_active && conn.status === 'connected' && tokenExpired;
 
-        // Net position for the active instrument tab: find the positions whose
-        // symbol starts with or contains the active instrument (case-insensitive),
-        // so a NQ snapshot entry covers NQ09-25, NQ SEP25, etc.
-        const instrumentUpper = instrument.toUpperCase();
-        const matchingPositions = (snap?.positions ?? []).filter((pos) =>
-          pos.symbol.toUpperCase().includes(instrumentUpper),
-        );
+        // Net position across ALL instruments the account currently holds —
+        // NOT filtered to the active group's tracked symbol. Per Elad
+        // (2026-07-07): the POSITION column + OPEN POSITIONS card must show
+        // what is actually running on every connected account, regardless of
+        // which group/symbol tab is selected.
+        const allPositions = snap?.positions ?? [];
         const netPosition =
-          matchingPositions.length > 0
-            ? matchingPositions.reduce(
+          allPositions.length > 0
+            ? allPositions.reduce(
                 (sum, pos) => sum + (pos.isLong ? pos.qty : -pos.qty),
                 0,
               )
@@ -822,7 +821,7 @@ export function CopyTradingDashboard() {
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
   const totalOpenPnL       = rows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
   const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
-  const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
+  const openPositionsCount = rows.filter((r) => r.hasAnyOpenPosition).length;
 
   // ── Contract autocomplete suggestions ─────────────────────────
   const normalizedDraftInstrument = instrumentDraft.trim().toUpperCase();
