@@ -1,6 +1,6 @@
 // src/components/onboarding/WelcomeOffer.tsx
 // ================================================
-// 🎁 WELCOME OFFER — Post-tour 10% discount popup
+// 🎁 WELCOME OFFER — Post-tour 20% discount popup
 // Shows after Guided Tour ends with 30-minute countdown
 // Minimizes to a floating gift icon (bottom-right)
 // Timer persists via localStorage with real expiry timestamp
@@ -19,7 +19,7 @@ const OFFER_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 const STORAGE_KEY_EXPIRY = 'finotaur_welcome_offer_expiry';
 const STORAGE_KEY_DISMISSED = 'finotaur_welcome_offer_dismissed';
 const STORAGE_KEY_USED = 'finotaur_welcome_offer_used';
-const PROMO_CODE = 'WELCOME10'; // ← Your Whop promo code
+const PROMO_CODE = 'WELCOME'; // ← Your Whop promo code
 
 // =====================================================
 // PUBLIC API
@@ -144,7 +144,7 @@ export default function WelcomeOffer() {
 
   const handleClaim = async () => {
     await initiateCheckout({
-      planName: 'platform_finotaur',
+      planName: 'premium',
       billingInterval: 'monthly',
     });
   };
@@ -212,7 +212,7 @@ export default function WelcomeOffer() {
                 boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
               }}
             >
-              🎁 Your 10% discount is waiting!
+              🎁 Your 20% discount is waiting!
             </div>
           </div>
         </motion.button>
@@ -278,18 +278,18 @@ export default function WelcomeOffer() {
             <h2 className="text-2xl font-bold mb-2">
               <span className="text-white">Welcome Gift: </span>
               <span style={{ background: 'linear-gradient(135deg, #F4D97B, #C9A646)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                10% Off for 3 Months
+                20% Off Your First Payment
               </span>
             </h2>
 
             <p className="text-zinc-400 text-sm leading-relaxed mb-4 max-w-sm mx-auto">
-              As a new member, use this exclusive promo code at checkout to get 10% off your first 3 payments.
+              As a new member, use this exclusive promo code at checkout to get 20% off your first payment.
             </p>
 
             {/* Promo Code Display */}
             <button
               onClick={() => {
-                navigator.clipboard.writeText('WELCOME10');
+                navigator.clipboard.writeText(PROMO_CODE);
                 toast.success('Promo code copied!');
               }}
               className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl mb-6 cursor-pointer transition-all hover:scale-[1.02]"
@@ -299,7 +299,7 @@ export default function WelcomeOffer() {
               }}
             >
               <span className="text-lg font-mono font-bold tracking-widest" style={{ color: '#F4D97B' }}>
-                WELCOME10
+                {PROMO_CODE}
               </span>
               <span className="text-[11px] text-zinc-500 group-hover:text-zinc-400 transition-colors">
                 tap to copy
@@ -351,7 +351,7 @@ export default function WelcomeOffer() {
               ) : (
                 <>
                   <Crown className="w-4 h-4" />
-                  Claim 10% Off — Subscribe Now
+                  Claim 20% Off — Subscribe Now
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

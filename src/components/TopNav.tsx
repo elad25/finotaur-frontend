@@ -24,7 +24,6 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
 import { Wordmark } from '@/components/ds/Wordmark';
 import { GlobalOmnibox } from '@/components/GlobalOmnibox';
-import PromoOfferChip from '@/components/PromoOfferChip';
 import { useFinoChat } from '@/contexts/FinoChatContext';
 import { useProductDrawer } from '@/contexts/ProductDrawerContext';
 import {
@@ -145,11 +144,6 @@ export const TopNav = () => {
           >
             <Menu className="h-5 w-5" />
           </button>
-
-          {/* 🎁 Promo offer chip — JOIN2026. ml-auto pushes it to the right
-              of the left column (toward the centered search), with a margin
-              so it sits a touch left of the omnibox rather than flush. */}
-          <PromoOfferChip className="ml-auto mr-8 lg:mr-20" />
         </div>
 
         {/* ── CENTER: GlobalOmnibox — truly viewport-centered ── */}
