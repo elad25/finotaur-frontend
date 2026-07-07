@@ -627,12 +627,6 @@ export function CopyTradingDashboard() {
     : null;
   const leaderPortfolioId = leaderId;
 
-  // Target account ids that belong to the ACTIVE route only.
-  const activeGroupTargetAccountIds = useMemo(
-    () => new Set((activeRoute?.automation_copier_route_targets ?? []).map((t) => t.destination_account_id)),
-    [activeRoute],
-  );
-
   // Duplicate-follower detection: account_id → number of ACTIVE routes where it's a target.
   const followerAccountIdCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -820,26 +814,15 @@ export function CopyTradingDashboard() {
   // Leader account name — used in the unfollow-with-exposure confirm copy.
   const leaderAccountName = rows.find((r) => r.id === leaderId)?.accountName ?? 'the leader';
 
-  // Summary bar — scoped to the ACTIVE GROUP only: the leader + its targets.
-  // (Not all connected accounts — each tab/group is fully independent.)
-  // NOTE (by design, confirmed with Elad): this is ACCOUNT-scoped, not
-  // symbol-scoped — PnL/position totals below cover every instrument on the
-  // leader + target accounts, not just the group's tracked symbol. Do not
-  // "fix" this to filter by `instrument`/`activeGroupTab.symbol`.
-  const activeGroupRows = useMemo(
-    () => rows.filter((r) => r.id === leaderId || activeGroupTargetAccountIds.has(
-      (() => {
-        const p = brokerAccountPortfolios.find((x) => x.id === r.id);
-        return p?.tradovate_account_id != null ? String(p.tradovate_account_id) : '';
-      })(),
-    )),
-    [rows, leaderId, activeGroupTargetAccountIds, brokerAccountPortfolios],
-  );
-
-  const totalDayPnL        = activeGroupRows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
-  const totalOpenPnL       = activeGroupRows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
-  const totalBalance       = activeGroupRows.reduce((s, r) => s + (r.balance ?? 0), 0);
-  const openPositionsCount = activeGroupRows.filter((r) => (r.position ?? 0) !== 0).length;
+  // Summary bar — GLOBAL across ALL connected accounts (every broker account
+  // in `rows`), independent of the active group / leader / follower selection.
+  // Per Elad (2026-07-07): the top cards must show the live total across every
+  // account, not just the selected group. Account-scoped, covers all
+  // instruments; the group tabs only drive the route/config table below.
+  const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
+  const totalOpenPnL       = rows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
+  const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
+  const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
   // ── Contract autocomplete suggestions ─────────────────────────
   const normalizedDraftInstrument = instrumentDraft.trim().toUpperCase();
