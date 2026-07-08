@@ -504,6 +504,108 @@ function extractClickId(data: WhopPaymentData | WhopMembershipData): string | nu
 }
 
 // ============================================
+// 🔥 Fire first-party paid_conversion event (ad attribution)
+// ============================================
+//
+// ADDITIVE ONLY. Never throws — any failure is caught and logged by the
+// caller. Attributes the payment back to the acquisition ad by joining the
+// paying user's earliest `signup` event (props carry the UTM params set at
+// signup) and writes one `paid_conversion` row to `public.events`.
+
+async function firePaidConversion(
+  supabaseServiceClient: SupabaseClient,
+  userId: string | null,
+  payment: {
+    whopPaymentId: string;
+    whopMembershipId: string | null;
+    plan: string | null;
+    product: string | null;
+    amountUsd: number | null;
+    currency: string | null;
+    isFirstPayment: boolean;
+  }
+): Promise<void> {
+  // Idempotency guard — skip if we already recorded this Whop payment.
+  const { data: existing } = await supabaseServiceClient
+    .from("events")
+    .select("id")
+    .eq("event_name", "paid_conversion")
+    .eq("props->>whop_payment_id", payment.whopPaymentId)
+    .maybeSingle();
+
+  if (existing) {
+    console.log("[whop-webhook] paid_conversion already recorded, skipping:", payment.whopPaymentId);
+    return;
+  }
+
+  // Look up the acquisition UTM from the user's earliest signup event.
+  let utm_source: string | null = null;
+  let utm_medium: string | null = null;
+  let utm_campaign: string | null = null;
+  let utm_content: string | null = null;
+  let utm_term: string | null = null;
+
+  if (userId) {
+    const { data: signupEvent } = await supabaseServiceClient
+      .from("events")
+      .select("props")
+      .eq("user_id", userId)
+      .eq("event_name", "signup")
+      .order("ts", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const signupProps = signupEvent?.props ?? {};
+    utm_source = signupProps.utm_source ?? null;
+    utm_medium = signupProps.utm_medium ?? null;
+    utm_campaign = signupProps.utm_campaign ?? null;
+    utm_content = signupProps.utm_content ?? null;
+    utm_term = signupProps.utm_term ?? null;
+  }
+
+  // Best-effort is_first_payment: trust the payload's own signal when present,
+  // else fall back to "no prior paid_conversion event for this user".
+  let isFirstPayment = payment.isFirstPayment;
+  if (userId) {
+    const { data: priorConversion } = await supabaseServiceClient
+      .from("events")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("event_name", "paid_conversion")
+      .limit(1)
+      .maybeSingle();
+    isFirstPayment = !priorConversion;
+  }
+
+  const { error } = await supabaseServiceClient.from("events").insert({
+    event_name: "paid_conversion",
+    user_id: userId,
+    source: "whop_webhook",
+    props: {
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      plan: payment.plan,
+      product: payment.product,
+      amount_usd: payment.amountUsd,
+      currency: payment.currency,
+      whop_payment_id: payment.whopPaymentId,
+      whop_membership_id: payment.whopMembershipId,
+      is_first_payment: isFirstPayment,
+    },
+  });
+
+  if (error) {
+    console.error("[whop-webhook] paid_conversion insert failed", error);
+    return;
+  }
+
+  console.log("[whop-webhook] paid_conversion recorded:", payment.whopPaymentId);
+}
+
+// ============================================
 // Find user by ID or email with fallback
 // ============================================
 
@@ -1249,6 +1351,26 @@ serve(async (req: Request) => {
         // Broker lifecycle: payment success after a prior cancel — attempt to reconnect broker
         if (finotaurUserId) {
           await reactivateBrokerConnections(supabase, finotaurUserId);
+        }
+        // 🔥 Ad attribution: fire first-party paid_conversion event (additive,
+        // never breaks payment handling — any failure is caught and logged).
+        if (result.success) {
+          try {
+            const paymentData = payload.data as WhopPaymentData;
+            let amountUsd = paymentData.subtotal ?? paymentData.total ?? paymentData.usd_total ?? 0;
+            if (amountUsd > 1000) amountUsd = amountUsd / 100;
+            await firePaidConversion(supabase, finotaurUserId, {
+              whopPaymentId: paymentData.id,
+              whopMembershipId: paymentData.membership?.id ?? null,
+              plan: paymentData.plan?.id ?? null,
+              product: paymentData.product?.id ?? null,
+              amountUsd,
+              currency: paymentData.currency ?? null,
+              isFirstPayment: paymentData.billing_reason === "subscription_create",
+            });
+          } catch (e) {
+            console.error('[whop-webhook] paid_conversion failed', e);
+          }
         }
         break;
       }
