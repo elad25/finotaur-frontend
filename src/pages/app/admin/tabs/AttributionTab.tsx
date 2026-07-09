@@ -6,7 +6,7 @@
 // ============================================
 
 import { useEffect, useState } from 'react';
-import { Megaphone, AlertTriangle, Users, Target, Compass, Info } from 'lucide-react';
+import { Megaphone, AlertTriangle, Users, Target, Compass, Info, CreditCard, DollarSign } from 'lucide-react';
 import { StatsCard } from '@/components/admin/StatsCard';
 import { SkeletonStatRow, SkeletonTable } from '@/components/ds/Skeleton';
 import { supabase } from '@/lib/supabase';
@@ -64,6 +64,36 @@ interface AdAttributionData {
   signups: SignupRow[];
 }
 
+// ---- Paid conversions (admin_ad_purchases) — cost-per-subscriber side ----
+
+interface PurchaseTotals {
+  subs: number;
+  first_payment_subs: number;
+  renewals: number;
+  attributed: number;
+  organic: number;
+  revenue: number;
+  first_payment_revenue: number;
+}
+
+interface AdPurchaseCount {
+  utm_content: string;
+  utm_campaign: string;
+  utm_source: string;
+  subs: number;
+  first_payment_subs: number;
+  revenue: number;
+}
+
+interface AdPurchaseData {
+  window_days: number;
+  totals: PurchaseTotals;
+  by_platform: { platform: string; subs: number; first_payment_subs: number; revenue: number }[];
+  by_campaign: { utm_campaign: string; utm_source: string; subs: number; first_payment_subs: number; revenue: number }[];
+  by_ad: AdPurchaseCount[];
+  purchases: unknown[];
+}
+
 type WindowDays = 7 | 30 | 90;
 
 const WINDOW_OPTIONS: WindowDays[] = [7, 30, 90];
@@ -78,6 +108,11 @@ const GOLD = '#C9A646';
 function pct(num: number, denom: number): string {
   if (!denom || !Number.isFinite(denom)) return '0%';
   return `${Math.round((num / denom) * 100)}%`;
+}
+
+/** Format a USD amount as a whole-dollar string (e.g. $1,234). */
+function money(n: number): string {
+  return `$${(n ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 
 /** Shorten a long URL for a table cell; full value available via title tooltip. */
@@ -111,6 +146,7 @@ function formatTs(ts: string): string {
 export function AttributionTab() {
   const [days, setDays] = useState<WindowDays>(90);
   const [data, setData] = useState<AdAttributionData | null>(null);
+  const [purchaseData, setPurchaseData] = useState<AdPurchaseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,13 +156,22 @@ export function AttributionTab() {
       try {
         setLoading(true);
         setError(null);
-        const { data: rpcData, error: rpcErr } = await supabase.rpc(
-          'admin_ad_attribution',
-          { p_days: days }
-        );
-        if (rpcErr) throw rpcErr;
+        // Signups (primary) + paid conversions (additive) in parallel.
+        const [attribution, purchases] = await Promise.all([
+          supabase.rpc('admin_ad_attribution', { p_days: days }),
+          supabase.rpc('admin_ad_purchases', { p_days: days }),
+        ]);
+        if (attribution.error) throw attribution.error;
         if (cancelled) return;
-        setData(rpcData as AdAttributionData);
+        setData(attribution.data as AdAttributionData);
+        // Purchases are additive — a failure here (e.g. RPC not yet deployed)
+        // must never blank the whole tab; just hide the revenue columns.
+        if (purchases.error) {
+          console.error('[AttributionTab] purchases load failed:', purchases.error);
+          setPurchaseData(null);
+        } else {
+          setPurchaseData(purchases.data as AdPurchaseData);
+        }
       } catch (err) {
         if (cancelled) return;
         console.error('[AttributionTab] load failed:', err);
@@ -171,7 +216,7 @@ export function AttributionTab() {
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-white">Ad Attribution</h1>
           <p className="text-sm text-gray-400 mt-1">
-            Which ads and platforms bring signups
+            Which ads bring signups, paid subscribers, and revenue
           </p>
         </div>
       </div>
@@ -220,6 +265,18 @@ export function AttributionTab() {
 
   const { totals, by_platform, by_campaign, by_ad, signups } = data;
   const maxPlatform = by_platform.length > 0 ? Math.max(...by_platform.map((p) => p.signups)) : 1;
+
+  // Paid-conversion overlay (additive). When purchaseData is null the revenue
+  // columns/cards are hidden — the signup view still renders unchanged.
+  const purchaseTotals = purchaseData?.totals ?? null;
+  const showRevenue = purchaseData !== null;
+  const adPurchaseByKey = new Map<string, { subs: number; revenue: number }>();
+  for (const p of purchaseData?.by_ad ?? []) {
+    adPurchaseByKey.set(`${p.utm_content}|${p.utm_campaign}|${p.utm_source}`, {
+      subs: p.subs,
+      revenue: p.revenue,
+    });
+  }
   const recentSignups = [...signups]
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, MAX_RECENT_SIGNUPS);
@@ -249,6 +306,30 @@ export function AttributionTab() {
           icon={Compass}
         />
       </section>
+
+      {/* ---- Revenue KPI cards (paid conversions) ---- */}
+      {purchaseTotals && (
+        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatsCard
+            title="Paid Subscribers"
+            value={purchaseTotals.subs.toLocaleString('en-US')}
+            subtitle={`${purchaseTotals.first_payment_subs.toLocaleString('en-US')} new · ${purchaseTotals.renewals.toLocaleString('en-US')} renewals`}
+            icon={CreditCard}
+          />
+          <StatsCard
+            title="Revenue"
+            value={money(purchaseTotals.revenue)}
+            subtitle={`${money(purchaseTotals.first_payment_revenue)} from new subs · last ${data.window_days}d`}
+            icon={DollarSign}
+          />
+          <StatsCard
+            title="Signup → Paid"
+            value={pct(purchaseTotals.subs, totals.signups)}
+            subtitle={`${purchaseTotals.subs.toLocaleString('en-US')} paid of ${totals.signups.toLocaleString('en-US')} signups`}
+            icon={Target}
+          />
+        </section>
+      )}
 
       {/* ---- Signups by platform ---- */}
       <section className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">
@@ -358,22 +439,41 @@ export function AttributionTab() {
                   <th className="px-5 py-2 font-medium">Campaign</th>
                   <th className="px-5 py-2 font-medium">Source</th>
                   <th className="px-5 py-2 font-medium text-right">Signups</th>
+                  {showRevenue && <th className="px-5 py-2 font-medium text-right">Paid Subs</th>}
+                  {showRevenue && <th className="px-5 py-2 font-medium text-right">Revenue</th>}
+                  {showRevenue && <th className="px-5 py-2 font-medium text-right">ARPU</th>}
                 </tr>
               </thead>
               <tbody>
-                {by_ad.map((a, idx) => (
-                  <tr
-                    key={`${a.utm_content}-${a.utm_campaign}-${idx}`}
-                    className="border-b border-gray-900 last:border-0"
-                  >
-                    <td className="px-5 py-2.5 text-gray-200">{a.utm_content || '—'}</td>
-                    <td className="px-5 py-2.5 text-gray-400">{a.utm_campaign || '—'}</td>
-                    <td className="px-5 py-2.5 text-gray-400">{a.utm_source || '—'}</td>
-                    <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
-                      {a.signups.toLocaleString('en-US')}
-                    </td>
-                  </tr>
-                ))}
+                {by_ad.map((a, idx) => {
+                  const pu = adPurchaseByKey.get(`${a.utm_content}|${a.utm_campaign}|${a.utm_source}`);
+                  const subs = pu?.subs ?? 0;
+                  const rev = pu?.revenue ?? 0;
+                  return (
+                    <tr
+                      key={`${a.utm_content}-${a.utm_campaign}-${idx}`}
+                      className="border-b border-gray-900 last:border-0"
+                    >
+                      <td className="px-5 py-2.5 text-gray-200">{a.utm_content || '—'}</td>
+                      <td className="px-5 py-2.5 text-gray-400">{a.utm_campaign || '—'}</td>
+                      <td className="px-5 py-2.5 text-gray-400">{a.utm_source || '—'}</td>
+                      <td className="px-5 py-2.5 text-right text-[#C9A646] font-semibold">
+                        {a.signups.toLocaleString('en-US')}
+                      </td>
+                      {showRevenue && (
+                        <>
+                          <td className="px-5 py-2.5 text-right text-gray-200">
+                            {subs.toLocaleString('en-US')}
+                          </td>
+                          <td className="px-5 py-2.5 text-right text-gray-200">{money(rev)}</td>
+                          <td className="px-5 py-2.5 text-right text-gray-400">
+                            {subs > 0 ? money(rev / subs) : '—'}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
