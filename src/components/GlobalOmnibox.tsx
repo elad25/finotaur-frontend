@@ -36,6 +36,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useSymbolSuggest, type SuggestItem } from '@/components/Search/useSymbolSuggest';
 import { classifyEquity } from '@/lib/symbolCategories';
 import { routeForSuggest } from '@/lib/tickerRouting';
+import { isMarketsBlocked, filterMarketsLockedSuggestions } from '@/lib/marketsAccess';
 import { searchCrypto, CRYPTO_COINS } from '@/data/cryptoCoins';
 import { searchForex, FOREX_PAIRS } from '@/data/forexPairs';
 import { searchIndices, INDICES } from '@/data/indices';
@@ -273,17 +274,18 @@ function GroupHeader({ label }: { label: string }) {
 // ---------------------------------------------------------------------------
 
 interface TabBarProps {
+  tabs: AssetTab[];
   activeTab: AssetTab;
   onChange: (tab: AssetTab) => void;
 }
 
-function TabBar({ activeTab, onChange }: TabBarProps) {
+function TabBar({ tabs, activeTab, onChange }: TabBarProps) {
   return (
     <div
       className="flex items-center gap-1 px-3 pt-2 pb-2 overflow-x-auto scrollbar-hide border-b"
       style={{ borderColor: 'rgba(201,166,70,0.10)' }}
     >
-      {ASSET_TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = activeTab === tab;
         return (
           <button
@@ -335,12 +337,29 @@ export function GlobalOmnibox() {
   const location = useLocation();
   const { open: openFino } = useFinoChat();
   const { hasBetaAccess } = useAdminAuth();
+  // Markets research (ETF/Crypto/Forex/Futures/Bonds) is beta-only — a blocked
+  // user must not even SEE these assets in search suggestions or tabs.
+  const marketsBlocked = isMarketsBlocked(hasBetaAccess);
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<AssetTab>('All');
+
+  // Asset-class tabs actually shown: Markets-locked classes (Funds/Futures/
+  // Forex/Crypto/Bonds) are hidden entirely from blocked users, not just
+  // filtered out of results — they must not know the tabs exist.
+  const visibleTabs: AssetTab[] = useMemo(
+    () => (marketsBlocked ? ['All', 'Stocks', 'Indices'] : ASSET_TABS),
+    [marketsBlocked],
+  );
+
+  // Guard against a stale selected tab if access state resolves after the
+  // user already picked a now-hidden tab.
+  useEffect(() => {
+    if (!visibleTabs.includes(activeTab)) setActiveTab('All');
+  }, [visibleTabs, activeTab]);
 
   // Modal input ref (desktop modal) and mobile input ref
   const modalInputRef = useRef<HTMLInputElement>(null);
@@ -432,8 +451,12 @@ export function GlobalOmnibox() {
     const dedupedFx = fx.filter((f) => !equitySymbols.has(f.symbol.toUpperCase()));
     const dedupedIdx = idx.filter((i) => !equitySymbols.has(i.symbol.toUpperCase()));
     const dedupedBonds = bonds.filter((b) => !equitySymbols.has(b.symbol.toUpperCase()));
-    return [...equities, ...dedupedEtfs, ...dedupedCryptos, ...dedupedFx, ...dedupedIdx, ...dedupedBonds];
-  }, [suggestState.data, debouncedQuery]);
+    const all = [...equities, ...dedupedEtfs, ...dedupedCryptos, ...dedupedFx, ...dedupedIdx, ...dedupedBonds];
+    // A blocked (non-beta) user must not see Markets-locked assets here either —
+    // this catches the classifyEquity stock→etf upgrade and all local injections
+    // above, which the hook-level filter (useSymbolSuggest) alone would miss.
+    return filterMarketsLockedSuggestions(all, hasBetaAccess);
+  }, [suggestState.data, debouncedQuery, hasBetaAccess]);
 
   // -------------------------------------------------------------------------
   // Filter enriched suggestions by active tab
@@ -681,55 +704,70 @@ export function GlobalOmnibox() {
   // Example chips
   // -------------------------------------------------------------------------
 
-  const EXAMPLE_CHIPS = ['NVDA', 'TSLA', 'AAPL', 'SPY'];
+  // SPY is an ETF — for a blocked user it would deep-link nowhere useful
+  // (Markets-locked), so swap it for another open stock chip.
+  const EXAMPLE_CHIPS = marketsBlocked
+    ? ['NVDA', 'TSLA', 'AAPL', 'MSFT']
+    : ['NVDA', 'TSLA', 'AAPL', 'SPY'];
 
   // -------------------------------------------------------------------------
   // Popular items per tab — shown in the empty state when a non-All tab is active
   // -------------------------------------------------------------------------
 
   function popularForTab(tab: AssetTab): EnrichedItem[] {
+    let items: EnrichedItem[];
     switch (tab) {
       case 'Stocks':
-        return POPULAR_STOCKS.map((e) => ({
+        items = POPULAR_STOCKS.map((e) => ({
           symbol: e.symbol,
           name: e.name,
           assetType: 'stock' as const,
         }));
+        break;
       case 'Funds':
-        return POPULAR_ETFS.map((e) => ({
+        items = POPULAR_ETFS.map((e) => ({
           symbol: e.symbol,
           name: e.name,
           assetType: 'etf' as const,
         }));
+        break;
       case 'Crypto':
-        return CRYPTO_COINS.slice(0, 8).map((c) => ({
+        items = CRYPTO_COINS.slice(0, 8).map((c) => ({
           symbol: c.symbol,
           name: c.name,
           assetType: 'crypto' as const,
           coinId: c.coinId,
         }));
+        break;
       case 'Forex':
-        return FOREX_PAIRS.slice(0, 8).map((p) => ({
+        items = FOREX_PAIRS.slice(0, 8).map((p) => ({
           symbol: p.symbol,
           name: p.name,
           assetType: 'fx' as const,
         }));
+        break;
       case 'Indices':
-        return INDICES.slice(0, 8).map((i) => ({
+        items = INDICES.slice(0, 8).map((i) => ({
           symbol: i.symbol,
           name: i.name,
           assetType: 'index' as const,
         }));
+        break;
       case 'Bonds':
-        return TREASURY_YIELDS.map((b) => ({
+        items = TREASURY_YIELDS.map((b) => ({
           symbol: b.symbol,
           name: b.name,
           assetType: 'bond' as const,
         }));
+        break;
       default:
         // All, Futures, Economy, Options — no curated popular list
-        return [];
+        items = [];
     }
+    // Belt-and-braces: visibleTabs already hides the tabs a blocked user could
+    // reach these from, but filter the data too in case popularForTab is ever
+    // called from elsewhere.
+    return filterMarketsLockedSuggestions(items, hasBetaAccess);
   }
 
   // -------------------------------------------------------------------------
@@ -764,7 +802,7 @@ export function GlobalOmnibox() {
     const isEmptyQuery = !query.trim();
 
     // TabBar is always rendered (both empty and has-query states)
-    const tabBar = <TabBar activeTab={activeTab} onChange={setActiveTab} />;
+    const tabBar = <TabBar tabs={visibleTabs} activeTab={activeTab} onChange={setActiveTab} />;
 
     if (isEmptyQuery) {
       // Empty state — show TabBar + content that depends on the active tab

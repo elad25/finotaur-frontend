@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
+import { filterMarketsLockedSuggestions } from "@/lib/marketsAccess";
 
 export type SuggestItem = {
   symbol: string;
@@ -19,6 +21,7 @@ export function useSymbolSuggest(query: string) {
   const [state, setState] = useState<State>({ status: "idle", data: [] });
   const ctrlRef = useRef<AbortController | null>(null);
   const q = useMemo(() => normalize(query), [query]);
+  const { hasBetaAccess } = useAdminAuth();
 
   useEffect(() => {
     if (!q || q.length < 1) {
@@ -38,7 +41,10 @@ export function useSymbolSuggest(query: string) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        const items: SuggestItem[] = (json.items || []).slice(0, 30);
+        const rawItems: SuggestItem[] = (json.items || []).slice(0, 30);
+        // A blocked (non-beta) user must not even see Markets-locked assets
+        // (ETF/crypto/fx/futures/bond) among search suggestions.
+        const items = filterMarketsLockedSuggestions(rawItems, hasBetaAccess);
         setState({ status: "ready", data: items });
       } catch (e: any) {
         if (e?.name === "AbortError") return;
@@ -47,7 +53,8 @@ export function useSymbolSuggest(query: string) {
     };
     run();
     return () => ctrl.abort();
-  }, [q]);
+    // Re-run (and re-filter) if beta access resolves after the initial fetch.
+  }, [q, hasBetaAccess]);
 
   return state;
 }
