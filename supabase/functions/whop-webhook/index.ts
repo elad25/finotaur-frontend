@@ -606,6 +606,91 @@ async function firePaidConversion(
 }
 
 // ============================================
+// 📊 Meta Conversions API — server-side Purchase (ad optimization)
+// ============================================
+//
+// ADDITIVE ONLY. Never throws — the caller wraps it in try/catch. Sends a
+// server-side `Purchase` to Meta's Conversions API so Meta can optimize
+// delivery toward buyers. Dedupes with any client-side Purchase via `event_id`
+// (= Whop payment id). The access token is a server secret and is NEVER logged.
+
+const META_CAPI_PIXEL_ID = "992779070272021";
+const META_CAPI_API_VERSION = "v20.0";
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function fireMetaCapiPurchase(
+  email: string | null,
+  purchase: {
+    eventId: string;
+    value: number | null;
+    currency: string | null;
+    plan: string | null;
+  }
+): Promise<void> {
+  const accessToken = Deno.env.get("META_CAPI_ACCESS_TOKEN") || "";
+  if (!accessToken) {
+    console.log("[whop-webhook] Meta CAPI skipped — META_CAPI_ACCESS_TOKEN not set");
+    return;
+  }
+  if (!email) {
+    console.log("[whop-webhook] Meta CAPI skipped — no email for user_data");
+    return;
+  }
+
+  // Meta requires the email normalized (trim + lowercase) then SHA-256 hashed.
+  const hashedEmail = await sha256Hex(email.trim().toLowerCase());
+  const testEventCode = Deno.env.get("META_CAPI_TEST_EVENT_CODE") || "";
+
+  const body: Record<string, unknown> = {
+    data: [
+      {
+        event_name: "Purchase",
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: purchase.eventId, // dedup with any client-side Purchase
+        action_source: "website",
+        event_source_url: "https://www.finotaur.com",
+        user_data: { em: [hashedEmail] },
+        custom_data: {
+          value: purchase.value ?? 0,
+          currency: (purchase.currency || "USD").toUpperCase(),
+          content_name: purchase.plan ?? undefined,
+        },
+      },
+    ],
+  };
+  if (testEventCode) body.test_event_code = testEventCode;
+
+  // The access token lives in the query string, so the URL is NEVER logged.
+  const url = `https://graph.facebook.com/${META_CAPI_API_VERSION}/${META_CAPI_PIXEL_ID}/events?access_token=${encodeURIComponent(accessToken)}`;
+
+  // Bound the request so a slow Meta API can never hang webhook processing.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      console.error(`[whop-webhook] Meta CAPI Purchase failed: ${resp.status} ${errText.slice(0, 300)}`);
+      return;
+    }
+    console.log("[whop-webhook] Meta CAPI Purchase sent:", purchase.eventId, testEventCode ? "(test)" : "");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// ============================================
 // Find user by ID or email with fallback
 // ============================================
 
@@ -1352,13 +1437,15 @@ serve(async (req: Request) => {
         if (finotaurUserId) {
           await reactivateBrokerConnections(supabase, finotaurUserId);
         }
-        // 🔥 Ad attribution: fire first-party paid_conversion event (additive,
-        // never breaks payment handling — any failure is caught and logged).
+        // 🔥 Ad attribution + 📊 Meta CAPI — both additive, both guarded, both
+        // fire only after a successful payment and NEVER break payment handling.
         if (result.success) {
+          const paymentData = payload.data as WhopPaymentData;
+          let amountUsd = paymentData.subtotal ?? paymentData.total ?? paymentData.usd_total ?? 0;
+          if (amountUsd > 1000) amountUsd = amountUsd / 100;
+
+          // 🔥 First-party paid_conversion event (ad attribution).
           try {
-            const paymentData = payload.data as WhopPaymentData;
-            let amountUsd = paymentData.subtotal ?? paymentData.total ?? paymentData.usd_total ?? 0;
-            if (amountUsd > 1000) amountUsd = amountUsd / 100;
             await firePaidConversion(supabase, finotaurUserId, {
               whopPaymentId: paymentData.id,
               whopMembershipId: paymentData.membership?.id ?? null,
@@ -1370,6 +1457,20 @@ serve(async (req: Request) => {
             });
           } catch (e) {
             console.error('[whop-webhook] paid_conversion failed', e);
+          }
+
+          // 📊 Server-side Meta CAPI Purchase so Meta can optimize to buyers
+          // (timeout-bounded, token never logged; no-op if secret/email absent).
+          try {
+            const capiEmail = finotaurEmail || paymentData.user?.email || null;
+            await fireMetaCapiPurchase(capiEmail, {
+              eventId: paymentData.id,
+              value: amountUsd,
+              currency: paymentData.currency ?? null,
+              plan: paymentData.plan?.id ?? null,
+            });
+          } catch (e) {
+            console.error('[whop-webhook] Meta CAPI Purchase error', e);
           }
         }
         break;
