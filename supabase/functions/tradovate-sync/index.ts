@@ -2019,11 +2019,43 @@ Deno.serve(async (req: Request) => {
     const { data: credentials, error } = await credentialsQuery;
     if (error) throw error;
 
+    // Free-tier lockdown: FREE-plan users' broker connections must stop syncing.
+    // Batch-fetch every owner's account_type in ONE query (not per-connection
+    // inside the loop below) — cheap even at thousands of connections.
+    // Fail-open on a lookup error: an existing paid-user sync must not break
+    // because of a transient profiles read failure.
+    let syncableCredentials = credentials ?? [];
+    if (syncableCredentials.length > 0) {
+      const ownerIds = Array.from(new Set(syncableCredentials.map((c) => c.user_id)));
+      const { data: owners, error: ownersError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, account_type')
+        .in('id', ownerIds);
+      if (ownersError) {
+        console.warn('[tradovate-sync] free_tier_check_failed:', ownersError.message);
+      } else {
+        const freeUserIds = new Set(
+          (owners ?? [])
+            .filter((o: { account_type?: string | null }) => o.account_type === 'free')
+            .map((o: { id: string }) => o.id),
+        );
+        if (freeUserIds.size > 0) {
+          syncableCredentials = syncableCredentials.filter((c) => {
+            if (freeUserIds.has(c.user_id)) {
+              console.log(`skip free-plan connection ${c.id}`);
+              return false;
+            }
+            return true;
+          });
+        }
+      }
+    }
+
     let totalInserted = 0;
     let totalErrors   = 0;
     let synced        = 0;
 
-    let allConnections = credentials ?? [];
+    let allConnections = syncableCredentials;
 
     // Reconciliation ownership map: every active account-owning connection grouped
     // by (user_id, environment). A (user,env) is only reconciled when EVERY one of

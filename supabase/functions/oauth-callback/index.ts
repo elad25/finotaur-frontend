@@ -80,6 +80,24 @@ Deno.serve(async (req: Request) => {
 
   const { userId, broker, environment, redirectUri, connectionId: stateConnectionId } = verifiedState;
 
+  // Free-tier lockdown (defense-in-depth): oauth-start already blocks FREE-plan
+  // users before this callback is ever reached, but a bypassed/replayed state
+  // token must not be allowed to create a broker_connections row either.
+  // Checked before the token exchange to avoid wasting the broker API call.
+  {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userId)
+      .maybeSingle();
+    if (profileError) {
+      console.error('[oauth-callback] profile lookup failed:', profileError.message);
+    } else if (profile?.account_type === 'free') {
+      console.warn('[oauth-callback] blocked free-plan connection attempt', { userId, broker });
+      return redirectTo('?oauth_error=upgrade_required');
+    }
+  }
+
   let adapter;
   try {
     adapter = getBrokerAuthAdapter(broker);

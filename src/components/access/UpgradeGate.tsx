@@ -310,7 +310,7 @@ export function UpgradeGate({
                   'Limited watchlists (5)',
                   '3 price alerts',
                   'Community access',
-                  '📓 Trading Journal (15 lifetime trades)',
+                  '📓 Trading Journal (10 lifetime trades)',
                 ].map((feat, fi) => (
                   <li key={fi} className="flex items-start gap-2.5">
                     <div className="w-4 h-4 rounded-full bg-[#C9A646]/10 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.2)' }}>

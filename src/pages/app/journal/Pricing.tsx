@@ -42,7 +42,7 @@ const plans: Plan[] = [
     yearlyMonthlyEquivalent: "$0",
     description: "Start your trading journey",
     features: [
-      "15 trades to uncover your first leak",
+      "10 trades to uncover your first leak",
       "1 broker connection",
       "Trade journal (manual + auto-import)",
       "Core performance stats",
@@ -333,10 +333,10 @@ function UpgradePlanModal({
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                    Start free — 15 trades
+                    Start free — 10 trades
                   </h4>
                   <p className="text-slate-300 text-base leading-relaxed">
-                    If Finotaur doesn't show a pattern that's hurting you within 15 trades, don't upgrade.
+                    If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
                   </p>
                 </div>
               </div>

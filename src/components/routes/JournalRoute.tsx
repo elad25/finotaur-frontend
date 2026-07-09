@@ -19,9 +19,9 @@
 // │ Platform PRO        │ ✅ Premium (bundled)                     │
 // │ Platform Enterprise │ ✅ Premium (bundled)                     │
 // │ Platform CORE       │ ✅ Basic-tier journal (25/mo)            │
-// │ FREE (no payment)   │ ✅ 15 trades LIFETIME (manual entry)     │
-// │ Platform FREE       │ ✅ 15 trades LIFETIME (manual entry)     │
-// │ No subscription     │ ✅ 15 trades LIFETIME (manual entry)     │
+// │ FREE (no payment)   │ ✅ 10 trades LIFETIME (manual entry)     │
+// │ Platform FREE       │ ✅ 10 trades LIFETIME (manual entry)     │
+// │ No subscription     │ ✅ 10 trades LIFETIME (manual entry)     │
 // ├─────────────────────┼──────────────────────────────────────────┤
 // │ premiumOnly route   │ ❌ Landing page if !isPremium             │
 // └─────────────────────┴──────────────────────────────────────────┘

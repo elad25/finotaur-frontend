@@ -7,7 +7,7 @@
 //
 // 🔥 v3.0.0 CHANGES (2026-06):
 // - REMOVED 'basic' tier (zero active subscribers — confirmed)
-// - Journal tiers remaining: Free (15 lifetime trades) and Premium (unlimited)
+// - Journal tiers remaining: Free (10 lifetime trades) and Premium (unlimited)
 // - isBasicUser() now only matches 'trial' (legacy in-flight refs) — basic plan is gone
 // =====================================================
 
@@ -16,7 +16,7 @@
 // ============================================
 
 export const SUBSCRIPTION_LIMITS = {
-  // Basic removed 2026-06 (zero subscribers). Free tier (15 lifetime trades) is handled at DB/RLS level.
+  // Basic removed 2026-06 (zero subscribers). Free tier (10 lifetime trades) is handled at DB/RLS level.
   premium: {
     max_trades: Infinity,
     name: 'Premium',
@@ -68,7 +68,7 @@ export interface SubscriptionStatus {
 
 /**
  * Get maximum trades for an account type.
- * Free tier (account_type = null / 'free') is capped at 15 lifetime trades (enforced at DB level).
+ * Free tier (account_type = null / 'free') is capped at 10 lifetime trades (enforced at DB level).
  */
 export function getMaxTrades(accountType: AccountType | string): number {
   if (isPremiumUser(accountType)) {
@@ -76,9 +76,9 @@ export function getMaxTrades(accountType: AccountType | string): number {
   }
 
   // 'trial' was a legacy alias for the old Basic plan (25 trades/month).
-  // With Basic removed, trial users fall through to the free 15-trade lifetime cap.
+  // With Basic removed, trial users fall through to the free 10-trade lifetime cap.
   // Return a safe finite sentinel; actual enforcement is at the DB level.
-  return 15;
+  return 10;
 }
 
 /**

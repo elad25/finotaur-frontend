@@ -134,7 +134,7 @@ const HeroSection = () => {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="text-xl text-slate-300 leading-relaxed font-light max-w-xl"
             >
-              In 15 trades, Finotaur shows what's quietly killing your P&L — and how to fix it.
+              In 10 trades, Finotaur shows what's quietly killing your P&L — and how to fix it.
             </motion.p>
 
             {/* CTA Buttons */}

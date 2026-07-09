@@ -46,7 +46,7 @@ const plans: Plan[] = [
     features: [
       "AI Stock Analyzer — 3/day",
       "FINO assistant + Community",
-      "Demo journal — 15 trades",
+      "Demo journal — 10 trades",
       "Market Pulse & news",
       "P&L calendar & core stats",
       "1 watchlist + basic screener",

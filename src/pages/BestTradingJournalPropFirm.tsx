@@ -63,12 +63,12 @@ const FAQS = [
   {
     question: "Is there a free trial?",
     answer:
-      "Yes. The Trader plan includes a 14-day free trial so you can connect your accounts and see your journal before paying — and the free tier lets you try the journal with 15 trades, no card required.",
+      "Yes. The Trader plan includes a 14-day free trial so you can connect your accounts and see your journal before paying — and the free tier lets you try the journal with 10 trades, no card required.",
   },
   {
     question: "How much does it cost?",
     answer:
-      "You can start free with a 15-trade demo portfolio. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, the AI trading coach, and the Finotaur Score.",
+      "You can start free with a 10-trade demo portfolio. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, the AI trading coach, and the Finotaur Score.",
   },
 ];
 
@@ -373,7 +373,7 @@ export default function BestTradingJournalPropFirm() {
             <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$0/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
               <li>No card required</li>
-              <li>Demo portfolio — 15 trades</li>
+              <li>Demo portfolio — 10 trades</li>
               <li>AI Stock Analyzer — 3 analyses/day</li>
               <li>Full analytics, strategies & Academy</li>
             </ul>

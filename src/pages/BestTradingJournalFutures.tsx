@@ -68,7 +68,7 @@ const FAQS = [
   {
     question: "How much does it cost?",
     answer:
-      "You can start free — the demo portfolio includes 15 journal trades and 3 AI stock analyses a day, no card required. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, and the AI trading coach.",
+      "You can start free — the demo portfolio includes 10 journal trades and 3 AI stock analyses a day, no card required. The Trader plan is $44.99/month with a 14-day free trial and adds unlimited trades, multiple broker connections, and the AI trading coach.",
   },
 ];
 
@@ -369,7 +369,7 @@ export default function BestTradingJournalFutures() {
             <p className="text-gold-primary font-semibold text-2xl mt-ds-2">$0/month</p>
             <ul className="text-ink-secondary text-[14px] leading-relaxed mt-ds-4 space-y-ds-2">
               <li>No card required</li>
-              <li>Demo portfolio — 15 trades</li>
+              <li>Demo portfolio — 10 trades</li>
               <li>AI Stock Analyzer — 3 analyses/day</li>
               <li>Full analytics, strategies & Academy</li>
             </ul>
