@@ -79,6 +79,27 @@ Deno.serve(async (req: Request) => {
 
   const userId = auth.userId;
 
+  // Free-tier lockdown: FREE-plan users may not connect a broker. Checked
+  // before parsing the request body / validating credentials against the
+  // exchange, so a free-plan attempt never spends an external API call.
+  // Fail-open on a lookup error — a transient profiles read hiccup must not
+  // lock out paying users.
+  {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userId)
+      .maybeSingle();
+    if (profileError) {
+      console.error('[exchange-connect] profile lookup failed:', profileError.message);
+    } else if (profile?.account_type === 'free') {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'upgrade_required', message: 'Broker connections require a paid plan.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } },
+      );
+    }
+  }
+
   try {
     let body: Record<string, unknown>;
     try {

@@ -205,7 +205,7 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
 // PLAN CONFIGURATIONS
 // ============================================
 
-// Basic removed 2026-06 (zero active subscribers). Free journal tier (15 lifetime trades) and Premium remain.
+// Basic removed 2026-06 (zero active subscribers). Free journal tier (10 lifetime trades) and Premium remain.
 export const PLANS: Record<PlanId, PlanConfig> = {
   // ═══════════════════════════════════════════
   // JOURNAL - PREMIUM (NO TRIAL)
@@ -785,7 +785,7 @@ export const PLAN_FEATURES = {
     sectorAnalysisPerMonth: 0,
     // Journal access for FREE tier
     journalAccess: true,
-    journalMaxTrades: 15,
+    journalMaxTrades: 10,
     journalTradesLifetime: true,
     journalMaxPortfolios: 1,
     journalBacktest: false,
@@ -819,7 +819,7 @@ export const PLAN_FEATURES = {
     sectorAnalysisPerMonth: 10,
     // Journal access same as free (Investor is not a journal tier)
     journalAccess: true,
-    journalMaxTrades: 15,
+    journalMaxTrades: 10,
     journalTradesLifetime: true,
     journalMaxPortfolios: 1,
     journalBacktest: false,

@@ -19,6 +19,7 @@ import { Suspense, memo, useEffect } from "react";
 import { lazy } from "@/lib/lazyWithRetry";
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { JournalRoute } from "@/components/routes/JournalRoute";
+import { JournalFeatureGate } from "@/components/routes/JournalFeatureGate";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -778,8 +779,8 @@ function AppContent() {
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
 {/* journal/mentor → floor/mentor (legacy redirect) */}
 <Route path="journal/mentor" element={<Navigate to="/app/mentor/mode" replace />} />
-<Route path="journal/trade-compare" element={<JournalRoute><TradeCompare /></JournalRoute>} />
-<Route path="journal/revenge-radar" element={<JournalRoute><RevengeRadar /></JournalRoute>} />
+<Route path="journal/trade-compare" element={<JournalRoute><JournalFeatureGate feature="shadow"><TradeCompare /></JournalFeatureGate></JournalRoute>} />
+<Route path="journal/revenge-radar" element={<JournalRoute><JournalFeatureGate feature="revenge-radar"><RevengeRadar /></JournalFeatureGate></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
         {/* THE FLOOR — Feed / Leaderboard / DM (open to all logged-in users) */}

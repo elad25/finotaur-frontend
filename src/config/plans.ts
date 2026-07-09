@@ -5,7 +5,7 @@
 //
 // 🔥 v3.0.0 CHANGES (2026-06):
 // - REMOVED 'basic' tier (zero active subscribers — confirmed)
-// - Journal tiers are now: Free (15 lifetime trades, no plan object) and Premium ($44.99/mo)
+// - Journal tiers are now: Free (10 lifetime trades, no plan object) and Premium ($44.99/mo)
 // =====================================================
 
 export interface Plan {
@@ -30,7 +30,7 @@ export interface Addon {
 
 // ============================================
 // PLANS - Premium only (Basic removed 2026-06)
-// Free tier (15 lifetime trades) exists in DB but has no purchasable plan object.
+// Free tier (10 lifetime trades) exists in DB but has no purchasable plan object.
 // ============================================
 
 export const PLANS: Plan[] = [

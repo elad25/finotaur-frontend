@@ -92,6 +92,27 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // Free-tier lockdown: FREE-plan users may not connect a broker.
+  // This function only ever returns JSON (the frontend performs the redirect
+  // to authorize_url on success), so the block response is JSON, not a 302.
+  // Fail-open on a lookup error — a transient profiles read hiccup must not
+  // lock out paying users; oauth-callback below is the defense-in-depth gate.
+  {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('account_type')
+      .eq('id', userId)
+      .maybeSingle();
+    if (profileError) {
+      console.error('[oauth-start] profile lookup failed:', profileError.message);
+    } else if (profile?.account_type === 'free') {
+      return new Response(
+        JSON.stringify({ error: 'upgrade_required', message: 'Broker connections require a paid plan.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+  }
+
   try {
     const redirectUri =
       Deno.env.get('oauth_redirect_uri_Journal') ?? DEFAULT_REDIRECT_URI;

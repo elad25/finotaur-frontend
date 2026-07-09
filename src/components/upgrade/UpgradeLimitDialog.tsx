@@ -1,9 +1,11 @@
 /**
  * UpgradeLimitDialog — reusable upgrade gate modal.
  *
- * Two presets keyed by `reason`:
- *  - 'broker-limit':     user hit the 1-broker cap on free/basic.
- *  - 'free-trade-limit': user hit the 15-lifetime-trade cap on free.
+ * Three presets keyed by `reason`:
+ *  - 'broker-limit':       user hit the 1-broker cap on free/basic.
+ *  - 'broker-free-locked': FREE-plan user tried to connect (or resume sync on)
+ *                          a broker — broker sync is fully off-limits on free.
+ *  - 'free-trade-limit':   user hit the lifetime-trade cap on free.
  *
  * Design rules (DESIGN_SYSTEM.md):
  *  - Gold is a statement, not decoration — one gold CTA, Crown accent only.
@@ -30,7 +32,7 @@ import { cn } from '@/lib/utils';
 // Types
 // ---------------------------------------------------------------------------
 
-export type UpgradeLimitReason = 'broker-limit' | 'free-trade-limit';
+export type UpgradeLimitReason = 'broker-limit' | 'broker-free-locked' | 'free-trade-limit';
 
 export interface UpgradeLimitDialogProps {
   open: boolean;
@@ -63,12 +65,22 @@ const PRESETS: Record<UpgradeLimitReason, Preset> = {
       'Switch brokers anytime',
     ],
   },
+  'broker-free-locked': {
+    title: 'Broker sync is a Premium feature',
+    description: () =>
+      'Connect your broker and your trades flow into your journal automatically — no manual entry. Upgrade to unlock automatic sync.',
+    bullets: [
+      'Automatic trade sync from your broker',
+      'Live positions & fills in your journal',
+      'No manual trade entry',
+    ],
+  },
   'free-trade-limit': {
     title: "You've reached your free trade limit",
     description: (used, max) =>
       used !== undefined && max !== undefined
-        ? `You've logged ${used} of ${max} free trades. Upgrade to keep going.`
-        : "You've used all your free trades. Upgrade to keep going.",
+        ? `You've logged all ${max} free trades — nice work building the habit. Upgrade to keep your journal growing with unlimited trades and broker sync.`
+        : "You've logged all your free trades — nice work building the habit. Upgrade to keep your journal growing with unlimited trades and broker sync.",
     bullets: [
       'Unlimited trades',
       'Full analytics & stats',

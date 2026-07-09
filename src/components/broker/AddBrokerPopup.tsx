@@ -23,8 +23,10 @@ import {
 } from '@/components/ui/dialog';
 import { BROKER_CONFIGS, BrokerName } from '@/lib/brokers/types';
 import { useAuth } from '@/providers/AuthProvider';
+import { useSubscription } from '@/hooks/useSubscription';
 import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
 import BinanceConnectionPopup from '@/components/brokers/BinanceConnectionPopup';
+import { UpgradeLimitDialog } from '@/components/upgrade/UpgradeLimitDialog';
 
 const CONNECTION_NAME_MAX = 32;
 const NINJATRADER_AFFILIATE_URL = 'https://ninjatraderdomesticvendor.sjv.io/c/7301959/3069488/37581';
@@ -58,6 +60,10 @@ interface Props {
   /** If provided, the user is redirected here after a successful OAuth round-trip
    *  instead of landing on /app/journal/overview. Must start with /app/. */
   returnTo?: string;
+  /** Called instead of starting a connect flow when a FREE-plan user (who may
+   *  not connect a broker at all) reaches the Connect button. If omitted, the
+   *  popup closes itself and shows its own upgrade dialog. */
+  onUpgradeRequired?: () => void;
 }
 
 function BrokerMark({ broker }: { broker: BrokerName }) {
@@ -180,9 +186,14 @@ function EnvironmentToggle({
   );
 }
 
-export default function AddBrokerPopup({ open, onOpenChange, returnTo }: Props) {
+export default function AddBrokerPopup({ open, onOpenChange, returnTo, onUpgradeRequired }: Props) {
   const { user } = useAuth();
   const { isLoading } = useTradovate();
+  // Defensive gate: FREE-plan users may not connect a broker at all. The
+  // primary gate lives in the caller (Overview.tsx openAddBrokerPopup), but
+  // this popup can also be opened via other entry points (e.g. the legacy
+  // Tradovate-modal handoff), so re-check here before any connect flow starts.
+  const { isFreeJournal } = useSubscription();
 
   const [selectedBroker, setSelectedBroker] = useState<BrokerName>('tradovate');
   const [connectionName, setConnectionName] = useState('');
@@ -190,6 +201,9 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo }: Props) 
   const [error, setError] = useState('');
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
   const [showBinancePopup, setShowBinancePopup] = useState(false);
+  // Self-contained fallback dialog, used only when the caller doesn't pass
+  // onUpgradeRequired.
+  const [showUpgradeFallback, setShowUpgradeFallback] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -223,6 +237,18 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo }: Props) 
 
   const handleConnect = async () => {
     setError('');
+
+    // Defensive gate: FREE-plan users may not start ANY connect flow
+    // (OAuth, IBKR, or Binance API-key) — see field comment above.
+    if (isFreeJournal) {
+      onOpenChange(false);
+      if (onUpgradeRequired) {
+        onUpgradeRequired();
+      } else {
+        setShowUpgradeFallback(true);
+      }
+      return;
+    }
 
     // Binance uses a dedicated API-key popup (not OAuth redirect).
     if (selectedBroker === 'binance' && user) {
@@ -538,6 +564,14 @@ export default function AddBrokerPopup({ open, onOpenChange, returnTo }: Props) 
             setShowBinancePopup(false);
             onOpenChange(false);
           }}
+        />
+      )}
+
+      {!onUpgradeRequired && (
+        <UpgradeLimitDialog
+          open={showUpgradeFallback}
+          onOpenChange={setShowUpgradeFallback}
+          reason="broker-free-locked"
         />
       )}
     </>

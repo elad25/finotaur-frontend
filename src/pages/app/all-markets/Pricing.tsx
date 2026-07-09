@@ -66,7 +66,7 @@ const plans: PlanConfig[] = [
     features: [
       'AI Stock Analyzer — 3/day',
       'FINO assistant + Community',
-      'Demo journal — 15 trades',
+      'Demo journal — 10 trades',
       'Market Pulse & news',
       'P&L calendar & core stats',
       '1 watchlist + basic screener',
@@ -923,7 +923,7 @@ const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null
                       <>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
-                          <span>Unlimited trades (back to 15)</span>
+                          <span>Unlimited trades (back to 10)</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-zinc-300">
                           <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />

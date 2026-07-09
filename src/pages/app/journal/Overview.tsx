@@ -1396,11 +1396,22 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   const [showImportPopup, setShowImportPopup] = useState(false);
   const [showAddBroker, setShowAddBroker] = useState(false);
   const [showBrokerUpgrade, setShowBrokerUpgrade] = useState(false);
+  // Which UpgradeLimitDialog preset to show: the 1-broker cap on free/basic
+  // ('broker-limit') vs. free-plan broker sync being fully locked
+  // ('broker-free-locked'). Defaults to 'broker-limit' for back-compat.
+  const [brokerUpgradeReason, setBrokerUpgradeReason] = useState<'broker-limit' | 'broker-free-locked'>('broker-limit');
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
   const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect, syncNow: brokerSyncNow } = useBrokerConnections({ purpose: 'journal' });
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
+
+  // Hoisted above handleSyncAllTrades — isFreeJournal is read in its deps
+  // array (below), and dep arrays are evaluated at the useCallback call site
+  // during render, so the const must already be initialized at that point in
+  // execution order (see the queryClient TDZ note right below for the same
+  // failure mode: .lessons/global/2026-05-19-pre-pr-build-and-cycle-validation.md).
+  const { limits, loading: subscriptionLoading, isPremium, isFreeJournal } = useSubscription();
 
   // 2026-05-19: queryClient pulled up here from its original location ~90
   // lines below. The Sync Trades useCallback (handleSyncAllTrades) below
@@ -1428,6 +1439,13 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   );
   const handleSyncAllTrades = useCallback(async () => {
     if (isSyncingAll) return;
+    // FREE-plan users with a pre-existing broker connection keep it visible
+    // but locked — Sync opens the upgrade dialog instead of running.
+    if (isFreeJournal && allBrokerConnections.length > 0) {
+      setBrokerUpgradeReason('broker-free-locked');
+      setShowBrokerUpgrade(true);
+      return;
+    }
     setIsSyncingAll(true);
     try {
       // When Tradovate connections exist, do a real broker sync first so the
@@ -1451,7 +1469,7 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
     } finally {
       setIsSyncingAll(false);
     }
-  }, [isSyncingAll, tradovateConnections, brokerSyncNow, queryClient]);
+  }, [isSyncingAll, isFreeJournal, allBrokerConnections, tradovateConnections, brokerSyncNow, queryClient]);
 
   // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
   // Resolves OQ-72: previously a user whose Tradovate session went degraded
@@ -1479,10 +1497,6 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
       && localStorage.getItem('finotaur_journal_empty_state_dismissed') === 'true',
   );
 
-  // Hoisted above openAddBrokerPopup — isPremium is read in the callback body.
-  // Matches the pattern documented above (emptyStateDismissed, queryClient):
-  // declaration order must match usage order to avoid TDZ after minification.
-  const { limits, loading: subscriptionLoading, isPremium } = useSubscription();
   // Demo mode (zero-trade preview): unlock the paid-gated charts so a new user
   // sees the full journal value instead of a lock. Flips off with the first real trade.
   const { isDemo: isJournalDemo } = useJournalDemoMode();
@@ -1498,13 +1512,20 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
       }
       return true;
     });
+    // Gate: FREE-plan users may not connect a broker at all.
+    if (isFreeJournal) {
+      setBrokerUpgradeReason('broker-free-locked');
+      setShowBrokerUpgrade(true);
+      return;
+    }
     // Gate: free/basic users may only have 1 active journal connection.
     if (!isPremium && allBrokerConnections.length >= 1) {
+      setBrokerUpgradeReason('broker-limit');
       setShowBrokerUpgrade(true);
       return;
     }
     setShowAddBroker(true);
-  }, [isPremium, allBrokerConnections]);
+  }, [isFreeJournal, isPremium, allBrokerConnections]);
 
   const handoffToAddBrokerPopup = useCallback(() => {
     setShowAddBroker(true);
@@ -1558,11 +1579,16 @@ function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOve
   // params so a manual refresh does not re-trigger.
   // When the server blocks a 2nd-broker attempt for non-premium users it
   // redirects to ?oauth_error=upgrade_required_for_multiple_brokers — we open
-  // the UpgradeLimitDialog for that specific error value.
+  // the UpgradeLimitDialog for that specific error value. FREE-plan users are
+  // now blocked at the edge function too, which redirects with
+  // ?oauth_error=upgrade_required — same dialog, free-locked copy.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get('oauth_error');
-    if (oauthError === 'upgrade_required_for_multiple_brokers') {
+    if (oauthError === 'upgrade_required_for_multiple_brokers' || oauthError === 'upgrade_required') {
+      setBrokerUpgradeReason(
+        oauthError === 'upgrade_required' ? 'broker-free-locked' : 'broker-limit',
+      );
       setShowBrokerUpgrade(true);
       // Strip the param so a manual refresh does not re-open the dialog.
       window.history.replaceState(null, '', window.location.pathname);
@@ -1977,6 +2003,25 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </Button>
             </BrokerConnectionsPopover>
 
+            {/* FREE-plan lock indicator — shown next to the broker controls when a
+                free-plan user still has an existing (now locked) broker connection.
+                Clicking opens the same upgrade dialog as Sync/Reconnect below. */}
+            {!effectiveReadOnly && isFreeJournal && allBrokerConnections.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBrokerUpgradeReason('broker-free-locked');
+                  setShowBrokerUpgrade(true);
+                }}
+                className="flex h-10 shrink-0 items-center gap-1.5 rounded-[12px] border border-[#C9A646]/40 bg-[#C9A646]/10 px-3 text-[11px] font-medium text-[#E8C766] transition-colors hover:border-[#C9A646]/60 hover:bg-[#C9A646]/15"
+                aria-label="Broker sync locked — upgrade to resume"
+                title="Locked — upgrade to resume sync"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Locked — upgrade to resume sync
+              </button>
+            )}
+
             {/* 2026-05-18: Sync Trades — fires tradovate-sync edge function for every
                 active Tradovate connection in parallel. Hidden when there are no
                 Tradovate connections (manual-only users). Spinner animates while
@@ -1986,7 +2031,11 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             {/* 2026-05-20: unconditional refresh button. With a Tradovate
                 connection it triggers a broker sync; without one it still
                 refetches trades + dashboard queries so the user always has a
-                manual way to force-refresh the page data. */}
+                manual way to force-refresh the page data.
+                2026-07-09: FREE-plan users with a locked existing broker
+                connection see the same button, but the click is intercepted
+                inside handleSyncAllTrades and opens the upgrade dialog instead
+                of running — the "Locked" badge above already signals why. */}
             {!effectiveReadOnly && (
               <Button
                 onClick={handleSyncAllTrades}
@@ -1995,18 +2044,22 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 size="compact"
                 className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
                 aria-label={
-                  isSyncingAll
-                    ? 'Refreshing'
-                    : tradovateConnections.length > 0
-                      ? 'Sync Trades'
-                      : 'Refresh Dashboard'
+                  isFreeJournal && allBrokerConnections.length > 0
+                    ? 'Locked — upgrade to resume sync'
+                    : isSyncingAll
+                      ? 'Refreshing'
+                      : tradovateConnections.length > 0
+                        ? 'Sync Trades'
+                        : 'Refresh Dashboard'
                 }
                 title={
-                  isSyncingAll
-                    ? 'Refreshing…'
-                    : tradovateConnections.length > 0
-                      ? 'Sync Trades'
-                      : 'Refresh Dashboard'
+                  isFreeJournal && allBrokerConnections.length > 0
+                    ? 'Locked — upgrade to resume sync'
+                    : isSyncingAll
+                      ? 'Refreshing…'
+                      : tradovateConnections.length > 0
+                        ? 'Sync Trades'
+                        : 'Refresh Dashboard'
                 }
               >
                 <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
@@ -2059,7 +2112,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         )}
 
         {/* Phase 1B.4 — Reconnect CTA for degraded / canceled broker connections.
-            Hidden in mentor/read-only view — mentor cannot act on student's broker. */}
+            Hidden in mentor/read-only view — mentor cannot act on student's broker.
+            2026-07-09: FREE-plan users see the same banner but "Reconnect now"
+            opens the upgrade dialog instead of the real reconnect flow — their
+            connection is locked, not just degraded. */}
         {!effectiveReadOnly && !brokersLoading && degradedConnection && (
           <div className="rounded-2xl border border-[#E36363]/30 bg-[#E36363]/8 px-5 py-4 mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -2071,15 +2127,24 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                   {degradedConnection.connection_name ?? degradedConnection.broker ?? 'Broker'} connection needs attention
                 </p>
                 <p className="text-xs text-[#A0A0A0] mt-0.5">
-                  {`We couldn't refresh your ${degradedConnection.connection_name ?? degradedConnection.broker ?? 'broker'} connection. Reconnect to keep your trades syncing.`}
+                  {isFreeJournal
+                    ? `Your ${degradedConnection.connection_name ?? degradedConnection.broker ?? 'broker'} connection is locked on the free plan. Upgrade to resume automatic sync.`
+                    : `We couldn't refresh your ${degradedConnection.connection_name ?? degradedConnection.broker ?? 'broker'} connection. Reconnect to keep your trades syncing.`}
                 </p>
               </div>
             </div>
             <button
-              onClick={() => setReconnectModalOpen(true)}
+              onClick={() => {
+                if (isFreeJournal) {
+                  setBrokerUpgradeReason('broker-free-locked');
+                  setShowBrokerUpgrade(true);
+                  return;
+                }
+                setReconnectModalOpen(true);
+              }}
               className="px-4 py-2 rounded-xl bg-[#C9A646] text-black text-sm font-semibold hover:bg-[#D4B255] transition-colors whitespace-nowrap"
             >
-              Reconnect now
+              {isFreeJournal ? 'Upgrade to reconnect' : 'Reconnect now'}
             </button>
           </div>
         )}
@@ -2331,7 +2396,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
       <ErrorBoundary>
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
       </ErrorBoundary>
-      <UpgradeLimitDialog open={showBrokerUpgrade} onOpenChange={setShowBrokerUpgrade} reason="broker-limit" />
+      <UpgradeLimitDialog open={showBrokerUpgrade} onOpenChange={setShowBrokerUpgrade} reason={brokerUpgradeReason} />
 
       {/* Phase 1B.4 — BrokerReconnectModal driven by the degraded-connection banner above. */}
       {reconnectModalOpen && degradedConnection && (
