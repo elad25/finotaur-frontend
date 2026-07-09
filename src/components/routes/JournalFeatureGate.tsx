@@ -13,12 +13,12 @@
 
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, GitCompare, Flame, Check } from 'lucide-react';
+import { Lock, GitCompare, Flame, Check, Copy, Shield } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { Button } from '@/components/ds/Button';
 
-type GatedFeature = 'shadow' | 'revenge-radar';
+type GatedFeature = 'shadow' | 'revenge-radar' | 'trade-copier' | 'risk-management';
 
 interface JournalFeatureGateProps {
   feature: GatedFeature;
@@ -55,6 +55,28 @@ const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
       'Builds the self-awareness to break the cycle',
     ],
     cta: 'Upgrade to unlock Revenge Radar',
+  },
+  'trade-copier': {
+    icon: Copy,
+    title: 'Trade Copier',
+    description: 'Automatically mirror your Tradovate trades across every connected account, in real time.',
+    bullets: [
+      'Real-time order mirroring, including stops and targets',
+      'Per-account risk multipliers to scale position size safely',
+      'Kill-switch protection that halts copying the moment risk limits are breached',
+    ],
+    cta: 'Upgrade to unlock Trade Copier',
+  },
+  'risk-management': {
+    icon: Shield,
+    title: 'Risk Management',
+    description: 'Live prop-firm trailing-drawdown tracking and account guardrails that keep every account funded.',
+    bullets: [
+      'Live trailing-drawdown meter for 13+ prop firms',
+      'Daily-loss and position-size guardrails on every account',
+      'Automatic kill-switch lockout before a breach costs you the account',
+    ],
+    cta: 'Upgrade to unlock Risk Management',
   },
 };
 
