@@ -1,7 +1,11 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v7.0.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v7.1.0
 // =====================================================
-// 
+//
+// 🔥 v7.1.0 - Affiliate attribution fallback via checkout metadata:
+// activate_whop_subscription/handle_whop_payment now fall back to the
+// metadata affiliate_code when no paid promo_code is present on the payment.
+//
 // 🔥 v7.0.0 - BUNDLE REMOVED: Finotaur Platform replaces Bundle
 // - Finotaur tier (prod_LtP5GbpPfp9bn/prod_CbWpZrn5P7wc9) includes Newsletter + Top Secret + Journal Premium
 // - Removed all bundle-specific logic, cross-discount pricing
@@ -106,11 +110,12 @@ function getBillingInterval(planId: string): 'monthly' | 'yearly' {
 }
 
 // Default commission rates (fallback if DB config not found)
+// 🔥 v7.1.0: Flat 0.20 across all tiers — synced with affiliate_config DB defaults
 const DEFAULT_COMMISSION_RATES = {
-  tier_1: 0.10,  // 10%
-  tier_2: 0.15,  // 15%
+  tier_1: 0.20,  // 20%
+  tier_2: 0.20,  // 20%
   tier_3: 0.20,  // 20%
-  annual: 0.15,  // 15% for annual
+  annual: 0.20,  // 20% for annual
 } as const;
 
 // ============================================
@@ -497,6 +502,27 @@ function extractClickId(data: WhopPaymentData | WhopMembershipData): string | nu
     if (clickId && typeof clickId === 'string' && clickId.length > 0) {
       console.log("✅ Found click_id in metadata:", clickId);
       return clickId;
+    }
+  }
+
+  return null;
+}
+
+// ============================================
+// 🔥 v7.1.0: Extract affiliate_code from metadata
+// ============================================
+
+function extractAffiliateCode(data: WhopPaymentData | WhopMembershipData): string | null {
+  const possibleLocations = [
+    data.metadata?.affiliate_code,
+    data.checkout_session?.metadata?.affiliate_code,
+    data.custom_metadata?.affiliate_code,
+  ];
+
+  for (const affiliateCode of possibleLocations) {
+    if (affiliateCode && typeof affiliateCode === 'string' && affiliateCode.length > 0) {
+      console.log("✅ Found affiliate_code in metadata:", affiliateCode);
+      return affiliateCode;
     }
   }
 
@@ -1606,6 +1632,10 @@ async function handlePaymentSucceeded(
     const productId = data.product?.id || '';
     const membershipId = data.membership?.id || '';
     const promoCode = extractPromoCode(data);
+    // 🔥 v7.1.0: Attribution fallback — a paid promo code always wins; if the
+    // customer didn't apply one, fall back to the metadata affiliate_code set
+    // by create-whop-checkout (member-referral / affiliate-link attribution).
+    const metadataAffiliateCode = extractAffiliateCode(data);
     const isFirstPayment = data.billing_reason === "subscription_create";
     
     let paymentAmount = data.subtotal || data.total || data.usd_total || 0;
@@ -2290,7 +2320,7 @@ const { error: updateError } = await supabase
         p_whop_membership_id: membershipId,
         p_whop_product_id: productId,
         p_finotaur_user_id: resolvedJournalUserId || null,  // 🔥 v7.5.0: Use resolved user ID
-        p_affiliate_code: promoCode || null,
+        p_affiliate_code: promoCode || metadataAffiliateCode || null,  // 🔥 v7.1.0: fallback to metadata affiliate code
         p_click_id: clickId || null,
       });
 
@@ -2321,7 +2351,7 @@ const { error: updateError } = await supabase
         p_whop_membership_id: membershipId,
         p_payment_amount: paymentAmount,
         p_is_first_payment: false,
-        p_promo_code: promoCode || null,
+        p_promo_code: promoCode || metadataAffiliateCode || null,  // 🔥 v7.1.0: fallback to metadata affiliate code
       });
 
       if (error) {
