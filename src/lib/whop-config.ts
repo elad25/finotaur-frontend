@@ -96,7 +96,7 @@ export const WHOP_PLAN_IDS = {
 
   // Intro Offer — hidden one-time Trader plan (30% off first month, then $44.99/mo).
   // Placeholder plan ID — real Whop plan not created yet. Find/replace when it exists.
-  premium_intro_monthly: 'plan_INTRO_TRADER_TBD',
+  premium_intro_monthly: 'plan_u6VqqKZlb0axR',
 
   // Platform - Finotaur ($89/month, 14-day trial). Repriced 2026-07: new Whop plans, new IDs.
   platform_finotaur_monthly: 'plan_AgWVNrqc0eSMK',
@@ -123,7 +123,7 @@ export const WHOP_PRODUCT_IDS = {
 
   // Intro Offer — hidden Whop product for the discounted Trader plan.
   // Placeholder product ID — real Whop product not created yet. Find/replace when it exists.
-  premium_intro: 'prod_INTRO_TRADER_TBD',
+  premium_intro: 'prod_vnQlVO0WVdmiI',
 
   // Platform - Finotaur
   platform_finotaur_monthly: 'prod_LtP5GbpPfp9bn',
@@ -165,7 +165,7 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
 
   // Intro Offer — hidden product, same entitlements as Journal Premium Monthly.
   // Placeholder product ID — real Whop product not created yet. Find/replace when it exists.
-  'prod_INTRO_TRADER_TBD': { plan: 'premium', interval: 'monthly', category: 'journal' },
+  'prod_vnQlVO0WVdmiI': { plan: 'premium', interval: 'monthly', category: 'journal' },
 
   // Platform - Finotaur
   'prod_LtP5GbpPfp9bn': { plan: 'platform_finotaur', interval: 'monthly', category: 'platform', isPlatform: true },
@@ -193,7 +193,7 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_gBG436aeJxaHU': 'premium_yearly',  // legacy — kept for in-flight refs
 
   // Intro Offer — placeholder plan ID, hygiene entry only (not purchasable via PLANS/pricing UI).
-  'plan_INTRO_TRADER_TBD': 'premium_intro_monthly',
+  'plan_u6VqqKZlb0axR': 'premium_intro_monthly',
 
   // Platform - Finotaur
   'plan_AgWVNrqc0eSMK': 'platform_finotaur_monthly', // $89/mo plan (2026-07)

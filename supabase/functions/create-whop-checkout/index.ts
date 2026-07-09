@@ -105,7 +105,7 @@ interface WhopCheckoutResponse {
   'plan_N33S1p5Y3dHrK': '/app/journal/overview?payment=success&source=whop',  // Premium Monthly ($44.99)
   'plan_WrjUcvrRhwWPL': '/app/journal/overview?payment=success&source=whop',  // Premium Yearly ($409)
   // Intro Offer — hidden Trader plan (30% off first month). Placeholder plan ID.
-  'plan_INTRO_TRADER_TBD': '/app/journal/overview?payment=success&source=whop',
+  'plan_u6VqqKZlb0axR': '/app/journal/overview?payment=success&source=whop',
   // Newsletter (War Zone) - ALL PLAN IDS
    'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly ($69.99)
   'plan_bp2QTGuwfpj0A': '/app/settings?tab=billing&upgrade=newsletter_yearly_success',  // War Zone Yearly ($699) - upgrade redirect
@@ -240,7 +240,7 @@ serve(async (req: Request) => {
         // Premium (tier 2) — current + legacy IDs
         'plan_N33S1p5Y3dHrK': 2, 'plan_WrjUcvrRhwWPL': 2, 'plan_v7QKxkvKIZooe': 2, 'plan_gBG436aeJxaHU': 2,
         // Intro Offer — hidden Trader plan, treated as Premium tier. Placeholder plan ID.
-        'plan_INTRO_TRADER_TBD': 2,
+        'plan_u6VqqKZlb0axR': 2,
       };
       const requestedTier = JOURNAL_PLAN_TIER[plan_id] ?? 0;
       if (requestedTier > 0) {
