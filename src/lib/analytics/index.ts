@@ -31,7 +31,9 @@ export type AnalyticsEventName =
   | 'cta_clicked'
   | 'checkout_click'
   | 'checkout_redirect'
-  | 'checkout_error';
+  | 'checkout_error'
+  | 'intro_offer_shown'
+  | 'intro_offer_expired';
 
 // ─── Env var helpers ──────────────────────────────────────────────────────────
 

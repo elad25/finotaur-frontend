@@ -85,6 +85,8 @@ const PRODUCT_ID_TO_PLAN_JOURNAL: Record<string, { plan: string; interval: strin
   'prod_bPwSoYGedsbyh': { plan: 'basic', interval: 'yearly' },
   'prod_Kq2pmLT1JyGsU': { plan: 'premium', interval: 'monthly' },
   'prod_vON7zlda6iuII': { plan: 'premium', interval: 'yearly' },
+  // Intro Offer — hidden product, same entitlements as Journal Premium Monthly. Placeholder product ID.
+  'prod_INTRO_TRADER_TBD': { plan: 'premium', interval: 'monthly' },
 };
 
 // ============================================
@@ -423,6 +425,8 @@ async function getPlanInfo(
     "prod_bPwSoYGedsbyh": { plan: "basic", interval: "yearly", price: 149.00, maxTrades: 25, isNewsletter: false, isTopSecret: false },
     "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
+    // Intro Offer — hidden product, same entitlements as Journal Premium Monthly. Placeholder product ID.
+    "prod_INTRO_TRADER_TBD": { plan: "premium", interval: "monthly", price: 31.49, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     // Newsletter fallback - Synced with WHOP_CONFIG v4.4.0
     "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 69.99, maxTrades: 0, isNewsletter: true, isTopSecret: false },
     "prod_8b3VWkZdena4B": { plan: "newsletter", interval: "yearly", price: 699.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
@@ -2302,15 +2306,33 @@ const { error: updateError } = await supabase
       console.log("✅ activate_whop_subscription RPC result:", result);
 
       if (!result?.success) {
-        return { 
-          success: false, 
-          message: result?.error || 'Subscription activation failed' 
+        return {
+          success: false,
+          message: result?.error || 'Subscription activation failed'
         };
       }
 
-      return { 
-        success: true, 
-        message: `Subscription activated: ${result?.plan} (${result?.interval}) for ${userEmail}${promoCode ? ` with promo ${promoCode}` : ''}${emailMismatch ? ' [email mismatch resolved]' : ''}` 
+      // 🔥 Intro Offer — mark the one-time-ever offer as used once activation
+      // succeeds. Placeholder plan ID (find/replace when the real plan exists).
+      // Never let this break activation.
+      if (data.plan?.id === 'plan_INTRO_TRADER_TBD' && resolvedJournalUserId) {
+        try {
+          await supabase
+            .from('intro_offer_state')
+            .update({
+              status: 'used',
+              used_at: new Date().toISOString(),
+              whop_membership_id: membershipId,
+            })
+            .eq('user_id', resolvedJournalUserId);
+        } catch (e) {
+          console.error("intro offer state update failed", e);
+        }
+      }
+
+      return {
+        success: true,
+        message: `Subscription activated: ${result?.plan} (${result?.interval}) for ${userEmail}${promoCode ? ` with promo ${promoCode}` : ''}${emailMismatch ? ' [email mismatch resolved]' : ''}`
       };
 
     } else {
