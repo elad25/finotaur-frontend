@@ -173,7 +173,7 @@ const PlansPage = lazy(() => import("@/pages/app/Plans"));
 const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
 const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
-const WelcomeOffer = lazy(() => import("@/components/onboarding/WelcomeOffer"));
+const IntroOffer = lazy(() => import("@/components/onboarding/IntroOffer"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
 const PrivacyPolicy = lazy(() => import("@/components/legal").then(m => ({ default: m.PrivacyPolicy })));
@@ -465,7 +465,7 @@ function AppContent() {
       <CookieConsentBanner />
       {FEATURES.AFFILIATE_TRACKING && <Suspense fallback={null}><AffiliateTracker /></Suspense>}
       <Suspense fallback={null}>
-        <WelcomeOffer />
+        <IntroOffer />
       </Suspense>
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}

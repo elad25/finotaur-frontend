@@ -6,7 +6,7 @@
 // ================================================
 
 import { supabase } from '@/lib/supabase';
-import { startWelcomeOffer } from './WelcomeOffer';
+import { startIntroOffer } from './IntroOffer';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -45,13 +45,13 @@ export const recordOnboardingCompletion = async (): Promise<void> => {
 // finishOnboarding
 // Single call-site for both "Finish" and "Skip" paths:
 //   1. Write profiles.onboarding_completed_at (async, best-effort)
-//   2. Start the 30-min welcome discount countdown
+//   2. Start the one-time-ever 30-min Intro Offer countdown
 //   3. Mark onboarding as seen in localStorage
 //   4. Clear tour-active flag from sessionStorage
 // ---------------------------------------------------------------------------
 export const finishOnboarding = (): void => {
   void recordOnboardingCompletion();
-  startWelcomeOffer();
+  void startIntroOffer();
   localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
   sessionStorage.removeItem(TOUR_ACTIVE_KEY);
 };
