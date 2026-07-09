@@ -633,9 +633,12 @@ async function fireMetaCapiPurchase(
     plan: string | null;
   }
 ): Promise<void> {
-  const accessToken = Deno.env.get("META_CAPI_ACCESS_TOKEN") || "";
+  // Accept either secret name — META_CAPI_TOKEN is what's set in prod;
+  // META_CAPI_ACCESS_TOKEN kept as a fallback for the originally-documented name.
+  const accessToken =
+    Deno.env.get("META_CAPI_TOKEN") || Deno.env.get("META_CAPI_ACCESS_TOKEN") || "";
   if (!accessToken) {
-    console.log("[whop-webhook] Meta CAPI skipped — META_CAPI_ACCESS_TOKEN not set");
+    console.log("[whop-webhook] Meta CAPI skipped — META_CAPI_TOKEN not set");
     return;
   }
   if (!email) {
