@@ -201,8 +201,15 @@ serve(async (req)=>{
           status: 400
         });
       }
-      // Validate amount
-      const MIN_PAYOUT = 100;
+      // Validate amount — threshold is live-configured in affiliate_config
+      // (payout_settings.min_payout_usd), falls back to $50 if the config
+      // row is ever missing (mirrors generate_monthly_payouts()'s COALESCE).
+      const { data: payoutSettingsConfig } = await supabase
+        .from('affiliate_config')
+        .select('config_value')
+        .eq('config_key', 'payout_settings')
+        .maybeSingle();
+      const MIN_PAYOUT = Number(payoutSettingsConfig?.config_value?.min_payout_usd) || 50;
       if (amount < MIN_PAYOUT) {
         return new Response(JSON.stringify({
           success: false,

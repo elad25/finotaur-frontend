@@ -871,7 +871,7 @@ function PayoutsTab() {
       <div className="bg-[#D4AF37]/5 border border-[#D4AF37]/20 rounded-xl p-4">
         <h4 className="text-sm font-semibold text-[#D4AF37] mb-2">Payout Information</h4>
         <ul className="text-xs text-gray-400 space-y-1">
-          <li>• Minimum payout: <span className="text-white">$100</span></li>
+          <li>• Minimum payout: <span className="text-white">$50</span></li>
           <li>• Payout day: <span className="text-white">15th of each month</span></li>
           <li>• Payment method: <span className="text-white">PayPal</span></li>
         </ul>
@@ -969,7 +969,7 @@ function PayoutsTab() {
         <div className="text-center py-12">
           <CreditCard className="w-12 h-12 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-400">No payouts yet</p>
-          <p className="text-sm text-gray-500 mt-1">Earn $100+ to receive your first payout</p>
+          <p className="text-sm text-gray-500 mt-1">Earn $50+ to receive your first payout</p>
         </div>
       )}
     </div>

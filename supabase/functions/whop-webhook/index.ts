@@ -1,6 +1,14 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v7.2.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v7.3.0
 // =====================================================
+//
+// 🔥 v7.3.0 - Member-refers-friend Phase 2: refund/dispute clawback. New
+// handleRefundOrDispute() routes payment.refunded / refund.* /
+// payment.disputed / dispute.* / payment.chargeback events to the
+// reverse_commissions_for_refund RPC, which cancels any not-yet-paid
+// affiliate commission tied to the refunded membership and decrements the
+// affiliate's running totals to match. Never throws — always resolves
+// {success:true} so Whop doesn't retry-storm.
 //
 // 🔥 v7.2.0 - Member-refers-friend enrollment: after a first-payment success
 // via activate_whop_subscription, fire-and-forget an invoke of create-whop-promo
@@ -1381,6 +1389,61 @@ async function reactivateBrokerConnections(
 }
 
 // ============================================
+// 🔥 v7.3.0: REFUND / DISPUTE CLAWBACK
+// Called on payment.refunded / refund.* / payment.disputed / dispute.* /
+// payment.chargeback. Cancels not-yet-paid affiliate commissions for the
+// affected membership via reverse_commissions_for_refund and decrements the
+// affiliate's running totals to match. NEVER throws — always resolves
+// {success:true} so Whop doesn't retry-storm on our account of a clawback.
+// ============================================
+
+async function handleRefundOrDispute(
+  supabase: SupabaseClient,
+  data: WhopPaymentData | WhopMembershipData,
+  eventType: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    // Mirror the top-level extraction (index.ts ~line 1463): payment-shaped
+    // payloads carry the membership under `.membership.id`; membership-shaped
+    // payloads (mirrors handleMembershipDeactivated's `data.id`) ARE the
+    // membership, so `.id` is the membership id itself.
+    const membershipId = 'membership' in data ? data.membership?.id : data.id;
+
+    if (!membershipId) {
+      console.warn(`[whop-webhook] handleRefundOrDispute: no membership id on ${eventType} payload`);
+      return { success: true, message: `${eventType} acknowledged — no membership id to reverse` };
+    }
+
+    const { data: result, error } = await supabase.rpc('reverse_commissions_for_refund', {
+      p_whop_membership_id: membershipId,
+      p_reason: eventType,
+    });
+
+    if (error) {
+      console.error(`[whop-webhook] reverse_commissions_for_refund RPC error for ${eventType}:`, error);
+      return { success: true, message: `${eventType} acknowledged — commission reversal RPC failed (logged)` };
+    }
+
+    console.log(`[whop-webhook] reverse_commissions_for_refund result for ${eventType}:`, result);
+
+    if (result?.paid_untouched_count > 0) {
+      console.error(
+        '[whop-webhook] REFUND on referral with ALREADY-PAID commissions — manual review needed',
+        { eventType, membershipId, result }
+      );
+    }
+
+    return {
+      success: true,
+      message: `${eventType} processed: ${JSON.stringify(result)}`,
+    };
+  } catch (err) {
+    console.error(`[whop-webhook] handleRefundOrDispute unexpected error for ${eventType}:`, err);
+    return { success: true, message: `${eventType} acknowledged — handler threw (logged, non-fatal)` };
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -1621,6 +1684,20 @@ serve(async (req: Request) => {
         } else {
           console.info('[whop-webhook] broker reactivate skipped — no finotaur_user_id for event: membership.resumed');
         }
+        break;
+      }
+
+      // 🔥 v7.3.0: Refund / dispute clawback. Whop's exact event names vary by
+      // dashboard config — cover the plausible family; anything not listed
+      // here still falls through to default (acknowledged, no-op).
+      case "payment.refunded":
+      case "refund.created":
+      case "refund.updated":
+      case "payment.disputed":
+      case "dispute.created":
+      case "dispute.updated":
+      case "payment.chargeback": {
+        result = await handleRefundOrDispute(supabase, payload.data, eventType);
         break;
       }
 
