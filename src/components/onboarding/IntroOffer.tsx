@@ -218,17 +218,31 @@ export default function IntroOffer() {
         return;
       }
 
-      writeCache({ status: 'active', expiresAt: row.expires_at, autoOpened: !!row.auto_opened_at });
       setExpiresAtMs(expiryMs);
 
-      if (!row.auto_opened_at) {
+      // Auto-open exactly once, ever. Trust BOTH signals: the server row
+      // (auto_opened_at) AND the local cache's `autoOpened` marker — a
+      // fire-and-forget/failed DB write must never cause a re-open on the
+      // next refresh, so the cache marker is the real once-guard and gets
+      // set synchronously BEFORE the card opens.
+      const alreadyAutoOpenedLocally = cached?.autoOpened === true;
+      const shouldAutoOpen = !row.auto_opened_at && !alreadyAutoOpenedLocally;
+
+      if (shouldAutoOpen) {
         // First time this offer is ever seen — open the card once.
+        writeCache({ status: 'active', expiresAt: row.expires_at, autoOpened: true });
         setIsMinimized(false);
-        void supabase
+
+        const { error: autoOpenError } = await supabase
           .from('intro_offer_state')
           .update({ auto_opened_at: new Date().toISOString() })
           .eq('user_id', user.id);
+
+        if (autoOpenError) {
+          console.warn('IntroOffer: failed to persist auto_opened_at', autoOpenError);
+        }
       } else {
+        writeCache({ status: 'active', expiresAt: row.expires_at, autoOpened: true });
         setIsMinimized(true);
       }
 
@@ -454,7 +468,7 @@ export default function IntroOffer() {
               style={{ background: 'rgba(201,166,70,0.08)', border: '1px solid rgba(201,166,70,0.25)' }}
             >
               <span className="text-sm text-zinc-500 line-through">${INTRO_OFFER.fullPrice.toFixed(2)}/mo</span>
-              <span className="text-lg font-mono font-bold tracking-wide" style={{ color: '#F4D97B' }}>
+              <span className="text-lg font-sans font-semibold tabular-nums tracking-[-0.01em]" style={{ color: '#F4D97B' }}>
                 ${INTRO_OFFER.introPrice.toFixed(2)}/mo for 3 months
               </span>
             </div>
@@ -470,14 +484,14 @@ export default function IntroOffer() {
               <Clock className="w-4 h-4" style={{ color: isUrgent ? '#ef4444' : '#C9A646' }} />
               <div className="flex items-center gap-1">
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-mono font-bold"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-sans font-bold tabular-nums"
                   style={{ background: isUrgent ? 'rgba(239,68,68,0.12)' : 'rgba(201,166,70,0.1)', color: isUrgent ? '#ef4444' : '#F4D97B' }}
                 >
                   {minutes}
                 </div>
                 <span className="text-lg font-bold mx-0.5" style={{ color: isUrgent ? '#ef4444' : '#C9A646' }}>:</span>
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-mono font-bold"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-sans font-bold tabular-nums"
                   style={{ background: isUrgent ? 'rgba(239,68,68,0.12)' : 'rgba(201,166,70,0.1)', color: isUrgent ? '#ef4444' : '#F4D97B' }}
                 >
                   {seconds}
