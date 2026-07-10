@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatTradeDateShort } from '@/utils/dateFormatter';
 import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
+import TradingRulesCard from '@/components/journal/strategy/TradingRulesCard';
 
 // ==========================================
 // 🎯 TYPES
@@ -2232,8 +2233,8 @@ const strategiesWithStats = useMemo(() => {
           </div>
         )}
         
-        <div className="flex items-center justify-between mb-10">
-          <div>
+        <div className="relative mb-8">
+          <div className="text-center">
             <h1 className="text-4xl font-bold mb-2" style={{ color: '#EAEAEA' }}>
               My Strategies
             </h1>
@@ -2241,10 +2242,10 @@ const strategiesWithStats = useMemo(() => {
               {strategies.length} strategies • {allTrades.length} total trades
             </p>
           </div>
-          
+
           <button
             onClick={handleOpenNewStrategy}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all hover:scale-105"
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all hover:scale-105 absolute right-0 top-1/2 -translate-y-1/2"
             style={{
               background: 'linear-gradient(135deg, #C9A646, #B48C2C)',
               color: '#000',
@@ -2254,6 +2255,10 @@ const strategiesWithStats = useMemo(() => {
             <Plus className="w-5 h-5" />
             New Strategy
           </button>
+        </div>
+
+        <div className="max-w-3xl mx-auto mb-12 w-full">
+          <TradingRulesCard userId={userId} />
         </div>
 
         {!userId || loading ? (
@@ -2328,7 +2333,7 @@ const strategiesWithStats = useMemo(() => {
             </div>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
             {strategiesWithStats.map(({ strategy, stats }) => (
               <StrategyCard
                 key={strategy.id}
