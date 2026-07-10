@@ -292,7 +292,7 @@ export const AccountTab = () => {
           )}
         </div>
 
-        <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-6">
           <div className="space-y-4 flex-1 min-w-0">
             {/* Name — separate First / Last name fields (both view + edit modes) */}
             <div className="grid gap-1.5">
@@ -358,7 +358,7 @@ export const AccountTab = () => {
           {/* Referral code — compact block, right side on desktop. Renders
               nothing while unresolved / feature-disabled, so no empty
               wrapper chrome (border/padding) is applied here. */}
-          <div className="w-full lg:w-72 lg:shrink-0">
+          <div className="w-full lg:w-96 lg:shrink-0 lg:self-center">
             <ReferralCodeInline />
           </div>
         </div>

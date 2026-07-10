@@ -137,7 +137,9 @@ export async function fetchMemberReferralRow(userId: string): Promise<MemberRefe
       'id, affiliate_code, coupon_code, whop_promo_id, status, affiliate_type, total_qualified_referrals, total_pending_usd, total_paid_usd, paypal_email',
     )
     .eq('user_id', userId)
-    .eq('affiliate_type', 'member')
+    // No affiliate_type filter: pre-existing 'regular'/'admin' affiliates
+    // (approved influencers, legacy rows) also have a shareable code — a
+    // user has at most one affiliates row (user_id is unique).
     .maybeSingle();
 
   if (error) {

@@ -101,10 +101,10 @@ export function ReferralCodeInline() {
 
   if (state.kind === 'locked') {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-3">
-        <div className="flex items-start gap-2">
-          <Lock className="h-4 w-4 shrink-0 text-[#C9A646]" aria-hidden="true" />
-          <p className="text-sm leading-relaxed text-zinc-400">
+      <div className="flex flex-col justify-center gap-3 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-5">
+        <div className="flex items-center gap-2.5">
+          <Lock className="h-5 w-5 shrink-0 text-[#C9A646]" aria-hidden="true" />
+          <p className="text-base leading-relaxed text-zinc-400">
             <Link to="/app/upgrade" className="text-[#C9A646] hover:underline">
               Upgrade
             </Link>{' '}
@@ -117,10 +117,10 @@ export function ReferralCodeInline() {
 
   if (state.kind === 'no-code' || state.kind === 'provisioning' || state.kind === 'error') {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-3">
-        <div className="flex items-center gap-2">
-          <Gift className="h-4 w-4 text-[#C9A646]" aria-hidden="true" />
-          <span className="text-sm font-medium text-white">Your referral code</span>
+      <div className="flex flex-col justify-center gap-3 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-5">
+        <div className="flex items-center gap-2.5">
+          <Gift className="h-5 w-5 text-[#C9A646]" aria-hidden="true" />
+          <span className="text-base font-medium text-white">Your referral code</span>
         </div>
         {state.kind === 'error' && <p className="text-xs text-red-400">{state.message}</p>}
         <button
@@ -147,11 +147,11 @@ export function ReferralCodeInline() {
   const link = buildReferralLink(code);
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-3">
-      <span className="text-xs text-zinc-400">Your referral code</span>
+    <div className="flex flex-col justify-center gap-3 rounded-lg border border-zinc-700/30 bg-zinc-800/30 p-5">
+      <span className="text-sm text-zinc-400">Your referral code</span>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-md border border-zinc-600/50 bg-zinc-900/60 px-2.5 py-1 font-mono text-sm font-semibold tracking-wider text-[#C9A646]">
+        <span className="rounded-md border border-zinc-600/50 bg-zinc-900/60 px-3 py-1.5 font-mono text-base font-semibold tracking-wider text-[#C9A646]">
           {code}
         </span>
         <button
@@ -172,12 +172,12 @@ export function ReferralCodeInline() {
         </button>
       </div>
 
-      <p className="text-xs leading-relaxed text-zinc-500">
+      <p className="text-sm leading-relaxed text-zinc-500">
         Friend gets {DEFAULT_MEMBER_DISCOUNT_PERCENT}% off · You earn {DEFAULT_MEMBER_DISCOUNT_PERCENT}% for 12
         months
       </p>
 
-      <Link to="/app/journal/refer" className="text-xs text-[#C9A646] hover:underline">
+      <Link to="/app/journal/refer" className="text-sm text-[#C9A646] hover:underline">
         Referral dashboard →
       </Link>
     </div>
