@@ -20,7 +20,6 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { domains } from '@/constants/nav';
 import { MarketsAssetTabs } from '@/components/MarketsAssetTabs';
-import { isMarketsBlocked } from '@/lib/marketsAccess';
 import {
   Tooltip,
   TooltipContent,
@@ -337,16 +336,8 @@ export const SubNav = () => {
     return true;
   }, [isImpersonating, isAdmin, isAffiliate, hasBetaAccess]);
 
-  // Blocked (non-beta) users must not see the Markets asset-tab strip at all —
-  // even disabled, it reveals what's inside the gated Markets area. This also
-  // covers pages that FALL BACK to the markets domain (e.g. /app/settings).
-  // Admin/beta keep the tabs; MARKETS_BETA_ONLY=false reopens for everyone.
-  if (activeDomain.id === 'markets' && isMarketsBlocked(hasBetaAccess)) {
-    return null;
-  }
-
   return (
-    <div
+    <div 
       className="sticky top-16 z-[99] border-b"
       style={{ 
         borderColor: 'rgba(255, 215, 0, 0.08)',
