@@ -31,6 +31,7 @@ import { detectRevenge } from '@/lib/journal/revengeDetection';
 import { HelpCircle, Info, Sparkles } from 'lucide-react';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import RevengeCalendar from '@/components/journal/RevengeCalendar';
+import RevengeRulesInsights from '@/components/journal/RevengeRulesInsights';
 import { FinoExplains } from '@/components/fino/FinoExplains';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -234,6 +235,9 @@ export default function RevengeRadar() {
               sub="all-time"
             />
           </div>
+
+          {/* Personal AI insights — rules vs. reality */}
+          <RevengeRulesInsights analysis={analysis} closedTrades={closedTrades} />
 
           {/* Main chart panel */}
           <div className={JOURNAL_PANEL}>
