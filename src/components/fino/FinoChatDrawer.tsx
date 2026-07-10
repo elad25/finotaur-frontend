@@ -193,7 +193,11 @@ function FinoChatPanel({
         err instanceof Error ? err.message : 'Failed to analyze screenshot';
       const code = (err as { code?: string })?.code;
       const status = (err as { status?: number })?.status;
-      const isUpgrade = code === 'upgrade_required' || status === 403;
+      // 'upgrade_required' (403) = tier gate; 'daily_limit_reached' (429) =
+      // the free-tier screenshot-extraction daily cap — both get the same
+      // persistent gold upgrade banner (never the transient red error).
+      const isUpgrade =
+        code === 'upgrade_required' || code === 'daily_limit_reached' || status === 403;
       setExtractionState({
         phase: 'error',
         message,
