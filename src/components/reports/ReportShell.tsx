@@ -14,9 +14,10 @@
  *
  * @see DESIGN_SYSTEM.md §4 (radius), §7 (motion)
  */
-import { useState, useCallback, useEffect, type ReactNode } from 'react';
+import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, X, Lock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Lock, Camera } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from '@/components/ui/carousel';
 import { Eyebrow } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
@@ -32,12 +33,22 @@ export interface ReportShellProps {
   /** One rendered slide per entry in `slides`, same order — pre-wrapped in ReportSlideFrame. */
   children: ReactNode[];
   onClose?: () => void;
+  /** Optional page-level header rendered above the dots/close bar — e.g. "What
+   *  your trading data reveals". When omitted, no header block renders (keeps
+   *  existing Portfolio/Markets callers pixel-identical). */
+  title?: string;
+  /** Optional subtitle line under the title, e.g. "24 trades • Jun 10 – Jul 9 (30 days)". */
+  subtitle?: string;
+  /** Slide keys that are currently locked — hides the camera/share button
+   *  while a locked slide is active (no point capturing a blurred card). */
+  lockedKeys?: string[];
 }
 
-export function ReportShell({ slides, children, onClose }: ReportShellProps) {
+export function ReportShell({ slides, children, onClose, title, subtitle, lockedKeys }: ReportShellProps) {
   const navigate = useNavigate();
   const [api, setApi] = useState<CarouselApi>();
   const [selected, setSelected] = useState(0);
+  const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     if (!api) return;
@@ -55,10 +66,58 @@ export function ReportShell({ slides, children, onClose }: ReportShellProps) {
     else navigate('/app/home');
   }, [onClose, navigate]);
 
+  const isCurrentLocked = !!lockedKeys?.includes(slides[selected]?.key);
+
+  const handleCapture = useCallback(async () => {
+    const node = slideRefs.current[selected];
+    if (!node) return;
+    try {
+      const dataUrl = await toPng(node, { pixelRatio: 2 });
+      const link = document.createElement('a');
+      link.download = `finotaur-report-${slides[selected]?.key ?? 'slide'}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.warn('[ReportShell] Failed to capture slide image', err);
+    }
+  }, [selected, slides]);
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface-base">
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-surface-base">
+      {/* Atmosphere — faint gold-tinted glow, top-center. Institutional, not neon. */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(201,166,70,0.04) 0%, rgba(201,166,70,0.02) 35%, transparent 70%)',
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Optional page-level header */}
+      {title && (
+        <div className="relative z-10 flex flex-shrink-0 flex-col items-center gap-ds-1 px-ds-5 pt-ds-5 text-center">
+          <div className="flex items-center gap-ds-2">
+            <h1 className="text-2xl font-semibold text-ink-primary sm:text-3xl">{title}</h1>
+            {!isCurrentLocked && (
+              <button
+                type="button"
+                onClick={handleCapture}
+                aria-label="Download slide image"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle text-ink-secondary transition-colors duration-base ease-out hover:border-gold-border hover:text-gold-primary"
+              >
+                <Camera className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {subtitle && (
+            <p className="font-mono text-sm tabular-nums text-ink-tertiary">{subtitle}</p>
+          )}
+        </div>
+      )}
+
       {/* Top bar: dot progress + close */}
-      <div className="flex flex-shrink-0 items-center justify-between px-ds-5 py-ds-4">
+      <div className="relative z-10 flex flex-shrink-0 items-center justify-between px-ds-5 py-ds-4">
         <div className="flex items-center gap-2" role="tablist" aria-label="Report slides">
           {slides.map((s, i) => (
             <button
@@ -72,7 +131,9 @@ export function ReportShell({ slides, children, onClose }: ReportShellProps) {
                 'h-1.5 rounded-full transition-all duration-base ease-out cursor-pointer',
                 i === selected
                   ? 'w-8 bg-gradient-gold'
-                  : 'w-1.5 bg-border-ds-default hover:bg-border-ds-strong',
+                  : i < selected
+                    ? 'w-1.5 bg-gold-primary/60 hover:bg-gold-primary/80'
+                    : 'w-1.5 bg-surface-2 hover:bg-border-ds-strong',
               )}
             />
           ))}
@@ -88,13 +149,13 @@ export function ReportShell({ slides, children, onClose }: ReportShellProps) {
       </div>
 
       {/* Slide carousel */}
-      <div className="relative min-h-0 flex-1 px-ds-5 pb-ds-6">
+      <div className="relative z-10 min-h-0 flex-1 px-ds-5 pb-ds-6">
         <button
           type="button"
           aria-label="Previous slide"
           onClick={() => api?.scrollPrev()}
           disabled={selected === 0}
-          className="absolute left-ds-2 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors duration-base ease-out hover:border-gold-border hover:text-gold-primary disabled:pointer-events-none disabled:opacity-30 sm:flex"
+          className="absolute left-ds-2 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors duration-base ease-out hover:border-gold-border hover:text-gold-primary disabled:pointer-events-none disabled:opacity-30 sm:flex"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden="true" />
         </button>
@@ -103,7 +164,13 @@ export function ReportShell({ slides, children, onClose }: ReportShellProps) {
           <CarouselContent className="h-full">
             {slides.map((s, i) => (
               <CarouselItem key={s.key} className="flex h-full items-center justify-center">
-                <div className="mx-auto h-full max-h-full w-full max-w-4xl overflow-y-auto py-ds-2">
+                <div
+                  ref={(el) => {
+                    slideRefs.current[i] = el;
+                  }}
+                  data-report-slide={s.key}
+                  className="mx-auto h-full max-h-full w-full max-w-4xl overflow-y-auto py-ds-2"
+                >
                   {children[i]}
                 </div>
               </CarouselItem>
@@ -116,7 +183,7 @@ export function ReportShell({ slides, children, onClose }: ReportShellProps) {
           aria-label="Next slide"
           onClick={() => api?.scrollNext()}
           disabled={selected === slides.length - 1}
-          className="absolute right-ds-2 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors duration-base ease-out hover:border-gold-border hover:text-gold-primary disabled:pointer-events-none disabled:opacity-30 sm:flex"
+          className="absolute right-ds-2 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border-[0.5px] border-border-ds-subtle bg-surface-1 text-ink-secondary transition-colors duration-base ease-out hover:border-gold-border hover:text-gold-primary disabled:pointer-events-none disabled:opacity-30 sm:flex"
         >
           <ChevronRight className="h-5 w-5" aria-hidden="true" />
         </button>
