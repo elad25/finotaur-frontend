@@ -10,8 +10,8 @@
 // SSR-safe: no window/document access.
 // =====================================================
 
-import { useNavigate } from 'react-router-dom';
-import { ASSET_CLASSES, getMarketsItemsForAsset } from '@/constants/markets';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ASSET_CLASSES, getMarketsItemsForAsset, isMarketsPath } from '@/constants/markets';
 import { useAssetSelector } from '@/contexts/AssetSelectorContext';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { isMarketsBlocked } from '@/lib/marketsAccess';
@@ -20,8 +20,14 @@ import { Lock } from 'lucide-react';
 
 export function MarketsAssetTabs() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { selectedAsset, setSelectedAsset } = useAssetSelector();
   const { hasBetaAccess } = useAdminAuth();
+
+  // Highlight a tab only when the user is actually ON a Markets page.
+  // Pages that merely fall back to the markets domain (e.g. /app/settings)
+  // must not show a lit asset tab — selectedAsset defaults to 'stocks'.
+  const onMarketsPage = isMarketsPath(location.pathname);
 
   const handleSelect = (assetId: (typeof ASSET_CLASSES)[number]['id']) => {
     setSelectedAsset(assetId);
@@ -49,7 +55,7 @@ export function MarketsAssetTabs() {
     >
       {ASSET_CLASSES.map((asset) => {
         const Icon = asset.icon;
-        const isActive = asset.id === selectedAsset;
+        const isActive = onMarketsPage && asset.id === selectedAsset;
         // Whole Markets research area is beta-only. comingSoon assets (Options/Futures)
         // stay sealed even for beta. Everything else: open to beta, locked for the public.
         const blocked = asset.comingSoon || isMarketsBlocked(hasBetaAccess);
