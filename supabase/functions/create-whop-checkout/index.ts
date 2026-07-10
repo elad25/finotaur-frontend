@@ -1,7 +1,11 @@
 // =====================================================
-// FINOTAUR CREATE WHOP CHECKOUT - v1.4.0
+// FINOTAUR CREATE WHOP CHECKOUT - v1.5.0
 // =====================================================
-// 
+//
+// 🔥 v1.5.0 CHANGES:
+// - ADDED: affiliate_code now also written into checkout metadata
+//   (member-referral attribution fallback for the webhook)
+//
 // 🔥 v1.4.0 CHANGES:
 // - ADDED: Auto-apply FINOTAUR50 coupon for Top Secret & War Zone
 // - 50% off first 2 payments for intro discount plans
@@ -78,6 +82,7 @@ interface CheckoutRequest {
   email?: string;       // Email for prefill
   user_id?: string;     // User ID from client (backup)
   discount_code?: string; // 🔥 v1.8.0: Welcome offer / promo code from client
+  acknowledge_forfeit?: boolean; // yearly-downgrade forfeit confirmation (was used untyped)
 }
 
 interface WhopCheckoutResponse {
@@ -338,6 +343,12 @@ serve(async (req: Request) => {
 
     if (subscription_category) {
       metadata.subscription_category = subscription_category;
+    }
+
+    // 🔥 v1.5.0: Also write affiliate_code into metadata — fallback attribution
+    // source for the webhook when no promo code was applied at payment time.
+    if (affiliate_code) {
+      metadata.affiliate_code = affiliate_code;
     }
 
     metadata.expected_email = finotaurEmail;

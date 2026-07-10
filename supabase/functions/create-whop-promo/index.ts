@@ -1,14 +1,34 @@
 // supabase/functions/create-whop-promo/index.ts
 // ============================================
-// 🎯 יוצר קופון ב-Whop אחרי שהאדמין מאשר אפילייט
+// 🎯 Creates a Whop percentage promo code
 // ============================================
-// 🔥 v2.1 FIX: Fixed stock limit issue
+// 🔥 v3.0.0 — Phase 1 member-refers-friend:
+//  - discount_percent now accepts any integer 1-100 (previously admin-only 10/15)
+//  - NEW auth path: service-role bearer (whop-webhook -> function), body { mode:'member', user_id }
+//  - NEW auth path: self-service member JWT, body { mode:'member' } (provisions own coupon only,
+//    user_id always taken from the verified JWT — any body.user_id is ignored)
+//  - Both member paths call ensure_member_affiliate() RPC, are idempotent on
+//    affiliates.whop_promo_id, and record promo_provision_error/promo_provision_attempts
+//    on Whop API failure instead of throwing.
 //
-// FLOW:
+// FLOW (admin path — unchanged):
 // 1. Admin approves affiliate application in the dashboard
 // 2. Frontend calls this Edge Function with affiliate details
 // 3. Edge Function creates promo code in Whop API
 // 4. Updates affiliate record with whop_promo_id
+//
+// FLOW (member path — new):
+// 1. A paying member requests their own referral coupon (self-service), OR
+//    whop-webhook fires this after a member's first payment (service-role, mode='member')
+// 2. Edge Function calls ensure_member_affiliate(user_id) RPC — creates/loads
+//    the member's affiliates row (idempotent, enforces the member_referral kill-switch
+//    and the "must be a paying member" check)
+// 3. If affiliates.whop_promo_id is already set -> return it (idempotent success)
+// 4. Else create a percentage promo code in Whop API using the affiliate's coupon_code,
+//    defaulting the discount from affiliate_config.member_referral.friend_discount_percent
+// 5. On success: UPDATE affiliates.whop_promo_id (+ clear promo_provision_error)
+//    On Whop API failure: UPDATE affiliates.promo_provision_error / promo_provision_attempts,
+//    return 502 — never throws into the caller (webhook / self-service UI)
 //
 // SETUP - Add these secrets in Supabase Dashboard:
 // - WHOP_API_KEY: Your Whop API key from dashboard
@@ -16,7 +36,7 @@
 // ============================================
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -28,10 +48,14 @@ const corsHeaders = {
 // ============================================
 
 interface CreatePromoRequest {
-  affiliate_id: string       // UUID של האפילייט ב-DB
-  coupon_code: string        // הקוד שהאדמין אישר
-  discount_percent: number   // 10 או 15
-  affiliate_name?: string    // שם האפילייט (optional, for metadata)
+  // Admin path (unchanged)
+  affiliate_id?: string       // UUID of the affiliate row in the DB
+  coupon_code?: string        // Code approved by the admin
+  discount_percent?: number   // Any integer 1-100
+  affiliate_name?: string     // Affiliate display name (optional, for metadata)
+  // Member path (new, Phase 1)
+  mode?: 'member'
+  user_id?: string             // Only honored on the service-role auth path
 }
 
 interface WhopPromoResponse {
@@ -41,6 +65,20 @@ interface WhopPromoResponse {
   promo_type: string
   status: 'active' | 'inactive' | 'archived'
   currency: string
+}
+
+// ============================================
+// HELPER: constant-time secret comparison (avoids timing oracle on the
+// service-role bearer check below — mirrors whop-webhook's timingSafeEqual)
+// ============================================
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return diff === 0
 }
 
 // ============================================
@@ -55,20 +93,20 @@ async function createWhopPromoCode(
   affiliateId: string,
   affiliateName?: string
 ): Promise<WhopPromoResponse> {
-  
+
   console.log(`[Whop API] Creating promo code: ${code} with ${discountPercent}% discount`)
   console.log(`[Whop API] Company ID: ${companyId}`)
-  
+
   // 🔥 v2.1 FIX: Use high stock number instead of 0
   const requestBody = {
     code: code.toUpperCase(),           // Whop codes are case-insensitive
-    amount_off: discountPercent,        // אחוז ההנחה
+    amount_off: discountPercent,        // discount percent
     base_currency: 'usd',
-    promo_type: 'percentage',           // אחוזים, לא סכום קבוע
-    new_users_only: true,               // רק למשתמשים חדשים
+    promo_type: 'percentage',           // percentage, not fixed amount
+    new_users_only: true,               // new users only
     stock: 999999,                      // 🔥 FIX: High number instead of 0!
-    unlimited_stock: true,              // ללא הגבלת שימושים
-    number_of_intervals: 0,             // 0 = forever (לא מוגבל בזמן)
+    unlimited_stock: true,              // unlimited usage
+    number_of_intervals: 0,             // 0 = forever (not time-limited)
   };
 
   console.log(`[Whop API] Request body:`, JSON.stringify(requestBody, null, 2));
@@ -102,6 +140,155 @@ async function createWhopPromoCode(
 }
 
 // ============================================
+// MEMBER PATH HANDLER (shared by service-role + self-service auth)
+// ============================================
+
+async function handleMemberPromo(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Response> {
+  const jsonResponse = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status,
+    })
+
+  // ============================================
+  // 1. KILL-SWITCH CHECK
+  // ============================================
+  const { data: configRow } = await supabase
+    .from('affiliate_config')
+    .select('config_value')
+    .eq('config_key', 'member_referral')
+    .single()
+
+  const config = (configRow?.config_value ?? {}) as { enabled?: boolean; friend_discount_percent?: number }
+
+  if (config.enabled !== true) {
+    return jsonResponse({ ok: false, error: 'member_referral_disabled' }, 403)
+  }
+
+  const discountPercent = Number.isInteger(config.friend_discount_percent)
+    ? (config.friend_discount_percent as number)
+    : 20
+
+  // ============================================
+  // 2. ENSURE THE MEMBER'S AFFILIATE ROW EXISTS (idempotent)
+  // ============================================
+  const { data: ensureResult, error: ensureError } = await supabase.rpc('ensure_member_affiliate', {
+    p_user_id: userId,
+  })
+
+  if (ensureError) {
+    console.error('[create-whop-promo] ensure_member_affiliate RPC error:', ensureError)
+    return jsonResponse({ ok: false, error: ensureError.message }, 403)
+  }
+
+  if (!ensureResult?.ok) {
+    return jsonResponse({ ok: false, error: ensureResult?.reason ?? 'ensure_member_affiliate_failed' }, 403)
+  }
+
+  // ============================================
+  // 3. IDEMPOTENT: promo already provisioned by a prior call
+  // ============================================
+  if (ensureResult.whop_promo_id) {
+    return jsonResponse({
+      ok: true,
+      coupon_code: ensureResult.coupon_code,
+      whop_promo_id: ensureResult.whop_promo_id,
+      discount_percent: discountPercent,
+    }, 200)
+  }
+
+  // Re-fetch the affiliate row: ensure_member_affiliate() only returns a JSON
+  // summary, but we need the row id (+ latest whop_promo_id, to catch a
+  // concurrent provisioning race) for the UPDATE below.
+  const { data: affiliateRow, error: affiliateFetchError } = await supabase
+    .from('affiliates')
+    .select('id, coupon_code, whop_promo_id, display_name, promo_provision_attempts')
+    .eq('user_id', userId)
+    .single()
+
+  if (affiliateFetchError || !affiliateRow) {
+    console.error('[create-whop-promo] affiliate row fetch failed:', affiliateFetchError)
+    return jsonResponse({ ok: false, error: 'affiliate_row_not_found' }, 500)
+  }
+
+  if (affiliateRow.whop_promo_id) {
+    // Race: another concurrent call already provisioned it.
+    return jsonResponse({
+      ok: true,
+      coupon_code: affiliateRow.coupon_code,
+      whop_promo_id: affiliateRow.whop_promo_id,
+      discount_percent: discountPercent,
+    }, 200)
+  }
+
+  // ============================================
+  // 4. WHOP CREDENTIALS
+  // ============================================
+  const whopApiKey = Deno.env.get('WHOP_API_KEY')
+  const whopCompanyId = Deno.env.get('WHOP_COMPANY_ID')
+
+  if (!whopApiKey || !whopCompanyId) {
+    return jsonResponse({ ok: false, error: 'whop_credentials_not_configured' }, 500)
+  }
+
+  // ============================================
+  // 5. CREATE THE PROMO IN WHOP
+  // ============================================
+  try {
+    const whopPromo = await createWhopPromoCode(
+      whopApiKey,
+      whopCompanyId,
+      affiliateRow.coupon_code,
+      discountPercent,
+      affiliateRow.id,
+      affiliateRow.display_name
+    )
+
+    const { error: updateError } = await supabase
+      .from('affiliates')
+      .update({
+        whop_promo_id: whopPromo.id,
+        promo_provision_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', affiliateRow.id)
+
+    if (updateError) {
+      console.error('[create-whop-promo] Warning: Failed to update member affiliate record:', updateError)
+      // Don't fail the request — the promo was created successfully in Whop.
+    }
+
+    return jsonResponse({
+      ok: true,
+      coupon_code: affiliateRow.coupon_code,
+      whop_promo_id: whopPromo.id,
+      discount_percent: discountPercent,
+    }, 200)
+  } catch (whopError) {
+    const message = whopError instanceof Error ? whopError.message : String(whopError)
+    console.error('[create-whop-promo] Whop API failure for member promo:', message)
+
+    const { error: failureUpdateError } = await supabase
+      .from('affiliates')
+      .update({
+        promo_provision_error: message,
+        promo_provision_attempts: (affiliateRow.promo_provision_attempts ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', affiliateRow.id)
+
+    if (failureUpdateError) {
+      console.error('[create-whop-promo] Warning: Failed to record promo_provision_error:', failureUpdateError)
+    }
+
+    return jsonResponse({ ok: false, error: message }, 502)
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -113,7 +300,7 @@ serve(async (req) => {
 
   try {
     // ============================================
-    // 1. VALIDATE AUTHORIZATION
+    // 1. VALIDATE AUTHORIZATION HEADER PRESENCE
     // ============================================
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
@@ -125,10 +312,37 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Verify the user is authenticated
     const token = authHeader.replace('Bearer ', '')
+    const body: CreatePromoRequest = await req.json()
+
+    // ============================================
+    // AUTH PATH A — Service role (whop-webhook -> this function, mode='member')
+    // ============================================
+    if (body.mode === 'member' && supabaseServiceKey && timingSafeEqual(token, supabaseServiceKey)) {
+      if (!body.user_id) {
+        throw new Error('Missing required field: user_id')
+      }
+      return await handleMemberPromo(supabase, body.user_id)
+    }
+
+    // ============================================
+    // AUTH PATH B — Self-service member (own JWT, mode='member')
+    // Provisions ONLY the caller's own coupon — user_id always comes from the
+    // verified JWT, any body.user_id is ignored.
+    // ============================================
+    if (body.mode === 'member') {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+      if (authError || !user) {
+        throw new Error('Unauthorized: Invalid token')
+      }
+      return await handleMemberPromo(supabase, user.id)
+    }
+
+    // ============================================
+    // AUTH PATH C — Admin (existing behavior, unchanged)
+    // ============================================
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    
+
     if (authError || !user) {
       throw new Error('Unauthorized: Invalid token')
     }
@@ -147,16 +361,16 @@ serve(async (req) => {
     // ============================================
     // 2. PARSE REQUEST
     // ============================================
-    const body: CreatePromoRequest = await req.json()
     const { affiliate_id, coupon_code, discount_percent, affiliate_name } = body
 
     if (!affiliate_id || !coupon_code) {
       throw new Error('Missing required fields: affiliate_id, coupon_code')
     }
 
-    // Validate discount percent (only 10 or 15 allowed)
-    const validDiscounts = [10, 15]
-    const discount = validDiscounts.includes(discount_percent) ? discount_percent : 10
+    // 🔥 v3.0.0: Accept any integer percent 1-100 (previously locked to 10 or 15)
+    const discount = Number.isInteger(discount_percent) && (discount_percent as number) >= 1 && (discount_percent as number) <= 100
+      ? (discount_percent as number)
+      : 10
 
     console.log(`[create-whop-promo] Creating promo for affiliate ${affiliate_id}`)
     console.log(`[create-whop-promo] Code: ${coupon_code}, Discount: ${discount}%`)
@@ -225,7 +439,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[create-whop-promo] Error:', error)
-    
+
     return new Response(
       JSON.stringify({
         success: false,
