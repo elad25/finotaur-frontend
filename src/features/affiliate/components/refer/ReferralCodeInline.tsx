@@ -57,7 +57,10 @@ export function ReferralCodeInline() {
     (async () => {
       const row = await fetchMemberReferralRow(user.id);
       if (cancelled) return;
-      setState(row?.coupon_code ? { kind: 'ready', row } : { kind: 'no-code' });
+      // "ready" requires a LIVE Whop promo, not just a code — a code without
+      // a whop_promo_id (never minted, or the Whop coupon was deleted) gives
+      // the friend no discount at checkout, so it needs (re)provisioning.
+      setState(row?.coupon_code && row?.whop_promo_id ? { kind: 'ready', row } : { kind: 'no-code' });
     })();
 
     return () => {
@@ -83,7 +86,7 @@ export function ReferralCodeInline() {
     }
 
     const freshRow = user?.id ? await fetchMemberReferralRow(user.id) : null;
-    setState({ kind: 'ready', row: freshRow?.coupon_code ? freshRow : rowFromProvisionResult(result.data) });
+    setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
   }, [user?.id]);
 
   const copy = useCallback(async (text: string, type: 'code' | 'link') => {

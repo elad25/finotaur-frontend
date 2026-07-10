@@ -98,7 +98,11 @@ export default function ReferFriendPage() {
       const row = await fetchMemberReferralRow(user.id);
       if (cancelled) return;
 
-      if (row?.coupon_code) {
+      // "ready" requires a LIVE Whop promo, not just a code. A code without a
+      // whop_promo_id (never minted, or the Whop coupon was deleted) gives the
+      // friend no discount at checkout — fall through to (re)provisioning,
+      // which re-mints the Whop promo for the member's existing code.
+      if (row?.coupon_code && row?.whop_promo_id) {
         setState({ kind: 'ready', row });
         return;
       }
@@ -122,7 +126,7 @@ export default function ReferFriendPage() {
 
       const freshRow = await fetchMemberReferralRow(user.id);
       if (cancelled) return;
-      setState({ kind: 'ready', row: freshRow?.coupon_code ? freshRow : rowFromProvisionResult(result.data) });
+      setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
     })();
 
     return () => {
