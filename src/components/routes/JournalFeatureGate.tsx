@@ -23,7 +23,7 @@ import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { Button } from '@/components/ds/Button';
 import { JournalPreviewContext } from '@/contexts/JournalPreviewContext';
 
-type GatedFeature = 'shadow' | 'revenge-radar' | 'trade-copier' | 'risk-management';
+type GatedFeature = 'shadow' | 'revenge-radar' | 'trade-copier' | 'risk-management' | 'ai-summary';
 
 interface JournalFeatureGateProps {
   feature: GatedFeature;
@@ -46,6 +46,9 @@ const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
   },
   'risk-management': {
     title: 'Risk Management',
+  },
+  'ai-summary': {
+    title: 'AI Summary — Leak Detector',
   },
 };
 

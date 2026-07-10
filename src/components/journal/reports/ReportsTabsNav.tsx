@@ -1,17 +1,15 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const TABS = [
+  { label: 'AI Summary', path: '/app/journal/reports/ai-summary' },
   { label: 'Overview', path: '/app/journal/reports/overview' },
   { label: 'Performance', path: '/app/journal/reports/performance' },
-  { label: 'Progress', path: '/app/journal/reports/progress' },
-  { label: 'Day View', path: '/app/journal/reports/day-view' },
   { label: 'Breakdowns', path: '/app/journal/reports/breakdowns' },
-  { label: 'Options', path: '/app/journal/reports/options' },
+  { label: 'Day View', path: '/app/journal/reports/day-view' },
   { label: 'Calendar', path: '/app/journal/reports/calendar' },
   { label: 'Compare', path: '/app/journal/reports/compare' },
-  { label: 'Scores', path: '/app/journal/reports/scores' },
-  { label: 'Summary', path: '/app/journal/reports/summary' },
-  { label: 'AI Recaps', path: '/app/journal/reports/recaps' },
+  { label: 'Options', path: '/app/journal/reports/options' },
+  { label: 'Progress', path: '/app/journal/reports/progress' },
 ];
 
 export default function ReportsTabsNav() {

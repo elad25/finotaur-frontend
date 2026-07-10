@@ -20,7 +20,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Printer } from 'lucide-react';
 import { useTrades } from '@/hooks/useTradesData';
 import { Card } from '@/components/ds/Card';
 import { Price, Change } from '@/components/ds/NumberDisplay';
@@ -259,12 +259,22 @@ export default function JournalReportsOverview() {
   return (
     <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-8">
 
-      {/* Heading */}
-      <div>
-        <h2 className="text-2xl font-semibold text-yellow-100">Overview</h2>
-        <p className="text-sm text-zinc-400 mt-1">
-          Your complete performance summary across {tradeCount} trades in {loggedDays} logged days.
-        </p>
+      {/* Heading + Export button */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold text-yellow-100">Overview</h2>
+          <p className="text-sm text-zinc-400 mt-1">
+            Your complete performance summary across {tradeCount} trades in {loggedDays} logged days.
+          </p>
+        </div>
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border-ds-subtle bg-surface-1 text-sm text-ink-secondary hover:text-ink-primary hover:border-border-ds-default transition-colors shrink-0"
+          aria-label="Export PDF"
+        >
+          <Printer className="w-4 h-4" />
+          Export PDF
+        </button>
       </div>
 
       {/* ── YOUR STATS ── */}

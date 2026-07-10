@@ -200,15 +200,13 @@ const JournalImport = lazy(() => import("@/pages/app/journal/Import"));
 const JournalExport = lazy(() => import("@/pages/app/journal/Export"));
 const JournalNotes = lazy(() => import("@/pages/app/journal/Notes"));
 const JournalReportsLayout = lazy(() => import("@/pages/app/journal/reports/ReportsLayout"));
+const JournalReportsAISummary = lazy(() => import("@/pages/app/journal/reports/AISummary"));
 const JournalReportsProgress = lazy(() => import("@/pages/app/journal/reports/ProgressTracker"));
 const JournalReportsDayView = lazy(() => import("@/pages/app/journal/reports/DayView"));
-const JournalReportsRecaps = lazy(() => import("@/pages/app/journal/reports/AIRecaps"));
 const JournalReportsBreakdowns = lazy(() => import("@/pages/app/journal/reports/Breakdowns"));
 const JournalReportsAnnualCalendar = lazy(() => import("@/pages/app/journal/reports/AnnualCalendar"));
 const JournalReportsCompare = lazy(() => import("@/pages/app/journal/reports/CompareReports"));
-const JournalReportsScores = lazy(() => import("@/pages/app/journal/reports/Scores"));
 const JournalReportsOverview = lazy(() => import("@/pages/app/journal/reports/Overview"));
-const JournalReportsSummary = lazy(() => import("@/pages/app/journal/reports/Summary"));
 const JournalReportsPerformance = lazy(() => import("@/pages/app/journal/reports/Performance"));
 const JournalReportsOptions = lazy(() => import("@/pages/app/journal/reports/OptionsAnalytics"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
@@ -767,7 +765,8 @@ function AppContent() {
 {/* Legacy keyword/template "AI Review" retired; redirect to the real LLM-grounded coach (finotaur-ai) */}
 <Route path="journal/ai-review" element={<Navigate to="/app/journal/finotaur-ai" replace />} />
 <Route path="journal/reports" element={<JournalRoute><JournalReportsLayout /></JournalRoute>}>
-  <Route index element={<Navigate to="/app/journal/reports/overview" replace />} />
+  <Route index element={<Navigate to="/app/journal/reports/ai-summary" replace />} />
+  <Route path="ai-summary" element={<JournalFeatureGate feature="ai-summary"><JournalReportsAISummary /></JournalFeatureGate>} />
   <Route path="overview" element={<JournalReportsOverview />} />
   <Route path="progress" element={<JournalReportsProgress />} />
   <Route path="day-view" element={<JournalReportsDayView />} />
@@ -775,9 +774,9 @@ function AppContent() {
   <Route path="options" element={<JournalReportsOptions />} />
   <Route path="calendar" element={<JournalReportsAnnualCalendar />} />
   <Route path="compare" element={<JournalReportsCompare />} />
-  <Route path="scores" element={<JournalReportsScores />} />
-  <Route path="summary" element={<JournalReportsSummary />} />
-  <Route path="recaps" element={<JournalReportsRecaps />} />
+  <Route path="scores" element={<Navigate to="/app/journal/reports/ai-summary" replace />} />
+  <Route path="summary" element={<Navigate to="/app/journal/reports/overview" replace />} />
+  <Route path="recaps" element={<Navigate to="/app/journal/reports/ai-summary" replace />} />
   <Route path="performance" element={<JournalReportsPerformance />} />
 </Route>
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
