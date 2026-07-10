@@ -20,12 +20,16 @@ export function SymbolAutocomplete({
   onSelect,
   variant = 'toolbar',
   filterToAssetClass = false,
+  filterSymbols,
 }: {
   symbol: string;
   assetClass?: AssetClass;
   onSelect: (symbol: string) => void;
   variant?: 'toolbar' | 'field';
   filterToAssetClass?: boolean;
+  /** Optional extra predicate applied on top of `filterToAssetClass` — e.g.
+   *  restricting futures suggestions to symbols with a populated data cache. */
+  filterSymbols?: (entry: SymbolEntry & { assetClass: AssetClass }) => boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -33,13 +37,13 @@ export function SymbolAutocomplete({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const universe = useMemo(
-    () =>
-      filterToAssetClass && assetClass
-        ? ALL_SYMBOLS.filter((u) => u.assetClass === assetClass)
-        : ALL_SYMBOLS,
-    [filterToAssetClass, assetClass],
-  );
+  const universe = useMemo(() => {
+    let list = filterToAssetClass && assetClass
+      ? ALL_SYMBOLS.filter((u) => u.assetClass === assetClass)
+      : ALL_SYMBOLS;
+    if (filterSymbols) list = list.filter(filterSymbols);
+    return list;
+  }, [filterToAssetClass, assetClass, filterSymbols]);
 
   // Best-effort reverse lookup: show the human ticker for the active symbol;
   // fall back to the raw source symbol if it isn't in the universe.

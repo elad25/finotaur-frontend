@@ -9,7 +9,7 @@
 // sessions are unaffected. CommissionConfig is stored on the session and
 // threaded into useBacktestSession via setCommissionConfig on chart load.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CalendarDays, Plus, Loader2 } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
@@ -46,12 +46,67 @@ import {
   type BacktestSession,
 } from '@/types/backtestSession';
 import { SymbolAutocomplete } from './SymbolAutocomplete';
-import type { AssetClass } from './symbolUniverse';
+import type { AssetClass, SymbolEntry } from './symbolUniverse';
 import { cn } from '@/lib/utils';
 import {
   type CommissionConfig,
   DEFAULT_COMMISSION_CONFIG,
 } from '@/lib/backtest/orderEngine';
+import { isDatabentoCachedSymbol } from '@/components/charting/dataSources';
+import { supabase } from '@/lib/supabase';
+
+/** Probe symbol used to read the shared Databento futures cache's date coverage — all
+ *  14 cached roots were seeded together, so MNQ's range represents the whole cache. */
+const FUTURES_COVERAGE_PROBE_SYMBOL = 'MNQ';
+
+/** Restricts futures symbol suggestions to the roots that actually have cached data. */
+function isCachedFuturesEntry(entry: SymbolEntry & { assetClass: AssetClass }): boolean {
+  return isDatabentoCachedSymbol(entry.symbol);
+}
+
+interface FuturesCoverage {
+  from: string; // ISO date-only prefix, e.g. "2026-01-04"
+  to: string;
+}
+
+/** Parses a "YYYY-MM-DD" (or full ISO) string into a local-midnight Date,
+ *  matching the convention `getTodayNY`/`toIsoDate` use elsewhere in this file. */
+function parseIsoDateOnly(iso: string): Date {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Fetches the earliest/latest cached bar dates for the Databento futures cache.
+ *  Returns null on any failure — the caller treats a missing coverage hint as
+ *  "unknown", not as an error. */
+async function fetchFuturesCoverage(): Promise<FuturesCoverage | null> {
+  try {
+    const [firstRes, lastRes] = await Promise.all([
+      supabase
+        .from('backtest_candles')
+        .select('ts')
+        .eq('source', 'databento')
+        .eq('symbol', FUTURES_COVERAGE_PROBE_SYMBOL)
+        .eq('timeframe', '1m')
+        .order('ts', { ascending: true })
+        .limit(1),
+      supabase
+        .from('backtest_candles')
+        .select('ts')
+        .eq('source', 'databento')
+        .eq('symbol', FUTURES_COVERAGE_PROBE_SYMBOL)
+        .eq('timeframe', '1m')
+        .order('ts', { ascending: false })
+        .limit(1),
+    ]);
+    const from = (firstRes.data as { ts: string }[] | null)?.[0]?.ts;
+    const to = (lastRes.data as { ts: string }[] | null)?.[0]?.ts;
+    if (!from || !to) return null;
+    return { from, to };
+  } catch {
+    return null;
+  }
+}
 
 const GOLD = '#C9A646';
 const ASSET_ORDER: BacktestAssetType[] = ['forex', 'stocks', 'crypto', 'futures'];
@@ -119,6 +174,16 @@ export function CreateBacktestSessionModal({
   const [creatingStrategy, setCreatingStrategy] = useState(false);
   const [newStrategyName, setNewStrategyName] = useState('');
 
+  // Futures data-coverage hint (lazy-fetched once, the first time the Futures
+  // tab is selected in this modal session).
+  const [futuresCoverage, setFuturesCoverage] = useState<FuturesCoverage | null>(null);
+  const [futuresCoverageFetched, setFuturesCoverageFetched] = useState(false);
+
+  useEffect(() => {
+    if (assetType !== 'futures' || futuresCoverageFetched) return;
+    setFuturesCoverageFetched(true);
+    fetchFuturesCoverage().then(setFuturesCoverage);
+  }, [assetType, futuresCoverageFetched]);
 
   const resetForm = () => {
     setName('');
@@ -132,6 +197,8 @@ export function CreateBacktestSessionModal({
     setError(null);
     setCreatingStrategy(false);
     setNewStrategyName('');
+    setFuturesCoverage(null);
+    setFuturesCoverageFetched(false);
   };
 
   const handleClose = (next: boolean) => {
@@ -175,6 +242,10 @@ export function CreateBacktestSessionModal({
       setError('Please select a symbol');
       return;
     }
+    if (assetType === 'futures' && !isDatabentoCachedSymbol(symbol)) {
+      setError("Historical data for this futures symbol isn't available yet. Choose one of the listed symbols.");
+      return;
+    }
     const balance = Number(startBalance);
     if (!balance || balance <= 0) {
       setError('Enter a valid starting balance');
@@ -189,6 +260,16 @@ export function CreateBacktestSessionModal({
     if (range.from > todayNY || range.to > todayNY) {
       setError('Backtest dates cannot be in the future');
       return;
+    }
+    // Guard: for futures, the selected range must overlap the cache's actual
+    // coverage window (only enforced when the coverage fetch succeeded).
+    if (assetType === 'futures' && futuresCoverage) {
+      const coverageFrom = parseIsoDateOnly(futuresCoverage.from);
+      const coverageTo = parseIsoDateOnly(futuresCoverage.to);
+      if (range.to < coverageFrom || range.from > coverageTo) {
+        setError('Selected dates are outside the available futures data range.');
+        return;
+      }
     }
 
     const selectedStrategy = strategies.find((s: any) => s.id === strategyId);
@@ -337,6 +418,7 @@ export function CreateBacktestSessionModal({
               symbol={symbol}
               assetClass={assetType as AssetClass}
               filterToAssetClass
+              filterSymbols={assetType === 'futures' ? isCachedFuturesEntry : undefined}
               variant="field"
               onSelect={setSymbol}
             />
@@ -406,6 +488,14 @@ export function CreateBacktestSessionModal({
                 </PopoverContent>
               </Popover>
               <p className="text-[10px] text-gray-600">Start time is 12 am US/Eastern</p>
+              {assetType === 'futures' && futuresCoverage && (
+                <p className="text-[10px] text-gray-600">
+                  Futures data available: {formatRangeLabel({
+                    from: parseIsoDateOnly(futuresCoverage.from),
+                    to: parseIsoDateOnly(futuresCoverage.to),
+                  })}
+                </p>
+              )}
             </div>
           </div>
 

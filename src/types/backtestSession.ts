@@ -80,4 +80,4 @@ export const SYMBOLS_BY_ASSET: Record<BacktestAssetType, string[]> = {
 };
 
 /** Asset types that are not yet fully supported (rendered as "Soon" — mirrors reference). */
-export const COMING_SOON_ASSETS: BacktestAssetType[] = ['futures'];
+export const COMING_SOON_ASSETS: BacktestAssetType[] = [];
