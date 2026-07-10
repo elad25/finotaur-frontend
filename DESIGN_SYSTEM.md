@@ -156,8 +156,9 @@ All spacing is a multiple of 8px. No exceptions for ad-hoc values.
 | Gap | `gap-ds-N`, `gap-x-ds-N`, `gap-y-ds-N` |
 | Sizing | `w-ds-N`, `h-ds-N`, `size-ds-N` |
 | Inset (positioning) | `top-ds-N`, `right-ds-N`, `bottom-ds-N`, `left-ds-N`, `inset-ds-N`, `inset-x-ds-N`, `inset-y-ds-N` |
+| Space between siblings | `space-x-ds-N`, `space-y-ds-N` (child-selector margins, same semantics as core `space-x/y`; no `-reverse`) |
 
-⚠️ `space-x-ds-N` / `space-y-ds-N` are **not** generated — they silently no-op. Use `gap-ds-N` on a flex/grid parent instead. Any `ds-` utility not in the table above does not exist; Tailwind drops unknown classes without warning, so a typo'd family mispositions/misspaces the element silently.
+⚠️ Any `ds-` utility not in the table above does not exist; Tailwind drops unknown classes without warning, so a typo'd family mispositions/misspaces the element silently. Prefer `gap-ds-N` on flex/grid parents over `space-*-ds-N` in new code.
 
 ---
 

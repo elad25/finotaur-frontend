@@ -14,10 +14,8 @@
  *   w-ds-N, h-ds-N, size-ds-N
  *   top-ds-N, right-ds-N, bottom-ds-N, left-ds-N
  *   inset-ds-N, inset-x-ds-N, inset-y-ds-N
- *
- * ⚠️ NOT implemented (despite historical usage in src/): space-x-ds-N /
- * space-y-ds-N — these silently no-op. They need child-selector rules;
- * tracked as a separate follow-up. Use gap-ds-N on a flex/grid parent.
+ *   space-x-ds-N, space-y-ds-N (sibling margins via child selector,
+ *   same selector as Tailwind core space-x/y; no -reverse variant)
  */
 
 const plugin = require('tailwindcss/plugin');
@@ -54,6 +52,12 @@ module.exports = plugin(function ({ matchUtilities }) {
       'gap-ds': (v) => ({ gap: v }),
       'gap-x-ds': (v) => ({ columnGap: v }),
       'gap-y-ds': (v) => ({ rowGap: v }),
+      'space-x-ds': (v) => ({
+        '& > :not([hidden]) ~ :not([hidden])': { marginLeft: v },
+      }),
+      'space-y-ds': (v) => ({
+        '& > :not([hidden]) ~ :not([hidden])': { marginTop: v },
+      }),
       'w-ds': (v) => ({ width: v }),
       'h-ds': (v) => ({ height: v }),
       'size-ds': (v) => ({ width: v, height: v }),
