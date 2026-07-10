@@ -147,6 +147,18 @@ All spacing is a multiple of 8px. No exceptions for ad-hoc values.
 
 **The 4px exception:** 4px is allowed because it's half the grid and used for fine-grained gaps (icon-to-text). Anything between 4px and 8px (5, 6, 7) is forbidden.
 
+**Tailwind utilities (`ds-` namespace):** the spacing plugin (`tailwind-plugin-ds-spacing.cjs`) generates px-exact utilities for every scale value 1–9:
+
+| Family | Utilities |
+|---|---|
+| Padding | `p-ds-N`, `px-ds-N`, `py-ds-N`, `pt-ds-N`, `pr-ds-N`, `pb-ds-N`, `pl-ds-N` |
+| Margin | `m-ds-N`, `mx-ds-N`, `my-ds-N`, `mt-ds-N`, `mr-ds-N`, `mb-ds-N`, `ml-ds-N` |
+| Gap | `gap-ds-N`, `gap-x-ds-N`, `gap-y-ds-N` |
+| Sizing | `w-ds-N`, `h-ds-N`, `size-ds-N` |
+| Inset (positioning) | `top-ds-N`, `right-ds-N`, `bottom-ds-N`, `left-ds-N`, `inset-ds-N`, `inset-x-ds-N`, `inset-y-ds-N` |
+
+⚠️ `space-x-ds-N` / `space-y-ds-N` are **not** generated — they silently no-op. Use `gap-ds-N` on a flex/grid parent instead. Any `ds-` utility not in the table above does not exist; Tailwind drops unknown classes without warning, so a typo'd family mispositions/misspaces the element silently.
+
 ---
 
 ## 4. Border radius
