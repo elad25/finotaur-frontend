@@ -34,7 +34,7 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Upload, Lock } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy, Sparkles, Upload } from "lucide-react";
 import { usePortfolios } from "@/hooks/usePortfolios"; // still needed for refetchPortfolios
 
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
@@ -1984,15 +1984,7 @@ if (hasResult && directRiskUSD > 0) {
                     </div>
                     {/* CTA cluster */}
                     <div className="flex flex-shrink-0 items-center gap-2">
-                      {isFreeJournal ? (
-                        <span
-                          title="Screenshot upload is available on any paid Journal plan"
-                          className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-lg border border-[#C9A646]/40 bg-[#C9A646]/15 px-3 text-xs font-semibold text-[#C9A646]"
-                        >
-                          <Lock className="w-3 h-3" />
-                          Upload with a <span className="font-bold tracking-wide">Journal plan</span>
-                        </span>
-                      ) : (
+                      {!isFreeJournal && (
                         <button
                           type="button"
                           onClick={() => openFino()}
