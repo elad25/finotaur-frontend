@@ -375,6 +375,41 @@ serve(async (req: Request) => {
     finalRedirectUrl = redirectUrlObj.toString();
 
     // ============================================
+    // 5.5 🎁 HIDDEN INTRO PLAN — direct checkout URL, skip the session API
+    // Whop checkout-SESSION pages ignore the `d=` URL param and lock manual
+    // promo entry, so the intro plan's promo code never applies through the
+    // normal session flow (verified visually). Direct plan-URL checkouts
+    // (whop.com/checkout/<plan_id>?d=<code>) DO honor `d=`. The webhook
+    // already resolves the user via the pending_checkouts row (written
+    // client-side before redirect) plus email matching, so no checkout
+    // session / session metadata is required for this plan.
+    // ============================================
+    const HIDDEN_INTRO_PLAN_ID = 'plan_u6VqqKZlb0axR';
+    if (plan_id === HIDDEN_INTRO_PLAN_ID && discount_code) {
+      const directCheckoutUrl = new URL(`https://whop.com/checkout/${HIDDEN_INTRO_PLAN_ID}`);
+      directCheckoutUrl.searchParams.set('d', discount_code);
+      directCheckoutUrl.searchParams.set('email', finotaurEmail);
+      const checkoutUrl = directCheckoutUrl.toString();
+
+      console.log(`Intro plan: returning direct checkout URL with promo ${discount_code}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          checkout_url: checkoutUrl,
+          checkout_id: null,
+          metadata: metadata,
+          prefilled_email: finotaurEmail,
+          intro_discount_applied: true,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
+    }
+
+    // ============================================
     // 6. CREATE WHOP CHECKOUT SESSION (V2 API)
     // ============================================
 

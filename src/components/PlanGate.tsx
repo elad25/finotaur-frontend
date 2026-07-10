@@ -45,7 +45,7 @@ export const PlanGate = ({ children, required, addon }: PlanGateProps) => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold">Premium Feature</h1>
+        <h1 className="text-3xl font-bold">Trader Feature</h1>
         <p className="mt-1 text-muted-foreground">
           Upgrade to unlock this functionality
         </p>
@@ -72,7 +72,7 @@ export const PlanGate = ({ children, required, addon }: PlanGateProps) => {
             }}
             className="bg-gold text-base-900 hover:bg-gold-600"
           >
-            {required ? `Upgrade to ${PLAN_DISPLAY_NAMES[required] ?? 'Premium'}` : 'View Plans & Upgrade'}
+            {required ? `Upgrade to ${PLAN_DISPLAY_NAMES[required] ?? 'Trader'}` : 'View Plans & Upgrade'}
           </Button>
         </div>
       </Card>

@@ -66,6 +66,15 @@ export default function JournalReportPage() {
   const fallbackText = useMemo(() => buildJournalFallbackText(reportData), [reportData]);
 
   const unlockedKeys = hasJournalAccess ? JOURNAL_REPORT_SLIDES.map((s) => s.key) : ['consistency'];
+  const lockedKeys = useMemo(
+    () => JOURNAL_REPORT_SLIDES.filter((s) => !unlockedKeys.includes(s.key)).map((s) => s.key),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasJournalAccess],
+  );
+  const subtitle =
+    reportData.totalTrades > 0
+      ? `${reportData.totalTrades} trades • ${reportData.dateRangeLabel} (${reportData.dateRangeDays} day${reportData.dateRangeDays === 1 ? '' : 's'})`
+      : undefined;
 
   const [takeaways, setTakeaways] = useState<Record<string, string>>({});
   const [takeawaysLoading, setTakeawaysLoading] = useState(hasJournalAccess);
@@ -146,5 +155,14 @@ export default function JournalReportPage() {
     );
   });
 
-  return <ReportShell slides={JOURNAL_REPORT_SLIDES}>{children}</ReportShell>;
+  return (
+    <ReportShell
+      slides={JOURNAL_REPORT_SLIDES}
+      title="What your trading data reveals"
+      subtitle={subtitle}
+      lockedKeys={lockedKeys}
+    >
+      {children}
+    </ReportShell>
+  );
 }

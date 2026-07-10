@@ -89,7 +89,7 @@ const plans: Plan[] = [
       'Priority support',
       'Early access to new features',
     ],
-    cta: 'Upgrade to Premium',
+    cta: 'Upgrade to Trader',
     featured: true,
     savings: 'Yearly — save ~3 months',
   },
@@ -363,7 +363,7 @@ export default function JournalPricingPage() {
             <div className="w-1 h-1 rounded-full bg-slate-600" />
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5 text-green-500" />
-              <span className="text-sm">14-Day Premium Trial</span>
+              <span className="text-sm">14-Day Trader Trial</span>
             </div>
             <div className="w-1 h-1 rounded-full bg-slate-600" />
             <div className="flex items-center gap-2">

@@ -90,10 +90,10 @@ const getContent = () => {
           <>
             <span className="font-bold">Monthly trade limit reached.</span>
             {' '}You've used all {limits?.max_trades || 25} trades this month.
-            {isPremium ? '' : ' Upgrade to Premium for unlimited trades.'}
+            {isPremium ? '' : ' Upgrade to Trader for unlimited trades.'}
           </>
         ),
-        ctaText: 'Upgrade to Premium',
+        ctaText: 'Upgrade to Trader',
         canDismiss: false,
       };
     }
@@ -107,10 +107,10 @@ const getContent = () => {
         message: (
           <>
             <span className="font-bold">{tradesRemaining} trades remaining this month.</span>
-            {' '}Upgrade to Premium for unlimited access.
+            {' '}Upgrade to Trader for unlimited access.
           </>
         ),
-        ctaText: 'Upgrade to Premium',
+        ctaText: 'Upgrade to Trader',
         canDismiss: true,
       };
     }

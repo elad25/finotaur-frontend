@@ -272,7 +272,7 @@ export function PairDeviceDialog({ open, onOpenChange }: PairDeviceDialogProps) 
           {/* ── error ─────────────────────────────────────────────────────── */}
           {phase === 'error' && (
             <div className="flex flex-col items-center gap-4 py-6">
-              {errorMsg?.includes('Premium subscription') ? (
+              {errorMsg?.includes('Trader subscription') ? (
                 <>
                   <Lock className="h-8 w-8 text-[#C9A646]" aria-hidden="true" />
                   <p className="text-sm text-zinc-300 text-center">{errorMsg}</p>
@@ -282,7 +282,7 @@ export function PairDeviceDialog({ open, onOpenChange }: PairDeviceDialogProps) 
                     showArrow={false}
                     onClick={() => { onOpenChange(false); navigate('/app/upgrade'); }}
                   >
-                    Upgrade to Premium
+                    Upgrade to Trader
                   </Button>
                 </>
               ) : (

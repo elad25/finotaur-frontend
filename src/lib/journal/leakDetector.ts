@@ -21,6 +21,10 @@ import { buildAggregate, computePlannedScenarios } from '@/lib/journal/plannedSc
 export interface LeakEvidence {
   tradeId: string;
   note?: string;
+  /** Per-trade dollar improvement if the user had followed the rule
+   *  (positive = would have been better by this much). Optional — only
+   *  populated for families where per-trade attribution is honest. */
+  deltaUsd?: number;
 }
 
 export type LeakFamily =
@@ -43,6 +47,11 @@ export interface Leak {
   sampleSize: number;
   confidence: 'high' | 'medium' | 'low';
   evidence: LeakEvidence[];
+  /** UNCAPPED per-trade dollar deltas covering ALL trades contributing to
+   *  costUsd (evidence[] above stays the capped display list). Sum of
+   *  deltaUsd equals costUsd (± rounding). Undefined where a family's
+   *  cost is inherently aggregate and not per-trade attributable. */
+  counterfactuals?: Array<{ tradeId: string; deltaUsd: number }>;
 }
 
 export interface LeakReport {
@@ -244,13 +253,32 @@ function buildRevengeLeak(
     return { leak: null, flaggedIds };
   }
 
+  // Per-trade counterfactual: removing a flagged trade from history means its
+  // own pnl no longer counts, so the "would-have" delta is -pnl. Sum over ALL
+  // flagged trades equals -analysis.revengePnl, which equals costUsd here
+  // (costUsd only clips at 0, and passesThresholds already guarantees > 0).
+  const tradesById = new Map(closedTrades.map((t) => [t.id, t]));
+  const deltaByTradeId = new Map<string, number>();
+  for (const tradeId of flaggedIds) {
+    const trade = tradesById.get(tradeId);
+    deltaByTradeId.set(tradeId, -(trade?.pnl ?? 0));
+  }
+  const counterfactuals = [...flaggedIds].map((tradeId) => ({
+    tradeId,
+    deltaUsd: deltaByTradeId.get(tradeId) ?? 0,
+  }));
+
   const confidence: Leak['confidence'] = applyConfidenceCap(
     sampleSize >= HIGH_CONFIDENCE_SAMPLE ? 'high' : 'medium',
     gates,
   );
   const evidence: LeakEvidence[] = [...analysis.flags.values()]
     .slice(0, 20)
-    .map((flag) => ({ tradeId: flag.tradeId, note: flag.reasons.join(', ') }));
+    .map((flag) => ({
+      tradeId: flag.tradeId,
+      note: flag.reasons.join(', '),
+      deltaUsd: deltaByTradeId.get(flag.tradeId),
+    }));
 
   const leak: Leak = {
     id: 'revenge_reentry',
@@ -263,6 +291,7 @@ function buildRevengeLeak(
     sampleSize,
     confidence,
     evidence,
+    counterfactuals,
   };
 
   return { leak, flaggedIds };
@@ -326,7 +355,15 @@ function buildSizeEscalationLeak(
   const evidence: LeakEvidence[] = [...found]
     .sort((a, b) => b.excess - a.excess)
     .slice(0, 20)
-    .map((f) => ({ tradeId: f.tradeId, note: `${money(f.excess)} excess loss from oversizing` }));
+    .map((f) => ({
+      tradeId: f.tradeId,
+      note: `${money(f.excess)} excess loss from oversizing`,
+      deltaUsd: f.excess,
+    }));
+
+  // Per-trade counterfactual: `found` already carries the exact per-trade
+  // contribution that costUsd was summed from — reuse it unfiltered/uncapped.
+  const counterfactuals = found.map((f) => ({ tradeId: f.tradeId, deltaUsd: f.excess }));
 
   return {
     id: 'size_escalation',
@@ -339,6 +376,7 @@ function buildSizeEscalationLeak(
     sampleSize,
     confidence,
     evidence,
+    counterfactuals,
   };
 }
 
@@ -467,20 +505,31 @@ function buildEarlyExitLeak(closedTrades: Trade[], grossLosses: number, gates: G
     gates,
   );
 
+  // Full signed per-trade counterfactual over every covered (has-target)
+  // trade — matches exactly how agg.totals.target - agg.totals.actual is
+  // derived in buildAggregate() (uncovered trades contribute 0 there), so
+  // the sum of these deltas equals costUsd. Some individual deltas can be
+  // negative (holding to target would have been worse for that trade) —
+  // that's honest, the net across all of them is still positive here.
+  const counterfactuals: { tradeId: string; deltaUsd: number }[] = [];
   const gaps: { tradeId: string; gap: number }[] = [];
   for (const t of closedTrades) {
     if (t.exit_price == null || t.exit_price <= 0 || t.close_at == null) continue;
     if (t.take_profit_price == null || t.take_profit_price <= 0) continue;
     const result = computePlannedScenarios(t);
     const targetScenario = result.scenarios.find((s) => s.key === 'target');
-    if (targetScenario?.available && targetScenario.deltaVsActual != null && targetScenario.deltaVsActual > 0) {
-      gaps.push({ tradeId: t.id, gap: targetScenario.deltaVsActual });
+    if (targetScenario?.available && targetScenario.deltaVsActual != null) {
+      counterfactuals.push({ tradeId: t.id, deltaUsd: targetScenario.deltaVsActual });
+      if (targetScenario.deltaVsActual > 0) {
+        gaps.push({ tradeId: t.id, gap: targetScenario.deltaVsActual });
+      }
     }
   }
   gaps.sort((a, b) => b.gap - a.gap);
   const evidence: LeakEvidence[] = gaps.slice(0, 20).map((g) => ({
     tradeId: g.tradeId,
     note: `left ${money(g.gap)} on the table vs the recorded target`,
+    deltaUsd: g.gap,
   }));
 
   return {
@@ -494,6 +543,7 @@ function buildEarlyExitLeak(closedTrades: Trade[], grossLosses: number, gates: G
     sampleSize: coveredCount,
     confidence,
     evidence,
+    counterfactuals,
   };
 }
 
@@ -534,10 +584,13 @@ function buildHeldLoserLeak(closedTrades: Trade[], grossLosses: number, gates: G
     coveredCount >= HIGH_CONFIDENCE_COVERAGE ? 'high' : 'medium',
     gates,
   );
+  // `costs` already carries the exact per-trade contribution costUsd was
+  // summed from — reuse it unfiltered/uncapped for the counterfactual.
+  const counterfactuals = costs.map((c) => ({ tradeId: c.tradeId, deltaUsd: c.cost }));
   costs.sort((a, b) => b.cost - a.cost);
   const evidence: LeakEvidence[] = costs
     .slice(0, 20)
-    .map((c) => ({ tradeId: c.tradeId, note: `ran ${money(c.cost)} past the recorded stop` }));
+    .map((c) => ({ tradeId: c.tradeId, note: `ran ${money(c.cost)} past the recorded stop`, deltaUsd: c.cost }));
 
   return {
     id: 'held_loser',
@@ -550,6 +603,7 @@ function buildHeldLoserLeak(closedTrades: Trade[], grossLosses: number, gates: G
     sampleSize: coveredCount,
     confidence,
     evidence,
+    counterfactuals,
   };
 }
 

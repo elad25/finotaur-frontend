@@ -56,9 +56,9 @@ interface Preset {
 
 const PRESETS: Record<UpgradeLimitReason, Preset> = {
   'broker-limit': {
-    title: 'Connect more brokers with Premium',
+    title: 'Connect more brokers with Trader',
     description: () =>
-      'Free and basic plans include one broker connection. Upgrade to Premium to sync all your accounts in a single journal.',
+      'Free and basic plans include one broker connection. Upgrade to Trader to sync all your accounts in a single journal.',
     bullets: [
       'Unlimited broker connections',
       'All accounts synced in one journal',
@@ -66,7 +66,7 @@ const PRESETS: Record<UpgradeLimitReason, Preset> = {
     ],
   },
   'broker-free-locked': {
-    title: 'Broker sync is a Premium feature',
+    title: 'Broker sync is a Trader feature',
     description: () =>
       'Connect your broker and your trades flow into your journal automatically — no manual entry. Upgrade to unlock automatic sync.',
     bullets: [
@@ -205,7 +205,7 @@ function UpgradeLimitDialog({
             showArrow={false}
           >
             <Crown className="h-4 w-4" />
-            Upgrade to Premium
+            Upgrade to Trader
           </Button>
 
           {/* Ghost / secondary dismiss */}

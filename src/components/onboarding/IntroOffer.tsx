@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Gift, Clock, ArrowRight, Crown } from 'lucide-react';
+import { X, Gift, Clock, ArrowRight, Crown, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 import { supabase } from '@/lib/supabase';
@@ -125,6 +125,7 @@ export default function IntroOffer() {
   const [isMinimized, setIsMinimized] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const [pulseGift, setPulseGift] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const expiredHandledRef = useRef(false);
   const shownTrackedRef = useRef(false);
 
@@ -218,17 +219,31 @@ export default function IntroOffer() {
         return;
       }
 
-      writeCache({ status: 'active', expiresAt: row.expires_at, autoOpened: !!row.auto_opened_at });
       setExpiresAtMs(expiryMs);
 
-      if (!row.auto_opened_at) {
+      // Auto-open exactly once, ever. Trust BOTH signals: the server row
+      // (auto_opened_at) AND the local cache's `autoOpened` marker — a
+      // fire-and-forget/failed DB write must never cause a re-open on the
+      // next refresh, so the cache marker is the real once-guard and gets
+      // set synchronously BEFORE the card opens.
+      const alreadyAutoOpenedLocally = cached?.autoOpened === true;
+      const shouldAutoOpen = !row.auto_opened_at && !alreadyAutoOpenedLocally;
+
+      if (shouldAutoOpen) {
         // First time this offer is ever seen — open the card once.
+        writeCache({ status: 'active', expiresAt: row.expires_at, autoOpened: true });
         setIsMinimized(false);
-        void supabase
+
+        const { error: autoOpenError } = await supabase
           .from('intro_offer_state')
           .update({ auto_opened_at: new Date().toISOString() })
           .eq('user_id', user.id);
+
+        if (autoOpenError) {
+          console.warn('IntroOffer: failed to persist auto_opened_at', autoOpenError);
+        }
       } else {
+        writeCache({ status: 'active', expiresAt: row.expires_at, autoOpened: true });
         setIsMinimized(true);
       }
 
@@ -301,6 +316,16 @@ export default function IntroOffer() {
 
   const handleMinimize = () => setIsMinimized(true);
   const handleReopen = () => setIsMinimized(false);
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(INTRO_OFFER.promoCode);
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    } catch {
+      toast.error('Could not copy code');
+    }
+  };
 
   const handleClaim = async () => {
     await initiateCheckout({
@@ -444,9 +469,29 @@ export default function IntroOffer() {
               </span>
             </h2>
 
-            <p className="text-zinc-400 text-sm leading-relaxed mb-4 max-w-sm mx-auto">
-              As a new member, this offer is applied automatically at checkout — no code needed.
-            </p>
+            {/* Promo code */}
+            <div className="mb-6">
+              <div
+                className="inline-flex items-center gap-3 px-5 py-3 rounded-xl"
+                style={{ background: 'rgba(201,166,70,0.08)', border: '1px dashed rgba(201,166,70,0.4)' }}
+              >
+                <span className="text-lg font-sans font-semibold tracking-widest" style={{ color: '#F4D97B' }}>
+                  {INTRO_OFFER.promoCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className="flex items-center justify-center w-7 h-7 rounded-md transition-colors hover:bg-white/5"
+                  style={{ color: codeCopied ? '#4ade80' : '#C9A646' }}
+                  aria-label="Copy promo code"
+                >
+                  {codeCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-zinc-500 text-xs mt-2">
+                {codeCopied ? 'Copied!' : 'Applied automatically at checkout'}
+              </p>
+            </div>
 
             {/* Price */}
             <div
@@ -454,7 +499,7 @@ export default function IntroOffer() {
               style={{ background: 'rgba(201,166,70,0.08)', border: '1px solid rgba(201,166,70,0.25)' }}
             >
               <span className="text-sm text-zinc-500 line-through">${INTRO_OFFER.fullPrice.toFixed(2)}/mo</span>
-              <span className="text-lg font-mono font-bold tracking-wide" style={{ color: '#F4D97B' }}>
+              <span className="text-lg font-sans font-semibold tabular-nums tracking-[-0.01em]" style={{ color: '#F4D97B' }}>
                 ${INTRO_OFFER.introPrice.toFixed(2)}/mo for 3 months
               </span>
             </div>
@@ -470,14 +515,14 @@ export default function IntroOffer() {
               <Clock className="w-4 h-4" style={{ color: isUrgent ? '#ef4444' : '#C9A646' }} />
               <div className="flex items-center gap-1">
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-mono font-bold"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-sans font-bold tabular-nums"
                   style={{ background: isUrgent ? 'rgba(239,68,68,0.12)' : 'rgba(201,166,70,0.1)', color: isUrgent ? '#ef4444' : '#F4D97B' }}
                 >
                   {minutes}
                 </div>
                 <span className="text-lg font-bold mx-0.5" style={{ color: isUrgent ? '#ef4444' : '#C9A646' }}>:</span>
                 <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-mono font-bold"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-sans font-bold tabular-nums"
                   style={{ background: isUrgent ? 'rgba(239,68,68,0.12)' : 'rgba(201,166,70,0.1)', color: isUrgent ? '#ef4444' : '#F4D97B' }}
                 >
                   {seconds}

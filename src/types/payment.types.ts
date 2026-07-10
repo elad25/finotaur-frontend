@@ -123,7 +123,7 @@ export const PRICING_PLANS: PricingPlan[] = [
   },
   {
     id: 'premium',
-    name: 'Premium',
+    name: 'Trader',
     price: 44.99,
     currency: 'USD',
     interval: 'month',
