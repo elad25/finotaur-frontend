@@ -49,7 +49,8 @@ export interface ReportTakeawaysResponse {
 export interface MarketsReportSection {
   key: string;
   title: string;
-  text: string;
+  /** 2-4 practical bullet points, each at most 3 sentences (Elad's style rule). */
+  bullets: string[];
 }
 
 export interface MarketsReportPayload {
