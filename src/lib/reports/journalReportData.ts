@@ -16,8 +16,11 @@
 
 import type { Trade } from '@/hooks/useTradesData';
 import { calculateAllStats, calculateBreakdown, type StrategyStats } from '@/hooks/useTradeStats';
+import { calculateActualR } from '@/utils/tradeCalculations';
 import type {
+  AdvancedStatTile,
   ConsistencyStatCard,
+  DailyPnlPoint,
   DayOfWeekRow,
   DisciplineData,
   EdgeScoreData,
@@ -25,10 +28,12 @@ import type {
   EntryHourBucket,
   EquityPoint,
   JournalReportData,
+  JournalReportGraphs,
   MistakeTagStat,
   PatternResult,
   ReportSlide,
   RiskDrawdownData,
+  RMultipleBucket,
   SessionComparison,
   StatusBadge,
   TakeawaySlideInput,
@@ -173,6 +178,194 @@ function buildConsistencyCards(stats: StrategyStats, maxDrawdownPct: number): Co
       tooltip: 'The largest drop from a cumulative-P&L peak to the following trough.',
     },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// 1b. Advanced Stats (Consistency slide → "Advanced Stats" tab)
+// ---------------------------------------------------------------------------
+
+/** Badge only where the threshold is meaningful (Sharpe/Sortino/Expectancy);
+ *  every other advanced tile is unbadged (undefined). */
+function ratioStatus(value: number): StatusBadge | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  if (value >= 1) return 'GREAT';
+  if (value >= 0.5) return 'GOOD';
+  return undefined;
+}
+
+function fmtHours(hrs: number): string {
+  if (hrs >= 24) return `${round1(hrs / 24)}d`;
+  return `${round1(hrs)}h`;
+}
+
+function buildAdvancedStats(trades: Trade[], stats: StrategyStats, riskLargestLoss: number): AdvancedStatTile[] {
+  const wins = trades.filter((t) => (t.pnl ?? 0) > 0).map((t) => Number(t.pnl) || 0);
+  const losses = trades.filter((t) => (t.pnl ?? 0) < 0).map((t) => Number(t.pnl) || 0);
+  const avgWinDollar = wins.length > 0 ? wins.reduce((a, b) => a + b, 0) / wins.length : 0;
+  const avgLossDollar = losses.length > 0 ? Math.abs(losses.reduce((a, b) => a + b, 0) / losses.length) : 0;
+  const winRateFrac = stats.winRate / 100;
+  const lossRateFrac = stats.totalTrades > 0 ? losses.length / stats.totalTrades : 0;
+  const expectancyDollar = winRateFrac * avgWinDollar - lossRateFrac * avgLossDollar;
+  const largestWinDollar = wins.length > 0 ? Math.max(...wins) : 0;
+
+  const expectancyStatus: StatusBadge | undefined = expectancyDollar > 0 ? 'GOOD' : undefined;
+
+  const tiles: AdvancedStatTile[] = [
+    {
+      key: 'expectancy-dollar',
+      label: 'Expectancy ($)',
+      displayValue: fmtMoney(expectancyDollar),
+      tooltip: 'Average dollar P&L you can expect per trade, given your current win rate and average win/loss size.',
+      status: expectancyStatus,
+    },
+    {
+      key: 'expectancy-r',
+      label: 'Expectancy (R)',
+      displayValue: `${stats.expectancy >= 0 ? '' : '−'}${Math.abs(round2(stats.expectancy)).toFixed(2)}R`,
+      tooltip: 'Average R-multiple you can expect per trade.',
+      status: stats.expectancy > 0 ? 'GOOD' : undefined,
+    },
+    {
+      key: 'avg-r',
+      label: 'Avg R',
+      displayValue: `${stats.avgR >= 0 ? '' : '−'}${Math.abs(round2(stats.avgR)).toFixed(2)}R`,
+      tooltip: 'Average R-multiple across all closed trades.',
+    },
+    {
+      key: 'sharpe',
+      label: 'Sharpe Ratio',
+      displayValue: fmtRatio(stats.sharpeRatio ?? 0),
+      tooltip: 'Mean R-multiple divided by its standard deviation — reward per unit of overall volatility.',
+      status: ratioStatus(stats.sharpeRatio ?? 0),
+    },
+    {
+      key: 'sortino',
+      label: 'Sortino Ratio',
+      displayValue: fmtRatio(stats.sortinoRatio ?? 0),
+      tooltip: 'Mean R-multiple divided by downside deviation only — reward per unit of downside risk.',
+      status: ratioStatus(stats.sortinoRatio ?? 0),
+    },
+    {
+      key: 'consistency',
+      label: 'Consistency',
+      displayValue: fmtRatio(stats.consistency ?? 0),
+      tooltip: 'How stable your R-multiples are trade to trade — higher means more repeatable results.',
+    },
+    {
+      key: 'total-r',
+      label: 'Total R',
+      displayValue: `${stats.totalR >= 0 ? '' : '−'}${Math.abs(round2(stats.totalR)).toFixed(2)}R`,
+      tooltip: 'Sum of R-multiples across every closed trade.',
+    },
+    {
+      key: 'largest-win',
+      label: 'Largest Win',
+      displayValue: fmtMoney(largestWinDollar),
+      tooltip: 'Your single largest winning trade by dollar P&L.',
+    },
+    {
+      key: 'largest-loss',
+      label: 'Largest Loss',
+      displayValue: fmtMoney(-Math.abs(riskLargestLoss)),
+      tooltip: 'Your single largest losing trade by dollar P&L.',
+    },
+  ];
+
+  if (stats.longestWinStreak !== undefined) {
+    tiles.push({
+      key: 'longest-win-streak',
+      label: 'Longest Win Streak',
+      displayValue: `${stats.longestWinStreak}`,
+      tooltip: 'Most consecutive winning trades in a row.',
+    });
+  }
+  if (stats.longestLossStreak !== undefined) {
+    tiles.push({
+      key: 'longest-loss-streak',
+      label: 'Longest Losing Streak',
+      displayValue: `${stats.longestLossStreak}`,
+      tooltip: 'Most consecutive losing trades in a row.',
+    });
+  }
+  if (stats.avgTradeDuration !== undefined && stats.avgTradeDuration > 0) {
+    tiles.push({
+      key: 'avg-duration',
+      label: 'Avg Trade Duration',
+      displayValue: fmtHours(stats.avgTradeDuration),
+      tooltip: 'Average time between opening and closing a trade.',
+    });
+  }
+  if (stats.tradesHitting1R !== undefined) {
+    tiles.push({
+      key: 'trades-hitting-1r',
+      label: 'Trades Hitting 1R',
+      displayValue: `${stats.tradesHitting1R}`,
+      tooltip: 'Number of trades that reached at least +1R before closing.',
+    });
+  }
+
+  return tiles;
+}
+
+// ---------------------------------------------------------------------------
+// 1c. Graphs (Consistency slide → "Graphs" tab)
+// ---------------------------------------------------------------------------
+
+/** Mirrors the R-multiple resolution logic inside calculateAllStats — no
+ *  exported per-trade R array exists on the stats engine, so this stays a
+ *  small, deliberately duplicated read-only helper. */
+function resolveTradeR(t: Trade): number | undefined {
+  let r = t.actual_r ?? t.metrics?.actual_r;
+  if (r === undefined && t.exit_price) {
+    r = calculateActualR(
+      t.entry_price,
+      t.stop_price,
+      t.exit_price,
+      t.quantity,
+      t.symbol,
+      t.side,
+      t.fees || 0,
+    );
+  }
+  return r;
+}
+
+const R_BUCKETS: { label: string; lo: number; hi: number }[] = [
+  { label: '< −2R', lo: -Infinity, hi: -2 },
+  { label: '−2R to −1R', lo: -2, hi: -1 },
+  { label: '−1R to 0R', lo: -1, hi: 0 },
+  { label: '0R to 1R', lo: 0, hi: 1 },
+  { label: '1R to 2R', lo: 1, hi: 2 },
+  { label: '2R to 3R', lo: 2, hi: 3 },
+  { label: '> 3R', lo: 3, hi: Infinity },
+];
+
+function buildRDistribution(trades: Trade[]): RMultipleBucket[] {
+  const rValues = trades.map(resolveTradeR).filter((r): r is number => r !== undefined);
+  if (rValues.length === 0) return [];
+
+  return R_BUCKETS.map((b) => ({
+    label: b.label,
+    count: rValues.filter((r) => r > b.lo && r <= b.hi).length,
+    isNegative: b.hi <= 0,
+  }));
+}
+
+function buildDailyPnl(trades: Trade[]): DailyPnlPoint[] {
+  const byDate = new Map<string, number>();
+  trades.forEach((t) => {
+    const ms = tradeDateMs(t);
+    if (ms === null || t.pnl == null) return;
+    const date = new Date(ms).toISOString().slice(0, 10);
+    byDate.set(date, (byDate.get(date) || 0) + (Number(t.pnl) || 0));
+  });
+  return Array.from(byDate.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, pnl]) => ({ date, pnl: round2(pnl) }));
+}
+
+function buildGraphs(trades: Trade[]): JournalReportGraphs {
+  return { rDistribution: buildRDistribution(trades), dailyPnl: buildDailyPnl(trades) };
 }
 
 // ---------------------------------------------------------------------------
@@ -502,6 +695,15 @@ function buildDateRangeLabel(trades: Trade[]): string {
   return first === last ? fmt(first) : `${fmt(first)} – ${fmt(last)}`;
 }
 
+/** Inclusive day-span between the first and last logged trade (min 1). */
+function buildDateRangeDays(trades: Trade[]): number {
+  const dates = trades.map((t) => t.open_at).filter(Boolean).map((d) => new Date(d).getTime()).sort((a, b) => a - b);
+  if (dates.length === 0) return 0;
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  return Math.max(1, Math.round((last - first) / (1000 * 60 * 60 * 24)) + 1);
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -512,16 +714,20 @@ export function buildJournalReportData(trades: Trade[]): JournalReportData {
   const degradedPatterns: string[] = [];
 
   const { rows: dayOfWeek, entryHourByDay } = buildDayOfWeek(trades);
+  const risk = buildRiskDrawdown(trades, stats, equity);
 
   return {
     totalTrades: trades.length,
     dateRangeLabel: buildDateRangeLabel(trades),
+    dateRangeDays: buildDateRangeDays(trades),
     consistency: buildConsistencyCards(stats, equity.maxDrawdownPct),
+    advancedStats: buildAdvancedStats(trades, stats, risk.largestLoss),
+    graphs: buildGraphs(trades),
     edgeScore: buildEdgeScore(stats, equity),
     dayOfWeek,
     entryHourByDay,
     patterns: buildPatterns(trades, degradedPatterns),
-    risk: buildRiskDrawdown(trades, stats, equity),
+    risk,
     discipline: buildDiscipline(trades),
     degradedPatterns,
   };

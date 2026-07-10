@@ -163,10 +163,44 @@ export interface DisciplineData {
   worstSession: SessionComparison | null;
 }
 
+/** One tile in the Consistency slide's "Advanced Stats" tab. `status` is
+ *  only set where a threshold is meaningful (Sharpe/Sortino/Expectancy) —
+ *  omitted (undefined) elsewhere per the "badge only where meaningful" rule. */
+export interface AdvancedStatTile {
+  key: string;
+  label: string;
+  displayValue: string;
+  tooltip: string;
+  status?: StatusBadge;
+}
+
+/** One bucket of the R-multiple distribution histogram (Graphs tab). */
+export interface RMultipleBucket {
+  label: string;
+  count: number;
+  isNegative: boolean;
+}
+
+/** One bar of the daily P&L chart (Graphs tab). */
+export interface DailyPnlPoint {
+  date: string;
+  pnl: number;
+}
+
+export interface JournalReportGraphs {
+  rDistribution: RMultipleBucket[];
+  dailyPnl: DailyPnlPoint[];
+}
+
 export interface JournalReportData {
   totalTrades: number;
   dateRangeLabel: string;
+  /** Inclusive day-span between the first and last logged trade — used for
+   *  the page-level subtitle ("N trades • <range> (N days)"). */
+  dateRangeDays: number;
   consistency: ConsistencyStatCard[];
+  advancedStats: AdvancedStatTile[];
+  graphs: JournalReportGraphs;
   edgeScore: EdgeScoreData;
   dayOfWeek: DayOfWeekRow[];
   entryHourByDay: Record<string, EntryHourBucket[]>;
