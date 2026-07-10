@@ -88,6 +88,7 @@ const plans: PlanConfig[] = [
       'Everything in Free, plus:',
       'Unlimited trades — auto-synced',
       'Trade Copier — Tradovate & NinjaTrader',
+      'Leak Detector — AI finds your most expensive losing pattern',
       'Full performance analytics',
       'Strategy builder & Playbooks',
       'Shadow — what-if analysis',

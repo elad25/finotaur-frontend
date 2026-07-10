@@ -100,7 +100,7 @@ export default function BacktestLanding() {
             >
               <span className="relative z-10 flex items-center gap-3">
                 <Rocket className="w-6 h-6" />
-                Upgrade to Premium Now
+                Upgrade to Trader Now
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </span>
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
@@ -267,7 +267,6 @@ export default function BacktestLanding() {
                         </span>
                       </div>
                     </th>
-                    <th className="text-center p-6 text-zinc-400 font-medium">Basic</th>
                     <th className="text-center p-6">
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-[#C9A646] font-bold">Trader</span>
@@ -280,18 +279,15 @@ export default function BacktestLanding() {
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">Manual Trades</td>
                     <td className="p-6 text-center text-zinc-400">10 lifetime</td>
-                    <td className="p-6 text-center text-zinc-400">25/month</td>
                     <td className="p-6 text-center text-[#C9A646] font-semibold">Unlimited</td>
                   </tr>
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">Auto Broker Sync</td>
                     <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
-                    <td className="p-6 text-center text-zinc-400">25/month</td>
                     <td className="p-6 text-center text-[#C9A646] font-semibold">Unlimited</td>
                   </tr>
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">AI Insights & Coach</td>
-                    <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
                     <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
                     <td className="p-6 text-center"><CheckCircle2 className="w-6 h-6 text-green-500 mx-auto" /></td>
                   </tr>
@@ -301,7 +297,6 @@ export default function BacktestLanding() {
                       Strategy Backtesting
                     </td>
                     <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
-                    <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
                     <td className="p-6 text-center">
                       <CheckCircle2 className="w-6 h-6 text-green-500 mx-auto animate-pulse" />
                     </td>
@@ -309,12 +304,10 @@ export default function BacktestLanding() {
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">Historical Data Access</td>
                     <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
-                    <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
                     <td className="p-6 text-center text-[#C9A646] font-semibold">20+ Years</td>
                   </tr>
                   <tr>
                     <td className="p-6 text-white">Monte Carlo & Walk Forward</td>
-                    <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
                     <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
                     <td className="p-6 text-center"><CheckCircle2 className="w-6 h-6 text-green-500 mx-auto" /></td>
                   </tr>
@@ -355,7 +348,7 @@ export default function BacktestLanding() {
                 >
                   <span className="flex items-center gap-3">
                     <Rocket className="w-6 h-6" />
-                    Get Premium Now
+                    Get Trader Now
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </span>
                 </button>

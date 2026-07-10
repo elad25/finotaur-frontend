@@ -43,36 +43,13 @@ const plans: Plan[] = [
     description: "Start your trading journey",
     features: [
       "10 trades to uncover your first leak",
-      "1 broker connection",
-      "Trade journal (manual + auto-import)",
-      "Core performance stats",
+      "Manual logging + AI screenshot import (5/day)",
+      "Core performance stats & P&L calendar",
       "Community access",
-      "Mobile app"
+      "Preview every Trader feature with sample data"
     ],
     cta: "Current Plan",
     featured: false
-  },
-  {
-    id: "basic",
-    name: "Basic",
-    monthlyPrice: "$24.99",
-    yearlyPrice: "$229",
-    yearlyMonthlyEquivalent: "$19.08",
-    description: "Essential trading tools for serious traders",
-    features: [
-      "Unlimited trade journal",
-      "Full performance analytics",
-      "Strategy builder & tracking",
-      "Calendar & trading sessions",
-      "Advanced statistics & metrics",
-      "Equity curve & charts",
-      "Risk/Reward calculator",
-      "Trade screenshots & notes",
-      "Email support"
-    ],
-    cta: "Upgrade to Basic",
-    featured: false,
-    savings: "Save 24%"
   },
   {
     id: "premium",
@@ -84,15 +61,14 @@ const plans: Plan[] = [
     features: [
       "Everything in Free, plus:",
       "Unlimited trades — never hit a cap",
-      "Unlimited broker connections — sync all your accounts",
-      "Your FINOTAUR Score — one number that grades your real edge",
-      "Daily AI briefing — ranked insights on what to fix first",
-      "Pattern of the Week — your biggest recurring edge or leak, surfaced automatically",
-      "Leak Finder — AI names the exact mistake costing you money",
-      "Behavioral & risk alerts before you tilt",
-      "Custom AI reports",
-      "Priority support",
-      "Early access to new features"
+      "Broker auto-sync — Tradovate, NinjaTrader, Interactive Brokers",
+      "Trade Copier — mirror trades across accounts",
+      "Leak Detector — AI names the exact mistake costing you money",
+      "Shadow — what-if analysis on every closed trade",
+      "Revenge Radar — tilt detection before it burns your account",
+      "Prop-firm Risk Management — live trailing-drawdown dashboard",
+      "Custom AI reports & Strategy Backtesting",
+      "Priority support"
     ],
     cta: "Upgrade to Trader",
     featured: true,
@@ -373,7 +349,7 @@ function UpgradePlanModal({
           </div>
 
           {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {plans.map((plan) => {
               const displayPrice = getDisplayPrice(plan);
               const isCurrentPlan = plan.id === currentPlan;
@@ -503,7 +479,7 @@ function UpgradePlanModal({
               <div className="w-1 h-1 rounded-full bg-slate-600" />
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-green-500" />
-                <span className="text-sm">14-Day Premium Trial</span>
+                <span className="text-sm">14-Day Trader Trial</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600" />
               <div className="flex items-center gap-2">
