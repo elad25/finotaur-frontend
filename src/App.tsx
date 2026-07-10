@@ -173,6 +173,9 @@ const PlansPage = lazy(() => import("@/pages/app/Plans"));
 const ProtectedAppLayout = lazy(() => import("@/layouts/ProtectedAppLayout"));
 const CopilotStandaloneLayout = lazy(() => import("@/layouts/CopilotStandaloneLayout"));
 const HomePage = lazy(() => import("@/pages/app/home/HomePage"));
+const JournalReportPage = lazy(() => import("@/pages/app/reports/JournalReportPage"));
+const PortfolioReportPage = lazy(() => import("@/pages/app/reports/PortfolioReportPage"));
+const MarketsReportPage = lazy(() => import("@/pages/app/reports/MarketsReportPage"));
 const IntroOffer = lazy(() => import("@/components/onboarding/IntroOffer"));
 const LegalHub = lazy(() => import("@/components/legal").then(m => ({ default: m.LegalHub })));
 const TermsOfUse = lazy(() => import("@/components/legal").then(m => ({ default: m.TermsOfUse })));
@@ -532,6 +535,12 @@ function AppContent() {
         <Route path="/app" element={<ProtectedRoute><MentorViewProvider><SuspenseRoute><ProtectedAppLayout /></SuspenseRoute></MentorViewProvider></ProtectedRoute>}>
           <Route index element={<Navigate to="/app/home" replace />} />
           <Route path="home" element={<SuspenseRoute><HomePage /></SuspenseRoute>} />
+
+          {/* FINO Reports — full-screen report surfaces (own chrome, see
+              HIDE_CHROME_ROUTES in ProtectedAppLayout). */}
+          <Route path="reports/journal" element={<SuspenseRoute><JournalReportPage /></SuspenseRoute>} />
+          <Route path="reports/portfolio" element={<SuspenseRoute><PortfolioReportPage /></SuspenseRoute>} />
+          <Route path="reports/markets" element={<SuspenseRoute><MarketsReportPage /></SuspenseRoute>} />
 
           {/* ALL MARKETS */}
           <Route path="all-markets/overview" element={<SuspenseRoute><AdminBetaGate><AllMarketsOverview /></AdminBetaGate></SuspenseRoute>} />
