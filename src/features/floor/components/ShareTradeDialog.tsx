@@ -323,147 +323,156 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
         </DialogHeader>
 
         {/* ── Scrollable body ─────────────────────────────────────────────── */}
-        <div className="flex flex-col lg:flex-row gap-0 overflow-hidden flex-1 min-h-0">
+        <div className="flex flex-col gap-ds-6 px-ds-5 py-ds-5 overflow-y-auto flex-1 min-h-0">
 
-          {/* Left column: destinations + privacy controls */}
-          <div className="flex flex-col gap-ds-5 px-ds-5 py-ds-5 overflow-y-auto flex-1 min-w-0">
-
-            {/* Caption */}
-            <div className="flex flex-col gap-ds-2">
-              <label className="font-sans text-[12px] font-semibold text-ink-secondary" htmlFor="share-caption">
-                Caption <span className="text-ink-muted font-normal">(optional)</span>
-              </label>
-              <textarea
-                id="share-caption"
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                placeholder="Add context about this trade…"
-                rows={2}
-                maxLength={500}
-                className={cn(
-                  'w-full resize-none rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-2',
-                  'px-ds-3 py-[9px]',
-                  'font-sans text-[13px] text-ink-primary placeholder:text-ink-muted',
-                  'focus:outline-none focus:border-border-ds-default',
-                  'transition-colors duration-base ease-out',
-                )}
-              />
+          {/* Preview — big, on top, true 1:1 of the feed card */}
+          <div
+            className={cn(
+              'flex flex-col items-center gap-ds-3 -mx-ds-5 px-ds-5 pb-ds-5',
+              'border-b border-border-ds-subtle bg-surface-1',
+            )}
+          >
+            <div className="flex flex-col items-center gap-[2px]">
+              <SectionLabel>Preview</SectionLabel>
+              <p className="font-sans text-[11px] text-ink-tertiary">
+                This is exactly what others will see.
+              </p>
             </div>
-
-            {/* Destinations */}
-            <div className="flex flex-col gap-ds-3">
-              <SectionLabel>Channel</SectionLabel>
-
-              {/* Single-select channel picker — Global or one strategy channel.
-                  Gated by broker-verification exactly like the old Global toggle. */}
-              <div
-                role="radiogroup"
-                aria-label="Channel"
-                className={cn('flex flex-wrap gap-[6px]', !verified && 'opacity-50')}
-              >
-                <ChannelPill
-                  Icon={Globe}
-                  label="Global"
-                  active={channel === GENERAL_CATEGORY}
-                  disabled={!verified}
-                  onClick={() => setChannel((prev) => (prev === GENERAL_CATEGORY ? null : GENERAL_CATEGORY))}
-                />
-                {FLOOR_CHANNELS.map((ch) => (
-                  <ChannelPill
-                    key={ch.key}
-                    Icon={ch.Icon}
-                    label={ch.label}
-                    active={channel === ch.key}
-                    disabled={!verified}
-                    onClick={() => setChannel((prev) => (prev === ch.key ? null : ch.key))}
-                  />
-                ))}
-              </div>
-              {!verified && (
-                <p className="font-sans text-[11px] text-ink-tertiary pl-ds-1 -mt-ds-1">
-                  Only broker-verified trades can be posted to the Global Feed.
-                </p>
-              )}
-
-              {/* Per-space community + mentor */}
-              {spacesLoading ? (
-                <p className="font-sans text-[12px] text-ink-tertiary">Loading your rooms…</p>
-              ) : spaces.length === 0 ? (
-                <p className="font-sans text-[12px] text-ink-tertiary">
-                  You are not a member of any mentor space.
-                </p>
-              ) : (
-                spaces.map((space) => (
-                  <div key={space.space_id} className="flex flex-col gap-ds-2 pl-ds-1">
-                    <div
-                      className={cn(
-                        'rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-2',
-                        'px-ds-3 py-ds-3 flex flex-col gap-ds-2',
-                      )}
-                    >
-                      <span className="font-sans text-[12px] font-semibold text-ink-primary">
-                        {space.name}
-                      </span>
-                      <div className="flex flex-col gap-ds-2">
-                        <ToggleRow
-                          checked={communityRooms.has(space.space_id)}
-                          onChange={() => toggleCommunityRoom(space.space_id)}
-                          label={`Share to ${space.name} feed`}
-                          description="Visible to all members of this space's community tab."
-                        />
-                        <ToggleRow
-                          checked={mentorRooms.has(space.space_id)}
-                          onChange={() => toggleMentorRoom(space.space_id)}
-                          label={`Send to ${space.name} mentor for 1:1 review`}
-                          description="Submitted to the mentor's review queue — only you and the mentor see it."
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Privacy controls */}
-            <div className="flex flex-col gap-ds-3">
-              <SectionLabel>Privacy</SectionLabel>
-              <ToggleRow
-                checked={hidePnl}
-                onChange={setHidePnl}
-                label="Hide P&L"
-                description="P&L amount is hidden from viewers — shown as •••"
-              />
-              <ToggleRow
-                checked={showSetupOnly}
-                onChange={setShowSetupOnly}
-                label="Show setup only"
-                description="Entry and exit prices are hidden — only setup and result direction visible."
-              />
-              <ToggleRow
-                checked={revealSize}
-                onChange={setRevealSize}
-                label="Reveal position size"
-                description="Shows the number of contracts / shares traded. Hidden by default."
-              />
+            {/* Render SharedTradeCard in preview-only mode (reactions/comments disabled by wrapping in a non-interactive skin) */}
+            <div className="w-full max-w-2xl mx-auto pointer-events-none select-none opacity-95">
+              <SharedTradeCard item={previewItem} />
             </div>
           </div>
 
-          {/* Right column: live preview */}
-          <div
-            className={cn(
-              'lg:w-[320px] shrink-0',
-              'border-t lg:border-t-0 lg:border-l border-border-ds-subtle',
-              'px-ds-4 py-ds-5 bg-surface-1 overflow-y-auto',
-            )}
-          >
-            <div className="flex flex-col gap-ds-3">
-              <SectionLabel>Preview</SectionLabel>
-              <p className="font-sans text-[11px] text-ink-tertiary -mt-ds-1">
-                This is exactly what others will see.
-              </p>
-              {/* Render SharedTradeCard in preview-only mode (reactions/comments disabled by wrapping in a non-interactive skin) */}
-              <div className="pointer-events-none select-none opacity-95">
-                <SharedTradeCard item={previewItem} />
+          {/* Controls — below the preview, two-up on wide dialogs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-ds-5">
+
+            {/* Left cell: caption + channel */}
+            <div className="flex flex-col gap-ds-5 min-w-0">
+
+              {/* Caption */}
+              <div className="flex flex-col gap-ds-2">
+                <label className="font-sans text-[12px] font-semibold text-ink-secondary" htmlFor="share-caption">
+                  Caption <span className="text-ink-muted font-normal">(optional)</span>
+                </label>
+                <textarea
+                  id="share-caption"
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  placeholder="Add context about this trade…"
+                  rows={2}
+                  maxLength={500}
+                  className={cn(
+                    'w-full resize-none rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-2',
+                    'px-ds-3 py-[9px]',
+                    'font-sans text-[13px] text-ink-primary placeholder:text-ink-muted',
+                    'focus:outline-none focus:border-border-ds-default',
+                    'transition-colors duration-base ease-out',
+                  )}
+                />
+              </div>
+
+              {/* Channel */}
+              <div className="flex flex-col gap-ds-3">
+                <SectionLabel>Channel</SectionLabel>
+
+                {/* Single-select channel picker — Global or one strategy channel.
+                    Gated by broker-verification exactly like the old Global toggle. */}
+                <div
+                  role="radiogroup"
+                  aria-label="Channel"
+                  className={cn('flex flex-wrap gap-[6px]', !verified && 'opacity-50')}
+                >
+                  <ChannelPill
+                    Icon={Globe}
+                    label="Global"
+                    active={channel === GENERAL_CATEGORY}
+                    disabled={!verified}
+                    onClick={() => setChannel((prev) => (prev === GENERAL_CATEGORY ? null : GENERAL_CATEGORY))}
+                  />
+                  {FLOOR_CHANNELS.map((ch) => (
+                    <ChannelPill
+                      key={ch.key}
+                      Icon={ch.Icon}
+                      label={ch.label}
+                      active={channel === ch.key}
+                      disabled={!verified}
+                      onClick={() => setChannel((prev) => (prev === ch.key ? null : ch.key))}
+                    />
+                  ))}
+                </div>
+                {!verified && (
+                  <p className="font-sans text-[11px] text-ink-tertiary pl-ds-1 -mt-ds-1">
+                    Only broker-verified trades can be posted to the Global Feed.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Right cell: privacy + mentor-space rooms */}
+            <div className="flex flex-col gap-ds-5 min-w-0">
+
+              {/* Privacy controls */}
+              <div className="flex flex-col gap-ds-3">
+                <SectionLabel>Privacy</SectionLabel>
+                <ToggleRow
+                  checked={hidePnl}
+                  onChange={setHidePnl}
+                  label="Hide P&L"
+                  description="P&L amount is hidden from viewers — shown as •••"
+                />
+                <ToggleRow
+                  checked={showSetupOnly}
+                  onChange={setShowSetupOnly}
+                  label="Show setup only"
+                  description="Entry and exit prices are hidden — only setup and result direction visible."
+                />
+                <ToggleRow
+                  checked={revealSize}
+                  onChange={setRevealSize}
+                  label="Reveal position size"
+                  description="Shows the number of contracts / shares traded. Hidden by default."
+                />
+              </div>
+
+              {/* Per-space community + mentor */}
+              <div className="flex flex-col gap-ds-3">
+                {spacesLoading ? (
+                  <p className="font-sans text-[12px] text-ink-tertiary">Loading your rooms…</p>
+                ) : spaces.length === 0 ? (
+                  <p className="font-sans text-[12px] text-ink-tertiary">
+                    You are not a member of any mentor space.
+                  </p>
+                ) : (
+                  spaces.map((space) => (
+                    <div key={space.space_id} className="flex flex-col gap-ds-2 pl-ds-1">
+                      <div
+                        className={cn(
+                          'rounded-[8px] border-[0.5px] border-border-ds-subtle bg-surface-2',
+                          'px-ds-3 py-ds-3 flex flex-col gap-ds-2',
+                        )}
+                      >
+                        <span className="font-sans text-[12px] font-semibold text-ink-primary">
+                          {space.name}
+                        </span>
+                        <div className="flex flex-col gap-ds-2">
+                          <ToggleRow
+                            checked={communityRooms.has(space.space_id)}
+                            onChange={() => toggleCommunityRoom(space.space_id)}
+                            label={`Share to ${space.name} feed`}
+                            description="Visible to all members of this space's community tab."
+                          />
+                          <ToggleRow
+                            checked={mentorRooms.has(space.space_id)}
+                            onChange={() => toggleMentorRoom(space.space_id)}
+                            label={`Send to ${space.name} mentor for 1:1 review`}
+                            description="Submitted to the mentor's review queue — only you and the mentor see it."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
