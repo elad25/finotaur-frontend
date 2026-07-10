@@ -2847,9 +2847,9 @@ export default function TradeCompare() {
         {/* ── Trade tab ── */}
         <TabsContent value="trade" className="mt-1">
           <div className="flex flex-col gap-ds-3">
-            {/* Stop/Target toggle + Select trade — same row, no gap */}
+            {/* Stop/Target toggle centered (mirrors the Performance tab); Select trade pinned right */}
             {!isLoading && (
-              <div className="flex items-center justify-between">
+              <div className="relative flex items-center justify-center">
                 <div className="flex gap-0.5 rounded-[10px] bg-white/[0.06] p-1">
                   {(['stop', 'target'] as const).map((v) => (
                     <button
@@ -2866,15 +2866,17 @@ export default function TradeCompare() {
                     </button>
                   ))}
                 </div>
-                <TradePicker
-                  closedTrades={closedTrades}
-                  selectedId={selectedId}
-                  effectiveId={effectiveId}
-                  dialogOpen={dialogOpen}
-                  setDialogOpen={setDialogOpen}
-                  setSelectedId={setSelectedId}
-                  disabled={closedTrades.length === 0}
-                />
+                <div className="absolute right-0">
+                  <TradePicker
+                    closedTrades={closedTrades}
+                    selectedId={selectedId}
+                    effectiveId={effectiveId}
+                    dialogOpen={dialogOpen}
+                    setDialogOpen={setDialogOpen}
+                    setSelectedId={setSelectedId}
+                    disabled={closedTrades.length === 0}
+                  />
+                </div>
               </div>
             )}
             {isLoading && loadingEl}
