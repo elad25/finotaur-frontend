@@ -367,8 +367,35 @@ export default function RevengeRulesInsights({ analysis, closedTrades }: Revenge
     );
   }
 
-  if (!displayedInsights || generateMutation.isPending) {
+  if (generateMutation.isPending) {
     return <LoadingPanel text="Analyzing your behavior against your rules…" />;
+  }
+
+  if (!displayedInsights) {
+    // Auto-generation either hasn't fired yet or failed — show a retry
+    // surface instead of an endless loading state.
+    return (
+      <div className={`${JOURNAL_PANEL} p-ds-5`}>
+        <div className="flex flex-col items-center gap-ds-3 py-6 text-center">
+          <Sparkles className="h-5 w-5 text-[#C9A646]" />
+          <p className="text-sm font-semibold text-white">Your Rules vs. Reality</p>
+          <p className="text-xs text-white/62 max-w-[420px]">
+            {generateMutation.isError
+              ? 'We could not generate your personal insights just now.'
+              : 'Generate a personal AI read of how your actual trading matches the rules you wrote.'}
+          </p>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="mt-1 flex items-center gap-2 px-5 py-2 rounded-xl font-bold transition-all hover:scale-105"
+            style={{ background: 'linear-gradient(135deg, #C9A646, #B48C2C)', color: '#000' }}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {generateMutation.isError ? 'Try Again' : 'Analyze My Trading'}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const { data } = displayedInsights;
