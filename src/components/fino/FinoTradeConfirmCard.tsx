@@ -3,7 +3,7 @@
 // Mirrors FinoActionBar's phase/auto-clear style; uses DS Button + Card + ui/Input/Select.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle, ExternalLink, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle, ExternalLink, Loader2, Sparkles, X, XCircle } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { Input } from '@/components/ui/input';
@@ -89,6 +89,21 @@ function isMissing(name: string, missing: string[]): boolean {
   return missing.includes(name);
 }
 
+/**
+ * Detects the free-tier 10-trade cap rejection from `enforce_free_trade_cap`
+ * (Postgres ERRCODE 42501). `createTrade()` only forwards `error.message`
+ * as a plain string (see src/lib/trades/index.ts), so match on the code
+ * (defensive, in case a future refactor preserves it) OR the exact DB
+ * message text — never a generic 'limit' substring, to avoid mislabeling
+ * unrelated errors as the upgrade case.
+ */
+function isTradeCapError(err: unknown): boolean {
+  const code = (err as { code?: string } | undefined)?.code;
+  if (code === '42501') return true;
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return message.includes('Free plan trade limit');
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -153,6 +168,9 @@ export default function FinoTradeConfirmCard({
 
   const [phase, setPhase] = useState<Phase>('editing');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  // 'cap' = free-tier 10-trade limit hit (persistent gold upgrade banner,
+  // no auto-dismiss); 'generic' = any other failure (red, auto-dismisses).
+  const [errorKind, setErrorKind] = useState<'cap' | 'generic'>('generic');
 
   const scheduleAutoClear = useCallback((ms: number) => {
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
@@ -205,9 +223,16 @@ export default function FinoTradeConfirmCard({
       scheduleAutoClear(6_000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
+      const isCapError = isTradeCapError(err);
       setErrorMsg(msg);
+      setErrorKind(isCapError ? 'cap' : 'generic');
       setPhase('error');
-      scheduleAutoClear(6_000);
+      // Cap hits persist until the user acts (Upgrade or dismiss) — same
+      // treatment as FinoChatDrawer's upgrade banner. Generic errors keep
+      // auto-clearing so a transient failure doesn't block the composer.
+      if (!isCapError) {
+        scheduleAutoClear(6_000);
+      }
     }
   }, [phase, form, file, acceptedTags, strategyId, scheduleAutoClear]);
 
@@ -241,7 +266,42 @@ export default function FinoTradeConfirmCard({
     );
   }
 
-  // ---- Render: error ----
+  // ---- Render: error (trade-cap upgrade) ----
+  // Same persistent gold upsell treatment as FinoChatDrawer's tier-gate
+  // banner (src/components/fino/FinoChatDrawer.tsx ~L335-362) — no
+  // auto-dismiss, explicit Upgrade CTA + manual dismiss only.
+
+  if (phase === 'error' && errorKind === 'cap') {
+    return (
+      <div className="mx-4 mb-2 flex items-start gap-2.5 rounded-lg border border-[#C9A646]/30 bg-[#C9A646]/10 px-3 py-2.5 animate-in fade-in">
+        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" />
+        <div className="flex-1">
+          <p className="text-[11px] leading-snug text-[#E8D9A8]">
+            Your journal is full — you&apos;ve logged all 10 free trades. Upgrade to Trader to keep adding trades.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = '/app/upgrade';
+            }}
+            className="mt-1.5 inline-flex items-center rounded-md bg-[#C9A646] px-2.5 py-1 text-[11px] font-semibold text-black transition-colors hover:bg-[#d8b65a]"
+          >
+            Upgrade to Trader
+          </button>
+        </div>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={onClose}
+          className="text-[#C9A646]/60 transition-colors hover:text-[#C9A646]"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  // ---- Render: error (generic) ----
 
   if (phase === 'error') {
     return (
