@@ -69,7 +69,14 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 const fmtPct = (n: number, decimals = 1): string => `${round1(n).toFixed(decimals)}%`;
 const fmtMoney = (n: number): string =>
   `${n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const fmtRatio = (n: number): string => (Number.isFinite(n) ? n.toFixed(2) : '—');
+// Ratios computed from a near-zero denominator (e.g. Sortino with almost no
+// downside deviation) explode into absurd magnitudes — cap the DISPLAY at 10+.
+const fmtRatio = (n: number): string => {
+  if (!Number.isFinite(n)) return '—';
+  if (n > 10) return '10+';
+  if (n < -10) return '−10+';
+  return n.toFixed(2);
+};
 
 function tradeDateMs(t: Trade): number | null {
   const raw = t.close_at || t.open_at;

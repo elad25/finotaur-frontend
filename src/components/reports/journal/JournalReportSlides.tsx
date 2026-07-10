@@ -110,10 +110,8 @@ export function ConsistencySlideContent({ data }: { data: JournalReportData }) {
 
   return (
     <div className="space-y-ds-4">
-      <p className="text-sm text-ink-secondary">
-        {data.totalTrades} trades &bull; {data.dateRangeLabel}
-      </p>
-
+      {/* Trade count + range live in the page-level subtitle (ReportShell) —
+          repeating them inside the slide was duplicate chrome. */}
       <AIArenaTabNav items={CONSISTENCY_TABS} activeId={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'essential' && (
