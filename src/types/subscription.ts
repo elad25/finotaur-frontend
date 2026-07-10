@@ -247,7 +247,7 @@ export function getAccountTypeDisplayName(accountType: AccountType): string {
   const names: Record<AccountType, string> = {
     free: 'Free (Legacy)',
     basic: 'Basic',
-    premium: 'Premium',
+    premium: 'Trader',
     trial: 'Trial',
     admin: 'Admin',
     vip: 'VIP',

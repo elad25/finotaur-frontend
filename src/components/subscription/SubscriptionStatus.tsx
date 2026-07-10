@@ -49,7 +49,7 @@ export function SubscriptionStatus() {
           )}
           <div>
             <h3 className="text-lg font-bold text-white">
-              {isPremium ? 'Premium Plan' : 'Free Trial'}
+              {isPremium ? 'Trader Plan' : 'Free Trial'}
             </h3>
             <p className="text-xs text-zinc-400">
               {limits.subscription_status === 'active' ? 'Active' : 
@@ -146,7 +146,7 @@ export function SubscriptionStatus() {
         {/* Features List for Free Users */}
         {isFreeTrial && (
           <div className="pt-4 border-t border-zinc-800">
-            <p className="text-xs font-semibold text-zinc-400 mb-3">Premium Benefits:</p>
+            <p className="text-xs font-semibold text-zinc-400 mb-3">Trader Benefits:</p>
             <ul className="space-y-2">
               {[
                 'Unlimited trades',
@@ -169,7 +169,7 @@ export function SubscriptionStatus() {
           <div className="pt-4 border-t border-zinc-800">
             <div className="flex items-center gap-2 text-sm text-emerald-400">
               <CheckCircle2 className="h-4 w-4" />
-              <span>All premium features unlocked</span>
+              <span>All Trader features unlocked</span>
             </div>
             
             {limits.subscription_expires_at && (

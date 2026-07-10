@@ -36,7 +36,7 @@ export interface Addon {
 export const PLANS: Plan[] = [
   {
     id: 'premium',
-    name: 'Premium',
+    name: 'Trader',
     price: 44.99,
     yearlyPrice: 409,
     yearlyMonthlyEquivalent: 34.08,

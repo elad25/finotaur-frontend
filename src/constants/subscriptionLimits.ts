@@ -19,8 +19,8 @@ export const SUBSCRIPTION_LIMITS = {
   // Basic removed 2026-06 (zero subscribers). Free tier (10 lifetime trades) is handled at DB/RLS level.
   premium: {
     max_trades: Infinity,
-    name: 'Premium',
-    displayName: 'Premium Plan',
+    name: 'Trader',
+    displayName: 'Trader Plan',
     reset: 'never' as const,
     price_monthly: 44.99,
     price_yearly: 409.00,
@@ -158,7 +158,7 @@ export function getPlanDisplayInfo(accountType: AccountType | string): {
 } {
   if (isPremiumUser(accountType)) {
     return {
-      name: accountType === 'admin' ? 'Admin' : accountType === 'vip' ? 'VIP' : 'Premium',
+      name: accountType === 'admin' ? 'Admin' : accountType === 'vip' ? 'VIP' : 'Trader',
       badge: accountType === 'vip' ? 'vip' : 'premium',
       color: 'text-[#C9A646]',
       bgColor: 'bg-[#C9A646]/20',

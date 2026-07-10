@@ -205,14 +205,14 @@ export function getPlanDisplay(profile: UserProfile | null | undefined): {
 
   // 🔥 v8.7.0: Check role first, then account_type
   if (role === 'admin' || role === 'super_admin' || account_type === 'admin' || account_type === 'vip') {
-    return { name: 'Premium (Admin)', badge: 'admin' };
+    return { name: 'Trader (Admin)', badge: 'admin' };
   }
 
   // Platform users (Finotaur/Enterprise) get journal Premium; Core removed 2026-06
   if ((account_type === 'free' || account_type === 'trial') && profile.platform_plan) {
     const activePlatform = ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '');
     if (activePlatform && ['finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan)) {
-      return { name: 'Premium — via Platform', badge: 'premium' };
+      return { name: 'Trader — via Platform', badge: 'premium' };
     }
   }
 
@@ -228,7 +228,7 @@ export function getPlanDisplay(profile: UserProfile | null | undefined): {
   
   if (account_type === 'premium') {
     const intervalText = subscription_interval === 'yearly' ? 'Yearly' : 'Monthly';
-    return { name: `Premium (${intervalText})`, badge: 'premium' };
+    return { name: `Trader (${intervalText})`, badge: 'premium' };
   }
 
   return { name: 'Free', badge: 'free' };
