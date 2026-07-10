@@ -291,8 +291,12 @@ function FinoChatPanel({
           )}
 
           {/* Tier teaser — what FINO can also do on higher plans. Only while the
-              conversation is empty, so it never competes with answers. */}
-          {finoTier.locked.length > 0 && messages.length === 0 && (
+              conversation is empty AND no screenshot extraction is in
+              progress, so it never competes with answers or the extraction
+              flow (confirm card, upgrade banner, etc.). */}
+          {finoTier.locked.length > 0 &&
+            messages.length === 0 &&
+            extractionState.phase === 'idle' && (
             <div className="flex-shrink-0 border-b border-border-ds-subtle px-4 py-2.5">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-tertiary">
                 FINO can also…
@@ -323,65 +327,14 @@ function FinoChatPanel({
               </div>
             </div>
           )}
-          {/* Session Review card — sits above the chat thread, never throws */}
-          <FinoSessionReviewCard />
-          {/* Action approval bar — shown when the SSE stream emits a type:'action' event */}
-          <FinoActionBar />
-
-          {/* Screenshot extraction indicators — mounted near FinoActionBar */}
-          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'extracting' && (
-            <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-[#C9A646]/20 bg-[#0D0C0A] px-3 py-2">
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#C9A646]" />
-              <span className="text-[11px] text-[#C9A646]">Analyzing screenshot…</span>
-            </div>
-          )}
-
-          {/* Tier gate — friendly gold upsell, persists until the user acts */}
-          {FINO_DETECTIVE_ENABLED &&
-            extractionState.phase === 'error' &&
-            extractionState.kind === 'upgrade' && (
-              <div className="mx-4 mb-2 flex items-start gap-2.5 rounded-lg border border-[#C9A646]/30 bg-[#C9A646]/10 px-3 py-2.5">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" />
-                <div className="flex-1">
-                  <p className="text-[11px] leading-snug text-[#E8D9A8]">{extractionState.message}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.href = '/app/upgrade';
-                    }}
-                    className="mt-1.5 inline-flex items-center rounded-md bg-[#C9A646] px-2.5 py-1 text-[11px] font-semibold text-black transition-colors hover:bg-[#d8b65a]"
-                  >
-                    Upgrade
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Dismiss"
-                  onClick={resetExtraction}
-                  className="text-[#C9A646]/60 transition-colors hover:text-[#C9A646]"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-          {/* Genuine extraction failure — red, auto-dismisses */}
-          {FINO_DETECTIVE_ENABLED &&
-            extractionState.phase === 'error' &&
-            extractionState.kind === 'error' && (
-              <div className="mx-4 mb-2 rounded-lg border border-red-500/20 bg-red-950/30 px-3 py-2">
-                <span className="text-[11px] text-red-400">{extractionState.message}</span>
-              </div>
-            )}
-
-          {FINO_DETECTIVE_ENABLED && extractionState.phase === 'review' && (
-            <FinoTradeConfirmCard
-              extraction={extractionState.extraction}
-              file={extractionState.file}
-              onClose={resetExtraction}
-            />
-          )}
-
+          {/* Session review card, action bar, extraction indicators and the
+              extraction confirm card all render INSIDE ChatInterface's
+              scrollable messages region (via `beforeMessages` below) — not
+              as fixed siblings above it. Previously they sat outside the
+              scroll container in a plain flex column with no overflow
+              handling, so once their combined height (chips + review card +
+              action bar + confirm card) exceeded the drawer's height, the
+              overflow was simply clipped with no way to scroll to it. */}
           <div className="flex min-h-0 flex-1 flex-col">
             <ChatInterface
               messages={messages}
@@ -401,6 +354,68 @@ function FinoChatPanel({
               promptPlacement="aboveInput"
               onImageSelected={FINO_DETECTIVE_ENABLED ? handleImageSelected : undefined}
               openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
+              beforeMessages={
+                <div className="-mx-4">
+                  {/* Session Review card — sits above the chat thread, never throws */}
+                  <FinoSessionReviewCard />
+                  {/* Action approval bar — shown when the SSE stream emits a type:'action' event */}
+                  <FinoActionBar />
+
+                  {/* Screenshot extraction indicators — mounted near FinoActionBar */}
+                  {FINO_DETECTIVE_ENABLED && extractionState.phase === 'extracting' && (
+                    <div className="mx-4 mb-2 flex items-center gap-2 rounded-lg border border-[#C9A646]/20 bg-[#0D0C0A] px-3 py-2">
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#C9A646]" />
+                      <span className="text-[11px] text-[#C9A646]">Analyzing screenshot…</span>
+                    </div>
+                  )}
+
+                  {/* Tier gate — friendly gold upsell, persists until the user acts */}
+                  {FINO_DETECTIVE_ENABLED &&
+                    extractionState.phase === 'error' &&
+                    extractionState.kind === 'upgrade' && (
+                      <div className="mx-4 mb-2 flex items-start gap-2.5 rounded-lg border border-[#C9A646]/30 bg-[#C9A646]/10 px-3 py-2.5">
+                        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#C9A646]" />
+                        <div className="flex-1">
+                          <p className="text-[11px] leading-snug text-[#E8D9A8]">{extractionState.message}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.location.href = '/app/upgrade';
+                            }}
+                            className="mt-1.5 inline-flex items-center rounded-md bg-[#C9A646] px-2.5 py-1 text-[11px] font-semibold text-black transition-colors hover:bg-[#d8b65a]"
+                          >
+                            Upgrade
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Dismiss"
+                          onClick={resetExtraction}
+                          className="text-[#C9A646]/60 transition-colors hover:text-[#C9A646]"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+
+                  {/* Genuine extraction failure — red, auto-dismisses */}
+                  {FINO_DETECTIVE_ENABLED &&
+                    extractionState.phase === 'error' &&
+                    extractionState.kind === 'error' && (
+                      <div className="mx-4 mb-2 rounded-lg border border-red-500/20 bg-red-950/30 px-3 py-2">
+                        <span className="text-[11px] text-red-400">{extractionState.message}</span>
+                      </div>
+                    )}
+
+                  {FINO_DETECTIVE_ENABLED && extractionState.phase === 'review' && (
+                    <FinoTradeConfirmCard
+                      extraction={extractionState.extraction}
+                      file={extractionState.file}
+                      onClose={resetExtraction}
+                    />
+                  )}
+                </div>
+              }
             />
           </div>
         </>

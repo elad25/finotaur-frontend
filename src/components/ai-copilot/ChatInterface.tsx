@@ -42,6 +42,15 @@ interface ChatInterfaceProps {
   promptRows?: PromptChip[][];
   placeholder?: string;
   disclaimer?: string;
+  /**
+   * Optional extra content rendered INSIDE the scrollable messages region,
+   * above the empty-state / message list (e.g. FinoChatDrawer's session
+   * review card, action bar, and screenshot-extraction confirm card). This
+   * keeps tall inline cards part of the same scroll container as the
+   * messages, so they never get stranded above a fixed-height chat area
+   * with no way to scroll to them. Omit for the default (no extra content).
+   */
+  beforeMessages?: React.ReactNode;
   /** Controls where suggestion chips appear.
    *  'center'     — default: marquee rows in the empty-state area (existing behavior).
    *  'aboveInput' — compact pill bubbles placed directly above the input bar;
@@ -102,6 +111,7 @@ export const ChatInterface = memo(function ChatInterface({
   promptPlacement = 'center',
   onImageSelected,
   openFilePickerRef,
+  beforeMessages,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -204,6 +214,7 @@ export const ChatInterface = memo(function ChatInterface({
         className="flex-1 overflow-y-auto px-4 py-6"
         style={{ scrollBehavior: 'smooth' }}
       >
+        {beforeMessages}
         {showEmptyState ? (
           <EmptyState
             title={emptyTitle}
