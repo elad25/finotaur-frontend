@@ -502,22 +502,29 @@ export async function getNewJoins24h(): Promise<NewJoins24h> {
  */
 export async function getUserById(userId: string): Promise<UserWithStats | null> {
   const cacheKey = `admin-user-${userId}`;
-  
+
   return cachedQuery(
     cacheKey,
     async () => {
-      const { data: user, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Uses the admin_get_user_details SECURITY DEFINER RPC (admin-only) —
+      // a direct `profiles` select is RLS-subject and returns 0 rows for
+      // any non-self user. Row shape = admin_list_users + trailing deleted_at.
+      const { data, error } = await supabase.rpc('admin_get_user_details', {
+        p_user_id: userId,
+      });
 
       if (error) {
-        if (error.code === 'PGRST116') return null;
+        console.error('❌ Error fetching user via admin_get_user_details RPC:', error);
         throw error;
       }
 
-      return mapDbRowToUserWithStats(user);
+      const rows = (data || []) as (AdminListUsersRow & { deleted_at: string | null })[];
+      if (rows.length === 0) return null;
+
+      const row = rows[0];
+      const user = mapDbRowToUserWithStats(row);
+      user.deleted_at = row.deleted_at;
+      return user;
     },
     CACHE_TTL.USER_DETAIL
   );

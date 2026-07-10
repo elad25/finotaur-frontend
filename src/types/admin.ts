@@ -84,6 +84,9 @@ export interface UserWithStats extends AdminUser {
   newsletter_status?: string | null;
   top_secret_status?: string | null;
   platform_plan?: string | null;
+
+  // Soft-delete marker — only populated by admin_get_user_details (single-user lookup)
+  deleted_at?: string | null;
 }
 
 /** Which product categories a user is subscribed to. */
