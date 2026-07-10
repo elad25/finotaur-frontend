@@ -1,23 +1,16 @@
-# Cloudflare Pages SPA fallback.
-# Any path that is not a real static asset is served index.html (HTTP 200)
-# so React Router can resolve client-side routes on hard-refresh, deep links,
-# and email/OAuth callback URLs. Static files in /assets/* are matched first
-# and served directly, so this rule never shadows real bundles.
-# A MISSING hashed chunk must return a 404 STATUS — never a 200 with the SPA
-# index.html body. During a deploy's propagation window an edge that does not
-# yet have /assets/<hash>.js otherwise answers that URL with the SPA fallback
-# (200, text/html); the browser then caches that text/html under the IMMUTABLE
-# asset URL, so dynamic import() keeps failing and the app white-screens
-# permanently — even after Ctrl+Shift+R (a plain reload cannot evict an
-# immutable-cached entry). A 404 STATUS is never stored by the browser as the
-# module, so the poisoning cannot happen and lazyWithRetry / the boot recovery
-# reload cleanly. Existing chunks are matched as static files first, so this
-# only ever affects a chunk that truly is not on this deployment.
-# NOTE: destination is /index.html (which exists), NOT a dedicated 404.html —
-# a real 404.html at the Pages root DISABLES the SPA fallback and makes every
-# non-prerendered route (e.g. /app/*, the OAuth callback) return the 404 page
-# instead of the app. Serving index.html with a 404 status keeps the SPA working
-# while still giving a missing chunk a non-200 status.
-# (2026-07-06 poisoned-cache incident + 404.html-broke-SPA regression.)
-/assets/*    /index.html    404
+# Cloudflare Pages SPA fallback for real navigation routes.
+# Any path with no real static asset is served index.html (HTTP 200) so React
+# Router can resolve client-side routes on hard-refresh, deep links, and
+# email/OAuth callback URLs.
+#
+# MISSING /assets/* chunks are deliberately NOT handled here — they are handled
+# by functions/assets/[[path]].ts, which returns a REAL 404. Cloudflare
+# _redirects CANNOT return a 404 status (it supports only 200 rewrites and 3xx
+# redirects), which is why the previous `/assets/* /index.html 404` rule silently
+# fell through to this `/* 200` catch-all and the app kept white-screening on
+# poisoned immutable caches during deploy propagation (2026-07-06 incident,
+# re-confirmed 2026-07-10: a dead /assets/*.js URL was still answering 200
+# text/html in production). A real 404.html at the Pages root is also not an
+# option — it disables the SPA fallback and 404s every /app/* route and the
+# OAuth callback. Full writeup: functions/assets/[[path]].ts.
 /*    /index.html   200

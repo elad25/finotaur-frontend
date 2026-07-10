@@ -32,12 +32,39 @@ const RELOAD_FLAG_KEY = '__finotaur_lazy_reload__';
 type ModuleWithDefault<T> = { default: T };
 
 const CHUNK_ERROR_PATTERN =
-  /Loading chunk|Loading CSS chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
+  /Loading chunk|Loading CSS chunk|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|Failed to load module script|Expected a JavaScript|module script but the server responded|MIME type/i;
 
 function isChunkLoadError(err: unknown): boolean {
   if (!err) return false;
   const msg = err instanceof Error ? err.message : String(err);
   return CHUNK_ERROR_PATTERN.test(msg);
+}
+
+/**
+ * Force-revalidate every already-loaded /assets/* module URL so the browser
+ * OVERWRITES any poisoned immutable entry (text/html cached under a .js URL) —
+ * a plain location.reload() does NOT reliably evict an `immutable`-cached entry,
+ * which is why the app used to white-screen permanently after a bad deploy
+ * window. `cache: 'reload'` forces a network fetch that replaces the cache
+ * entry; after the edge fix (functions/assets/[[path]].ts) that URL now returns
+ * either the real chunk or a clean 404, both of which break the poison loop.
+ * Best-effort: never throws, never blocks the reload.
+ */
+async function evictPoisonedAssetCache(): Promise<void> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+  try {
+    const urls = Array.from(
+      new Set(
+        performance
+          .getEntriesByType('resource')
+          .map((e) => e.name)
+          .filter((u) => u.includes('/assets/') && /\.(js|mjs|css)(\?|$)/.test(u)),
+      ),
+    );
+    await Promise.allSettled(urls.map((u) => fetch(u, { cache: 'reload' })));
+  } catch {
+    /* best-effort — never block the reload */
+  }
 }
 
 function safeSessionFlag(): { get: () => boolean; set: () => void; clear: () => void } {
@@ -78,12 +105,18 @@ export function lazyWithRetry<T extends ComponentType<any>>(
       try {
         const mod = await factory();
         if (!mod || typeof (mod as any).default === 'undefined') {
-          // Don't retry — this is a code/build problem, not a network problem.
+          // A build-time guard (assertLazyImportsHaveDefault in vite.config.ts)
+          // already PROVES every lazy import has a default export. So a MISSING
+          // default at runtime cannot be a code/build problem — it means the
+          // import resolved to the wrong bytes: the SPA index.html shell served
+          // (text/html) for an /assets/<hash>.js URL during deploy propagation
+          // or from a poisoned immutable cache. Treat it as a chunk-load failure
+          // (message matches CHUNK_ERROR_PATTERN) so the recovery path below
+          // cache-busts and reloads instead of hard-crashing the whole app.
           throw new Error(
-            '[lazyWithRetry] Module resolved without a `default` export. ' +
-            'Check the lazy(() => import(...)) factory and ensure the target ' +
-            'file has `export default`, or that .then(m => ({ default: m.X })) ' +
-            'references an export that still exists.',
+            '[lazyWithRetry] Module resolved without a `default` export — the ' +
+            'index.html shell was likely served for a hashed chunk (deploy ' +
+            'propagation / poisoned cache). Failed to fetch dynamically imported module.',
           );
         }
         reloadFlag.clear();
@@ -104,6 +137,9 @@ export function lazyWithRetry<T extends ComponentType<any>>(
     if (isChunkLoadError(lastError) && typeof window !== 'undefined') {
       if (!reloadFlag.get()) {
         reloadFlag.set();
+        // Evict any poisoned immutable cache entry BEFORE reloading, otherwise
+        // the reload re-reads the same text/html shell and the loop repeats.
+        await evictPoisonedAssetCache();
         window.location.reload();
         // Return a never-resolving promise — the reload will replace this
         // module instance anyway, and we don't want React to render a broken
