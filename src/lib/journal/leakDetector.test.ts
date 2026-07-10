@@ -161,6 +161,68 @@ describe('buildLeakReport — revenge trader', () => {
     expect(report.verdict!.costUsd).toBeGreaterThanOrEqual(100);
     expect(report.verdict!.sampleSize).toBeGreaterThanOrEqual(5);
   });
+
+  it('counterfactuals sum to costUsd for revenge_reentry (± rounding)', () => {
+    const trades: Trade[] = [];
+
+    for (let i = 0; i < 10; i++) {
+      const day = i + 1;
+      const hour = 9 + i;
+      trades.push(
+        makeTrade({
+          id: `victim-${i}`,
+          symbol: 'MES',
+          entry_price: 5000,
+          exit_price: 4990,
+          quantity: 1,
+          multiplier: 1,
+          pnl: -50,
+          outcome: 'LOSS',
+          open_at: iso(day, hour, 0),
+          close_at: iso(day, hour, 10),
+        }),
+      );
+      trades.push(
+        makeTrade({
+          id: `revenge-${i}`,
+          symbol: 'MES',
+          entry_price: 5000,
+          exit_price: 4984,
+          quantity: 1,
+          multiplier: 1,
+          pnl: -80,
+          outcome: 'LOSS',
+          open_at: iso(day, hour, 15),
+          close_at: iso(day, hour, 25),
+        }),
+      );
+    }
+
+    for (let i = 0; i < 15; i++) {
+      const day = 11 + i;
+      trades.push(
+        makeTrade({
+          id: `pad-${i}`,
+          symbol: 'NQ',
+          entry_price: 15000,
+          exit_price: 15005,
+          quantity: 1,
+          multiplier: 1,
+          pnl: 100,
+          outcome: 'WIN',
+          open_at: iso(day, 12, 0),
+          close_at: iso(day, 12, 10),
+        }),
+      );
+    }
+
+    const report = buildLeakReport(trades);
+    const verdict = report.verdict!;
+    expect(verdict.family).toBe('revenge_reentry');
+    expect(verdict.counterfactuals).toBeDefined();
+    const sum = verdict.counterfactuals!.reduce((s, c) => s + c.deltaUsd, 0);
+    expect(sum).toBeCloseTo(verdict.costUsd, 6);
+  });
 });
 
 // ─── Family 4: early_exit ───────────────────────────────────────────────────────
@@ -196,6 +258,32 @@ describe('buildLeakReport — early exit', () => {
 
     // No losses anywhere in this dataset — nothing should compete or crowd it out.
     expect(report.verdict!.family).toBe('early_exit');
+  });
+
+  it('counterfactuals sum to costUsd for early_exit (± rounding)', () => {
+    const trades = Array.from({ length: 30 }, (_, i) => {
+      const day = (i % 28) + 1;
+      return makeTrade({
+        id: `early-${i}`,
+        symbol: 'MES',
+        entry_price: 5000,
+        exit_price: 5040,
+        take_profit_price: 5100,
+        stop_price: 0,
+        quantity: 1,
+        multiplier: 1,
+        pnl: 40,
+        outcome: 'WIN',
+        open_at: iso(day, 8 + (i % 10), 0),
+        close_at: iso(day, 8 + (i % 10), 30),
+      });
+    });
+
+    const report = buildLeakReport(trades);
+    const earlyExit = report.leaks.find((l) => l.family === 'early_exit')!;
+    expect(earlyExit.counterfactuals).toBeDefined();
+    const sum = earlyExit.counterfactuals!.reduce((s, c) => s + c.deltaUsd, 0);
+    expect(sum).toBeCloseTo(earlyExit.costUsd, 6);
   });
 });
 
