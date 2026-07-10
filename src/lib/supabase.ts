@@ -53,6 +53,60 @@ if (import.meta.env.DEV) {
   console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey.substring(0, 20) + '...');
 }
 
+// ============================================
+// 🔁 Transient PostgREST 503 resilience (schema-cache reload / pool contention)
+// ============================================
+// A PostgREST wedge returns HTTP 503 (often PGRST002 "Could not query the
+// database for the schema cache. Retrying.") to ALL /rest/v1 and /auth/v1
+// calls for a window (seconds→minutes) — this is what broke the app on
+// 2026-07-09 while Postgres itself was fully healthy. A 503 means the request
+// never reached Postgres, so retrying is safe for every HTTP method (no
+// double-write). 502/504 and network errors are retried only for idempotent
+// methods. This transport wrapper rides out short reloads transparently;
+// longer outages still surface to React Query's own retry.
+const REST_RETRY_MAX = 4;
+const REST_RETRY_BASE_MS = 800;
+
+const restRetrySleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithRestRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const method = (init?.method || 'GET').toUpperCase();
+  const idempotent = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+  let attempt = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let res: Response;
+    try {
+      res = await fetch(input, init);
+    } catch (err) {
+      // Network-level failure (e.g. TypeError "Failed to fetch"). Only retry
+      // idempotent methods — a mutation may have executed before the socket died.
+      if (idempotent && attempt < REST_RETRY_MAX) {
+        attempt += 1;
+        await restRetrySleep(REST_RETRY_BASE_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 250));
+        continue;
+      }
+      throw err;
+    }
+
+    // 503 = never executed → safe to retry for any method.
+    // 502/504 = gateway may have forwarded the request → idempotent-only.
+    const retryable =
+      res.status === 503 || (idempotent && (res.status === 502 || res.status === 504));
+
+    if (retryable && attempt < REST_RETRY_MAX) {
+      attempt += 1;
+      await restRetrySleep(REST_RETRY_BASE_MS * 2 ** (attempt - 1) + Math.floor(Math.random() * 250));
+      continue;
+    }
+    return res;
+  }
+}
+
 // 🔥 SINGLETON - instance יחיד לכל האפליקציה
 let supabaseInstance: SupabaseClient | null = null;
 
@@ -70,7 +124,8 @@ export const supabase = (() => {
         storageKey: 'finotaur-auth-token',
       },
       global: {
-        headers: { 'x-client-info': 'finotaur-web@1.0.0' }
+        headers: { 'x-client-info': 'finotaur-web@1.0.0' },
+        fetch: fetchWithRestRetry,
       },
       realtime: {
         params: { eventsPerSecond: 10 }
