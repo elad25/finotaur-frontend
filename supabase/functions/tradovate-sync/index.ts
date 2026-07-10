@@ -20,6 +20,13 @@ import { scheduleRetry } from '../_shared/retryQueue.ts';
 import { fetchWithRetry as sharedFetchWithRetry } from '../_shared/fetchWithRetry.ts';
 import { matchStop, type StopOrder } from './_stopMatch.ts';
 
+// Abort an in-flight fetch after `timeoutMs` (default 20s) so a hung Tradovate
+// call rejects (caught by existing error handling) instead of lingering for
+// minutes. Honors a caller-provided signal if one is passed.
+async function fetchWithTimeout(input: string | URL | Request, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
+  return await fetch(input, { ...init, signal: (init as any).signal ?? AbortSignal.timeout(timeoutMs) });
+}
+
 // Diagnostic: last stop-index summary, surfaced in non-cron responses for verification.
 let lastStopDiag: Record<string, unknown> | null = null;
 let brokerRiskBudget = 50; // max auto-liq hydrations per cron invocation (rate-limit guard)
@@ -850,7 +857,7 @@ async function syncCredential(cred: {
 
       for (const url of candidateUrls) {
         try {
-          const res = await fetch(url, {
+          const res = await fetchWithTimeout(url, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
           if (!res.ok) continue;
@@ -1089,7 +1096,7 @@ async function syncCredential(cred: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let rawOrderBody: any[] = [];
   try {
-    const orderRes = await fetch(`${base}/order/list`, {
+    const orderRes = await fetchWithTimeout(`${base}/order/list`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (orderRes.ok) {
@@ -1138,7 +1145,7 @@ async function syncCredential(cred: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let rawOvBody: any[] = [];
   try {
-    const ovRes = await fetch(`${base}/orderVersion/list`, {
+    const ovRes = await fetchWithTimeout(`${base}/orderVersion/list`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (ovRes.ok) {
@@ -1450,7 +1457,7 @@ async function syncCredential(cred: {
         brokerRiskBudget--;
         const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
         const jget = async (u: string) => {
-          const r = await fetch(`${base}${u}`, hdr);
+          const r = await fetchWithTimeout(`${base}${u}`, hdr);
           return r.ok ? await r.json() : { _status: r.status };
         };
         const acct = await jget(`/account/item?id=${acctId}`);
@@ -1662,7 +1669,7 @@ async function processAccountFills(args: {
   // Any failure → null + warn + CONTINUE (must never break the sync).
   let accountEquityAtEntry: number | null = null;
   try {
-    const balanceRes = await fetch(
+    const balanceRes = await fetchWithTimeout(
       `${base}/cashBalance/getCashBalanceSnapshot?accountId=${accountIdNum}`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
@@ -1699,7 +1706,7 @@ async function processAccountFills(args: {
   // A failure here MUST NOT throw out of / abort the fills sync for this or
   // any other account — log and continue.
   try {
-    const propBalanceRes = await fetch(
+    const propBalanceRes = await fetchWithTimeout(
       `${base}/cashBalance/getCashBalanceSnapshot?accountId=${accountIdNum}`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
