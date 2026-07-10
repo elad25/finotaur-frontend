@@ -22,6 +22,7 @@ import { isBrokerId, brokerConnId } from '@/hooks/usePortfolios';
 import { excludeHiddenWhenAllAccounts } from '@/lib/journal/hiddenAccounts';
 import { getDemoTrades } from '@/utils/demoJournalData';
 import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
+import { useJournalPreview } from '@/contexts/JournalPreviewContext';
 
 // ================================================
 // 🔥 ASSET MULTIPLIERS - For R calculation
@@ -395,6 +396,7 @@ export function useTrades(
   }, [targetUserId, qc]);
 
   const { isDemo } = useJournalDemoMode();
+  const { isPreview } = useJournalPreview();
 
   const query = useQuery({
     queryKey: [
@@ -420,6 +422,14 @@ export function useTrades(
     refetchOnMount: 'always',
     refetchInterval: false,
   });
+
+  // Free-tier preview (JournalFeatureGate, e.g. Shadow / Revenge Radar): always
+  // show the rich sample journal regardless of the user's real trade count —
+  // these premium surfaces are gated to sample data, real journal pages
+  // elsewhere are unaffected since the context only exists under gated routes.
+  if (isPreview) {
+    return { ...query, data: getDemoTrades() };
+  }
 
   // Zero-trade users see a sample-filled journal on the /app/journal surface
   // only — home dashboard, AI Arena etc. must never render demo data.

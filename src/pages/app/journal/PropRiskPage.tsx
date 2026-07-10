@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Gauge, Settings, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { usePropRisk } from '@/features/prop-risk/usePropRisk';
@@ -12,6 +13,8 @@ import { AssignPlanDialog } from '@/features/prop-risk/AssignPlanDialog';
 import { PROP_STATUS_META } from '@/features/prop-risk/computePropStatus';
 import type { PropRiskRow } from '@/features/prop-risk/usePropRisk';
 import type { PropStatus } from '@/features/prop-risk/computePropStatus';
+import { useJournalPreview } from '@/contexts/JournalPreviewContext';
+import { getDemoPropRiskRows } from '@/utils/demoPropRiskData';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -363,13 +366,28 @@ function UnsupportedFirmCard({ row, onAssign }: { row: PropRiskRow; onAssign: (r
 // ── Main page ─────────────────────────────────────────────────────
 
 export default function PropRiskPage() {
-  const { rows, isLoading, assignPlan, removePlan } = usePropRisk();
+  const navigate = useNavigate();
+  const { isPreview } = useJournalPreview();
+  const propRisk = usePropRisk();
+  const isLoading = isPreview ? false : propRisk.isLoading;
+  const { assignPlan, removePlan } = propRisk;
+  // Free-tier preview: substitute the live rows with deterministic sample
+  // accounts before the empty-state check, so free users see a fully
+  // populated dashboard instead of "no accounts found".
+  const rows = isPreview ? getDemoPropRiskRows() : propRisk.rows;
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogRow, setDialogRow] = useState<PropRiskRow | null>(null);
 
   const openDialog = (row: PropRiskRow) => {
+    // Preview accounts aren't real — editing/assigning a plan would try to
+    // upsert prop_account_configs for a sample account name. Redirect to
+    // upgrade instead, same pattern as the Copier's adaptive CTA.
+    if (isPreview) {
+      navigate('/app/upgrade');
+      return;
+    }
     setDialogRow(row);
     setDialogOpen(true);
   };
