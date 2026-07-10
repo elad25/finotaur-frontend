@@ -55,7 +55,11 @@ export function ReferFriendCard() {
     (async () => {
       const row = await fetchMemberReferralRow(user.id);
       if (cancelled) return;
-      setState(row?.coupon_code ? { kind: 'ready', row } : { kind: 'no-code' });
+      // "ready" requires a LIVE Whop promo, not just a code. A row with a
+      // coupon_code but no whop_promo_id (never minted, or the Whop coupon
+      // was deleted) means the friend discount doesn't actually exist at
+      // checkout — treat it as needing (re)provisioning.
+      setState(row?.coupon_code && row?.whop_promo_id ? { kind: 'ready', row } : { kind: 'no-code' });
     })();
 
     return () => {
@@ -81,7 +85,7 @@ export function ReferFriendCard() {
     }
 
     const freshRow = user?.id ? await fetchMemberReferralRow(user.id) : null;
-    setState({ kind: 'ready', row: freshRow?.coupon_code ? freshRow : rowFromProvisionResult(result.data) });
+    setState({ kind: 'ready', row: freshRow?.whop_promo_id ? freshRow : rowFromProvisionResult(result.data) });
   }, [user?.id]);
 
   const copy = useCallback(async (text: string, type: 'code' | 'link') => {
