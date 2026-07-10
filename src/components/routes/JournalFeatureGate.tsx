@@ -13,12 +13,12 @@
 
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, GitCompare, Flame, Check } from 'lucide-react';
+import { Lock, GitCompare, Flame, Check, Sparkles } from 'lucide-react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { RouteSkeleton } from '@/components/ds/RouteSkeleton';
 import { Button } from '@/components/ds/Button';
 
-type GatedFeature = 'shadow' | 'revenge-radar';
+type GatedFeature = 'shadow' | 'revenge-radar' | 'ai-summary';
 
 interface JournalFeatureGateProps {
   feature: GatedFeature;
@@ -55,6 +55,17 @@ const FEATURE_COPY: Record<GatedFeature, FeatureCopy> = {
       'Builds the self-awareness to break the cycle',
     ],
     cta: 'Upgrade to unlock Revenge Radar',
+  },
+  'ai-summary': {
+    icon: Sparkles,
+    title: 'AI Summary — Leak Detector',
+    description: 'FINOTAUR AI diagnoses your single most expensive trading pattern, backed by real evidence from your own trades.',
+    bullets: [
+      'Identifies your #1 leak — revenge trading, oversizing, holding losers, and more',
+      'Every diagnosis backed by real trade evidence, not guesswork',
+      'Weekly and monthly AI recaps included',
+    ],
+    cta: 'Upgrade to unlock AI Summary',
   },
 };
 
