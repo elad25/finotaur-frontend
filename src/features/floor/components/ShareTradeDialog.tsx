@@ -9,7 +9,7 @@
 // all selected destinations.
 
 import { useState, useMemo } from 'react';
-import { Share2 } from 'lucide-react';
+import { Share2, Globe } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -23,8 +23,8 @@ import { useAuth } from '@/providers/AuthProvider';
 // intentional: floor depends on mentor to offer rooms as share destinations (unidirectional, no cycle)
 import { useMySpaces } from '@/features/mentor/hooks/useMentorshipSpaces';
 import { useShareTrade } from '@/features/floor/hooks/useShareTrade';
-import { STRATEGY_CATEGORIES } from '@/lib/strategyCategories';
 import { isBrokerVerifiedTrade } from '@/lib/trades/isBrokerVerifiedTrade';
+import { FLOOR_CHANNELS, GENERAL_CATEGORY } from '@/features/floor/lib/floorChannels';
 import { cn } from '@/lib/utils';
 import type { GlobalFeedItem, ShareDestination, SharePrivacy } from '@/features/floor/types/community';
 
@@ -168,6 +168,39 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Channel picker pill ────────────────────────────────────────────────────────
+
+interface ChannelPillProps {
+  Icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+function ChannelPill({ Icon, label, active, disabled, onClick }: ChannelPillProps) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-[6px] rounded-full px-[10px] py-[5px]',
+        'font-sans text-[11px] font-medium border-[0.5px] transition-colors duration-base ease-out',
+        'disabled:cursor-not-allowed',
+        active
+          ? 'bg-gradient-gold border-transparent text-surface-base'
+          : 'bg-surface-2 border-border-ds-subtle text-ink-secondary hover:border-border-ds-default hover:text-ink-primary',
+      )}
+    >
+      <Icon className="h-[12px] w-[12px]" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 // ── Main dialog ───────────────────────────────────────────────────────────────
 
 export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialogProps) {
@@ -183,7 +216,9 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
   const verified = isBrokerVerifiedTrade(trade);
 
   // ── Destination selection state ──────────────────────────────────────────────
-  const [globalSelected, setGlobalSelected] = useState(false);
+  // Single-select channel: null = nothing picked, GENERAL_CATEGORY = Global,
+  // otherwise one of FLOOR_CHANNELS' keys (a strategy category channel).
+  const [channel, setChannel] = useState<string | null>(null);
   // communityRooms: Set of space_ids selected for community feed sharing
   const [communityRooms, setCommunityRooms] = useState<Set<string>>(new Set());
   // mentorRooms: Set of space_ids selected for mentor 1:1 review
@@ -194,13 +229,11 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
   const [showSetupOnly, setShowSetupOnly] = useState(false);
   const [revealSize, setRevealSize] = useState(false);
   const [caption, setCaption] = useState('');
-  // Strategy category — required when the Global destination is selected.
-  const [strategyCategory, setStrategyCategory] = useState<string | null>(null);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const privacy: SharePrivacy = useMemo(
-    () => ({ hidePnl, showSetupOnly, revealSize, caption: caption || undefined, strategyCategory }),
-    [hidePnl, showSetupOnly, revealSize, caption, strategyCategory],
+    () => ({ hidePnl, showSetupOnly, revealSize, caption: caption || undefined, strategyCategory: channel }),
+    [hidePnl, showSetupOnly, revealSize, caption, channel],
   );
 
   const previewItem = useMemo(
@@ -208,8 +241,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
     [trade, privacy, authorName],
   );
 
-  const hasAnyDestination =
-    globalSelected || communityRooms.size > 0 || mentorRooms.size > 0;
+  const hasAnyDestination = channel != null || communityRooms.size > 0 || mentorRooms.size > 0;
 
   function toggleCommunityRoom(spaceId: string) {
     setCommunityRooms((prev) => {
@@ -233,9 +265,9 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
     const destinations: ShareDestination[] = [];
 
     // Defensive: never send a global destination for an unverified trade,
-    // even if globalSelected state somehow got set (the toggle is disabled
-    // and force-reset below, but this guards against any state drift).
-    if (globalSelected && verified) {
+    // even if channel state somehow got set (the picker is disabled and
+    // force-reset below, but this guards against any state drift).
+    if (channel != null && verified) {
       destinations.push({ scope: 'global' });
     }
 
@@ -251,18 +283,12 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
 
     if (destinations.length === 0) return;
 
-    if (globalSelected && verified && !strategyCategory) {
-      toast({ title: 'Pick a strategy category for the global share.' });
-      return;
-    }
-
     try {
       await shareTrade(trade.id, destinations, privacy);
       toast({ title: 'Trade shared successfully.' });
       onOpenChange(false);
       // Reset state for next open
-      setGlobalSelected(false);
-      setStrategyCategory(null);
+      setChannel(null);
       setCommunityRooms(new Set());
       setMentorRooms(new Set());
       setCaption('');
@@ -326,50 +352,37 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
 
             {/* Destinations */}
             <div className="flex flex-col gap-ds-3">
-              <SectionLabel>Destinations</SectionLabel>
+              <SectionLabel>Channel</SectionLabel>
 
-              {/* Global — disabled for unverified (non broker-synced) trades */}
-              <ToggleRow
-                checked={verified && globalSelected}
-                onChange={verified ? setGlobalSelected : () => {}}
-                disabled={!verified}
-                label="FINOTAUR Global (public community)"
-                description="Visible to all members of the FINOTAUR community."
-              />
+              {/* Single-select channel picker — Global or one strategy channel.
+                  Gated by broker-verification exactly like the old Global toggle. */}
+              <div
+                role="radiogroup"
+                aria-label="Channel"
+                className={cn('flex flex-wrap gap-[6px]', !verified && 'opacity-50')}
+              >
+                <ChannelPill
+                  Icon={Globe}
+                  label="Global"
+                  active={channel === GENERAL_CATEGORY}
+                  disabled={!verified}
+                  onClick={() => setChannel((prev) => (prev === GENERAL_CATEGORY ? null : GENERAL_CATEGORY))}
+                />
+                {FLOOR_CHANNELS.map((ch) => (
+                  <ChannelPill
+                    key={ch.key}
+                    Icon={ch.Icon}
+                    label={ch.label}
+                    active={channel === ch.key}
+                    disabled={!verified}
+                    onClick={() => setChannel((prev) => (prev === ch.key ? null : ch.key))}
+                  />
+                ))}
+              </div>
               {!verified && (
                 <p className="font-sans text-[11px] text-ink-tertiary pl-ds-1 -mt-ds-1">
                   Only broker-verified trades can be posted to the Global Feed.
                 </p>
-              )}
-
-              {/* Strategy category — required for global shares */}
-              {verified && globalSelected && (
-                <div className="flex flex-col gap-ds-2 pl-ds-1">
-                  <span className="font-sans text-[11px] text-ink-tertiary">
-                    Strategy category <span className="text-gold-primary">(required)</span>
-                  </span>
-                  <div className="flex flex-wrap gap-[6px]">
-                    {STRATEGY_CATEGORIES.map((cat) => {
-                      const active = strategyCategory === cat;
-                      return (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setStrategyCategory(cat)}
-                          aria-pressed={active}
-                          className={cn(
-                            'rounded-full px-[10px] py-[4px] font-sans text-[11px] font-medium border-[0.5px] transition-colors duration-base ease-out',
-                            active
-                              ? 'bg-gradient-gold border-transparent text-surface-base'
-                              : 'bg-surface-2 border-border-ds-subtle text-ink-secondary hover:border-border-ds-default hover:text-ink-primary',
-                          )}
-                        >
-                          {cat}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               )}
 
               {/* Per-space community + mentor */}
@@ -474,7 +487,7 @@ export function ShareTradeDialog({ trade, open, onOpenChange }: ShareTradeDialog
             variant="gold"
             size="compact"
             showArrow={false}
-            disabled={!hasAnyDestination || isSharing || (globalSelected && verified && !strategyCategory)}
+            disabled={!hasAnyDestination || isSharing || (channel != null && !verified)}
             onClick={handleSubmit}
           >
             {isSharing ? 'Sharing…' : 'Share trade'}

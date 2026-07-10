@@ -20,14 +20,12 @@ import {
 import { useFloorProfile } from '@/features/floor/hooks/useFloorProfile';
 import { SharedTradeCard } from '@/features/floor/components/SharedTradeCard';
 import { FeedTagRail } from '@/features/floor/components/FeedTagRail';
+import { FloorChannelBar } from '@/features/floor/components/FloorChannelBar';
 import { PostTradeDialog } from '@/features/floor/components/PostTradeDialog';
 import { FloorProfileDialog } from '@/features/floor/components/FloorProfileDialog';
 import { VerifiedTradesNotice } from './VerifiedTradesNotice';
-import type {
-  GlobalFeedItem,
-  FeedFilters,
-  FeedFacetKind,
-} from '@/features/floor/types/community';
+import { getChannelByKey } from '@/features/floor/lib/floorChannels';
+import type { GlobalFeedItem } from '@/features/floor/types/community';
 
 // ── Feed skeleton ──────────────────────────────────────────────────────────────
 
@@ -207,7 +205,7 @@ function VerifiedOnlyNotice() {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function GlobalFeed() {
-  const [filters, setFilters] = useState<FeedFilters>({});
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
 
   const {
     posts,
@@ -218,7 +216,7 @@ export function GlobalFeed() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useGlobalFeed(filters);
+  } = useGlobalFeed({ strategyCategory: activeChannel });
 
   const { facets } = useFeedFacets();
   const { rows: leaderboard } = useConsistencyLeaderboard('week', 5);
@@ -226,26 +224,7 @@ export function GlobalFeed() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  // Single-select per dimension; clicking the active chip clears that dimension.
-  function toggleFilter(kind: FeedFacetKind, value: string) {
-    setFilters((prev) => {
-      const field = (
-        {
-          symbol: 'symbol',
-          strategy_category: 'strategyCategory',
-          outcome: 'outcome',
-          tier: 'tier',
-        } as const
-      )[kind];
-      const next = { ...prev };
-      if (next[field] === value) {
-        next[field] = null;
-      } else {
-        next[field] = value as never;
-      }
-      return next;
-    });
-  }
+  const activeChannelMeta = getChannelByKey(activeChannel);
 
   // ── Infinite scroll sentinel ────────────────────────
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -286,6 +265,9 @@ export function GlobalFeed() {
       <PostTradeDialog open={composerOpen} onOpenChange={setComposerOpen} />
       <FloorProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
 
+      {/* Channel switcher */}
+      <FloorChannelBar facets={facets} activeChannel={activeChannel} onSelect={setActiveChannel} />
+
       {/* Two-column layout: feed (left) + tag rail (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_260px] gap-ds-4 items-start">
         {/* Main column */}
@@ -298,6 +280,17 @@ export function GlobalFeed() {
 
           {/* Verified-only notice */}
           <VerifiedOnlyNotice />
+
+          {/* Active channel context header */}
+          <div className="flex items-center gap-ds-2 px-[2px]">
+            <activeChannelMeta.Icon className="h-[14px] w-[14px] text-gold-primary shrink-0" />
+            <span className="font-sans text-[13px] font-semibold text-ink-primary">
+              {activeChannelMeta.label}
+            </span>
+            <span className="font-sans text-[12px] text-ink-tertiary truncate">
+              {activeChannelMeta.blurb}
+            </span>
+          </div>
 
           {/* Feed list */}
           <div className="rounded-[12px] border-[0.5px] border-border-ds-subtle overflow-hidden">
@@ -335,13 +328,7 @@ export function GlobalFeed() {
 
         {/* Right rail — sticky on large screens */}
         <div className="hidden lg:block lg:sticky lg:top-ds-4">
-          <FeedTagRail
-            facets={facets}
-            filters={filters}
-            onToggle={toggleFilter}
-            onClearAll={() => setFilters({})}
-            leaderboard={leaderboard}
-          />
+          <FeedTagRail leaderboard={leaderboard} />
         </div>
       </div>
     </div>
