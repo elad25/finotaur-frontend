@@ -245,7 +245,7 @@ export default function AISummary() {
             format="currency"
             decimals={0}
             showSign={false}
-            className="!text-4xl md:!text-5xl font-bold"
+            className="!text-2xl md:!text-3xl font-bold"
           />
           <p className="text-sm text-ink-secondary">
             {verdict.shareOfLosses !== null && (
