@@ -15,13 +15,16 @@
 
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ShieldCheck, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Search, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { useTrades } from '@/hooks/useTradesData';
 import type { Trade } from '@/hooks/useTradesData';
+import { useJournalDemoMode } from '@/hooks/useJournalDemoMode';
+import { useJournalPreview } from '@/contexts/JournalPreviewContext';
 import { Card } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
 import { buildLeakReport } from '@/lib/journal/leakDetector';
 import type { Leak, LeakEvidence } from '@/lib/journal/leakDetector';
+import { computeGroupStats } from '@/lib/journal/groupStats';
 import CreditsBanner from '@/components/journal/reports/CreditsBanner';
 import RecapCard from '@/components/journal/reports/RecapCard';
 import LeakCounterfactualChart from '@/components/journal/reports/LeakCounterfactualChart';
@@ -133,10 +136,89 @@ function OtherLeakCard({ leak }: { leak: Leak }) {
 }
 
 // ---------------------------------------------------------------------------
+// Progress-to-diagnosis bar — shared by the 'collecting' and 'early' states
+// ---------------------------------------------------------------------------
+
+interface ProgressToDiagnosisProps {
+  tradesAnalyzed: number;
+  minTradesRequired: number;
+}
+
+function ProgressToDiagnosis({ tradesAnalyzed, minTradesRequired }: ProgressToDiagnosisProps) {
+  const pct = Math.min(100, (tradesAnalyzed / minTradesRequired) * 100);
+  return (
+    <div className="w-full max-w-xs h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+      <div
+        className="h-full rounded-full bg-gold-primary transition-all duration-300"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Early Insight card — preliminary, relaxed-gate finding for the 'early'
+// status (10-29 trades). Visually distinct from the full-verdict hero: a
+// muted amber accent instead of the gold "flagship" treatment.
+// ---------------------------------------------------------------------------
+
+function EarlyInsightCard({ insight }: { insight: Leak }) {
+  return (
+    <Card
+      padding="compact"
+      className="flex flex-col gap-2 border-amber-500/25 bg-amber-500/[0.04] hover:border-amber-500/40"
+    >
+      <div className="flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+        <span className="text-[10px] font-semibold tracking-[1.2px] uppercase text-amber-400">
+          Early signal
+        </span>
+      </div>
+      <p className="text-sm font-medium text-ink-primary leading-snug">{insight.title}</p>
+      <div className="flex items-center justify-between gap-2">
+        <Change value={-insight.costUsd} format="currency" decimals={0} showSign={false} />
+        <span className="text-[11px] text-ink-tertiary">{insight.evidence.length} trades</span>
+      </div>
+      <p className="text-[11px] text-amber-300/80">
+        Preliminary — based on {insight.sampleSize} trades, confirmed at 30
+      </p>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quick stats strip — win rate / avg win / avg loss / expectancy, so the
+// 'early' state never feels empty while insights are still gated.
+// ---------------------------------------------------------------------------
+
+function QuickStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-1 py-1">
+      <span className="text-[10px] font-semibold tracking-[1px] uppercase text-ink-tertiary">{label}</span>
+      <span className="text-base font-semibold text-ink-primary">{value}</span>
+    </div>
+  );
+}
+
+function QuickStatsStrip({ trades }: { trades: Trade[] }) {
+  const stats = useMemo(() => computeGroupStats(trades), [trades]);
+  return (
+    <Card padding="compact">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <QuickStat label="Win rate" value={`${stats.winRate.toFixed(0)}%`} />
+        <QuickStat label="Avg win" value={fmtCurrencyWhole(stats.avgWin)} />
+        <QuickStat label="Avg loss" value={fmtCurrencyWhole(stats.avgLoss)} />
+        <QuickStat label="Expectancy" value={fmtCurrencyWhole(stats.expectancy)} />
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AI Recaps section — reused as-is from AIRecaps.tsx (weekly + monthly only)
 // ---------------------------------------------------------------------------
 
-function AIRecapsSection() {
+function AIRecapsSection({ demo = false }: { demo?: boolean }) {
   return (
     <section className="space-y-4">
       <div>
@@ -149,8 +231,8 @@ function AIRecapsSection() {
       </div>
       <CreditsBanner />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecapCard period="weekly" />
-        <RecapCard period="monthly" />
+        <RecapCard period="weekly" demo={demo} />
+        <RecapCard period="monthly" demo={demo} />
       </div>
     </section>
   );
@@ -180,6 +262,15 @@ export default function AISummary() {
   const { data: trades = [], isLoading } = useTrades();
   const [showAllEvidence, setShowAllEvidence] = useState(false);
 
+  // Demo-mode journal: mirrors the two conditions useTrades() itself checks
+  // (src/hooks/useTradesData.ts ~L430-438) before substituting sample data on
+  // this /app/journal surface — free-tier preview (JournalFeatureGate) and
+  // zero-real-trade users. Either one means `trades` above is sample data, so
+  // no real AI call (edge function / recap generation) should fire on it.
+  const { isPreview } = useJournalPreview();
+  const { isDemo } = useJournalDemoMode();
+  const demoActive = isPreview || isDemo;
+
   const report = useMemo(() => buildLeakReport(trades), [trades]);
 
   const tradesById = useMemo(() => {
@@ -197,7 +288,6 @@ export default function AISummary() {
   // ---------------------------------------------------------------------------
 
   if (report.status === 'collecting') {
-    const pct = Math.min(100, (report.tradesAnalyzed / report.minTradesRequired) * 100);
     return (
       <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
         <div>
@@ -209,16 +299,60 @@ export default function AISummary() {
           <p className="text-lg font-semibold text-ink-primary">
             Analyzing your trading… {report.tradesAnalyzed} of {report.minTradesRequired} trades logged
           </p>
-          <div className="w-full max-w-xs h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-gold-primary transition-all duration-300"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
+          <ProgressToDiagnosis tradesAnalyzed={report.tradesAnalyzed} minTradesRequired={report.minTradesRequired} />
           <p className="text-sm text-ink-tertiary max-w-sm">
             Log {report.minTradesRequired} trades and FINOTAUR will identify your most expensive losing pattern.
           </p>
         </Card>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // State A.5 — early (10-29 closed trades): relaxed-gate preliminary
+  // insights, never a full verdict. Progress-bar-to-30 stays visible.
+  // ---------------------------------------------------------------------------
+
+  if (report.status === 'early') {
+    return (
+      <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-6 space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold text-yellow-100">AI Summary</h2>
+          <p className="text-sm text-zinc-400 mt-1">Your most expensive trading pattern, diagnosed by FINOTAUR AI.</p>
+        </div>
+
+        <Card padding="spacious" className="flex flex-col items-center text-center gap-4 py-10">
+          <Search className="w-8 h-8 text-gold-primary" />
+          <p className="text-lg font-semibold text-ink-primary">
+            Early Read — {report.tradesAnalyzed} of {report.minTradesRequired} trades logged
+          </p>
+          <ProgressToDiagnosis tradesAnalyzed={report.tradesAnalyzed} minTradesRequired={report.minTradesRequired} />
+          <p className="text-sm text-ink-tertiary max-w-sm">
+            Full diagnosis at {report.minTradesRequired} trades. Here's what's showing up so far.
+          </p>
+        </Card>
+
+        {report.earlyInsights.length > 0 && (
+          <section>
+            <h3 className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-3">
+              Early signals
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {report.earlyInsights.map((insight) => (
+                <EarlyInsightCard key={insight.id} insight={insight} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section>
+          <h3 className="text-[11px] font-semibold tracking-[1.2px] uppercase text-gold-primary mb-3">
+            Your numbers so far
+          </h3>
+          <QuickStatsStrip trades={trades} />
+        </section>
+
+        <AIRecapsSection demo={demoActive} />
       </div>
     );
   }
@@ -281,7 +415,7 @@ export default function AISummary() {
         <LeakCounterfactualChart trades={trades} verdict={verdict} />
 
         {/* AI action plan */}
-        <LeakActionPlan verdict={verdict} />
+        <LeakActionPlan verdict={verdict} demo={demoActive} />
 
         {/* Evidence */}
         <section>
@@ -322,7 +456,7 @@ export default function AISummary() {
           </section>
         )}
 
-        <AIRecapsSection />
+        <AIRecapsSection demo={demoActive} />
       </div>
     );
   }
@@ -348,7 +482,7 @@ export default function AISummary() {
         </p>
       </Card>
 
-      <AIRecapsSection />
+      <AIRecapsSection demo={demoActive} />
     </div>
   );
 }

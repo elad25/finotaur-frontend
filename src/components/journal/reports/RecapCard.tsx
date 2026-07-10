@@ -1,4 +1,5 @@
-import { useAIRecap, type RecapPeriod } from '@/hooks/useAIRecap';
+import { useState } from 'react';
+import { useAIRecap, type RecapPeriod, type RecapData } from '@/hooks/useAIRecap';
 
 const PERIOD_LABELS: Record<RecapPeriod, string> = {
   weekly: 'Weekly',
@@ -17,12 +18,103 @@ function formatRelativeTime(isoString: string): string {
   return `${diffD}d ago`;
 }
 
-interface RecapCardProps {
-  period: RecapPeriod;
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
-export default function RecapCard({ period }: RecapCardProps) {
-  const { recap, isGenerating, error, generate, lastGenerated } = useAIRecap(period);
+/** Current week (Mon-Sun) / month range, formatted the same way the real
+ *  edge function's periodStart/periodEnd are — used only to date-label the
+ *  canned demo recap, mirrors computePeriodRange() in useAIRecap.ts. */
+function currentPeriodRange(period: RecapPeriod): { periodStart: string; periodEnd: string } {
+  const now = new Date();
+  if (period === 'monthly') {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { periodStart: isoDate(first), periodEnd: isoDate(last) };
+  }
+  const day = now.getDay(); // 0 = Sun
+  const offsetToMon = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + offsetToMon);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { periodStart: isoDate(monday), periodEnd: isoDate(sunday) };
+}
+
+/**
+ * Canned, deterministic recaps for demo-mode journals (zero-trade users and
+ * free-tier preview) — written to plausibly match the demo journal's overall
+ * shape (src/utils/demoJournalData.ts: ~1-3 trades/weekday over 72 days plus
+ * three scripted revenge-trading sequences). Shown instead of a real
+ * generate() call so demo/free journals never hit the recap edge function.
+ */
+function buildDemoRecap(period: RecapPeriod): RecapData {
+  const { periodStart, periodEnd } = currentPeriodRange(period);
+  if (period === 'monthly') {
+    return {
+      period,
+      periodStart,
+      periodEnd,
+      generatedAt: new Date().toISOString(),
+      tradeCount: 45,
+      narrative:
+        `Over the past month you closed around 45 trades for a net P&L of roughly $2,150. Your strongest edge was ICT MSS setups in the London and NY AM sessions. ` +
+        `The biggest drag was three multi-trade revenge sequences — each one starting with a normal loss and escalating into 3-4 oversized re-entries within the same session.`,
+      keyMetrics: [
+        { label: 'Trades', value: '45' },
+        { label: 'Win rate', value: '55%' },
+        { label: 'Net P&L', value: '$2,150' },
+        { label: 'Avg R', value: '1.3' },
+      ],
+      observations: [
+        'Each revenge sequence sized up trade over trade relative to the one before it.',
+        'Winners and losers were held for roughly the same amount of time — no scale-out edge either way.',
+        'A 30-minute cooldown after a loss would have avoided most of this month’s largest red days.',
+      ],
+      isMock: false,
+    };
+  }
+  return {
+    period,
+    periodStart,
+    periodEnd,
+    generatedAt: new Date().toISOString(),
+    tradeCount: 9,
+    narrative:
+      `This week you logged 9 trades with a net P&L of around $860. Your best pattern was FVG Sniper entries in the NY AM session. ` +
+      `The costliest habit was re-entering within minutes of a loss, chasing it back — three of this week's losses came from that pattern.`,
+    keyMetrics: [
+      { label: 'Trades', value: '9' },
+      { label: 'Win rate', value: '56%' },
+      { label: 'Net P&L', value: '$860' },
+      { label: 'Avg R', value: '1.4' },
+    ],
+    observations: [
+      'Every loss inside a revenge sequence was sized larger than the trade before it.',
+      'The single winning streak this week ran 3 trades in a row.',
+      'Stepping away for 30 minutes after a loss would have cut this week’s biggest red trade.',
+    ],
+    isMock: false,
+  };
+}
+
+interface RecapCardProps {
+  period: RecapPeriod;
+  /** Demo-mode journal (zero-trade user or free-tier preview): show a fixed
+   *  sample recap on click, never call the recap edge function. */
+  demo?: boolean;
+}
+
+export default function RecapCard({ period, demo = false }: RecapCardProps) {
+  const { recap: liveRecap, isGenerating: liveIsGenerating, error: liveError, generate: liveGenerate, lastGenerated: liveLastGenerated } =
+    useAIRecap(period);
+  const [demoRecap, setDemoRecap] = useState<RecapData | null>(null);
+
+  const recap = demo ? demoRecap : liveRecap;
+  const isGenerating = demo ? false : liveIsGenerating;
+  const error = demo ? null : liveError;
+  const lastGenerated = demo ? demoRecap?.generatedAt ?? null : liveLastGenerated;
+  const generate = demo ? () => setDemoRecap(buildDemoRecap(period)) : liveGenerate;
 
   return (
     <div className="rounded-2xl border border-yellow-200/15 bg-[#141414] p-5 space-y-4">
@@ -73,11 +165,15 @@ export default function RecapCard({ period }: RecapCardProps) {
       {/* Recap content */}
       {recap && (
         <>
-          {/* Mock badge */}
-          {recap.isMock && (
-            <span className="inline-block text-[10px] bg-yellow-500/10 text-yellow-300 px-2 py-0.5 rounded-full">
-              PREVIEW · mock data
-            </span>
+          {/* Sample caption (demo mode) or mock badge (real generation fallback) */}
+          {demo ? (
+            <p className="text-[11px] text-zinc-500">Sample recap — connect your trades to get yours</p>
+          ) : (
+            recap.isMock && (
+              <span className="inline-block text-[10px] bg-yellow-500/10 text-yellow-300 px-2 py-0.5 rounded-full">
+                PREVIEW · mock data
+              </span>
+            )
           )}
 
           {/* Narrative */}

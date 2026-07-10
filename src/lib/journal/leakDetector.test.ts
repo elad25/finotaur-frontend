@@ -42,16 +42,20 @@ function iso(day: number, hour: number, minute: number): string {
 // ─── Collecting status (< 30 trades) ───────────────────────────────────────────
 
 describe('buildLeakReport — collecting status', () => {
-  it('returns status "collecting" with null verdict when under 30 trades', () => {
-    const trades = Array.from({ length: 10 }, (_, i) =>
+  it('returns status "collecting" with null verdict when under 10 trades', () => {
+    // NOTE: fixture size is 7 (not the original 10) because 10 is now the
+    // "early" floor (EARLY_MIN_TRADES) — see the "early status" describe
+    // block below for the 10-29 range behavior.
+    const trades = Array.from({ length: 7 }, (_, i) =>
       makeTrade({ id: `t-${i}`, pnl: -10, outcome: 'LOSS' }),
     );
     const report = buildLeakReport(trades);
     expect(report.status).toBe('collecting');
-    expect(report.tradesAnalyzed).toBe(10);
+    expect(report.tradesAnalyzed).toBe(7);
     expect(report.minTradesRequired).toBe(30);
     expect(report.verdict).toBeNull();
     expect(report.leaks).toEqual([]);
+    expect(report.earlyInsights).toEqual([]);
     expect(report.cleanBill).toBe(false);
   });
 
@@ -495,5 +499,115 @@ describe('buildLeakReport — revenge/size_escalation dedupe', () => {
     for (let i = 1; i <= 6; i++) {
       expect(evidenceIds).toContain(`trade-B${i}`);
     }
+  });
+});
+
+// ─── Early Read (10-29 trades) ─────────────────────────────────────────────────
+
+describe('buildLeakReport — early status (10-29 trades)', () => {
+  it('surfaces a revenge_reentry earlyInsight for a 15-trade clustered revenge pattern', () => {
+    const trades: Trade[] = [];
+
+    // 5 pairs: a loss, then a quick same-symbol re-entry (also a loss) within
+    // 15 minutes — each pair on its own day/hour so no other family fires.
+    for (let i = 0; i < 5; i++) {
+      const day = i + 1; // days 1-5
+      const hour = 9 + i; // distinct hour per pair, avoids toxic_bucket clustering
+      trades.push(
+        makeTrade({
+          id: `early-victim-${i}`,
+          symbol: 'MES',
+          entry_price: 5000,
+          exit_price: 4990,
+          quantity: 1,
+          multiplier: 1,
+          pnl: -50,
+          outcome: 'LOSS',
+          open_at: iso(day, hour, 0),
+          close_at: iso(day, hour, 10),
+        }),
+      );
+      trades.push(
+        makeTrade({
+          id: `early-revenge-${i}`,
+          symbol: 'MES',
+          entry_price: 5000,
+          exit_price: 4984,
+          quantity: 1,
+          multiplier: 1,
+          pnl: -80,
+          outcome: 'LOSS',
+          open_at: iso(day, hour, 15), // 5 min after victim's close (quick_reentry <=15min)
+          close_at: iso(day, hour, 25),
+        }),
+      );
+    }
+
+    // 5 unrelated, profitable padding trades on later, separate days.
+    for (let i = 0; i < 5; i++) {
+      const day = 6 + i;
+      trades.push(
+        makeTrade({
+          id: `early-pad-${i}`,
+          symbol: 'NQ',
+          entry_price: 15000,
+          exit_price: 15005,
+          quantity: 1,
+          multiplier: 1,
+          pnl: 100,
+          outcome: 'WIN',
+          open_at: iso(day, 12, 0),
+          close_at: iso(day, 12, 10),
+        }),
+      );
+    }
+
+    // total = 15 trades — inside the 10-29 "early" window.
+    const report = buildLeakReport(trades);
+
+    expect(report.status).toBe('early');
+    expect(report.tradesAnalyzed).toBe(15);
+    expect(report.verdict).toBeNull();
+    expect(report.leaks).toEqual([]);
+    expect(report.earlyInsights.length).toBeGreaterThanOrEqual(1);
+    expect(report.earlyInsights[0].family).toBe('revenge_reentry');
+    expect(['low', 'medium']).toContain(report.earlyInsights[0].confidence);
+    for (const insight of report.earlyInsights) {
+      expect(insight.confidence).not.toBe('high');
+    }
+  });
+
+  it('returns status "collecting" with empty earlyInsights for 8 trades', () => {
+    const trades = Array.from({ length: 8 }, (_, i) =>
+      makeTrade({ id: `coll-${i}`, pnl: -10, outcome: 'LOSS' }),
+    );
+    const report = buildLeakReport(trades);
+    expect(report.status).toBe('collecting');
+    expect(report.earlyInsights).toEqual([]);
+  });
+
+  it('boundary: exactly 10 trades is "early", not "collecting"', () => {
+    const trades = Array.from({ length: 10 }, (_, i) =>
+      makeTrade({ id: `b10-${i}`, pnl: -10, outcome: 'LOSS' }),
+    );
+    const report = buildLeakReport(trades);
+    expect(report.status).toBe('early');
+  });
+
+  it('boundary: 29 trades is "early", not "ok"', () => {
+    const trades = Array.from({ length: 29 }, (_, i) =>
+      makeTrade({ id: `b29-${i}`, pnl: 10, outcome: 'WIN' }),
+    );
+    const report = buildLeakReport(trades);
+    expect(report.status).toBe('early');
+  });
+
+  it('boundary: exactly 30 trades is "ok", not "early"', () => {
+    const trades = Array.from({ length: 30 }, (_, i) =>
+      makeTrade({ id: `b30-${i}`, pnl: 10, outcome: 'WIN' }),
+    );
+    const report = buildLeakReport(trades);
+    expect(report.status).toBe('ok');
+    expect(report.earlyInsights).toEqual([]);
   });
 });
