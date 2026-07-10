@@ -351,6 +351,80 @@ describe('buildLeakReport — toxic hour', () => {
     const nextHour = (localHour + 1) % 24;
     const expectedLabel = `${String(localHour).padStart(2, '0')}:00-${String(nextHour).padStart(2, '0')}:00`;
     expect(toxic!.title).toContain(expectedLabel);
+    // Subject/verb must agree: an hour bucket is a singular subject → "is".
+    expect(toxic!.title).toBe(`Your ${expectedLabel} hour is bleeding money`);
+  });
+});
+
+// ─── Family 3: toxic_bucket — weekday bucket title grammar ───────────────────────
+
+describe('buildLeakReport — toxic weekday', () => {
+  it('toxic_bucket weekday title reads grammatically ("Your <Weekday> trading is bleeding money")', () => {
+    const trades: Trade[] = [];
+    const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // 6 losing trades all on the SAME local weekday. Feb 2026 gives at most 4
+    // dates per weekday within days 1-28 (2, 9, 16, 23 are 7 apart → identical
+    // weekday in any fixed timezone), so two of those dates carry a second
+    // losing trade at a distinct hour. All six hours differ (6-11), so no
+    // single HOUR bucket reaches the 5-trade floor — only the WEEKDAY bucket
+    // qualifies, forcing the weekday branch of the title.
+    const lossHits: Array<[number, number]> = [
+      [2, 6],
+      [2, 7],
+      [9, 8],
+      [9, 9],
+      [16, 10],
+      [23, 11],
+    ];
+    lossHits.forEach(([day, hour], i) => {
+      trades.push(
+        makeTrade({
+          id: `toxic-wd-${i}`,
+          entry_price: 5000,
+          exit_price: 4980,
+          quantity: 1,
+          multiplier: 1,
+          pnl: -100,
+          outcome: 'LOSS',
+          stop_price: 0,
+          open_at: iso(day, hour, 0),
+          close_at: iso(day, hour, 10),
+        }),
+      );
+    });
+
+    // 24 small-positive padding trades on the OTHER 24 days (never a toxic-
+    // weekday date), spread across hours 12-19 so no padding bucket competes.
+    const padDays = [1, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28];
+    padDays.forEach((day, i) => {
+      trades.push(
+        makeTrade({
+          id: `okwd-${i}`,
+          entry_price: 5000,
+          exit_price: 5005,
+          quantity: 1,
+          multiplier: 1,
+          pnl: 5,
+          outcome: 'WIN',
+          stop_price: 0,
+          open_at: iso(day, 12 + (i % 8), 0),
+          close_at: iso(day, 12 + (i % 8), 10),
+        }),
+      );
+    });
+
+    const report = buildLeakReport(trades);
+    const toxic = report.leaks.find((l) => l.family === 'toxic_bucket');
+    expect(toxic).toBeDefined();
+    expect(toxic!.sampleSize).toBe(6);
+
+    // Weekday is derived from the LOCAL weekday of open_at (browser timezone),
+    // so compute the expected singular name the same way rather than hardcoding.
+    const expectedWeekday = WEEKDAY_NAMES[new Date(iso(2, 6, 0)).getDay()];
+    // Singular subject + singular verb — NOT the old "Your Fridays is …" bug.
+    expect(toxic!.title).toBe(`Your ${expectedWeekday} trading is bleeding money`);
+    expect(toxic!.title).not.toContain('s is bleeding money');
   });
 });
 
