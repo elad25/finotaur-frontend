@@ -35,5 +35,7 @@ export function mapSpaceError(error: unknown): string {
   if (message.includes('invalid_role')) return 'Invalid role specified.';
   if (message.includes('trade_not_broker_verified'))
     return 'Only broker-verified trades can be shared to the Global Feed. Connect a broker to share real fills.';
+  if (message.includes('share_rate_limited'))
+    return 'You can share one trade to the feed per hour. Please try again later.';
   return 'Something went wrong. Please try again.';
 }
