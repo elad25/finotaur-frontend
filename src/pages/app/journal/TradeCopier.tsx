@@ -42,9 +42,9 @@ function PremiumGate() {
         <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center mx-auto">
           <Shield className="w-8 h-8 text-[#C9A646]" />
         </div>
-        <h2 className="text-xl font-bold text-white">Premium Journal Feature</h2>
+        <h2 className="text-xl font-bold text-white">Trader Journal Feature</h2>
         <p className="text-zinc-400 text-sm">
-          Trade Copier is available to Premium Journal subscribers (Finotaur tier and above).
+          Trade Copier is available to Trader plan subscribers.
           Connect your broker, auto-sync trades, and copy positions across accounts.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
@@ -675,7 +675,7 @@ export default function TradeCopier() {
                 </SectionCard>
                 {!isPreview && (
                   <CopierDemoOverlay
-                    ctaLabel={isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                    ctaLabel={isPremium ? 'Connect your broker' : 'Upgrade to Trader'}
                     onCta={() =>
                       isPremium ? setShowAddBroker(true) : navigate('/app/upgrade')
                     }
@@ -730,7 +730,7 @@ export default function TradeCopier() {
                     onClick={() => (isPremium ? setShowAddBroker(true) : navigate('/app/upgrade'))}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gold-primary/10 px-4 py-2 text-xs font-semibold text-gold-primary transition-all hover:bg-gold-primary/20 hover:border-gold-primary/50"
                   >
-                    {isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                    {isPremium ? 'Connect your broker' : 'Upgrade to Trader'}
                   </button>
                 </div>
               </SectionCard>
@@ -760,7 +760,7 @@ export default function TradeCopier() {
                     onClick={() => (isPremium ? setShowAddBroker(true) : navigate('/app/upgrade'))}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-gold-border bg-gold-primary/10 px-4 py-2 text-xs font-semibold text-gold-primary transition-all hover:bg-gold-primary/20 hover:border-gold-primary/50"
                   >
-                    {isPremium ? 'Connect your broker' : 'Upgrade to Premium'}
+                    {isPremium ? 'Connect your broker' : 'Upgrade to Trader'}
                   </button>
                 </div>
               </SectionCard>

@@ -73,7 +73,7 @@ export function useAgentDevices() {
 
       if (e) {
         if (e.message?.includes('subscription_required')) {
-          throw new Error('Trade Copier requires a Premium subscription.');
+          throw new Error('Trade Copier requires a Trader subscription.');
         }
         throw new Error(e.message);
       }

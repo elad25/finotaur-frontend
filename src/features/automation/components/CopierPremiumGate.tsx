@@ -41,7 +41,7 @@ export function CopierPremiumGate({ children }: CopierPremiumGateProps) {
             <Zap className="h-4 w-4 text-[#C9A646]" aria-hidden="true" />
             <span>
               Free trial: <span className="font-semibold text-zinc-100">{trial.used} / {trial.limit}</span> copied
-              trades used. Upgrade to Premium for unlimited copying.
+              trades used. Upgrade to Trader for unlimited copying.
             </span>
           </div>
           <Button variant="gold" size="sm" showArrow={false} onClick={() => navigate('/app/upgrade')}>
@@ -64,10 +64,10 @@ export function CopierPremiumGate({ children }: CopierPremiumGateProps) {
       {/* copy */}
       <div className="text-center space-y-2 max-w-xs">
         <p className="text-base font-semibold text-zinc-100">
-          Trade Copier is a Premium feature
+          Trade Copier is a Trader feature
         </p>
         <p className="text-sm text-zinc-500 leading-relaxed">
-          You&apos;ve used all {trial.limit} free copied trades. Upgrade to Premium to
+          You&apos;ve used all {trial.limit} free copied trades. Upgrade to Trader to
           keep copying your trades across accounts.
         </p>
       </div>
@@ -79,7 +79,7 @@ export function CopierPremiumGate({ children }: CopierPremiumGateProps) {
         showArrow={false}
         onClick={() => navigate('/app/upgrade')}
       >
-        Upgrade to Premium
+        Upgrade to Trader
       </Button>
     </div>
   );

@@ -111,7 +111,7 @@ export function SubscriptionGuard({ children, requiredPlan, feature }: Subscript
           </div>
           
           <h3 className="text-2xl font-bold text-white mb-2">
-            {requiredPlan === 'premium' ? 'Premium' : 'Basic'} Feature
+            {requiredPlan === 'premium' ? 'Trader' : 'Basic'} Feature
           </h3>
           
           <p className="text-zinc-400 mb-6">
@@ -123,7 +123,7 @@ export function SubscriptionGuard({ children, requiredPlan, feature }: Subscript
               onClick={() => navigate('/app/upgrade')}
               className="w-full px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold rounded-xl hover:from-yellow-600 hover:to-yellow-700 transition-all"
             >
-              Upgrade to {requiredPlan === 'premium' ? 'Premium' : 'Basic'}
+              Upgrade to {requiredPlan === 'premium' ? 'Trader' : 'Basic'}
             </button>
             
             <button
