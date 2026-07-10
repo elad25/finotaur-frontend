@@ -352,6 +352,11 @@ function FinoChatPanel({
               dailyLimit={usage?.unlimited ? undefined : (usage?.daily_limit ?? undefined)}
               promptRows={finoTier.promptRows}
               promptPlacement="aboveInput"
+              // Hide the suggestion pills the moment a screenshot is sent —
+              // the extraction flow (spinner → confirm card → upgrade/error)
+              // has no chat message yet, so the message-based auto-hide can't
+              // fire. Any non-idle extraction phase suppresses the chips.
+              suppressPrompts={extractionState.phase !== 'idle'}
               onImageSelected={FINO_DETECTIVE_ENABLED ? handleImageSelected : undefined}
               openFilePickerRef={FINO_DETECTIVE_ENABLED ? filePickerTriggerRef : undefined}
               beforeMessages={

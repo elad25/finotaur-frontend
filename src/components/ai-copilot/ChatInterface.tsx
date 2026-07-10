@@ -69,6 +69,14 @@ interface ChatInterfaceProps {
    * Only populated when `onImageSelected` is also provided.
    */
   openFilePickerRef?: React.MutableRefObject<(() => void) | null>;
+  /**
+   * When true, the above-input suggestion chips are suppressed even while the
+   * conversation is still empty. Used by FinoChatDrawer to hide the prompt
+   * pills the moment a screenshot/image is sent (the trade-extraction flow
+   * shows its own confirm card and no chat message exists yet, so the
+   * messages-based auto-hide wouldn't fire). Default false = existing behavior.
+   */
+  suppressPrompts?: boolean;
 }
 
 interface PromptChip {
@@ -112,6 +120,7 @@ export const ChatInterface = memo(function ChatInterface({
   onImageSelected,
   openFilePickerRef,
   beforeMessages,
+  suppressPrompts = false,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -284,8 +293,10 @@ export const ChatInterface = memo(function ChatInterface({
         dailyLimit={dailyLimit}
       />
 
-      {/* Above-input chip bubbles — only when promptPlacement === 'aboveInput' and conversation is empty */}
-      {promptPlacement === 'aboveInput' && showEmptyState && (
+      {/* Above-input chip bubbles — only when promptPlacement === 'aboveInput',
+          the conversation is empty, AND prompts aren't suppressed (e.g. a
+          screenshot was just sent and the trade-extraction card is showing). */}
+      {promptPlacement === 'aboveInput' && showEmptyState && !suppressPrompts && (
         <div className="flex flex-wrap gap-1.5 px-3 pb-2">
           {promptRows.flat().slice(0, 6).map((chip) => {
             const Icon = chip.icon;
